@@ -34,6 +34,7 @@ use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
 use glasnost_ui::widget::Targets;
 use glasnost_vfs::{FileRef, Vfs};
 
+use super::band;
 use super::paint::Painter;
 use super::play::{Button, Play, Tool, local_house};
 use crate::mapview::build::{self, GameMode, Inputs, Options};
@@ -48,9 +49,6 @@ pub const MAP_IMAGE: u32 = 1;
 pub const RADAR_IMAGE: u32 = 2;
 /// First sprite id of the sidebar icons.
 const ICON_SPRITES: u32 = 1000;
-/// A left-button drag longer than this (in either direction) is a box
-/// selection. Interim (Q-0278).
-pub const DRAG_START: i32 = 4;
 /// Pixels the view scrolls per drawn frame at an edge or with an arrow
 /// key. Interim (Q-0279).
 pub const SCROLL_STEP: i32 = 16;
@@ -98,6 +96,8 @@ pub struct Session {
     icon_palette: Option<[u8; 1024]>,
     pointer: Option<Point>,
     press: Option<(Point, Button)>,
+    /// The armed band-box drag (S-0214 claim 18).
+    drag: Option<band::Drag>,
     /// The last drawn sidebar's targets.
     targets: Targets<HudHit>,
     pause_targets: Targets<PauseHit>,
@@ -206,6 +206,7 @@ impl Session {
             icon_palette,
             pointer: None,
             press: None,
+            drag: None,
             targets: Targets::new(),
             pause_targets: Targets::new(),
             problems: Vec::new(),
@@ -421,23 +422,35 @@ impl Session {
     /// The pointer moved.
     pub fn pointer_moved(&mut self, p: Point) {
         self.pointer = Some(p);
+        let mode = self.play.game.world.rules().mode;
+        if let Some(d) = self.drag.as_mut() {
+            d.motion(p, mode);
+        }
     }
 
     /// The pointer left the window.
     pub fn pointer_left(&mut self) {
         self.pointer = None;
         self.press = None;
+        self.drag = None;
     }
 
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.pointer = Some(p);
         self.press = Some((p, b));
+        // spec: S-0214 claim 18 (a primary-button press in the battlefield can start a selection drag when sell, repair, power, building-placement and superweapon targeting modes are off)
+        self.drag = (b == Button::Left
+            && !self.paused
+            && self.play.tool == Tool::Select
+            && self.targets.hit(p) == Some(HudHit::Map))
+        .then(|| band::Drag::armed(p));
     }
 
     /// A button went up: a click or the end of a drag.
     pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) -> SessionEvent {
         self.pointer = Some(p);
+        let drag = self.drag.take();
         let Some((start, pb)) = self.press.take() else {
             return SessionEvent::None;
         };
@@ -464,11 +477,16 @@ impl Session {
                 None => SessionEvent::None,
             };
         }
-        let dragged = (p.x - start.x).abs() > DRAG_START || (p.y - start.y).abs() > DRAG_START;
+        let dragged = drag.is_some_and(|d| d.active) && b == Button::Left;
         match self.targets.hit(start) {
-            Some(HudHit::Map) if dragged && b == Button::Left && self.play.tool == Tool::Select => {
-                let inside = self.objects_in(Rect::spanning(start, p));
-                self.play.select_box(&inside, mods.force_select);
+            Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
+                let end = band::limit(p, self.map_rect());
+                let inside = self.box_candidates(start, end);
+                // spec: S-0214 claim 19 (an unmodified box without a live candidate continues as the ordinary release click at the final pixel)
+                if self.play.select_box(&inside, mods.force_select) {
+                    let (cell, object) = self.under(end);
+                    self.play.click_map(b, object, cell, mods);
+                }
             }
             Some(HudHit::Map) if !dragged => {
                 let (cell, object) = self.under(p);
@@ -496,19 +514,24 @@ impl Session {
         SessionEvent::None
     }
 
-    /// The local player's objects whose reference point projects inside
-    /// `r` (screen pixels of the battlefield).
-    fn objects_in(&self, r: Rect) -> Vec<ObjectId> {
+    /// The live box candidates whose box point is inside the box from
+    /// `press` to `end` (S-0214 claim 19, Terms *box point*): objects of
+    /// any owner in play on the map, at their position projected with
+    /// height lift, aircraft at their lifted origin. Terrain objects are not
+    /// candidates, and the 500-candidate frame limit of claim 20 is not
+    /// applied (interim, Q-0278).
+    fn box_candidates(&self, press: Point, end: Point) -> Vec<ObjectId> {
         let w = &self.play.game.world;
         let v = self.view();
         let m = self.map_rect();
         w.objects
             .values()
-            .filter(|o| o.owner == Some(self.play.local) && o.on_map)
+            .filter(|o| o.on_map && o.kind != SimKind::Terrain)
             .filter(|o| {
-                let p = w.reference_point(o.id);
-                let (qx, qy) = project_lifted(p.x, p.y, p.z);
-                r.contains(Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y))
+                // spec: S-0214 Terms (box point: the drawing origin, the position projected with world-height lift; S-0101 F1)
+                let (qx, qy) = project_lifted(o.pos.x, o.pos.y, o.pos.z);
+                let q = Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y);
+                band::inside(press, end, q)
             })
             .map(|o| o.id)
             .collect()
@@ -521,9 +544,10 @@ impl Session {
         }
     }
 
-    /// The options menu key: opens or closes the menu (S-0201 claim 8).
-    pub fn toggle_pause(&mut self) {
-        self.paused = !self.paused;
+    /// The options menu key opens the menu (S-0213 claim 23; S-0201
+    /// claim 8: no ticks run while it is open).
+    pub fn open_options(&mut self) {
+        self.paused = true;
     }
 
     /// Whether ticks may run now.
@@ -601,12 +625,10 @@ impl Session {
             };
             brackets(&mut d, cx, cy, hw, hh);
         }
-        if let (Some((start, Button::Left)), Some(p)) = (self.press, self.pointer)
-            && m.contains(start)
-            && self.play.tool == Tool::Select
-            && ((p.x - start.x).abs() > DRAG_START || (p.y - start.y).abs() > DRAG_START)
+        if let (Some(drag), Some(p)) = (self.drag, self.pointer)
+            && drag.active
         {
-            d.frame(Rect::spanning(start, p), colour::ACCENT);
+            d.frame(Rect::spanning(drag.press, band::limit(p, m)), colour::ACCENT);
         }
         let mut y = m.y + 4;
         for msg in &self.play.messages {

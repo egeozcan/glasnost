@@ -444,7 +444,7 @@ Interim rules of the game client, each tied to a request:
 | `session::read_icons`, `register_art` | an icon is frame 0 of its file through the overlay palette file of S-0111, index 0 transparent, its canvas centred in the slot and clipped; a darkened icon gets a translucent black veil; the alternate icon is unused | Q-0275 |
 | `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar, sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
 | `session` | the system pointer; no action cursors | Q-0277 |
-| `session::pointer_up`, `play::select_box` | a left drag of more than 4 px selects the local house's selectable mobile objects whose reference point is inside the box; Shift adds to the selection; an empty box clears it | Q-0278 |
+| `session::box_candidates`, `play::select_box` | S-0214 claims 18 to 20 apply; the parts still open: a box's candidates are every non-terrain object in play whose position, projected with height lift, is inside (transient drawing displacements ignored), added in object order, with no 500-candidate frame limit | Q-0278 |
 | `client::update`, `session::edge_scroll` | 16 px per drawn frame within 4 px of a window edge (corners scroll diagonally) or while an arrow key is held, also while paused, then S-0101 claim 8's limits | Q-0279 |
 | `install::slot_swatches` | a lobby swatch is the colour definition of the slot through S-0103's HSV formula; grey when missing | Q-0280 |
 | `install::offered_countries`, `glasnost_ui::setup` | the setup offers the non-passive countries except the neutral and special houses', in registration order; at most 8 slots, the first always the person's; teams 1 to 4 or none | Q-0281 |
@@ -452,7 +452,7 @@ Interim rules of the game client, each tied to a request:
 | `glasnost_ui::hud` | a tab with a newly ready item flashes, lit while (tick / 10) is even | Q-0283 |
 | `play::click_map` (sell mode) | walls get no sell order | Q-0284 |
 | `play::end`, `glasnost_ui::end` | the end screen shows, per house, the result, objects built, kills, losses and the house's combat score; the time is the last tick × the paced period; there is no harvested figure | Q-0285 |
-| `client::key`, `window::GameApp::modifiers` | S stop, X scatter, G guard, D deploy, C cheer; Shift is force-select, Ctrl or Cmd force-fire, Alt force-move; attack-move mode has no key; Escape opens and closes the options menu; no route mode | Q-0286 |
+| `window::GameApp::modifiers` | the command, options and arrow keys follow S-0213 claims 22 and 23 (`client::bound`); the physical modifier keys (question 2, S-0214's part) are still open: Shift is force-select, Ctrl or Cmd force-fire, Alt force-move, and attack-move mode has no key | Q-0286 |
 
 Known limits:
 

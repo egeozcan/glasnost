@@ -10,6 +10,7 @@
 //! - [`client`]: the screens, pacing, sound and input without a window.
 //! - [`install`]: the install's rules, maps and samples for the menus.
 
+pub mod band;
 pub mod client;
 pub mod install;
 pub mod paint;

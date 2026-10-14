@@ -263,6 +263,31 @@ fn vehicle_like(w: &World, id: ObjectId) -> bool {
     building(w, id).is_some_and(|b| b.raw.undeploys_into.is_some() && b.foundation == (1, 1))
 }
 
+/// Whether an ordinary band box can add the object to house `house`'s
+/// selection (S-0214 claim 19): an own selectable infantry unit, vehicle,
+/// aircraft or vehicle-like building in play, not already selected, not
+/// tethered to a building that stands on its cell. Deactivated objects,
+/// slaves controlled by a master and units held in a tank bunker are
+/// excluded too; none of those states exists yet, so no object is one.
+pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0214 claim 19 (own infantry, vehicles and aircraft; ordinary buildings excluded, vehicle-like buildings taken)
+    let kind_ok = match o.kind {
+        Kind::Infantry | Kind::Vehicle | Kind::Aircraft => true,
+        Kind::Building => vehicle_like(w, id),
+        Kind::Terrain => false,
+    };
+    // spec: S-0214 claim 19 (a unit tethered to a building is excluded while its cell holds that building)
+    let tether = crate::econ::tethered(w, id)
+        && o.contact.and_then(|k| w.obj(k)).is_some_and(|b| {
+            b.kind == Kind::Building
+                && crate::objects::foundation_cells(b.pos.cell(), b.foundation)
+                    .contains(&o.pos.cell())
+        });
+    // spec: S-0214 claim 19 (in play, selectable, not being erased, not already selected; enemy and allied objects never added)
+    kind_ok && own(w, house, id) && selectable(w, id) && !selection.contains(&id) && !tether
+}
+
 /// Rally-capable (S-0214 Terms): a factory of infantry or vehicles, a
 /// cloning building or a repair depot.
 fn rally_capable(w: &World, id: ObjectId) -> bool {
@@ -1396,7 +1421,7 @@ fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
 }
 
 /// The representative (S-0214 claim 1): highest rank, then nearest to the
-/// target, then selected earliest.
+/// target, then the first in selection order (claim 12).
 fn representative(w: &World, sel: &[ObjectId], on: ClickOn) -> Option<ObjectId> {
     let mut best: Option<(u8, u64, ObjectId)> = None;
     for &id in sel.iter().filter(|&&id| w.obj(id).is_some()) {
@@ -1459,8 +1484,8 @@ pub fn click(
             if let Some(i) = s.iter().position(|&x| x == t) {
                 s.remove(i);
             } else if selectable(w, t) {
-                // spec: S-0214 Terms (can be selected: claim 12 adds only an object that can be selected)
-                s.push(t);
+                // spec: S-0214 Terms (can be selected: claim 12 adds only an object that can be selected) and claim 12 (the selection order of an addition; a removal keeps the others' order)
+                add_to_selection(w, &mut s, t);
             } else {
                 return ClickResult::default();
             }
@@ -1507,34 +1532,41 @@ pub fn click(
     result
 }
 
-/// The selection response that acknowledges an order without an
-/// acknowledgement of its own kind (S-0214 claim 14, F5): response
-/// `raw mod responses`, where `raw` is the next raw value of the
-/// unsynchronised random stream; `None`, and no value taken, when the type
-/// has no selection response. Sound only, never game state.
-pub fn selection_response(raw: u32, responses: u32) -> Option<u32> {
+/// The order response that acknowledges an order (S-0214 claim 14, F5):
+/// entry `raw mod responses` of the applicable order-response list, where
+/// `raw` is the next raw value of the unsynchronised random stream. For an
+/// order kind without its own response kind that list is the type's
+/// special-attack list, never its selection list (S-0701 claim 18 and F6,
+/// which the audio crate applies). `None`, and no value taken, for an
+/// empty list. Sound only, never game state.
+pub fn order_response(raw: u32, responses: u32) -> Option<u32> {
     // spec: S-0214 F5 (i = x mod n, unsigned remainder; none for n = 0)
     raw.checked_rem(responses)
 }
 
-/// The number n of selection responses of an object's type (S-0214 Terms,
-/// *selection response*, and F5): the count of the type's list, every
-/// entry counted; 0 when it has none.
-pub fn selection_responses(w: &World, id: ObjectId) -> u32 {
-    let Some(o) = w.obj(id) else { return 0 };
-    let r = w.rules();
-    // spec: S-0214 Import mapping (VoiceSelect: n is the count of the list; absent: empty, no response)
-    let list = match o.kind {
-        Kind::Building => r
-            .buildings
-            .get(o.type_index as usize)
-            .and_then(|b| b.raw.voice_select.as_ref()),
-        Kind::Terrain => None,
-        _ => r
-            .unit(o.kind, o.type_index)
-            .and_then(|u| u.raw.voice_select.as_ref()),
-    };
-    list.map_or(0, |l| l.len() as u32)
+/// Whether an object's type has a primary weapon doing positive damage
+/// (S-0214 claim 12): the type's normal first weapon, not the weapon the
+/// object currently chooses, its veterancy or its ability to fire.
+pub fn positive_primary(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 claim 12 and Import mapping (the type's primary weapon and its Damage; no primary weapon or 0 damage: not positive)
+    veterancy::type_combat(w, id)
+        .and_then(|tc| tc.slots[0])
+        .is_some_and(|x| w.rules().combat.weapon(x).damage > 0)
+}
+
+/// Adds an object to a selection (S-0214 claim 12, S-0213 Terms): at the
+/// front when its type's primary weapon does positive damage, otherwise at
+/// the end. An object already selected stays where it is.
+pub fn add_to_selection(w: &World, selection: &mut Vec<ObjectId>, id: ObjectId) {
+    if selection.contains(&id) {
+        return;
+    }
+    // spec: S-0214 claim 12 (positive-primary-damage objects at the front, the others at the end)
+    if positive_primary(w, id) {
+        selection.insert(0, id);
+    } else {
+        selection.push(id);
+    }
 }
 
 /// The move destination of claim 11. No cell or object is shrouded before

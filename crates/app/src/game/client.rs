@@ -440,6 +440,7 @@ impl Client {
         if down {
             self.gesture();
         }
+        // spec: S-0213 claim 23 (holding Left, Right, Up or Down scrolls the view that way; releasing an arrow ends its contribution)
         let arrow = match k {
             Key::Left => Some(0),
             Key::Right => Some(1),
@@ -457,14 +458,10 @@ impl Client {
         let Some(s) = self.session.as_mut() else {
             return;
         };
-        match k {
-            Key::Escape => s.toggle_pause(),
-            // spec: S-0213 table T2 (the key commands); the default keys are interim (Q-0286)
-            Key::Char('s') => s.key(KeyCommand::Stop),
-            Key::Char('x') => s.key(KeyCommand::Scatter),
-            Key::Char('g') => s.key(KeyCommand::Guard),
-            Key::Char('d') => s.key(KeyCommand::Deploy),
-            Key::Char('c') if !s.paused => s.play.cheer(),
+        match bound(k) {
+            Some(Bound::Options) => s.open_options(),
+            Some(Bound::Command(c)) => s.key(c),
+            Some(Bound::Cheer) if !s.paused => s.play.cheer(),
             _ => {}
         }
     }
@@ -637,6 +634,33 @@ impl Default for Client {
 fn busy_veil(d: &mut DrawList, size: (i32, i32), status: &str) {
     d.fill(Rect::new(0, 0, size.0, size.1), colour::VEIL);
     d.text_centred(Rect::new(0, size.1 / 2 - 8, size.0, 16), status, colour::TEXT);
+}
+
+/// What a pressed key does in a running game.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    /// Opens the in-game options menu.
+    Options,
+    /// A key command of S-0213 table T2.
+    Command(KeyCommand),
+    /// The cheer command.
+    Cheer,
+}
+
+/// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
+/// route-mode key Z is not bound: route mode does not exist yet.
+pub fn bound(k: Key) -> Option<Bound> {
+    match k {
+        // spec: S-0213 claim 23 (Escape opens the in-game options menu, reserved for it; closing keys are not specified, so the menu closes through its return control)
+        Key::Escape => Some(Bound::Options),
+        // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer, acting on key press)
+        Key::Char('s') => Some(Bound::Command(KeyCommand::Stop)),
+        Key::Char('x') => Some(Bound::Command(KeyCommand::Scatter)),
+        Key::Char('g') => Some(Bound::Command(KeyCommand::Guard)),
+        Key::Char('d') => Some(Bound::Command(KeyCommand::Deploy)),
+        Key::Char('c') => Some(Bound::Cheer),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
