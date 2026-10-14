@@ -1,9 +1,9 @@
 ---
 id: Q-0223
 title: Which updates of a driving vehicle are its cell-arrival updates for the clear report
-status: open
+status: answered
 related: [S-0417, S-0207, S-0409]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need

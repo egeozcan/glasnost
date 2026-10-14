@@ -1,9 +1,9 @@
 ---
 id: Q-0222
 title: How a factory's queued guard becomes current when its unloading ends
-status: open
+status: answered
 related: [S-0417, S-0215]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need
