@@ -389,8 +389,13 @@ pub fn buildup_ticks(w: &World, t: u32) -> i32 {
         // spec: S-0108 claim 5 (no build-up sprite: range a = 0, c = 1, d = 0, finished at once)
         return 0;
     }
-    // spec: S-0108 claim 5 (n = ⌊N_b / 2⌋; unknown frame counts read as n = 0)
-    let n = b.raw.econ.buildup_frames.unwrap_or(0).div_euclid(2);
+    let n = if b.raw.gate.unwrap_or(false) {
+        // spec: S-0108 claim 5 and Import mapping (a gate: n = G + 1, GateStages absent 9; S-0406 claim 15)
+        b.raw.econ.gate_stages.unwrap_or(9).saturating_add(1)
+    } else {
+        // spec: S-0108 claim 5 (n = ⌊N_b / 2⌋; unknown frame counts read as n = 0)
+        b.raw.econ.buildup_frames.unwrap_or(0).div_euclid(2)
+    };
     let db = if n <= 0 {
         // spec: S-0108 claim 5 (n ≤ 0: d_b = 1)
         1
@@ -435,7 +440,13 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
     };
     match sale.stage {
         Stage::Ordered => {
-            if let Some(&u) = o.econ.building.upgrades.last() {
+            // spec: S-0408 claim 5 (a positive upgrade count sells the upgrade at that count's position; a count of 0 sells the building)
+            let c = o.econ.building.upgrade_count;
+            if c > 0 {
+                // spec: S-0408 Edge cases (a count above 3 names no position: the empty-position departure)
+                let u = usize::try_from(c - 1)
+                    .ok()
+                    .and_then(|i| o.econ.building.upgrades.get(i).copied().flatten());
                 sell_upgrade(w, id, u);
                 return SELLING_DELAY;
             }
@@ -543,32 +554,56 @@ fn finish(w: &mut World, id: ObjectId, packs: bool) {
     crate::objects::remove(w, id);
 }
 
-/// Sells the top upgrade of building `id` (S-0408 claim 5).
-fn sell_upgrade(w: &mut World, id: ObjectId, u: u32) {
+/// Sells the upgrade at the upgrade count's position of building `id`
+/// (S-0408 claim 5); `u` is the type recorded there, none for an empty
+/// position (the departure of S-0408 Edge cases).
+fn sell_upgrade(w: &mut World, id: ObjectId, u: Option<u32>) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(house) = w.obj(id).and_then(|o| o.owner) else {
         return;
     };
-    let amount = refund(
-        w,
-        house,
-        TypeRef {
-            kind: Kind::Building,
-            index: u,
-        },
-    );
-    // spec: S-0408 claim 5 (the refund for the upgrade's type)
-    credit(w, house, amount);
-    // spec: S-0408 claim 5 (selling an upgrade takes one creation draw, S-0202 claim 10)
-    let _ = w.rng.raw();
+    if let Some(u) = u {
+        let amount = refund(
+            w,
+            house,
+            TypeRef {
+                kind: Kind::Building,
+                index: u,
+            },
+        );
+        // spec: S-0408 claim 5 (the refund for the upgrade's type)
+        credit(w, house, amount);
+        // spec: S-0408 claim 5 (selling an upgrade takes one creation draw, S-0202 claim 10)
+        let _ = w.rng.raw();
+    } else {
+        // spec: S-0408 Edge cases (an empty position: no refund, no creation draw; the count drops by 1 and the building goes to guard)
+        w.note("S-0408 Edge cases: an upgrade sale found its position empty (our engine's departure: no refund)");
+    }
+    let turret = u.is_some_and(|u| {
+        w.rules()
+            .buildings
+            .get(u as usize)
+            .is_some_and(|b| b.turret)
+    });
     let tick = w.tick;
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0408 claim 5 (the most recently added upgrade is removed)
-        ob.econ.building.upgrades.pop();
-        // The upgrade count after a sale is not stated (request Q-0131): it drops by 1, not below 0.
-        ob.econ.building.upgrade_count = (ob.econ.building.upgrade_count - 1).max(0);
+        let b = &mut ob.econ.building;
+        if let Some(slot) = usize::try_from(b.upgrade_count - 1)
+            .ok()
+            .and_then(|i| b.upgrades.get_mut(i))
+        {
+            // spec: S-0408 claim 5 (only the sold position is cleared)
+            *slot = None;
+        }
+        b.upgrade_count = if turret {
+            // spec: S-0408 claim 5 (a turret upgrade resets the count to 0, whatever its level or the target's limit)
+            0
+        } else {
+            // spec: S-0408 claim 5 (otherwise c − 1 exactly, not recomputed, not clamped to the type's limit)
+            b.upgrade_count - 1
+        };
         ob.econ.sale = None;
-        // spec: S-0408 claim 5 (the building goes to guard, otherwise unchanged)
+        // spec: S-0408 claim 5 (the building goes to guard; its health is unchanged)
         ob.beh.force(Behaviour::Guard, tick, stale);
     }
     // spec: S-0408 claim 5 (the house works out its power again, S-0405 claim 7)

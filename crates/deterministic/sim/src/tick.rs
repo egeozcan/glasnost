@@ -100,6 +100,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let moved = match loco {
         Some(Locomotor::Drive) => drive::tick(w, id),
         Some(Locomotor::Walk) => walk::tick(w, id),
+        // spec: S-0417 claim 5 (a tunnelling or teleporting vehicle drives temporarily for its factory exit)
+        _ if crate::econ::release::temporary_drive(w, id) => drive::tick(w, id),
         _ => false,
     };
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)

@@ -430,6 +430,34 @@ fn claim_11_failed_pack_up() {
     assert_eq!(kept[0].owner, Some(A));
 }
 
+// spec: S-0415 claim 12 (only a clear entry outcome accepts: one own standing infantry unit in the return cell refuses; a clear neighbour does not rescue the pack-up)
+#[test]
+fn claim_12_own_infantry_refuses() {
+    let mut w = game(&rules());
+    let y = deployed_yard(&mut w);
+    let spot = Target::Cell(c(6, 6));
+    order(&mut w, Order::GuardSpot { actor: y, spot });
+    step(&mut w);
+    let credits = w.houses[0].credits;
+    order(&mut w, Order::Sell { actor: y });
+    // The infantry unit stands in the return cell when the build-down ends.
+    until(&mut w, 60, |w| {
+        w.obj(y)
+            .is_some_and(|o| o.econ.sale.is_some() && o.beh.current == Some(Behaviour::Selling))
+    })
+    .expect("selling");
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c(0, 0), 0);
+    until(&mut w, 60, |w| w.obj(y).is_none()).expect("removed");
+    assert_eq!(w.houses[0].credits, credits + 500);
+    let mcv = w.rules().index_of(Kind::Vehicle, "MCV").unwrap();
+    assert!(
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Vehicle && o.type_index == mcv)
+            .all(|o| !o.on_map)
+    );
+}
+
 // spec: S-0415 claim 11 and Edge cases (quirks.failed_packup_keeps_vehicle off: no vehicle remains)
 #[test]
 fn claim_11_quirk_off() {

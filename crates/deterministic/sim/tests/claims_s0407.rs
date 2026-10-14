@@ -349,7 +349,7 @@ fn claim_8_upgrade() {
         let upg = t(&w, Kind::Building, "UPG").index;
         let e1 = building(&mut w, "HUT", 0, 0, 0);
         building(&mut w, "HUT", 0, 4, 4);
-        w.obj_mut(e1).unwrap().econ.building.upgrades.push(upg);
+        w.obj_mut(e1).unwrap().econ.building.upgrades[0] = Some(upg);
         let a = tech::answer(&w, H, t(&w, Kind::Infantry, "UPX"));
         assert_eq!(a == Answer::Allowed, !last);
     }

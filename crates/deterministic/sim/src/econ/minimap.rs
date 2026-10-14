@@ -370,8 +370,8 @@ pub fn inverted(c: RadarColour, bits: Bits) -> RadarColour {
 }
 
 /// Whether a cell is shrouded for the shown house, by S-0110's point test on
-/// the cell's centre at its ground height (claim 6); a cell that is not
-/// usable is not shrouded (claim 6, our engine's choice).
+/// the cell's centre at the cell's surface height there (claim 6); a cell
+/// that is not usable is not shrouded (claim 6, our engine's choice).
 pub fn cell_shrouded(w: &World, h: HouseId, c: CellXY) -> bool {
     if !w.cells.usable(c) {
         return false;
@@ -382,7 +382,8 @@ pub fn cell_shrouded(w: &World, h: HouseId, c: CellXY) -> bool {
 
 fn ground_centre(w: &World, c: CellXY) -> Pos {
     let p = Pos::centre(c, 0);
-    let z = w.cells.cell(c).map_or(0, |x| x.floor_height());
+    // spec: S-0410 claim 6 (the cell surface height at its centre, S-0106 claims 2 and 3; a slope's centre may lie above its level)
+    let z = w.surface_at(p.x, p.y);
     Pos::new(p.x, p.y, z)
 }
 

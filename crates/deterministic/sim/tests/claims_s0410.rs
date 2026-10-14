@@ -1,6 +1,8 @@
 //! Claim tests for S-0410 (radar availability, and the pure functions of
 //! the radar map) on synthetic data: invented types, no stock values.
 
+mod common;
+
 use glasnost_map::CellXY;
 use glasnost_num::Rounding;
 use glasnost_rules::schema::Ruleset;
@@ -211,6 +213,40 @@ fn claim_5_scale_and_size() {
     let img = minimap::image(&tall);
     assert_eq!((img.width, img.height), (70, 108));
     assert_eq!((img.left, img.top), (35, 0));
+}
+
+// spec: S-0410 claim 6 (the point test on the cell's centre at the cell's surface height there, S-0106: a slope whose centre lies a level up uses two candidate cells)
+#[test]
+fn claim_6_surface_height_at_the_centre() {
+    let mut s = common::Scene::new();
+    let cells: Vec<CellXY> = (1..=20).map(|k| common::cell(3 * k - 30, 0)).collect();
+    for (k, &c) in (1u8..).zip(&cells) {
+        s.set_cell(c, common::slope_tile(k), 0);
+    }
+    let mut w = s.build();
+    let mut differs = 0;
+    for &c in &cells {
+        // Explore the diagonal neighbour up and left of c, not c.
+        let d = CellXY::new(c.x - 1, c.y - 1);
+        let p = glasnost_sim::world::Pos::centre(CellXY::new(c.x - 2, c.y - 2), 0);
+        shroud::area_reveal(&mut w, A, p, 1);
+        let centre = glasnost_sim::world::Pos::centre(c, 0);
+        let z = w.surface_at(centre.x, centre.y);
+        let at_surface =
+            shroud::point_shrouded(&w, A, glasnost_sim::world::Pos::new(centre.x, centre.y, z));
+        assert_eq!(minimap::cell_shrouded(&w, A, c), at_surface, "{c:?}");
+        let floor = w.cells.cell(c).unwrap().floor_height();
+        let at_floor = shroud::point_shrouded(
+            &w,
+            A,
+            glasnost_sim::world::Pos::new(centre.x, centre.y, floor),
+        );
+        assert!(shroud::explored(&w, A, d) && !shroud::explored(&w, A, c));
+        if at_floor != at_surface {
+            differs += 1;
+        }
+    }
+    assert!(differs > 0, "no slope's centre is a level up");
 }
 
 // spec: S-0410 claim 6 and F3 (the cell shown at a pixel; at scale 1 the right-hand point of (x, y) shows (x + 1, y), quirks.radar_pixel_cell_shift)

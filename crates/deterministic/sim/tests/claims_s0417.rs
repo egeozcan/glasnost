@@ -1,0 +1,410 @@
+//! Claim tests for S-0417 (factory unloading) on synthetic data: invented
+//! factory and vehicle types, no stock numbers.
+
+mod econ_common;
+
+use econ_common::*;
+use glasnost_map::CellXY;
+use glasnost_rules::schema::Ruleset;
+use glasnost_sim::behaviour::Door;
+use glasnost_sim::econ::release::{self, Outcome};
+use glasnost_sim::objects;
+use glasnost_sim::orders::Order;
+use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+
+/// Our test factory: a ground vehicle factory (vehicle factory flag) with
+/// a 3 × 2 foundation and an invented door time.
+fn ruleset_with(foundation: [i32; 2]) -> Ruleset {
+    let mut r = ruleset();
+    let mut b = factory("vehicle");
+    b.foundation = Some(foundation);
+    b.weapons_factory = Some(true);
+    b.deploy_time = dec("0.01");
+    r.registries.get_mut("buildings").unwrap().push("VF".into());
+    r.sim.buildings.insert("VF".into(), b);
+    let mut s = wheel(700);
+    s.accelerates = Some(false);
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("STEADY".into());
+    r.sim.vehicles.insert("STEADY".into(), s);
+    r
+}
+
+fn new_unit(w: &mut World, kind: Kind, name: &str) -> ObjectId {
+    let ti = w.rules().index_of(kind, name).unwrap();
+    objects::create(w, kind, ti, Some(HouseId(0)))
+}
+
+fn top_left(w: &World, b: ObjectId) -> CellXY {
+    w.obj(b).unwrap().pos.cell()
+}
+
+fn spawn_at(w: &mut World, kind: Kind, name: &str, c: CellXY) -> ObjectId {
+    glasnost_sim::testkit::spawn(w, kind, name, 0, c, 0)
+}
+
+/// One record per processing of K: (tick, progress count after it).
+fn run_recording(w: &mut World, k: ObjectId, ticks: i32) -> Vec<(i32, i32)> {
+    let mut v = Vec::new();
+    let mut last = w.obj(k).unwrap().beh.last;
+    for _ in 0..ticks {
+        step(w);
+        let o = w.obj(k).unwrap();
+        if o.beh.last != last && o.beh.current == Some(Behaviour::Unload) {
+            v.push((w.tick, o.beh.progress));
+        }
+        last = o.beh.last;
+        if o.beh.current != Some(Behaviour::Unload) {
+            break;
+        }
+    }
+    v
+}
+
+// spec: S-0417 claim 3 and F3 (E = (x0 + a − 1, y0 + b) from the eleventh pair; the 3 × 2 word gives (x0, y0 − 1))
+#[test]
+fn claim_3_apron() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tl = top_left(&w, k);
+    assert_eq!(release::apron(&w, k), Some(CellXY::new(tl.x, tl.y - 1)));
+}
+
+// spec: S-0417 Edge cases (quirks.factory_apron_short_list: (32767, 32767) for 2 × 1 and 1 × 2, wrapped; (0, 0) for 1 × 1, giving (x0 − 1, y0)) and Q-0221 (interim: switch off, the last pair)
+#[test]
+fn edge_short_list_pairs() {
+    let wrap = |v: i32| i32::from(v as i16);
+    for (f, on) in [
+        ([2, 1], true),
+        ([1, 2], true),
+        ([1, 1], true),
+        ([1, 1], false),
+    ] {
+        let mut r = ruleset_with(f);
+        r.globals.quirks.factory_apron_short_list = on;
+        let mut w = game(&r);
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let tl = top_left(&w, k);
+        let e = release::apron(&w, k).unwrap();
+        let want = match (f, on) {
+            ([1, 1], true) => CellXY::new(tl.x - 1, tl.y),
+            (_, true) => CellXY::new(wrap(tl.x + 32766), wrap(tl.y + 32767)),
+            _ => {
+                let l = release::exit_list(1, 1, false, true);
+                let (a, b) = *l.last().unwrap();
+                CellXY::new(tl.x + a - 1, tl.y + b)
+            }
+        };
+        assert_eq!(e, want, "{f:?} {on}");
+    }
+}
+
+// spec: S-0417 Edge cases (the words with fewer than eleven entries: 2 × 1, 1 × 2, 1 × 1, the 3 × 3 refinery, 6 × 4 and 0 × 0)
+#[test]
+fn edge_short_list_words() {
+    for (fw, fh, refinery, short) in [
+        (2, 1, false, true),
+        (1, 2, false, true),
+        (1, 1, false, true),
+        (3, 3, true, true),
+        (6, 4, false, true),
+        (0, 0, false, true),
+        (2, 2, false, false),
+        (3, 2, false, false),
+        (3, 3, false, false),
+        (4, 3, false, false),
+    ] {
+        let n = release::exit_list(fw, fh, refinery, true).len();
+        assert_eq!(n < 11, short, "{fw} × {fh} {refinery}: {n}");
+    }
+}
+
+// spec: S-0417 table T1 and claim 6 (68 points before the target, facing 64; 7 progress units a point, S-0207's end correction with m = 1)
+#[test]
+fn t1_exit_track() {
+    let p = release::exit_track_points();
+    assert_eq!(p.len(), 68);
+    assert_eq!(p[0], (-670, -68, 64));
+    assert_eq!(p[3], (-639, -65, 64));
+    assert_eq!(p[4], (-630, -64, 64));
+    assert_eq!(p[67], (0, -1, 64));
+    let cost = 7 * (p.len() as i32 + 1) - glasnost_sim::tracks::end_correction(&p);
+    assert_eq!(cost, 7 * 69 - 6);
+}
+
+// spec: S-0417 claims 1, 2 and 7 and table S1 (U2: stages, door, sending out not before the third processing, closing after the tether ends, guard); S-0417 claim 12 (one delay draw a processing)
+#[test]
+fn claim_2_stages() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+    assert_eq!(w.obj(tank).unwrap().contact, Some(k));
+    assert!(release::tethered(&w, tank));
+    let mut processings = 0;
+    let mut sent = None;
+    let mut last = w.obj(k).unwrap().beh.last;
+    let mut report = None;
+    for _ in 0..600 {
+        step(&mut w);
+        let o = w.obj(k).unwrap().clone();
+        if o.beh.last != last {
+            processings += 1;
+            last = o.beh.last;
+        }
+        let on_track = w
+            .obj(tank)
+            .unwrap()
+            .drive
+            .as_ref()
+            .is_some_and(|d| d.track.as_ref().is_some_and(|t| t.exit));
+        if on_track && sent.is_none() {
+            sent = Some(processings);
+            // The door is at rest open when the vehicle is sent out.
+            assert_eq!(o.beh.gate.door, Door::Open);
+            // The contacted unit was forced to guard at the start; move is queued now.
+            let u = w.obj(tank).unwrap();
+            assert!(matches!(
+                (u.beh.current, u.beh.queued),
+                (Some(Behaviour::Guard), Some(Behaviour::Move)) | (Some(Behaviour::Move), _)
+            ));
+        }
+        if report.is_none() && w.obj(tank).unwrap().contact.is_none() {
+            report = Some(w.obj(tank).unwrap().pos.cell());
+            // Closing has not begun before the report.
+            assert!(!matches!(
+                o.beh.gate.door,
+                Door::Closing { .. } | Door::Closed
+            ));
+        }
+        if o.beh.current == Some(Behaviour::Guard) {
+            break;
+        }
+    }
+    assert!(
+        sent.is_some_and(|n| n >= 3),
+        "sent out at processing {sent:?}"
+    );
+    // The clear report at E itself.
+    assert_eq!(report, release::apron(&w, k));
+    let o = w.obj(k).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_eq!(o.beh.gate.door, Door::Closed);
+    assert!(!release::tethered(&w, tank));
+}
+
+// spec: S-0417 claim 9 (U9: a naval factory: two processings, the door opened by the first, guard queued by the second; no contact with the ship)
+#[test]
+fn claim_9_naval() {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("NAVYARD").unwrap().weapons_factory = Some(true);
+    let mut w = game(&r);
+    let k = building(&mut w, "NAVYARD", 0, 0, 0);
+    let boat = new_unit(&mut w, Kind::Vehicle, "BOAT");
+    if release::release(&mut w, k, boat) != Outcome::Released {
+        // No water on the synthetic map: start the unloading by hand.
+        let t = w.tick;
+        w.obj_mut(k).unwrap().beh.force(Behaviour::Unload, t, true);
+    }
+    assert_eq!(w.obj(boat).unwrap().contact, None);
+    let rec = run_recording(&mut w, k, 200);
+    assert_eq!(rec.len(), 1, "{rec:?}");
+    for _ in 0..200 {
+        step(&mut w);
+        if w.obj(k).unwrap().beh.current == Some(Behaviour::Guard) {
+            break;
+        }
+    }
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Guard));
+    assert_ne!(w.obj(k).unwrap().beh.gate.door, Door::Closed);
+}
+
+// spec: S-0417 claim 4 (U5: a blocked apron: requests to E's occupants, then to occupied neighbours; the factory stays in apron clearing; neighbours get nothing when E is free)
+#[test]
+fn claim_4_blocked_apron() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let e = release::apron(&w, k).unwrap();
+    let blocker = spawn_at(&mut w, Kind::Vehicle, "JEEP", e);
+    let neighbour = spawn_at(&mut w, Kind::Vehicle, "JEEP", CellXY::new(e.x - 2, e.y));
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    // Two processings: starting, then a blocked apron clearing.
+    let mut n = 0;
+    let mut last = w.obj(k).unwrap().beh.last;
+    while n < 2 {
+        step(&mut w);
+        let l = w.obj(k).unwrap().beh.last;
+        if l != last {
+            n += 1;
+            last = l;
+        }
+    }
+    assert_eq!(w.obj(k).unwrap().beh.progress, 1);
+    // The blocker was asked to scatter: it has somewhere to go.
+    assert!(w.obj(blocker).unwrap().dest.is_some());
+    // A vehicle two cells away is no apron neighbour.
+    assert!(w.obj(neighbour).unwrap().dest.is_none());
+
+    // E free, a vehicle in a neighbour: nothing is sent to it.
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let e = release::apron(&w, k).unwrap();
+    let side = spawn_at(&mut w, Kind::Vehicle, "JEEP", CellXY::new(e.x - 1, e.y - 1));
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    let rec = run_recording(&mut w, k, 80);
+    assert!(rec.iter().any(|&(_, p)| p >= 2), "{rec:?}");
+    assert!(w.obj(side).unwrap().dest.is_none());
+}
+
+// spec: S-0417 claim 6 (U7: an accelerating type keeps the speed fraction 0.5 on the exit track; a non-accelerating type uses the target fraction 1.0)
+#[test]
+fn claim_6_speed_fraction() {
+    let one = glasnost_num::F64::from_i64(1, glasnost_num::Rounding::default());
+    for (name, want) in [("TANK", glasnost_sim::consts::HALF), ("STEADY", one)] {
+        let mut w = game(&ruleset_with([3, 2]));
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let v = new_unit(&mut w, Kind::Vehicle, name);
+        assert_eq!(release::release(&mut w, k, v), Outcome::Released);
+        let mut seen = None;
+        for _ in 0..400 {
+            step(&mut w);
+            let d = w.obj(v).unwrap().drive.clone().unwrap();
+            if d.track.as_ref().is_some_and(|t| t.exit && t.next > 0) {
+                seen = Some(d.rho);
+                break;
+            }
+        }
+        assert_eq!(seen, Some(want), "{name}");
+    }
+}
+
+// spec: S-0417 claim 8 (U8: the saved rally is the destination at the report, with no further move queued; a later rally change is not read; without a rally, a scatter destination)
+#[test]
+fn claim_8_run_away() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tl = top_left(&w, k);
+    let a = Target::Cell(CellXY::new(tl.x + 6, tl.y + 6));
+    let b = Target::Cell(CellXY::new(tl.x - 6, tl.y + 6));
+    w.obj_mut(k).unwrap().guard_spot = Some(a);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    assert_eq!(w.obj(tank).unwrap().guard_spot, Some(a));
+    // The rally changes after release.
+    w.obj_mut(k).unwrap().guard_spot = Some(b);
+    for _ in 0..600 {
+        step(&mut w);
+        if w.obj(tank).unwrap().contact.is_none() {
+            break;
+        }
+    }
+    let o = w.obj(tank).unwrap();
+    assert_eq!(o.contact, None);
+    assert_eq!(o.dest, Some(a));
+
+    // No rally: the run-away scatter gives a destination.
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    for _ in 0..600 {
+        step(&mut w);
+        if w.obj(tank).unwrap().contact.is_none() {
+            break;
+        }
+    }
+    let o = w.obj(tank).unwrap();
+    assert_eq!(o.contact, None);
+    assert!(o.dest.is_some());
+}
+
+// spec: S-0417 claim 10 (an infantry factory: no unloading stages or door; contact and tether end at the next cell-arrival update, with no run-away reply)
+#[test]
+fn claim_10_infantry() {
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    assert!(release::tethered(&w, grunt));
+    assert_ne!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+    for _ in 0..100 {
+        step(&mut w);
+        if w.obj(grunt).unwrap().contact.is_none() {
+            break;
+        }
+    }
+    assert_eq!(w.obj(grunt).unwrap().contact, None);
+    assert!(!release::tethered(&w, grunt));
+    assert_eq!(w.obj(k).unwrap().beh.gate.door, Door::Closed);
+}
+
+// spec: S-0215 claim 11 (vehicles: in contact with a vehicle-factory building and the queued behaviour neither move nor enter; in contact with nothing on cell (x, y + 1) of one)
+#[test]
+fn s0215_claim_11_vehicle_factory_readiness() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tl = top_left(&w, k);
+    let v = spawn_at(&mut w, Kind::Vehicle, "JEEP", CellXY::new(tl.x, tl.y + 1));
+    assert!(release::holds_back(&w, v));
+    assert!(!glasnost_sim::process::ready(&w, v));
+    w.obj_mut(v).unwrap().contact = Some(k);
+    w.obj_mut(v).unwrap().beh.queued = Some(Behaviour::Guard);
+    assert!(release::holds_back(&w, v));
+    w.obj_mut(v).unwrap().beh.queued = Some(Behaviour::Move);
+    assert!(!release::holds_back(&w, v));
+    let other = spawn_at(
+        &mut w,
+        Kind::Vehicle,
+        "JEEP",
+        CellXY::new(tl.x + 1, tl.y + 1),
+    );
+    assert!(!release::holds_back(&w, other));
+}
+
+// spec: S-0213 claims 8 and 9 (a tethered actor ignores stop and scatter orders) and table T3 (b) (a behaviour order keeps the link at a building that is not of the unloading kind)
+#[test]
+fn s0213_tethered_orders() {
+    let mut w = game(&ruleset_with([3, 2]));
+    ready(&mut w);
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    force(&mut w, 0, Order::Stop { actor: tank });
+    step(&mut w);
+    assert_eq!(w.obj(tank).unwrap().contact, Some(k));
+    assert!(release::tethered(&w, tank));
+}
+
+// spec: S-0417 claims 2 and 7 (the unloading state survives a save and load: the state hash is unchanged in the middle of an unloading)
+#[test]
+fn save_round_trip_mid_unloading() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    for _ in 0..60 {
+        step(&mut w);
+    }
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+    let bytes = glasnost_sim::save::save(&w);
+    let mut back =
+        glasnost_sim::save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+    assert_eq!(
+        glasnost_sim::save::state_hash(&back),
+        glasnost_sim::save::state_hash(&w)
+    );
+    for _ in 0..200 {
+        step(&mut w);
+        step(&mut back);
+    }
+    assert_eq!(
+        glasnost_sim::save::state_hash(&back),
+        glasnost_sim::save::state_hash(&w)
+    );
+}

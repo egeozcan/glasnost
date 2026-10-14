@@ -39,7 +39,7 @@ fn building(cost: i32) -> BuildingType {
 fn rules() -> Ruleset {
     let mut r = testkit::ruleset();
     let names = [
-        "WALLA", "HUT", "FREE", "CHEAP", "PAD", "OVER", "FLAT", "FIRE", "LOCK", "UPG",
+        "WALLA", "HUT", "FREE", "CHEAP", "PAD", "OVER", "FLAT", "FIRE", "LOCK", "UPG", "UPT", "UL3",
     ];
     r.registries.insert(
         "buildings".into(),
@@ -84,7 +84,13 @@ fn rules() -> Ruleset {
     s.buildings.insert("LOCK".into(), lock);
     let mut upg = building(200);
     upg.econ.powers_up_building = Some("HUT".into());
-    s.buildings.insert("UPG".into(), upg);
+    s.buildings.insert("UPG".into(), upg.clone());
+    let mut upt = upg.clone();
+    upt.turret = Some(true);
+    s.buildings.insert("UPT".into(), upt);
+    let mut ul3 = upg;
+    ul3.econ.powers_up_to_level = Some(3);
+    s.buildings.insert("UL3".into(), ul3);
     let mut wall = building(100);
     wall.econ.wall = Some(true);
     wall.econ.to_overlay = Some("O0".into());
@@ -328,7 +334,15 @@ fn claim_4_second_order() {
     assert_eq!(w.obj(hut).unwrap().econ.sale, before);
 }
 
-// spec: S-0408 claim 5 (a sale on an upgraded building sells only its top upgrade: its refund, the upgrade removed, guard, one creation draw)
+/// Sells `b` once and runs three ticks.
+fn sell_once(w: &mut World, b: ObjectId) {
+    order(w, A, Order::Sell { actor: b });
+    for _ in 0..3 {
+        step(w);
+    }
+}
+
+// spec: S-0408 claim 5 (a positive count sells the upgrade at that count's position: its refund, the position cleared, the count c − 1, guard, health unchanged)
 #[test]
 fn claim_5_upgrade_sale() {
     let mut w = game(&rules());
@@ -336,18 +350,69 @@ fn claim_5_upgrade_sale() {
     let upg = ty(&w, "UPG");
     glasnost_sim::econ::placement::add_upgrade(&mut w, hut, upg);
     glasnost_sim::econ::placement::add_upgrade(&mut w, hut, upg);
-    assert_eq!(w.obj(hut).unwrap().econ.building.upgrades.len(), 2);
+    assert_eq!(
+        w.obj(hut).unwrap().econ.building.upgrades,
+        [Some(upg), Some(upg), None]
+    );
+    w.obj_mut(hut).unwrap().health = 300;
     let credits = w.houses[0].credits;
-    order(&mut w, A, Order::Sell { actor: hut });
-    for _ in 0..3 {
-        step(&mut w);
-    }
+    sell_once(&mut w, hut);
     let o = w.obj(hut).unwrap();
-    assert_eq!(o.econ.building.upgrades.len(), 1);
-    // Request Q-0131: the upgrade count drops by 1.
+    assert_eq!(o.econ.building.upgrades, [Some(upg), None, None]);
     assert_eq!(o.econ.building.upgrade_count, 1);
     assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_eq!(o.health, 300);
     assert_eq!(w.houses[0].credits, credits + 100);
+    // Room for a level-less upgrade again.
+    assert!(glasnost_sim::econ::placement::upgrade_target(&w, A, upg, c(0, 0)).is_some());
+}
+
+// spec: S-0408 claim 5 (a turret upgrade resets the count to 0; lower positions are kept but no longer count, and the next sale sells the building)
+#[test]
+fn claim_5_turret_upgrade_resets_the_count() {
+    let mut w = game(&rules());
+    let hut = put(&mut w, "HUT", 0, c(0, 0));
+    let (upg, upt) = (ty(&w, "UPG"), ty(&w, "UPT"));
+    glasnost_sim::econ::placement::add_upgrade(&mut w, hut, upg);
+    glasnost_sim::econ::placement::add_upgrade(&mut w, hut, upt);
+    sell_once(&mut w, hut);
+    let o = w.obj(hut).unwrap();
+    assert_eq!(o.econ.building.upgrade_count, 0);
+    assert_eq!(o.econ.building.upgrades, [Some(upg), None, None]);
+    let credits = w.houses[0].credits;
+    order(&mut w, A, Order::Sell { actor: hut });
+    for _ in 0..200 {
+        step(&mut w);
+    }
+    assert!(w.obj(hut).is_none(), "the building itself is sold");
+    assert!(w.houses[0].credits > credits);
+}
+
+// spec: S-0408 claim 5 (a non-turret level-field upgrade lowers the count by 1 only, not clamped) and Edge cases (a positive count at an empty position: no refund, no creation draw, count − 1, guard)
+#[test]
+fn claim_5_level_upgrade_and_empty_position() {
+    let mut w = game(&rules());
+    let hut = put(&mut w, "HUT", 0, c(0, 0));
+    let ul3 = ty(&w, "UL3");
+    // F5: c′ = min(0 + 3, 2) = 2, recorded in position 2.
+    glasnost_sim::econ::placement::add_upgrade(&mut w, hut, ul3);
+    assert_eq!(
+        w.obj(hut).unwrap().econ.building.upgrades,
+        [None, Some(ul3), None]
+    );
+    sell_once(&mut w, hut);
+    let o = w.obj(hut).unwrap();
+    assert_eq!(o.econ.building.upgrade_count, 1);
+    assert_eq!(o.econ.building.upgrades, [None, None, None]);
+    // A level-field upgrade still needs count 0.
+    assert!(glasnost_sim::econ::placement::upgrade_target(&w, A, ul3, c(0, 0)).is_none());
+    // The departure: position 1 is empty.
+    let credits = w.houses[0].credits;
+    sell_once(&mut w, hut);
+    let o = w.obj(hut).unwrap();
+    assert_eq!(o.econ.building.upgrade_count, 0);
+    assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_eq!(w.houses[0].credits, credits);
 }
 
 // spec: S-0408 claim 6 (a building destroyed during its sale pays no refund)

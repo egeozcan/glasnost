@@ -227,33 +227,125 @@ fn claim_1_placement_point_and_construction() {
     }
 }
 
-// spec: S-0108 claim 5 (the build-up is finished (n − 1) × d_b ticks after it began, d_b = trunc(B × 900 / n): n = 5, B = 0.05 give 36)
-// spec: S-0406 claim 1 (construction completes; request Q-0130: at the first processing on or after that tick, then guard)
-#[test]
-fn construction_completes_after_buildup() {
-    let r = rules();
-    let mut w = with_yard(&r);
-    assert_eq!(
-        glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "HUT")),
-        36
-    );
-    let start = w.tick;
-    assert!(place(&mut w, "HUT", c(0, 0)));
-    let id = buildings_at(&w, c(0, 0))[0];
-    let mut done = None;
-    for _ in 0..60 {
-        glasnost_sim::tick::step(&mut w);
+/// A building of type `name` put on the map at the middle in its
+/// construction state, with no other object in play (no other draws).
+fn lone_placed(w: &mut World, name: &str) -> ObjectId {
+    let t = ty(w, name);
+    let id = glasnost_sim::objects::create(w, Kind::Building, t, Some(A));
+    placement::put_on_map(w, id, c(0, 0), true);
+    id
+}
+
+/// Runs `id` through its construction; returns (C, H): the tick of the
+/// first construction processing and the handover tick, checking claim 14's
+/// cadence (one processing a tick, no draw of the scenario stream) on the
+/// way and that guard is current by the end of the handover tick.
+fn construction_ticks(w: &mut World, id: ObjectId) -> (i32, i32) {
+    let mut first = None;
+    let mut last = w.obj(id).unwrap().beh.last;
+    for _ in 0..200 {
+        let rng = w.rng.clone();
+        let t = w.tick;
+        glasnost_sim::tick::step(w);
         let o = w.obj(id).unwrap();
+        if first.is_none() {
+            first = o.econ.construction.first;
+            if let Some(c) = first {
+                assert_eq!(c, t);
+            }
+        }
         if !o.econ.construction.building_up {
-            done = Some(w.tick - 1);
             assert_eq!(o.beh.current, Some(Behaviour::Guard));
-            break;
+            return (first.expect("a first processing"), t);
         }
         assert_eq!(o.beh.current, Some(Behaviour::Construction));
+        if first.is_some() {
+            // spec: S-0406 claim 14 (consecutive processings, no timing draw)
+            assert_ne!(o.beh.last, last, "processed at {t}");
+            assert_eq!(w.rng, rng, "no draw at {t}");
+        }
+        last = o.beh.last;
     }
-    let done = done.expect("construction completes");
-    assert!(done - start >= 36, "not before the build-up ends");
-    assert!(done - start <= 37, "at the first processing after it");
+    panic!("construction does not complete");
+}
+
+// spec: S-0108 claim 5 (d_b = trunc(B × 900 / n): n = 5, B = 0.05 give 9, finished 36 ticks after)
+// spec: S-0406 claims 14 and 15 and F6 (delay 1 and no draw whatever the rate; H = C + (n − 1) × d_b; guard current by the end of the handover tick)
+#[test]
+fn claims_14_15_construction_handover() {
+    for rate in ["0.016", "2"] {
+        let mut r = rules();
+        r.sim.behaviours.insert(
+            "construction".into(),
+            glasnost_rules::sim::BehaviourProps {
+                rate: Some(Decimal(rate.into())),
+                ..Default::default()
+            },
+        );
+        let mut w = game(&r);
+        assert_eq!(
+            glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "HUT")),
+            36
+        );
+        let id = lone_placed(&mut w, "HUT");
+        let (cc, h) = construction_ticks(&mut w, id);
+        assert_eq!(h, cc + 36, "rate {rate}");
+    }
+}
+
+// spec: S-0406 claim 15 and F6 (a type with no build-up sprite: a zero-delay range, H = C + 1)
+#[test]
+fn claim_15_no_buildup_sprite() {
+    let mut r = rules();
+    r.sim.buildings.get_mut("HUT").unwrap().econ.buildup = None;
+    let mut w = game(&r);
+    let id = lone_placed(&mut w, "HUT");
+    let (cc, h) = construction_ticks(&mut w, id);
+    assert_eq!(h, cc + 1);
+}
+
+// spec: S-0406 claim 15 (a gate uses its gate range: n = G + 1, GateStages absent 9; S-0108 claim 5)
+#[test]
+fn claim_15_gate_range() {
+    let mut r = rules();
+    let w = with_yard(&r);
+    // n = 10, d_b = trunc(0.05 × 900 / 10) = 4: 9 × 4.
+    assert_eq!(
+        glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "GATE1")),
+        36
+    );
+    r.sim.buildings.get_mut("GATE1").unwrap().econ.gate_stages = Some(3);
+    let w = with_yard(&r);
+    // n = 4, d_b = trunc(0.05 × 900 / 4) = 11: 3 × 11.
+    assert_eq!(
+        glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "GATE1")),
+        33
+    );
+}
+
+// spec: S-0406 claim 15 (the handover does not clear the building's target)
+#[test]
+fn claim_15_target_kept() {
+    let r = rules();
+    let mut w = game(&r);
+    let id = lone_placed(&mut w, "HUT");
+    let aim = glasnost_sim::world::Target::Cell(c(4, 4));
+    w.obj_mut(id).unwrap().target = Some(aim);
+    construction_ticks(&mut w, id);
+    assert_eq!(w.obj(id).unwrap().target, Some(aim));
+}
+
+// spec: S-0406 claim 16 (a placed building faces 0, its turret too, whatever the factory's facing)
+#[test]
+fn claim_16_placed_facing() {
+    let r = rules();
+    let mut w = game(&r);
+    testkit::spawn(&mut w, Kind::Building, "YARD", 0, c(-6, -6), 96);
+    assert!(place(&mut w, "HUT", c(0, 0)));
+    let id = buildings_at(&w, c(0, 0))[0];
+    let o = w.obj(id).unwrap();
+    assert_eq!((o.body.start, o.body.target), (0, 0));
+    assert_eq!(o.turret.target, 0);
 }
 
 // spec: S-0406 claim 2 (the 8-cell 3 × 3 word lacks the cell 2 along x and 1 along y from the top-left)
@@ -560,7 +652,7 @@ fn claim_12_upgrade() {
     let o = w.obj(hut).unwrap();
     assert_eq!(o.econ.building.upgrade_count, 1);
     assert_eq!(o.health, 400);
-    assert_eq!(o.econ.building.upgrades, vec![ty(&w, "UPG")]);
+    assert_eq!(o.econ.building.upgrades, [Some(ty(&w, "UPG")), None, None]);
     glasnost_sim::tick::step(&mut w);
     assert_eq!(power::totals(&w, A).0, 25);
     // The type's upgrade count is 1: no more room.
@@ -578,7 +670,7 @@ fn claim_12_level_field() {
     assert!(place(&mut w, "LVL2", c(0, 0)));
     let o = w.obj(hut).unwrap();
     assert_eq!(o.econ.building.upgrade_count, 1);
-    assert_eq!(o.econ.building.upgrades.len(), 1);
+    assert_eq!(o.econ.building.upgrades, [Some(ty(&w, "LVL2")), None, None]);
 }
 
 // spec: S-0406 claim 12 (an upgrade order that names such a building passes claim 4 whatever its ring holds; claim 5 still asked)

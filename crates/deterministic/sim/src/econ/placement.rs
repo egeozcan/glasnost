@@ -66,6 +66,10 @@ impl Rules {
 pub struct Construction {
     /// The construction has not completed yet (S-0408 claim 3 (a)).
     pub building_up: bool,
+    /// The tick *C* of the construction behaviour's first processing
+    /// (S-0406 claim 14 and F6); none before it.
+    #[serde(default)]
+    pub first: Option<i32>,
 }
 
 /// The placement fields of a building type (S-0406 Import mapping), with
@@ -641,7 +645,7 @@ pub fn place_building(w: &mut World, house: HouseId, t: TypeRef, cell: CellXY) -
 /// state; then the wall fill for a place order (`by_order`). The facing is
 /// 0 unless the caller sets one.
 pub fn put_on_map(w: &mut World, id: ObjectId, cell: CellXY, by_order: bool) {
-    // The facing of a placed building is not stated (request Q-0133): 0.
+    // spec: S-0406 claim 16 and Constants (a placed building faces 0, map north)
     put_on_map_facing(w, id, cell, by_order, 0);
 }
 
@@ -857,7 +861,7 @@ pub fn add_upgrade(w: &mut World, b: ObjectId, u: u32) {
         ob.health = strength;
         // spec: S-0406 F5 (recorded in position c′ when 1 ≤ c′ ≤ 3; otherwise nothing, departure)
         if (1..=3).contains(&c2) {
-            ob.econ.building.upgrades.push(u);
+            ob.econ.building.upgrades[(c2 - 1) as usize] = Some(u);
         }
     }
     if let Some(h) = owner {
