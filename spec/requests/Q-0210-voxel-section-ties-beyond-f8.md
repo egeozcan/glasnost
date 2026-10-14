@@ -1,9 +1,9 @@
 ---
 id: Q-0210
 title: Which section covers which among equal nearest depths beyond F8's two cases, and in the depth-buffered mode?
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need

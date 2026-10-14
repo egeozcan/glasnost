@@ -1,9 +1,9 @@
 ---
 id: Q-0211
 title: What do in-bound normal-mode-0 voxel columns draw beyond claim 35's three cases?
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0213
 title: Does a ground vehicle's voxel shadow darken its own body where they overlap?
-status: open
+status: answered
 related: [S-0102, S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
