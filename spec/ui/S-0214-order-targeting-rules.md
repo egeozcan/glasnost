@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -281,8 +281,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 4. **The generic result on an object.** Over an object, every actor has a *generic result* *g*
    by table G. It covers the modifier roles, clicks on the actor itself, the attack rule of claim
-   6 and plain selection. Table G is a precedence list: the first row whose condition holds gives
-   *g*. The final action of an own actor is a function of *g* and the actor's and target's
+   6 and plain selection. Table G states the generic result *g*. When multiple row conditions hold, the result is the one in the highest-priority applicable row; the row order specifies precedence between outcomes, not the order or method of testing conditions. The final action of an own actor is a function of *g* and the actor's and target's
    properties, given by its kind's table (claims 7 and 8). For an actor that is not an own object,
    *g* is the final action.
    - Backing: `measurable` (Scenario T3, including row G3, and Scenarios T2 and T6 for rows G4,
@@ -378,7 +377,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    building), given by the kind's cell table (IC, VC, ACC or BC). For an
    infantry unit, vehicle or aircraft, a click on a cell outside the usable area produces an order
    only when the action is *no-move*.
-   - Backing: `measurable` (Scenarios T7 and T10), except the rows that read what fog of war shows
+   A force-fire click that produces an attack order on a destroyable-cliff cell names the
+   clicked cell at input. At a later approach step, that target can be replaced by another
+   cell of the same tile under S-0307 claim 23. That replacement belongs to approach,
+   not to click resolution; S-0215 claim 37 owns when the approach step occurs.
+   - Backing: `measurable` (Scenarios T7 and T10; S-0307 RG24 for the cited target replacement), except the rows that read what fog of war shows
      (rows IC2 and IC3, and the fog parts of rows GC9, VC2 and BC2), which are `unmeasured`: no
      setting that turns fog of war on in a skirmish is known (Open questions).
    - Confidence: medium (low for the building cell table)
@@ -643,7 +646,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 sidebar's repair mode over an object that cannot be repaired (claim 13) are the same action. It
 produces no order either way.
 
-**Table R: representative rank** (claim 1). The first matching row gives the rank.
+**Table R: representative rank** (claim 1). When multiple row conditions hold, the representative has the rank in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions.
 
 | Rank | Selected object |
 |---|---|
@@ -654,8 +657,7 @@ produces no order either way.
 | 4 | An armed unit whose default weapon (the weapon it would use by default, as for a healing actor, Terms) does zero or negative damage (a healing actor, or a weapon without damage) |
 | 5 | An armed unit whose default weapon does positive damage |
 
-**Table G: generic result *g* on an object** (claim 4). The first row whose condition holds gives
-*g*. In a campaign game a further rule applies to targets under shroud. Campaigns are out of scope for now, so it is not
+**Table G: generic result *g* on an object** (claim 4). When multiple row conditions hold, *g* is the result in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. In a campaign game a further rule applies to targets under shroud. Campaigns are out of scope for now, so it is not
 specified. Row G2 asks only whether the actor is being erased. Unlike row G10, it does not ask
 whether the target is being erased. That difference is the original's, not an omission.
 
@@ -675,9 +677,7 @@ whether the target is being erased. That difference is the original's, not an om
 
 **Table I: infantry on an object** (claim 7). The rows use *g* and two values derived from it,
 *g*₁ and *g*₂, each defined in full below. The derived values of this table and of table V are
-functions of the actor, the target, the modifiers held and *g*. Values *e*, *v* and *x* are given
-by small tables in which the first matching row gives the value; no row of table I reads the
-result of another row.
+functions of the actor, the target, the modifiers held and *g*. Values *e*, *v* and *x* are given by small tables; when multiple row conditions hold, the value is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. No row of table I reads the result of another row.
 "Engineer", "spy" and the rest name type flags (Import mapping). An *engineer-friendly building*
 is a repairable building, not vehicle-like, that is allied with the actor, or that belongs to a
 passive neutral house, can be garrisoned and is not being erased. A *deployed in-place deployer*
@@ -725,7 +725,7 @@ undefined.
 
 **Derived result g₂.** If the transport-verdict table assigns a value to *x*, *g₂* is that value. If that table assigns no value, *g₂* is *v*.
 
-*Final action.* The first matching row gives it.
+*Final action.* When multiple row conditions hold, the final action is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions.
 
 | Row | Actor and target | Final action |
 |---|---|---|
@@ -764,9 +764,7 @@ or *attack* from rows I16 to I18, since those come before I27; an engineer told 
 without the scenery check; and an infantry unit that does not deploy, clicked on itself, gets the
 fallback move (row I28), usually *no-move*.
 
-**Table V: vehicle on an object** (claim 8). The rows use *g* and the derived values *k*, *b*, *n*
-and *q*, each defined in full below by a small table in which the first matching row gives the
-value. Like those of table I, they are functions of the actor, the target, the modifiers held and
+**Table V: vehicle on an object** (claim 8). The rows use *g* and the derived values *k*, *b*, *n* and *q*, each defined in full below by a small table; when multiple row conditions hold, the value is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. Like those of table I, they are functions of the actor, the target, the modifiers held and
 *g*: the letters name results, not steps, and fix no order of evaluation.
 
 *Fire-or-deploy value k* (a vehicle unable to fire, or clicked on itself).
@@ -809,7 +807,7 @@ not phasing in, whose type carries passengers.
 | q3 | Docking answer *refuses* | no-enter |
 | q4 | Otherwise (including a docking answer that is neither) | *n* |
 
-*Final action.* The first matching row gives it.
+*Final action.* When multiple row conditions hold, the final action is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions.
 
 | Row | Vehicle and target | Final action |
 |---|---|---|
@@ -826,7 +824,7 @@ click then moves it toward the enemy, claim 11); and an unarmed vehicle clicked 
 that accepts it gets *enter* with or without force-fire, by rows G10 and n3, since force-fire
 gives an unarmed actor no generic *attack* (claim 6 (c)).
 
-**Table VD: a vehicle clicked on itself** (*g* = deploy). The first matching row gives *k*.
+**Table VD: a vehicle clicked on itself** (*g* = deploy). When multiple row conditions hold, *k* is the result in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions.
 
 | Row | Vehicle | *k* |
 |---|---|---|
@@ -839,8 +837,7 @@ gives an unarmed actor no generic *attack* (claim 6 (c)).
 | VD7 | A transport, carrying passengers, not on a bridge, and either its first passenger could not move on the land type of the cell (a land multiplier below 0.01 there, Formulas F4, the land not being water), or the transport is in the air while its type does not hover | no-deploy |
 | VD8 | Otherwise | deploy if it has deploy readiness, else no-deploy |
 
-**Table AC: aircraft on an object** (claim 8). The first matching row gives the final action. All
-rows: low.
+**Table AC: aircraft on an object** (claim 8). When multiple row conditions hold, the final action is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. All rows: low.
 
 | Row | Aircraft and target | Final action |
 |---|---|---|
@@ -856,8 +853,7 @@ rows: low.
 | AC10 | *g* is select; the target a building with the repair-depot flag | enter if the target's type is in the aircraft's dock list, it has a free place for this aircraft, it holds no unit and its docking answer is *accepts*; else no-enter |
 | AC11 | Otherwise | *g* |
 
-**Table B: building on an object** (claim 8). The first matching row gives the final action. All
-rows: low, except the factory-category tests clarified by claim 17 (high).
+**Table B: building on an object** (claim 8). When multiple row conditions hold, the final action is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. All rows: low, except the factory-category tests clarified by claim 17 (high).
 
 | Row | Building and target | Final action |
 |---|---|---|
@@ -878,7 +874,7 @@ rows: low, except the factory-category tests clarified by claim 17 (high).
 A building's *g* is *move* only with force-move held (row G7), since no other row of table G
 gives it.
 
-**Table GC: generic result *c* on a cell** (claim 9). The first row whose condition holds gives *c*.
+**Table GC: generic result *c* on a cell** (claim 9). When multiple row conditions hold, *c* is the result in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions.
 
 | Row | Condition | *c* |
 |---|---|---|
