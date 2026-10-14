@@ -836,6 +836,51 @@ impl Builder<'_> {
         }
     }
 
+    /// The importer warning of S-0406 claim 18 and Import mapping: a type
+    /// whose construction range (S-0108 claim 5) has a positive delay and 1
+    /// stage or fewer never completes its construction.
+    fn single_stage_buildup_warning(
+        &mut self,
+        t: &TypeRec,
+        frames: Option<i32>,
+        gate_stages: Option<i32>,
+    ) {
+        let gate = fold(t.keys.get(&b"Gate"[..]), None, |v, _| value::boolean(v)) == Some(true);
+        let n = if gate {
+            // spec: S-0108 claim 5 and Import mapping (a gate: n = G + 1, GateStages absent 9)
+            gate_stages.unwrap_or(9).saturating_add(1)
+        } else {
+            // spec: S-0108 claim 5 (n = ⌊N_b / 2⌋)
+            frames.unwrap_or(0).div_euclid(2)
+        };
+        if n >= 2 || !self.buildup_delay_positive(n) {
+            return;
+        }
+        // spec: S-0406 claim 18 and Import mapping (the importer warns about a positive-delay range of 1 stage or fewer, in both states of the switch)
+        self.warn(0, 0, format!(
+            "buildings {}: its build-up has {n} stage(s) with a positive delay, so its construction never completes (S-0406 claim 18; quirks.single_stage_buildup_never_completes)",
+            show(&t.name)
+        ));
+    }
+
+    /// Whether the build-up delay d_b = trunc(B × 900 / n) is positive
+    /// (S-0108 claim 5, F1), with *B* the general build-up time in force.
+    fn buildup_delay_positive(&self, n: i32) -> bool {
+        if n <= 0 {
+            // spec: S-0108 claim 5 (n ≤ 0: d_b = 1)
+            return true;
+        }
+        let state = self
+            .i
+            .outcome
+            .globals
+            .get(GENERAL)
+            .and_then(|s| s.get(&b"BuildupTime"[..]));
+        // spec: S-0108 Import mapping (BuildupTime absent: 0.05)
+        let text = fold(state, None, |v, _| decimal_text(v)).unwrap_or_else(|| "5e-2".into());
+        decimal_times_at_least(&text, 900, n)
+    }
+
     /// The art fields of a building type's image section (S-0402 Import
     /// mapping).
     fn building_art_econ(&mut self, econ: &mut Rec, index: usize, t: &TypeRec) {
@@ -863,12 +908,27 @@ impl Builder<'_> {
                         Some(!value::is_no_type(name))
                     }
                 });
-        if buildup == Some(true) {
+        // spec: S-0108 claim 5 and S-0007 claim 11 (with the art looked up, a build-up name whose file does not resolve gives no build-up sprite)
+        let art = self.i.arts.and_then(|a| a.get(&(kind, index)));
+        let buildup = match art {
+            Some(a) => buildup == Some(true) && a.building_sprites.contains_key("buildup"),
+            None => buildup == Some(true),
+        };
+        let frames = art.and_then(|a| a.buildup_frames);
+        if buildup {
             econ.put("buildup", jsonc::boolean(true));
+            // spec: S-0108 claim 5 (N_b, the build-up sprite's image-frame count)
+            if let Some(n) = frames {
+                econ.put("buildup_frames", int_node(n));
+            }
         }
         // spec: S-0108 Import mapping (GateStages: an integer, absent 9; S-0406 claim 15)
-        if let Some(v) = self.art_int(kind, index, t, "GateStages") {
+        let gate_stages = self.art_int(kind, index, t, "GateStages");
+        if let Some(v) = gate_stages {
             econ.put("gate_stages", int_node(v));
+        }
+        if buildup && art.is_some() {
+            self.single_stage_buildup_warning(t, frames, gate_stages);
         }
         // spec: S-0402 Import mapping (the docking, payment and unloading animations: animation type names)
         for &(field, k) in DOCK_ANIMS {
@@ -1018,6 +1078,38 @@ impl Builder<'_> {
         if !econ.0.is_empty() {
             rec.put("economy", econ.node());
         }
+    }
+}
+
+/// Whether decimal text `d` in our grammar, times `k`, is at least `n`
+/// (`n` positive): the test d_b ≥ 1 of S-0108 F1 without a double.
+pub(super) fn decimal_times_at_least(d: &str, k: u128, n: i32) -> bool {
+    let (body, pct) = match d.strip_suffix('%') {
+        Some(b) => (b, true),
+        None => (d, false),
+    };
+    if body.starts_with('-') {
+        return false;
+    }
+    let (mant, exp) = match body.split_once('e') {
+        Some((m, e)) => (m, e.parse::<i32>().unwrap_or(0)),
+        None => (body, 0),
+    };
+    // spec: S-0003 claim 7 (a percent value is a hundredth)
+    let exp = if pct { exp - 2 } else { exp };
+    let digits = mant.trim_start_matches('0');
+    if digits.is_empty() {
+        return false;
+    }
+    // Long mantissas only make the value larger than any count here.
+    let m: u128 = digits[..digits.len().min(30)].parse().unwrap_or(u128::MAX);
+    let exp = exp + i32::try_from(digits.len().saturating_sub(30)).unwrap_or(0);
+    let lhs = m.saturating_mul(k);
+    let n = u128::from(n.unsigned_abs());
+    if exp >= 0 {
+        lhs.saturating_mul(10u128.saturating_pow(exp.unsigned_abs())) >= n
+    } else {
+        lhs >= n.saturating_mul(10u128.saturating_pow(exp.unsigned_abs()))
     }
 }
 

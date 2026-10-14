@@ -307,9 +307,9 @@ pub struct EconFields {
     #[serde(default)]
     pub buildup: Option<bool>,
     /// Buildings: the image-frame count *N_b* of the build-up sprite (S-0108
-    /// claim 5: *n* = ⌊*N_b* / 2⌋ build-up frames); absent: unknown, which
-    /// the simulation reads as *n* = 0 (the importer does not count the
-    /// sprite's frames yet).
+    /// claim 5: *n* = ⌊*N_b* / 2⌋ build-up frames), counted by the importer
+    /// from the sprite file; absent: unknown, which the simulation reads as
+    /// *N_b* = 0 (S-0406 claim 18 then applies).
     #[serde(default)]
     pub buildup_frames: Option<i32>,
     /// Buildings: the art `GateStages`, the gate-stage count *G* (S-0108

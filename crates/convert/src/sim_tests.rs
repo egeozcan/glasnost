@@ -1094,3 +1094,80 @@ fn approach_keys() {
     assert_eq!(s.vehicles["Cart"].can_approach_target, Some(false));
     assert_eq!(s.vehicles["Rover"].can_approach_target, None);
 }
+
+/// spec: S-0108 claim 5 (N_b from the build-up sprite; no resolved file, no
+/// build-up sprite) and S-0406 claim 18 and Import mapping (the importer
+/// warns about a positive-delay range of 1 stage or fewer)
+#[test]
+fn buildup_frames_and_single_stage_warning() {
+    let base = "[BuildingTypes]\n1=Tall\n2=Short\n3=Bare\n4=Lost\n5=Door\n[Tall]\nSight=1\n\
+                [Short]\nSight=1\n[Bare]\nSight=1\n[Lost]\nSight=1\n[Door]\nGate=yes\n";
+    let art_text = "[Tall]\nBuildup=TallMk\n[Short]\nBuildup=ShortMk\n[Bare]\nBuildup=BareMk\n\
+                    [Lost]\nBuildup=LostMk\n[Door]\nBuildup=DoorMk\nGateStages=0\n";
+    let layers = [crate::layers::Layer {
+        role: crate::layers::Role::Base,
+        file: "rules.ini".into(),
+        doc: Document::parse(base.as_bytes(), Default::default(), &mut Vec::new()),
+    }];
+    let art = Document::parse(art_text.as_bytes(), Default::default(), &mut Vec::new());
+    let outcome = crate::layers::apply(
+        &layers,
+        &art,
+        "art.ini",
+        Default::default(),
+        &LayerQuirks::default(),
+    );
+    let with = |image: &str, frames: Option<i32>| TypeArt {
+        image: image.as_bytes().to_vec(),
+        building_sprites: BTreeMap::from([("buildup", b"x.shp".to_vec())]),
+        buildup_frames: frames,
+        ..TypeArt::default()
+    };
+    let arts = BTreeMap::from([
+        ((Kind::Buildings, 0), with("Tall", Some(10))),
+        ((Kind::Buildings, 1), with("Short", Some(3))),
+        ((Kind::Buildings, 2), with("Bare", Some(1))),
+        (
+            (Kind::Buildings, 3),
+            TypeArt {
+                image: b"Lost".to_vec(),
+                ..TypeArt::default()
+            },
+        ),
+        ((Kind::Buildings, 4), with("Door", Some(10))),
+    ]);
+    let (node, w) = build(SimInputs {
+        outcome: &outcome,
+        art: &art,
+        arts: Some(&arts),
+        quirks: &LayerQuirks::default(),
+        art_quirks: &ArtQuirks::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &SimQuirks::default(),
+    });
+    let s: SimData = glasnost_rules::de::from_node(&node).unwrap();
+    let b = &s.buildings;
+    assert_eq!(b["Tall"].econ.buildup, Some(true));
+    assert_eq!(b["Tall"].econ.buildup_frames, Some(10));
+    assert_eq!(b["Short"].econ.buildup_frames, Some(3));
+    assert!(b.get("Lost").is_none_or(|t| t.econ.buildup.is_none()));
+    assert!(!warned(&w, "buildings Tall:"));
+    assert!(warned(&w, "buildings Short: its build-up has 1 stage(s)"));
+    assert!(warned(&w, "buildings Bare: its build-up has 0 stage(s)"));
+    assert!(!warned(&w, "buildings Lost:"));
+    assert!(warned(&w, "buildings Door: its build-up has 1 stage(s)"));
+}
+
+/// spec: S-0108 claim 5 and F1 (d_b = trunc(B × 900 / n) is positive when B × 900 ≥ n)
+#[test]
+fn buildup_delay_sign() {
+    use super::econ::decimal_times_at_least;
+    assert!(decimal_times_at_least("5e-2", 900, 1));
+    assert!(decimal_times_at_least("5e-2", 900, 45));
+    assert!(!decimal_times_at_least("5e-2", 900, 46));
+    assert!(!decimal_times_at_least("0", 900, 1));
+    assert!(!decimal_times_at_least("-1", 900, 1));
+    assert!(decimal_times_at_least("1%", 900, 9));
+    assert!(!decimal_times_at_least("1%", 900, 10));
+    assert!(decimal_times_at_least("2", 900, 1800));
+}

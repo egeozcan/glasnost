@@ -415,8 +415,12 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         door_update(w, id);
     }
-    // spec: S-0215 claim 11 (the per-tick start of infantry, vehicles and buildings)
-    let ready_now = ready(w, id);
+    if kind == Kind::Building {
+        // spec: S-0406 claim 17 (the construction state sets the ready mark on a building turn)
+        crate::econ::placement::construction_turn(w, id);
+    }
+    // spec: S-0215 claim 11 (the per-tick start of infantry, vehicles and buildings); S-0406 claim 17 (no first start while the construction state lasts)
+    let ready_now = ready(w, id) && !crate::econ::placement::first_start_withheld(w, id);
     let Some(o) = w.obj(id) else { return };
     if ready_now {
         if kind == Kind::Infantry && o.beh.current.is_none() && o.beh.queued.is_none() {
@@ -436,7 +440,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         && ob.target.is_some()
         && ob.combat.opportunity
         && matches!(
-            ob.beh.current,
+            // spec: S-0406 claim 17 (a building with none current is seen in its queued construction)
+            crate::econ::placement::seen_behaviour(ob),
             Some(
                 Behaviour::Ambush
                     | Behaviour::Construction

@@ -275,7 +275,7 @@ fn bp(w: &World, type_index: u32) -> Option<&BuildingPower> {
 /// positions (Terms, *upgrade positions*).
 fn held_upgrades(w: &World, id: ObjectId) -> Vec<u32> {
     w.obj(id).map_or_else(Vec::new, |o| {
-        // spec: S-0408 claim 5 (recorded upgrades do not count in power at count 0; S-0405 states no such gate, request Q-0224: interim, S-0408's gate)
+        // spec: S-0405 claims 1 and 2, F1 and F2 (recorded upgrades count only while the upgrade count is positive)
         if o.econ.building.upgrade_count == 0 {
             return Vec::new();
         }
@@ -530,9 +530,9 @@ pub fn in_operation(w: &World, id: ObjectId) -> bool {
     if t.needs_engineer && !engineer_inside(w, id) {
         return false;
     }
-    // spec: S-0405 claim 8 (not building or selling: the current behaviour only)
+    // spec: S-0405 claim 8 (not building or selling: the current behaviour only) and S-0406 claim 17 (the queued construction is seen while none is current)
     !matches!(
-        o.beh.current,
+        super::placement::seen_behaviour(o),
         Some(Behaviour::Construction | Behaviour::Selling)
     )
 }
@@ -545,8 +545,9 @@ pub fn firing_answer(w: &World, id: ObjectId) -> Option<Answer> {
         return None;
     }
     let t = bp(w, o.type_index)?;
+    // spec: S-0406 claim 17 (the queued construction is seen while none is current)
     let building_or_selling = matches!(
-        o.beh.current,
+        super::placement::seen_behaviour(o),
         Some(Behaviour::Construction | Behaviour::Selling)
     );
     // spec: S-0405 T1 (illegal: occupiable without firing occupants; being drained; building or selling and not a pulse cannon)
