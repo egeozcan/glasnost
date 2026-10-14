@@ -4,9 +4,10 @@
 //! objects).
 //!
 //! The groups of draws run in the table's order. The groups that belong to
-//! specs not implemented here (the tags of S-0011 claim 34, the start-event
-//! draws of animations, S-0109 claim 13) take no draw and are recorded in the
-//! world's notes when a map reaches them.
+//! specs not implemented here (the tags of S-0011 claim 34, the smudge
+//! selection of S-0312 claim 26 and the resource chain reaction of S-0401
+//! claim 20 in an animation's start event) take no draw and are recorded in
+//! the world's notes when a map reaches them.
 
 use std::sync::Arc;
 
@@ -82,10 +83,32 @@ pub fn recalc_cells(w: &mut World, order: &[CellXY]) {
     for &c in order {
         let anim = tile_anim_due(w, &cat, c);
         recalc_pass(&mut w.cells.grid, &[c], &rr);
-        if let Some(name) = anim {
-            anim_creation_draws(w, &name);
+        if let Some(a) = anim {
+            let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+            let at = tile_anim_position(c, level, a.dx, a.dy);
+            anim_created_at(w, &a.name, Some(at));
         }
     }
+}
+
+/// The ground displacement of S-0101 F6 for one sum *u*:
+/// trunc₀(4473959 · *u* / 1048576), with a 64-bit product.
+fn f6_term(u: i32) -> i32 {
+    // spec: S-0101 F6 (a = 4473959 / 1048576; trunc₀ of the exact product, a 64-bit product)
+    let v = i64::from(u) * 4_473_959 / 1_048_576;
+    i32::try_from(v).unwrap_or(if v < 0 { i32::MIN } else { i32::MAX })
+}
+
+/// The world position of a tile animation of a cell at `level` whose tile
+/// has the displacement (`dx`, `dy`) in pixels (S-0010 Formulas, *Tile
+/// animation position*; S-0101 F6). F6's exact form is its value with
+/// `quirks.chop_rounding` on; claim 19's view-size case is a departure
+/// that our engine does not reproduce.
+pub fn tile_anim_position(c: CellXY, level: i32, dx: i32, dy: i32) -> (i32, i32, i32) {
+    // spec: S-0010 Formulas (X = 256x + 128 + trunc₀(a(dx + 2dy)), Y = 256y + 128 + trunc₀(a(2dy − dx)), z = 104ℓ)
+    let x = 256 * c.x + 128 + f6_term(dx.wrapping_add(dy.wrapping_mul(2)));
+    let y = 256 * c.y + 128 + f6_term(dy.wrapping_mul(2).wrapping_sub(dx)); // spec: S-0010 Formulas (Y)
+    (x, y, 104 * level) // spec: S-0010 Formulas (z = 104ℓ)
 }
 
 /// Whether the recalculation of `c` that is about to run starts the cell's
@@ -99,7 +122,11 @@ pub fn recalc_cells(w: &mut World, order: &[CellXY]) {
 /// and leaves what happens then open (S-0010 Open questions); the sim
 /// rules carry no such flag for animations, so our engine applies the
 /// rules to every tile animation.
-fn tile_anim_due(w: &mut World, cat: &TileCatalogue, c: CellXY) -> Option<String> {
+fn tile_anim_due(
+    w: &mut World,
+    cat: &TileCatalogue,
+    c: CellXY,
+) -> Option<glasnost_map::terrain::TileAnim> {
     let i = w.cells.idx(c)?;
     let cell = *w.cells.cell(c)?;
     let first = match &mut w.cells.anim_first {
@@ -130,26 +157,31 @@ fn tile_anim_due(w: &mut World, cat: &TileCatalogue, c: CellXY) -> Option<String
     if w.cells.anim_first.is_none() {
         w.cells.anim_started[i] = true;
     }
-    Some(anim.name.clone())
+    Some(anim.clone())
 }
 
-/// The creation draws of an animation created with no loop delay (S-0202
-/// claim 10, *Animation creation draws*): the stage-delay draw of S-0109
-/// claim 3 when its range holds more than one value, then a bouncing type's
-/// three raw values and three ranged draws over −65535 … 65535. A start
-/// event's chain reaction on a cell holding no resource takes no draw
-/// (S-0202 claim 10); one on a resource cell (S-0401 claim 20, the economy
-/// topic's seam) and the immediate middle event's particles and smudges
-/// (S-0109 claim 14, S-0202 claim 15) are not taken: the importer carries
-/// neither the sprites' image-frame counts and middle-frame bounds nor the
-/// particle types they need. An animation type the rules do not list has no fields
-/// (S-0004 claim 3) and takes no draw.
+/// The creation draws of an animation created in play with no loop delay
+/// (a warp or a combat animation): the creation draws of S-0202 claim 10
+/// (see [`anim_created_at`]). Its start event takes no draw: S-0202 claim
+/// 15 composes the immediate middle event's draws only for animations
+/// created during loading, and the particle and smudge specs give none for
+/// play, so a type whose start event has effects leaves a note.
 pub fn anim_creation_draws(w: &mut World, name: &str) {
     let rules = w.rules_arc();
     let Some(a) = rules.animation(name) else {
         return;
     };
-    let q = rules.quirks;
+    creation_draws(w, a);
+    let middle =
+        a.mu == Some(0) && (a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater);
+    if middle || a.chain_reaction {
+        w.note("S-0109 claim 13: the start-event draws of an animation created in play (its immediate middle event's particles and smudges, S-0202 claim 15 covering loading only; a chain reaction on a resource cell, S-0401 claim 20) are not taken");
+    }
+}
+
+/// The creation draws of S-0202 claim 10 before the start event.
+fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
+    let q = w.rules().quirks;
     let (d1, d2) = a.random_delay;
     if d1 != d2 {
         // spec: S-0109 claim 3 (one ranged draw over [d₁′, d₂′] when d₁′ ≠ d₂′)
@@ -165,9 +197,122 @@ pub fn anim_creation_draws(w: &mut World, name: &str) {
             let _ = w.rng.ranged(-65535, 65535, q.ranged_draw_half_span);
         }
     }
-    if a.start_effects {
-        // spec: S-0202 claim 10 (a chain reaction on a cell without resource takes no draw and has no effect)
-        w.note("S-0109 claim 13: an animation's start-event draws (a chain reaction on a resource cell, S-0401 claim 20; middle-event particles and smudges, S-0202 claim 15, which need sprite and particle data the importer does not carry) are not taken");
+}
+
+/// The creation draws of an animation created during loading with no loop
+/// delay at the world position `at` (S-0202 claim 10, *Animation creation
+/// draws*; `None` for a resource glint, S-0202 claim 14, whose position no
+/// spec gives, so its middle event takes its particle draws and notes the
+/// scorch-or-crater part): the
+/// stage-delay draw of S-0109 claim 3 when its range holds more than one
+/// value, then a bouncing type's three raw values and three ranged draws
+/// over −65535 … 65535, then the start event (S-0109 claim 13): the
+/// immediate middle event when μ = 0 (S-0109 claim 14, S-0202 claim 15,
+/// [`middle_event`]), then the resource chain reaction. A chain reaction on
+/// a cell holding no resource takes no draw (S-0202 claim 10); one on a
+/// resource cell is S-0401 claim 20's, the economy topic's seam, and is not
+/// taken. An animation type the rules do not list has no fields (S-0004
+/// claim 3) and takes no draw.
+pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
+    let rules = w.rules_arc();
+    let Some(a) = rules.animation(name) else {
+        return;
+    };
+    creation_draws(w, a);
+    let effects = a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater;
+    match a.mu {
+        // spec: S-0109 claim 13 (the start event produces the middle event at once when μ = 0)
+        Some(0) => middle_event(w, a, at),
+        None if effects => w.note("S-0109 claim 25: an animation type's μ is unknown (the import found no art for it), so its start event's middle-event draws are not taken"),
+        _ => {}
+    }
+    // spec: S-0109 claim 13 (the middle event's effects and draws precede the chain reaction)
+    if a.chain_reaction {
+        let resource = at.is_none_or(|(x, y, _)| {
+            // spec: S-0202 claim 10 (a chain reaction on a cell without resource takes no draw and has no effect)
+            crate::econ::resource::resource_at(w, cell_of(x, y)).is_some()
+        });
+        if resource {
+            w.note("S-0401 claim 20: an animation's start-event chain reaction on a resource cell (the economy topic's seam) takes no draw and has no effect");
+        }
+    }
+}
+
+/// The cell containing a ground position (S-0204 claim 2).
+fn cell_of(x: i32, y: i32) -> CellXY {
+    // spec: S-0204 claim 2 (the containing cell)
+    CellXY::new(x / 256, y / 256)
+}
+
+/// The height limit of the middle event's scorch marks and craters, in
+/// leptons (S-0109 claim 14).
+const SMUDGE_HEIGHT_LIMIT: i32 = 30; // spec: S-0109 claim 14 (attempted only below 30 leptons above the terrain)
+
+/// The resource levels a crater request removes (S-0109 claim 14, S-0401
+/// claim 16 (c)).
+const CRATER_BALES: i32 = 6; // spec: S-0401 Constants (bales a crater takes: 6)
+
+/// The middle event of an animation at `at` (S-0109 claim 14; S-0202 claim
+/// 15 for its composition at creation): the particle groups, then, when the
+/// height test passes, the scorch-or-crater choice, a crater's removal of 6
+/// resource levels from the containing cell (with any recalculation it
+/// causes), then the smudge selection of S-0312 claim 26, which is not
+/// modelled: smudge types and the smudges of cells are not carried, so no
+/// type fits and it takes no draw, as for destructions.
+fn middle_event(w: &mut World, a: &crate::rules::AnimRules, at: Option<(i32, i32, i32)>) {
+    let q = w.rules().quirks;
+    if let Some((p, n)) = a.particles {
+        // spec: S-0109 claim 14 (particles requested when a type is given and the count is positive; not gated by height)
+        for _ in 0..n.max(0) {
+            particle_draws(w, p, q.ranged_draw_half_span);
+        }
+    }
+    if !a.scorch && !a.crater {
+        return;
+    }
+    let Some((x, y, z)) = at else {
+        w.note("S-0109 claim 14: the middle event of an animation whose position is not carried takes no scorch-or-crater choice and removes no resource");
+        return;
+    };
+    // spec: S-0109 claim 14 (attempted only when Z − H(X, Y) < 30; no lower bound)
+    if z - w.surface_at(x, y) >= SMUDGE_HEIGHT_LIMIT {
+        return;
+    }
+    let crater = if a.scorch && a.crater {
+        // spec: S-0109 claim 14 (both flags: one ranged draw over [0, 2147483646] with S-0202 claim 4's range)
+        let r = w.rng.ranged(0, 2147483646, q.ranged_draw_half_span);
+        // spec: S-0109 claim 14 (r times the nearest binary64 to 1 / 2147483646 compared with 0.5 in the selected rounding; with quirks.chop_rounding on, a scorch mark exactly when r < 1073741824)
+        let mode = q.rounding();
+        // spec: S-0109 claim 14 (compared with 0.5)
+        let half =
+            glasnost_num::F64::from_i64(1, mode).div(glasnost_num::F64::from_i64(2, mode), mode);
+        !crate::rng::unit_value(r, mode).lt(half)
+    } else {
+        a.crater
+    };
+    if crater {
+        // spec: S-0109 claim 14 and S-0401 claim 16 (c) (a crater request takes 6 bales from the containing cell before placement, by claim 3's rule)
+        crate::econ::resource::take_bales(w, cell_of(x, y), CRATER_BALES);
+    }
+    // spec: S-0202 claim 15 and S-0312 claim 26 (the smudge-type draw comes last: R(0, n − 1), no draw for n ≤ 1)
+    w.note("S-0312 claim 26: smudge types, the smudges of cells and the morphable flag of tilesets are not modelled, so no smudge type fits a middle event's scorch mark or crater: n = 0, no draw and no smudge");
+}
+
+/// One requested particle's creation draws (S-0202 claim 15), in table
+/// order: a smoke particle's starting-speed raw value, the lifetime raw
+/// value, then the starting-colour draw R(0, 2147483646) when the colour
+/// list is nonempty and a starting colour is not black. The values are not
+/// kept: particles hold no simulation state in our engine.
+fn particle_draws(w: &mut World, p: crate::rules::ParticleRules, half_span: bool) {
+    if p.smoke {
+        // spec: S-0202 claim 15 (smoke: one raw value for a starting-speed variation)
+        let _ = w.rng.raw();
+    }
+    // spec: S-0202 claim 15 (every particle: one raw value for its lifetime variation; a zero lifetime field keeps the draw)
+    let _ = w.rng.raw();
+    if p.colour_draw {
+        // spec: S-0202 claim 15 (one ranged draw R(0, 2147483646) for the starting-colour interpolation)
+        let _ = w.rng.ranged(0, 2147483646, half_span);
     }
 }
 
@@ -199,7 +344,8 @@ pub fn resource_glints(w: &mut World, order: &[CellXY]) {
         // spec: S-0202 claim 14 (the choice R(0, f − 1); claims 4 and 5 for its bounds)
         if w.rng.ranged(0, top, q.ranged_draw_half_span) == 0 {
             // spec: S-0202 claim 14 (a zero result creates the glint at once, with claim 10's creation draws)
-            anim_creation_draws(w, &glint);
+            // spec: S-0202 claim 14 (the glint takes all applicable creation and start-event draws of claim 10)
+            anim_created_at(w, &glint, None);
         }
     }
 }

@@ -806,6 +806,7 @@ fn claim_12_cell_animation_draws_before_the_tile_animation() {
     s.catalogue.tiles[1].anim = Some(TileAnim {
         name: "ROCK".into(),
         attaches_to: 0,
+        ..TileAnim::default()
     });
     s.set_cell(cell(0, 0), 1, 0);
     s.cell_mut(cell(0, 0)).overlay = 0;
@@ -1100,6 +1101,7 @@ fn claim_28_cleanup_recalculation_after_the_second_pass() {
         s.catalogue.tiles[1].anim = Some(TileAnim {
             name: "SPARK".into(),
             attaches_to: 0,
+            ..TileAnim::default()
         });
         s.set_cell(cell(-6, 0), 1, 0);
         if !removed_on_anim {
@@ -1138,6 +1140,7 @@ fn s0010_claim_12_game_start_pass() {
     s.catalogue.tiles[1].anim = Some(TileAnim {
         name: "SPARK".into(),
         attaches_to: 0,
+        ..TileAnim::default()
     });
     s.set_cell(cell(0, 0), 1, 0);
     let w = s.build();

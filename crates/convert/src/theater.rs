@@ -616,8 +616,10 @@ const ANIM_NAME_MAX: usize = 127; // spec: S-0010 Import mapping (the animation 
 
 /// The tile animations of a tileset (S-0010 claim 19): read from the section
 /// named by its set name, keys `TileNNAnim` and `TileNNAttachesTo` with NN
-/// the tile's number within the set from 01, at least two digits. An empty
-/// or absent animation name gives none; an absent attaches-to key −1.
+/// the tile's number within the set from 01, at least two digits, with the
+/// displacement keys `TileNNXOffset` and `TileNNYOffset`. An empty or absent
+/// animation name gives none; an absent attaches-to key −1, an absent
+/// displacement 0.
 fn tile_anims(doc: &Document, set_name: &[u8], count: i32) -> Vec<Option<TileAnim>> {
     let section = doc.section(set_name);
     (1..=count.max(0))
@@ -634,9 +636,18 @@ fn tile_anims(doc: &Document, set_name: &[u8], count: i32) -> Vec<Option<TileAni
                 .value(format!("Tile{k:02}AttachesTo").as_bytes())
                 .and_then(value::integer)
                 .unwrap_or(-1);
+            // spec: S-0010 Import mapping (TileNNXOffset, TileNNYOffset: the displacement in pixels, absent 0)
+            let offset = |axis: &str| {
+                section
+                    .value(format!("Tile{k:02}{axis}Offset").as_bytes())
+                    .and_then(value::integer)
+                    .unwrap_or(0)
+            };
             Some(TileAnim {
                 name: crate::names::encode(name),
                 attaches_to,
+                dx: offset("X"),
+                dy: offset("Y"),
             })
         })
         .collect()
@@ -818,7 +829,8 @@ mod tests {
     fn claim_19_tile_animations() {
         let d = doc(
             "[TileSet0000]\nTilesInSet=1\n[TileSet0001]\nTilesInSet=3\nSetName=Foo\n\
-             [Foo]\nTile01Anim=Spark\nTile02Anim=Glow\nTile02AttachesTo=2\nTile03Anim=\n",
+             [Foo]\nTile01Anim=Spark\nTile02Anim=Glow\nTile02AttachesTo=2\nTile02XOffset=-7\n\
+             Tile02YOffset=12\nTile03Anim=\n",
         );
         let c = Catalogue::read(&d, Theater::Temperate);
         let a = &c.tilesets[1].anims;
@@ -832,6 +844,9 @@ mod tests {
             Some(("Glow", 2))
         );
         assert_eq!(a[2], None);
+        // spec: S-0010 Import mapping (absent displacements 0)
+        assert_eq!(a[0].as_ref().map(|x| (x.dx, x.dy)), Some((0, 0)));
+        assert_eq!(a[1].as_ref().map(|x| (x.dx, x.dy)), Some((-7, 12)));
         let images = c.images(&|_| false);
         let (cat, _) = c.tile_catalogue(&images, &|_| None);
         assert_eq!(cat.tiles[0].anim, None);

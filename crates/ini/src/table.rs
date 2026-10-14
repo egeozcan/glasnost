@@ -268,7 +268,8 @@ impl Table {
             // state). The table never gains a repeat, so its state is never observed.
             return self.by_key.get(&k).and_then(|v| v.first().copied());
         }
-        // spec: S-0002 State and ordering (row 1: the remembered occurrence; nothing changes)
+        // spec: S-0002 State and ordering (row 1: the remembered occurrence; nothing changes),
+        // claim 13 (a name whose hash equals the remembered one's is a hit, whatever its spelling)
         if let Some(r) = self.remembered
             && self.keys[r as usize] == k
         {
@@ -291,8 +292,8 @@ impl Table {
             }
             None => {
                 if !was_ordered {
-                    // spec: S-0002 State and ordering (row 5: "nothing is remembered"). Read as
-                    // forgetting the remembered occurrence, unlike row 3; request Q-0183.
+                    // spec: S-0002 State and ordering (row 5), claim 13 (a miss that orders the
+                    // table discards the remembered occurrence; an ordered miss, row 3, keeps it)
                     self.remembered = None;
                 }
                 None
@@ -544,7 +545,8 @@ mod tests {
         let mut forgot = t.clone();
         forgot.forget();
         assert_eq!(forgot.lookup(b"Cost"), Some(0));
-        // Row 5 (Q-0183): not ordered, not found: nothing is remembered.
+        // Row 5, claim 13: not ordered, not found: the table is ordered and
+        // the remembered occurrence is forgotten.
         assert_eq!(t.lookup_mut(b"Nope"), None);
         assert_eq!((t.ordered, t.remembered), (true, None));
         // Row 8: a replacement forgets and keeps the table ordered.
@@ -588,7 +590,31 @@ mod tests {
         assert_eq!((t.remembered, t.peak), (None, 11));
     }
 
-    /// spec: S-0002 State and ordering (a table with no occurrences)
+    /// spec: S-0002 claim 13 (a remembered hit by hash: another spelling of the same hash
+    /// neither orders the table nor forgets; a miss in a not-ordered table orders it and
+    /// forgets; a miss in an ordered table keeps the remembered occurrence)
+    #[test]
+    fn missed_lookup_forgets_only_when_it_orders() {
+        let q = Quirks::default();
+        // "ZdxeLZgd" has the hash of "Cost".
+        let mut t = table(&["Cost", "Cost", "Filler0"], &q);
+        assert_eq!(t.lookup_mut(b"Cost"), Some(1));
+        t.add(b"Filler1");
+        assert_eq!((t.ordered, t.remembered), (false, Some(1)));
+        assert_eq!(t.lookup_mut(b"ZdxeLZgd"), Some(1));
+        assert_eq!((t.ordered, t.remembered), (false, Some(1)));
+        // The miss orders the table and discards the earlier winner.
+        assert_eq!(t.lookup_mut(b"Nope"), None);
+        assert_eq!((t.ordered, t.remembered), (true, None));
+        // A successful lookup remembers again; an ordered miss keeps it.
+        let won = t.lookup_mut(b"Cost");
+        assert!(won.is_some());
+        assert_eq!(t.lookup_mut(b"Nope"), None);
+        assert_eq!((t.ordered, t.remembered), (true, won));
+    }
+
+    /// spec: S-0002 State and ordering (a table with no occurrences), claim 13 (an empty
+    /// table changes nothing)
     #[test]
     fn empty_table() {
         let mut t = table(&[], &Quirks::default());

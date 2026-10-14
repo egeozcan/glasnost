@@ -37,6 +37,38 @@ fn claim_14_fraidycat_idle_scatter() {
     assert!(!scattered(&fraidycat(true)));
 }
 
+/// The scenario draws one idle attempt of a resting unit of a type
+/// registered as `name` takes, with seed `seed`.
+fn idle_draws(name: &str, seed: u32) -> u64 {
+    let mut s = Scene::new();
+    s.setup.seed = seed;
+    s.infantry(name, unit_type(common::FOOT, 4, 5));
+    s.place_infantry(0, name, cell(0, 0), 0);
+    let mut w = s.build();
+    let id = common::objects_of(&w, Kind::Infantry)[0];
+    let st = w.obj_mut(id).unwrap().infantry.as_mut().unwrap();
+    st.seq = Some(Seq::Stand);
+    st.idle_until = 0;
+    let before = w.rng.taken();
+    infantry::idle_attempt(&mut w, id, false);
+    w.rng.taken() - before
+}
+
+/// spec: S-0107 claim 14 and Import mapping (the hard-coded cow is the infantry type whose
+/// registry name is the cow identifier, compared case-insensitively; it takes the extra draw e)
+#[test]
+fn claim_14_cow_by_registry_name_in_any_case() {
+    for seed in 1..8 {
+        let cow = idle_draws("COW", seed);
+        assert_eq!(idle_draws("cow", seed), cow);
+        assert_eq!(idle_draws("Cow", seed), cow);
+    }
+    // Another name takes no draw e, so over many seeds it takes fewer draws.
+    let cow: u64 = (1..16).map(|s| idle_draws("cow", s)).sum();
+    let other: u64 = (1..16).map(|s| idle_draws("COWS", s)).sum();
+    assert!(cow > other);
+}
+
 /// A frightened, walking soldier of a type that can crawl, after one
 /// sequence update while it moves; `human`: its owner's control.
 fn frightened_walker(human: bool) -> Option<Seq> {

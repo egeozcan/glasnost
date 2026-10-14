@@ -673,7 +673,7 @@ pub fn full_recompute_with_terms(
     let normalised = normalise(raw_tint, q);
     let (ground, raised) = unscaled_levels(ambient, sum, terms, height_level);
     let k = normalised.k;
-    // spec: S-0104 Formulas, "Cell light" (scaled ground = ⌊min(ground, 2000)·K / 65536⌋)
+    // spec: S-0104 Formulas, "Cell light" (scaled ground = min(2000, max(0, ⌊min(ground, 2000)·K / 65536⌋)))
     let scaled_ground = if normalised.near_black {
         // spec: S-0104 claim 8 (near-black: the scaled ground level becomes 0 at a full recompute)
         0
@@ -681,10 +681,10 @@ pub fn full_recompute_with_terms(
         clamp_level(ground.min(i64::from(LEVEL_MAX)) * k / ONE_16_16)
     };
     CellLight {
-        // spec: S-0104 Formulas, "Cell light" (unscaled ground = ground)
+        // spec: S-0104 Formulas, "Cell light" (unscaled ground = min(2000, max(0, ground)))
         unscaled_ground: clamp_level(ground),
         scaled_ground,
-        // spec: S-0104 Formulas, "Cell light" (scaled raised = ⌊raised·K / 65536⌋, no clamp before scaling)
+        // spec: S-0104 Formulas, "Cell light" (scaled raised = min(2000, max(0, ⌊raised·K / 65536⌋)), no clamp before scaling)
         scaled_raised: clamp_level(raised * k / ONE_16_16),
         raw_tint,
         normalised,

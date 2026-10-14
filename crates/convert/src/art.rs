@@ -81,7 +81,7 @@ pub struct ArtQuirks {
     pub loading_archive_sprites_vanish: bool,
     /// `quirks.sequence_value_length_limit` (S-0107 claim 22): the
     /// `Sequence=` value and each kind value are read as at most 31
-    /// characters. Off: read whole.
+    /// bytes of text. Off: read whole.
     pub sequence_value_length_limit: bool,
     /// `quirks.case_sensitive_direction` (S-0107 claim 22): a declared
     /// direction is recognised only in exact upper case. Off: any case.
@@ -182,6 +182,14 @@ pub struct TypeArt {
     /// file while the loading archives are mounted (S-0108 claim 5); none
     /// when there is no build-up sprite or the file does not parse.
     pub buildup_frames: Option<i32>,
+    /// An animation's sprite of its last sprite-found moment: a type read
+    /// that found a sprite, or the new-theater refresh when it found one
+    /// (S-0109 claim 25); none when no moment found one.
+    pub middle_sprite: Option<Vec<u8>>,
+    /// The image-frame count of [`TypeArt::middle_sprite`], read from the
+    /// file while the loading archives are mounted (S-0109 claim 25); none
+    /// when there is no such sprite or the file does not parse.
+    pub middle_sprite_frames: Option<i32>,
     /// Notes on open or unusual cases.
     pub notes: Vec<String>,
 }
@@ -813,6 +821,10 @@ fn animation(ctx: &mut Ctx, t: &TypeRec) -> TypeArt {
             ctx.found(&with_ext(&a.image, "shp"), true, false)
         };
         holds = a.sprite.is_some();
+        if holds {
+            // spec: S-0109 claim 25 (a type read that finds a sprite is a sprite-found moment)
+            a.middle_sprite.clone_from(&a.sprite);
+        }
     }
     // spec: S-0007 claim 14 (the theater refresh)
     if flags.theater {
@@ -826,6 +838,11 @@ fn animation(ctx: &mut Ctx, t: &TypeRec) -> TypeArt {
             .or_else(|| ctx.exists_then(with_ext(&base, "shp")));
     } else if flags.new_theater {
         a.sprite = ctx.subst_found(&with_ext(&a.image, "shp"), true);
+        if a.sprite.is_some() {
+            // spec: S-0109 claim 25 (the new-theater refresh that finds a sprite is a sprite-found
+            // moment; the theater flag's refresh is not)
+            a.middle_sprite.clone_from(&a.sprite);
+        }
     }
     // spec: S-0007 claim 23 (an animation's translucent sprite comes from its own art section)
     if let Some(n) = section_text(own, "AlphaImage", ICON_MAX).filter(|n| !n.is_empty()) {

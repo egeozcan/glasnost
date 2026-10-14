@@ -166,7 +166,7 @@ fn place_overlay(w: &mut World, c: CellXY, o: u8) {
         // spec: S-0112 claim 7 (a wall placed from the map's overlay list recomputes c and its edge neighbours)
         walls::wall_placed(w, c);
     }
-    cell_animation(w, o);
+    cell_animation(w, c, o);
     // spec: S-0202 claim 10 (placing an overlay recalculates its cell)
     recalc_cells(w, &[c]);
 }
@@ -177,12 +177,12 @@ fn place_overlay(w: &mut World, c: CellXY, o: u8) {
 /// in its cell and before that placement's recalculation of the cell (so
 /// before the draws of any tile animation that recalculation starts).
 /// Animation playback (S-0109) is not modelled, so the animation itself
-/// and its position leave no state: the overlay cell's centre moved by 384
+/// leaves no state; its position, the overlay cell's centre moved by 384
 /// leptons along +x and +y (the top corner of cell (x + 2, y + 2), where its
-/// chain reaction acts), at the surface height of the overlay cell's centre
-/// (S-0202 claim 10, S-0009 claim 12). The start event's draws are those of
-/// `load::anim_creation_draws`.
-fn cell_animation(w: &mut World, o: u8) {
+/// start event's effects act), at the surface height of the overlay cell's
+/// centre (S-0202 claim 10, S-0009 claim 12), places its start event's
+/// effects (`load::anim_created_at`).
+fn cell_animation(w: &mut World, c: CellXY, o: u8) {
     let Some(name) = w
         .rules()
         .overlays
@@ -191,8 +191,14 @@ fn cell_animation(w: &mut World, o: u8) {
     else {
         return;
     };
+    // spec: S-0009 claim 12 (Where: the overlay cell's centre)
+    let (cx, cy) = (256 * c.x + 128, 256 * c.y + 128);
+    // spec: S-0009 claim 12 (Where: the height is the terrain surface height at the centre of the overlay's cell)
+    let z = w.surface_at(cx, cy);
+    // spec: S-0009 Constants (cell animation displacement: 384 leptons along +x and along +y)
+    let at = (cx + 384, cy + 384, z);
     // spec: S-0009 claim 12 (Order: the cell animation's creation draws come before the tile animation of the same placement)
-    crate::load::anim_creation_draws(w, &name);
+    crate::load::anim_created_at(w, &name, Some(at));
 }
 
 /// Whether a cell holds an overlay, for the end-row test (S-0202 claim

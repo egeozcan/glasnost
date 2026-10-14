@@ -251,6 +251,17 @@ async fn look_up_art(
             a.buildup_frames = Some(i32::try_from(shp.frames.len()).unwrap_or(i32::MAX));
         }
     }
+    // spec: S-0109 claim 25 (μ = ⌊n / 2⌋ from the image-frame count n of the sprite of the last sprite-found moment)
+    for a in arts.values_mut() {
+        let Some(r) = a.middle_sprite.as_ref().and_then(|f| vfs.resolve_bytes(f)) else {
+            continue;
+        };
+        if let Ok(bytes) = vfs.read_resolved(&r).await
+            && let Ok(shp) = glasnost_fmt::shp::Shp::parse(&bytes)
+        {
+            a.middle_sprite_frames = Some(i32::try_from(shp.frames.len()).unwrap_or(i32::MAX));
+        }
+    }
     // spec: S-0005 claim 13 (the loading archives are released before play)
     vfs.finish_loading();
     let in_play = |n: &[u8]| vfs.resolve_bytes(n).is_some();

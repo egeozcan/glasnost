@@ -31,7 +31,7 @@ use crate::names::{encode, show};
 /// bytes that matches after the cut could tell them apart).
 const NAME_LIMIT: usize = value::COMMON_TEXT_LIMIT; // spec: S-0003 claim 16, Constants (common text limit)
 /// Bytes of the `Sequence=` value and of each kind value (S-0107 claim 22).
-const SEQUENCE_VALUE_MAX: usize = 31; // spec: S-0107 claim 22 (31 characters)
+const SEQUENCE_VALUE_MAX: usize = 31; // spec: S-0107 claim 22 (31 bytes of text)
 /// Bytes of a building's `Foundation` value (S-0108 Import mapping).
 const FOUNDATION_MAX: usize = 31; // spec: S-0108 Import mapping (Foundation, text cut to 31)
 
@@ -261,6 +261,38 @@ const REFINERY_WORD: &str = "3x3Refinery"; // spec: S-0406 Import mapping (the w
 /// The foundation a word that matches nothing gives (S-0108 Import mapping).
 // spec: S-0108 Import mapping (a word that matches none gives 1x1), S-0003 claim 16
 const FOUNDATION_FALLBACK: [i32; 2] = [1, 1];
+
+/// The text limit of a particle type's behaviour name (S-0202 Import
+/// mapping).
+const BEHAVES_LIKE_LIMIT: usize = 31; // spec: S-0202 Import mapping (BehavesLike: at most 31 text bytes)
+
+/// The particle behaviours by name (S-0202 Import mapping).
+// spec: S-0202 Import mapping (BehavesLike: Gas, Smoke, Fire, Spark or Railgun)
+const PARTICLE_BEHAVIOURS: [&str; 5] = ["Gas", "Smoke", "Fire", "Spark", "Railgun"];
+
+/// The text limit of a colour list (S-0202 Import mapping).
+const COLOUR_LIST_LIMIT: usize = 511; // spec: S-0202 Import mapping (ColorList: at most 511 text bytes)
+
+/// The number of colours of a colour list (S-0202 Import mapping:
+/// comma-separated parenthesised RGB triples): the parenthesised groups it
+/// closes.
+fn colour_list_len(v: &[u8]) -> i32 {
+    // spec: S-0202 Import mapping (ColorList: at most 511 text bytes)
+    let text = value::text(v, COLOUR_LIST_LIMIT);
+    let mut open = false;
+    let mut n = 0i32;
+    for &b in text {
+        match b {
+            b'(' => open = true,
+            b')' if open => {
+                open = false;
+                n += 1;
+            }
+            _ => {}
+        }
+    }
+    n
+}
 
 /// How a field's stored value is read.
 #[derive(Clone, Copy)]
@@ -1026,6 +1058,7 @@ impl Builder<'_> {
             Kind::Projectiles,
             Kind::Warheads,
             Kind::Animations,
+            Kind::Particles,
             Kind::Tiberiums,
             Kind::Superweapons,
         ] {
@@ -1323,16 +1356,22 @@ impl Builder<'_> {
                     self.fields(&mut rec, t, kind, WARHEAD_FIELDS);
                     self.warhead_combat(&mut rec, t);
                 }
-                Kind::Animations => self.animation(&mut rec, t),
+                Kind::Animations => self.animation(&mut rec, i, t),
+                Kind::Particles => self.particle(&mut rec, t),
                 Kind::Tiberiums => self.tiberium(&mut rec, t),
                 Kind::Superweapons => self.superweapon(&mut rec, t),
                 _ => {}
             }
-            // A weapon, projectile, warhead or animation that read no section still exists with the
-            // engine defaults of its kind (S-0004 claims 6 and 13), and other records name it.
+            // A weapon, projectile, warhead, animation or particle type that read no section still
+            // exists with the engine defaults of its kind (S-0004 claims 6 and 13), and other
+            // records name it.
             let always = matches!(
                 kind,
-                Kind::Weapons | Kind::Projectiles | Kind::Warheads | Kind::Animations
+                Kind::Weapons
+                    | Kind::Projectiles
+                    | Kind::Warheads
+                    | Kind::Animations
+                    | Kind::Particles
             );
             if always || !rec.0.is_empty() {
                 out.push((key.clone(), rec.node()));
@@ -1670,8 +1709,20 @@ impl Builder<'_> {
     /// Import mapping; S-0202 claim 10), from its section of the art
     /// database: the random rate pair, each end keeping the value held when
     /// it is −1 (S-0109 claim 3), the bouncing flags, the resource chain
-    /// reaction and the middle-event effects.
-    fn animation(&mut self, rec: &mut Rec, t: &TypeRec) {
+    /// reaction and the middle-event effects; and μ, from the sprite of the
+    /// type's last sprite-found moment (S-0109 claim 25), when a theater was
+    /// given.
+    fn animation(&mut self, rec: &mut Rec, index: usize, t: &TypeRec) {
+        if let Some(a) = self.i.arts.and_then(|a| a.get(&(Kind::Animations, index))) {
+            // spec: S-0109 claims 14 and 25 (μ = ⌊n / 2⌋ of the last sprite found; 0 when none was found)
+            let mu = match (&a.middle_sprite, a.middle_sprite_frames) {
+                (None, _) => Some(0),
+                (Some(_), n) => n.map(|n| n / 2),
+            };
+            if let Some(mu) = mu {
+                rec.put("middle_frame", int_node(mu));
+            }
+        }
         let Some(sec) = self.art_section(&t.name) else {
             return;
         };
@@ -1697,10 +1748,91 @@ impl Builder<'_> {
             }
         }
         if let Some(v) = sec.value(b"SpawnsParticle") {
-            // spec: S-0109 Import mapping (SpawnsParticle: a particle type name; none: no particle)
-            let name = value::text(v, value::COMMON_TEXT_LIMIT);
-            if !name.is_empty() && !value::is_no_type(name) {
-                rec.put("spawns_particle", jsonc::boolean(true));
+            // spec: S-0202 Import mapping and S-0004 claim 13 (SpawnsParticle: a particle type name of at most 31 bytes)
+            let name = value::text(v, crate::refs::NEXT_PARTICLE_LIMIT);
+            // spec: S-0004 claim 2 (<none> names no type; none names a type called none while quirks.particle_none_is_a_name is on)
+            let no_type = name.is_empty()
+                || name.eq_ignore_ascii_case(b"<none>")
+                || (!self.i.quirks.particle_none_is_a_name && value::is_no_type(name));
+            if !no_type {
+                let key = self
+                    .type_key(Kind::Particles, name)
+                    .unwrap_or_else(|| encode(name));
+                rec.put("spawns_particle", jsonc::string(key));
+            }
+        }
+        if let Some(n) = sec.value(b"NumParticles").and_then(value::integer) {
+            // spec: S-0202 Import mapping (NumParticles: an integer count; absent 0)
+            rec.put("num_particles", int_node(n));
+        }
+    }
+
+    /// A particle type's fields that its creation draws read (S-0202 claim
+    /// 15 and Import mapping), from its rules sections.
+    fn particle(&mut self, rec: &mut Rec, t: &TypeRec) {
+        // spec: S-0202 Import mapping (BehavesLike: Gas, Smoke, Fire, Spark or Railgun, case-insensitive, at most 31 text bytes; an unrecognised name gives no recognised behaviour)
+        let behaves = fold(t.keys.get(&b"BehavesLike"[..]), None, |v, _| {
+            let name = value::text(v, BEHAVES_LIKE_LIMIT);
+            Some(
+                PARTICLE_BEHAVIOURS
+                    .iter()
+                    .find(|b| b.as_bytes().eq_ignore_ascii_case(name))
+                    .map(|b| b.to_ascii_lowercase()),
+            )
+        })
+        .flatten();
+        if let Some(b) = &behaves {
+            rec.put("behaves_like", jsonc::string(b.clone()));
+        }
+        // spec: S-0202 Import mapping (MaxEC: a signed integer; omitted or empty layered values keep the previous value)
+        let max_ec = fold(t.keys.get(&b"MaxEC"[..]), None, |v, _| value::integer(v));
+        if let Some(m) = max_ec {
+            rec.put("max_ec", int_node(m));
+        }
+        let railgun = behaves.as_deref() == Some("railgun");
+        if max_ec == Some(0) && !railgun {
+            // spec: S-0202 claim 15 and S-0205 claim 3 (a zero lifetime field: the original fails; our engine takes the remainder as 0 and the importer warns)
+            self.warn(
+                t.reads.last().copied().unwrap_or(t.created_in),
+                0,
+                format!(
+                    "particle {}: MaxEC 0 divides by zero at the particle's creation in the original; our engine takes the remainder as 0 (S-0202 claim 15, S-0205 claim 3)",
+                    show(&t.name)
+                ),
+            );
+        }
+        // spec: S-0202 Import mapping (ColorList: empty also when omitted or empty in a later layer, so the last section read decides)
+        let colours = t
+            .reads
+            .last()
+            .and_then(|&r| given_at(t, "ColorList", r))
+            .map_or(0, colour_list_len);
+        if colours != 0 {
+            rec.put("color_count", int_node(colours));
+        }
+        for (field, key) in [
+            ("start_color1", "StartColor1"),
+            ("start_color2", "StartColor2"),
+        ] {
+            // spec: S-0202 Import mapping (StartColor1, StartColor2: generic byte triples, S-0003 claim 11; black at type creation; omitted layered values keep the previous value)
+            let mut held: Option<[u8; 3]> = None;
+            for e in t
+                .keys
+                .get(key.as_bytes())
+                .into_iter()
+                .flat_map(|s| &s.history)
+            {
+                match &e.what {
+                    What::Set(v) => held = Some(value::byte_triple(v, held.unwrap_or([0; 3])).0),
+                    What::Reset => held = None,
+                    _ => {}
+                }
+            }
+            if let Some(c) = held {
+                rec.put(
+                    field,
+                    jsonc::array(c.iter().map(|&x| int_node(i32::from(x))).collect()),
+                );
             }
         }
     }
@@ -1797,13 +1929,13 @@ impl Builder<'_> {
             return value::text(v, usize::MAX).to_vec();
         }
         if v.len() > SEQUENCE_VALUE_MAX {
-            // spec: S-0107 Import mapping (warning for a value longer than 31 characters)
+            // spec: S-0107 Import mapping (warning for a value longer than 31 bytes)
             self.art_warn(line, format!(
-                "{key} value {:?} is longer than 31 characters; the rest is not read (S-0107 claim 22)",
+                "{key} value {:?} is longer than 31 bytes; the rest is not read (S-0107 claim 22)",
                 show(v)
             ));
         }
-        // spec: S-0107 claim 22 (each value is read as at most 31 characters)
+        // spec: S-0107 claim 22 (each value is read as at most 31 bytes of text)
         value::text(v, SEQUENCE_VALUE_MAX).to_vec()
     }
 

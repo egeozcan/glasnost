@@ -476,7 +476,8 @@ pub fn idle_attempt(w: &mut World, id: ObjectId, in_progress: bool) {
     let is_cow = w
         .rules()
         .unit(o.kind, o.type_index)
-        // spec: S-0107 Import mapping (the cow: type identifier COW, compared case-insensitively)
+        // spec: S-0107 claim 14, Import mapping (Hard-coded identifiers: the cow is the infantry
+        // type whose registry name is COW, compared case-insensitively; other names do not count)
         .is_some_and(|u| u.name.eq_ignore_ascii_case("COW"));
     // spec: S-0107 claim 14 (conditions: timer run out, no movement in progress, not prone, not attacking, stand/guard/tread)
     let goes = tick >= s.idle_until

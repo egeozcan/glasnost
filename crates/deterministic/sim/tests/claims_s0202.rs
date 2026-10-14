@@ -136,10 +136,12 @@ fn claim_10_tile_animation_draws() {
     s.catalogue.tiles[1].anim = Some(TileAnim {
         name: "spark".into(),
         attaches_to: 0,
+        ..TileAnim::default()
     });
     s.catalogue.tiles[2].anim = Some(TileAnim {
         name: "ROCK".into(),
         attaches_to: 0,
+        ..TileAnim::default()
     });
     s.register("animations", "SPARK");
     s.register("animations", "ROCK");

@@ -76,8 +76,9 @@ pub struct TileInfo {
 
 /// A tile's animation (S-0010 claim 19 and Import mapping): the animation
 /// type's name as written and the sub-tile it attaches to (−1 when absent:
-/// the animation never starts). Its displacement and depth adjustment are
-/// the renderer's.
+/// the animation never starts) and its screen displacement, which places
+/// it (S-0010 Formulas, *Tile animation position*). Its depth adjustment
+/// is the renderer's.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TileAnim {
     /// The animation type's name as written (bytes 128 to 255 as U+F780 to
@@ -85,6 +86,12 @@ pub struct TileAnim {
     pub name: String,
     /// The attaches-to sub-tile.
     pub attaches_to: i32,
+    /// The screen displacement *dx* in pixels (absent 0).
+    #[serde(default)]
+    pub dx: i32,
+    /// The screen displacement *dy* in pixels (absent 0).
+    #[serde(default)]
+    pub dy: i32,
 }
 
 /// The role starts of S-0010 table R (claim 4), as tile numbers; an unset

@@ -206,6 +206,9 @@ pub struct SimData {
     /// Animation types by type name (their art sections, S-0109).
     #[serde(default)]
     pub animations: BTreeMap<String, AnimationType>,
+    /// Particle types by type name (S-0202 claim 15).
+    #[serde(default)]
+    pub particles: BTreeMap<String, ParticleType>,
     /// The difficulty rows by our name (`easy`, `normal`, `difficult`;
     /// S-0302 Terms, glossary *difficulty skill block*).
     #[serde(default)]
@@ -348,9 +351,42 @@ pub struct AnimationType {
     /// `Crater`: a middle-event effect.
     #[serde(default)]
     pub crater: Option<bool>,
-    /// `SpawnsParticle` names a particle type: a middle-event effect.
+    /// `SpawnsParticle`: the particle type the middle event requests, by
+    /// type name (S-0109 claim 14, S-0202 claim 15).
     #[serde(default)]
-    pub spawns_particle: Option<bool>,
+    pub spawns_particle: Option<String>,
+    /// `NumParticles`: particles requested per middle event (S-0109 claim
+    /// 14); absent 0.
+    #[serde(default)]
+    pub num_particles: Option<i32>,
+    /// μ: half the image-frame count of the sprite of the type's last
+    /// sprite-found moment, 0 when none was found (S-0109 claims 14 and
+    /// 25); absent when the import had no art.
+    #[serde(default)]
+    pub middle_frame: Option<i32>,
+}
+
+/// A particle type's fields that its creation draws read (S-0202 claim 15
+/// and Import mapping).
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleType {
+    /// `BehavesLike`: `gas`, `smoke`, `fire`, `spark` or `railgun`; absent
+    /// for no recognised behaviour.
+    #[serde(default)]
+    pub behaves_like: Option<String>,
+    /// `MaxEC`: the lifetime field (absent 1).
+    #[serde(default)]
+    pub max_ec: Option<i32>,
+    /// The number of colours of `ColorList` (absent 0).
+    #[serde(default)]
+    pub color_count: Option<i32>,
+    /// `StartColor1`, components 0 … 255 (absent black).
+    #[serde(default)]
+    pub start_color1: Option<[i32; 3]>, // spec: S-0202 Import mapping (an RGB triple)
+    /// `StartColor2`, components 0 … 255 (absent black).
+    #[serde(default)]
+    pub start_color2: Option<[i32; 3]>, // spec: S-0202 Import mapping (an RGB triple)
 }
 
 /// Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,
