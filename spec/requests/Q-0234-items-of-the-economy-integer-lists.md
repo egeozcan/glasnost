@@ -1,9 +1,9 @@
 ---
 id: Q-0234
 title: How the items of the virtual-purifier, extra-credit and computer-timer integer lists are read
-status: open
+status: answered
 related: [S-0003, S-0402, S-0412]
-answered-by: []
+answered-by: [S-0003]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0061, Q-0075, Q-0100, Q-0171]
+requests: [Q-0061, Q-0075, Q-0100, Q-0171, Q-0234]
 supersedes: []
 ---
 
@@ -574,6 +574,43 @@ our engine's result.
       occupy part of the line)
     - Confidence: high
 
+### Economy and computer-timer integer lists
+
+23. **The virtual-purifier, extra-credit and computer-timer lists use decimal-prefix
+    integer items too.** Each of the three lists in Import mapping rows C21 to C23
+    uses claim 20's item form and 511-byte text limit, not the common 127-byte limit.
+    Each non-empty comma-separated item contributes one signed 32-bit integer:
+    optional leading whitespace and sign, then decimal digits, stopping at the first
+    other byte. There is no scalar hexadecimal dispatch. `$10` contributes 0,
+    `10h` contributes 10, and a `0x` prefix followed by `10` contributes 0.
+    An item with no decimal digits, such as `abc`, contributes 0 and keeps its
+    place; it neither disappears nor keeps a prior value at that position.
+    Claim 4's wrapping applies. Conversion is exact integer arithmetic with no
+    floating-point operation or rounding. The retained integers represent purifier
+    counts, integer percentages and timer durations in ticks, respectively; their
+    later use is not part of the conversion.
+
+    Claim 12's comma splitting applies: empty items take no place, so `5,,7`
+    gives (5, 7), while `5,abc,7` gives (5, 0, 7). A whitespace-only item left
+    after claim 1's whole-text cut and trailing trim is non-empty and gives 0.
+    Claim 3's no-digit, trailing-text and overflow warnings apply to every item,
+    with no hexadecimal suffix exception; claim 1's text-cut warning applies too.
+
+    Missing or empty keys keep the entire list in force. A present non-empty
+    value replaces the entire list, without retaining or adding positions from
+    the previous list. A value consisting only of commas therefore replaces it
+    with an empty list. Before any rules layer supplies them, these lists are
+    empty. Index selection and the effects or safe results of a too-short list
+    remain S-0402 claim 12 and S-0412 claim 3. In particular this conversion does
+    not grant AI houses the original's computer-only income or setup advantages,
+    and the computer timer has no effect in our engine.
+    - Backing: `measurable` (scenario V18 for the item form, positions, replacement,
+      retention and text beyond 127 bytes; part c observes the original's initial
+      timer duration without requiring its computer-player behaviour), and
+      `unmeasured` (the exact 511-byte reader limit: S-0001's physical-line limit
+      cuts file input sooner because the key and `=` occupy part of that line)
+    - Confidence: high
+
 ## Formulas
 
 Notation. For a real number *z*: RN₅₃(*z*) and RN₂₄(*z*) are *z* rounded to the nearest double
@@ -682,7 +719,7 @@ integer from claim 9.
 | Percentage factor | RN₅₃(1/100), the double nearest to 0.01 | ratio | *c* in the formulas. Applied when `%` is present |
 | Tuple text limit | 63 | bytes | Integer pairs, triples and quadruples, colour and byte triples |
 | Common text limit | 127 | bytes | Most text and list fields |
-| Decimal-integer-list text limit | 511 | bytes | Debris maxima and auto-deploy delays, claims 20 and 22; physical-line truncation imposes a smaller limit |
+| Decimal-integer-list text limit | 511 | bytes | Debris maxima, auto-deploy delays and the three economy/setup lists, claims 20, 22 and 23; physical-line truncation imposes a smaller limit |
 | Type-list text limit | 31 | bytes | Values in type list sections |
 | Maximum stored type-name length | 24 | bytes | Longest type name kept when a type is created (claim 15) |
 | Integer width | 32 | bits | Integer results, two's complement, wrap modulo 2³² |
@@ -794,6 +831,9 @@ unspecified in the original; our engine leaves the value in force and warns (cla
 | C19 | Building type `Factory` | Named value (claim 21), 31-byte text limit. Producing vocabulary: `Infantry` immediately followed by `Type` = infantry, `Unit` immediately followed by `Type` = vehicles, `Aircraft` immediately followed by `Type` = aircraft, `Building` immediately followed by `Type` = buildings. Each is one word with no intervening space. Whole text compared ignoring ASCII case, after claim 1's cut and trailing trim. `<none>` explicitly means no factory; bare `none` is unmatched and also gives no factory. Missing or empty keeps the value in force, initially no factory. Non-empty unmatched text gives no factory, with a warning. Additional recognised words include `Terrain` immediately followed by `Type` (one word), and bare `Infantry`, `Unit`, `Aircraft` and `Building`; none names one of the four production kinds. These are not aliases for the four producing words ending in `Type` |
 
 | C20 | `[General]` `AIAutoDeployFrameDelay` | Decimal-prefix integer list in ticks (claim 22), 511-byte text limit, not 127. No scalar hexadecimal forms. Unreadable non-empty items give 0 and retain their place; empty items are skipped. Present non-empty replaces the list; missing or empty keeps the held list. Index selection, starting default and too-short-list outcome remain S-0215 claim 31 and its Import mapping |
+| C21 | `[General]` `AIVirtualPurifiers` | Decimal-prefix integer list of purifier counts (claim 23), 511-byte text limit. No scalar hexadecimal forms. Unreadable non-empty items retain a place with 0; empty items are skipped. Initially empty; missing or empty keeps the whole list in force, present non-empty replaces it. Index selection and too-short-list outcome: S-0402 claim 12 |
+| C22 | `[General]` `MultiplayerAICM` | Decimal-prefix integer list of integer percentages (claim 23), 511-byte text limit. No scalar hexadecimal forms or decimal-percentage conversion: `10%` gives the integer 10. Unreadable non-empty items retain a place with 0; empty items are skipped. Initially empty; missing or empty keeps the whole list in force, present non-empty replaces it. Selection, subsequent percentage arithmetic and too-short-list outcome: S-0412 claim 3 |
+| C23 | `[General]` `AIHateDelays` | Decimal-prefix integer list of timer durations in ticks (claim 23), 511-byte text limit. No scalar hexadecimal forms. Unreadable non-empty items retain a place with 0; empty items are skipped. Initially empty; missing or empty keeps the whole list in force, present non-empty replaces it. Original-only timer selection: S-0412 claim 3; no effect in our engine |
 
 ## Measurement scenarios
 
@@ -1019,6 +1059,66 @@ spec's scenario use that scenario's named test data.
   16 for the hexadecimal spellings, delay 90 for the unreadable item, or a missing
   second entry in the long-comma control contradicts the proposed reader. Void a
   run if the bystander interferes in the test area or is defeated.
+
+- **V18 (economy and computer-timer integer items, Q-0234).** Purpose-made
+  skirmish test maps, game speed 2, 800 × 600, director and mods off. Named test
+  data are the maps' override sections and, for the layering controls, a loose
+  base-rules copy removed after each test. One human and one normal-difficulty
+  bystander computer player, whose difficulty index is 1 (S-0412 claim 4).
+  Keep all unrelated difficulty-indexed lists long enough. Test C21, C22 and C23
+  separately, one run per spelling and role below. The second retained entry is
+  the quantity selected in each run.
+
+  | Value text | Retained integers | Selected quantity |
+  |---|---|---|
+  | `5,abc,9` | 5, 0, 9 | 0 |
+  | `5,$10,9` | 5, 0, 9 | 0 |
+  | `5,10h,9` | 5, 10, 9 | 10 |
+  | `5,` followed by `0x` immediately followed by `10,9` | 5, 0, 9 | 0 |
+  | `5,,7,9` | 5, 7, 9 | 7 |
+  | `5, ,9` | 5, 0, 9 | 0 |
+  | `5,4294967303,9` | 5, 7, 9 | 7 |
+
+  - *Part a, virtual purifiers:* use S-0402 H6 part c's computer-owned refinery
+    and harvester, with no real purifier, but set named test values to 8 ore
+    bales, value per bale 30, country income factor 1.0 and purifier bonus 0.25.
+    Observe only the refinery, its ore patch and this unload. A read-only balance
+    recorder logs the payments per tick. Expected: main payment 240, and bonus
+    payments 0, 600 or 420 for selected quantities 0, 10 or 7, respectively,
+    under S-0402 F3. No other computer purchase, sale or income may change the
+    balance during the observed unload; void such a run. A nonzero bonus for
+    `abc`, `$10` or the `0x` spelling, a bonus for 16 rather than 10 purifiers
+    with `10h`, or a bonus for 9 rather than 7 with the empty-item spelling
+    falsifies the conversion or placement claim.
+  - *Part b, extra credits:* use S-0412 K9 part b's setup with named starting
+    credits 2500, unit count 0, bases on and crates off. Record the computer
+    house's balance at game start before it spends or receives other credits,
+    using the same calibrated trigger observations or a read-only recorder.
+    Expected: 2500 plus S-0412 claim 3's extra-credit formula with the selected
+    integer as its percentage. Thus zero items give no extra; 10 and 7 give
+    the distinct results of that formula, not hexadecimal 16 or the third
+    entry 9. Any different balance, after ruling out other transactions,
+    falsifies the claimed reader or placement.
+  - *Part c, computer timer:* use part b's setup. A read-only recorder records
+    the timer's assigned duration at game start, not the later time of an AI
+    decision. Expected durations are exactly the selected integers in ticks.
+    A duration of 16 for either hexadecimal-looking form, 9 for `abc`, or a
+    result other than 7 for the empty-item spelling falsifies claim 23. This
+    observes setup only; it requires no reproduction of the original's AI.
+
+  For each role also test `5` followed by 130 commas and then `7,9` on one
+  physical line. Expected: selected quantity 7, proving text beyond byte 127
+  is read. For layer retention, the named base-rules copy supplies `5,4,9`.
+  Compare absent and empty map keys with a present `5,abc,9`: expected selected
+  quantities 4, 4 and 0. These controls distinguish keeping the prior whole
+  list from replacing it. Our engine additionally records the imported lists
+  and warnings, including `,,,` replacing the list with an empty list; do not
+  require an original-game effect from a too-short list. For C21/C22 compare
+  original-game effects only, not extra advantages on our engine's AI houses.
+  C23 has no runtime effect in our engine. Loss of the long-comma second entry,
+  retention of the prior 4 after a non-empty replacement, or loss of that 4
+  for an absent/empty key falsifies the corresponding claim. Apply the
+  bystander's void rule to every test object and observed transaction.
 
 ## Open questions
 
