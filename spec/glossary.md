@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -497,7 +497,8 @@ human-controlled house. This is a rule of our engine, not a claim about the orig
 - *Orders.* An AI house acts only through orders, and its orders are applied, although the
   original drops orders issued in the name of a computer-controlled house (S-0213, claim 3). They pass the same
   legality rules as a person's (S-0214) and the same checks when they are applied (S-0213), with
-  no exemption from the owner check or from the limit on pending orders.
+  no exemption from the pending-order limit. The original checks the actor's owner only for
+  sell orders; AI-house orders follow that same rule (S-0213, claims 12 and 15).
 - *Unit rules.* Its units follow the rules that the specs give for units of a human-controlled
   owner. A behaviour rule that the original applies only to units of a computer-controlled owner
   (see *computer-controlled*) does not apply to them, and the recruitable property of S-0215
