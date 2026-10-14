@@ -2,13 +2,13 @@
 id: S-0014
 title: Game bitmap font file layout
 topic: formats
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0501]
+requests: [Q-0501, Q-0530]
 supersedes: []
 ---
 
@@ -18,7 +18,7 @@ supersedes: []
 
 The game's bitmap font contains a full 16-bit text-unit mapping and fixed-size,
 one-bit glyph records. This spec supplies its file layout and the mask interpretation
-needed by status text, answering Q-0501 questions 1 to 4.
+needed by status text, answering Q-0501 questions 1 to 4 and Q-0530 question 1.
 
 S-0005 claim 18a owns file identity and archive precedence. S-0213 claim 25 owns
 status-text metrics, line splitting, control characters and when fallback is used.
@@ -53,8 +53,10 @@ Skirmish presentation only is covered; network games and campaigns are out of sc
 
    The metadata value at file byte 4 is retained without assigning it a rendering
    role; individual glyph widths come from claim 3. Bitmap height and line pitch
-   are distinct: the former describes stored rows, the latter supplies text-layout
-   metrics under S-0213 claim 25. No palette is part of this header.
+   are distinct: the former describes stored rows, the latter is an imported
+   text-layout metric. Its use for status-line spacing, height and vertical placement
+   belongs to S-0213 claim 25, not this file-layout claim. No palette is part of
+   this header.
    - Backing: `measurable` (F1, F2) for the layout and established metrics.
      `unmeasured` for the metadata's meaning, because no effect of that value has
      been traced and a confirming observable is not yet known.
@@ -100,9 +102,17 @@ Skirmish presentation only is covered; network games and campaigns are out of sc
    capital X, text unit 88, within that entry's stored width and the common
    bitmap height. Its width is the stored width of that X entry. There is no
    reserved fallback record and no substitution of the question-mark entry.
-   The valid status-font scope here requires a mapped capital X. S-0213 claim 25
-   owns when this generated image replaces a missing character and its advance.
-   - Backing: `measurable` (F2; S-0213 claim 25)
+   The valid status-font scope here requires a mapped capital X. In the original,
+   a structurally valid font without a mapped X still loads and can measure and
+   paint text consisting entirely of mapped characters, with unchanged widths
+   and masks. X is needed to define the fallback, not to draw other mapped
+   characters. If such text instead needs a missing-character fallback, its
+   fallback image and width are unspecified. Our engine rejects the font as a
+   whole under claim 6, even when a particular notice would need no fallback.
+   S-0213 claim 25 owns when the generated image replaces a missing character
+   and its advance.
+   - Backing: `measurable` (F2, F4; S-0213 claim 25) for original behaviour.
+     Whole-font rejection is the design rule in claim 6.
    - Confidence: high
 
 5. **Transparency and foreground.** A zero mask bit leaves the destination pixel
@@ -116,6 +126,26 @@ Skirmish presentation only is covered; network games and campaigns are out of sc
    the ordinary foreground; there is no quirk switch for this drawing-only defect.
    - Backing: `measurable` (F3; S-0213 claim 25). The fixed fallback colour is a
      presentation design rule, not an oracle prediction.
+   - Confidence: high
+
+6. **Invalid resolved font (Q-0530 question 1).** Our engine treats a resolved
+   font outside this contract's valid scope exactly as a missing font: it reports
+   S-0213 claim 25's missing-asset diagnostic and omits status text. It does not
+   keep valid records from the rejected file, reinterpret an invalid selector
+   as missing, or substitute a lower-precedence font or a host font.
+
+   Rejection applies to a different identifying sequence, an incomplete header,
+   mapping or record payload, any positive selector greater than N, a record
+   span smaller than 1 + HB bytes, any stored width greater than 8B pixels, or
+   an absent mapping for capital X. These checks cover every selector and every
+   declared record, not only entries used by the current notice. A zero-width
+   mapped X is present and does not itself fail validation.
+
+   This is an engine rule, a departure confirmed by the project lead, not a
+   prediction of the original's response to every invalid file. No partial use
+   of malformed records is allowed, and no quirk switch is offered.
+   - Backing: `measurable` (F5, engine acceptance check); design rule, not an
+     oracle prediction
    - Confidence: high
 
 ## Formulas
@@ -159,16 +189,19 @@ This contract covers the `fonT` file variant and structurally valid records with
 selectors either zero or within 1 to N. A different identifying sequence is outside
 this contract, not another spelling of this variant. Truncated files, out-of-range
 selectors, dimensions that cannot contain the mask, and a missing mapped X are
-outside its valid-input scope; no original rendering result is asserted for them.
+outside its valid-input scope and rejected under claim 6. Claim 4 states the
+original's usable mapped-text case without X; no deterministic fallback result
+is asserted for that case.
 
 ## Import mapping
 
 | Input | Imported concept | Form |
 |---|---|---|
-| Game font file selected by S-0005 claim 18a | Header, mapping and masks | Binary layout of claims 1 to 3 |
+| Game font file selected by S-0005 claim 18a | Header, mapping and masks | Binary layout of claims 1 to 3; any failure of claim 6's validity checks gives the missing-asset diagnostic and omitted status text, with no partial import |
 | Record width byte | Individual glyph width | Unsigned integer pixels |
-| Common bitmap height and line pitch | Bitmap rows and text-layout metrics | Unsigned integer pixels, distinct roles |
-| Mapping entry for text unit 88 | Fallback source | Claim 4; generated image, not another file record |
+| Common bitmap height | Bitmap rows | Unsigned integer pixels; claim 3 |
+| Header line pitch | Imported text-layout metric | Unsigned integer pixels; status-display use is owned by S-0213 claim 25 |
+| Mapping entry for text unit 88 | Fallback source and required validity condition | Claim 4; generated image, not another file record; zero selector rejects the entire font under claim 6 |
 | Status notice's foreground | Colour painted by set mask bits | S-0213 claim 25; not stored in the font |
 
 No rules-file key controls this binary layout. Missing-file handling remains
@@ -187,7 +220,6 @@ S-0213 claim 25's contract.
   131072 bytes, all nonzero selectors refer to records, all widths fit their rows,
   and the records fit exactly the header's counts. A differing header sequence,
   incompatible table length or incompatible record boundaries falsifies the layout.
-- Tool: read-only archive extraction and a binary-format checker.
 
 **F2 — Mapping and mask orientation (claims 1 to 4).**
 - Setup: a tiny purpose-made skirmish map with a distant bystander computer player,
@@ -209,7 +241,6 @@ S-0213 claim 25's contract.
   X changes the fallback. The original's zero-width control can paint a stray
   first-column pixel while retaining zero stored width; our engine paints none.
   Any stable opposite oracle result falsifies the relevant original-behaviour claim.
-- Tool: scripted input and lossless screen capture; no simulation recorder is needed.
 
 **F3 — Transparent mask and foreground (claim 5).**
 - Setup: F2's skirmish setup and named test font, with a repeatable route-refusal
@@ -223,10 +254,35 @@ S-0213 claim 25's contract.
   Oracle fallback pixels exhibit the cosmetic packed-colour defect recorded in
   claim 5; our engine deliberately uses the ordinary foreground. Opaque clear
   bits or palette-derived ordinary foreground falsifies claim 5.
-- Tool: lossless screen capture with pixel comparison.
+
+**F4 — Mapped text without X (claim 4).**
+- Setup: F2's skirmish, settings and void rule. Named test files are two structurally
+  valid font copies differing only in X's selector, positive in one and zero in
+  the other, and a repeatable notice whose ordinary characters all have positive
+  selectors in both. Keep its total width comfortably below the line limit and
+  include no X or other missing ordinary character. Restore assets afterwards.
+- Procedure: in the original, capture the same notice once with each copy.
+- Observable: whether the font loads, painted masks, character origins and wrapping.
+- Expected: both notices draw identically. Refusal to load the no-X copy, omitted
+  mapped text, changed masks or changed advance falsifies claim 4. Do not test
+  undefined fallback drawing against the original. Our engine intentionally omits
+  status text for the no-X copy under claim 6.
+
+**F5 — Whole-font rejection (claim 6; engine acceptance check).**
+- Setup: our engine replay of F2, with named copies of a valid font and a repeatable
+  fully mapped notice. No original-game run of malformed data is required.
+- Procedure: run once per copy, changing only one condition: identifying bytes,
+  header truncation, mapping truncation, payload truncation, an out-of-range
+  selector unused by the notice, too-small record span, an over-wide unused record,
+  or a zero X selector. Include the unchanged valid copy as a control.
+- Observable: diagnostic and whether any status glyphs are painted.
+- Expected: each invalid copy gives missing-font handling and no status text.
+  The control draws. Partial rendering, silent acceptance or a substitute font
+  fails the engine rule. This does not falsify an oracle claim.
 
 ## Open questions
 
-- Behaviour of a font without a mapped capital X remains outside the valid-font
-  scope, as in S-0213 claim 25. It does not block importing the installed font.
+- Q-0530 questions 2 and 3 belong to S-0213 claim 25: status-line spacing,
+  the pitch's display role and glyph top-row placement. Claim 1 defines the
+  pitch's file field only and prescribes none of those display rules.
 - Q-0501 question 5 belongs to S-0213 claim 25, not this layout contract.
