@@ -1,9 +1,9 @@
 ---
 id: Q-0284
 title: Which cell does a sell-mode click on a wall sell, and can it be under shroud?
-status: open
+status: answered
 related: [S-0214, S-0408]
-answered-by: []
+answered-by: [S-0408]
 ---
 
 ## Need

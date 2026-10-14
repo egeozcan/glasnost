@@ -2,13 +2,13 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0130, Q-0131, Q-0225]
+requests: [Q-0130, Q-0131, Q-0225, Q-0284]
 supersedes: []
 ---
 
@@ -328,6 +328,31 @@ house state, on or off). In addition:
       during a silent wall sale)
     - Confidence: medium
 
+12a. **The cell targeted by a wall-sale click (Q-0284).** With sell mode on and an empty
+    selection, a click that picks no individual object gives a sell-wall order for the cell under
+    the cursor when that cell holds a wall overlay owned by the acting house and is neither
+    shrouded nor fogged for that house. The cell is the cursor cell of S-0101 claims 9 and 10,
+    without a foundation adjustment: S-0406 F2 is a placement formula, not a wall-sale formula.
+    The wall's drawn pixels do not choose the cell. A click on wall art extending into a
+    neighbouring cell therefore does not sell that wall unless the cursor cell itself holds it.
+    A click within the wall's cell can sell it even where the wall art has no opaque pixel.
+    A shrouded or fogged cell, a wall of another house, an ownerless wall, a non-wall overlay
+    or an empty cell gives no wall-sale order. There is no search for a nearby wall.
+
+    Input does not test the wall's builder or its unsellable flag: it can give an order whose
+    application removes nothing under claim 12. Conversely claim 12 does not test shroud or fog:
+    these are input conditions, not a second visibility test when the order applies.
+    S-0214 claim 13 already states the own-wall and visibility conditions; this claim supplies
+    the cell choice and the distinction between input and application.
+
+    When the click picks an individual object, a *sell* action gives the object sell order,
+    not a sell-wall order. In particular an own sellable ordinary building is sold as a building
+    even if the cursor cell differs from its foundation. S-0214 owns object picking and the
+    action on such an object; this claim does not turn a refused object sale into a wall sale.
+    - Backing: `measurable` (scenario S11; S8 for application refusal)
+    - Confidence: high (cell choice, wall conditions and lack of a visibility recheck), medium
+      (object-versus-cell dispatch)
+
 ### Building repair
 
 13. **Repair belongs to S-0314.** The repair order (S-0213, claim 13) switches a building's repair
@@ -580,7 +605,9 @@ tick the building disappears.
 | Rules, building section, `FreeUnit` | the free unit whose cost is deducted (claim 2) | vehicle type name | none |
 | Rules, `[General]`, `PadAircraft` | pad aircraft list (claim 2) | list of aircraft type names | empty |
 | Rules, `[General]`, `SeparateAircraft` | the separate-aircraft setting (claim 2) | boolean | owned by the aircraft specs |
-| Rules, building section, `Unsellable` | unsellable flag (claims 3, 12) | boolean | no |
+| Rules, building section, `Unsellable` | unsellable flag (claims 3, 12); not a wall-click input gate (claim 12a) | boolean | no |
+| Rules, overlay section, `Wall` | wall-overlay flag required by both input and application (claims 12, 12a) | boolean; S-0210 owns parsing | no |
+| Rules, building section, `ToOverlay` | overlay used to identify its builder for application (claim 12); no builder lookup for input (claim 12a) | overlay type name; S-0406 owns resolution | none |
 | Rules, building section, `FirestormWall` | firestorm-wall flag (claims 3, 4) | boolean | no |
 | Rules, building section, `Repairable` | repairable flag (claim 14) | boolean | yes |
 | Rules, building section, `ClickRepairable` | click-repairable flag (claim 14) | boolean | yes |
@@ -854,6 +881,42 @@ tick number. Any game speed.
   treats an ordinary no-sprite order as a zero-delay refunded sale, or a positive-delay
   one-stage or zero-stage range reports completion, pays or removes on any observed wrap,
   changes health merely because it wraps, or prevents the ordinary effects of either hit.
+
+**S11: wall-sale input cell and cover (claim 12a, Q-0284).**
+- *Setup:* a tiny flat skirmish map with isolated own and enemy stock walls, an ownerless
+  map wall, an empty cell and a non-wall overlay. One distant bystander computer player,
+  director and mods off, stock data, speed index 2, 800 × 600. The observed area is the wall
+  test patch. Include a completed own sellable ordinary building away from the walls.
+  For the cover variants, a purpose-made map trigger re-covers an own wall cell; use a
+  separate named test-map fog setting for the fog variant. Keep each wall isolated so selling
+  one does not change neighbouring wall art.
+- *Procedure:* clear selection and enter sell mode. With scripted mouse input, click the
+  centre and several transparent-art pixels inside each own wall cell, then pixels of its
+  drawing that fall inside neighbouring cells according to S-0101 F7. Rebuild or restart
+  after each accepted sale. Repeat on enemy, ownerless, empty and non-wall cells.
+  Repeat with an own wall cell shrouded, and separately fogged, moving the cursor onto it
+  after cover changes. In a further variant, issue the click while uncovered and have the
+  test trigger cover the cell before the order applies; accept this variant only when the
+  recorder establishes that timing, otherwise record it as inconclusive. Click the own
+  building's image as an object-sale control. Three
+  fresh repetitions per click and cover variant. Void a run if the bystander affects the
+  patch or is defeated. If no map setup keeps an own wall covered, record that variant as
+  inconclusive, not as a pass.
+- *Observable:* input pixel, cursor cell, picked object if any, shroud/fog state, action
+  offered, issued order kind and target, and which overlay or building disappears. Use
+  tick-labelled captures and a read-only recorder; these observe, never set game state.
+- *Expected:* with no picked object, every tested pixel selecting an uncovered own wall
+  cell gives the wall-sale order for exactly that cell. Transparent wall art does not refuse
+  it; wall art over an empty neighbouring cell gives no order. Enemy, ownerless, shrouded,
+  fogged, empty and non-wall cells give no wall-sale order. The building control gives an
+  object sell order and its ordinary sale. An order issued before cover changes still sells
+  the wall when applied after that change. Credits for accepted wall sales remain unchanged
+  under the original quirk (claim 12). S8's unsellable-builder variant gives an order but
+  leaves the wall in place.
+- *Falsified if:* a neighbouring wall is chosen by its drawn pixels, transparent art refuses
+  an otherwise eligible wall cell, a covered or non-own wall receives a wall-sale order,
+  the post-issue cover change alone prevents an already-issued wall sale, or the building
+  control gives a wall-sale order instead of an object sale.
 
 ## Open questions
 
