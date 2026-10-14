@@ -1416,3 +1416,39 @@ pub fn unit_rules(r: &SimRules, w: &World, id: ObjectId) -> Option<UnitRules> {
     let o = w.obj(id)?;
     r.unit(o.kind, o.type_index).cloned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::Kind;
+    use crate::testkit;
+
+    /// The world after `n` scatter requests from a vehicle to a friendly
+    /// walker's cell in one tick, with the duplicate-request switch `on`.
+    fn after_requests(on: bool, n: usize) -> World {
+        let mut r = testkit::ruleset();
+        r.globals.quirks.drive_duplicate_scatter_request = on;
+        let mut w = testkit::game_with(&r, 40, 3);
+        let v = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(40, 0, 0), 0);
+        let c = testkit::mid(40, 0, -1);
+        testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c, 0);
+        if let Some(o) = w.obj_mut(v) {
+            o.drive.get_or_insert_with(DriveState::new);
+        }
+        for _ in 0..n {
+            request_scatter(&mut w, v, c);
+        }
+        w
+    }
+
+    // spec: S-0207 claim 15 and Edge cases (quirks.drive_duplicate_scatter_request: on, a second request in the tick reaches the receiver again and takes its draw; off, it is omitted with its draws)
+    #[test]
+    fn duplicate_request_in_one_tick() {
+        let once = after_requests(true, 1).rng;
+        let twice = after_requests(true, 2).rng;
+        assert_ne!(once, twice, "on: the second request draws again");
+        let once = after_requests(false, 1).rng;
+        let twice = after_requests(false, 2).rng;
+        assert_eq!(once, twice, "off: the second request is not sent");
+    }
+}

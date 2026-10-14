@@ -277,6 +277,12 @@ fn surrender_ends_the_game_with_an_end_screen() {
 #[test]
 fn s0213_claim_25_status_lines() {
     let mut p = start();
+    // A line said before the first display update is added at that update.
+    p.messages.clear();
+    p.say("early");
+    p.update_messages(16 * 10_000);
+    assert_eq!(p.messages[0].until, 10_480);
+    let mut p = start();
     p.messages.clear();
     p.update_messages(16 * 100 + 15);
     assert_eq!(p.clock, 100);

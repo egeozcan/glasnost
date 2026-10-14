@@ -1401,6 +1401,16 @@ pub fn install_temporary_drive(w: &mut World, u: ObjectId) {
     if w.obj(u).is_none_or(|o| o.drive.is_some()) {
         return;
     }
+    if !crate::teleport::is_teleporter(w, u) {
+        // A tunnelling vehicle: S-0207 claim 21 covers teleporting
+        // locomotion only, so its cell claim is released as before.
+        crate::drive::release_claims(w, u);
+        if let Some(ob) = w.obj_mut(u) {
+            ob.drive = Some(crate::drive::DriveState::new());
+            ob.econ.temporary_drive = true;
+        }
+        return;
+    }
     // Its own cell claim is handed to the driving state's claims.
     // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
     let pending = w

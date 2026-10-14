@@ -89,6 +89,8 @@ pub struct Play {
     /// The presentation clock: host milliseconds over [`CLOCK_MS`], set
     /// at each display update (S-0213 claim 25).
     pub clock: i64,
+    /// Whether a display update has set [`Self::clock`] yet.
+    pub clock_started: bool,
     /// Why the game stopped, when a tick failed.
     pub failed: Option<String>,
     /// The cheer command's rate limit (S-0213 claim 19).
@@ -140,6 +142,7 @@ impl Play {
             credits: CreditCounter::default(),
             messages: Vec::new(),
             clock: 0,
+            clock_started: false,
             failed: None,
             cheer,
             effects: Vec::new(),
@@ -187,6 +190,14 @@ impl Play {
         // spec: S-0213 claim 25 (the 16 ms clock count)
         self.clock = now_ms.div_euclid(CLOCK_MS);
         let clock = self.clock;
+        if !self.clock_started {
+            // Lines said before the first update (the game's start) are
+            // added at that update's clock count.
+            self.clock_started = true;
+            for m in &mut self.messages {
+                m.until += clock;
+            }
+        }
         // spec: S-0213 claim 25 (removed when the count is strictly greater than the deadline, not at equality)
         self.messages.retain(|m| clock <= m.until);
     }
