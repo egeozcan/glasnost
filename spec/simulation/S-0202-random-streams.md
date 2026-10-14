@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -39,7 +39,7 @@ the creation start event can react, while later trigger-played start events are 
 Check these revisions together, including claim 15's 6-bale removal under S-0401 claim 3:
 a stage-6 resource cell becomes stage 0, not empty. S-0011 claim 36 covers the specified
 middle-event composition during loading and play, while subsequent particle updates remain
-outside it. Event timing, sprite-derived μ and the height gate remain S-0109's.
+outside it and must not be treated as draw-free. Event timing, sprite-derived μ and the height gate remain S-0109's.
 
 ## Terms
 
@@ -732,7 +732,8 @@ original's recording modes are retained as deferred context, not implementation 
     outcomes and consumption; different fitting smudges or resource state can of course
     change the conditional groups and selection bounds. The same composition applies when
     a middle event occurs later in playback under S-0109 claim 14; subsequent particle
-    updates are not particle creation and remain outside this spec.
+    updates are not particle creation and remain outside this spec. That exclusion does not
+    make them draw-free: their draws must be accounted for separately from this event's group.
 
     The smudge height gate is also the same in both phases: for integer world position
     (X, Y, Z), test Z − H(X, Y) < 30 leptons, with H the terrain surface height at that
@@ -1649,7 +1650,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   smudge forms and map-data timing. These effects must not be treated as taking zero draws
   during map loading. Claim 15 and R14 D/E also answer all of Q-0217: creation-time
   middle events during play use the same scenario-stream composition and terrain-height
-  test. Subsequent particle updates remain outside this spec.
+  test. Subsequent particle updates remain outside this spec, not draw-free.
 - Whether any of the unsynchronised random stream's users that were classified only briefly
   changes game state. In internet games, two draws are taken under a condition on the local
   player's house (the same kind of condition as claim 12's extra draw) and could not be tied to a
