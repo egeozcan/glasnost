@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501]
 supersedes: []
 ---
 
@@ -855,6 +855,10 @@ Terms).
     There is no kerning or extra proportional scaling. A tab advances to the next
     multiple of 64 pixels from the line origin. All width arithmetic
     is integer pixels, with no rounding. File identity is in Import mapping.
+    S-0014 claims 1–3 supply the binary font layout and masks; claims 4 and 5
+    supply the generated fallback image and mask transparency. This claim owns
+    status-text metrics, splitting, control characters, fallback use and foreground
+    selection.
 
     **Glyph selection and drawing (Q-0501, questions 2 to 4).** Each unsigned
     16-bit text unit independently selects the font's imported glyph mapping,
@@ -862,7 +866,10 @@ Terms).
     value of zero means missing; a positive value selects glyph number one less
     than that value, with glyph numbers counted from zero. Aliases are allowed.
     A blank bitmap or a stored width of zero does not make a mapped glyph missing:
-    a present zero-width glyph still advances by the one spacing pixel.
+    a present zero-width glyph still advances by the one spacing pixel but paints
+    no pixels in our engine, as S-0014 claim 3 specifies. The original has a cosmetic
+    bug: a zero-width glyph can paint its first column when the first bit of a
+    stored row is set. This drawing-only correction has no quirk switch.
     The zero text unit ends the text rather than selecting a glyph. Tabs and
     explicit breaks use their special rules here rather than mapped glyph metrics.
 
@@ -886,7 +893,9 @@ Terms).
     the ordinary foreground. This drawing-only defect has no quirk switch.
     - Backing for glyph selection, generated fallback and original mask/colour
       behaviour: `measurable` (Scenario O21 c). The fixed fallback colour is a
-      presentation design rule, not an oracle prediction.
+      presentation design rule, not an oracle prediction. Suppressing zero-width
+      pixels is likewise a presentation design rule; the original defect is
+      `measurable` (Scenario O21 c; S-0014 claim 3).
     - Confidence for these glyph and colour rules: high
 
     A line contains at most 111 text characters. The width limit is inclusive:
@@ -1129,7 +1138,7 @@ only when they actually assign a destination.
 | String-table entry `MSG:PlannerMaximum` | route-holder-limit text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic, not substitute stock English |
 | String-table entry `MSG:PlanningModeHeteroSel` | incompatible-selection text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic |
 | No rules, art or map key | route refusal duration and shared status display (claim 25) | fixed presentation rules | 480 clock units of 16 milliseconds; six lines |
-| Game font file `GAME.FNT` | status-text glyph mapping, masks, widths and bitmap height (claim 25) | unsigned 16-bit text-unit mapping; zero means missing, positive values select zero-based glyph number value minus one; widths in integer pixels, binary masks; resolved through S-0005 claims 1 to 4 and 18a | no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text; binary file layout remains Q-0501's formats-owner question |
+| Game font file `GAME.FNT` | status-text glyph mapping, masks, widths and bitmap height (claim 25) | unsigned 16-bit text-unit mapping; zero means missing, positive values select zero-based glyph number value minus one; widths in integer pixels, binary masks; resolved through S-0005 claims 1 to 4 and 18a | no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text; binary layout and masks are S-0014 claims 1–3, fallback image and transparency are claims 4 and 5 |
 | Mapped capital X in `GAME.FNT` | generated fallback shape and width (claim 25) | text unit 88, complemented mask with the same width and bitmap height | no reserved fallback entry; a font without a mapped X is outside the defined valid-font scope |
 | Rules `[Colors]` | route-notice foreground (claim 25) | local player's chosen definition, parsed by S-0103 claims 4 and 5; unmodified HSV converted and packed by claims 6 and 9 | colour-definition import defaults remain S-0103's; no font palette or battlefield lighting |
 | No rules, art or map key | status-text splitting (claim 25) | fixed integer-pixel budgets, 111-character limit, one-pixel character spacing and 64-pixel tab stops | claim 25's initial and resized budgets and separator rules |
@@ -1818,8 +1827,9 @@ applied: a cue is not proof that an order passed its application checks.
   against two different battlefield backgrounds.
 - *Procedure:* display a refusal notice containing two units mapped to the same
   glyph, a unit above 255 with a distinct low-byte glyph, a zero mapping, a
-  positive-width blank glyph and a present zero-width blank glyph. In separate
-  fresh sessions alter only X's width or mask. Also assign large widths to the
+  positive-width blank glyph and a present zero-width blank glyph. Add a separate
+  zero-width mapped glyph whose first stored row bit is set, keeping X positive-width.
+  In separate fresh sessions alter only X's width or mask. Also assign large widths to the
   carriage-return and line-feed mappings and display explicit breaks. Repeat
   each variant three times, then repeat the colour test with altered battlefield
   lighting. Keep each notice below the wrapping budget and six-line capacity.
@@ -1828,6 +1838,8 @@ applied: a cue is not proof that an order passed its application checks.
 - *Expected:* aliases match; the full 16-bit unit selects the glyph, not its low
   byte. Only a zero mapping uses complemented X with X's width plus one pixel of
   advance. Present blank glyphs retain their widths; zero width advances one pixel.
+  The nonblank zero-width control can paint a stray first-column pixel in the oracle.
+  Our engine paints none, without changing that advance.
   X alterations change the fallback only as claim 25 states. Breaks draw nothing
   and take no advance despite their altered mapped widths. Zero mask pixels
   retain each background; one mask pixels have direct converted/packed foreground,
@@ -1836,8 +1848,10 @@ applied: a cue is not proof that an order passed its application checks.
 - *Falsified if:* low-byte selection, replacement of a present blank/zero-width
   glyph, a dedicated fallback independent of X, different advances, painted break
   glyphs, opaque zero pixels, palette-derived foreground, lighting-dependent text,
-  or a different original fallback colour transformation is observed. This tests
-  drawing and metrics, not the still-unassigned binary file-layout contract.
+  or a different original fallback colour transformation is observed. Absence of
+  the stray first-column pixel in the unclipped nonblank zero-width oracle control
+  falsifies the documented original defect. This tests status drawing and metrics.
+  S-0014 claims 1–3 own the binary file-layout contract.
 
 **Scenario O22: arrows during order blocks (claim 23, Q-0391).**
 - *Setup:* a large flat skirmish map, no scroll limits near the observed view,
@@ -1880,8 +1894,9 @@ extension is a design rule and has no oracle measurement.
   Their pointers need the cross-spec updates listed for sign-off below.
 - Q-0501 questions 2 to 5 are answered by claim 25 and O21 b/c. Question 5's
   zero advance already appeared in Formulas before this request; claim 25 now
-  makes it explicit. Question 1's binary font-file layout is still open: S-0005
-  claim 18a owns lookup only, and a separately assigned formats contract is needed.
+  makes it explicit. Question 1's binary font-file layout is answered by S-0014
+  claims 1–3; its claims 4 and 5 specify fallback image and transparency.
+  S-0005 claim 18a retains file identity and lookup ownership.
   A font lacking a mapped capital X is outside the defined valid-font scope here.
 - Q-0393's four shared-status-display questions are answered by claim 25 and O21 b.
   S-0411 claim 17 already excludes sidebar production labels from this display.
