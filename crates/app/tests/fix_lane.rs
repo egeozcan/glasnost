@@ -717,3 +717,83 @@ fn mouse_controls() {
     println!("right click: selection {:?}", s.play.selection);
     assert!(s.play.selection.is_empty(), "the right click cleared it");
 }
+
+/// Item 4: a vehicle whose weapon is a spawner (its shot is a spawned
+/// object), ordered to attack an enemy object with a left click; prints
+/// its behaviour, target and firing-check answer (S-0301 claim 9) as they
+/// change.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn spawner_weapon_attack() {
+    use glasnost_sim::combat::{check, weapon};
+    let Some((mut c, shots)) = start((1280, 800)) else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let mut clock = 0i64;
+    reveal(&mut c);
+    ticks(&mut c, &mut clock, 5);
+    let s = c.session.as_mut().unwrap();
+    let local = s.play.local;
+    let w = s.play.world();
+    let r = w.rules();
+    let spawners: Vec<String> = r
+        .vehicles
+        .iter()
+        .filter(|u| {
+            u.primary
+                .as_ref()
+                .and_then(|p| r.combat.weapon_index.get(p))
+                .is_some_and(|&id| r.combat.weapon(id).spawner)
+        })
+        .map(|u| u.name.clone())
+        .collect();
+    println!(
+        "{} vehicle types with a spawner primary weapon",
+        spawners.len()
+    );
+    let Some(name) = spawners.first() else { return };
+    let enemy = w
+        .objects
+        .values()
+        .find(|o| {
+            o.on_map
+                && o.owner
+                    .is_some_and(|h| h != local && !w.allied(Some(local), Some(h)))
+                && w.houses[usize::from(o.owner.unwrap().0)].role
+                    == glasnost_sim::world::HouseRole::Player
+        })
+        .map(|o| (o.id, o.pos.cell()))
+        .expect("an enemy object");
+    let at = CellXY::new(enemy.1.x - 10, enemy.1.y);
+    let id =
+        glasnost_sim::testkit::spawn(&mut s.play.game.world, Kind::Vehicle, name, local.0, at, 0);
+    ticks(&mut c, &mut clock, 2);
+    look_at(&mut c, CellXY::new(at.x + 5, at.y));
+    ticks(&mut c, &mut clock, 1);
+    let s = c.session.as_mut().unwrap();
+    s.play.select_box(&[id], false);
+    let p = point_of(&mut c, None, Some(enemy.0)).expect("the enemy is on screen");
+    click_at(&mut c, Button::Left, p);
+    let mut last = String::new();
+    for _ in 0..400 {
+        ticks(&mut c, &mut clock, 1);
+        let w = c.session.as_ref().unwrap().play.world();
+        let Some(o) = w.obj(id) else {
+            println!("tick {}: the unit is gone", w.tick);
+            break;
+        };
+        let answer = check::check(w, id, o.target, 0, true);
+        let now = format!(
+            "behaviour {:?}, target {:?}, slot 0 weapon spawner {:?}, answer {answer:?}",
+            o.beh.current,
+            o.target,
+            weapon::slot_weapon(w, id, 0).map(|x| w.rules().combat.weapon(x).spawner)
+        );
+        if now != last {
+            println!("tick {}: {now}", w.tick);
+            last = now;
+        }
+    }
+    shots.save(&mut c, "spawner-attack");
+}
