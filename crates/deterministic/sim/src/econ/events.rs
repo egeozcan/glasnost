@@ -166,7 +166,7 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
     match o.kind {
         Kind::Building => {
             crate::econ::power::building_turn(w, id);
-            // spec: S-0203 claim 12 (a building master's group update sees that turn's operation-state effects and animation advancement, and comes before its paid repair)
+            // spec: S-0402 claim 21 and S-0203 claim 12 (a building master's group update sees that turn's operation-state effects and animation advancement, and comes before its paid repair)
             crate::econ::slaves::group_turn(w, id);
             // spec: S-0314 claim 8 and S-0408 claim 13 (a building whose repair is on steps in its turn); S-0203 claim 12 (after the group update, so a delivery in it can pay this turn's step)
             crate::econ::sell::building_turn(w, id);
