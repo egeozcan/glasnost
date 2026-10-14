@@ -155,6 +155,9 @@ fn claim_14_production_during_a_sale() {
     step(&mut w);
     // The sale is queued, not yet current.
     w.obj_mut(f).unwrap().beh.queued = Some(glasnost_sim::rules::Behaviour::Selling);
+    // No body range runs, so no ready mark starts the queued sale (S-0215 claim 11).
+    w.obj_mut(f).unwrap().econ.idle_body = None;
+    w.obj_mut(f).unwrap().beh.ready_mark = false;
     let (progress, paid) = (item(&w, 0, tank).unwrap().progress, credits(&w, 0));
     for _ in 0..40 {
         step(&mut w);

@@ -142,12 +142,17 @@ fn claim_2_stages() {
     let k = building(&mut w, "VF", 0, 0, 0);
     let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
     assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
-    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+    // spec: S-0417 claims 1 and 2 (unload queued at release, current at the next per-tick start that finds the ready mark: the default range's delay 0 sets it every building turn)
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Guard));
+    assert_eq!(w.obj(k).unwrap().beh.queued, Some(Behaviour::Unload));
     assert_eq!(w.obj(tank).unwrap().contact, Some(k));
     assert!(release::tethered(&w, tank));
-    let mut processings = 0;
-    let mut sent = None;
+    let before = w.obj(k).unwrap().beh.last;
+    step(&mut w);
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
     let mut last = w.obj(k).unwrap().beh.last;
+    let mut processings = i32::from(last != before);
+    let mut sent = None;
     let mut report = None;
     for _ in 0..600 {
         step(&mut w);
@@ -557,3 +562,94 @@ fn testkit_run(w: &mut World, n: i32) {
         step(w);
     }
 }
+
+/// VF with idle body range `idle` (S-0108 Import mapping, `AnimIdle`).
+fn with_idle(idle: [i32; 3], waits: bool) -> Ruleset {
+    let mut r = ruleset_with([3, 2]);
+    r.sim.buildings.get_mut("VF").unwrap().econ.anim_idle = Some(idle);
+    r.globals.quirks.factory_unload_waits_ready_mark = waits;
+    r
+}
+
+// spec: S-0417 claim 2 and Edge cases (quirks.factory_unload_waits_ready_mark: a positive-delay range of one stage never sets the ready mark, so the queued unload never becomes current and the vehicle stays in contact at its appear point; off, queueing unload sets the mark and it starts at the next per-tick start)
+#[test]
+fn claim_2_unload_waits_ready_mark() {
+    for waits in [true, false] {
+        let mut w = game(&with_idle([0, 1, 5], waits));
+        let k = building(&mut w, "VF", 0, 0, 0);
+        step(&mut w);
+        w.obj_mut(k).unwrap().beh.ready_mark = false;
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        let at = w.obj(tank).unwrap().pos;
+        assert_eq!(w.obj(k).unwrap().beh.ready_mark, !waits);
+        step(&mut w);
+        if waits {
+            for _ in 0..100 {
+                step(&mut w);
+            }
+            let o = w.obj(k).unwrap();
+            assert_eq!(o.beh.current, Some(Behaviour::Guard));
+            assert_eq!(o.beh.queued, Some(Behaviour::Unload));
+            assert_eq!(w.obj(tank).unwrap().contact, Some(k));
+            assert_eq!(w.obj(tank).unwrap().pos, at);
+        } else {
+            assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+        }
+    }
+}
+
+// spec: S-0417 claim 2 (Q-0222: closing queues guard without a start; a zero-delay body range sets the mark every building turn, so guard becomes current at the second per-tick start of the closing tick, the tick of the processing that queued it)
+#[test]
+fn claim_2_guard_starts_at_the_second_start() {
+    let mut w = game(&with_idle([0, 1, 0], true));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    let mut started = false;
+    for _ in 0..600 {
+        step(&mut w);
+        let o = w.obj(k).unwrap();
+        if o.beh.current == Some(Behaviour::Unload) {
+            started = true;
+        }
+        if started && o.beh.current == Some(Behaviour::Guard) {
+            let (processed, _) = o.beh.last.expect("a processing");
+            assert_eq!(o.beh.start_tick, processed, "guard starts in the closing tick");
+            assert_eq!(o.beh.queued, None);
+            return;
+        }
+    }
+    panic!("guard never started");
+}
+
+// spec: S-0417 claim 2 and Edge cases (quirks.factory_unload_waits_ready_mark: once unload is current, a range that never sets the mark never lets the queued guard start; off, the closing processing sets it)
+#[test]
+fn claim_2_guard_waits_ready_mark() {
+    for waits in [true, false] {
+        let mut w = game(&with_idle([0, 1, 5], waits));
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        // The mark left by construction starts the unloading.
+        w.obj_mut(k).unwrap().beh.ready_mark = true;
+        let mut queued_guard = false;
+        for _ in 0..600 {
+            step(&mut w);
+            let o = w.obj(k).unwrap();
+            queued_guard |= o.beh.queued == Some(Behaviour::Guard);
+            if o.beh.current == Some(Behaviour::Guard) {
+                break;
+            }
+        }
+        let o = w.obj(k).unwrap();
+        if waits {
+            assert!(queued_guard);
+            assert_eq!(o.beh.current, Some(Behaviour::Unload));
+            assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+        } else {
+            assert_eq!(o.beh.current, Some(Behaviour::Guard));
+        }
+    }
+}
+

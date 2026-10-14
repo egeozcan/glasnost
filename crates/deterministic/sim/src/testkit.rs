@@ -551,8 +551,9 @@ pub fn mid(size: i32, dx: i32, dy: i32) -> CellXY {
 }
 
 /// Creates an object of type `name` for house `house` and places it at the
-/// centre of `cell` (a building's top-left cell), facing `facing`. Infantry
-/// stand at the cell's centre position. Takes the creation draw like any
+/// centre of `cell` (a building's top-left cell), facing `facing`, in
+/// *guard*; a building also in its idle body state. Infantry stand at the
+/// cell's centre position. Takes the creation draw like any
 /// object creation (S-0202 claim 10).
 pub fn spawn(
     w: &mut World,
@@ -574,6 +575,11 @@ pub fn spawn(
     let tick = w.tick;
     if let Some(o) = w.obj_mut(id) {
         o.beh.force(Behaviour::Guard, tick, stale);
+    }
+    if kind == crate::rules::Kind::Building {
+        // A complete building runs its idle body range (S-0108 claim 6),
+        // whose stage updates set the ready mark (S-0215 claim 11).
+        crate::econ::body::enter_idle(w, id, true);
     }
     id
 }

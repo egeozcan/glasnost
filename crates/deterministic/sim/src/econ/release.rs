@@ -597,12 +597,8 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
     };
     // spec: S-0404 claim 13 and Constants (it appears inside K facing 16384)
     crate::objects::place(w, unit, p, VEHICLE_FACING);
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    let tick = w.tick;
-    if let Some(o) = w.obj_mut(k) {
-        // spec: S-0404 claim 13 (K then starts unloading)
-        o.beh.force(Behaviour::Unload, tick, stale);
-    }
+    // spec: S-0417 claim 1 (K queues unloading; claim 2 governs when it becomes current)
+    queue_unload(w, k);
     let spot = rally(w, k);
     if let Some(o) = w.obj_mut(unit) {
         // spec: S-0417 claim 1 (a ground vehicle factory releases u into contact with K)
@@ -638,12 +634,8 @@ fn holds_object(w: &World, c: CellXY) -> bool {
 fn naval_row(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
     let in_contact = w.objects.values().any(|o| o.contact == Some(k));
     if !in_contact {
-        let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-        let tick = w.tick;
-        if let Some(o) = w.obj_mut(k) {
-            // spec: S-0404 claim 13 (when K has no unit in contact, K starts unloading)
-            o.beh.force(Behaviour::Unload, tick, stale);
-        }
+        // spec: S-0417 claim 1 (a naval factory queues unloading only when it had no unit in contact)
+        queue_unload(w, k);
     }
     let c = w.reference_point(k);
     let cc = c.cell();
@@ -1110,14 +1102,35 @@ fn move_door(w: &mut World, k: ObjectId, open: bool) {
     }
 }
 
+/// A release queues *unload* on K without a start (S-0417 claims 1 and
+/// 2): it becomes current at a per-tick start that finds the ready mark
+/// set. With `quirks.factory_unload_waits_ready_mark` off, queueing it also
+/// sets the mark.
+fn queue_unload(w: &mut World, k: ObjectId) {
+    let waits = w.rules().quirks.factory_unload_waits_ready_mark;
+    if let Some(o) = w.obj_mut(k) {
+        // spec: S-0417 claims 1 and 2 (unload queued at release, without a start; nothing in the release sets or clears the ready mark)
+        o.beh.queue(Some(Behaviour::Unload));
+        if !waits {
+            // spec: S-0417 Edge cases (quirks.factory_unload_waits_ready_mark off: queueing unload at release also sets the ready mark)
+            o.beh.ready_mark = true;
+        }
+    }
+}
+
 /// K falls back to rest at the end of its unloading: it queues *guard*
-/// (S-0417 claims 2 and 9; the production animation is not modelled).
+/// (S-0417 claims 2 and 9). The deferred request for the idle body state
+/// leaves the running idle range unchanged (S-0108 claim 6: the same
+/// state), as no production animation is modelled.
 fn end_unloading(w: &mut World, k: ObjectId) {
+    let waits = w.rules().quirks.factory_unload_waits_ready_mark;
     if let Some(b) = w.obj_mut(k) {
-        // spec: S-0417 claim 2 and table S1 (closing: queue guard; unloading ends when guard starts)
+        // spec: S-0417 claim 2 and table S1 (closing: queue guard without a start; guard becomes current at the first per-tick start that finds the ready mark set, Q-0222)
         b.beh.queue(Some(Behaviour::Guard));
-        // Q-0222 (interim: the processing that queues guard sets the ready mark, so guard starts at the second per-tick start of the same tick, as S-0406 claim 15 states for construction)
-        b.beh.ready_mark = true;
+        if !waits {
+            // spec: S-0417 Edge cases (quirks.factory_unload_waits_ready_mark off: the processing that queues guard also sets the ready mark)
+            b.beh.ready_mark = true;
+        }
     }
 }
 

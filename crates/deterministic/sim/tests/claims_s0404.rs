@@ -868,6 +868,9 @@ fn claim_8_factory_being_sold() {
         .unwrap()
         .beh
         .queue(Some(glasnost_sim::rules::Behaviour::Selling));
+    // No body range runs, so no ready mark starts the queued sale (S-0215 claim 11).
+    w.obj_mut(b).unwrap().econ.idle_body = None;
+    w.obj_mut(b).unwrap().beh.ready_mark = false;
     let p = item(&w, 0, grunt).unwrap().progress;
     let c = credits(&w, 0);
     for _ in 0..20 {
@@ -1195,6 +1198,9 @@ fn claim_13_ground_exit_point() {
     assert!(o.on_map);
     assert_eq!((o.pos.x, o.pos.y), (tl.x + 100, tl.y + 60));
     assert_eq!(w.body_facing(tank), 16384);
+    // spec: S-0417 claim 1 (K queues unloading; it becomes current at a per-tick start that finds the ready mark set)
+    assert_eq!(w.obj(k).unwrap().beh.queued, Some(Behaviour::Unload));
+    step(&mut w);
     assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
     let mut w = game(&ruleset());
     let k = building(&mut w, "WARFACT", 0, 0, 0);
@@ -1215,6 +1221,7 @@ fn claim_13_ground_busy_and_hand_off() {
     let other = building(&mut w, "WARFACT2", 0, 6, 0);
     let first = new_unit(&mut w, Kind::Vehicle, "TANK");
     assert_eq!(release::release(&mut w, k, first), Outcome::Released);
+    unloading_now(&mut w, k);
     let second = new_unit(&mut w, Kind::Vehicle, "TANK");
     assert_eq!(release::release(&mut w, k, second), Outcome::Busy);
     assert!(!w.obj(second).unwrap().on_map);
@@ -1223,7 +1230,16 @@ fn claim_13_ground_busy_and_hand_off() {
     switch(&mut w, twin, false);
     assert_eq!(release::release(&mut w, k, second), Outcome::Released);
     assert_eq!(w.obj(second).unwrap().pos, w.reference_point(twin));
-    assert_eq!(w.obj(twin).unwrap().beh.current, Some(Behaviour::Unload));
+    assert_eq!(w.obj(twin).unwrap().beh.queued, Some(Behaviour::Unload));
+}
+
+/// Starts K's queued *unload* as its next per-tick start with the ready
+/// mark set would (S-0417 claims 1 and 2).
+fn unloading_now(w: &mut World, k: ObjectId) {
+    let t = w.tick;
+    let o = w.obj_mut(k).unwrap();
+    assert_eq!(o.beh.queued, Some(Behaviour::Unload));
+    o.beh.force(Behaviour::Unload, t, true);
 }
 
 // spec: S-0404 claim 7 (a busy release cancels the item with the refund at once and starts the next queued type; nothing is retried) and S-0407 claim 10 (no ever-built count)
@@ -1245,6 +1261,7 @@ fn claim_7_busy_release_cancels() {
     // K is still letting an earlier vehicle out when the automatic place order applies.
     let earlier = new_unit(&mut w, Kind::Vehicle, "TANK");
     assert_eq!(release::release(&mut w, k, earlier), Outcome::Released);
+    unloading_now(&mut w, k);
     let before = credits(&w, 0);
     production::place(&mut w, HouseId(0), jeep, None);
     assert!(w.obj(obj).is_none(), "the cancelled unit is deleted");
@@ -1499,6 +1516,8 @@ fn claim_13_way_out() {
     let k = building(&mut w, "WARFACT", 0, 0, 0);
     let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
     assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    step(&mut w);
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
     for _ in 0..300 {
         step(&mut w);
         if w.obj(k).unwrap().beh.current != Some(Behaviour::Unload) {
