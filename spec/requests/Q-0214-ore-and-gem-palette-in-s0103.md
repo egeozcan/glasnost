@@ -1,9 +1,9 @@
 ---
 id: Q-0214
 title: S-0103 still leaves the ore and gem overlay palette open after S-0104's hand-off note
-status: open
+status: answered
 related: [S-0103, S-0104, S-0112]
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need

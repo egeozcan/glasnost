@@ -2,13 +2,13 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0214]
 supersedes: []
 ---
 
@@ -82,7 +82,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
    - Backing: `measurable` (PI). With base rules that supply all selected positions and the light-grey name (claim 10; PF confirms the name first), a house shows only definitions the base rules create, so a test map cannot supply a malformed one; PI uses a loose copy of the base rules instead.
    - Confidence: high. Medium for integers outside −2 147 483 648 … 2 147 483 647, which are expected to reduce the same way, mod 256; this overflow extension is `unmeasured`, because PI does not test overflowing integers and their parsing is not isolated here.
 
-5. **Two palettes per colour definition, and the first definition of a name wins.** Each colour definition has a single-shade and a 53-shade house-colour palette with the same ramp (S-0104 shades them). A house's units, infantry, aircraft and buildings are drawn with its 53-shade palette, except where claim 8 says otherwise (claims 8 and 10). Among the battlefield subjects covered by claim 8, the single-shade palette is shown only by animations flagged for the alternative palette. Names are compared ignoring case. When any later rules layer (the language rules file, the game-mode file or the map) defines a colour name that already exists, the existing definition is kept with its original value. Every house that shows that name keeps the earlier ramp, and nothing at a later position is created.
+5. **Two palettes per colour definition, and the first definition of a name wins.** Each colour definition has a single-shade and a 53-shade house-colour palette with the same ramp (S-0104 shades them). A house's units, infantry, aircraft and buildings are drawn with its 53-shade palette, except where claim 8 says otherwise (claims 8 and 10). Among the battlefield subjects covered by claim 8, the single-shade palette is shown only by animations flagged for the alternative palette. Names are compared ignoring case. When any later rules layer (the language rules file, the game-mode file or the map) defines a colour name that already exists, the existing definition is kept with its original value. Every house that shows that name keeps the earlier ramp, and nothing at a later position is created. This is a specific exception to the general layer-override rule in S-0006 claim 2; revise S-0006 claim 2 in the same batch to identify the colour-definition section as an exception.
    - Backing: `measurable` (PE for the two variants, PF for the shown-name rule). Definition positions are tested by PC; the statement that higher-layer names append and duplicates create no hidden extra definition is `unmeasured`: stock skirmish lobby choices expose the existing base-rules positions, not the count or positions of newly appended definitions.
    - Confidence: high
 
@@ -256,6 +256,7 @@ Theaters. These names are engine constants of the original, not stock data. Each
 | rules `[General]` (a game-wide section) | `Parachute` | animation name | the parachute of an object other than a projectile (claim 8, row 3) | not established |
 | rules `[General]` | `BombParachute` | animation name | the parachute of a projectile; not drawn with it (claim 8) | not established |
 | map `[Map]` | `Theater` | theater identifier (Constants) | which palette files are used (claim 2) | (see S-0009) |
+| overlay, smudge and terrain-object data | keys and value forms in S-0112 Import mapping | as specified there | palette, tint and brightness selection delegated by claim 8 to S-0112 claims 1–3, including deck-cell precedence | defaults in S-0112 Import mapping |
 
 ## Measurement scenarios
 
@@ -452,6 +453,8 @@ Every scenario that reads pixels shares these rules:
   - or the animated tile shows the first colour definition's single-shade ramp, or stops taking the coloured light.
 
 ## Open questions
+
+Q-0214 is resolved by claim 8: S-0112 claims 1–3 own the established overlay, smudge and terrain-object palette rules. No residual palette question for those subjects remains here; the deck and marker exceptions still apply to ore and gems.
 
 - **Saved games.** Whether loading a saved game makes the next game reload the palette files, whatever its theater, is not established.
 - **Snow unit palette missing at program start.** What the game does if the snow unit palette file itself is missing when the program starts is not established.
