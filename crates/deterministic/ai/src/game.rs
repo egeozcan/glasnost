@@ -188,7 +188,8 @@ impl Game {
         }
         let mut g = Self::new(rules, map, &replay.map, catalogue, replay.setup.clone())
             .map_err(SaveError::Load)?;
-        while g.world.tick < replay.ticks {
+        // spec: S-0201 claim 1 (the final tick leaves the tick number at itself: count the ticks run)
+        while tick::ticks_run(&g.world) < replay.ticks {
             g.issue_recorded(replay);
             g.step();
             each(&g);

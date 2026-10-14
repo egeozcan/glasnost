@@ -471,7 +471,7 @@ fn play_ai(
         }
     }
     g.run_ms = t.elapsed().as_millis();
-    g.ticks = game.world.tick;
+    g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
     let world = &game.world;
     for h in 0..PLAYERS {
@@ -527,7 +527,8 @@ fn play_ai(
     let mut loaded =
         AiGame::load(&half.save(), rules.clone(), tiles).map_err(|e| format!("load: {e:?}"))?;
     let same_at_save = loaded.state_hash() == half.state_hash();
-    while loaded.world.tick < g.ticks {
+    // The final tick leaves the tick number at itself (S-0201 claim 1): count the ticks run.
+    while glasnost_sim::tick::ticks_run(&loaded.world) < g.ticks {
         loaded.step();
     }
     g.save_matches = same_at_save && loaded.state_hash() == end;
