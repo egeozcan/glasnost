@@ -61,7 +61,7 @@ fn clicking_an_object_selects_it() {
 }
 
 // spec: S-0214 table G row G4 (force-select on an own actor: toggle select)
-// spec: S-0214 claim 12 (toggle select adds or removes the clicked object)
+// spec: S-0214 claim 12 (toggle select adds or removes the clicked object; an addition with positive primary damage goes at the front, one without at the end)
 #[test]
 fn force_select_toggles() {
     let w = game(3);
@@ -71,7 +71,12 @@ fn force_select_toggles() {
         ..Default::default()
     };
     let r = targeting::click(&w, ALPHA, &[a[0]], ClickOn::Object(a[1]), fs);
-    assert_eq!(r.selection, Some(vec![a[0], a[1]]));
+    let want = if targeting::positive_primary(&w, a[1]) {
+        vec![a[1], a[0]]
+    } else {
+        vec![a[0], a[1]]
+    };
+    assert_eq!(r.selection, Some(want));
     let r = targeting::click(&w, ALPHA, &[a[0], a[1]], ClickOn::Object(a[0]), fs);
     assert_eq!(r.selection, Some(vec![a[1]]));
 }
@@ -741,12 +746,12 @@ mod r11 {
         assert_eq!((r.acknowledge, r.marker), (None, false));
     }
 
-    // spec: S-0214 F5 (i = x mod n, unsigned; none for a type without selection responses)
+    // spec: S-0214 F5 (i = x mod n, unsigned; none for an empty applicable list)
     #[test]
-    fn selection_response_choice() {
-        assert_eq!(targeting::selection_response(7, 3), Some(1));
-        assert_eq!(targeting::selection_response(u32::MAX, 2), Some(1));
-        assert_eq!(targeting::selection_response(5, 0), None);
+    fn order_response_choice() {
+        assert_eq!(targeting::order_response(7, 3), Some(1));
+        assert_eq!(targeting::order_response(u32::MAX, 2), Some(1));
+        assert_eq!(targeting::order_response(5, 0), None);
     }
 }
 

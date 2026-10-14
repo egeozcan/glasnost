@@ -130,19 +130,98 @@ fn terms_allied_is_judged_from_the_actor_side() {
     assert_ne!(from_b, Action::Attack);
 }
 
-// spec: S-0214 Terms (selection response) and Import mapping (VoiceSelect: n is the count of the list, every entry kept; absent: none); F5 (no value taken for n = 0)
+// spec: S-0214 claim 12 (an addition goes at the front when its type's primary weapon does positive damage, else at the end; a removal keeps the others' order) and S-0213 Terms (selection order)
 #[test]
-fn f5_selection_response_count() {
-    let mut r = testkit::combat_ruleset();
-    r.sim.infantry.get_mut("WALKER").unwrap().voice_select =
-        Some(vec!["Hi".into(), "none".into(), "Yo".into()]);
+fn claim_12_selection_order() {
+    let mut r = healing_walker();
+    r.sim.vehicles.get_mut("CART").unwrap().primary = None;
     let mut w = game(&r);
-    let walker = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
-    let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 2, 0), 0);
-    assert_eq!(targeting::selection_responses(&w, walker), 3);
-    assert_eq!(targeting::selection_responses(&w, cart), 0);
-    assert_eq!(targeting::selection_response(7, 3), Some(1));
-    assert_eq!(targeting::selection_response(7, 0), None);
+    // No primary weapon, negative primary damage, and two positive ones.
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 0, 0), 0);
+    let first = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(SIZE, 2, 0), 0);
+    let medic = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 4, 0), 0);
+    let second = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(SIZE, 6, 0), 0);
+    assert!(!targeting::positive_primary(&w, cart));
+    assert!(targeting::positive_primary(&w, first));
+    assert!(!targeting::positive_primary(&w, medic));
+    let mut sel = Vec::new();
+    for id in [cart, first, medic, second] {
+        targeting::add_to_selection(&w, &mut sel, id);
+    }
+    assert_eq!(sel, vec![second, first, cart, medic]);
+    // A toggle-select click removes the second tank, keeping the order.
+    let force = Modifiers {
+        force_select: true,
+        ..Modifiers::default()
+    };
+    let r = targeting::click(&w, ALPHA, &sel, ClickOn::Object(second), force);
+    assert_eq!(r.selection, Some(vec![first, cart, medic]));
+    // And adds it again at the front.
+    let again = targeting::click(&w, ALPHA, &[first, cart, medic], ClickOn::Object(second), force);
+    assert_eq!(again.selection, Some(vec![second, first, cart, medic]));
+}
+
+// spec: S-0214 claim 12 and Import mapping (a primary weapon of 0 damage does not do positive damage: the object goes at the end)
+#[test]
+fn claim_12_zero_primary_damage_is_not_positive() {
+    let mut r = testkit::combat_ruleset();
+    r.sim.weapons.get_mut("Gun").unwrap().damage = Some(0);
+    let mut w = game(&r);
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(SIZE, 2, 0), 0);
+    assert!(!targeting::positive_primary(&w, tank), "0 damage is not positive");
+}
+
+// spec: S-0214 claim 19 (a box adds own infantry, vehicles and aircraft not yet selected; never enemy objects or ordinary buildings)
+#[test]
+fn claim_19_box_eligibility() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, mid(SIZE, 0, 0), 0);
+    let walker = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 2, 0), 0);
+    let enemy = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 4, 0), 0);
+    let tower = spawn(&mut w, Kind::Building, "TOWER", 0, mid(SIZE, 8, 0), 0);
+    assert!(targeting::box_eligible(&w, ALPHA, &[], cart));
+    assert!(targeting::box_eligible(&w, ALPHA, &[], walker));
+    assert!(!targeting::box_eligible(&w, ALPHA, &[cart], cart), "already selected");
+    assert!(!targeting::box_eligible(&w, ALPHA, &[], enemy));
+    assert!(!targeting::box_eligible(&w, ALPHA, &[], tower));
+}
+
+// spec: S-0214 table C (attack: the in-range frames only with one selected unit or building whose weapon is in range of the target)
+#[test]
+fn claim_21_attack_cursor_context() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    let b = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 1), 0);
+    let near = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 1, 0), 0);
+    let far = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 14, 0), 0);
+    assert!(targeting::attack_cursor_in_range(&w, &[a], ClickOn::Object(near)));
+    assert!(!targeting::attack_cursor_in_range(&w, &[a], ClickOn::Object(far)));
+    assert!(!targeting::attack_cursor_in_range(&w, &[a, b], ClickOn::Object(near)));
+}
+
+// spec: S-0214 table C and claim 5 (the attack-move frames when the gesture turns the representative's move or attack into an attack-move; not without the gesture)
+#[test]
+fn claim_21_attack_move_cursor() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    let empty = ClickOn::Cell(glasnost_map::CellXY::new(SIZE / 2 + 4, SIZE / 2 + 4));
+    let gesture = Modifiers {
+        force_fire: true,
+        force_select: true,
+        ..Modifiers::default()
+    };
+    assert!(targeting::shows_attack_move(&w, ALPHA, &[a], empty, gesture));
+    assert!(!targeting::shows_attack_move(&w, ALPHA, &[a], empty, Modifiers::default()));
+}
+
+// spec: S-0214 F5 (i = x mod n, unsigned remainder; none for n = 0, no value taken)
+#[test]
+fn f5_order_response_choice() {
+    assert_eq!(targeting::order_response(7, 3), Some(1));
+    assert_eq!(targeting::order_response(7, 0), None);
 }
 
 // spec: S-0214 Part 2 (idle: area guard on the actor itself if its first weapon heals, else guard)

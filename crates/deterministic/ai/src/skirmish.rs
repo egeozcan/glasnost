@@ -100,7 +100,7 @@ pub fn run(
             break;
         }
     }
-    replay.ticks = w.tick;
+    replay.ticks = tick::ticks_run(&w);
     Ok(Run {
         replay,
         world: w,

@@ -364,6 +364,7 @@ fn claim_21_restoration_retains_the_teleporting_state() {
         mark: Some(l),
         phasing: Some((w.tick, 50)),
         mark_layer: Layer::Ground,
+        ..Default::default()
     };
     {
         let o = w.obj_mut(id).unwrap();
@@ -477,24 +478,38 @@ fn claim_20_end_of_phasing_in_draws_with_the_search_gates() {
     assert_eq!(timer, end + n + u);
 }
 
-// spec: S-0207 claim 20 (a) and (e) (on a high-bridge cell a vehicle lands at H + 416 and is listed in the deck layer; its vehicle-present mark is held in that layer's record, interim request Q-0240)
+/// Makes `c` a high-bridge cell.
+fn bridge(w: &mut World, c: CellXY) {
+    let i = w.cells.idx(c).expect("cell");
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+}
+
+/// The vehicle-present flags of `c`'s ground and deck records.
+fn vehicle_flags(w: &World, c: CellXY) -> (bool, bool) {
+    let f = |l| w.cells.occ(c, l).is_some_and(|o| o.vehicle_present());
+    (f(Layer::Ground), f(Layer::Deck))
+}
+
+/// Runs until the object has finished phasing in.
+fn settle(w: &mut World, id: ObjectId) {
+    run_until(w, 400, |w| !teleport::phasing_in(w, id));
+}
+
+// spec: S-0207 claim 20 (a) and (e) (on a high-bridge cell a vehicle lands at H + 416 and is listed in the deck layer; its reservation is the ground record, kept through deck placement, which also marks the deck: both records are marked; a later accepted destination clears the remembered ground reservation and the old deck mark clears when the next jump removes it, Q-0240)
+// spec: S-0209 claim 1 (teleporting vehicles: reservation layer need not match listing layer)
 #[test]
 fn claim_20_vehicle_landing_on_a_high_bridge() {
     let s = scene(false);
     let (mut w, id) = start(&s);
+    let here = w.obj(id).unwrap().pos.cell();
     let dc = cell(0, -6);
-    let i = w.cells.idx(dc).expect("cell");
-    w.cells.deck[i] = true;
-    w.cells.deck_entry[i] = true;
-    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+    bridge(&mut w, dc);
     order_move(&mut w, id, dc);
     run(&mut w, 1);
-    let deck_mark = |w: &World| {
-        w.cells
-            .occ(dc, Layer::Deck)
-            .is_some_and(|o| o.vehicle_present())
-    };
-    assert!(deck_mark(&w) && !marked(&w, dc));
+    assert_eq!(vehicle_flags(&w, dc), (true, false), "ground reservation");
+    assert_eq!(vehicle_flags(&w, here), (false, false));
     run(&mut w, 1);
     let o = w.obj(id).unwrap();
     let ground = centre(&w, dc);
@@ -502,7 +517,36 @@ fn claim_20_vehicle_landing_on_a_high_bridge() {
     assert_eq!(o.layer, Layer::Deck);
     assert!(w.cells.list(dc, Layer::Deck).contains(&id));
     assert!(!w.cells.list(dc, Layer::Ground).contains(&id));
-    assert!(deck_mark(&w) && !marked(&w, dc));
+    assert_eq!(vehicle_flags(&w, dc), (true, true), "both records");
+    settle(&mut w, id);
+    let next = cell(6, 0);
+    order_move(&mut w, id, next);
+    run(&mut w, 1);
+    assert_eq!(vehicle_flags(&w, dc), (false, true), "remembered ground cleared");
+    assert_eq!(vehicle_flags(&w, next), (true, false));
+    run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == next);
+    assert_eq!(vehicle_flags(&w, dc), (false, false), "deck cleared at departure");
+    assert_eq!(vehicle_flags(&w, next), (true, false), "one record off a bridge");
+}
+
+// spec: S-0207 Edge cases (quirks.teleport_vehicle_ground_reservation off: the reservation is in the eventual landing layer, deck on a high bridge, with no separate ground reservation, and is cleared from that layer)
+#[test]
+fn claim_20_vehicle_ground_reservation_switch_off() {
+    let mut s = scene(false);
+    s.ruleset.globals.quirks.teleport_vehicle_ground_reservation = false;
+    let (mut w, id) = start(&s);
+    let dc = cell(0, -6);
+    bridge(&mut w, dc);
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    assert_eq!(vehicle_flags(&w, dc), (false, true));
+    run(&mut w, 1);
+    assert_eq!(w.obj(id).unwrap().layer, Layer::Deck);
+    assert_eq!(vehicle_flags(&w, dc), (false, true));
+    settle(&mut w, id);
+    order_move(&mut w, id, cell(6, 0));
+    run(&mut w, 1);
+    assert_eq!(vehicle_flags(&w, dc), (false, false));
 }
 
 /// Whether the object-present flag of cell `c`'s record in layer `l` is set.
@@ -510,30 +554,41 @@ fn present(w: &World, c: CellXY, l: Layer) -> bool {
     w.cells.occ(c, l).is_some_and(|o| o.others > 0)
 }
 
-// spec: S-0207 claim 20 (an aircraft with the teleporting locomotor moves by it) and (a) (its reservation is the object-present flag of the landing cell's ground record) and (e) (it lands at H or, on a high-bridge cell, H + 416; interim for the deck landing's ground reservation, request Q-0310)
+/// An aircraft with the teleporting locomotor at the middle cell, the
+/// aircraft reservation quirk set to `on`.
+fn flash(on: bool) -> (World, ObjectId) {
+    let mut s = Scene::new();
+    let mut t = unit_type(WHEEL, 6, 5);
+    t.locomotor = Some(Locomotor::Teleport);
+    s.aircraft("FLASH", t);
+    s.place_aircraft(0, "FLASH", cell(0, 0), 64);
+    s.ruleset.globals.quirks.teleport_aircraft_ground_reservation = on;
+    let mut w = s.build();
+    open_orders(&mut w);
+    let id = objects_of(&w, Kind::Aircraft)[0];
+    (w, id)
+}
+
+/// The object-present flags of `c`'s ground and deck records.
+fn present_flags(w: &World, c: CellXY) -> (bool, bool) {
+    (present(w, c, Layer::Ground), present(w, c, Layer::Deck))
+}
+
+// spec: S-0207 claim 20 (an aircraft with the teleporting locomotor moves by it) and (a) (its reservation is the object-present flag of the landing cell's ground record) and (e) (it lands at H or, on a high-bridge cell, H + 416; deck placement also sets the deck flag, keeping the ground reservation, Q-0310)
+// spec: S-0209 claim 1 (teleporting aircraft: both records marked, only the deck lists the aircraft; removal on the deck clears only the deck)
 #[test]
 fn claim_20_aircraft_moves_its_object_present_mark() {
     for high in [false, true] {
-        let mut s = Scene::new();
-        let mut t = unit_type(WHEEL, 6, 5);
-        t.locomotor = Some(Locomotor::Teleport);
-        s.aircraft("FLASH", t);
-        s.place_aircraft(0, "FLASH", cell(0, 0), 64);
-        let mut w = s.build();
-        open_orders(&mut w);
-        let id = objects_of(&w, Kind::Aircraft)[0];
+        let (mut w, id) = flash(true);
         let here = w.obj(id).unwrap().pos.cell();
         let dc = cell(0, -6);
         if high {
-            let i = w.cells.idx(dc).expect("cell");
-            w.cells.deck[i] = true;
-            w.cells.deck_entry[i] = true;
-            w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+            bridge(&mut w, dc);
         }
         assert!(present(&w, here, Layer::Ground));
         order_move(&mut w, id, dc);
         run(&mut w, 1);
-        assert!(present(&w, dc, Layer::Ground), "high {high}");
+        assert_eq!(present_flags(&w, dc), (true, false), "high {high}");
         assert!(!present(&w, here, Layer::Ground), "high {high}");
         run(&mut w, 1);
         let o = w.obj(id).unwrap();
@@ -542,14 +597,51 @@ fn claim_20_aircraft_moves_its_object_present_mark() {
         assert_eq!(o.pos, Pos::new(ground.x, ground.y, z), "high {high}");
         let layer = if high { Layer::Deck } else { Layer::Ground };
         assert_eq!(o.layer, layer);
-        assert!(present(&w, dc, layer));
-        if high {
-            assert!(!present(&w, dc, Layer::Ground));
-        }
-        // Removal clears the mark where it is.
+        assert_eq!(present_flags(&w, dc), (true, high), "high {high}");
         glasnost_sim::objects::remove(&mut w, id);
-        assert!(!present(&w, dc, layer));
+        // On the deck removal clears the deck flag only; on the ground its one mark.
+        assert_eq!(present_flags(&w, dc), (high, false), "high {high}");
+        // spec: S-0209 claim 6 (the retained object-present flag alone refuses a walker's standing position below the bridge, even after the aircraft is destroyed)
+        assert_eq!(
+            glasnost_sim::occupancy::no_position_by_flags(&w, dc, Layer::Ground),
+            high
+        );
     }
+}
+
+// spec: S-0207 claim 20 (e) (an aircraft's next accepted destination clears the remembered ground reservation; the old deck flag clears when the next jump removes it)
+#[test]
+fn claim_20_aircraft_next_jump_from_the_deck() {
+    let (mut w, id) = flash(true);
+    let dc = cell(0, -6);
+    bridge(&mut w, dc);
+    order_move(&mut w, id, dc);
+    run(&mut w, 2);
+    settle(&mut w, id);
+    let next = cell(6, 0);
+    order_move(&mut w, id, next);
+    run(&mut w, 1);
+    assert_eq!(present_flags(&w, dc), (false, true));
+    assert_eq!(present_flags(&w, next), (true, false));
+    run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == next);
+    assert_eq!(present_flags(&w, dc), (false, false));
+    assert_eq!(present_flags(&w, next), (true, false));
+}
+
+// spec: S-0207 Edge cases (quirks.teleport_aircraft_ground_reservation off: only the eventual landing layer is reserved, and removal clears the landing-layer mark, leaving no separate ground mark)
+#[test]
+fn claim_20_aircraft_ground_reservation_switch_off() {
+    let (mut w, id) = flash(false);
+    let dc = cell(0, -6);
+    bridge(&mut w, dc);
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    assert_eq!(present_flags(&w, dc), (false, true));
+    run(&mut w, 1);
+    assert_eq!(w.obj(id).unwrap().layer, Layer::Deck);
+    assert_eq!(present_flags(&w, dc), (false, true));
+    glasnost_sim::objects::remove(&mut w, id);
+    assert_eq!(present_flags(&w, dc), (false, false));
 }
 
 // spec: S-0207 claim 20 (a) (an aircraft removed before its jump clears the reservation on its landing cell, not its own cell's)

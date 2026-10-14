@@ -50,10 +50,89 @@ pub struct TeleportState {
     pub mark: Option<CellXY>,
     /// Phasing in: the jump tick *t*₀ and the delay *D* (part f, F9).
     pub phasing: Option<(i32, i64)>,
-    /// The record layer of an infantry unit's reserved standing position
-    /// at `mark` (S-0208 claim 19).
+    /// The record layer of the reservation at `mark`: an infantry unit's
+    /// standing position (S-0208 claim 19), a vehicle-present or
+    /// object-present mark (S-0207 claim 20 a).
     #[serde(default)]
     pub mark_layer: Layer,
+    /// The reservation of the remembered landing point after a completed
+    /// jump, its cell and record layer (S-0207 claim 20 a: finishing a jump
+    /// does not erase the remembered point; S-0208 claim 19 for infantry).
+    #[serde(default)]
+    pub held: Option<(CellXY, Layer)>,
+    /// The deck record a vehicle or aircraft marked by deck placement
+    /// beside its ground reservation, cleared when the next jump removes it
+    /// from that cell (S-0207 claim 20 e).
+    #[serde(default)]
+    pub deck_mark: Option<CellXY>,
+}
+
+impl TeleportState {
+    /// The state with no landing point, keeping the remembered reservation
+    /// and deck mark (S-0207 claim 20 a and e): a pending reservation not
+    /// jumped to becomes the held one.
+    fn without_landing(&self) -> Self {
+        Self {
+            held: self.mark.map(|c| (c, self.mark_layer)).or(self.held),
+            deck_mark: self.deck_mark,
+            ..Default::default()
+        }
+    }
+}
+
+/// Sets or clears the mark a teleporting vehicle (vehicle-present) or
+/// aircraft (object-present) holds in a record (S-0207 claim 20 a, S-0209
+/// claim 1).
+fn reserve(w: &mut World, kind: Kind, c: CellXY, l: Layer, add: bool) {
+    if kind == Kind::Aircraft {
+        if let Some(rec) = w.cells.occ_mut(c, l) {
+            rec.others = if add {
+                rec.others.saturating_add(1)
+            } else {
+                rec.others.saturating_sub(1)
+            };
+        }
+    } else {
+        w.cells.claim_vehicle(c, l, add);
+    }
+}
+
+/// Whether the ground-reservation quirk of a vehicle or aircraft is on.
+fn ground_reservation(w: &World, kind: Kind) -> bool {
+    let q = &w.rules().quirks;
+    match kind {
+        // spec: S-0207 Edge cases (quirks.teleport_aircraft_ground_reservation)
+        Kind::Aircraft => q.teleport_aircraft_ground_reservation,
+        // spec: S-0207 Edge cases (quirks.teleport_vehicle_ground_reservation)
+        _ => q.teleport_vehicle_ground_reservation,
+    }
+}
+
+/// The records a teleporting vehicle or aircraft clears when it is taken
+/// off the map (S-0207 claim 20, S-0209 claim 1): its pending or held
+/// reservation and its deck mark. An aircraft standing on the deck with no
+/// replacement destination clears only the deck, leaving the remembered
+/// ground reservation (`quirks.teleport_aircraft_ground_reservation`). A
+/// vehicle's removal is not described: it clears both (interim, request
+/// Q-0356), as does an aircraft with a replacement reservation pending.
+pub fn removal_marks(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
+    let Some(o) = w.obj(id) else {
+        return Vec::new();
+    };
+    let Some(t) = o.teleport.as_ref() else {
+        return vec![(o.pos.cell(), o.layer)];
+    };
+    let own = t
+        .mark
+        .map(|c| (c, t.mark_layer))
+        .or(t.held)
+        .unwrap_or((o.pos.cell(), o.layer));
+    match t.deck_mark {
+        // spec: S-0207 claim 20 (e) (an aircraft destroyed and removed while still on the deck clears the deck flag but not the remembered ground reservation)
+        Some(d) if o.kind == Kind::Aircraft && t.mark.is_none() => vec![(d, Layer::Deck)],
+        Some(d) => vec![own, (d, Layer::Deck)],
+        None => vec![own],
+    }
 }
 
 /// Whether the object moves with the teleporting locomotor in our engine.
@@ -122,35 +201,20 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         },
     };
     match landing_point(w, id, dc) {
-        Some(l) if o.kind == Kind::Aircraft => {
-            // spec: S-0207 claim 20 (a) (an aircraft moves its object-present mark, not a vehicle-present mark, at once from the old point's cell to L's)
-            let (old, old_layer) = aircraft_mark(w, id);
-            if let Some(rec) = w.cells.occ_mut(old, old_layer) {
-                rec.others = rec.others.saturating_sub(1);
-            }
-            // spec: S-0207 claim 20 (a) (its reservation at L is in the ground layer, even on a high-bridge cell)
-            if let Some(rec) = w.cells.occ_mut(l.cell(), Layer::Ground) {
-                rec.others = rec.others.saturating_add(1);
-            }
-            st.mark = Some(l.cell());
-            st.mark_layer = Layer::Ground;
-            st.landing = Some(l);
-            st.for_dest = Some(dest);
-            set_state(w, id, st);
-        }
         Some(l) => {
-            // spec: S-0207 claim 20 (a) (the vehicle-present mark moves at once from the old point's cell to L's)
-            let old = st.mark.unwrap_or(o.pos.cell());
-            let old_layer = if st.mark.is_some() {
-                landing_layer(w, old)
+            // spec: S-0207 claim 20 (a) (a vehicle's vehicle-present mark, an aircraft's object-present mark, moves at once from the old point's record to L's)
+            let (old, old_layer) = aircraft_mark(w, id);
+            reserve(w, o.kind, old, old_layer, false);
+            // spec: S-0207 claim 20 (a) and Edge cases (the reservation at L is in the ground record at L's chosen height H, even on a high-bridge cell; quirk off: the eventual landing layer)
+            let layer = if ground_reservation(w, o.kind) {
+                Layer::Ground
             } else {
-                o.layer
+                landing_layer(w, l.cell())
             };
-            w.cells.claim_vehicle(old, old_layer, false);
-            // The mark is held in the record of the layer the object is listed in after the jump (interim, request Q-0240).
-            w.cells
-                .claim_vehicle(l.cell(), landing_layer(w, l.cell()), true);
+            reserve(w, o.kind, l.cell(), layer, true);
             st.mark = Some(l.cell());
+            st.mark_layer = layer;
+            st.held = None;
             st.landing = Some(l);
             st.for_dest = Some(dest);
             set_state(w, id, st);
@@ -169,25 +233,28 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The cell and record layer of an aircraft's object-present mark (S-0207
-/// claim 20 a): the cell of a landing point fixed and not yet jumped to, in
-/// the record it was reserved in; otherwise its own cell, read in the deck
-/// layer only on a high-bridge cell when its height is at least *H* + 416
-/// there, and in the ground layer otherwise.
+/// The cell and record layer of the old point's mark of a teleporting
+/// vehicle or aircraft (S-0207 claim 20 a): the cell of a landing point
+/// fixed and not yet jumped to, in the record it was reserved in; else the
+/// remembered landing point's, kept after a completed jump; otherwise its
+/// own cell, read in the deck layer only on a high-bridge cell when its
+/// height is at least *H* + 416 there, and in the ground layer otherwise.
 pub fn aircraft_mark(w: &World, id: ObjectId) -> (CellXY, Layer) {
     let Some(o) = w.obj(id) else {
         return (CellXY::new(0, 0), Layer::Ground);
     };
-    if let Some(t) = o.teleport.as_ref()
-        && let Some(c) = t.mark
-    {
-        return (c, t.mark_layer);
+    if let Some(t) = o.teleport.as_ref() {
+        if let Some(c) = t.mark {
+            return (c, t.mark_layer);
+        }
+        // spec: S-0207 claim 20 (a) (the old point is the previous remembered L, including after a completed jump)
+        if let Some(h) = t.held {
+            return h;
+        }
     }
     let c = o.pos.cell();
-    let high = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
     // spec: S-0207 claim 20 (a) (the old-point mark read in the deck layer only on a high-bridge cell when the old point's height is at least H + 416 there, an exact integer comparison)
-    let on_deck = high && o.pos.z >= w.surface_at(o.pos.x, o.pos.y).wrapping_add(DECK_HEIGHT);
-    (c, if on_deck { Layer::Deck } else { Layer::Ground })
+    (c, reservation_layer(w, o.pos))
 }
 
 /// The landing point of a non-infantry object for destination cell `dc`
@@ -247,10 +314,18 @@ fn take_infantry_destination(w: &mut World, id: ObjectId, dest: Target, mut st: 
         // spec: S-0208 claim 19 (Q-0235: a new destination reaching landing choice before an earlier landing point was jumped to releases the earlier reservation)
         w.cells.clear_infantry(c, st.mark_layer, id, oq);
     }
+    // spec: S-0208 claim 19 and Edge cases (after a completed jump the old entry is cleared by the unit's actual position and height, whoever marked it, before the choice; quirks.teleport_infantry_ground_reservation)
+    let by_position =
+        !earlier && st.held.is_some() && w.rules().quirks.teleport_infantry_ground_reservation;
+    if by_position {
+        let p = walk::position_class(within(o.pos).0, within(o.pos).1, top);
+        w.cells
+            .clear_position(o.pos.cell(), reservation_layer(w, o.pos), p, oq);
+    }
     match infantry_landing(w, id, dest) {
         Some((l, layer)) => {
             // spec: S-0208 claim 19 (an infantry unit reserves its chosen standing position, not a vehicle-present mark) and S-0209 claim 1 (the old entry cleared, the new one marked at once)
-            if !earlier {
+            if !earlier && !by_position {
                 w.cells.clear_infantry(o.pos.cell(), o.layer, id, oq);
             }
             let mark = walk::position_class(within(l).0, within(l).1, top);
@@ -259,13 +334,15 @@ fn take_infantry_destination(w: &mut World, id: ObjectId, dest: Target, mut st: 
             }
             st.mark = Some(l.cell());
             st.mark_layer = layer;
+            st.held = None;
             st.landing = Some(l);
             st.for_dest = Some(dest);
             set_state(w, id, st);
         }
         None => {
             // spec: S-0208 claim 19 (no landing point: the destination is removed and the unit does not jump)
-            if earlier {
+            // spec: S-0208 claim 19 (after a completed jump a refused choice marks the unit's current position, its deck position on a deck)
+            if earlier || by_position {
                 // spec: S-0208 claim 19 (Q-0235: a refused replacement discards the earlier landing point; the unit's entry is restored at its present position, the record chosen by that position's height and cell)
                 let mark = walk::position_class(within(o.pos).0, within(o.pos).1, top);
                 let layer = reservation_layer(w, o.pos);
@@ -478,7 +555,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         _ => {
             // spec: S-0207 claim 20 (d) (L equal to its own position, or none fixed: no jump, the destination is removed)
             if o.dest.is_some() || st.landing.is_some() {
-                set_state(w, id, TeleportState::default());
+                set_state(w, id, st.without_landing());
                 drop_destination(w, id);
             }
             false
@@ -539,36 +616,44 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         .wrapping_add(if high { DECK_HEIGHT } else { 0 });
     // spec: S-0207 claim 20 (e) (its cell layer is the bridge deck on a high-bridge cell, ground elsewhere, for every kind)
     let layer = landing_layer(w, new);
+    let st = o.teleport.clone().unwrap_or_default();
+    if let Some(d) = st.deck_mark {
+        // spec: S-0207 claim 20 (e) (the old deck mark is cleared when the next jump removes the object from that cell)
+        reserve(w, o.kind, d, Layer::Deck, false);
+    }
     w.cells.leave(old, o.layer, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = Pos::new(l.x, l.y, z);
         ob.layer = layer;
-        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
-        ob.dest = None;
-        ob.path.steps.clear();
     }
     w.cells.enter(new, layer, id, false);
-    if o.kind == Kind::Aircraft && layer == Layer::Deck {
-        // Whether the ground reservation stays under the bridge after a deck landing is open (S-0207 Open questions): it moves to the deck record the aircraft is listed in (interim, request Q-0310).
-        if let Some(rec) = w.cells.occ_mut(new, Layer::Ground) {
-            rec.others = rec.others.saturating_sub(1);
+    // The reservation the object holds after the jump: the remembered landing point's.
+    let mut held = st.mark.map(|c| (c, st.mark_layer));
+    let mut deck_mark = None;
+    if o.kind == Kind::Infantry {
+        if let Some((c, from)) = held
+            && c == new
+            && from != layer
+            && !w.rules().quirks.teleport_infantry_ground_reservation
+        {
+            // spec: S-0208 Edge cases (quirks.teleport_infantry_ground_reservation off: the reservation moves to the actual landing surface at the same standing position)
+            let oq = crate::objects::occ_quirks(w);
+            let top = w.rules().quirks.top_position_counts_as_centre;
+            w.cells.clear_infantry(new, from, id, oq);
+            let mark = walk::position_class(within(l).0, within(l).1, top);
+            if let Some(h) = o.owner {
+                w.cells.mark_infantry(new, layer, mark, id, h);
+            }
+            held = Some((new, layer));
         }
-        if let Some(rec) = w.cells.occ_mut(new, Layer::Deck) {
-            rec.others = rec.others.saturating_add(1);
-        }
-    }
-    if o.kind == Kind::Infantry
-        && let Some(t) = o.teleport.as_ref()
-        && t.mark == Some(new)
-        && t.mark_layer != layer
-    {
-        // S-0208 claim 19 lists the unit on the deck after a jump onto a high bridge whatever record its reservation used, but does not say whether the reservation moves: it moves to the record of the layer the unit is listed in (interim, request Q-0311).
-        let oq = crate::objects::occ_quirks(w);
-        let top = w.rules().quirks.top_position_counts_as_centre;
-        w.cells.clear_infantry(new, t.mark_layer, id, oq);
-        let mark = walk::position_class(within(l).0, within(l).1, top);
-        if let Some(h) = o.owner {
-            w.cells.mark_infantry(new, layer, mark, id, h);
+        // spec: S-0208 claim 19 (landing neither transfers the reservation nor marks the actual position: a ground-chosen point stays taken in ground, the deck gets no mark)
+    } else if held != Some((new, layer)) {
+        // spec: S-0207 claim 20 (e) (deck placement marks the deck record without clearing or transferring the ground reservation: both records are marked)
+        reserve(w, o.kind, new, layer, true);
+        if held.is_some() {
+            deck_mark = Some(new);
+        } else {
+            held = Some((new, layer));
         }
     }
     // spec: S-0207 claim 20 (e) (entering L's cell has the arrival effects of the object's own kind) and S-0211 claim 5 (both cells are recomputed, for a walker as for a vehicle)
@@ -576,6 +661,13 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     if o.kind == Kind::Vehicle {
         // spec: S-0207 claim 20 (e) (a vehicle's: those of reaching a track target in a new cell, crushing among them, S-0210 claim 9)
         crate::crush::entered_cell(w, id, new);
+    }
+    // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
+    crate::objects::arrival_raise(w, id);
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
+        ob.dest = None;
+        ob.path.steps.clear();
     }
     // spec: S-0207 claim 20 (e) and (i) (a second warp animation at L, with its creation draws after the old point's in the jump tick; crates and parasites have no state in our engine)
     if let Some(warp) = r.warp_out.clone() {
@@ -589,6 +681,9 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         id,
         TeleportState {
             phasing,
+            // spec: S-0207 claim 20 (a) (finishing a jump does not erase the remembered point)
+            held,
+            deck_mark,
             ..Default::default()
         },
     );

@@ -308,34 +308,42 @@ impl Play {
         }
     }
 
-    /// A box selection (interim, Q-0278): `inside` are the objects whose
-    /// reference point projects inside the box; the local house's
-    /// selectable mobile ones are taken, replacing the selection, or added
-    /// to it with `add`.
-    pub fn select_box(&mut self, inside: &[ObjectId], add: bool) {
+    /// An ordinary band box's release (S-0214 claims 19 and 20).
+    /// `candidates` are the live box candidates whose box point is inside
+    /// the box, of any owner and kind. `force_select` is read as held, not
+    /// as a counted modifier. Returns whether the release continues as the
+    /// ordinary release click at the final pixel.
+    pub fn select_box(&mut self, candidates: &[ObjectId], force_select: bool) -> bool {
         let w = &self.game.world;
         let local = self.local;
-        let taken: Vec<ObjectId> = inside
-            .iter()
-            .copied()
-            .filter(|&id| {
-                targeting::selectable(w, id)
-                    && w.obj(id)
-                        .is_some_and(|o| o.owner == Some(local) && o.kind.is_mobile())
-            })
-            .collect();
-        if !add {
+        if candidates.is_empty() {
+            // spec: S-0214 claim 19 (with force-select an empty box performs no fallback)
+            if force_select {
+                return false;
+            }
+            // spec: S-0214 Edge cases (quirks.empty_box_release_click: on, an unmodified empty box is a click at its release pixel; off, it clears the selection and gives no order)
+            if w.rules().quirks.empty_box_release_click {
+                return true;
+            }
+            self.selection.clear();
+            return false;
+        }
+        // spec: S-0214 claim 19 (without force-select a box with a live candidate clears the old selection, even when nothing in it is eligible; with force-select eligible objects are added, not toggled)
+        if !force_select {
             self.selection.clear();
         }
         let mut first = None;
-        for id in taken {
-            if !self.selection.contains(&id) {
-                self.selection.push(id);
+        // Candidates are added in object order (interim, Q-0278).
+        for &id in candidates {
+            if targeting::box_eligible(w, local, &self.selection, id) {
+                // spec: S-0214 claims 12 and 20 (additions use the selection order; no count limit on the selection)
+                targeting::add_to_selection(w, &mut self.selection, id);
                 first = first.or(Some(id));
             }
         }
-        // spec: S-0701 claim 17 (several objects selected by one input: only the first speaks)
+        // spec: S-0701 claim 17 and S-0214 claim 20 (only the first successful addition speaks)
         self.selected.extend(first);
+        false
     }
 
     /// A key command for the selection (S-0213 table T2).

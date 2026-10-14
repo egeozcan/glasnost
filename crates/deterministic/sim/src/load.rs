@@ -385,6 +385,8 @@ pub fn new_game(
                 setup: state,
                 ..Default::default()
             },
+            // spec: S-0215 claim 38 (a house begins with no recorded base centre or base-start cell and a radius of 0)
+            base: Default::default(),
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {
@@ -572,6 +574,10 @@ pub fn new_game(
             *b = w.houses[h]
                 .start
                 .and_then(|s| list3.get(s as usize).copied());
+            if let Some(c) = *b {
+                // spec: S-0215 claim 38 (a start assignment supplies a base-start cell)
+                crate::base::start_assigned(&mut w, HouseId(h as u8), c);
+            }
         }
     }
 

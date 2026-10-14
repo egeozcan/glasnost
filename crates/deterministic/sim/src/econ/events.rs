@@ -36,6 +36,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         if kind == Kind::Building {
             // spec: S-0407 claim 12 (a) (a building put on the map)
             super::tech::recheck_due(w, h);
+            // spec: S-0215 claim 38 (an owned building's entry refreshes the base-start cell and radius)
+            crate::base::refresh(w, h, None);
             // spec: S-0404 claim 8 (a factory building placed: its lines checked at once)
             super::production::factory_event(w, h, id, false);
         } else if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
@@ -66,6 +68,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
         if kind == Kind::Building {
             // spec: S-0407 claim 12 (b) (a building leaves the map)
             super::tech::recheck_due(w, h);
+            // spec: S-0215 claim 38 (an owned building's removal refreshes the records from the surviving buildings)
+            crate::base::refresh(w, h, Some(id));
             // spec: S-0404 claim 8 (a factory building leaving the map: its lines checked at once, without it)
             super::production::factory_event(w, h, id, true);
             if for_good {
@@ -115,6 +119,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
         super::tech::recheck_due(w, h);
         // spec: S-0404 claim 8 (a factory building that changes owner: the lines of both houses)
         super::production::factory_event(w, h, id, false);
+        // spec: S-0215 claim 38 (a building's owner change refreshes the records of both affected houses)
+        crate::base::refresh(w, h, None);
     }
     if let Some(h) = old
         && let Some(house) = w.houses.get_mut(usize::from(h.0))

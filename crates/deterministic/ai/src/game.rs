@@ -108,7 +108,7 @@ impl Game {
             }
         }
         tick::step(&mut self.world);
-        self.replay.ticks = self.world.tick;
+        self.replay.ticks = tick::ticks_run(&self.world);
     }
 
     /// The game's result once it is over (S-0414).

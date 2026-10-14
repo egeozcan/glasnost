@@ -14,6 +14,7 @@
 //! `xtask` tests enforce that rule.
 
 pub mod approach;
+pub mod base;
 pub mod behaviour;
 pub mod bridges;
 pub mod cells;

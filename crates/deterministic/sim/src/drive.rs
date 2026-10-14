@@ -134,29 +134,31 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
-    let (claims, layer) = match w.obj(id) {
+    let claims: Vec<(CellXY, Layer)> = match w.obj(id) {
         // spec: S-0209 claim 1 (a vehicle taken out of a cell's list while between steps clears that cell's flag; one without the driving locomotor never advanced)
+        // spec: S-0207 claim 20 (a) and (e) (a teleporting vehicle's mark is on the cell of its landing point until the jump, in its reservation record; after it, the remembered reservation and any deck mark)
         Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => {
-            // spec: S-0207 claim 20 (a) (a teleporting vehicle's mark is on the cell of its landing point until the jump)
-            match o.teleport.as_ref().and_then(|t| t.mark) {
-                Some(c) => (vec![c], crate::teleport::landing_layer(w, c)),
-                None => (vec![o.pos.cell()], o.layer),
-            }
+            crate::teleport::removal_marks(w, id)
         }
-        Some(o) => (
-            o.drive
-                .as_ref()
-                .map(|d| d.claims.clone())
-                .unwrap_or_default(),
-            o.layer,
-        ),
+        Some(o) => o
+            .drive
+            .as_ref()
+            .map(|d| d.claims.iter().map(|&c| (c, o.layer)).collect())
+            .unwrap_or_default(),
         None => return,
     };
-    for c in claims {
+    for (c, layer) in claims {
         w.cells.claim_vehicle(c, layer, false);
     }
-    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
-        d.claims.clear();
+    if let Some(o) = w.obj_mut(id) {
+        if let Some(d) = o.drive.as_mut() {
+            d.claims.clear();
+        }
+        if let Some(t) = o.teleport.as_mut() {
+            // The released records are no longer held.
+            t.held = None;
+            t.deck_mark = None;
+        }
     }
 }
 
@@ -1170,6 +1172,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
             crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);
+            // spec: S-0207 claim 22 (reaching a track target raises the cell's entered-by tag, after the arrival report and cell-centre crushing; the cell it actually occupies)
+            crate::objects::arrival_raise(w, id);
             return true;
         }
         let p: Point = pts[next - 1];
