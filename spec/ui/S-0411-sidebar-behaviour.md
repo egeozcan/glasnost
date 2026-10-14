@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,14 +25,15 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Paired revisions.** S-0404 revision 5 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 6 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary (claims 7 and 13).
-S-0407 revision 5's corrections, retained in revision 6, distinguish cancellation orders issued
+S-0407 revision 7 distinguishes cancellation orders issued
 at the recheck from their application at the tick's end, exempt held-item resume from the
 issue-time limit test, and retain the application-time limit test on queued starts (claims
-13 and 16). Its T14 run 7 distinguishes the permanent-removal refund from the later sidebar
-cancellation boundary. The former per-tick-removal correction requests are resolved.
+13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
+icon order used by claim 13 below. Its T14 run 7 distinguishes the permanent-removal refund
+from the later sidebar cancellation boundary. The former per-tick-removal correction requests are resolved.
 Full-tab suppression remains S-0004 claim 11's rule: whether a suppressed type is offered for
 order legality, gains an icon when space opens, or gives cancellation orders on losing
 availability remains unresolved here and in S-0407. No cancellation or refill rule is inferred.
@@ -361,7 +362,9 @@ last recheck). In addition:
     is displayed. No rule is asserted here for a type whose icon was suppressed by a full tab
     (claim 2), including whether its loss of availability gives cancellation orders. Within a tab they
     follow its existing icon order immediately before removal (S-0004 claim 11), including icons
-    outside the visible scrolled portion. For each removed type its cancel order, when claim 2
+    outside the visible scrolled portion. S-0407 claim 17 owns the admission order when several
+    new offers appear together; it can affect that existing icon order without changing the
+    cancellation rule here. For each removed type its cancel order, when claim 2
     requires one, precedes its cancel-all order, when required. All orders for that type precede
     those for the next removed type. This is not registration order and not a group of all
     cancels followed by all cancel-all orders. In our engine the same order applies for every
