@@ -607,6 +607,7 @@ impl Client {
                 Some(s) => {
                     s.update_marks();
                     s.update_cursor(&mut self.painter);
+                    s.update_status_glyphs(&mut self.painter);
                     if self.cpu_map {
                         let v = s.view();
                         changed.push((MAP_IMAGE, v.size.0, v.size.1, s.map_rgba()));

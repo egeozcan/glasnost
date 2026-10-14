@@ -23,6 +23,7 @@ use glasnost_ui::hud::{self, HudModel};
 use glasnost_ui::modes::{self, Mode};
 use glasnost_ui::status;
 
+use crate::game::status_font::StatusFont;
 use crate::mapview::credits::{CreditCounter, Tick};
 use crate::mapview::live::guarded;
 use crate::mapview::sidebar::{self, Action};
@@ -53,12 +54,20 @@ pub enum Tool {
 /// A status message.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Message {
-    /// Its text.
-    pub text: String,
+    /// Its text: the line's 16-bit text units (S-0213 claim 25).
+    pub units: Vec<u16>,
     /// Its deadline: the presentation clock count when added plus
     /// [`MESSAGE_CLOCKS`]; it goes at the first display update whose count
     /// is greater.
     pub until: i64,
+}
+
+impl Message {
+    /// The line as a string, for logs and tests (an unpaired surrogate
+    /// shows as U+FFFD; drawing uses [`Self::units`]).
+    pub fn text(&self) -> String {
+        String::from_utf16_lossy(&self.units)
+    }
 }
 
 /// Which mouse button.
@@ -99,6 +108,9 @@ pub struct Play {
     /// Status texts left partly out because they could not fit (S-0213
     /// Edge cases), for the client's log.
     pub status_problems: Vec<String>,
+    /// The game font that measures and draws status text (S-0213 claim
+    /// 25); without it status text is omitted (Import mapping).
+    pub status_font: Option<StatusFont>,
     /// Why the game stopped, when a tick failed.
     pub failed: Option<String>,
     /// The cheer command's rate limit (S-0213 claim 19).
@@ -159,6 +171,7 @@ impl Play {
             clock_started: false,
             status_width: i32::MAX,
             status_problems: Vec::new(),
+            status_font: None,
             failed: None,
             cheer,
             effects: Vec::new(),
@@ -217,26 +230,31 @@ impl Play {
     }
 
     /// Shows a status message on the shared display (S-0213 claim 25):
-    /// it is split into lines within the width budget, each appended with
-    /// its own lifetime and counting against the capacity, never
-    /// refreshing an older copy; a line added at capacity removes the
-    /// oldest. Widths are our own font's until the game font can be read
-    /// (interim, Q-0501).
+    /// it is split into lines within the width budget with the game font's
+    /// glyph widths, each appended with its own lifetime and counting
+    /// against the capacity, never refreshing an older copy; a line added
+    /// at capacity removes the oldest. Without a loaded game font the text
+    /// is omitted (the session reported the missing font when it started).
     pub fn say(&mut self, text: impl Into<String>) {
         let text = text.into();
-        // spec: S-0213 claim 25 (Line splitting and font; interim glyph widths, Q-0501)
-        let split = status::split(&text, self.status_width, status::our_glyph_width);
+        // spec: S-0213 Import mapping (no status text without a loaded font: our engine omits the text)
+        let Some(font) = self.status_font.as_ref() else {
+            return;
+        };
+        let units: Vec<u16> = text.encode_utf16().collect();
+        // spec: S-0213 claim 25 (Line splitting and font: the imported game font's glyph widths)
+        let split = status::split(&units, self.status_width, |c| font.width(c));
         if split.unfittable {
-            // spec: S-0213 Edge cases (Unfittable status text: the remainder is omitted with a warning)
+            // spec: S-0213 Edge cases (Unfittable status text: the remainder is omitted with a warning for the offending text or font)
             self.status_problems.push(format!(
-                "status text {text:?} has a remainder that cannot fit {} pixels; it is left out",
+                "status text {text:?} has a remainder that cannot fit {} pixels in the game font; it is left out",
                 self.status_width
             ));
         }
-        for line in split.lines {
+        for units in split.lines {
             // spec: S-0213 claim 25 (each line's deadline = clock count when added + 480, exact integers)
             let until = self.status_clock + MESSAGE_CLOCKS;
-            self.messages.push(Message { text: line, until });
+            self.messages.push(Message { units, until });
             let n = self.messages.len();
             // spec: S-0213 claim 25 (a new line at capacity removes the oldest line; wrapped lines count against the same capacity)
             if n > MESSAGES_SHOWN {

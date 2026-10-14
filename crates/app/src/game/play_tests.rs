@@ -4,6 +4,7 @@
 //! makes, with no GPU.
 
 use super::*;
+use crate::game::status_font::StatusFont;
 use glasnost_ai::fixture;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::rules::Kind;
@@ -36,7 +37,27 @@ fn start() -> Play {
     )
     .expect("the synthetic skirmish loads");
     assert_eq!(game.ai_houses().len(), 1, "only the machine is an AI house");
-    Play::new(game, local)
+    let mut p = Play::new(game, local);
+    p.status_font = Some(test_font());
+    p
+}
+
+/// A synthetic game font (S-0014) for status text: printable ASCII mapped,
+/// a space 2 pixels wide, `W` 9, the capital X 6 and every other glyph 4;
+/// other units are missing.
+fn test_font() -> StatusFont {
+    let mut f = glasnost_fmt::fnt::Font::empty(2, 7, 9);
+    for c in 32u16..=126 {
+        let w = match c {
+            32 => 2,
+            87 => 9,
+            88 => 6,
+            _ => 4,
+        };
+        let j = f.push_glyph(w, &["#########", "#", "#"]);
+        f.map_unit(c, Some(j));
+    }
+    StatusFont::new(f).expect("the capital X is mapped")
 }
 
 fn own(p: &Play, kind: Kind) -> Vec<ObjectId> {
@@ -554,7 +575,7 @@ fn s0213_claim_25_status_lines() {
     for k in 0..7 {
         p.say(format!("line {k}"));
     }
-    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
     assert_eq!(
         texts,
         ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"]
@@ -575,26 +596,26 @@ fn s0213_claim_25_split_lines_share_capacity_and_lifetime() {
     assert_eq!(p.status_width, 478);
     p.update_messages(16 * 100);
     p.say("one\ntwo\r\nthree");
-    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
     assert_eq!(texts, ["one\n", "two\r", "three"]);
     assert!(p.messages.iter().all(|m| m.until == 580));
     // Lines said at a later count expire later.
     p.update_messages(16 * 101);
     p.say("four\nfive\nsix\nseven");
-    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
     assert_eq!(
         texts,
         ["two\r", "three", "four\n", "five\n", "six\n", "seven"]
     );
     p.update_messages(16 * 581);
-    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
     assert_eq!(texts, ["four\n", "five\n", "six\n", "seven"]);
     // A long word wraps inside itself at the budget; each piece is a line.
     p.messages.clear();
     let word = "W".repeat(200);
     p.say(word.clone());
     assert!(p.messages.len() > 1 && p.messages.len() <= 6);
-    let joined: String = p.messages.iter().map(|m| m.text.as_str()).collect();
+    let joined: String = p.messages.iter().map(|m| m.text()).collect();
     assert_eq!(joined, word);
     // A change of the view's dimensions clears the lines and sets W − 16.
     p.status_view(300, true);
@@ -605,6 +626,35 @@ fn s0213_claim_25_split_lines_share_capacity_and_lifetime() {
     p.say("x");
     assert!(p.messages.is_empty());
     assert_eq!(p.status_problems.len(), 1);
+}
+
+/// spec: S-0213 claim 25 (a missing unit measures as the generated fallback, the capital X's width plus one pixel; a mapped unit by its own width; the zero unit ends the text)
+#[test]
+fn s0213_claim_25_game_font_widths() {
+    let mut p = start();
+    p.messages.clear();
+    // Budget 7: one missing unit (6 + 1) fits exactly, two do not.
+    p.status_view(22 + 7, false);
+    p.say("\u{e9}\u{e9}");
+    let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
+    assert_eq!(texts, ["\u{e9}", "\u{e9}"]);
+    p.messages.clear();
+    // "ab" is 5 + 5 = 10 pixels and fits; the zero unit ends the text.
+    p.status_view(22 + 10, false);
+    p.say("ab\0cd");
+    let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
+    assert_eq!(texts, ["ab"]);
+}
+
+/// spec: S-0213 Import mapping (without a loaded game font there is no status text; the session reports the missing font)
+#[test]
+fn s0213_claim_25_no_font_no_status_text() {
+    let mut p = start();
+    p.status_font = None;
+    p.messages.clear();
+    p.say("hello");
+    assert!(p.messages.is_empty());
+    assert!(p.status_problems.is_empty());
 }
 
 /// spec: S-0411 claim 17 (starting, holding, resuming and cancelling production and its completion add no battlefield status line; the sidebar labels are not status messages)
