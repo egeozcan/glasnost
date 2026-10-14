@@ -450,10 +450,13 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         }
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
-        if dest.is_none()
-            && let Some(ob) = w.obj_mut(vid)
-        {
-            ob.beh.force(Behaviour::Guard, tick, stale);
+        if let Some(ob) = w.obj_mut(vid) {
+            if dest.is_some() {
+                // spec: S-0415 claim 10 (the destination with move queued)
+                ob.beh.queue(Some(Behaviour::Move));
+            } else {
+                ob.beh.force(Behaviour::Guard, tick, stale);
+            }
         }
         // spec: S-0415 claim 10 (the centre of the return cell, facing D × 256)
         crate::objects::place(w, vid, Pos::centre(c, z), facing_of(d));
@@ -461,7 +464,7 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
             // spec: S-0415 claim 10 and S-0207 claim 20 (a) (the destination given once the vehicle is on the map, in the conversion tick: a teleporter's mark moves at once)
             super::assign_destination(w, vid, Some(spot));
             if let Some(ob) = w.obj_mut(vid) {
-                // spec: S-0415 claim 10 (the destination with move queued, in the conversion tick: after the placement, so that the placement's fall-back does not replace it)
+                // spec: S-0415 claim 10 (move queued in the conversion tick: queued again once the destination is given, so that a placement fall-back that queued guard without it, S-0215 claim 15, does not replace it; no change when move is already current)
                 ob.beh.queue(Some(Behaviour::Move));
             }
         }

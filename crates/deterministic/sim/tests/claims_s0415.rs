@@ -394,7 +394,14 @@ fn claims_9_10_pack_up() {
     // r = 500 / 1000, S = 200.
     assert_eq!(v.health, 100);
     assert_eq!(v.dest, Some(spot));
-    assert!(v.beh.queued == Some(Behaviour::Move) || v.beh.current == Some(Behaviour::Move));
+    // Revision 8: move is queued in the conversion tick, not forced; it starts at the vehicle's next behaviour start.
+    assert_eq!(v.beh.current, None);
+    assert_eq!(v.beh.queued, Some(Behaviour::Move));
+    let id = v.id;
+    until(&mut w, 5, |w| {
+        w.obj(id).unwrap().beh.current == Some(Behaviour::Move)
+    })
+    .expect("move started");
 }
 
 // spec: S-0213 claim 12 via S-0415 claim 9 (a construction yard without a guard spot does not pack up: it is sold, with the refund)

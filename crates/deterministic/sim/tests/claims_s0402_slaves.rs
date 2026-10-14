@@ -304,6 +304,31 @@ fn claim_21_building_emergence() {
     assert!(draws >= SLAVES as u64);
 }
 
+// spec: S-0402 claim 21 (a slave taken inside in an update cannot finish reload in that update, even with delay 0; a reload completion and a replacement may emerge in the same update)
+#[test]
+fn claim_21_same_update_reload_and_replacement() {
+    let mut r = rules();
+    for b in ["SMB", "SMB2", "SMH"] {
+        r.sim.buildings.get_mut(b).unwrap().econ.slave_reload_rate = Some(0);
+    }
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let s = slaves::slaves_of(&w, b)[0];
+    until(&mut w, 600, |w| group(w, b).members[0].inside).expect("delivered");
+    assert!(!group(&w, b).members[0].ready);
+    let next = group(&w, b).next_update;
+    while w.tick <= next {
+        testkit::run(&mut w, 1);
+    }
+    assert!(w.obj(s).unwrap().on_map, "reloaded and out in one update");
+    // A lost slave's replacement leaves in the update that creates it.
+    let lost = slaves::slaves_of(&w, b)[1];
+    glasnost_sim::objects::remove(&mut w, lost);
+    until(&mut w, 200, |w| group(w, b).members[1].id.is_some()).expect("replaced");
+    let n = group(&w, b).members[1].id.unwrap();
+    assert!(w.obj(n).unwrap().on_map);
+}
+
 // spec: S-0402 claim 21 and S-0208 claim 3 (a vehicle master in its offered cell: the vehicle-present refusal, no emergence and no draw)
 #[test]
 fn claim_21_vehicle_master_blocks_emergence() {
