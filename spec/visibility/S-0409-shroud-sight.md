@@ -2,7 +2,7 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -94,8 +94,10 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
   special-ability specs; this spec only says where the state is not tested (claim 15).
 - **Border cells of the map's diamond.** The legal cells of which at least one of the eight map
   neighbours is not a legal cell (S1 row 10).
-- **Arrival in a cell.** The tick on which a walking or driving unit arrives in a new cell, as the
-  movement specs use the word (S-0207, scenario D1; S-0208, claim 6).
+- **Arrival in a cell.** The movement arrival update, not merely crossing a cell boundary.
+  For ordinary walking infantry it is the tick the unit snaps to its chosen standing position
+  (S-0208, claims 6 and 23), including intermediate arrivals while the walk continues and a
+  same-cell arrival (S-0208, claim 21). Driving arrivals follow S-0207 (scenario D1).
 
 ## Behaviour
 
@@ -207,8 +209,8 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
 8. **When sight is applied.** An object holds a sight only while it is on the map and inside the
    usable area. For each house *H* that it counts for by claim 2:
    - it adds its sight when it enters the map (it is placed, built, unloaded or created),
-   - a walking or driving unit removes its sight and adds it again at its new place on each arrival
-     in a cell,
+   - a walking or driving unit removes its sight and adds it again at the position reached on each
+     arrival in a cell (Terms), including a walking infantry unit's same-cell arrival,
    - every moving object (any locomotor) also removes and adds its sight, in its turn, on each tick
      in which it is moving and at least 15 ticks have passed since its last such refresh (the first
      one comes on the first tick it moves, or 15 ticks after the previous refresh if it stopped and
@@ -231,7 +233,10 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
      in scenario V8 part B2); `unmeasured` for distinct factory-release and unloading sight
      events (the listed scenarios do not isolate these from other sights), and for the
      short-stop timer rule independently of take-off or landing refreshes (V7 B's restart
-     run may include those other refreshes). Also `unmeasured` for entering a transport or
+     run may include those other refreshes). A same-cell walking arrival's refresh is
+     `unmeasured` independently here: on V7 A's flat ground its sight centre and radius
+     are unchanged, so the explored footprint does not distinguish a refresh from none.
+     Also `unmeasured` for entering a transport or
      a building and for the flying and jumping events: the removal shows only through a pending mark inside a hostile
      field, where the transport's own sight covers the same cells, and the jumping locomotor's
      events belong to its own spec
@@ -1026,10 +1031,19 @@ mean an allied and an enemy bystander computer player.
   repeat layout 1 with the observer at level 5, recalculating its shifted centre and blocking
   cells under F3. Expected: a level-8 blocking cell no longer hides a target (8 is not greater
   than observer level 5 + 3). Falsified if the target remains hidden.
-- **V7 (claims 8 to 10).** Part A: a human vehicle drives a straight route of 10 cells; capture every
-  drawn frame. Observable: the tick on which each new cell enters the explored area. Expected: new
-  cells appear on the tick of each arrival in a cell (and on the first tick of motion and every 15
-  ticks thereafter). Part B: a human aircraft flies across unexplored ground; sample only sustained flight,
+- **V7 (claims 8 to 10).** Part A: a human vehicle drives a straight route of 10 cells; repeat
+  with ordinary walking infantry. Capture every drawn frame and record per-tick positions.
+  For infantry also record its walking target so the standing-position snaps of S-0208
+  claims 6 and 23 can be distinguished from boundary crossings and final walk completion.
+  Observable: the tick on which each new cell enters the explored area. Expected: arrival
+  refreshes use the position reached on that tick, including intermediate standing-position
+  arrivals, not the earlier boundary-crossing position. The explored area is the union of
+  the shapes revealed at arrivals and at the separate moving refreshes (the first tick of
+  motion and every 15 ticks thereafter, claim 8). Repeat S-0208 W13's same-cell walk:
+  its standing-position snap counts as an arrival too, but on flat ground with unchanged
+  sight centre and radius no new explored cell is required; that repeat alone cannot
+  isolate the refresh. Falsified if the inter-cell run's explored set or timing differs
+  from that union after accounting for periodic refreshes. Part B: a human aircraft flies across unexplored ground; sample only sustained flight,
   outside take-off and landing, and use a sufficiently long route for three periodic refreshes.
   Expected: explored area grows in steps 15 ticks apart. A second run of part B: the aircraft is ordered to stop (a
   hover or a landing) and 5 ticks later to move again; expected: the next growth comes 15 ticks
