@@ -1,9 +1,9 @@
 ---
 id: Q-0236
 title: What a killed aircraft whose type has an empty explosion list shows, and whether it takes a draw
-status: open
+status: answered
 related: [S-0312]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0172]
+requests: [Q-0172, Q-0230, Q-0237]
 supersedes: []
 ---
 
@@ -30,7 +30,9 @@ walking infantry's stopping and destination outcomes. Claims 19 to 21 extend ord
 and resolve their failure centre and usable-area exception for Q-0172. Claim 22 gives the search
 of types with the close-range property, claim 23 the replacement of a destroyable-cliff cell
 target, and claim 24 the one rule that treats jumpjets differently. Deploying searches and
-jumpjet stopping remain open below.
+jumpjet stopping remain open below. Claim 21 resolves the usable-area/reach-region distinction
+of Q-0230. Claim 22 b cites S-0208 claim 21 for the ordinary walker's shortcut outcome.
+Claim 25 resolves the non-walking outcome of Q-0237.
 Skirmish is covered; campaigns and network games are out of scope.
 
 ## Terms
@@ -113,7 +115,10 @@ and *subject to walls*. In addition:
    absent-key default is 0). The minimum-range field and the type's air range bonus field use the
    same form. The domain is a field magnitude below 8 388 608 cells (|*R*₀| below 2³¹); beyond it
    the value is not covered.
-   - Backing: `measurable` (RG1 a, b and d for conversion, e for negative fields)
+   - Backing: `measurable` (RG1 a, b and d for weapon conversion, e for negative weapon
+     fields, f for minimum-range conversion; RG2 g for air-bonus conversion and negative
+     air bonuses). `unmeasured` for distinguishing a negative minimum range from zero:
+     every non-negative measured distance passes both, so there is no differing range answer
    - Confidence: high
 
 2. **Unlimited range.** A weapon whose *R*₀ is exactly −512 (a range field of −2) passes the range
@@ -266,7 +271,7 @@ and *subject to walls*. In addition:
     passengers have short weapons still passes the range test at its own weapon's range, while
     those other rules see the shorter value. The passengers' own range tests use their own weapons
     and the bonus of claim 5.
-    The S-0306 draft's claim 4 specifies this current-weapon rule, including the weapon-number slot for a multi-weapon passenger and skipping a passenger without a current weapon. Its P3 f does not distinguish the current-weapon rule from a primary-only rule, so those passenger cases remain unmeasured there.
+    S-0306 claim 4 specifies this current-weapon rule, including the weapon-number slot for a multi-weapon passenger and skipping a passenger without a current weapon. Its P3 f does not distinguish the current-weapon rule from a primary-only rule, so those passenger cases remain unmeasured there.
     - Backing: `measurable` (RG9 and RG10 for an ordinary armed passenger and the range test's
       non-use; scatter and scan consequences through S-0306 P3 and S-0309's scenarios).
       Backing: `unmeasured` for multi-weapon current-slot selection and missing passenger weapons,
@@ -303,7 +308,8 @@ and *subject to walls*. In addition:
     be clear for the unit's locomotion class and movement zone and in its current reach region
     (S-0211 and S-0212). In these ground/no-bridge cases, a **clear cell** is enterable by class
     for that class and zone (S-0211 claim 10), has an occupancy record empty as a whole (S-0209),
-    and belongs to that region. This is not the actor's neighbouring-cell entry outcome: the
+    and belongs to that region. For locomotion class *winged*, the clear-cell test instead
+    accepts without occupancy, region, land or wall tests (claim 21). This is not the actor's neighbouring-cell entry outcome: the
     approach test does not accept a moving blocker or an enemy obstacle as a clear cell.
     On the covered open ground, the coarse route-length estimate is the
     Chebyshev distance in cells and introduces no further rejection. No random draw selects
@@ -425,7 +431,8 @@ and *subject to walls*. In addition:
     The test requires the actor's locomotion class, its own movement zone and its current
     reach region, determined from its actual cell and its current ground/deck layer. The
     candidate region is the ground-layer region. No candidate-height equality is required.
-    S-0211 claim 10 supplies the clear-cell land and wall tests, with a high-bridge deck
+    The *winged* exception of claim 21 bypasses all these clear-cell conditions, not the range
+    or detour tests. S-0211 claim 10 supplies the clear-cell land and wall tests, with a high-bridge deck
     bypassing the underlying land multiplier. This can accept a deck candidate whose ground
     is occupied, and reject it solely because its deck is occupied.
 
@@ -450,13 +457,43 @@ and *subject to walls*. In addition:
     - Backing: `measurable` (RG19)
     - Confidence: high for ordinary cells; claim 23 gives the destroyable-cliff replacement
 
-21. **Alternatives outside the usable area (Q-0172 question 6).** The usable-area test
-    rejects primary cells, but is not applied to a vehicle's alternatives. A legal alternative
-    outside the usable area can therefore be selected if its range, clear-cell and detour
-    tests pass. This is `quirks.approach_alternative_outside_area`. No result is specified
-    here for a cell outside the map's legal cells.
-    - Backing: `measurable` (RG20)
-    - Confidence: high
+21. **Alternatives outside the usable area (Q-0172 question 6; Q-0230).** The usable-area
+    test rejects primary cells, but is not applied to a vehicle's alternatives. This omission
+    does not make outside cells members of the attacker's reach region.
+
+    For an actor of locomotion class other than *winged*, the clear-cell test still compares
+    the candidate's ground reach region with the actor's region of claims 15 and 19. A legal
+    outside-area cell on ordinary flat ground has category *off-map* (S-0211 claim 11) and
+    no reach region (S-0212 claims 2 to 4). A stationary actor inside a ground reach region
+    therefore refuses that alternative, even when its terrain is open and continuous with
+    the actor's terrain. No replacement category based on land or overlay is used, and no
+    boundary-specific region exemption exists.
+
+    For locomotion class *winged*, the clear-cell test accepts without testing the region,
+    occupancy, height, land multiplier or wall. This applies to primaries and alternatives,
+    inside and outside the usable area. It does not bypass the primary usable-area test or
+    either candidate's range and detour conditions. Since a range-passing inside primary
+    is always clear for a winged vehicle, it never offers alternatives: failure at the
+    detour test proceeds to the next primary, not to alternatives. Winged class therefore
+    does not supply a way for this actor to select an outside alternative either.
+
+    The missing alternative boundary test is still reproduced as
+    `quirks.approach_alternative_outside_area`; selection remains conditional on every other
+    test, not guaranteed to have a reachable fixture. The earlier claim that ordinary flat
+    outside ground could be in an inside actor's ground reach region is withdrawn. Whether
+    bridge or moving-actor states make this omission observable remains open. A chosen
+    destination does not promise a path to it.
+
+    Nearby-cell searches still exclude outside-area cells, for *winged* class too
+    (S-0212 claim 25). Path computation uses S-0212 claim 6's independent reachability gate:
+    a ground-region actor and an ordinary outside-ground destination fail it unless one of
+    that claim's three exceptions applies. The *winged* clear-cell exception alone does not
+    waive that gate. The nearby and path rules already answer Q-0230 question 3 in S-0212.
+    This claim changes neither rule. No result is specified here for an illegal map cell.
+    - Backing: `measurable` (RG20; S-0212 P11 for the path gate and P21 for nearby searches).
+      `unmeasured` for the missing alternative boundary test itself: no reachable fixture
+      distinguishing it from an explicit boundary refusal is established
+    - Confidence: high for clear-cell acceptance and refusal; as S-0212 for path outcomes
 
 22. **Close-range searches (Q-0172 question 3).** For an attacker whose type has the
     close-range property, the search of claims 15 to 21 applies with the changes below. Nothing
@@ -480,8 +517,15 @@ and *subject to walls*. In addition:
        neighbours), *P* is the position choice in the attacker's own cell with desired point *T*,
        read from that cell's ground occupancy record whatever surface the attacker is on. The
        attacker's own entry counts as taken there. When a position is found and *d*₁ < *d*₀, the
-       search ends successfully at once: the attacker's movement is sent directly to *P*, its
-       destination becomes the cell of *T*, and the target is kept. No candidate is examined.
+       search ends successfully at once: an immediate movement towards *P* is requested,
+       its destination becomes the cell of *T*, and the target is kept. No candidate is examined.
+       For ordinary walking infantry, S-0208 claim 21 owns the second standing-position
+       choice, reservation replacement and arrival outcome. The actual walking target can
+       differ from *P* on a bridge deck. It is not an unconditional stop at *P*: after arrival,
+       S-0208 claims 16 and 17 decide whether the destination is cleared or walking continues.
+       These rules already answer Q-0237 questions 1 to 3 in S-0208 claims 3 and 21, including
+       replacing an existing walking target and releasing its old reservation immediately.
+       Other locomotors' shortcut outcome is claim 25.
        Otherwise the search continues with (c). With *d*₀ = 0 the shortcut never succeeds. A vehicle on the ground carries
        its own vehicle mark in its cell's ground record, so the position choice gives it no
        position and the shortcut does not succeed for it.
@@ -502,13 +546,16 @@ and *subject to walls*. In addition:
     e. **Own occupancy disregarded (every actor kind).** During each clear-cell test of claims 15,
        16 and 19, an attacker in the ground layer has its own occupancy entry withdrawn and restored right after the
        test. A cell whose only occupant is the attacker can therefore be clear. Any other
-       occupant still makes it not clear: the whole occupancy record must be empty, even though
-       (c) found a free standing position in it.
+       occupant still makes it not clear for a non-winged actor: the whole occupancy record
+       must be empty, even though (c) found a free standing position in it. Winged actors
+       retain claim 21's clear-cell bypass.
     f. **Random draws.** Every position choice of (b) and (c) takes a scenario-stream draw of S-0208 claim 3 exactly when the desired class is the centre and the table's first row (the refused cell: vehicle-present flag, or object-present flag without an open gate) does not apply. The draw occurs even when every position of the selected row is taken and the choice returns no position. The observable draw order places the shortcut's choice, when its distance condition holds, before draws attributable to primary candidates; primary-candidate draws follow F4's preference order. A primary contributes its draw even if its range test fails, and each occurrence of a repeated cell contributes another draw. No draw attributable to a later primary occurs after the search ends. These same draw results apply when the search may not change the actor. The class of *T* is the centre, for example, for a vehicle standing on a cell centre and for every building, whose reference point lies on a cell centre, edge or corner (S-0208 claim 2).
 
     When the search may not change the actor (claim 17), the shortcut moves nothing and sets no
     destination, but it still ends the search.
-    - Backing: `measurable` (RG23)
+    - Backing: `measurable` (RG23); `unmeasured` for the map-origin fallback and
+      the search when it may not change the actor: RG23 establishes neither a range-passing
+      map-origin fixture nor a normal-action fixture for the latter query mode
     - Confidence: high for the radius, the shortcut's conditions and constants, the bypass,
       the disregarded own occupancy and the draws; medium for the shortcut's combined movement
       and destination outcome and for the map-origin case
@@ -530,8 +577,11 @@ and *subject to walls*. In addition:
     actor, the target is not replaced and the search continues with the original cell.
     When no cell qualifies, the target becomes the cell at map coordinates (0, 0), which is
     reachable only when every tile cell lies outside the usable area.
-    - Backing: `measurable` (RG24); `unmeasured` for the case with no qualifying cell, which
-      needs an attackable cliff whose whole tile is outside the usable area
+    - Backing: `measurable` (RG24 for stationary actors); `unmeasured` for the moving
+      vehicle's scatter-reference cell, since RG24 does not arrange replacement during
+      movement, for the query that may not change the actor, since no normal-action fixture
+      invokes that mode, and for the case with no qualifying cell, which needs an attackable
+      cliff whose whole tile is outside the usable area
     - Confidence: high for the replacement rule; medium for the scatter-reference cell of a
       moving vehicle; low for the no-qualifying-cell result
 
@@ -543,6 +593,25 @@ and *subject to walls*. In addition:
     takes the search is S-0215 claim 37; its stopping is S-0208.
     - Backing: `measurable` (RG25)
     - Confidence: high for the exemption; medium that nothing else in the search differs
+
+25. **Shortcut for non-walking actors (Q-0237 question 4).** Claim 22 b's choice is not
+    restricted to infantry. A vehicle on a high-bridge deck can succeed when its ground
+    record supplies a position *P* with *d*₁ < *d*₀: its deck vehicle mark is not read by
+    that initial choice. Other mobile actors can likewise succeed when those same conditions
+    hold. The search still ends immediately, keeps the target and, when allowed to change
+    the actor, assigns the target-reference cell as destination.
+
+    For driving, sailing, hovering, flying, jumpjet, teleporting, tunnelling, rocket and
+    drop-pod locomotion, the immediate request towards *P* changes no movement point and
+    reserves no standing position. These actors move, if at all, according to their ordinary
+    response to the assigned cell destination, not towards *P* as an infantry walking target.
+    This is a distinction of locomotor, not of object kind or locomotion class. Ordinary
+    walking infantry instead use S-0208 claim 21. No additional random draw belongs to this
+    non-walking response; the initial choice still draws as claim 22 f specifies.
+    - Backing: `measurable` (RG26 for the deck vehicle and non-walking response).
+      `unmeasured` for exercising the shortcut under every other listed locomotor, since
+      no normal-action fixture for each is established
+    - Confidence: high for the common non-walking response; medium for reachable fixtures
 
 ## Formulas
 
@@ -556,6 +625,8 @@ with the wrap function
 > *w*(*n*) = the integer congruent to *n* modulo 2³² that lies in [−2³¹, 2³¹ − 1].
 
 *w* changes a value only outside that range, so it matters only for bad data (Edge cases).
+This is S-0205 claim 1's shared integer domain, not a range-specific quirk. Unless a quirk
+below explicitly supplies another input, the formulas describe the default, original behaviour.
 
 **F1. Effective range** (claims 2 to 6).
 
@@ -688,7 +759,10 @@ The rows exclude one another, so exactly one applies to each question.
   are measured at world height 0. Off: use terrain height at the alternative centre plus
   416 leptons when its cell carries a high bridge, just as for primary candidates.
 - **`quirks.approach_alternative_outside_area`** (default on, original). Vehicle alternatives
-  may be outside the usable area. Off: apply the primary usable-area test to alternatives too.
+  may be outside the usable area, but still face claim 21's clear-cell and detour conditions.
+  For a stationary non-winged actor inside a ground reach region, ordinary outside-ground
+  alternatives fail the region test even with this switch on. Off: apply the primary
+  usable-area test to alternatives too, including for the winged class.
 
 - **`quirks.garrison_range_drops_air_bonus`** (default on, the original). A garrisoned building's
   range replaces the weapon range together with its air bonus, so the air bonus is lost (claim 4).
@@ -707,14 +781,26 @@ The rows exclude one another, so exactly one applies to each question.
   the elevation section is missing) the original stops with a program error, an integer division
   by zero (S-0205, claim 3), whenever the range test is asked for two floor-bound objects with a
   projectile subject to elevation, whatever their height difference, Δ*h* = 0 included. Our engine takes *E*₁ = *E*₂ = 0 when *I* = 0, and the importer warns when a
-  projectile subject to elevation exists while *I* = 0. A negative *I* is not zeroed: it gives the original's integer division, truncating toward zero (*k* = trunc(Δ*h* / *I*) ≤ 0). *E*₂ and *E*₁ then follow F2, including the configured increment bonus *b*, cap *c* and wrap; their signs are not fixed for arbitrary imported values. This behaviour is reproduced, with the same warning.
-- **Negative elevation cap (bad data, reproduced).** The cap applies even when Δ*h* = 0 (*k* = 0 and *f* = 0), so *f*′ = *c* for *c* < 0. The resulting values are still calculated by F2, including its signed-32-bit wrap: *t* is obtained by the stated conversion rule, *E*₂ = *w*(256*t*), *σ* = *w*(*E*₂² + (104 Δ*h*)²), and *E*₁ = ⌊*r*(|*σ*|)⌋. When the intermediate products do not wrap and |trunc(*c*)| ≤ 127, *E*₂ = 256 × trunc(*c*) and, at Δ*h* = 0, *E*₁ = |*E*₂| (S-0204 claim 5). This applies to every pair of floor-bound objects with a subject-to-elevation projectile, including a firer on lower ground. The importer warns.
-- **Negative range fields**, other than the −1 sentinel, whose *R*₀ is not −512, give a negative
+  projectile subject to elevation exists while *I* = 0. A negative *I* is not zeroed: it gives the original's integer division, truncating toward zero (*k* = trunc(Δ*h* / *I*) ≤ 0). *E*₂ and *E*₁ then follow F2, including the configured increment bonus *b*, cap *c* and wrap; their signs are not fixed for arbitrary imported values. This behaviour is reproduced, with the same warning. A negative increment is not a separate quirk: the field's domain is signed integers, and this is the ordinary signed division of S-0205 claim 2, confirmed by RG22 a. Only zero needs the safe departure.
+- **`quirks.negative_elevation_cap`** (default on, the original; bad data). The cap applies even when Δ*h* = 0 (*k* = 0 and *f* = 0), so *f*′ = *c* for *c* < 0. The resulting values are still calculated by F2, including its signed-32-bit wrap: *t* is obtained by the stated conversion rule, *E*₂ = *w*(256*t*), *σ* = *w*(*E*₂² + (104 Δ*h*)²), and *E*₁ = ⌊*r*(|*σ*|)⌋. When the intermediate products do not wrap and |trunc(*c*)| ≤ 127, *E*₂ = 256 × trunc(*c*) and, at Δ*h* = 0, *E*₁ = |*E*₂| (S-0204 claim 5). This applies to every pair of floor-bound objects with a subject-to-elevation projectile, including a firer on lower ground. The importer warns. Off: use max(0, *c*) in place of *c* in F2, without changing the imported value or any other elevation term. Claim 6 carries the original behaviour's backing and confidence (RG22 b).
+- **`quirks.negative_range_fields`** (default on, the original; bad data). Negative range fields, other than the −1 sentinel, whose *R*₀ is not −512, give a negative
   *R*₀ (a field slightly beyond −2, such as −2.001, still truncates to −512 and is unlimited). F1
   and claim 9 apply to it unchanged, so the target is out of range unless the other terms of the
-  limit reach the distance; reproduced, the importer warns.
-- **Overflow in F2 and the limits (bad data, reproduced; RG15).** The bonus term of F2 can
-  overflow: with |*t*| ≥ 182 the sum wraps (F2 gives the result), and the limits of claim 9 wrap when
+  limit reach the distance; the importer warns. Off: after claim 1's conversion, use
+  max(0, value) for a negative weapon range, minimum range or air bonus, except that a
+  weapon range converted to −512 remains unlimited. A field read as exactly −1 cells
+  still keeps the value in force before this replacement.
+  This replacement also supplies the weapon range read by ρ and the approach radius.
+  Claim 1 carries the original conversion's backing and confidence (RG1 e and RG2 g).
+  Its negative-minimum equivalence is unmeasured for the reason stated there.
+- **Overflow in F2 and the limits (bad data, reproduced; RG15).** This is not a separate
+  quirk: it is the shared signed-32-bit domain of S-0205 claim 1, applied at the sites
+  specified in F1 and F2, rather than a range-specific defect or extra clamp. The topic
+  formulas and RG15 identify where it is observable. Saturating these operations would
+  change that shared domain; this spec proposes no such alternative.
+  The bonus term of F2 can overflow: |*t*| = 182 already wraps its square even at
+  Δ*h* = 0. For larger values the exact result is F2, not a monotonic threshold, since
+  *E*₂ itself can wrap before squaring. The limits of claim 9 wrap when
   *R* + *E* leaves the 32-bit range. A large positive result needs a cap of 182 or more together
   with a *k* × *b* that reaches it (for example *I* = 1, *b* = 200, *c* = 200, Δ*h* = 1).
   Negative caps can also cause wrap at Δ*h* = 0: for example a cap of −200 gives
@@ -729,8 +815,9 @@ The rows exclude one another, so exactly one applies to each question.
 | rules, weapon section | `Range` | weapon range *R*₀ (claims 1, 2); also the approach radius through ρ in claims 13 and 15 | lepton form of claim 1 | 0 |
 | rules, weapon section | `MinimumRange` | minimum range *m* | lepton form of claim 1 | 0 |
 | rules, section of an infantry or vehicle type | `CloseRange` | close-range property (claim 22) | boolean (S-0003) | no |
-| rules, infantry or vehicle type section | `SpeedType` | locomotion class for approach-cell qualification (claims 15 to 21) and the failure nearby search | name, as S-0211 Import mapping | S-0211 claim 3: infantry foot; vehicle track when its crusher flag is yes, otherwise wheel |
+| rules, infantry or vehicle type section | `SpeedType` | locomotion class for approach-cell qualification (claims 15 to 21), including the winged clear-cell bypass, and the failure nearby search | name, as S-0211 Import mapping | S-0211 claim 3: infantry foot; vehicle track when its crusher flag is yes, otherwise wheel |
 | rules, infantry or vehicle type section | `MovementZone` | own movement zone and reach region for claims 15 to 21 | name, as S-0211 claim 12 and Import mapping | normal |
+| rules, infantry, vehicle or aircraft type section | `Locomotor` | locomotor response to the shortcut's immediate movement request (claims 22 b and 25) | class identifier parsed and recognised as S-0207 claim 14 and Import mapping | keeps value in force; engine default teleporting locomotor |
 | rules, weapon section | `CellRangefinding` | cell rangefinding property (claim 8) | boolean (S-0003) | no |
 | rules, weapon section | `Projectile` | the projectile type whose properties claims 6, 9 to 11 and 18 use | type name | — |
 | rules, section of an infantry or vehicle type | `HunterSeeker` | hunter-seeker property (claim 17) | boolean (S-0003) | no |
@@ -788,6 +875,10 @@ leptons).
 - Run e: range field −2.001, target 40 cells away: fires (conversion still gives the
   unlimited −512 leptons). Control range field −3, with no bonuses and an ordinary nearby
   target: no shot. Firing in the control or refusal in e falsifies the negative-field result.
+- Run f (minimum-range conversion): keep the five-cell target and a generous maximum range.
+  Set the minimum-range field to 5.003 cells (1280 leptons after truncation).
+  Expected: fires at distance 1280. Control minimum 5.004 cells (1281 leptons): no shot.
+  Refusal in f or firing in the control falsifies the minimum-range conversion.
 - Repeat a and b′ with an arcing projectile, no elevation or cliff property and gravity chosen
   so reachability passes under F3. Expected: a fires, b′ moves; the reverse falsifies the planar
   comparison. Also repeat b with the original non-arcing projectile: firing falsifies its limit.
@@ -818,6 +909,14 @@ leptons).
   wide because *p* stays below 900), and the run is repeated with that file. Expected: moves, because
   Δ*z* = −416 for a floor-bound target under a high bridge (claim 8 b). Control: the same attacker
   and range, the target on open ground at the same planar distance: fires (Δ*z* = 0).
+- Run g (air-bonus conversion): use run a's eligible airborne target and record its
+  integer spatial distance D. Set the weapon range to (D − 128)/256 cells, exactly
+  representable in the domain of claim 1. Air bonus 0.4999 cells converts to 127 leptons:
+  expected moves. Control bonus 0.5 cells converts to 128 leptons: fires. For the negative
+  bonus run, set weapon range to (D + 64)/256 cells and air bonus −0.5 cells:
+  expected moves (limit D − 64). Control bonus 0: fires. One run per setting.
+  Firing in either refused run or movement in either control falsifies this part.
+  Use D well below 2²⁴ leptons so the weapon fields remain exactly representable.
 - Falsified if: run a's control fires or run a moves, run b fires at 5 cells, run c fires, d/e
   are off by a whole cell, or run f fires (an airborne firer would then measure no height
   difference to a target under a bridge) or its control moves.
@@ -1104,18 +1203,34 @@ makes one infantry type and one vehicle type able to force-attack it and gives e
   destination merely because the cell comes in range. Any different target/destination pair
   falsifies the search rule; a later infantry stop tests S-0208 instead.
 
-**RG20. Legal alternatives outside the usable area (claim 21).** Use RG11's vehicle, houses,
-speed and recorder on a named map whose legal cells extend beyond its usable area. Place the
-first range-passing primary just inside that boundary, block it, and leave its first
-alternative clear just outside the boundary but on legal terrain in the same reach region.
-Other primaries and alternatives cannot qualify. Named test data disables special approaches.
-- Procedure: attack the enemy object, recording the first destination, terrain, occupancy,
-  usable-area boundary and the detour estimates. One run, with a control moving the same
-  alternative inside the usable area. Director and mods off; the bystander remains away.
-- Expected: the alternative is chosen in both runs, not rejected solely for the boundary.
-  Off in our engine, the outside alternative is rejected and claim 17 applies. Refusal in
-  the original when all other tests pass falsifies claim 21. Illegal off-map alternatives
-  are not a fixture for this test.
+**RG20. Outside-area clearance and the winged exception (claim 21; Q-0230).** Use RG11's
+houses, speed and recorder on a named flat map with legal cells beyond its usable area.
+Director and mods are off except the named test map data. Keep the bystander away. Observe
+one attacker, its unarmed enemy target, and all F4 cells. Record the range results, cell
+categories, reach-region comparisons, occupancy, locomotor, class and first destination.
+- Run a: ordinary wheeled ground vehicle inside a ground reach region. Arrange a blocked
+  range-passing primary inside the boundary whose first alternative is empty open terrain
+  just outside. Other candidates fail. Expected: the outside alternative is refused by
+  its off-map reach-region result. Control with the alternative inside and passing the
+  detour test: it is selected. Acceptance of the outside alternative falsifies this part.
+- Run b: named test data gives a jumpjet vehicle the winged class and jumpjet locomotor,
+  without close-range or special crushing, deploying or balloon-hover properties. F4's
+  first primary inside the usable area fails range; its next primary lies outside and
+  passes range. Both are skipped. A later inside primary also passes range. Expected:
+  that later primary is selected even if occupied and in a different ground reach region:
+  winged clearance never fails, so the vehicle does not try alternatives. Repeat with
+  the actor's class changed to wheel and a blocked inside primary whose first alternative
+  is outside. Expected: the outside alternative fails clearance. One run per fixture.
+- Because winged clearance always accepts a range-passing inside primary, a winged vehicle
+  never needs its alternatives. Thus no covered stationary actor inside a ground reach
+  region can select an ordinary outside-ground alternative: non-winged alternatives fail
+  clearance, and winged actors select the primary instead. The switch can be inert for
+  these fixtures despite the missing alternative boundary test.
+- Path/nearby controls: S-0212 P11 tests an ordinary outside-ground destination's independent
+  path gate and its exceptions. P21 tests nearby searches, which retain their usable-area
+  requirement even for winged class. Do not infer path reachability from an approach
+  destination or ordinary move-click acceptance. A different recorded destination under
+  the computed candidates falsifies the corresponding rule. Illegal cells are not tested.
 
 **RG21. Sloped measured points and source substitutions (claims 7 and 8).** Use RG10's
 houses, speed and recorder on a named map with slopes and no bridges, one unarmed enemy
@@ -1173,7 +1288,9 @@ close-range property off.
   target's cell centre, against 362 for the attacker's cell centre), destination the target's
   cell, target kept, exactly one draw. With the right position free instead, the draw decides:
   a choice of the right position (373 leptons) gives no shortcut. Control: attacker two cells away (*d*₀ = 512),
-  no shortcut. Repeat (b) with the vehicle attacker: no shortcut.
+  no shortcut. Repeat (b) with the ground vehicle attacker: no shortcut. S-0208 W13
+  tests the ordinary walker's second choice, immediate reservation replacement, interruption
+  of an earlier walk and arrival outcome; RG26 tests the deck-vehicle distinction.
 - (c) Bypass: the vehicle with weapon range 0.75 cell (192 leptons), so its single radius is 256
   leptons with the property on or off, ten cells from the target along a map axis. Expected:
   the axis-neighbour cell of the target on the attacker's side (256 leptons, failing the range
@@ -1208,18 +1325,53 @@ the first destination.
   no draw. A different replacement or no replacement falsifies claim 23.
 
 **RG25. The jumpjet detour exemption (claim 24).** Use RG11 c's wall maze, houses, speed and
-recorder. Named test data gives an infantry type the jumpjet flag and the same weapon as
-RG11's infantry, and sets the locomotion class and movement zone of it and of the control type
-explicitly to the same values. Order it to attack while airborne so that the first clear,
+recorder. Named test data gives an infantry type the jumpjet flag, the jumpjet locomotor and the
+same weapon as RG11's infantry, and sets the locomotion class and movement zone of it and of
+the control type explicitly to the same values. The control has ordinary walking locomotion. Order it to attack while airborne so that the first clear,
 range-passing primary fails both detour inequalities, computed by S-0212 F8 for that class
 and zone, and a later one passes them. A fixture in which the jumpjet's own estimates pass is
 not a valid run.
-- Expected: the jumpjet takes the first primary. Control: the same type without the jumpjet
+- Expected: the jumpjet takes the first primary. Control: the matched ordinary walking type without the jumpjet
   flag takes the later primary (claim 16). One run each; a jumpjet choosing the later primary
   falsifies claim 24.
 
+**RG26. Successful deck-vehicle shortcut without walking to P (claim 25; Q-0237).** Use
+RG23's houses, speed, recorder and named close-range test data, on a map with an intact high
+bridge. Place an ordinary driving vehicle on a deck cell diagonally adjacent to its unarmed
+enemy target's cell. Keep the ground beneath the attacker empty; its own vehicle mark is
+on the deck. Its weapon range must make S-0215 request an approach search. Record the actor's
+layer, both occupancy records, exact position, movement heading point, destination, target
+and scenario stream state each tick through the first subsequent movement.
+- Procedure: issue an attack order. Make up to 20 runs, evaluating claim 22 b from the
+  recorded initial draw. Count only runs whose selected P is nonempty and closer than
+  the two cell centres' distance. Obtain at least one qualifying run. A draw choosing a
+  point that fails the shortcut is a control, not a failure of claim 25. If no qualifying
+  run occurs in 20 attempts, this part remains pending rather than falsified.
+- Expected in a qualifying run: target kept, destination the target-reference cell, no
+  reservation or immediate heading towards P. Any later driving uses that destination's
+  ordinary movement rules. Control with the same vehicle on ground: its ground vehicle
+  mark prevents the initial choice, hence no shortcut. Repeat a qualifying geometry with
+  hovering and sailing vehicles using named test data and legal supporting surfaces,
+  if those fixtures can be arranged; their response to P is likewise absent.
+- Falsifier: failure of the shortcut despite its recorded inequalities and a free ground
+  choice, losing the target, assigning the own cell instead, or installing P as an immediate
+  movement point for a driving vehicle. Ordinary walking infantry are the contrast of
+  S-0208 W13, not a non-walking control. No result here establishes full flight or sailing
+  movement rules.
+
 ## Open questions
 
+- **Q-0230.** Questions 1 and 2 are resolved by claim 21: an ordinary outside-ground
+  alternative is not in an inside ground actor's reach region; winged clearance skips that
+  comparison rather than relabelling the cell. Question 3 was already answered by S-0212
+  claims 6 and 25. The missing boundary test alone does not establish a reachable case
+  that chooses an outside alternative; RG20 replaces the earlier impossible same-region
+  fixture. Whether a reachable bridge or moving-actor combination makes the outside-area
+  switch affect destination choice remains open, not an ordinary flat-ground exemption.
+- **Q-0237.** Questions 1 to 3 were already answered by S-0208 claims 3 and 21 and W13.
+  Claim 22 b now cites them explicitly; claim 25 and RG26 answer question 4. Complete
+  subsequent motion of other locomotors remains owned by their movement specs, not by
+  this shortcut result.
 - **Q-0172.** Answered: question 1 by claim 17 (for every search, close-range included),
   question 2 by claims 20 and 23, question 3 by claim 22, questions 4 and 5 by claims 19 and
   22 c, question 6 by claim 21 and question 7 by claim 18. Two edges stay open: a vehicle
@@ -1264,16 +1416,11 @@ not a valid run.
 
 ## Cross-spec changes required in this round
 
-- S-0306 claim 4's current-weapon rule and its bridge-mark question are already applied in
-  approved revision 6; the current revision 7 draft retains both. No further correction to
-  S-0306 is required for those points.
-- S-0212 claim 25's failed-approach row may drop its non-close-range qualifier: claim 17's
-  centre now covers close-range searches, and close-range infantry never have empty radii.
-  Its parameters and other exclusions remain unchanged.
-- S-0215 claim 37 and its related scope pointers should cite claims 15 to 24 and drop the
-  close-range and jumpjet search gaps. The deploying search gap remains.
-- S-0208 should name claim 22 as a user of its claim 3 position choice (desired point the target's
-  reference point, ground record on any surface), and own the movement outcome of claim 22 b,
-  in which the attacker is sent to a standing position in its own cell while its destination
-  is the target's cell.
-- The glossary may add *close-range property* (this spec's claim 22 and S-0215 F3 both use it).
+The earlier coordinated changes are already present: S-0306 revision 6 introduced the
+current-weapon rule and bridge-mark question and approved revision 7 retains both.
+S-0212 claim 25 includes close-range approach failures while retaining its other parameters
+and exclusions; S-0215 claim 37 cites claims 15 to 24; S-0208 claims 3 and 21 own the initial
+choice's use and the ordinary walking outcome; the glossary defines the close-range property.
+No further changes to those specs are required by this revision. Sign-off should retain the
+failed-approach row's agreement with claim 17; the other S-0212 coordinated movement checks
+are owned by S-0207 and S-0208.

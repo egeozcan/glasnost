@@ -2,11 +2,11 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -419,16 +419,31 @@ which gives 256, 512, 1024, 1024 and 2048 for ω = 1, 2, 3, 4 and 5 or more.
 facing (turret facing with the turret flag, body facing without it) and *d* the direction of its target, the weapon counts as pointing at the target when
 |δ(*f*, *d*)| ≤ 2048, or |δ(*f*, *d*)| ≤ 4096 for a homing projectile.
 
-**F5. Start value when several turret rows apply** (claim 9). Integers, facing units. In a tick in
-which *k* ≥ 1 of claim 9's spin row, target row and facing-error row apply, number the applicable
-rows 1 … *k* from the lowest in the table upwards, so that row *k* gives the final target. Let *s*₀ be the turret's current value in this tick (F1, from the turn in force before the tick) and τ₀ the target in force before the tick. Let τᵢ be the target of row *i*. For the spin row, calculate τᵢ by F2 using the facing left by the preceding applicable row. Consider applicable rows from the lowest in the table to the highest. For each row, compare its target with the target in force immediately before that row. An equal target leaves the facing and turn unchanged. A different target starts a replacement turn from the facing current immediately before that row; when the replacement turn has positive duration, that starting facing is the F1 value at ε = 0, namely (τᵢ − βᵢ × Θᵢ) mod 65536. When Θᵢ = 0 or ω ≤ 0, the facing is τᵢ at once. The target in force after the row is τᵢ. Thus the highest applicable row supplies the final target, while any effective earlier row can leave the facing change specified here. If the final row's target equals the target in force immediately before it, the turn in force then continues unchanged.
+**F5. Observable facing when several turret rows apply** (claim 9). All values are integers in
+facing units. In a tick where *k* ≥ 1 of the spin, target and facing-error rows apply, let
+τ₀ be the target in force before the tick and let *s*₀ be the facing supplied by F1 for that
+tick before any of these rows has an effect. Number the applicable rows in their table order,
+from lowest to highest, with target facings τ₁ … τₖ. The final target is τₖ.
 
-The turn towards the final target τₖ starts from *s*ₖ₋₁, unless τₖ = τₖ₋₁, in which case the
-turn in force at that point goes on unchanged. With *k* = 1 this is claims 1 and 3 alone. Each
-step with τᵢ ≠ τᵢ₋₁ and Θᵢ ≥ 1 moves the value by the remainder jump Δᵢ − βᵢΘᵢ of claim 1.
-Example (scenario R4 run f): *s*₀ = 0, τ₀ = 0; the facing-error row gives τ₁ = 16383 and
-*s*₁ = 3 (Θ₁ = 63, β₁ = 260); the turret-locked row gives τ₂ = 0, a turn from 3 to 0 with Θ = 0,
-so the turret rests at 0.
+The tick's facing is the result of the successive target changes described by the following
+state relation. For each *i* from 1 to *k*, if τᵢ = τᵢ₋₁, that row leaves the turn and facing
+unchanged. Otherwise it replaces the target with τᵢ and starts a turn from the facing produced
+by the preceding applicable row. When the replacement has duration Θᵢ ≥ 1, that starting facing
+is
+
+> *s*ᵢ = (τᵢ − βᵢ × Θᵢ) mod 65536,
+
+where Θᵢ and βᵢ are given by F1 for the difference from the preceding facing to τᵢ. This is
+F1's value at ε = 0, including its remainder jump Δᵢ − βᵢΘᵢ. When Θᵢ = 0 or ω ≤ 0, the facing
+takes τᵢ at once. The target of the spin row, when it applies, is the F2 target derived from
+the facing supplied by the preceding applicable row. If the final row's target equals the target
+already in force immediately before it, the existing turn continues unchanged.
+
+Thus earlier effective target changes can affect the facing visible in the tick even though
+the highest applicable row supplies the final target. With only one applicable row, this is
+claims 1 and 3. Example (scenario R4 run f): *s*₀ = 0 and τ₀ = 0; the facing-error row gives
+τ₁ = 16383 and *s*₁ = 3 (Θ₁ = 63, β₁ = 260); the turret-locked row gives τ₂ = 0, whose
+replacement turn completes at once, so the turret rests at 0.
 
 ## Constants
 

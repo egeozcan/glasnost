@@ -150,7 +150,7 @@ fn defends_the_base() {
 }
 
 // The AI sees only its own house's shroud: two worlds that differ only by
-// an enemy unit on a cell the house does not see give the same orders.
+// an enemy unit on a cell the house has not explored give the same orders.
 #[test]
 fn decides_only_on_what_it_sees() {
     let mut g = armed();
@@ -159,14 +159,14 @@ fn decides_only_on_what_it_sees() {
         .flat_map(|y| (0..=2 * fixture::SIZE).map(move |x| glasnost_map::CellXY::new(x, y)))
         .find(|&c| {
             g.world.cells.usable(c)
-                && !shroud::seen(&g.world, HouseId(0), c)
+                && !shroud::explored(&g.world, HouseId(0), c)
                 && g.world.objects.values().all(|o| o.pos.cell() != c)
         })
-        .expect("a cell house 0 does not see");
+        .expect("a cell house 0 has not explored");
     let base = Brain::new(&g.world, &map, HouseId(0));
     let mut other = g.world.clone();
     testkit::spawn(&mut other, Kind::Vehicle, "GUNR", 1, hidden, 0);
-    assert!(!shroud::seen(&other, HouseId(0), hidden));
+    assert!(!shroud::explored(&other, HouseId(0), hidden));
     // Over a whole think period, from the same brain state.
     for _ in 0..glasnost_ai::scripted::THINK_PERIOD {
         let (mut a, mut b) = (base.clone(), base.clone());

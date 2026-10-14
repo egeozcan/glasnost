@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0216]
 supersedes: []
 ---
 
@@ -16,10 +16,11 @@ supersedes: []
 
 ## Summary
 
-**Revision scope.** F8 extends the equal-depth cases to the configurations requested by
-Q-0210; other mixed-depth tie configurations remain open. Claim 35 gives the general
-in-bound colour-height relation for normal mode 0 (Q-0211). Claim 39 gives the own-image
-exclusion of vehicle shadows, including hovering and slopes (Q-0213).
+**Revision scope.** F8 adds all eight mixed-depth configurations of Q-0215 questions 1–6.
+Its arbitrary-section characterization remains open. Claim 35 corrects the top-down
+colour-height relation: every span's empty count follows its colours, with no special
+first-span exception (Q-0216). Its existing MS-19 output table is unchanged; MS-26's
+second row is corrected and a three-span discriminator is added.
 
 How a voxel model (a VXL model with its HVA animation) becomes pixels: the fixed viewing
 transform, how many facings each model part can show, how the body, turret and barrel are
@@ -192,9 +193,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
    at a fixed turn rate of 3 (see *Turn rate* and F9: a turn of *Δ* facing units takes
    *⌊|Δ| / 768⌋* ticks). With the absent-key default *A = 8* the turn is 2048 facing units and
    takes 2 ticks: the elevation's 32-step value is level after the first tick and one step
-   (11.25°) above level from the second tick on (`quirks.barrel_elevation_quantised`). With *A = 20* the turn is 5120
+   (11.25°) above level from the second tick on (`quirks.barrel_elevation_quantised`). For an illustrative type whose imported fire-angle field is *A = 20*, the turn is 5120
    facing units and takes 6 ticks at 853 facing units per tick; the 32-step values 0, 1, …, 6
-   ticks after placement are 8, 8, 7, 7, 6, 6, 6 (F9). What a barrel image shows is the elevation at the time the image was made; a
+   ticks after placement are 8, 8, 7, 7, 6, 6, 6 (F9). This is an example field value, not a value asserted for stock data. What a barrel image shows is the elevation at the time the image was made; a
    cached barrel image keeps it (claim 26, `quirks.barrel_cache_ignores_elevation`), so a barrel first drawn in the first tick
    can stay level on screen after the elevation has risen. Buildings re-aim the elevation
    when firing; how they choose it belongs to the building combat specs, and this spec only fixes
@@ -439,8 +440,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     from those examples. There is no depth test
     between sections, so a farther voxel in the higher-priority section can cover a nearer voxel
     in the other section.
-    - Backing: `measurable` (MS-5 for distinct depths; MS-5b and MS-25 for F8's tie configurations).
-      Other mixed-depth tie configurations remain open.
+    - Backing: `measurable` (MS-5 for distinct depths; MS-5b and MS-25 for F8's tie configurations
+      and the dependence on the full section sequence).
+      Mixed-depth tie configurations not listed in F8 remain open.
     - Confidence: high
 
 24. **Per-type depth buffering.** A type with the depth-buffer option draws differently in four
@@ -819,10 +821,16 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       *Cᵣ ≡ Nz (mod 256)* contribute outside depth-buffered mode. In depth-buffered mode
       the boundary condition is instead *Cᵣ ≡ Nz (mod 4294967296)*. Thus an ordinary small
       depth-buffered column ends only at *Cᵣ = Nz*, not *Nz + 256*. Within span *r*, colour *aₗ*, for
-      *0 ≤ l < nᵣ*, is at traversal distance *d = Cᵣ₋₁ + eᵣ + l* cells from the far face.
-      All arithmetic here is exact integer arithmetic, with no rounding. Its grid cell is
-      *d* bottom-up and *Nz − 1 − d* top-down; projection uses F5, including its carry
-      and the empty-count exception below. In depth-buffered mode colours are still unlit,
+      *0 ≤ l < nᵣ*, is at traversal distance *d = Cᵣ₋₁ + eᵣ + l* cells from the far face
+      bottom-up, and *d = Cᵣ₋₁ + l* top-down. All arithmetic here is exact integer
+      arithmetic, with no rounding. Its grid cell is *d* bottom-up and *Nz − 1 − d*
+      top-down. Thus bottom-up the span's empty count precedes its colours; top-down it
+      follows them and affects only later spans. This applies to every span, including the
+      topmost one, in both depth modes: there is no first-span exception (Q-0216).
+      Projection uses F5, including its carry and the empty-count exception below.
+      In the standard *e + 2*-cell column in the table, the top-down colours are *Y* at
+      traversal distance 0 and *X* at distance 1, hence *Y* at cell *e + 1* and *X* at
+      cell *e*. The remaining *e* empty cells contribute no pixel. In depth-buffered mode colours are still unlit,
       but the depth test, two-pixel output and absence of carry of claim 24 apply.
       A span with *n = 0* supplies no colour but its
       empty count still contributes to *C*. Reaching *Nz* inside a span does not cut it off.
@@ -1026,7 +1034,14 @@ facings 0–8 are exact.
 > digits, that is to a multiple of 2⁻¹³ when *m* < 2 and of 2⁻¹² when *m* ≥ 2; *2^ζ × √m′* is
 > exact; and *trunc₂₄* truncates toward zero to single precision (24 significant binary digits).
 
-The result is never larger than the exact root, and its relative error is below 2⁻¹³.
+The result is never larger than the exact root of the magnitude, and its relative error
+for nonzero inputs is below 2⁻¹³.
+
+F1's visible rotation and shading consequences are `measurable` through MS-1, MS-4 and
+MS-15, confidence high. The complete sine table, its two tiny nonzero exceptions and the
+exact square-root approximation are `unmeasured`: the scenarios exercise only some inputs,
+and integer pixels and shade indices cannot distinguish all last-place differences.
+Confidence high for these mathematical definitions.
 
 **F2. View transform.** *V = Rx(−60°) · Rz(−45°)* with table trigonometry (so the effective
 angles are 59.985° and 44.912°, F1) and truncating single-precision stores (F0):
@@ -1149,7 +1164,7 @@ tick again sets *λ* to 0. Examples, as the recoil slides of successive ticks:
 The part is drawn shifted by *−λ* model units along the turret's forward axis; the shift is not
 rounded to whole pixels before the transform (the pixel position then follows F5).
 
-**F8. Section overlap priorities (claims 23, 24; Q-0210).** Nearest depths are single-precision
+**F8. Section overlap priorities (claims 23, 24; Q-0210, Q-0215 questions 1–6).** Nearest depths are single-precision
 view-space values under F0, in model units, compared exactly without tolerance or conversion
 to integer comparison depths. Greater nearest depth means higher painter overlap priority.
 The following relations fix both painter coverage and equal-comparison-depth coverage in
@@ -1163,6 +1178,14 @@ claim 24. Names stand for sections in the listed file order, not required storag
 | A, B, C, D | A = B = C = D | A, B, C, D | D, C, B, A |
 | A, B, C, D | A = B > C = D | C, D, A, B | B, A, D, C |
 | A, B, C | A < B = C | A, B, C | C, B, A |
+| A, B, C | A > B = C | B, C, A | A, C, B |
+| A, B, C | A = C > B | B, A, C | C, A, B |
+| A, B, C | A = C < B | A, C, B | B, C, A |
+| A, B, C | A = B < C | A, B, C | C, B, A |
+| A, B, C, D | A = B = C > D | D, B, C, A | A, C, B, D |
+| A, B, C, D | A > B = C = D | B, C, D, A | A, D, C, B |
+| A, B, C, D | A = C > B = D | B, D, C, A | A, C, D, B |
+| A, B, C, D | A = D > B = C | B, C, A, D | D, A, C, B |
 
 An entire part with any positive number of sections at one equal nearest depth has painter
 priority in file order, and depth-mode contributing order in reverse file order. Thus the last
@@ -1171,8 +1194,15 @@ For every table row the last section in the painter-priority column similarly wi
 shared by all sections at one comparison depth, provided that depth exceeds the initial depth
 and no right-hand overwrite interferes (claim 24). These are coverage requirements; an
 implementation need not sort or draw sections in these sequences if it produces the same
-pixels. Other mixed-depth tie configurations remain open. Backing: `measurable` (MS-25,
-MS-5b). Confidence: high.
+pixels. For finite nearest depths, the priority depends only on the full file-order section
+sequence and its exact nearest-depth comparison relations, not on the numerical gaps between depths, colours,
+occupied voxel positions, or earlier part draws. It is not a pair-local rule: A = B alone
+gives A, B, but adding a lower-depth C after them gives C, B, A. Consequently sections
+without pixels at a particular overlap can still change which tied section wins there.
+The section count and the number of intervening sections are already part of that full
+sequence, not extra inputs. Other mixed-depth configurations remain open; this table is
+not a complete characterization for arbitrary section counts (Q-0215 question 7).
+Backing: `measurable` (MS-25, MS-5b). Confidence: high.
 
 **F9. Turning at a turn rate (claim 6, Terms).** This is S-0206's turning rule (its claim 1 and F1), stated here for the barrel elevation. All quantities are integers. A facing turns from
 a start facing *ψ₀* toward a target facing *ψ₁* at turn rate *ω* (1 … 127). Let *Δ* be *ψ₁ − ψ₀* taken as the signed
@@ -1249,6 +1279,11 @@ darkens.
 | Level-body tolerance | 0.005 | radians | Claim 26: pitch or roll of this size or more counts as an unsettled tilt; compared in floating point |
 
 ### Normal direction tables
+
+The tables below support claim 18. Their visible shade consequences are `measurable`
+(MS-4 and MS-15), confidence high. Exact components of every table entry are `unmeasured`:
+these scenarios do not isolate every normal, and different components can produce the same
+integer shade and captured pixels. Confidence high for the listed constants.
 
 Normal mode 0 has no table (`quirks.voxel_mode0_misread`). Modes 1–4 index the tables below by the voxel's normal
 index. The values are the original's single-precision constants, in model-frame axes. Each entry is
@@ -1829,8 +1864,10 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
     exact integer counts with a non-negative remainder, no rounding. This defines which
     supplied voxels can show, not an order of parser work. MS-20 tests the prefix ending at
     C₁ = Nz, and MS-24 the prefix ending at C₂ = Nz + 256. Other totals are unmeasured (claim 36).
-  - *Stray voxels.* A column that never hits *Nz* exactly at a pair boundary (a short one, or a
-    long one that passes *Nz* inside a run) does not end with its own runs. It continues with
+  - *Stray voxels.* A column that never satisfies the visible-prefix boundary condition
+    above within its own runs does not end with those runs. Passing *Nz* inside a run
+    does not itself end the column; a later pair boundary can still satisfy the condition.
+    If none does, the original continues with
     data that belongs to the neighbouring column (the next column when drawn bottom-up,
     the previous one when drawn top-down) as further runs, and draws whatever voxels they
     describe, at positions and in colours that depend on unrelated file contents. That part is
@@ -1966,9 +2003,9 @@ S-0007's model-file lookup, not an INI default.
 
 | Input concept | File | Form | Default | Feeds |
 |---|---|---|---|---|
-| Section sequence and bounds | VXL model | ordered sections and single-precision bounds | none; required model data | nearest-depth relations and F8 priorities (claims 23, 24) |
+| Section sequence and bounds | VXL model | ordered sections and single-precision bounds | none; required model data | full-sequence nearest-depth relations and F8 priorities, including Q-0215 questions 1–6 (claims 23, 24) |
 | Section normal mode and grid height | VXL model | integers in 0 … 255 | none; required model data | mode 0 selection and Nz (claim 35) |
-| Column value sequence and its start/end | VXL model | ordered values in 0 … 255, or an empty-column marker | none; required model data | colour-height relation and bounded-data warning (claims 35, 36) |
+| Column value sequence and its start/end | VXL model | ordered values in 0 … 255, or an empty-column marker | none; required model data | colour-height relation, with top-down empty counts following each span's colours (Q-0216), and bounded-data warning (claims 35, 36) |
 | Per-section pose | HVA companion | frame-indexed transforms | file lookup and failure treatment in S-0007 | transformed bounds for F8 and own-image overlap in claim 39 |
 
 The voxel lighting table is the archive file `voxels.vpl`, looked up like other game files (S-0005). Claim 38 gives how its content is used. Its byte layout is given by S-0013. The VXL and HVA byte layouts are public; this spec only fixes their interpretation.
@@ -3042,16 +3079,20 @@ area of the screen's next fresh draw.
 
 **MS-25, requested section ties (claims 23, 24, F8).** Common setup, named test VXL/HVA
 files and art database copy as in MS-5b, caching disabled, shadows suppressed, speed index 2.
-Test all six F8 rows and an all-equal part of five sections. Keep transformed nearest
+Test all fourteen F8 rows and an all-equal part of five sections. Keep transformed nearest
 depths exactly equal within groups, adjusting bounds independently of occupied voxels.
 Provide separate coincident marker pixels for each pair and for all sections together,
 in distinct colours, separated by at least three pixels. In the depth variant their
 comparison depths must be equal, nonzero, and unaffected by right-pixel overwrites.
 Restart the program per variant to exclude retained depths. Capture each model paused,
 once without the depth option and once with it. Expected pair winner in both variants:
-the later section in F8's painter-priority column. Whole-part winners for the six rows:
-B, A, C, D, B, C. In the five-section case the last section wins, with file-order painter
-priority for every pair. Verify equality and pixel coincidences with a golden-image
+the later section in F8's painter-priority column. Whole-part winners in table order:
+B, A, C, D, B, C, A, C, B, C, A, A, A, D. In the five-section case the last section wins,
+with file-order painter priority for every pair. Repeat each mixed-depth configuration
+with different strictly ordered nearest-depth gaps but the same equality groups: all pair
+winners remain unchanged. Also compare A = B alone with A = B > C while C has no
+pixel at the A/B marker: B wins the former, A the latter. This tests the influence of the
+full section sequence independently of actual C coverage. Verify equality and pixel coincidences with a golden-image
 calculation from the files. Any contrary marker with verified equal depths falsifies
 the corresponding priority, rather than being discarded as a setup failure.
 
@@ -3064,14 +3105,23 @@ Values below are invented test data, not stock values. Capture once per model an
 | Forward column value sequence | Nz | Bottom-up output | Top-down output |
 |---|---|---|---|
 | 0, 2, 10, 11, 90, 1, 2, 20, 21, 91 | 5 | cells 0, 1, 3, 4 show 10, 11, 20, 21 | separate fixture below |
-| 1, 91, 21, 20, 2, 0, 90, 11, 10, 2 | 5 | separate fixture above | cells 4, 3, 1, 0 show 10, 11, 20, 21 |
+| 1, 91, 21, 20, 2, 0, 90, 11, 10, 2 | 5 | separate fixture above | cells 4, 3, 2, 1 show 10, 11, 20, 21 |
 | 0, 2, 10, 11, 90, 0, 1, 20, 91 | 2 | only cells 0, 1 show 10, 11 | separate fixture below |
 | 0, 91, 20, 1, 0, 90, 11, 10, 2 | 2 | separate fixture above | only cells 1, 0 show 10, 11 |
 | 0, 3, 10, 11, 12, 90 | 2 | cells 0, 1, 2 show 10, 11, 12 before bounded-data stop | use the separate sequence 0, 90, 12, 11, 10, 3: cells 1, 0, −1 show 10, 11, 12 before bounded-data stop |
 | 0, 1, 10, 90 | 3 | cell 0 shows 10 before bounded-data stop | use 0, 90, 10, 1: cell 2 shows 10 before bounded-data stop |
+| 1, 92, 30, 1, 2, 91, 21, 20, 2, 1, 90, 10, 1 | 8 | top-down fixture only | cells 7, 5, 4, 1 show 10, 20, 21, 30 |
 
-Compare only the within-column prefix for the last two rows: the oracle's continuation
-outside the supplied data is unspecified. Engine-conformance replays must add no further
+The second row is Q-0216's two-span discriminator: 20 and 21 at cells 1 and 0
+would falsify the corrected relation. The last row has three spans and nonzero empty
+counts, distinguishing the uniform rule from a special first-span rule: any displacement
+of 10 from cell 7 or of 20 and 21 from cells 5 and 4 falsifies it. Capture MS-19 (b)
+upside down in the same program-build test series: X at cell 40 and Y at cell 41
+confirms its unchanged table row, whereas X at cell 0 and Y at cell 1 falsifies it.
+
+For the three-colour span in the two-cell grid and the one-colour span in the three-cell
+grid, compare only the within-column prefix: the oracle's continuation outside the
+supplied data is unspecified. Engine-conformance replays must add no further
 voxels. Also supply a 260-colour column in a four-cell grid, as spans of 255 and 5 colours,
 zero empty counts. Bottom-up includes all 260 cells; a separately encoded top-down equivalent
 starts at cell 3 and extends downward. Scale its height so the pixels fit the copy rectangle.
@@ -3154,9 +3204,12 @@ unsettled-shadow freshness of claim 31.
   in the original, and whether a new game does so, remain open (claim 26). Our engine retains
   reuse throughout a game and starts each game without earlier images. Invalidation bounds how
   long the frame and elevation reuse artefacts persist in the original.
-- **Other section ties.** F8 answers Q-0210's configurations and all-equal parts of any size.
-  Arbitrary mixed-depth ties outside those configurations still need a complete behavioural
-  characterization; a stable tie rule must not be inferred from the table.
+- **Other section ties (Q-0215 question 7).** F8 answers Q-0210's configurations,
+  Q-0215 questions 1–6 and all-equal parts of any size. The full file-order sequence and
+  exact nearest-depth relations suffice to determine the original's result, but a complete
+  behavioural characterization for arbitrary mixed-depth ties remains open. The current
+  table does not license extrapolation or a stable tie rule. A general non-code-shaped
+  coverage relation is still needed.
 
 ## Questions for the project lead
 

@@ -2,13 +2,13 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0132]
+requests: [Q-0132, Q-0220]
 supersedes: []
 ---
 
@@ -170,7 +170,11 @@ vehicle's movement is heading to (S-0207). In addition:
    queued behaviour, if it has one, becomes current. When it has none, the working hypothesis is that
    nothing else happens, so the vehicle stays in *unload* and does nothing at each later processing
    until it is given another order (Open question 2).
-   - Backing: `measurable` (scenario D1; scenario D2, part f: (1) for the lost readiness, (2) for
+   The turn target is (*D* × 256) mod 65536 facing units for every integer *D*, including
+   values outside 0 … 255. This is exact integer arithmetic with no rounding. The completion
+   comparison still uses *D* unchanged: an out-of-range deploy facing never produces a building.
+   - Backing: `measurable` (scenario D1; D13 for an out-of-range turn target; scenario D2,
+     part f: (1) for the lost readiness, (2) for
      the destination and what follows the abandonment, which can be told apart from a mere pause
      of the attempts because the vehicle stands elsewhere afterwards); D2 part n for cell-test
      refusal during a turn. The precedence of a destination over simultaneous lost readiness or
@@ -179,7 +183,8 @@ vehicle's movement is heading to (S-0207). In addition:
      leaves it queued without replacing the current *unload* first; D2 f2 tests the no-queue case.
      Recovery after lost readiness is `unmeasured` if D2 f1 cannot arrange parasite removal:
      an attachment that lasts to the end only tests that deployment remains paused.
-   - Confidence: high (the turn, the target facing); medium (the abandonment by a
+   - Confidence: high (the turn, the target facing, including the reduction of an out-of-range
+     deploy facing in scenario D13); medium (the abandonment by a
      destination); low (what follows an abandoned turn; the continuing turn after a lost readiness)
 
 6. **Completion.** With deploy readiness and no destination, a passed cell test and rounded facing
@@ -189,8 +194,11 @@ vehicle's movement is heading to (S-0207). In addition:
      centre of the anchor, (256*x* + 128, 256*y* + 128) leptons, standing on the ground layer at height 0
      above the terrain of that cell. Its construction state begins at entry (S-0108), with no
      current behaviour, *construction* queued and the ready mark already set. Its insertion facing
-     is 0 facing units (map north), not the vehicle's body facing or *D* × 256. At the second
-     per-tick start of its first turn *U*, *construction* becomes current; its first construction
+     is 0 facing units (map north), not the vehicle's body facing or *D* × 256. For a turreted
+     building, its initial turret facing is also 0: a building has no independently turning body,
+     and this same facing is its turret facing (S-0406 claim 16; S-0206 Terms), not its barrel
+     elevation. This describes entry, not a restriction on later aiming at an inherited target.
+     At the second per-tick start of its first turn *U*, *construction* becomes current; its first construction
      processing is *C* = *U* + 1 ticks in uninterrupted play (S-0406 claim 17 and F7).
      Construction processing and handover follow S-0406 claims 14 and 15, including retention
      of the inherited target across that handover.
@@ -231,14 +239,16 @@ vehicle's movement is heading to (S-0207). In addition:
    this happens in a first attempt, its *unload* ends with *guard* queued and no announcement
    (claim 2). In a later attempt no behaviour is queued, and the vehicle attempts again at its next
    processing.
-   - Backing: `measurable` (scenarios D1, D3 and D4 for the completion; D15 for insertion facing,
+   - Backing: `measurable` (scenarios D1, D3 and D4 for the completion; D15 and S-0406 PL13
+     for insertion and initial turret facing,
      D16 for the first-turn and first-construction-processing ticks, and
      S-0406 scenario PL11 for construction processing and handover; D12 part a for the
      position within the cell, the height and the layer, part b for the water-bound case; scenario D2,
      part g for the failure in a first attempt, part l for the failure in a later attempt and the retry).
      D12 part b is conditional: if no vehicle can stand on the marked cell, the water-bound case
      is `unmeasured` because its starting state cannot be arranged.
-   - Confidence: high (building, cell, insertion facing, construction state, health, removal).
+   - Confidence: high (building, cell, insertion and initial turret facing, construction state,
+     health, removal).
      Construction processing and handover retain S-0406's confidences; medium (the first-turn
      timing relative to deployment, pending D16; the position
      within the cell and the layer, the take-overs, the retargeting, the placement height); low (the
@@ -283,7 +293,9 @@ vehicle's movement is heading to (S-0207). In addition:
      the build-down at all,
    - its construction state runs backwards (the build-down, S-0108) as in any sale. Exact
      completion timing is S-0408 claim 17 and F4, including the stage-23 early report without
-     a guard spot, zero-delay completion and ranges that never report. Packing up is acted
+     a guard spot, zero-delay completion and ranges that never report under
+     `quirks.single_stage_buildup_never_completes` (default original), with the alternative
+     completion on the first wrap when that shared switch is off. Packing up is acted
      on in the same selling processing that sees the completion report, not a later tick,
    - when that processing sees completion and the return cell accepts the vehicle (claim 12), the
      vehicle of claim 10 appears and the building is removed in the same tick. The house receives
@@ -482,10 +494,10 @@ Claim 4 gives the original's *hunt* replacement for non-human-controlled owners.
   could, and a wall with no owner refuses. No stock deploying vehicle is concerned; a mod with a
   wall-tower deploying vehicle may want it off.
 - **Deploy facing outside 0 … 255** (claims 5, 6 and 10): the rounded facing of F1 never equals such a
-  value, so the vehicle never deploys. The facing it turns towards is *D* × 256 reduced modulo 65536
-  as a working hypothesis (arithmetic on facings wraps modulo 65536, glossary *facing*), and the facing of a vehicle that a
-  packing building of such a type releases is not established either (Open question 4; scenario
-  D13). No switch; the importer warns.
+  value, so the vehicle never deploys and no deployed-building facing exists. Its turn target is
+  (*D* × 256) mod 65536 facing units (claim 5), with exact integer arithmetic and no rounding.
+  The facing of a vehicle that a packing building of such a type releases is not established
+  (Open question 4; scenario D13). No switch; the importer warns.
 - `quirks.packup_sound_on_sale` (default on): claim 9. A building type with a pack-up sound that
   is sold instead of packing up plays both the sell sound and its pack-up sound, the second only
   when its house is the local player's (S-0408 owns the sale). Off: a building that is sold plays only the sell sound; the pack-up
@@ -860,12 +872,13 @@ are repetitions that guard against void runs.
 - Runs: 3 per facing.
 - Observable: whether a building ever appears; the vehicle's body facing per tick for 30 processings
   after the order; the facing of the vehicle that appears at the pack-up.
-- Expected (low confidence): no building appears, the vehicle keeps the same turn target and its facing
-  settles at 300 × 256 mod 65536 = 11264 (and 65536 − 1280 = 64256 for −5); the vehicle that appears
-  at the pack-up has that facing.
-- Falsified if: a building appears, the settled facing differs, or the packed-up vehicle's facing
-  differs from the predicted reduction. The facings that are found settle
-  Open question 4.
+- Expected: no building appears, the vehicle keeps the same turn target and its facing
+  settles at 300 × 256 mod 65536 = 11264 (and 65536 − 1280 = 64256 for −5), with high confidence.
+  The working hypothesis for the separate packed-up vehicle is that it has that facing too
+  (low confidence; Open question 4).
+- Falsified if: a building appears or the deploying vehicle's settled facing differs from the
+  reduction. A packed-up vehicle with a different facing falsifies only the separate pack-up
+  hypothesis; its recorded facing settles Open question 4.
 
 **D14. Return-cell refusal and no alternative cell (Q-0132).**
 - Setup: the standard measurement setup above, game speed index 2, 800 × 600 pixels, director
@@ -917,15 +930,18 @@ are repetitions that guard against void runs.
 - Setup: the common measurement setup, game speed index 2, director and mods off. Named map
   overrides give an ordinary, non-gate deployed building deploy facing 64 and then 192 in separate
   variants. The deploying vehicle begins already at the required facing on clear ground, with
-  no target; no enemy is in range of the building.
+  no target; no enemy is in range of the building. Repeat each variant with turreted and
+  non-turreted copies of the building type (S-0406 claim 16/PL13).
 - Procedure: issue a deploy order and record the vehicle's last body facing and the building's
-  body facing in its appearance tick, before any later aiming.
-- Runs: 3 valid runs per variant, observed area as in the common setup.
-- Observable: vehicle and building body facings in facing units, with the appearance tick.
+  facing in its appearance tick, including its turret facing when turreted, before any later aiming.
+- Runs: 3 valid runs per variant and turret flag, observed area as in the common setup.
+- Observable: vehicle body facing and building facing in facing units, including the initial
+  turret facing, with the appearance tick.
 - Expected: the vehicle finishes facing 16384 or 49152, respectively, but the building is inserted
-  at facing 0 in both variants. Packing up still uses *D* × 256 as claim 10 specifies.
-- Falsified if: either inserted building has any facing other than 0, including inheritance of
-  the vehicle facing or a result that changes with the deploy-facing field. Construction timing is measured separately by S-0406 PL11.
+  at facing 0 in both variants, including its turret facing when turreted. Packing up still
+  uses *D* × 256 as claim 10 specifies.
+- Falsified if: either inserted building or its turret has any facing other than 0, including
+  inheritance of the vehicle facing or a result that changes with the deploy-facing field. Construction timing is measured separately by S-0406 PL11.
 
 **D16. First turn and construction processing after deployment.**
 - Setup: the common skirmish measurement setup, game speed index 2, director and mods off.
@@ -966,7 +982,7 @@ are repetitions that guard against void runs.
 3. Whether the *guard* that a failed attempt queues replaces *unload* already in the tick of the
    attempt or only at the vehicle's next processing is not established (claims 2 and 4). Scenario D2's
    per-tick behaviour record settles it.
-4. The facing that a deploy facing outside 0 … 255 gives, both for the turn of a deploying vehicle
-   (claims 5 and 6) and for the vehicle that a packing building of such a type releases
-   (claim 10): the original may reduce *D* × 256 modulo 65536 or use another reduction. Scenario D13
-   records both.
+4. The facing of the vehicle that a packing building with a deploy facing outside 0 … 255
+   releases (claim 10): whether it reduces *D* × 256 modulo 65536 like the deploying vehicle's
+   turn target or uses another reduction remains open. Scenario D13 records it. The deploy
+   turn target itself is established by claim 5.

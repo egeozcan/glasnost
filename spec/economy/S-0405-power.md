@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -435,7 +435,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
     of 0. Unlike power orders, this initial-state rule does not exclude the firestorm-wall
     flag: a firestorm-wall type meeting either condition starts switched off with a map flag
     of 0, and one meeting neither starts switched on. The power-mode flag does not decide
-    this initial state. S-0009 claim 40 already states this conditional initial-state rule and owns the map field's encoding.
+    this initial state. This rule is consistent with S-0009 claim 40, which gives the same conditional startup rule.
+    S-0009 owns the map field's encoding.
 
     Later power orders follow claim 10 without an exception for map placement. A non-firestorm
     building that started switched off can be switched on by an applicable power-on order

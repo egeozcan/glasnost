@@ -1,9 +1,9 @@
 ---
 id: Q-0221
 title: The exit apron of a short exit list with the switch off, an outlying apron, and the full-ring exit lists
-status: open
+status: answered
 related: [S-0417, S-0404]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need

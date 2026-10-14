@@ -2,7 +2,7 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,6 +23,12 @@ and spread into empty neighbours on per-tiberium timers with random choices, whe
 appear, how ore mines make new resource cells, and how all of this is ordered within a tick and
 draws from the scenario random stream. The harvesting units that take the bales, and the credits a
 house gets for them, are S-0402's.
+
+**Joint hand-off.** At sign-off, check claim 20 and E17 against S-0109 claim 13 and
+S-0011 claim 36 and T21: creation-time resource chain reaction is enabled, and only
+later start events of a trigger-played animation suppress it. Hand off these aligned
+revisions together. S-0202 claims 10 and 15 and R14 own the immediate middle-event
+draw composition; later particle updates remain outside that established scope.
 
 ## Terms
 
@@ -482,8 +488,9 @@ claim 4), which can take more than one raw draw. In addition:
       first game's tick-0 update depends on the tick number when the tiberiums are created)
 
 20. **Animation start-event resource chain reaction (Q-0046 Q2a).** The chain reaction is
-    enabled by the animation type's resource-chain-reaction flag and is suppressed for a
-    trigger-played animation (S-0109 claim 13). It acts on the cell containing the animation's
+    enabled by the animation type's resource-chain-reaction flag. For a trigger-played animation,
+    it is suppressed at later start events, but not at the creation-time start event
+    (S-0011 claim 36; S-0109 claim 13). It acts on the cell containing the animation's
     position, not necessarily the cell whose overlay created the animation (S-0009 claim 12).
     The following applies during map loading as well as during play.
 
@@ -532,9 +539,9 @@ claim 4), which can take more than one raw draw. In addition:
     finds no resource. It is separate from the recalculation caused by emptying the cell
     before the debris trial (claim 5).
 
-    In observable scenario-stream order, any draws for eligible neighbour offers precede the optional debris trial; a passing trial is followed by a selection draw only when the debris list has more than one entry, then by any draws caused by creating and starting the selected debris animation; applicable detonation draws follow, then any tile-animation draws from the post-detonation recalculation. This is not a fixed raw-draw count: ranged rejection and downstream effects can add draws. A failed debris trial skips selection and debris-animation creation, not the later detonation. Suppression for a trigger-played animation skips the whole chain reaction, including its emptying, neighbour offers, debris trial, detonation and post-detonation recalculation, with zero draws from the reaction itself. This specifies observable stream order, not an internal call structure.
+    In observable scenario-stream order, any draws for eligible neighbour offers precede the optional debris trial; a passing trial is followed by a selection draw only when the debris list has more than one entry, then by any draws caused by creating and starting the selected debris animation; applicable detonation draws follow, then any tile-animation draws from the post-detonation recalculation. This is not a fixed raw-draw count: ranged rejection and downstream effects can add draws. A failed debris trial skips selection and debris-animation creation, not the later detonation. Suppression at a later start event for a trigger-played animation skips the whole chain reaction, including its emptying, neighbour offers, debris trial, detonation and post-detonation recalculation, with zero draws from the reaction itself. Its creation-time start event is not suppressed and follows the normal chain-reaction rules above. This specifies observable stream order, not an internal call structure.
     - Backing: `measurable` (scenario E17)
-    - Confidence: high for the no-resource gate and direct draw conditions; medium for the
+    - Confidence: high for the no-resource gate, creation/later suppression distinction and direct draw conditions; medium for the
       complete composed sequence during map loading until E17 is run
 
 ## Formulas
@@ -918,9 +925,21 @@ cell and take exactly one raw debris trial. A trial with |*r*| mod 3 ≠ 0 creat
 passing C trial creates the sole debris animation, with no raw selection draw; D takes the
 ranged selection before its debris creation draws. Debris starts 10 leptons above the source.
 *Falsified if:* A advances the stream beyond the animation's independent creation draws, B takes
-a debris trial, or C or D deviates from those conditions or ordering. A trigger-played control
-with the same animation over resource must leave that resource unchanged and take no reaction
-draws, even with a nonempty debris list.
+a debris trial, or C or D deviates from those conditions or ordering. Repeat B to D with
+trigger-played creations at waypoint markers (S-0011 T21): their creation-time start events
+must empty the resource and follow the same reaction draw rules.
+
+*Later-start suppression control:* give the test animation a positive loop-delay range and
+enough repeats to observe a later start event. Enable normal spreading from nearby resource
+so that the emptied target can receive resource again during the delay. Record the target's
+resource and stream state immediately before and after that later start. Count only runs in
+which resource is present before the event and no unrelated removal occurs. Obtain at least
+10 such events for both a trigger-played animation and an ordinary-animation control. Expected:
+the trigger-played later start leaves the resource unchanged and takes no reaction draws,
+even with a nonempty debris list; the ordinary later start empties it and follows the normal
+reaction rules. Account separately for loop-delay, middle-event and resource-update draws.
+A suppressed creation reaction, or a reaction at the trigger-played later start, falsifies
+the creation/later distinction. Inability to refill the target in time is inconclusive.
 
 *Variants:* repeat during play using a weapon explosion animation with the same settings,
 subtracting its projectile and explosion-selection draws. Enable spreading on unmarked eligible
@@ -949,7 +968,8 @@ B's animation starts and takes its stage-delay draw after all applicable detonat
 The land type then reflects B rather than A. Repeat with a tile animation already started
 on the target since the second load pass: the post-detonation recalculation takes no further
 animation-creation draw. Include empty-debris and failed-trial cases, which still recalculate,
-and the no-resource and trigger-played controls, which do not. A missing or premature start,
+and the no-resource and trigger-played later-start controls, which do not. A trigger-played
+creation over resource must still recalculate normally. A missing or premature start,
 a duplicate start despite the once-only rule, or a different stream order falsifies the claim.
 
 ## Open questions

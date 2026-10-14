@@ -33,6 +33,9 @@ use glasnost_sim::world::{HouseId, World};
 /// Players of the lane's games.
 const PLAYERS: usize = 2;
 
+/// The tick of the early offer in the report.
+const EARLY: i32 = 3000;
+
 /// Who plays the lane's houses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Players {
@@ -40,6 +43,9 @@ pub enum Players {
     Scripted,
     /// The own AI of M5b (`glasnost_ai::game::Game`).
     Ai,
+    /// The own AI, one game per pair of sides: each player the first open
+    /// country of its side, so that every side plays.
+    AiSides,
 }
 
 /// The lane's plan: types by role, two harvesters, waves of six (our own
@@ -69,6 +75,8 @@ struct Game {
     first: [BTreeMap<Role, i32>; PLAYERS],
     /// The players' country registration indices.
     countries: Vec<usize>,
+    /// The players' side indices, for [`Players::AiSides`].
+    sides: Option<(i32, i32)>,
     /// Types of the rules by role (a role with none blocks the plan).
     types: BTreeMap<Role, usize>,
     /// Per player house: ticks in which its credits rose.
@@ -77,6 +85,11 @@ struct Game {
     credits: [i32; PLAYERS],
     /// Per player house: types it could build at the end, by role.
     buildable: [BTreeMap<Role, usize>; PLAYERS],
+    /// Per player house: its army units at the end by current behaviour,
+    /// destination kind and target kind.
+    army_end: [BTreeMap<String, usize>; PLAYERS],
+    /// Per player house: types it could build at tick [`EARLY`], by role.
+    early: [BTreeMap<Role, usize>; PLAYERS],
     /// Per player house: credits gained over the game.
     income: [i64; PLAYERS],
     /// Per player house: harvester ticks by current behaviour and harvest
@@ -141,29 +154,38 @@ async fn run_async(
             continue;
         }
         let rules = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
-        let mut g = Game {
-            index,
-            load_ms,
-            cells: map.cells.len(),
-            ..Default::default()
+        let tiles = Arc::new(tiles);
+        let pairs: Vec<Option<(i32, i32)>> = if players == Players::AiSides {
+            side_pairs(&rules).into_iter().map(Some).collect()
+        } else {
+            vec![None]
         };
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            play(
-                &mut g,
-                &rules,
-                &map,
-                Arc::new(tiles),
-                max_ticks,
-                seed,
-                players,
-            )
-        }));
-        match result {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => g.failure = Some(e),
-            Err(_) => g.failure = Some("panic".into()),
+        for pair in pairs {
+            let mut g = Game {
+                index,
+                load_ms,
+                cells: map.cells.len(),
+                sides: pair,
+                ..Default::default()
+            };
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                play(
+                    &mut g,
+                    &rules,
+                    &map,
+                    tiles.clone(),
+                    max_ticks,
+                    seed,
+                    players,
+                )
+            }));
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => g.failure = Some(e),
+                Err(_) => g.failure = Some("panic".into()),
+            }
+            games.push(g);
         }
-        games.push(g);
     }
     Ok(report(mount_ms, looked, &games, max_ticks, seed, players))
 }
@@ -183,6 +205,29 @@ fn countries(rules: &SimRules) -> Vec<(u32, String)> {
         })
         .map(|(i, (n, _))| (i as u32, n.clone()))
         .collect()
+}
+
+/// The first open country of each side, by side index.
+fn side_countries(rules: &SimRules) -> BTreeMap<i32, String> {
+    let mut out = BTreeMap::new();
+    for (i, n) in countries(rules) {
+        if let Some(Some(side)) = rules.econ.tech.country_side.get(i as usize) {
+            out.entry(*side).or_insert(n);
+        }
+    }
+    out
+}
+
+/// Every pair of sides that have an open country.
+fn side_pairs(rules: &SimRules) -> Vec<(i32, i32)> {
+    let sides: Vec<i32> = side_countries(rules).into_keys().collect();
+    let mut out = Vec::new();
+    for (k, &a) in sides.iter().enumerate() {
+        for &b in &sides[k + 1..] {
+            out.push((a, b));
+        }
+    }
+    out
 }
 
 /// The players' countries: the first open countries that own a harvester
@@ -257,14 +302,20 @@ fn play(
             *g.types.entry(r).or_default() += 1;
         }
     }
-    let chosen = player_countries(&probe);
+    let chosen = match g.sides {
+        Some((a, b)) => {
+            let by_side = side_countries(rules);
+            vec![by_side[&a].clone(), by_side[&b].clone()]
+        }
+        None => player_countries(&probe),
+    };
     g.countries = chosen
         .iter()
         .filter_map(|n| rules.country_names.iter().position(|x| x == n))
         .collect();
     drop(probe);
     let setup = setup::skirmish(rules, &players(chosen), Settings::default(), 0, seed);
-    if who == Players::Ai {
+    if who != Players::Scripted {
         return play_ai(g, rules, map, tiles, max_ticks, setup);
     }
     let t = Instant::now();
@@ -385,6 +436,11 @@ fn play_ai(
             }
         }
         drained = w.effects.len();
+        if w.tick == EARLY {
+            for h in 0..PLAYERS {
+                g.early[h] = offer(w, h);
+            }
+        }
         for h in 0..PLAYERS {
             watch(w, h, &mut seen[h], &mut g.first[h]);
             let c = w.houses[h].credits;
@@ -431,6 +487,28 @@ fn play_ai(
     for (built, seen) in g.built.iter_mut().zip(&seen) {
         *built = seen.iter().map(|(r, s)| (*r, s.len())).collect();
     }
+    for h in 0..PLAYERS {
+        for o in world
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner == Some(HouseId(h as u8)))
+        {
+            if role_of(world, tech::type_of(o)) == Some(Role::Army) {
+                let kind = |t: &Option<glasnost_sim::world::Target>| match t {
+                    None => "none",
+                    Some(glasnost_sim::world::Target::Cell(_)) => "cell",
+                    Some(_) => "object",
+                };
+                let key = format!(
+                    "{:?} dest {} target {}",
+                    o.beh.current,
+                    kind(&o.dest),
+                    kind(&o.target)
+                );
+                *g.army_end[h].entry(key).or_default() += 1;
+            }
+        }
+    }
     let end = game.state_hash();
 
     // The replay runs the AI again.
@@ -454,6 +532,19 @@ fn play_ai(
     }
     g.save_matches = same_at_save && loaded.state_hash() == end;
     Ok(())
+}
+
+/// The types house `h` can build now, by role.
+fn offer(w: &World, h: usize) -> BTreeMap<Role, usize> {
+    let mut out = BTreeMap::new();
+    for t in all_types(w) {
+        if let Some(r) = role_of(w, t)
+            && tech::buildable(w, HouseId(h as u8), t)
+        {
+            *out.entry(r).or_default() += 1;
+        }
+    }
+    out
 }
 
 /// Notes the house's objects on the map by role, and the first tick of
@@ -494,6 +585,7 @@ fn report(
     let (cmd, who) = match players {
         Players::Scripted => ("skirmish", "scripted houses"),
         Players::Ai => ("ai", "AI houses"),
+        Players::AiSides => ("ai-sides", "AI houses, one game per pair of sides"),
     };
     let _ = writeln!(
         s,
@@ -513,9 +605,11 @@ fn report(
             .collect();
         let _ = writeln!(
             s,
-            "  types by role: {}; player countries (registration index): {:?}",
+            "  types by role: {}; player countries (registration index): {:?}{}",
             types.join(", "),
-            g.countries
+            g.countries,
+            g.sides
+                .map_or(String::new(), |(a, b)| format!("; sides {a} and {b}"))
         );
         if !g.types.contains_key(&Role::Yard)
             || !g.types.keys().any(|r| matches!(r, Role::Factory(_)))
@@ -567,6 +661,17 @@ fn report(
                 .map(|(r, t)| format!("{} {t}", role_name(*r)))
                 .collect();
             let _ = writeln!(s, "  house {h} first tick by role: {}", first.join(", "));
+            if !g.early[h].is_empty() || g.first[h].len() < 3 {
+                let early: Vec<String> = g.early[h]
+                    .iter()
+                    .map(|(r, n)| format!("{} {n}", role_name(*r)))
+                    .collect();
+                let _ = writeln!(
+                    s,
+                    "  house {h} could build at tick {EARLY}: {}",
+                    early.join(", ")
+                );
+            }
         }
         for h in 0..PLAYERS {
             let mut ticks: Vec<_> = g.harvest_ticks[h].iter().collect();
@@ -580,6 +685,15 @@ fn report(
             );
         }
         let _ = writeln!(s, "  combat: {} shots, {} killed", g.shots, g.killed);
+        for h in 0..PLAYERS {
+            if !g.army_end[h].is_empty() {
+                let v: Vec<String> = g.army_end[h]
+                    .iter()
+                    .map(|(k, n)| format!("{k} ×{n}"))
+                    .collect();
+                let _ = writeln!(s, "  house {h} army at the end: {}", v.join(", "));
+            }
+        }
         let _ = writeln!(
             s,
             "  replay reproduces the final state: {}; save in mid-game, loaded and continued, matches: {}",

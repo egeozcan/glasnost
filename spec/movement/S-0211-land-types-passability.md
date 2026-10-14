@@ -2,7 +2,7 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)

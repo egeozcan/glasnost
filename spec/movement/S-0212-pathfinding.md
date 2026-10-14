@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238]
 supersedes: []
 ---
 
@@ -31,7 +31,10 @@ has removed the former delayed-search Open question; hand off these revisions to
 Claim 25's infantry teleport fallback parameters agree with S-0208 claim 19, and its
 failed-approach row includes close-range searches covered by S-0307 claim 17. Retain the
 other parameters and exclusions of that row. Hand off these coordinated texts together.
-At hand-off, update S-0212's index entry from approved revision 22 to this revision 23.
+The approved index already records revision 23; at hand-off update it to this revision 24.
+Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
+and whether any scenario randomness occurs. Its upstream house-centre choice and complete draw
+sequence remain open in S-0215; do not mark the request answered until that part is approved.
 
 ### Evidence scope
 
@@ -1344,7 +1347,7 @@ Terms specific to this spec:
     | Case | Result |
     |---|---|
     | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the drive locomotor has its destination cleared, so it stops where it is. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
-    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish or multiplayer game is then given a new destination chosen by its house (a house cell whose choice belongs to the AI-visible-rules specs), provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every player-house unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. Units of the neutral and special houses keep the original's non-human-owner rule; those houses are not AI houses. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
+    | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish is given the house-selected destination of claim 23a, provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every player-house unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. Units of the neutral and special houses keep the original's non-human-owner rule; those houses are not AI houses. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
     | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For locomotors other than driving, ship and hovering, the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. A unit with the ship or hovering locomotor also has its destination cleared, like a unit with the driving locomotor. |
 
     The same clearing ends every failed search of a unit with the driving, ship or hovering
@@ -1357,6 +1360,28 @@ Terms specific to this spec:
       and the rule remains a low-confidence assumption (Open questions). The neutral/special
       distinction is our engine's scope rule from the glossary, not an additional oracle claim
     - Confidence: medium for driving, ship and hovering. Low for the remaining locomotors in row 3
+
+23a. **House-selected destination after give-up (Q-0238, partial).** For both the neutral
+    and special houses, row 2 assigns the house-selected destination on the same tick as
+    the failed search, not on a later processing of *area guard*. This failure reaction
+    queues only *area guard*: it neither queues *move* nor forces a behaviour to start.
+    The ordinary start and processing rules remain S-0215's. The two houses use the
+    same choice rules; neither has an automatic exemption just because it is a non-player
+    house or lacks a base or start cell.
+
+    The destination is a nearby-cell result around a centre supplied by the house's
+    choice, not necessarily that centre itself. Table T5 specifies this final search.
+    No result leaves the destination absent. Choosing the centre takes scenario randomness,
+    including at least one ranged draw, even when the house has no base or start cell.
+    The final nearby-cell search takes no additional draw. The complete centre choice,
+    its fallback when the house has no base or start cell, and its complete draw sequence
+    belong to S-0215 and remain open; no particular cell or total draw count is asserted here.
+    Player-house units do not take either choice under Departure D5.
+    - Backing: `measurable` (P26 for timing, queue, final-search parameters and presence
+      of scenario draws; claim 25 and P16 run (u) for the nearby search's no-draw rule).
+      The player-house exclusion is the glossary's scope rule
+    - Confidence: high for same-tick assignment, the queue and presence of a ranged draw.
+      Medium for the final-search parameters
 
 ### Destination substitution
 
@@ -1451,6 +1476,8 @@ Terms specific to this spec:
     | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
     | Rally point (S-0213 claim 20) | the clicked cell | *foot*; *amphibious* for a naval factory; *winged* for an aircraft factory | *normal*; *amphibious-crusher* for a naval factory; *fly* for an aircraft factory | that of the building's own cell for that zone | the centre is a bridge cell | no | no | none |
+    | House-selected destination after give-up (claim 23a), original non-human-owner rule retained for neutral and special houses | the centre supplied by the house's choice, still open in S-0215 | *track* | *normal* | that of the unit's ground cell for *normal* | never | no | no | none |
+    | Aircraft factory edge entry without a rally point (S-0417 claim 14) | the cell of the factory's reference point | the aircraft's, *winged* counted as *track* | the aircraft's own | that of the centre cell for that zone, read for its deck in deck mode | the aircraft is on a bridge deck | no | no | none |
     | Harvester queueing (S-0402 claim 9) | the queueing cell of S-0402 | *wheel* | *normal* | none | never | no | no | the refinery's top-left cell |
     | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
@@ -1529,8 +1556,9 @@ Terms specific to this spec:
     scatter, click-handling tick for move orders and rally points (S-0213 claim 20 and S-0214
     claim 11), failure tick for ordinary approach failure, landing-point fixation tick for
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
-    and processing tick for idle harvester step-off
-    (S-0402 claim 13).
+    processing tick for idle harvester step-off (S-0402 claim 13), release tick for
+    aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
+    tick for the house-selected destination after give-up (claim 23a).
 
     S-0307 claim 16 owns qualification of obstructed approach positions before failure, including
     its two alternative coarse-estimate tests; these are not nearby-cell-search qualification
@@ -1539,7 +1567,9 @@ Terms specific to this spec:
     - Backing: `measurable` for the ring rule, the scan order and the distance choice (scenario P7,
       runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
-      parameters (S-0402 scenario H11), and for both free-unit searches and the no-overlay
+      parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
+      aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
+      final nearby search after give-up (P26), and for both free-unit searches and the no-overlay
       condition (S-0402 scenario H13 parts b and c), for the ordinary approach-failure parameters
       and centre after candidate trials, including close-range failure (S-0307 scenarios RG12,
       RG17 and RG23 f), for the infantry teleport fallback parameters (S-0208 scenario W11), for the teleporting
@@ -1567,6 +1597,8 @@ Terms specific to this spec:
       the winged class's fixed land multipliers give no independent zero-multiplier control.
       P21(a) tests the 31/32-cell radius boundary and the no-result case. The smaller-map
       radius bound stays `unmeasured`: no fixture here distinguishes it from usable-area refusal.
+      The aircraft factory row's deck-mode case remains `unmeasured`: U13 c does not
+      establish an aircraft entering from the edge while marked as on a bridge deck.
       Visibility preference
       across rings remains `unmeasured`: no proposed fixture hides whole qualifying inner rings
       while controlling the visibility of outer-ring cells.
@@ -2049,11 +2081,12 @@ and in a later game an absent key keeps the value an earlier game's rules layers
 (S-0006 claim 3). The keys behind the passability category (land types, overlays, terrain objects,
 firestorm walls and laser fences) and the locomotion class are S-0211's.
 
-**Unit and infantry type keys** (in the type's section)
+**Vehicle, infantry and aircraft type keys** (in the type's section)
 
 | Key | Form | Absent-key default | Use here |
 |---|---|---|---|
-| `MovementZone` | named value as in S-0211's import mapping (text cut to 31 characters, letter case ignored, the spelling `subterannean`) | `normal` | movement zone (claims 4, 6, 13, 25). A value outside the vocabulary: S-0211 claim 4, departure D1 |
+| `MovementZone` | named value as in S-0211's import mapping (text cut to 31 characters, letter case ignored, the spelling `subterannean`) | `normal` | movement zone (claims 4, 6, 13, 25), including the aircraft factory edge-entry row. The final house-selected search instead always uses *normal* (claim 23a). A value outside the vocabulary: S-0211 claim 4, departure D1 |
+| `SpeedType` | named locomotion class (S-0211 Import mapping) | S-0211 claim 3: *foot* for infantry, *winged* for aircraft, *track* for crusher vehicles and *wheel* for other vehicles | aircraft factory edge-entry search uses the aircraft's class, *winged* counted as *track*. The final house-selected search instead always uses *track* (claim 23a) |
 | `ThreatAvoidanceCoefficient` | decimal, single precision (S-0003 claim 6), held as a double | 0.0 | threat coefficient *k* (claims 13, 17, 18), copied to the unit when it enters play |
 | `Speed` | integer, converted to the speed number 0 to 255 (Terms): by S-0207 claim 1 for a vehicle type, by S-0208 F4 for an infantry type, each with its rule for the value −1 | speed number 0 | speed comparison of claim 19 |
 | `IsTrain` (vehicle types) | boolean | false | marks the type as a train: train rules (claims 7, 8, 14, 16, 20, 24). Stock data is not known to set it |
@@ -3042,6 +3075,44 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   corresponding ending condition of claim 22. One qualifying run each. A successful intervening
   step in the replacement-only run, or no such step in the step-only run, voids the contrast.
 
+**P26. Neutral and special give-up (claim 23a; Q-0238).**
+- Setup: purpose-made skirmish map, game-speed index 2, 800 × 600, director and mods
+  off, stock types only. Place one ordinary unarmed driving vehicle owned by the neutral
+  house, then repeat with the special house. A map-defined team of that house supplies
+  a move-to-waypoint destination through its script, as in P11; the team is used only
+  to exercise the original, not as an implementation requirement. Enclose that waypoint
+  more than one cell away in impassable buildings: their cells
+  retain the open passability category, so connectivity does not itself refuse the order.
+  Include one bystander computer player isolated from the test area. Use normal map
+  team processing, not a write into the running game's state, to produce the move.
+  For the human-owned control, supply the same destination through an ordinary move order.
+  Score only a run whose recorder confirms a passed reachability gate and an actual
+  search failure satisfying row 2, with no intervening order or second failure.
+- Procedure: record the failed-search tick, current and queued behaviours, destination,
+  map occupancy and random-stream state immediately around the failure reaction and
+  on the next two ticks. For the final-search test also record the house-supplied centre.
+  That single cell is an input to this test, not evidence that its upstream selection
+  rule is known. Predict the final result from T5 and claim 25 at the recorded failure
+  tick. Compare a same-geometry run owned by a human-controlled house. Use the
+  read-only recorder and scripted input; do not alter the benchmark harness here.
+- Expected: both non-player houses queue *area guard*, with no *move* queued or forced
+  by the failure reaction. A found final-search cell is assigned on the failure tick.
+  No result leaves no destination. It matches the *track*, *normal*, ground-reach-region
+  search with no height condition and selection position *N* mod *n*. The centre
+  choice advances the scenario stream, even without a base or start cell. This part
+  tests only the presence of centre-choice draws, not their total or the final search's
+  separate no-draw rule; P16 run (u) tests that shared nearby-search rule.
+  The human-owned control queues *guard* and receives no house-selected destination.
+- Falsifiers: a destination assigned only on a later tick, an additional queued or forced
+  behaviour attributable to this reaction, a mismatch with the final-search prediction,
+  or no scenario draw in an isolated non-player-house choice. Unrelated draws void
+  the draw comparison, not confirm it. A gate refusal is not this test.
+- Runs: obtain three qualifying failures per non-player house and three human controls,
+  allowing at most twenty attempts per group. Include a no-result final search only
+  if recorded occupancy establishes that no candidate qualifies through the full radius.
+  Otherwise record that branch as untested. No upstream centre-choice claim is confirmed
+  by this conditional final-search test.
+
 ## Open questions
 
 - Measurement coverage remains incomplete for the path-length cutoffs of claim 19, the closing
@@ -3080,8 +3151,11 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
   applies them in both.
-- The house cell to which a unit with a computer-controlled owner is sent in the original after giving up (claim 23) is not
-  identified.
+- Q-0238 question 1 and the complete draw sequence underlying question 2 remain open:
+  S-0215 must specify the house-supplied centre of claim 23a, including for a neutral or
+  special house with no base or start cell. This revision fixes its final nearby-search
+  parameters, same-tick assignment and queue, and establishes that the centre choice
+  uses scenario randomness; it does not yet determine the destination without that input.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
 

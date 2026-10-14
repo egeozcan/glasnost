@@ -2,11 +2,11 @@
 id: S-0204
 title: Coordinates, distance and facing
 topic: simulation
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0077]
 supersedes: []
