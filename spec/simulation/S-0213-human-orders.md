@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -853,9 +853,41 @@ Terms).
     Measurement and drawing use the imported game bitmap font, with its individual
     glyph widths and one extra pixel of advance per character, including the last.
     There is no kerning or extra proportional scaling. A tab advances to the next
-    multiple of 64 pixels from the line origin. A missing glyph uses the font's
-    fallback, an inverted capital X, and that glyph's width. All width arithmetic
+    multiple of 64 pixels from the line origin. All width arithmetic
     is integer pixels, with no rounding. File identity is in Import mapping.
+
+    **Glyph selection and drawing (Q-0501, questions 2 to 4).** Each unsigned
+    16-bit text unit independently selects the font's imported glyph mapping,
+    without reducing it to its low byte or combining surrogate pairs. A mapping
+    value of zero means missing; a positive value selects glyph number one less
+    than that value, with glyph numbers counted from zero. Aliases are allowed.
+    A blank bitmap or a stored width of zero does not make a mapped glyph missing:
+    a present zero-width glyph still advances by the one spacing pixel.
+    The zero text unit ends the text rather than selecting a glyph. Tabs and
+    explicit breaks use their special rules here rather than mapped glyph metrics.
+
+    A missing glyph uses a generated fallback, not a reserved glyph entry or a
+    question mark. Its mask is the complement of the mapped capital X (text unit
+    88), within that glyph's stored width and the font's bitmap height, and its
+    width is the capital X's stored width. Thus changing that imported X changes
+    both the fallback shape and its advance. These statements cover a valid font
+    with a mapped capital X; behaviour for a font without one remains open.
+
+    Glyph masks have two values: zero leaves the destination pixel unchanged,
+    and one paints the notice's foreground. They do not select palette indices.
+    For route refusals the foreground comes from the local player's colour
+    definition: convert its unmodified hue, saturation and value to RGB using
+    S-0103 claim 6's integer conversion, then retain the display-format channel
+    bits using S-0103 claim 9. No ramp-entry selection, shade subtraction or
+    battlefield lighting is applied. Other events retain their own choice of
+    colour definition. The fallback uses this same foreground in our engine.
+    The original has a cosmetic bug: a fallback glyph inverts the even-numbered
+    bits of the packed 16-bit foreground, counting from bit 0, rather than using
+    the ordinary foreground. This drawing-only defect has no quirk switch.
+    - Backing for glyph selection, generated fallback and original mask/colour
+      behaviour: `measurable` (Scenario O21 c). The fixed fallback colour is a
+      presentation design rule, not an oracle prediction.
+    - Confidence for these glyph and colour rules: high
 
     A line contains at most 111 text characters. The width limit is inclusive:
     a character whose advance brings the accumulated width exactly to the limit
@@ -868,8 +900,9 @@ Terms).
     searching back for a word boundary. Character counts refer to the string
     table's 16-bit text units, not encoded byte counts.
 
-    An explicit carriage return or line feed ends a line after that character,
-    before any width overflow would be needed. At the start of a continuation,
+    An explicit carriage return or line feed has no horizontal advance and draws
+    no glyph. It ends a line after that character, before any width overflow would
+    be needed (Q-0501 question 5). At the start of a continuation,
     characters with values 1 to 31 are skipped, but ordinary spaces are kept.
     Thus a paired carriage return and line feed makes one break, and consecutive
     break characters do not create additional empty stored lines. Leading spaces
@@ -1096,7 +1129,9 @@ only when they actually assign a destination.
 | String-table entry `MSG:PlannerMaximum` | route-holder-limit text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic, not substitute stock English |
 | String-table entry `MSG:PlanningModeHeteroSel` | incompatible-selection text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic |
 | No rules, art or map key | route refusal duration and shared status display (claim 25) | fixed presentation rules | 480 clock units of 16 milliseconds; six lines |
-| Game font file `GAME.FNT` | status-text glyph shapes, widths and fallback (claim 25) | imported bitmap font, resolved through S-0005 claims 1 to 4; no host-font substitution | no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text |
+| Game font file `GAME.FNT` | status-text glyph mapping, masks, widths and bitmap height (claim 25) | unsigned 16-bit text-unit mapping; zero means missing, positive values select zero-based glyph number value minus one; widths in integer pixels, binary masks; resolved through S-0005 claims 1 to 4 and 18a | no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text; binary file layout remains Q-0501's formats-owner question |
+| Mapped capital X in `GAME.FNT` | generated fallback shape and width (claim 25) | text unit 88, complemented mask with the same width and bitmap height | no reserved fallback entry; a font without a mapped X is outside the defined valid-font scope |
+| Rules `[Colors]` | route-notice foreground (claim 25) | local player's chosen definition, parsed by S-0103 claims 4 and 5; unmodified HSV converted and packed by claims 6 and 9 | colour-definition import defaults remain S-0103's; no font palette or battlefield lighting |
 | No rules, art or map key | status-text splitting (claim 25) | fixed integer-pixel budgets, 111-character limit, one-pixel character spacing and 64-pixel tab stops | claim 25's initial and resized budgets and separator rules |
 | No rules, art or map key | acceptance of arrow events during an order block (claim 23) | fixed input rule, subject to the presentation quirk | presses and releases made during the block discarded |
 | Cursor image and palette of S-0214 Import mapping | edge-scroll images of table E | same imported image and palette, full-size frames | same missing-file handling as S-0214 |
@@ -1774,6 +1809,36 @@ applied: a cue is not proof that an order passed its application checks.
   individual tests to six lines or fewer so eviction does not hide a break.
   Do not run unfittable-font failure data against the original.
 
+**Scenario O21 c: status glyph selection and foreground (claim 25; Q-0501).**
+- *Setup:* O21's tiny skirmish fixture, speed 6, 800 × 600, isolated bystander
+  and its void rule, director and unrelated mods off. Use named valid test font,
+  string-table and colour-definition copies, restoring them afterwards. Keep a
+  mapped capital X. Choose an invented HSV definition for the local player's
+  slot whose direct packed RGB differs from shaded/ramp alternatives. Capture
+  against two different battlefield backgrounds.
+- *Procedure:* display a refusal notice containing two units mapped to the same
+  glyph, a unit above 255 with a distinct low-byte glyph, a zero mapping, a
+  positive-width blank glyph and a present zero-width blank glyph. In separate
+  fresh sessions alter only X's width or mask. Also assign large widths to the
+  carriage-return and line-feed mappings and display explicit breaks. Repeat
+  each variant three times, then repeat the colour test with altered battlefield
+  lighting. Keep each notice below the wrapping budget and six-line capacity.
+- *Observable:* screen-captured glyph masks, pixels inside and outside each mask,
+  origins of following glyphs, explicit line breaks and foreground channel values.
+- *Expected:* aliases match; the full 16-bit unit selects the glyph, not its low
+  byte. Only a zero mapping uses complemented X with X's width plus one pixel of
+  advance. Present blank glyphs retain their widths; zero width advances one pixel.
+  X alterations change the fallback only as claim 25 states. Breaks draw nothing
+  and take no advance despite their altered mapped widths. Zero mask pixels
+  retain each background; one mask pixels have direct converted/packed foreground,
+  unchanged by battlefield lighting. The oracle's missing glyph has the recorded
+  even-bit foreground inversion; our engine instead uses the ordinary foreground.
+- *Falsified if:* low-byte selection, replacement of a present blank/zero-width
+  glyph, a dedicated fallback independent of X, different advances, painted break
+  glyphs, opaque zero pixels, palette-derived foreground, lighting-dependent text,
+  or a different original fallback colour transformation is observed. This tests
+  drawing and metrics, not the still-unassigned binary file-layout contract.
+
 **Scenario O22: arrows during order blocks (claim 23, Q-0391).**
 - *Setup:* a large flat skirmish map, no scroll limits near the observed view,
   speed 6, 800 × 600, fresh unconflicted arrow bindings, pointer in the interior.
@@ -1813,6 +1878,11 @@ extension is a design rule and has no oracle measurement.
   S-0101 claims 14 and 15 already own displacement and retained scrolling.
   S-0201 claim 14 owns the initial block and claim 11 the chrono-flash block.
   Their pointers need the cross-spec updates listed for sign-off below.
+- Q-0501 questions 2 to 5 are answered by claim 25 and O21 b/c. Question 5's
+  zero advance already appeared in Formulas before this request; claim 25 now
+  makes it explicit. Question 1's binary font-file layout is still open: S-0005
+  claim 18a owns lookup only, and a separately assigned formats contract is needed.
+  A font lacking a mapped capital X is outside the defined valid-font scope here.
 - Q-0393's four shared-status-display questions are answered by claim 25 and O21 b.
   S-0411 claim 17 already excludes sidebar production labels from this display.
   Their font and layout are not changed by the status-text contract here.
