@@ -438,6 +438,24 @@ fn claim_8_end_delay() {
     );
 }
 
+// spec: S-0201 claim 1 (the tick number grows after each tick of the end delay before the final one; the final tick runs in full but does not add 1, so afterwards the tick number is the last tick's) and S-0203 State and ordering
+#[test]
+fn final_tick_adds_nothing() {
+    let mut s = scene(false);
+    s.ruleset.sim.general.economy.savour_delay = Some(Decimal("0".into()));
+    let mut w = s.build();
+    spawn(&mut w, Kind::Vehicle, "TANK", 1, 0, 0);
+    spawn(&mut w, Kind::Vehicle, "TANK", 2, 4, 0);
+    w.houses[1].allies = vec![B, C];
+    w.houses[2].allies = vec![B, C];
+    common::run(&mut w, 2);
+    // The decision did not make its tick final: the tick number advanced.
+    assert_eq!((w.econ.end.ended, w.econ.end.over, w.tick), (Some(1), Some(2), 2));
+    common::run(&mut w, 1);
+    assert_eq!(w.tick, 2, "the final tick added nothing");
+    assert!(victory::outcome(&w).is_some());
+}
+
 // spec: S-0414 claim 9 (a house defeated during the end delay loses; the delay restarts only for a person-played house with a win pending; quirks.defeat_during_end_delay)
 #[test]
 fn claim_9_defeat_during_delay() {

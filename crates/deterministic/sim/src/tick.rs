@@ -34,8 +34,13 @@ pub fn step(w: &mut World) {
     orders::apply_pending(w);
     // spec: S-0011 claim 11 (a one-time tag that fired is deleted at the end of the tick)
     crate::triggers::end_tick(w);
-    // spec: S-0203 claim 1 (after the last part the tick number grows by 1)
-    w.tick = w.tick.wrapping_add(1);
+    if w.econ.end.over == Some(w.tick) || w.econ.end.finished {
+        // spec: S-0201 claim 1 and S-0203 State and ordering (the final tick runs in full but does not add 1: afterwards the tick number is the last tick's; no next tick runs, S-0414 claim 8)
+        w.econ.end.finished = true;
+    } else {
+        // spec: S-0203 claim 1 and S-0201 claim 1 (after the last part the tick number grows by 1, except in the final tick)
+        w.tick = w.tick.wrapping_add(1);
+    }
     // Derived data, not state: the regions are brought up to date between
     // ticks, so that input rules can read them (crate::targeting).
     crate::regions::ensure(w);
