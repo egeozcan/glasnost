@@ -2,7 +2,7 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -28,8 +28,9 @@ are out of scope.
 **Joint hand-off checks.** Confirm claim 9 against S-0009 claim 29 and its header-pair
 Import mapping in the versions handed off together: unread components are unspecified
 in the original; completion from the value in force is our engine's departure, with
-an importer warning. Missing or empty pairs keep the whole value in force. Claim 14's trigger-name exceptions remain
-aligned with S-0011 claims 5 and 21. S-0011's reveal scope and S-0409 claim 17 already
+an importer warning. Missing or empty pairs keep the whole value in force. Confirm claim 14's trigger-name exceptions against S-0011 claims 5 and 21
+in the versions handed off together, including owner-country marker handling and
+exact event type-name matching. S-0011's reveal scope and S-0409 claim 17 already
 agree on every player house in our engine, including observers; that design rule
 is not an extension of this spec's type-reference rule.
 
@@ -410,6 +411,8 @@ our engine's result.
     owner country instead treats the angle-bracketed no-type spelling, ignoring ASCII case,
     as the first registered country. The bare spelling has no marker handling there: it
     undergoes ordinary case-insensitive country type-name or country name-field lookup.
+    S-0011 claim 5 also owns the owner-country field's special handling of `<random>`.
+    This exception does not extend to ordinary type references.
     The event results, owner failures and compatibility rules remain S-0011's, not new
     switches here. A building's factory kind is a vocabulary word (claim 21), not a
     reference to a registered type, and does not use this claim's marker rules.

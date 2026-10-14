@@ -1,9 +1,9 @@
 ---
 id: Q-0280
 title: Which shade of a colour definition does the setup screen's colour swatch show?
-status: open
+status: answered
 related: [S-0103, S-0412]
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0279]
 supersedes: []
 ---
 
@@ -19,8 +19,8 @@ supersedes: []
 How a world position (leptons, with height) becomes a pixel position in the battlefield view, how
 terrain, overlays and objects are lifted by height, how the view position is chosen and limited by the map's
 local area, and how a screen pixel is turned back into a ground position or a cell for the cursor.
-Every integer step is exact; the two calculations covered here that the original does in floating
-point are named, with their rounding direction, and each is given an exact equivalent.
+Projection and picking calculations state their number domains and rounding. Edge and keyboard
+scrolling specify their displacement, acceleration and relation to game speed and freezes.
 This spec covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
@@ -52,6 +52,10 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 | bib (of a building) | A part of a building's image, in S-0102's wording. S-0102 defines it. This spec says only that the cell pass paints it (claim 6). |
 | *M<sub>w</sub>* | The map width of the map size (S-0009 writes it *W*; here *W* is the view width). |
 | (*V<sub>x</sub>*, *V<sub>y</sub>*, *V<sub>w</sub>*, *V<sub>h</sub>*) | The four numbers of the local area: left, top, width, height. As for the map size, horizontal numbers count cell widths (60 world pixels each) and vertical numbers count cell heights (30 world pixels each). |
+
+| scroll index *r* | The player's scroll-speed setting, 0 fastest to 6 slowest. Distinct from game speed. |
+| edge momentum *a* | Non-negative integer controlling edge-scroll acceleration and run-on (F9), initially 0 at game start. Not a world velocity. |
+| client pixel | Pixel measured from the game window's client top-left, including the sidebar and the strip above the battlefield. Client width and height are *B*, *C*. |
 
 ## Behaviour
 
@@ -255,6 +259,51 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       decks are not asserted by this claim.
     - Confidence: high.
 
+12. **Screen-edge scrolling.** In ordinary skirmish play, without a mouse button held or a
+    planning interaction, the pointer activates edge scrolling only at client column 0 or
+    *B* − 1, or client row 0 or *C* − 1 (and beyond those bounds if the pointer can reach there).
+    Columns 1 and *B* − 2 and rows 1 and *C* − 2 do not activate it. These are the full client
+    edges, not the battlefield/sidebar boundary. F9 gives the direction: at 800×600 the four
+    corners scroll diagonally and the midpoint of each edge scrolls along that screen axis.
+    Direction is retained while the pointer leaves the edge and momentum decays, so leaving
+    the edge need not stop scrolling immediately. At an edge the direction is sampled again
+    even when the pointer moves to a different edge without an intervening stop.
+    - Backing: `measurable` (M7a, M7c)
+    - Confidence: high
+13. **Edge-scroll displacement and acceleration.** Each unfrozen cycle with edge scrolling
+    active requests the displacement in F9, once per cycle, not once per display refresh and
+    not multiplied by elapsed time. The two components of a diagonal request have the same
+    magnitude as a cardinal request: diagonal distance is not normalised. F5 limits the
+    resulting centre. Displacement depends on the scroll index and the imported edge-scroll
+    multiplier, not on the game-speed index. Acceleration and decay advance by at most one
+    stage per cycle, and only when the 16 ms pacing clock has advanced since the preceding
+    stage change. Thus a slow cycle does not skip stages to catch up. At game speeds 1 to 6
+    on a host that keeps up, an uninterrupted edge hold advances one stage per cycle until
+    its steady speed; index 0 may repeat stages because its cycles can be shorter than 16 ms.
+    More cycles per second mean faster scrolling per second even at steady speed.
+    - Backing: `measurable` (M7b, M7c, M7e)
+    - Confidence: high
+14. **Arrow-key scrolling.** With no modifier held, each held arrow requests 21 pixels per
+    unfrozen cycle along its screen axis. It does not accelerate and ignores both the scroll
+    index and the edge-scroll multiplier. Two perpendicular arrows request (±21, ±21) pixels,
+    opposed arrows cancel on their axis. Mouse and arrow requests add before the next displayed
+    view position, subject to F5. Key down/up events take effect when accepted as input, not
+    necessarily in the cycle in which the player physically presses/releases them (S-0213
+    claim 1). A modifier-assisted scroll is outside this claim.
+    - Backing: `measurable` (M7d, M7e)
+    - Confidence: high
+15. **Scrolling while paused or frozen.** Neither edge nor arrow scrolling continues during a
+    stand-still for the options menu or lost focus, or during a frozen cycle. Drawn frames during
+    a freeze do not imply scroll updates. Arrow scrolling also stops during a freeze if an arrow
+    was already held before it began. A freeze does not itself clear edge momentum or held-arrow
+    state: when unfrozen cycles resume, scrolling can resume without starting acceleration over.
+    Edge scrolling is suppressed during an order block. A previously held arrow continues
+    scrolling during its unfrozen cycles, although the block can prevent new inputs. This is presentation behaviour, not an additional game-speed path
+    to game state. S-0201 claims 8 to 11 already specify the stand-still/freeze distinction.
+    - Backing: `measurable` (M7f)
+    - Confidence: high for scrolling suppression and retained state; medium for its visible
+      resumption, which depends on accepted input and the pointer's position
+
 ## Formulas
 
 **F1. Projection** (integers. Inputs: X, Y, *z* in leptons. Output: world pixel):
@@ -410,6 +459,52 @@ height level of cell *c*):
 Exact integer arithmetic, so no rounding applies beyond F7's. 180 is the cursor probe depth
 (Constants) while `quirks.cursor_probe_depth_180` is on.
 
+**F9. Edge-scroll direction and magnitude** (claims 12 and 13).
+
+Let (*p*, *q*) be the pointer's client pixel. When it is on an edge, form a snapped client point
+(*s*, *t*): horizontally choose 0 for *p* < α·*B*, *B* − 1 for *p* > (1 − α)·*B*, otherwise
+trunc₀(*B*/2). Vertically choose 0 for *q* < β·*C*, *C* − 1 for *q* > (1 − β)·*C*, otherwise
+trunc₀(*C*/2). Here α = 0.16 and β = 0.21, each represented by the nearest double-precision
+value. The comparisons use double-precision products rounded toward zero. Compute the bearing
+*f* by S-0204 F3, including its table corrections and shared quirk, with differences
+Δx = *s* − trunc₀(*B*/2), Δy = *t* − trunc₀(*C*/2) in pixels rather than leptons.
+This use interprets zero bearing as screen up, not map north. Its coarse direction is
+
+> *u* = ⌊(*f* + 128)/256⌋ mod 256,   *d* = ⌊(*u* + 16)/32⌋ mod 8.
+
+All coarse conversions are exact integer arithmetic. The direction vectors for *d* = 0 … 7 are
+respectively (0, −1), (1, −1), (1, 0), (1, 1), (0, 1), (−1, 1), (−1, 0), (−1, −1).
+
+The magnitude table *T* has these integer values, in pixels before the imported multiplier:
+
+| Table index *i* | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| *T(i)* | 448 | 384 | 320 | 256 | 192 | 128 | 64 | 32 | 16 |
+
+For *r* from 0 to 6 and edge momentum *a*, the cycle's effective momentum is
+*aₑ* = min(*a*, 7 − *r*). While the pointer is on an edge, or *a* > 0 with a retained direction,
+
+> *i* = 8 − *aₑ*,   *m* = trunc₀(rz<sub>d</sub>(*T(i)* × μ)),   requested displacement = *m* × direction vector.
+
+μ is the imported edge-scroll multiplier, a double-precision dimensionless value. The original
+uses floating-point multiplication rounded toward zero, then converts to an integer by truncation
+toward zero (S-0205). The formula covers finite non-negative μ whose result fits a signed
+32-bit integer. Momentum arithmetic is integer, with no rounding. The magnitude is applied on
+both axes for a diagonal, without a division by √2.
+
+At a reachable edge, the next momentum is *aₑ* + 1 if the pacing clock has advanced by at least
+one unit (16 ms) since the last momentum change, otherwise *aₑ*. The change restarts that
+one-unit interval. If the one-pixel request in that direction is blocked by F5, no edge request
+or acceleration is made. Away from an edge, a nonzero momentum still makes the request above,
+but the next momentum is max(0, *aₑ* − 1) when that interval expires, otherwise *aₑ*.
+Decay also restarts the interval and still occurs when the retained direction is blocked.
+There is no request away from an edge with momentum 0. A freeze performs neither transition.
+
+A fresh, uninterrupted edge hold at paced speeds therefore uses table indices
+8, 7, …, *r* + 1, then repeats *r* + 1. Its steady magnitude is
+trunc₀(rz<sub>d</sub>(*T(r + 1)* × μ)) pixels per cycle. The original's clock is
+⌊host milliseconds / 16⌋, as in S-0201; this clock affects local camera acceleration only.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -430,7 +525,8 @@ Exact integer arithmetic, so no rounding applies beyond F7's. 180 is the cursor 
 
 ## State and ordering
 
-The view has one state value, the view centre. Every request to move it (scrolling, centring on an
+The view's position has one state value, the view centre; edge momentum and its retained
+scroll direction are separate presentation state (F9). Every request to move it (scrolling, centring on an
 object, start of game) stores the limited centre of F5, never the requested one. The origin of every
 drawn frame is derived from that stored centre by F3. Observable consequence: after scrolling hard
 against an edge, scrolling back moves the view at once. No extra scrolling is needed to "unwind" the
@@ -459,8 +555,8 @@ part of the request that was cut off.
   With the quirk off, the cell under a pixel is still given by F7's pixel formula, so only the
   lepton position returned changes. No observable difference in play is known
   (claim 9).
-- **Rounding mode.** F2 and F6 are the only floating-point calculations covered here that are evaluated during play (the
-  derivation of *k* in F2 gives the same *k* in either mode). Both rely on the
+- **Rounding mode.** F2, F6 and the scroll calculations in F9 use floating point during play (the
+  derivation of *k* in F2 gives the same *k* in either mode). They rely on the
   program-wide *round-toward-zero mode* (glossary), whose single switch `quirks.chop_rounding`
   belongs to S-0205 (number domains). This spec defines no switch of its own for it. The
   mode does not change *L(z)* at any height a map can produce (F2). With the mode on, F6 equals its exact formula; rounding to
@@ -499,6 +595,12 @@ part of the request that was cut off.
 | map file, `[Map]` | `Size` = left, top, width, height | map size. Only the width *M<sub>w</sub>* enters F5 | four integers | as in S-0009 |
 | map file, `[Map]` | `LocalSize` = left, top, width, height | local area *V<sub>x</sub>*, *V<sub>y</sub>*, *V<sub>w</sub>*, *V<sub>h</sub>* in F5 | four integers | as in S-0009 |
 | map file, cell data | cell height | height level of each cell (terrain lift, cursor probe) | integer per cell | 0 |
+| settings file, options section | scroll-speed control | scroll index *r* | integer, ordinary control range 0 … 6, fastest … slowest | 3 |
+| rules, `[AudioVisual]` | `ScrollMultiplier` | edge-scroll multiplier μ | floating-point number or percent, as S-0003 | 1.0; later layers retain the value in force |
+
+The scroll-speed control's positions *p* = 0 … 6 (slowest … fastest) set *r* = 6 − *p*.
+There is no rules key for the one-pixel edge, the magnitude table or the unmodified arrow speed.
+The speed and multiplier defaults and parsing are covered by claims 13 and 14 and M7b/M7d/M7g.
 
 F3 and F5 use the same view size *W*, *H*, as they do in normal play. *W* and *H* come from the
 player's screen resolution minus the sidebar and the strip above the view. A later user-interface
@@ -731,6 +833,61 @@ a reading mistake.
     (*n* − 1, *n* − 1). Falsified if any pixel's cell differs, in particular if the pick follows the
     drawn diamonds (a lift of 210 px).
 
+- **M7 — edge and keyboard scrolling** (claims 12 to 15). Setup: a large flat purpose-made
+  skirmish map with a revealed, distinctive tile grid throughout the observation area; begin
+  far from scroll limits. Use 800×600, speed 2 unless varied, one isolated bystander computer
+  player, director and mods off. Scripted input and a screen recording identify every drawn
+  frame and the view origin from tile pixels. Re-centre before each sub-run and leave the pointer
+  inside the client for at least 16 cycles to exhaust momentum. One run per condition, with a
+  repeat only to resolve capture ambiguity. Count game-drawn frames, not monitor refreshes.
+  - (a) Test each edge midpoint at the outermost pixel, then at one and four pixels inward.
+    Hold for 12 cycles. Test the four client corners and the battlefield/sidebar seam likewise.
+    Expected: only the outermost full-client edge starts movement; corners give both components,
+    midpoint edges only one. Any motion starting one pixel inward after momentum has expired,
+    activation at the internal seam, or a missing corner component falsifies claim 12.
+  - (b) For each scroll index 0 … 6, hold an edge midpoint and record the first 16 displacements.
+    Expected: F9's table sequence, scaled by μ, ending at its stated steady value. Repeat with
+    a named test-map override setting μ to 0.1 (invented test value), then μ to 1.0; the
+    displacement must use truncation, not nearest rounding. For example *T(7)* × 0.1 gives
+    3 pixels and *T(8)* × 0.1 gives 1 pixel. A constant speed from the first cycle, a different
+    peak, a different rounding result, or a diagonal component smaller than its cardinal
+    counterpart falsifies claim 13. Repeat each corner to check both components.
+  - (c) At steady speed, move the pointer just inside the edge. Expected: movement continues
+    in the retained direction while F9 decays to zero. Move it to a different edge while still
+    accelerating: direction changes without resetting momentum. Hold outward at a scroll limit,
+    then reverse: no accumulated outward displacement must be unwound. Record each origin.
+    immediate stopping on edge exit, a momentum reset on the new edge, or a delay caused by
+    accumulated out-of-bounds displacement falsifies the respective rule.
+  - (d) Hold each arrow for 12 accepted cycles, pointer in the interior. Repeat all scroll
+    indices and the two μ test maps from (b), with no modifiers. Expected: 21 pixels per
+    cycle throughout. Hold two perpendicular arrows, then opposed arrows; expect (21, 21)
+    in the appropriate signs and zero on the opposed axis. Combine an arrow with a steady
+    edge hold: expect the sum. Any setting dependence, acceleration, diagonal normalisation
+    or failure of addition/cancellation falsifies claim 14. Ignore initial/final cycles whose
+    key events have not yet been accepted.
+  - (e) Repeat a steady edge hold and an arrow hold at game speeds 1 and 6; include speed 0
+    with host-clock timestamps if capture can identify each game-drawn frame. Expected:
+    identical steady per-cycle magnitudes, different per-second distances. At index 0, stages
+    may repeat within one 16 ms clock interval but never advance twice in that interval.
+    Any steady per-cycle speed change with game speed or elapsed-time-scaled jump falsifies
+    the corresponding claim. If index 0 cannot be captured reliably, leave that clock-phase
+    consequence unconfirmed rather than substituting monitor frames for cycles.
+  - (f) Add a named elapsed-time trigger starting a positive timed freeze as in S-0201 T6.
+    Begin a steady edge hold, then in another run hold an arrow before the freeze; do not
+    release the arrow until after it ends. Expected: origin unchanged in all frozen drawn
+    frames, resuming on unfrozen cycles, with retained momentum rather than a new ramp.
+    Repeat across options-menu and lost-focus stand-stills: no motion while stopped and
+    no backlog jump. A frozen-frame origin change or a fresh acceleration ramp without
+    an intervening pointer/input change falsifies claim 15. Separately start a chrono flash
+    while holding an edge, and in another run while holding an arrow: expect edge suppression
+    during its order block but continued held-arrow scrolling until its frozen cycles begin. These trigger fixtures
+    use S-0201's mappings, not a new pause input invented for this spec.
+  - (g) Remove the saved scroll index for a fresh program start, then read the scroll-speed
+    control and replay (b): expect index 3 and its displacement sequence. For a named loose
+    test rules file with the edge multiplier omitted, remove that key from every applied
+    layer: expect μ = 1.0. Restore all test files afterwards. Another default falsifies
+    the import row. This tests defaults, not a stock-data value.
+
 ## Open questions
 
 - The cell under the cursor when probed cells are part of a bridge (claim 10, scope) is not
@@ -745,6 +902,8 @@ a reading mistake.
   outline, its health bar and other status markers. The original appears to draw these only while
   the building's position is in the band, but no scenario checks it yet. The building's body is
   drawn regardless (claim 6).
-- What happens to scrolling (edge or keyboard scrolling, as opposed to centring requests) when the
-  view is larger than the local area. Claim 8 gives the result of each request. How scrolling
-  turns into requests in that case has not been studied.
+- Scroll indices outside 0 … 6, negative or overflowing edge multipliers, modifier-assisted
+  arrow speeds and right-button drag scrolling are not specified by claims 12 to 15. Q-0279's
+  ordinary edge and unmodified-arrow cases are answered; these additional modes remain outside
+  that answer. The oversized-view clamp in claim 8 still applies, but no dedicated measurement
+  here exercises edge momentum with its inverted limits.

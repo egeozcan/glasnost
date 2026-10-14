@@ -1,9 +1,9 @@
 ---
 id: Q-0261
 title: Which speech database entry is announced for each event the specs mention, and how does an entry become a sample?
-status: open
+status: answered
 related: [S-0005, S-0311, S-0314, S-0408, S-0411, S-0414, S-0415, S-0011]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

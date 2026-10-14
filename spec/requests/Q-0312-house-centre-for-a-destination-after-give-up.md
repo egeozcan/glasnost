@@ -1,9 +1,9 @@
 ---
 id: Q-0312
 title: Which centre a neutral or special house chooses for a unit that gave up after a failed path search
-status: open
+status: answered
 related: [S-0212, S-0215]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

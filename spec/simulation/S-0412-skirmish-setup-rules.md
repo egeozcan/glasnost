@@ -2,13 +2,13 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0045, Q-0192]
+requests: [Q-0045, Q-0192, Q-0281]
 supersedes: []
 ---
 
@@ -19,6 +19,7 @@ supersedes: []
 What the skirmish lobby fixes for a game and what each value does at game start: setup values,
 starting credits, random country and colour choices, our engine's optional handicap, the alliances
 every game starts with, the superweapon and crate settings, and the observable order of game start.
+It also specifies the standard lobby's offered countries, map-dependent player rows and teams.
 Start positions, starting units and the unused-house cleanup belong to S-0009, victory and defeat to
 S-0414, country fields to S-0413; network games and campaigns are outside this spec.
 
@@ -62,8 +63,9 @@ S-0413 claim 6). In addition:
 - **Base-unit list.** A game-wide list of vehicle types in the rules data (Import mapping). S-0009
   uses it for the base unit, and S-0414 claim 2 for its first three types.
 - **Short-game setting.** The yes/no setup value that selects the defeat rule of S-0414 (claim 2).
-- **Lobby team.** A per-player setup value: either "no team" or one of a small set of team
-  numbers. Players with the same team number start allied (claim 8).
+- **Lobby team.** A per-player setup value: either "no team" or one of four teams, numbered
+  1 … 4 here in offered order (not a transcription of their displayed labels). Players with
+  the same team number start allied (claim 8). Claim 15 states the standard lobby's choices.
 - **Alliance, allied, mutually allied.** An alliance is a one-way relation between two houses: house
   A *allies* house B when A counts B as a friend. A and B are *mutually allied* when each allies the
   other. A house always counts as allied with itself. How alliances change during play is S-0414's
@@ -536,6 +538,36 @@ S-0413 claim 6). In addition:
       cleanup before the starting units (S-0009 claim 28 backs that a removed house gets none.
       The conditional diagnostic K9 part d is not a completed or established skirmish test)
 
+### Choices offered by the standard skirmish lobby
+
+15. **Countries, player rows and teams offered (Q-0281).** This claim covers the standard
+    skirmish lobby; a game-mode family's special team controls are not covered.
+    - **Countries.** The country control offers random first, then countries in registration
+      order. A country is offered only when its registration index is 0 … 9, its multiplayer
+      listing flag is on, and its resolved display name is nonempty. There is no additional
+      test of its passive flag, its side, or whether it is the country used by the neutral or
+      special house. Such a country is offered if it meets the same three conditions. A country
+      registered eleventh or later is never offered explicitly. These are the countries meant
+      by the setup's offered countries in claim 6's switch-off alternative; random choice with
+      that switch on still ignores the listing flag and display-name condition (claim 6).
+    - **Player rows.** At most eight rows are shown: one human row and up to seven computer
+      rows. For a readable selected map, the row count is the number of start-waypoint entries
+      among markers 0 … 7 whose parsed integer value is not −1. Missing entries use −1.
+      This is an entry count, not a test that their coordinates give usable cells, and holes
+      in the marker numbering do not stop the count. If that count is zero, the lobby uses
+      the map's random-map player-count field instead; if that field is also zero or absent,
+      it offers eight rows. Thus maps with two, four or eight such entries show two, four or
+      eight rows respectively. Map-list minimum and maximum player fields do not select
+      the row count. On switching to a map with fewer rows, the computer slots beyond the
+      new limit are emptied and hidden, not kept as hidden participants. This row limit
+      does not replace S-0009's rules for resolving the positions of the chosen participants.
+    - **Teams.** The standard control offers no team and four distinct teams (1 … 4 in the
+      convention above). No team is not a fifth team: two players on no team are not allied
+      by that choice (claim 8). These choices do not depend on the map's start-waypoint count.
+    - Backing: `measurable` (scenario K11, parts a, b and c respectively)
+    - Confidence: high for the filtering, row count and team count; medium for the displayed
+      country order until K11 records it
+
 ## Formulas
 
 **Initial crate count** (claim 10). With *C*<sub>min</sub>, *C*<sub>max</sub> and *H* signed 32-bit
@@ -608,7 +640,11 @@ resolution").
   unspecified in the original, and our engine then draws again until the index names a country (a
   departure; the importer warns when the rules list fewer than ten countries). Off: uniform among
   the countries the setup offers.
-- **The build bar's switch** (claim 9 a) is owned by S-0407 claim 7. Proposed shared quirk switch: `quirks.superweapon_setting_tests_first_only`, default on (YR behavior: with the superweapon setting off, only a building type's first superweapon is tested). With the switch off, the first and second superweapons are both tested. Confirm this switch and its alternative in the S-0407 joint hand-off; this spec states only the setup-setting behavior owned here.
+- **The build bar's switch** (claim 9 a), `quirks.superweapon_setting_tests_first_only`, is
+  confirmed and owned by S-0407 revision 11 claim 7. Default on = original: with the
+  superweapon setting off, only the first superweapon is tested. Off: either the first or
+  second disableable superweapon bars the building, with the tech-lab exemption unchanged.
+  It does not change this spec's granting rule (claim 9 b).
 - **`quirks.crate_count_humans_only`** (claim 10). Original: only human participants count, so a
   skirmish starts with max(*C*<sub>min</sub>, 1) crates, capped by *C*<sub>max</sub> (in our engine
   max(*C*<sub>min</sub>, 0) when the skirmish has no human participant, claim 10). Off: every
@@ -641,6 +677,11 @@ bases setting), `TechLevel` (the game's tech level) and `AlliesAllowed` and `All
 
 | Key | Concept | Parse form | Default when absent |
 |---|---|---|---|
+| country section, `Multiplay` | listing flag required for an explicitly offered country (claim 15); also S-0413 claim 4's display flag | boolean, S-0003 | off initially; a later missing value keeps the value in force |
+| country section, `UIName` | display-name reference; the resolved text must be nonempty for an explicitly offered country (claim 15) | text reference, first 31 characters kept and resolved to display text | empty initially, giving empty display text; later missing or empty keeps the reference in force |
+| map `[Waypoints]`, keys `0` … `7` | entries counted to set the lobby's row limit (claim 15), independently of S-0009's coordinate interpretation | signed integer, S-0003 | −1 for each missing entry |
+| map `[RandomMap]` `NumPlayers` | row-count fallback when none of those waypoint entries is present (claim 15); a zero result selects eight | signed integer, S-0003 | 0 |
+| map `[Basic]` `MinPlayers`, `MaxPlayers` | map-list information only, not this row limit (claim 15; S-0009 Import mapping) | integer | S-0009 owns the map-list defaults |
 | `[MultiplayerDialogSettings]` `Money` | default credits setting offered | integer | 10000 |
 | `[MultiplayerDialogSettings]` `MinMoney`, `MaxMoney`, `MoneyIncrement` | credits slider range and step (interface) | integers | 2500, 10000, 100 |
 | `[MultiplayerDialogSettings]` `UnitCount`, `MinUnitCount`, `MaxUnitCount` | default unit-count setting offered and its slider range (interface) | integers | 10, 1, 20 |
@@ -824,7 +865,7 @@ whose base-unit list has three vehicle types V1, V2 and V3 in that order, each o
 only; the human on a country of the side of V1; the other houses are computer players.
 - *Part a (the list rule and the cells).* Observable: the vehicles the human owns at tick 1 and
   their cells. Expected: one of each of the three types; V1 on the cell three cells further along
-  x and y from the base cell; V2 and V3 around the base cell within radius 3 or more. Falsified if
+  x and y from the base cell; V2 and V3 on cells selected by S-0009 claim 46's placement search with first radius 3. Falsified if
   the human receives only the type of its own side, or V1 is elsewhere while that cell is free.
 - *Part b (the order).* Setup: as part a, on open flat ground with no pre-placed objects near
   the base cell. Observable: the three vehicles' cells at tick 0. Expected: V3 occupies the
@@ -959,6 +1000,37 @@ survives (the maximum level). Falsified if either non-player house's infantry su
 then has the maximum level when non-passive), or if the control is crushed (then the provisions do
 not hold and the run says nothing).
 
+**K11: choices offered by the lobby.** Use 800 × 600, director and mods off, standard
+skirmish mode, speed index 2 saved in the setup. Record screenshots or scripted-input logs of
+all choices before starting a game. Repeat each variant three times after a fresh program start.
+- *Part a (countries).* Name a loose test copy of the base rules, installed before program
+  start, that gives the first twelve registered countries distinct, deliberately reverse-sorted
+  display names. Among indices 0 … 9, give one the listing flag off, one an empty display-name
+  reference, one the passive flag on, one the civilian side, and assign the neutral and special
+  countries to two other indices with listing on and nonempty names. Keep all other listing
+  flags on and names nonempty. Procedure: open the human and an occupied computer row's country
+  controls and record every choice in order. Expected: random first, then exactly the qualifying
+  indices in increasing registration order, including the passive, civilian, neutral and special
+  countries. Neither of indices 10 and 11 appears. Falsified by any different membership or
+  order. A control using stock data is useful but cannot alone distinguish these filters.
+- *Part b (rows).* Name tiny test maps with exactly two, four and eight of start markers 0 … 7
+  present and valid. Expected row counts: two, four and eight, including the human. Occupy all
+  seven computer rows on the eight-marker map and switch to the two-marker map: only one
+  computer slot remains available; switching back does not restore the emptied slots.
+  Variants: two nonconsecutive marker entries still give two rows; a marker value that parses
+  as a non-−1 integer but lies outside the playable area still counts; changing only the
+  map-list minimum and maximum does not change the count. With all eight marker entries
+  absent, a named random-map player-count value of four gives four rows; removing that field
+  gives eight. Falsified by any other row count, by preserved hidden opponents, or by the
+  map-list fields changing the row limit. Do not start games on deliberately invalid-position
+  maps: this test observes the lobby, not loading-time position resolution.
+- *Part c (teams).* On the two-, four- and eight-marker maps, inspect the human and an occupied
+  computer row's team controls. Expected in standard mode: no team plus four distinct teams
+  on every map. Choose matching teams and start on the valid four-marker map, with one other
+  player on another team and one on no team, as K5 part a does. Expected alliances follow
+  claim 8. Repeat with the human and the previously matching computer both on no team:
+  they do not gain an alliance from that choice. Falsified by another set of choices or a map-dependent team count; K5 part a supplies the alliance falsifiers.
+
 ## Open questions
 
 - Game modes other than the one of claim 13 may change set-up rules (one of them reveals the map at
@@ -966,6 +1038,16 @@ not hold and the run says nothing).
 - Whether *H* in claim 10 is the human count on every way a skirmish can start.
 
 ## Cross-spec hand-off
+
+**Q-0281.** Claim 15, K11 and the Import mapping answer all three questions for the standard
+skirmish lobby. At filing, S-0009 claim 23 already gave the eight-player ceiling, and its
+Import mapping already treated map-list minimum/maximum players as display information.
+Neither answered the lobby's map-dependent row count. S-0413 claim 4 already describes the
+listing flag in the in-game player and score lists, not the country chooser. Its current
+wording that the flag decides only those displays needs widening to include claim 15's
+explicit-country filtering. Random-country resolution remains claim 6's separate rule.
+S-0103's colour slots do not need changing. Special controls of other game-mode families
+remain outside this spec's standard-lobby scope.
 
 **Q-0192 is already resolved behaviourally in approved revision 4**, claim 14, its ordering
 table and K9 part a. This revision records both questions as answered: tile-animation draws

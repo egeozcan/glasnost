@@ -1,9 +1,9 @@
 ---
 id: Q-0310
 title: What happens to a teleporting aircraft's ground-record reservation when it lands on a bridge deck
-status: open
+status: answered
 related: [S-0207, S-0209]
-answered-by: []
+answered-by: [S-0207, S-0209]
 ---
 
 ## Need

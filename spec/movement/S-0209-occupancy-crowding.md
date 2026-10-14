@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 20
+revision: 21
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310]
 supersedes: []
 ---
 
@@ -31,9 +31,10 @@ facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infa
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0213 (human
 orders), S-0214 (order targeting rules) and S-0215 (behaviours) are approved specs of the index in
 `spec/README.md`. Claim, formula, table and row labels cited from them are those of the revisions
-that index lists, except S-0207 claim 20, cited at revision 14 in this correction batch.
-Hand off that revision and this one together for the teleporting-vehicle reservation lifecycle
-and shared quirk. S-0208 and S-0212 use their current correction-batch texts where revised.
+that index lists, except S-0207 claim 20, cited at revision 15 in this correction batch.
+Hand off that revision and this one together for the teleporting-vehicle and aircraft
+reservation lifecycles and shared quirks. S-0212 claim 22's immediate fresh search and
+same-tick follow-up remain coordinated with S-0207 claim 15 and scenario D17(d3). S-0208 and S-0212 use their current correction-batch texts where revised.
 
 The glossary cited is the current approved glossary. Its terms are used as defined
 there, in particular *cell*, *lepton*, *tick*, *infantry*, *vehicle*, *building*, *aircraft*,
@@ -379,9 +380,11 @@ rank* and *elite weapon*), *n*
      position is free from that tick. The walker is listed in the next cell only from the tick on
      which its position moves into it (claim 13), so for a few ticks the next cell shows the taken
      position and the walker's house while the walker is still listed in the cell it is leaving.
-   - *Clearing the house.* When a mark is cleared, the infantry house goes back to none only when
-     none of the three side positions is taken afterwards, by an infantry unit or by a terrain
-     object's mark. Otherwise it stays as it was.
+   - *Clearing the house after an infantry mark.* When an infantry unit clears its mark, the
+     infantry house goes back to none only when none of the three side positions is taken
+     afterwards, by an infantry unit or by a terrain object's mark. Otherwise it stays as it was.
+     This house-clearing rule applies only to clearing an infantry mark; clearing a terrain
+     object's marks leaves the house unchanged, even when it frees the last side position.
    - *Vehicles.* A vehicle sets the vehicle-present flag of the cell layer its position is in.
      Ordinary ground movement has the reservations below; teleporting movement has the separate
      lifecycle described next. When it starts a movement step into a neighbouring cell, it also sets that cell's flag at once, before
@@ -425,6 +428,18 @@ rank* and *elite weapon*), *n*
      it is.
    - *Other objects.* An aircraft on the ground sets the object-present flag of its cell. Which other
      kinds set it is not known.
+   - *Teleporting aircraft.* S-0207 claim 20 a and e owns this lifecycle. Fixing a
+     landing point reserves its ground object-present flag, even on a high bridge.
+     Deck placement also marks the deck object-present flag without clearing ground:
+     immediately after an uninterrupted landing both records are marked, but only the
+     deck lists the aircraft. The next accepted destination clears the remembered ground
+     reservation; the next jump's departure clears the actual deck mark. Destruction and
+     removal while the aircraft remains on deck clear only deck, leaving ground marked.
+     These flags are not counts of objects: another object's marking or clearing of the
+     same flag can overwrite that result. The ground mark is neither a listed aircraft
+     nor a vehicle-present flag. This shares `quirks.teleport_aircraft_ground_reservation`
+     (Edge cases), with medium confidence and `measurable` backing through S-0207
+     scenario D22, run 14, and scenario C30 here.
 
    Consequence of the clearing rule: in a cell whose terrain object marks a side position, the
    infantry house never goes back to none while the terrain object stands, once an infantry unit has
@@ -437,10 +452,9 @@ rank* and *elite weapon*), *n*
      at the start of a step), for
      the building flag (scenario C10, part c, through the free-cell test of S-0212 claim 25), for the
      moments at which a driving vehicle clears its flag (scenario C28), and for
-     the terrain marks (scenario C16). `unmeasured` for the
-     object-present flag: every stock object known to set it, an aircraft on the ground, also gets a
-     value of its own in claim 4, so the flag's own effect (claim 6's no-position case) has no known
-     stock trigger.
+     the terrain marks (scenario C16), and for the object-present flag's isolated effect
+     through a teleporting aircraft's retained ground reservation (scenario C30 and
+     S-0207 scenario D22, run 14).
    - Confidence: high for the infantry part and the terrain marks. Medium for the vehicle, building
      and object-present flags, and for the three moments at which a driving vehicle clears its flag
      (inferred, not observed). Low for the clearing when a vehicle is taken out of a cell's list.
@@ -453,8 +467,9 @@ rank* and *elite weapon*), *n*
    - A unit standing at the centre or the top position does not reduce that room. Such a unit can be
      pre-placed by the map (S-0208 claim 5), or have walked in towards its mission target (S-0208
      claim 4).
-   - So a cell can hold up to five infantry: three on the side positions, one at the centre and one at
-     the top. A unit at the top position is recorded as taking the centre (S-0208 claim 2).
+   - So a cell can hold five infantry at distinct standing positions: three on the side positions,
+     one at the centre and one at the top. This is not a separate five-object limit on map placement.
+     A unit at the top position is recorded as taking the centre (S-0208 claim 2).
    - Side positions marked by a terrain object (claim 1) count as taken, so a cell holding one has
      room for fewer arriving walkers, and none when the object's pattern marks all three.
    - Backing: `measurable` (scenario C1, S-0208 scenario W2, and scenario C16 for the terrain marks)
@@ -477,7 +492,7 @@ rank* and *elite weapon*), *n*
      the cells of a building that claim 4 passes over, for example a building type that is invisible
      in play.
    - Backing: `measurable` (scenario C2, parts a to d, scenario C10, parts a and b, and scenario
-     C13 for the enslaved walker). `unmeasured` for the object-present flag, for the reason given in claim 1.
+     C13 for the enslaved walker), and scenario C30 for the object-present flag's isolated refusal.
    - Confidence: high for the vehicle-present flag. Medium for the object-present flag, the
      building-present flag and the vehicle that has started a step into the cell.
 
@@ -588,11 +603,13 @@ rank* and *elite weapon*), *n*
 
    *Overriding occupants.* Number the occupants *o*₁, …, *o*ₙ in listing order (claim 13), and give
    the overlays index 0, ahead of every occupant. Let *k* be the smallest index from 1 to *n* for which
-   *o*ₖ is on an "overrides" row. When such a *k* exists:
+   *o*ₖ is on an "overrides" row. When such a *k* exists, the outcome is:
 
-   > outcome = *blocked* when *v*(*o*ᵢ) = *blocked* for some index *i* < *k* (an overlay included).
-   > Otherwise outcome = the value of *o*ₖ's row: *clear*, or *blocked* when *o*ₖ is on row WP3 and
-   > is invulnerable.
+   | Condition | Outcome |
+   |---|---|
+   | At least one overlay or occupant with index less than *k* has value *blocked* | *blocked* |
+   | No overlay or occupant with index less than *k* has value *blocked*, and *o*ₖ is on row WP3 and is invulnerable | *blocked* |
+   | No overlay or occupant with index less than *k* has value *blocked*, and the preceding WP3-invulnerability condition does not apply | The value of *o*ₖ's row (*clear*) |
 
    Consequences:
    - In such a cell neither *C* nor the record table plays a part. Values before index *k* that are
@@ -673,15 +690,20 @@ rank* and *elite weapon*), *n*
      only when the vehicle's cell layer also holds an object giving *cloaked blocker*, or when the
      vehicle has not set the vehicle-present flag of the cell it is listed in. The first needs a
      cloaked enemy object and an allied vehicle in one cell layer, which vehicles do not share
-     outside a passing moment, and the second is not known to occur.
+     outside a passing moment. Claim 1 does establish release before the vehicle's position leaves
+     its cell, but no scenario here isolates that interval together with the between-steps or
+     chain-point condition needed to distinguish the rows. Scenario C28 observes flags, not that
+     conditional entry outcome.
    - U7 (vehicle crate row VO1): it applies in a campaign game only, and campaign games are outside
      this batch (as for claim 14).
 
 5. **Entry outcome table for a ground vehicle mover.** For a ground vehicle and a neighbouring
    cell, the outcome follows from the cell's terrain and contents as set out in parts 5a to 5f. The
    tables have the same shape as those of claim 4 for walkers, but their rows differ (labels VO, VP
-   and VR). S-0212 claim 27 summarises the rows its path costs rely on. Where its summary and the
-   tables here differ, the tables here are meant (Questions for the project lead).
+   and VR). S-0212 claim 27 summarises the rows its path costs rely on; this claim owns the full
+   table, as decided on 2026-10-10. Its moving-unit summary already agrees with rows VP21 to VP23.
+   Its unconditional blocker summary and its building and wall summaries still need the concrete
+   corrections listed under Cross-spec coordination below; these are not undecided policy.
 
    *5a. Terrain checks.* Terrain checks that give *blocked* belong to S-0211 and S-0212 (claim 10)
    and are not repeated here, among them a land type on which the vehicle's speed percentage is
@@ -796,6 +818,18 @@ rank* and *elite weapon*), *n*
    cases) in a cell that holds only allied infantry that counts as moving. Scenario C26 uses the
    first.
 
+   **Aircraft reservation consequence.** An otherwise empty ground layer beneath a
+   teleporting aircraft's bridge landing has only its retained object-present flag.
+   With no other terrain restriction, occupant, standing-position mark, infantry house
+   or vehicle-present flag, ordinary infantry and ground-vehicle entry outcomes are
+   both *clear*. That flag alone gives no value in either entry table. Ordinary infantry
+   standing-position choice nevertheless refuses it unless an open gate stands there
+   (claim 3), so the walker can stop and ask again despite a *clear* outcome (claim 6).
+   The same distinction holds after aircraft destruction leaves the ground flag behind.
+   Deck entry still sees the listed aircraft through the ordinary occupant tables.
+   - Backing: `measurable` (scenario C30; S-0207 scenario D22, run 14)
+   - Confidence: medium
+
    **Teleport reservation consequence.** Before a teleporting vehicle jumps to an otherwise
    empty high-bridge cell over level ground, an approaching ground vehicle reads the ground
    reservation and gets *moving blocker* from row VR5. A vehicle approaching on the deck reads
@@ -851,13 +885,14 @@ rank* and *elite weapon*), *n*
 6. **Walking on.** When the next cell of its path is *clear*, a walker chooses its walking target
    there on its asking tick (S-0208 claim 3). When it then steps towards it belongs to S-0208
    (claim 6).
-   - A *clear* cell can still have no free standing position. Claim 4 has then passed over an object
-     that sets the object-present flag but gets no value in claim 4, and no open gate stands in the
-     cell (claim 3). In that case the walker stops for that tick and asks again on the next one.
-   - Backing: `measurable` for walking on (scenario C1). `unmeasured` for the no-position case: no
-     stock situation is known that produces it, since claim 4 gives a value for an aircraft on the
-     ground.
-   - Confidence: high for walking on, low for the no-position case
+   - A *clear* cell can still have no free standing position: its object-present flag
+     can be set without any listed occupant giving a value in claim 4, and without an
+     open gate (claim 3). A teleporting aircraft's retained ground reservation below a
+     bridge supplies this case, even after the aircraft is destroyed. The walker stops
+     for that tick and asks again on the next one.
+   - Backing: `measurable` for walking on (scenario C1) and for the no-position case
+     (scenario C30; S-0207 scenario D22, run 14).
+   - Confidence: high for walking on, medium for the no-position case
 
 7. **First reaction to an obstacle: an immediate new path.** When the next cell gives *cloaked
    blocker*, *stationary friendly*, *friendly obstacle*, *enemy obstacle* or *blocked*, the walker
@@ -1052,22 +1087,23 @@ rank* and *elite weapon*), *n*
     - Backing: `measurable` (scenario C9 for the front and end rule and the map's order; scenario C18
       for the override case; scenario C26, parts b and c2, for the moment a walker enters,
       S-0207 scenario D17 (d), runs 3a and 3b, for the nearest-object tie; scenario C29 for aircraft
-      listing)
+      listing). `unmeasured` for order among multiple buildings in one cell layer: no valid setup
+      establishing overlapping buildings and distinguishing their order is known here.
     - Confidence: high for the front and end rule and for the moment a walking unit counts as
       entering and for the nearest-object tie. Medium for the order among objects placed by the
       map and for aircraft listing.
 
 ### Entry outcomes for an aircraft
 
-14. **An aircraft gets clear everywhere in skirmish and network games.** In a skirmish or network
-    game an aircraft's entry outcome for every cell is *clear*, whatever the cell's terrain,
+14. **An aircraft gets clear everywhere in skirmish.** In a skirmish
+    an aircraft's entry outcome for every cell is *clear*, whatever the cell's terrain,
     overlays and occupants. No other value arises. In a campaign game a cell can also give *blocked*
     to some aircraft when the cell is under shroud (low; Open questions).
     - Specs that read "the actor's entry outcome" for an aircraft (S-0213 claim 7, S-0214 row GC9) therefore always see *clear* for it in this batch's game modes.
-    - Backing: `measurable` (scenario C21, part a) for skirmish and network games. `unmeasured` for
-      the campaign case: campaign games are outside this batch (the project lead's decision of
+    - Backing: `measurable` (scenario C21, part a) for skirmish. Network entry rules are deferred.
+      `unmeasured` for the campaign case: campaign games are outside this batch (the project lead's decision of
       2026-10-10; Open questions), as for row VO1 of claim 5 (U7).
-    - Confidence: high for skirmish and network games; low for the campaign case
+    - Confidence: high for skirmish; low for the campaign case
 
 ## Formulas
 
@@ -1147,8 +1183,9 @@ Ordering stated as consequences:
   switch `quirks.occupancy_house_side_positions_only` (default: the original) selects this. With it
   off, the infantry house is cleared only when no standing position is taken. Scenario C12 (a)
   distinguishes the two.
-- **The infantry house can outlast its infantry.** Clearing a mark leaves the house as it is
-  whenever a side position stays taken (claim 1). The house is that of the last infantry unit to
+- **The infantry house can outlast its infantry.** Clearing an infantry mark leaves the house as
+  it is whenever a side position stays taken (claim 1). Clearing a terrain object's marks leaves
+  it as it is regardless of the remaining side positions. The house is that of the last infantry unit to
   mark, even when that unit has left and only units of another house, or only a terrain object's
   marks, remain. Two cases follow:
   - When an allied unit marks after an enemy one and then leaves, the enemy unit that stays is no
@@ -1165,11 +1202,14 @@ Ordering stated as consequences:
     5, rows VP26 and VP29; a train without a primary weapon aside, Open questions).
 
   The switch `quirks.occupancy_house_stale` (default: the original) selects this. With it off,
-  whenever a mark is cleared and the clearing rule leaves the house in force, the house becomes that
-  of the infantry unit that marked most recently among those still holding a position in that cell
-  layer, or none when no infantry unit holds one. The switch combines freely with
-  `quirks.occupancy_house_side_positions_only`, which decides when the clearing rule sets the house to
-  none. Scenarios C12 (e), C16 (c) and C16 (c2) distinguish the two settings.
+  clearing an infantry mark, when the house-clearing rule would leave the house in force, instead
+  gives the house of the infantry unit that marked most recently among those still holding a
+  position in that cell layer, or none when no infantry unit holds one. Clearing a terrain object's
+  marks also recomputes the house in that way, regardless of the remaining side positions.
+  The switch combines freely with `quirks.occupancy_house_side_positions_only`, which decides
+  when clearing an infantry mark sets the house to none without that recomputation; it does not
+  itself change terrain-object removal. Scenarios C12 (e), C16 (c), (c2) and (c3) distinguish
+  the two settings.
 - **Four still friends count as moving.** Row WR4 of claim 4 asks for exactly three allied infantry
   without movement in progress. When a fourth one stands still at the centre or top position of a
   full cell, the count is four and the cell gives *moving blocker* (row WR5): the walker sends no
@@ -1217,6 +1257,14 @@ Ordering stated as consequences:
   landing layer (deck on a high bridge, ground elsewhere), with no separate ground reservation
   beneath a deck landing. S-0207 owns the lifecycle and the alternative; claims 1 and 5 here
   own their occupancy and entry-outcome consequences.
+- **`quirks.teleport_aircraft_ground_reservation`** (shared with S-0207 claim 20 a and e).
+  Default original: reserve ground at terrain height, retain it through deck placement,
+  clear the remembered ground reservation on the next accepted destination, and clear
+  only actual deck occupancy on removal without replacement. Destruction on deck can
+  therefore leave a ground object-present flag. Off: reserve only the eventual landing
+  layer, clear that reservation on replacement, and clear the landing-layer mark on
+  removal, leaving no separate ground mark. S-0207 owns this lifecycle and alternative.
+  Claims 1, 3, 5 and 6 here own occupancy, entry and standing-position consequences.
 - **Rounding.** The rounding mode is S-0205's (claim 5, switch `quirks.chop_rounding`), and this
   spec defines no switch of its own for it. The conversions to integers in F1 and F2 truncate toward
   zero in either setting (S-0205 claim 7). The switch reaches F1 only through √̃, for sums of
@@ -1253,9 +1301,13 @@ Ordering stated as consequences:
 
 ## Measurement scenarios
 
-All run under the *measurement setup* on purpose-made flat maps of clear terrain, with one human
-player and one computer player whose start position is far away, unless stated. Computer-owned
-units are pre-placed by the map and stay idle unless a map trigger moves them. A *recorder* reads, on
+All run under the *measurement setup*, game speed index 2, director and mods off apart from the
+named test data, on purpose-made flat maps of clear terrain, with one human player and one
+bystander computer player whose start position is far away, unless stated. The observed area is
+the corridor, bridge or other test site and its approach cells. Void a run if an unnamed bystander
+object enters that area or acts on a test object, or the bystander is defeated before observation
+ends. Named computer-owned test units are pre-placed by the map; parts requiring them idle count
+only while the recorder confirms they stay idle, except for their specified trigger moves. A *recorder* reads, on
 every tick, the tick number and each unit's world position, target and destination, and, where a
 scenario says so, a unit's contact and behaviour (as in S-0213's scenarios).
 Targeting is shown by a presentation-only target line. A *test file* is a per-scenario rules change
@@ -1575,7 +1627,8 @@ does, by the rule of glossary *AI house* (claim 4), which needs no measurement.
 - *Expected:* the computer-owned unit never enters the cell: it stops short, gives up, or does not set
   out, since no path leads through a *blocked* cell. The human-owned unit walks through and takes the
   crate.
-- *Falsified if:* the computer-owned unit enters the crate's cell.
+- *Falsified if:* the computer-owned unit enters the crate's cell, or the human-owned unit fails
+  to enter and take the crate while it remains there and no other object or rule blocks its route.
 
 **Scenario C7: who receives a request that is not move-anywhere (claims 11, 12).** A crushing
 vehicle's warning request (S-0210 claim 7) is forced and not move-anywhere. An infantry unit that
@@ -1664,9 +1717,9 @@ other route.
   - (a) *B*. It entered *X* last, so it is listed first.
   - (b) *A*.
   - (c) *B*.
-- *Falsified if:* in (c) the walker attacks *A* first. In (a) and (b), the walker attacks the same
-  unit in both orders: the order among map-placed units is then not the map's order, which falsifies
-  that part of claim 13 only.
+- *Falsified if:* in (c) the walker attacks *A* first, in (a) it attacks *A* first, or in (b) it
+  attacks *B* first. The latter two falsify the claimed map-placement order; identical first targets
+  in (a) and (b) also falsify its claimed dependence on that order.
 
 **Scenario C10: a building that is invisible in play (claims 1, 3, 4).**
 - *Setup:* a one-cell-wide corridor of impassable cells. One of its cells holds a stock building of
@@ -1879,14 +1932,22 @@ than the close-enough distance from the cell in front of *X*.
     before an unarmed infantry *W*′ of the human player arrives. Control (c′): as (c), without *E*.
   - (c2) As (c), with an armed infantry *W*″ of the human player in place of *W*′, given its order
     after *E* has left *X*. The corridor through *X* is its only route.
+  - (c3) As (c), but after *E* has left *X*, destroy *T* by ordinary force-fire from a separate
+    human-owned attacker whose position and walking target never enter *X*. Use a weapon that can
+    destroy *T*; a named test file may give its warhead the wood-damaging property if needed.
+    Give *W*′ its move order only after *T* is removed. Control (c3′): remove *T* in the same way without first
+    passing *E* through *X*. A read-only recorder also logs *X*'s infantry house, standing-position
+    marks and listed objects each tick. Neither run may have any intervening infantry mark in *X*.
   - (d) A separate map in the snow theater, with a stock terrain-object type *T*₇ whose snow
     side-position pattern marks all three side positions (read from the stock data). A
     computer-owned fraidycat civilian (S-0107 Terms) walks north to a cell *D* and is hit from due
     map east when 4 cells from *D*, as in S-0208 scenario W7 (b), so that it receives only the
     request with a threat point. Of *D*'s eight neighbours, the cells map south and map east of *D* are open ground and the
     other six each hold a *T*₇ placed by the map.
-- *Procedure:* give the move order and record until the walker has passed *X*, or 300 ticks. In (d),
-  record until the civilian has a new destination and has reached it, or 300 ticks.
+- *Procedure:* give the move order and record until the walker has passed *X*, or 300 ticks. In
+  (c3), record from before *E* enters until 300 ticks after *T* is removed, with the control using
+  the same removal and observation period. In (d), record until the civilian has a new destination
+  and has reached it, or 300 ticks.
 - *Observable:* whether the walker walks into *X*, the standing position it takes there (on the
   recorder), and whether it takes *T* as its target. In (b), also whether the occupants move away,
   and the ticks between *W*'s first stop in front of *X* and the tick on which it gives up or moves
@@ -1908,6 +1969,10 @@ than the close-enough distance from the cell in front of *X*.
   - (c2) *X* gives *W*″ *enemy obstacle* through the stale house (row WR3), so its route leads to
     *X*. On the repeated ask it considers the first listed object of *X*, the terrain object *T*,
     which is allied with no house, and takes *T* as its target (claim 9). It does not walk into *X*.
+  - (c3) *T*'s removal frees its side-position marks but leaves *X*'s infantry house the computer's.
+    With no listed objects or position marks, *X* still gives *blocked* to the unarmed *W*′
+    (row WR2), which does not enter. In (c3′) the house remains none and *W*′ walks through *X*.
+    With `quirks.occupancy_house_stale` off, removal would set the house to none in (c3) too.
   - (d) The six cells with a *T*₇ give *blocked* (row WR6), so the scan of
     S-0208 claim 12 passes over them, and the new destination is always the cell south or the cell
     east of *D*.
@@ -1921,6 +1986,10 @@ than the close-enough distance from the cell in front of *X*.
   - (c2) *W*″ stops in front of *X* without taking *T* as its target (as a terrain object counted as
     allied would make it), or walks through *X*. If (c) did not show the stale house, (c2) cannot
     decide,
+  - (c3) the recorded house clears on *T*'s removal, its position marks remain after removal, or
+    *W*′ enters *X* while the recorded enemy house remains. If *E* did not first leave its house
+    recorded in *X*, another infantry marks there before the probe, *T* is not fully removed,
+    or *W*′ also fails to pass in (c3′), the pair cannot decide the removal rule.
   - (d) in any run the new destination is a cell holding a *T*₇. If the civilian gets no new
     destination in a run (S-0208 claim 11), that run cannot decide.
 
@@ -2694,6 +2763,35 @@ That moment is called the *window*. Common setup:
 - *Falsified if:* the flying aircraft alone refuses placement, a landed aircraft allows it, or
   the takeoff leaves a listing that still refuses placement after height becomes positive.
 
+**Scenario C30: retained aircraft ground mark versus entry and standing-position choice
+(claims 1, 3, 5 and 6; Q-0310).**
+
+- *Setup:* use S-0207 D22 run 14's named test map and teleporting aircraft, high
+  bridge over traversable level ground, human house and distant bystander computer
+  player, game speed index 2, director and mods off except that named test data.
+  Keep the landing cell free of all other flag writers. Void unrelated bystander
+  interference in the bridge and probe area, or its defeat.
+- *Procedure:* repeat the accepted-next-destination and destruction branches three
+  times each. At reservation, after deck placement, after replacement and after
+  removal, use a read-only recorder to record both occupancy records, listings and
+  ticks. In separate repeats probe the ground beneath with an ordinary non-crushing
+  driving vehicle and a walking infantry unit. Use a ground corridor that puts the
+  cell next in each probe's path. Record the ground entry outcome and, separately,
+  the infantry's walking target and position on each asking tick. Capture any
+  pre-jump reservation interval rather than assuming it lasts a full tick.
+- *Expected:* ground alone is marked before placement, both records after placement,
+  with deck listing only. Replacement clears old ground and departure clears old
+  deck. Destruction on deck clears deck but leaves ground marked. In otherwise clear
+  ground with that mark alone, both probes get *clear*: the vehicle can start its
+  step, but the walker chooses no standing position, remains still on that asking
+  tick and asks again next tick. After replacement clears ground, that refusal ends.
+- *Falsified if:* ground clears solely on deck placement or destruction, deck remains
+  marked after removal, the retained flag alone makes either entry outcome non-clear,
+  or the ordinary walker reserves a standing position despite that flag and no open
+  gate. A missing captured pre-jump interval is inconclusive for reservation timing.
+- *Tool:* read-only state recorder and scripted normal input. No result is yet an
+  M-record.
+
 ## Open questions
 
 - Factory release establishes an infantry tether situation (S-0417 claim 10), but whether it
@@ -2753,19 +2851,26 @@ That moment is called the *window*. Common setup:
   walking target (low confidence). That belongs to the movement specs of such units. Scenario C19
   uses an ordinary walking type for that reason.
 
+## Cross-spec coordination
+
+S-0209 owns occupancy outcomes by the decision of 2026-10-10. No new policy decision is needed.
+S-0208's current correction-batch text agrees with claim 5 for a still allied infantry occupant,
+and S-0212's current claim 27 agrees with rows VP21 to VP23 for moving allied units.
+The following remaining corrections to S-0212 claim 27 must be checked at paired hand-off:
+
+- Replace the unconditional statement that any *blocked* occupant defeats all other occupants
+  with claim 5's override rule: a *blocked* value before the first override defeats it, while
+  occupants after that override do not decide the outcome under the default
+  `quirks.occupancy_override_hides_later_blockers`. Without an override, use the most severe
+  contents value and then the record table. Claim 5 carries the backing and confidence.
+- Qualify the allied-building summary by rows VP3 and VP5 to VP18, or cite those rows instead of
+  equating all building exceptions with mission targets. Invisible buildings, non-blocking repair
+  or bunker cells, the bib edge and inactive firestorm walls are among its exceptions.
+- Qualify the non-crushable-wall summary by rows VO4 to VO6: a primary warhead able to damage wood
+  also suffices when the overlay armour is wood, even when it cannot damage walls.
+
 ## Questions for the project lead
 
-- **Agreement with S-0208:** decided (delegated sign-off, 2026-10-10: S-0209 owns occupancy
-  outcomes). S-0208 revision 13 agrees with claim 5: its Edge case on
-  `quirks.top_position_counts_as_centre` gives a remaining unit that stands still *stationary
-  friendly* for an allied vehicle (row VP20) whatever the record shows, and its scenario W2 (b) reads
-  the record through the nearby-cell search instead of through a vehicle.
-- **Agreement with S-0212:** decided (delegated sign-off, 2026-10-10: S-0209 owns occupancy
-  outcomes). S-0212 revision 16 claim 27 agrees with claim 5: an allied unit that counts as moving
-  gives *moving blocker* of its own only when it is a vehicle (or aircraft) between steps or a unit
-  at a chain point (row VP22), outside the close case (row VP21); no outcome of its own comes from
-  any other allied unit that counts as moving, infantry among them (row VP23), and it points
-  to claim 5 for the full table.
 - **Switch for objects and record from different cell layers.** If the bridge specs show that a
   deck can span uneven ground (Open questions), should there be a switch
   `quirks.cell_layer_split_on_uneven_deck` (default: the original), whose alternative would read the

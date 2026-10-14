@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -400,8 +400,12 @@ and *subject to walls*. In addition:
     Thus an ordinary actor still drops its target and receives the nearby-search result or
     no destination as in the table; non-empty radii do not suppress the nearby search.
     For ground actors without bridges its parameters are the empty-radius parameters above,
-    now using this centre. No rule of the failure distinguishes close-range types or jumpjets,
-    and the nearby-search parameters for actors outside that ground scope are S-0212's.
+    now using this centre. This includes close-range failed approaches in S-0212 claim 25's
+    failed-approach row, with that row's other parameters and exclusions unchanged.
+    Close-range infantry always have a non-empty radius (claim 22 a), but their failed
+    candidate search uses the same nearby-cell parameters. No rule of the failure
+    distinguishes close-range types or jumpjets, and the nearby-search parameters for actors
+    outside that ground scope are S-0212's.
     - Backing: `measurable` (RG12, RG17 and RG23 f)
     - Confidence: high for keeping or dropping the target and the object-destination exceptions,
       medium for the nearby-search parameters and failure-centre rule
@@ -1425,7 +1429,7 @@ These behavioural changes are already in the approved copies as well as the curr
 Sign-off should retain the failed-approach row's agreement with claim 17, including close-range
 failures, and the shortcut's target-reference desired point and ground occupancy inputs in
 claim 22 b and c. S-0215's cross-spec hand-off note still names S-0307 revision 6 as a version
-to hand off together: update that note to recognise approved revision 8 and this revision 9,
+to hand off together: update that note to recognise approved revision 9 and this revision 10,
 which retain those search contracts. Its claim 37's approach processing and destination
 retention agree with this spec and require no behavioural change. The other S-0212 coordinated
 movement checks are owned by S-0207 and S-0208.

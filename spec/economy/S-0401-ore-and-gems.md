@@ -2,7 +2,7 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -503,8 +503,13 @@ claim 4), which can take more than one raw draw. In addition:
     change, debris trial, debris selection or detonation, and the chain reaction takes **zero
     draws**. This does not suppress the animation's other creation or middle-event draws.
     When a start event also produces a middle event because μ = 0, that middle event's effects
-    and draws precede the chain reaction. Thus a crater that has already emptied the cell can
-    make the chain reaction take no draws (S-0109 claim 14 and claim 16c here).
+    and draws precede the chain reaction, including particle creation, any scorch-or-crater
+    choice, conditional resource-removal effects and smudge selection (S-0202 claim 15).
+    Thus a crater that has already emptied the cell can make the chain reaction take no
+    draws (S-0109 claim 14 and claim 16c here). A crater take from stage 6 instead leaves
+    resource at stage 0: the subsequent unsuppressed reaction empties it and follows the
+    normal debris and detonation rules below. Trigger-played suppression at a later start
+    event does not suppress its immediate middle event or that event's draws.
 
     When the cell holds resource of tiberium *T*, it is emptied as in claim 5. The draws of any
     neighbour offers that add spread entries occur in step-direction order 0 to 7, before the
@@ -957,11 +962,20 @@ nonzero resource-explosion damage and put a wall in its scanned cells: its S-030
 must follow debris creation. Repeat this nonzero-damage variant with an empty debris list
 and with a failed debris trial: the detonation and its applicable draws must still occur,
 following any emptying draws in the empty-list case and following the trial in the failed-trial
-case. Finally use μ = 0 and a crater-only animation over a stage-0
-resource cell: the middle event empties the cell and the later chain reaction has no debris trial
-or detonation. Repeat the load cases with an overlay cell animation whose position, rather than
-its overlay cell, is over the test resource (S-0009 M6e). Any differing gate or draw order
-falsifies claim 20; unrelated middle-event draws are accounted for by their owning specs.
+case. Finally use μ = 0 and a crater-only animation over resource at stages 0, 5 and 6,
+with a nonempty debris list. At stages 0 and 5 the immediate middle event empties the cell,
+so the subsequent chain reaction has no debris trial or detonation. At stage 6 the crater
+leaves stage 0 resource, which the reaction then empties, with its debris trial and
+unconditional detonation. Repeat these creation cases during loading and during play,
+including trigger-played creation at a waypoint during play; obtain at least 10 incoming
+stream states for each case. Account for the whole middle-event group under S-0202
+claim 15 before predicting reaction draws, including any smudge selection and neighbour
+offers caused by the crater. Enable particles and both effect flags in a separate variant
+using S-0202 R14's fixtures: the particle and smudge groups must precede any surviving
+reaction's debris trial, rather than being omitted or deferred until after it. Subsequent
+particle updates are recorded separately, not assumed draw-free. Repeat the load cases
+with an overlay cell animation whose position, rather than its overlay cell, is over the
+test resource (S-0009 M6e). Any differing resource gate or draw order falsifies claim 20.
 
 *Post-detonation terrain variant:* use named theater test data and a resource overlay whose
 land type makes its cell the overlay case of S-0010 claim 8. Before removal its tile A names

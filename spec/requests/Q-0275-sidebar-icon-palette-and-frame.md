@@ -1,9 +1,9 @@
 ---
 id: Q-0275
 title: Which palette and which frame draw a sidebar icon?
-status: open
+status: answered
 related: [S-0007, S-0411, S-0103]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need

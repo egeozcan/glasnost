@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,7 +27,7 @@ and the draws of putting a released unit on the map (Open question 8). Claim 14 
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
 the search's no-draw rule; their untested cases remain qualified there.
 
-**Paired hand-off confirmations.** S-0404 revision 9 claim 13 retains the fulfilled release
+**Paired hand-off confirmations.** S-0404 revision 10 claim 13 retains the fulfilled release
 hand-off: release queues *unload*, and contact-place count, infantry candidate acceptance and
 edge-entry nearby destination refer to claim 14 here. Nearby-search draws are resolved as none.
 Initial-placement draws remain open. S-0212 revision 25 table T5 includes the aircraft factory
@@ -45,6 +45,7 @@ scatter request, threat point, forced, move-anywhere and locomotor use the gloss
 terms. Behaviours, queueing, processing, falling back to rest and standard delay are S-0215's.
 Track, drive vehicle, speed fraction ρ, target fraction ρₜ and progress unit are S-0207's.
 The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation playback S-0109's.
+Armed and unarmed use S-0215 claim 32's building weapon test.
 
 - **Factory K, unit u:** the building and the unit it has just released. Its foundation's top-left
   cell is (*x*₀, *y*₀).
@@ -88,8 +89,8 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
    not start it, and it requests K's *idle* body state as a deferred change (S-0108 claim 6). No
    unloading processing and nothing in the release sets or clears K's ready mark (S-0215 claim 11).
    *Guard* therefore becomes current at the first of K's per-tick starts that finds the mark set,
-   and is first processed on the tick after a second-start change (S-0215 claim 3b). For a
-   factory without a turret, the mark comes from its body range (S-0215 claim 11, S-0108 claims 5
+   and is first processed on the tick after a second-start change (S-0215 claim 3b). For an
+   unarmed factory without a turret, the mark comes from its body range (S-0215 claim 11, S-0108 claims 5
    and 6). Starts that find nothing queued do not clear it, so a mark set at any time since *unload*
    became current is still set at closing (a behaviour queued and started in between would itself
    have ended the unloading). *Unload* itself is queued at release without a start, so it too
@@ -103,22 +104,28 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
      first per-tick start of the tick whose body update next sets the mark; the body update
      comes before that start.
    - A positive-delay range of one stage or fewer never sets the mark, and a turreted factory's
-     body range sets it only during construction or selling. Once such a factory has used the
-     mark left by its construction, a queued *unload* never becomes current: the released vehicle
+     body range sets it only during construction or selling. For an unarmed factory with either
+     condition and no other source of the mark, once it has used the mark left by its
+     construction, a queued *unload* never becomes current: the released vehicle
      stays at its appear point in contact with K, and K stays in its resting behaviour. If *unload*
      did become current, the queued *guard* would never start and K would stay in *unload*
-     (Edge cases, `quirks.factory_unload_waits_ready_mark`).
+     (Edge cases, `quirks.factory_unload_waits_ready_mark`). An armed factory can instead
+     obtain the mark from its resting-behaviour processing (S-0215 claim 32), so the
+     never-starts prediction does not apply to it merely because its body range gives no mark.
    - Backing: `measurable` (U2 for stages and the *guard* start, U3 for delay assignments). The
      positive-delay and never-ending cases are `unmeasured`: no stock vehicle factory is
-     established with such a range or a turret. The damaged production-animation variant is
+     established with such a range or a turret. The armed-factory qualification is
+     `unmeasured` here: U2 does not exercise an armed factory; its ready-mark source is
+     owned by S-0215 claim 32.
+     The damaged production-animation variant is
      `unmeasured` here: U2 does not damage K or distinguish that variant.
    - Confidence: high (stages, queueing without a start, no ready-mark change while unloading),
      medium (the start tick, inherited from the ready-mark and body-range rules)
 
 3. **Apron position.** For a foundation with at least eleven exit-list entries, take its eleventh
    pair (*a*, *b*) from S-0404 Constants. E is (*x*₀ + *a* − 1, *y*₀ + *b*). The track ends at
-   E's centre, at ground height under the movement rules. S-0404's lists do not generally put E
-   inside the foundation: for example, its 3 × 2 word gives (*x*₀, *y*₀ − 1).
+   E's centre, at ground height under the movement rules. E need not lie inside the
+   foundation; its position depends on the selected pair, not on a containment test.
    Shorter lists use the results in Edge cases. Apron selection uses the original lists under
    either state of S-0404's full-ring switch, as specified in Edge cases.
    - Backing: `measurable` (U4 for stock factory types). Other foundation words are `unmeasured`:
@@ -380,8 +387,9 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
       destination is the result of the nearby-cell search (S-0212 claim 25) around the cell of
       K's reference point. The search uses the aircraft type's locomotion class, with *winged*
       counted as *track*, and its own movement zone. Its reach region is the centre cell's for
-      that zone, and it runs in deck mode only when the aircraft is on a bridge deck. It has no
-      height condition, further test or reference cell, as in S-0212's idle harvester step-off
+      that zone, read for its deck in deck mode. It runs in deck mode only when the aircraft
+      is on a bridge deck. It has no height condition, further test or reference cell,
+      as in S-0212's idle harvester step-off
       row. The tick number used to select among preferred cells is the release tick.
       When the search finds a cell, the aircraft's *move* is forced with that cell as
       destination. When it finds none, *move* is forced with no destination. With a rally point,
@@ -474,13 +482,16 @@ relative actor update orders; confidence medium.
 
 ## Edge cases and quirks
 
-- **Short exit lists: `quirks.factory_apron_short_list`.** The original has definite
-  special results, not arbitrary results outside the list. For the 2 × 1 and 1 × 2 words the
-  pair used by F3 is (32767, 32767) cells. For the 1 × 1, 3 × 3 refinery, 6 × 4 and 0 × 0 words
-  it is (0, 0) cells. The former give an outlying apron, with signed wrapping; the latter give
-  (*x*₀ − 1, *y*₀). Default original: use these special pairs.
-  - **The outlying apron in the original.** With F3's signed wrapping, the 2 × 1 and 1 × 2 apron
-    selects no legal cell (S-0009 Terms and claim 1) for any top-left cell a map can have. The
+- **Short exit lists: `quirks.factory_apron_short_list`.** Let *L* be the number of
+  entries in the foundation's original exit list (S-0404 Constants), before any full-ring
+  alternative. Default original: for *L* = 10 entries the pair used by F3 is
+  (32767, 32767) cells; for *L* < 10 entries it is (0, 0) cells. These are engine
+  constants, not imported coordinate values. The first case gives an outlying apron with
+  signed wrapping; the second gives (*x*₀ − 1, *y*₀). Lists with at least eleven entries
+  use claim 3 unchanged. These length-based rules cover all foundation words S-0404 defines.
+  - **The outlying apron in the original.** With F3's signed wrapping, the apron from the
+    constant (32767, 32767) pair selects no legal cell (S-0009 Terms and claim 1) for any
+    top-left cell a map can have. The
     original then reads E as a cell holding no object: the apron is never blocked and no clearing request is
     sent. At letting out, the exit-track instruction is accepted, and the first point carries the
     vehicle to E's centre plus (−670, −68) leptons, far off the map. What follows has not been
@@ -493,22 +504,23 @@ relative actor update orders; confidence medium.
     applying under both states of `quirks.factory_apron_short_list`.
   - **E a legal cell outside the usable area**, for example a factory at the map edge, is an
     ordinary apron: claims 4 to 8 apply unchanged.
-  - **Fixed alternative** (switch off). The
-    pair used by F3 is the last pair of the foundation's list (S-0404 Constants): for the 2 × 1,
-    1 × 2, 1 × 1, 3 × 3 refinery and 6 × 4 words, the last listed pair. For the 0 × 0 word, whose
-    list is empty, it is (0, 0). Lists of eleven or more entries keep their eleventh pair.
+  - **Fixed alternative** (switch off). For a nonempty list shorter than eleven entries,
+    the pair used by F3 is its last listed pair. For an empty list it is (0, 0) cells.
+    Lists of eleven or more entries keep their eleventh pair.
   - **With S-0404's `quirks.foundation_exit_lists` off.** E still uses the original lists' pairs
     (this edge case and claim 3), whatever that switch's state. With
     `quirks.factory_apron_short_list` off, its last-pair alternative likewise uses the original
     short list, not the full ring. The apron selection is separate from the infantry exit
     search, so the full ring's length never matters here.
-  - Backing: `unmeasured` (no stock ground vehicle factory with these words is known; the
+  - Backing: `unmeasured` (no stock ground vehicle factory with a short exit list is
+    established; the
     fixed alternative, invalid-cell handling and independence from full rings are design).
     Confidence high (pairs, the apron read as free, the accepted original instruction and
     the decided design rules); low (what the original does after the off-map placement).
 - **`quirks.factory_unload_waits_ready_mark`.** Proposed default original: a factory's queued
-  *unload* and the *guard* queued at its end both wait for the ready mark (claim 2), so a factory
-  whose body range never sets the mark either never starts unloading a released vehicle or, once
+  *unload* and the *guard* queued at its end both wait for the ready mark (claim 2), so an
+  unarmed factory whose body range never sets the mark and has no other source of that mark
+  either never starts unloading a released vehicle or, once
   unloading, never leaves *unload*. Fixed alternative: queueing *unload* at release, and the
   processing that queues *guard* at the end of unloading (claims 2 and 9), also set the ready mark.
   *Unload* then starts at K's next per-tick start, and *guard* at the second per-tick start of the
@@ -636,7 +648,7 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   factory-supplied destination before temporary driving starts: do not presume an empty
   suspended state. No stock setup for a pre-existing pending jump or phasing-in state at
   installation is established, so U6 does not score those conditional retention rules.
-- **U7, speed. Produce stock accelerating and non-accelerating drive types and record speed
+- **U7, speed.** Produce stock accelerating and non-accelerating drive types and record speed
   fractions, per-tick positions and arrival time. Calculate each prediction using its own imported
   speed, bonuses, S-0207 progress formula and T1. Expect 0.5 retained for accelerating types,
   1.0 on movement update for non-accelerating types, absent another effect. Falsifier: ordinary
@@ -695,8 +707,9 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
 - **U12, aircraft tether.** Produce from an aircraft factory with a free docking place a stock
   type that need not return to a dock, and one that must. Record contact and tether on the
   aircraft and K from the release tick, then order each to take off. Expect: the first is tethered
-  on its release tick and untethered when it leaves the ground. The second has contact but no
-  tether from the release. Falsifiers: either release branch reversed, or the first losing its
+  on its release tick and untethered when it leaves the ground. Both have contact at release.
+  the second has no tether. Falsifiers: missing release contact in either branch,
+  either release branch reversed, or the first losing its
   tether before take-off or retaining it after leaving the ground. If a stock type cannot be
   produced docked for a branch, record that branch as untested, not confirmed.
 
@@ -711,7 +724,9 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   result. Part c: an aircraft factory with no free docking place and no rally point, producing a
   type that need not return to a dock. Record the edge-entry cell, the aircraft's behaviour and
   destination. Predict the nearby-cell result from S-0212 claim 25 using the recorded map
-  occupancy, the aircraft type's movement zone and the release tick as its selection tick.
+  occupancy, the aircraft type's locomotion class (*winged* counted as *track*), its own
+  movement zone and the release tick as its selection tick. This ordinary-ground setup
+  uses the centre cell's ground reach region and does not score the deck-mode branch.
   Expect *move* to that result around the
   factory's reference-point cell. Falsifiers: a released second infantry unit with every place
   held, a non-free candidate accepted, or a destination differing from the predicted search

@@ -1,9 +1,9 @@
 ---
 id: Q-0279
 title: How fast does the view scroll at the screen edge and with the keyboard?
-status: open
+status: answered
 related: [S-0101, S-0201]
-answered-by: []
+answered-by: [S-0101]
 ---
 
 ## Need

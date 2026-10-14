@@ -1,9 +1,9 @@
 ---
 id: Q-0277
 title: Which mouse cursor shows for each action under the pointer?
-status: open
+status: answered
 related: [S-0214, S-0406, S-0408]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

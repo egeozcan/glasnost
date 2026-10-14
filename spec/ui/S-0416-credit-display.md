@@ -2,11 +2,11 @@
 id: S-0416
 title: Credit display (the ticking credits counter on the sidebar)
 topic: ui
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -61,9 +61,15 @@ scenario D2 only). In addition:
    - Backing: `measurable` (scenario D3)
    - Confidence: medium
 
-4. **Tick sounds.** In every cycle in which the counter moves, one credit tick sound plays, at half
-   volume: the list's first entry when rising, its second when falling. When the list has fewer than
-   two entries, no tick sound plays at all.
+4. **Tick sounds.** In every cycle in which the counter moves, one credit tick sound is requested:
+   the list's first entry when rising, its second when falling. When the list has fewer than
+   two entries, no tick sound is requested at all. This is a centred screen request at integer
+   request level 8192 on S-0701's scale, whose full level is 16384 (claim 35). The original uses
+   the exactly representable floating-point fraction 0.5: trunc(0.5 × 16384) = 8192, with
+   truncation toward zero. This halves the request level, not the audible amplitude: under
+   otherwise equal conditions it is about 10 dB below the same entry requested at full level.
+   S-0701 F3 and F4 own the combined level, integer rounding and output law; its playback limits
+   can prevent a request from being heard.
    - Backing: `measurable` (scenario D4)
    - Confidence: medium
 
@@ -96,7 +102,7 @@ Example: a refund of 1000 credits moves the counter by 125, 109, 95, 83, … per
 | Gap divisor | 8 | dimensionless | claim 2 |
 | Largest step | 143 | credits per cycle | claim 2 |
 | Smallest step | 1 | credits per cycle | claim 2 |
-| Tick sound volume | one half | of full volume | claim 4 |
+| Tick sound request level | 8192 | level units (16384 = full request) | claim 4; S-0701 claim 35 |
 | Shown value at game start | 0 | credits | claim 3 |
 
 ## State and ordering
@@ -104,8 +110,8 @@ Example: a refund of 1000 credits moves the counter by 125, 109, 95, 83, … per
 | State | Event (once in every cycle that is not frozen; frozen cycles: open question 1) | Result |
 |---|---|---|
 | *D* = *G* | update | nothing |
-| *D* < *G* | update | *D* increases by *s*; the rising tick sound plays |
-| *D* > *G* | update | *D* decreases by *s*; the falling tick sound plays |
+| *D* < *G* | update | *D* increases by *s*; when the credit tick sound list has at least two entries, the first entry is requested |
+| *D* > *G* | update | *D* decreases by *s*; when the credit tick sound list has at least two entries, the second entry is requested |
 
 ## Edge cases and quirks
 
@@ -152,12 +158,22 @@ Runs: 1 per scenario and sub-test, since no claim here involves a random draw.
 - Falsified if: the counter shows the full amount in the first frame.
 
 **D4. Tick sounds.**
-- Setup: stock audio data, then a test rules file whose credit tick list has one entry.
-- Observable: the sounds during a rise and a fall.
-- Expected: stock data: one sound per moving frame, different for rising and falling; one-entry list:
-  no tick sound.
-- Falsified if: the one-entry list plays a sound, or rising and falling use the same entry with stock
-  data that lists two different sounds.
+- Setup: stock audio data, then a named test rules file whose credit tick list has one entry.
+  For the level comparison, use named test sound data assigning the same single sample to a
+  credit tick entry and a selection response entry, each with volume percentage 100 and no
+  pitch or volume shift. Set the sound volume option to full, game speed to index 6, and keep
+  the observed area quiet; use one bystander computer player kept outside it. Director and
+  other mods are off, apart from the named test data.
+- Procedure: make the counter rise and fall in each list test. In the comparison test, capture
+  isolated ticks and a local unit's selection response separately, without overlapping sounds.
+- Observable: audio capture of the rising and falling sounds and the same sample's output level
+  in the tick and response, alongside frame capture of the counter.
+- Expected: stock data uses the first entry on a rise and the second on a fall, subject to
+  S-0701's playback limits; the one-entry list is silent. The comparison gives ticks about
+  10 dB below the full-level response, with the exact difference given by S-0701 F3/F4
+  (including its full-volume quirk).
+- Falsified if: the one-entry list plays a sound, the wrong directional entry is heard, or the
+  isolated comparison differs from the output-law prediction by more than one F4 step.
 
 **D5. Presentation only.**
 - Setup: two runs of the same skirmish, with no change of the house's credits other than those

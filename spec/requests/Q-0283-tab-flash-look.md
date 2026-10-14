@@ -1,9 +1,9 @@
 ---
 id: Q-0283
 title: Which periods of a flashing tab are lit, and what does the lit look look like?
-status: open
+status: answered
 related: [S-0411]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need

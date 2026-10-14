@@ -2,7 +2,7 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -215,7 +215,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
 
     The build category uses S-0302 claim 5's import rule: cut to 31 bytes, then trim surrounding whitespace, then compare the whole text without regard to ASCII letter case. A nonempty unknown word sets the unspecified category, not the earlier category; an absent or empty key keeps the held category, initially unspecified. Only the combat category selects the second tab; an unspecified category selects the first.
 
-    A tab holds at most 76 items. An otherwise eligible item that becomes available while its tab is full is not shown. Eligibility therefore does not guarantee a shown icon. S-0411 claim 15 owns full-tab offer membership and order legality, capacity judgement before removals, delayed admission, and the absence of sidebar removal orders when a still-suppressed type loses availability. An item already shown (the same type) is not added twice. Two different types are two items even if their names are equal.
+    A tab holds at most 76 items. An otherwise eligible item that becomes available while its tab is full is not shown. Eligibility therefore does not guarantee a shown icon. S-0411 claim 15 owns full-tab offer membership and order legality, capacity judgement before removals, delayed admission, and the absence of sidebar removal orders when a still-suppressed type loses availability. In particular, an icon removed at a recheck still occupies its place for that recheck's admission tests: the vacancy is not refilled at the same recheck (S-0411 claim 15, scenario S10). An item already shown (the same type) is not added twice. Two different types are two items even if their names are equal.
 
     Items are kept in sorted order. A newly available item is placed in front of the first item already in the tab that it sorts before. If it sorts before none of them, it is placed after all of them. "Item *a* sorts before item *b*" is decided by the first rule below that tells them apart:
     1. A superweapon sorts before anything that is not a superweapon. Two superweapons sort by recharge time in ticks (Formulas), shortest first, and then by display name as in rule 6, including its tie rule. Rules 2 to 5 do not apply to two superweapons.

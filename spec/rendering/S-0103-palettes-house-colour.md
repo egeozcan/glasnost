@@ -2,13 +2,13 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0214]
+requests: [Q-0214, Q-0280]
 supersedes: []
 ---
 
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-This spec covers skirmish rendering; network games and campaigns are out of scope. It describes how the palette files become palettes, how a colour definition becomes the 16-entry house-colour ramp, which colour definition each house shows, and which palette each kind of drawn object uses. It also says which palette indices keep their colour under coloured light. How a palette is shaded by light into rows of hi-colour pixels is in S-0104 (lighting). This spec only names the inputs to that shading.
+This spec covers skirmish rendering; network games and campaigns are out of scope. It describes how the palette files become palettes, how a colour definition becomes the 16-entry house-colour ramp, which colour definition each house shows, and which palette each kind of drawn object uses. It also says which palette indices keep their colour under coloured light, and gives the fixed colours of the skirmish setup screen's colour swatches. How a palette is shaded by light into rows of hi-colour pixels is in S-0104 (lighting). This spec only names the inputs to that shading.
 
 ## Terms
 
@@ -36,6 +36,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Tint-exempt index.** A palette index whose shade-table entries ignore the light's colour. They do not follow brightness either, except at the darkest rows: in a 53-row shade table such an entry rises from black over rows 0 to 6 and shows its full palette colour in every row from 6 on (S-0104, claim 6 and Formulas, "Shade table").
 - **Hi-colour pixel.** A 16-bit packed RGB value in the display surface's pixel layout.
 - **Lobby colour slot.** The colour a player picks in the skirmish lobby, numbered 0–7 in the order the lobby lists the eight colours.
+- **Lobby swatch.** The coloured interior of a fixed-colour choice in the setup screen's colour control, both in its open list and when that choice is selected. Text, borders and the drop-down arrow are not part of this interior.
 - **Vein animation.** An animation whose art marks it as a vein animation (Import mapping).
 - **Terrain animation.** An animation that the game creates as part of a cell's terrain when the map's terrain is set up or when the cell is recalculated in play, rather than one created by an object or an event.
 - **Object's own animation.** An animation that belongs to one object and shows part of that object: an animation a building plays as part of itself, the animation of a unit deploying or undeploying, and the parachute that carries an object down, unless that object is a projectile (claim 8).
@@ -82,7 +83,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
    - Backing: `measurable` (PI). With base rules that supply all selected positions and the light-grey name (claim 10; PF confirms the name first), a house shows only definitions the base rules create, so a test map cannot supply a malformed one; PI uses a loose copy of the base rules instead.
    - Confidence: high. Medium for integers outside −2 147 483 648 … 2 147 483 647, which are expected to reduce the same way, mod 256; this overflow extension is `unmeasured`, because PI does not test overflowing integers and their parsing is not isolated here.
 
-5. **Two palettes per colour definition, and the first definition of a name wins.** Each colour definition has a single-shade and a 53-shade house-colour palette with the same ramp (S-0104 shades them). A house's units, infantry, aircraft and buildings are drawn with its 53-shade palette, except where claim 8 says otherwise (claims 8 and 10). Among the battlefield subjects covered by claim 8, the single-shade palette is shown only by animations flagged for the alternative palette. Names are compared ignoring case. When any later rules layer (the language rules file, the game-mode file or the map) defines a colour name that already exists, the existing definition is kept with its original value. Every house that shows that name keeps the earlier ramp, and nothing at a later position is created. This is a specific exception to the general layer-override rule in S-0006 claim 2; revise S-0006 claim 2 in the same batch to identify the colour-definition section as an exception.
+5. **Two palettes per colour definition, and the first definition of a name wins.** Each colour definition has a single-shade and a 53-shade house-colour palette with the same ramp (S-0104 shades them). A house's units, infantry, aircraft and buildings are drawn with its 53-shade palette, except where claim 8 says otherwise (claims 8 and 10). Among the battlefield subjects covered by claim 8, the single-shade palette is shown only by animations flagged for the alternative palette. Names are compared ignoring case. When any later rules layer (the language rules file, the game-mode file or the map) defines a colour name that already exists, the existing definition is kept with its original value. Every house that shows that name keeps the earlier ramp, and nothing at a later position is created. This is a specific exception to the general layer-override rule, also identified in S-0006 claim 2.
    - Backing: `measurable` (PE for the two variants, PF for the shown-name rule). Definition positions are tested by PC; the statement that higher-layer names append and duplicates create no hidden extra definition is `unmeasured`: stock skirmish lobby choices expose the existing base-rules positions, not the count or positions of newly appended definitions.
    - Confidence: high
 
@@ -145,6 +146,14 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 
     - Backing: `measurable` (PC)
     - Confidence: high for the table and the non-player houses. Medium that the slot numbering matches the lobby's listing order.
+
+11. **Setup-screen swatches are fixed RGB colours, not shades of a definition.** Each fixed lobby colour slot has the RGB colour in Constants. These are engine constants, independent of every colour definition and of the house-colour ramp. Changing a definition can change the battlefield house colour without changing its setup-screen swatch. There is no HSV conversion, ramp entry selection, palette-file multiplication or lighting adjustment for a swatch. Each component is reduced directly to the display's hi-colour precision by the 16-bit-step formula, with no subtraction of 1.
+    - Backing: `measurable` (PK, including the named base-rules test for independence)
+    - Confidence: high
+
+12. **A swatch is a flat rectangular fill.** The coloured interior uses one solid colour, not an image tinted or recoloured by the slot colour. The open list and the selected choice use the same slot colour. Text and surrounding control decoration may cover parts of the fill and are excluded from the flat-colour rule. This claim covers enabled fixed-colour choices; the random choice is not a ninth player colour slot.
+    - Backing: `measurable` (PK)
+    - Confidence: high
 
 ## Formulas
 
@@ -209,6 +218,19 @@ The hue scale is 255 per full circle, divided into six sectors of 42.5. H = 255 
 | σ_0 … σ_15 | 0.7661539316177368, 0.7949070930480957, 0.8224136829376221, 0.8481203317642212, 0.8719707727432251, 0.8935688734054565, 0.9135870337486267, 0.9316057562828064, 0.9473402500152588, 0.9612804651260376, 0.9731168746948242, 0.9826816916465759, 0.9902727603912354, 0.9956966042518616, 0.9989056587219238, 1.0 | dimensionless | single-precision values, written exactly |
 | γ_0 … γ_15 | 0.9807852506637573, 0.9088482856750488, 0.8719707727432251, 0.8289040923118591, 0.7807372212409973, 0.7274125814437866, 0.6692825555801392, 0.606731116771698, 0.5395258069038391, 0.469366192817688, 0.3961058259010315, 0.3202287256717682, 0.24223609268665314, 0.16188637912273407, 0.08121144026517868, 1.2246063538223773e-16 | dimensionless | γ_15 is not exactly 0, but ⌊γ_15 · V⌋ = 0 for every byte V |
 
+**Lobby swatch colours (claim 11).** Each tuple is (red, green, blue), in integer component units from 0 to 255 before the 16-bit step. These values are fixed by the engine, not imported rules values.
+
+| Lobby colour slot | RGB |
+|---|---|
+| 0 | (221, 226, 13) |
+| 1 | (255, 25, 25) |
+| 2 | (42, 116, 226) |
+| 3 | (62, 209, 46) |
+| 4 | (255, 160, 25) |
+| 5 | (50, 215, 230) |
+| 6 | (149, 40, 189) |
+| 7 | (255, 154, 235) |
+
 Theaters. These names are engine constants of the original, not stock data. Each theater has an identifier, which the map's theater value names, a palette base name *B* and a suffix *X*. All four columns are names, not quantities, so they carry no unit.
 
 | Theater | Identifier | *B* | *X* |
@@ -244,9 +266,11 @@ Theaters. These names are engine constants of the original, not stock data. Each
 
 ## Import mapping
 
+The lobby swatch's RGB and flat fill (claims 11 and 12) have no data-file selector or absent-key default: they are fixed interface behaviour. In particular, the colour-definition values below feed battlefield palettes, not swatches.
+
 | Source | Key | Parse | Feeds | Absent |
 |---|---|---|---|---|
-| rules `[Colors]` | each key | name = key, compared ignoring case; value as in claim 4 | one colour definition at the next definition position, if the name is new (claims 4–6 and 10) | missing integers = 0; a line with an empty value creates no definition (S-0001, claim 11) |
+| rules `[Colors]` | each key | name = key, compared ignoring case; value as in claim 4 | one colour definition at the next definition position, if the name is new (claims 4–6 and 10); never the setup swatch RGB or fill (claims 11 and 12) | missing integers = 0; a line with an empty value creates no definition (S-0001, claim 11) |
 | rules `[Colors]` | `LightGrey` | name, ignoring case | the definition both non-player houses of a skirmish show (claim 10) | engine constant name |
 | art, building entry | `TerrainPalette` | boolean | building uses the tile palette (claim 8) | no |
 | art, animation entry | `AltPalette` | boolean | alternative palette (claim 8, row 4) | no |
@@ -452,7 +476,17 @@ Every scenario that reads pixels shares these rules:
   - B2's animation or the vein animations show the first colour definition's ramp, or keep their pixels at 0.43 (row 4 is met first),
   - or the animated tile shows the first colour definition's single-shade ramp, or stops taking the coloured light.
 
+**PK: fixed setup-screen swatch colours and flat fills (claims 11 and 12).**
+- *Setup:* the measurement setup, 800×600, an unscaled and unfiltered display path as above, director and unrelated mods off. Open the skirmish setup screen with the other player entries empty so all eight fixed colours are available. No map is running, so game speed, battlefield lighting and tick recording do not apply. Set the speed control to index 2 for the later battlefield comparison.
+- *Procedure:* capture the open colour list with the pointer outside the sampled interiors. Select each fixed colour in turn and capture its closed control. Repeat in a fresh program run with one named loose copy of the base rules, changing only the colour definition at position P(0) to the invented value (170, 128, 200). Keep all names, positions and other entries unchanged. Start the PC test map with slot 0 to confirm that the changed definition supplies the worked-example battlefield ramp, then remove the test file.
+- *Observable:* the top bits of every unobscured interior pixel in each open-list choice and selected choice, plus the slot-0 battlefield remap pixels in the test-file run. Exclude text, arrow, border and pixels covered by the pointer. Use the display-path and pixel-reading rules above, but not the battlefield lit-component subtraction for swatches.
+- *Runs:* one stock program run and one named-test-file program run, each capturing all eight fixed choices.
+- *Expected:* every interior pixel for a slot matches that slot's Constants RGB after the 16-bit step; its open-list and selected-control colours match. There is no interior image pattern or gradient. The modified definition changes the battlefield ramp as in PC but leaves all swatch pixels unchanged. For comparison, compute the definition's own HSV-derived RGB and all 16 ramp entries from the data read at measurement time: no equality caused by pixel quantisation establishes that the swatch was derived from that entry.
+- *Falsified if:* any unobscured interior pixel differs from the packed constant, the interior has an image-dependent pattern, the open and selected fills differ, or the changed definition changes the swatch. A failure to obtain the changed battlefield ramp invalidates the independence sub-test rather than confirming it.
+
 ## Open questions
+
+Q-0280 is resolved by claims 11 and 12: the setup swatch is a flat fill of a fixed RGB constant, not the definition's own colour or a ramp entry. S-0412 claims 1 and 7 continue to own slot selection and random-colour resolution; neither determines a swatch shade.
 
 Q-0214 is resolved by claim 8: S-0112 claims 1–3 own the established overlay, smudge and terrain-object palette rules. No residual palette question for those subjects remains here; the deck and marker exceptions still apply to ore and gems.
 

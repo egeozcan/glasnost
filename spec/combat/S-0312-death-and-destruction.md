@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1492,6 +1492,8 @@ variant. Q-0268 part 1 is owned by the movement specs, not by this death scenari
   17 already answers the existence-count part of question 3. Production-line retention,
   progress, completion, refund, release and placement, including survival of a factory without
   later cancellation, remain for S-0404. Off-map hit eligibility does not answer these parts.
+  Q-0193 must be reopened at hand-off: S-0414's answer resolves only the defeat-count portion,
+  not the whole request. This spec does not list Q-0193 as answered.
 - The unplaced default position of a death weapon's projectile (claim 6): believed to be the map
   origin, which would put its warhead debris at the map's corner and take the land type of that
   corner's cell. Scenario D6, variant d, would show it.
