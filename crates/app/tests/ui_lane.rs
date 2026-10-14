@@ -186,7 +186,12 @@ fn client_screens_from_menu_to_end() {
     c.next_seed = 12345;
     click(&mut c, r);
     run_jobs(&mut c);
-    assert_eq!(c.shell.screen, Screen::Game, "the game starts: {}", c.status);
+    assert_eq!(
+        c.shell.screen,
+        Screen::Game,
+        "the game starts: {}",
+        c.status
+    );
 
     // Deploy the base unit where it stands, then play on.
     let mut clock = 0i64;
@@ -227,14 +232,14 @@ fn client_screens_from_menu_to_end() {
     // The first icon's indices as grey levels, to tell the icon palette
     // (Q-0275) from the decoding.
     if let Some(img) = first.and_then(|t| s.icon(t)) {
-        let grey: Vec<u8> = img
-            .pixels()
-            .iter()
-            .flat_map(|&i| [i, i, i, 255])
-            .collect();
+        let grey: Vec<u8> = img.pixels().iter().flat_map(|&i| [i, i, i, 255]).collect();
         let path = shots.dir.join("icon-indices.png");
         std::fs::write(&path, png::png(img.width(), img.height(), &grey)).unwrap();
-        println!("icon {}x{}: wrote icon-indices.png", img.width(), img.height());
+        println!(
+            "icon {}x{}: wrote icon-indices.png",
+            img.width(),
+            img.height()
+        );
     }
     s.play.tab_click(0);
     s.play.cameo_click(0, Button::Left, false);

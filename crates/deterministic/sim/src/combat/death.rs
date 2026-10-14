@@ -237,9 +237,8 @@ pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
     let other_house = hit.house.is_some() && hit.house != attacker_house;
     let known = hit.attacker.is_some() || hit.house.is_some();
     // spec: S-0312 claim 29 and Edge cases (a vehicle's extra earlier group, quirks.vehicle_destruction_extra_raises)
-    let extra = kind == Kind::Vehicle
-        && !other_house
-        && w.rules().quirks.vehicle_destruction_extra_raises;
+    let extra =
+        kind == Kind::Vehicle && !other_house && w.rules().quirks.vehicle_destruction_extra_raises;
     crate::triggers::destruction_raises(w, id, known, extra);
 }
 

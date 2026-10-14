@@ -7,8 +7,8 @@ use super::*;
 use glasnost_ai::fixture;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::rules::Kind;
-use glasnost_sim::world::Target;
 use glasnost_sim::testkit;
+use glasnost_sim::world::Target;
 
 fn start() -> Play {
     let rules = fixture::rules();
@@ -83,7 +83,11 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     // spec: S-0701 claim 18 (the click's orders and selection go to the order response); the order selects nothing new
     assert_eq!(p.acks.len(), 1);
     assert_eq!(p.acks[0].0, [mcv]);
-    assert_eq!(std::mem::take(&mut p.selected), [mcv], "only the second left click");
+    assert_eq!(
+        std::mem::take(&mut p.selected),
+        [mcv],
+        "only the second left click"
+    );
     p.step();
     assert_eq!(p.world().obj(mcv).unwrap().dest, Some(Target::Cell(to)));
     step_until(&mut p, 400, |p| {
@@ -113,7 +117,12 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     p.cameo_click(0, Button::Left, false);
     assert_eq!(p.tool, Tool::Place(t));
     // Find a cell the preview shows green, then place there.
-    let yard = p.world().obj(own(&p, Kind::Building)[0]).unwrap().pos.cell();
+    let yard = p
+        .world()
+        .obj(own(&p, Kind::Building)[0])
+        .unwrap()
+        .pos
+        .cell();
     let spot = (-8..=8)
         .flat_map(|dy| (-8..=8).map(move |dx| CellXY::new(yard.x + dx, yard.y + dy)))
         .find(|&c| p.preview(c).is_some_and(|(_, ok)| ok))
@@ -265,7 +274,10 @@ fn claim_19_empty_box_release_click() {
 fn claim_19_empty_box_switch_off() {
     let mut rs = fixture::ruleset();
     rs.globals.quirks.empty_box_release_click = false;
-    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&rs, "synthetic-skirmish"));
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &rs,
+        "synthetic-skirmish",
+    ));
     let mut p = start_with(rules);
     p.selection = own(&p, Kind::Vehicle);
     assert!(!p.select_box(&[], false));
@@ -341,7 +353,11 @@ fn surrender_ends_the_game_with_an_end_screen() {
     assert!(!p.running());
     // spec: S-0414 claims 19 and 23 (the displayed scores are fixed once play has stopped)
     let local = p.local;
-    assert!(glasnost_sim::econ::stats::of(p.world(), local).shown.is_some());
+    assert!(
+        glasnost_sim::econ::stats::of(p.world(), local)
+            .shown
+            .is_some()
+    );
 }
 
 /// spec: S-0414 claim 23 and Formulas (the active clock counts ⌊v/16⌋ − ⌊u/16⌋ per active interval; paused or unfocused time and time after play stops are not counted)

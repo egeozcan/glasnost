@@ -293,7 +293,10 @@ fn selection_response_draw() {
     assert_eq!(heard(&mut a, 0), [want]);
     a.mixer_mut().clear();
     // spec: S-0701 claim 17 and scenario D3 (an ordinary other house's object: no draw, no response)
-    assert!(!glasnost_sim::econ::setup::passive(&w, w.obj(theirs).unwrap().owner.unwrap()));
+    assert!(!glasnost_sim::econ::setup::passive(
+        &w,
+        w.obj(theirs).unwrap().owner.unwrap()
+    ));
     a.selected(&w, theirs, &mut u);
     assert_eq!(u, r);
     a.tick(&w, &[], &mut u);
@@ -1093,10 +1096,26 @@ fn production_announcement_kinds() {
     let w = world();
     let mut now = 0;
     for (cue, role, want) in [
-        (UiCue::BuildStarted { infantry: true }, Announcement::Training, true),
-        (UiCue::BuildStarted { infantry: true }, Announcement::Building, false),
-        (UiCue::BuildResumed { infantry: false }, Announcement::Building, true),
-        (UiCue::BuildResumed { infantry: false }, Announcement::Training, false),
+        (
+            UiCue::BuildStarted { infantry: true },
+            Announcement::Training,
+            true,
+        ),
+        (
+            UiCue::BuildStarted { infantry: true },
+            Announcement::Building,
+            false,
+        ),
+        (
+            UiCue::BuildResumed { infantry: false },
+            Announcement::Building,
+            true,
+        ),
+        (
+            UiCue::BuildResumed { infantry: false },
+            Announcement::Training,
+            false,
+        ),
         (UiCue::BuildQueued, Announcement::Building, false),
         (UiCue::BuildQueued, Announcement::Training, false),
     ] {

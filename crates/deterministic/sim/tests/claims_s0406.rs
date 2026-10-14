@@ -625,7 +625,9 @@ fn claim_5_missing_cell_is_shroud_tested() {
     assert!(placement::explored(&w, A, refy, at(0, 0)));
     // Only the missing cell (2, 1) is shrouded again; the eight covered cells stay explored.
     let i = w.cells.idx(at(2, 1)).expect("on the map");
-    let marks = w.econ.shroud.houses[usize::from(A.0)].as_mut().expect("player house");
+    let marks = w.econ.shroud.houses[usize::from(A.0)]
+        .as_mut()
+        .expect("player house");
     let kept = marks.marks[i];
     marks.marks[i] = 0;
     for cell in placement::foundation_cells(&w, refy, at(0, 0)) {
@@ -633,7 +635,10 @@ fn claim_5_missing_cell_is_shroud_tested() {
     }
     assert!(!glasnost_sim::econ::shroud::explored(&w, A, at(2, 1)));
     assert!(!placement::explored(&w, A, refy, at(0, 0)));
-    w.econ.shroud.houses[usize::from(A.0)].as_mut().expect("player house").marks[i] = kept;
+    w.econ.shroud.houses[usize::from(A.0)]
+        .as_mut()
+        .expect("player house")
+        .marks[i] = kept;
     assert!(placement::explored(&w, A, refy, at(0, 0)));
 }
 

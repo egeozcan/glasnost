@@ -556,7 +556,11 @@ mod tests {
         assert_eq!(icon_shade_component(200, ICON_SHADE_ROWS - 1), 255);
         assert_eq!(icon_shade_component(200, 0), 0);
         // No file: all black.
-        assert!(icon_palette_565(None, &PaletteQuirks::default()).iter().all(|&c| c == 0));
+        assert!(
+            icon_palette_565(None, &PaletteQuirks::default())
+                .iter()
+                .all(|&c| c == 0)
+        );
     }
 
     /// spec: S-0103 claim 11 and Constants (lobby swatches: the slot's RGB reduced directly by the 16-bit step, no subtraction of 1)

@@ -1762,7 +1762,11 @@ mod destruction_triggers {
         );
         assert_eq!(w.triggers.fired, f0, "the crippling fires nothing");
         damage::apply(&mut w, id, hit_with(warhead(&r, "W1"), 1000));
-        assert_eq!(w.triggers.fired - f0, 2, "the later lethal hit fires normally");
+        assert_eq!(
+            w.triggers.fired - f0,
+            2,
+            "the later lethal hit fires normally"
+        );
     }
 }
 

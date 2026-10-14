@@ -229,7 +229,8 @@ impl Rules {
                     }
                     let Some(b) = find(&buildings, n) else {
                         // spec: S-0407 claim 8 (d) (a name that is neither a group word nor a building type is dropped; quirks.prerequisite_names_dropped off: it remains an unmet entry)
-                        return (!r.globals.quirks.prerequisite_names_dropped).then_some(Prereq::Unmet);
+                        return (!r.globals.quirks.prerequisite_names_dropped)
+                            .then_some(Prereq::Unmet);
                     };
                     if upgrade_of(&buildings[b as usize]) {
                         Some(Prereq::Upgrade(b))

@@ -1054,8 +1054,18 @@ fn duplicate_scatter_request_switch() {
         s.ruleset.globals.quirks.drive_duplicate_scatter_request = on;
         let (mut w, m, v) = blocked_scene(&mut s, "MOVER", "IDLER", 0, cell(0, -10));
         until_blocked(&mut w, m, v);
-        assert!(w.obj(v).expect("v").dest.is_some(), "on {on}: the friend got the request");
-        let sent = w.obj(m).expect("m").drive.as_ref().expect("d").requests.clone();
+        assert!(
+            w.obj(v).expect("v").dest.is_some(),
+            "on {on}: the friend got the request"
+        );
+        let sent = w
+            .obj(m)
+            .expect("m")
+            .drive
+            .as_ref()
+            .expect("d")
+            .requests
+            .clone();
         if on {
             assert_eq!(sent, None);
         } else {

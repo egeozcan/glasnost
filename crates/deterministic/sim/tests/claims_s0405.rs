@@ -840,7 +840,11 @@ fn claim_19_meter_parts() {
     assert_eq!(a, 10);
     assert_eq!(e.map(i), [5, 3, 1]);
     let (_, e) = power::meter(400, 50, 100, 20, rz);
-    assert_eq!(e.map(i), [5, 5, 0], "below 100 units of shortage: no further part");
+    assert_eq!(
+        e.map(i),
+        [5, 5, 0],
+        "below 100 units of shortage: no further part"
+    );
     let (_, e) = power::meter(400, 200, 100, 20, rz);
     assert_eq!(e.map(i), [10, 0, 0], "unused output is no part");
     let (_, e) = power::meter(400, 0, 0, 20, rz);

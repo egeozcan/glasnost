@@ -43,12 +43,7 @@ pub struct End {
 impl End {
     /// Reads the end screen from the world and its outcome, with `units`
     /// of active play time (S-0414 claim 23).
-    pub fn from_world(
-        w: &World,
-        outcome: &Outcome,
-        local: Option<HouseId>,
-        units: i64,
-    ) -> Self {
+    pub fn from_world(w: &World, outcome: &Outcome, local: Option<HouseId>, units: i64) -> Self {
         let rows = outcome
             .results
             .iter()

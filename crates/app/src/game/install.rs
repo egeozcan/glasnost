@@ -135,7 +135,11 @@ pub fn start_count(bytes: &[u8]) -> u32 {
 /// A database file read through the game's search order and parsed.
 async fn database(vfs: &Vfs, name: &str) -> Option<Document> {
     let f = glasnost_convert::inputs::read(vfs, name).await?;
-    Some(Document::parse(&f.bytes, Default::default(), &mut Vec::new()))
+    Some(Document::parse(
+        &f.bytes,
+        Default::default(),
+        &mut Vec::new(),
+    ))
 }
 
 /// Reads the install's menus data: the base rules resolved, the

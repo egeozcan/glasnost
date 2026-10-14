@@ -243,10 +243,7 @@ impl Play {
         let w = &self.game.world;
         let house = self.local;
         // spec: S-0416 claim 1 (one counter step per cycle towards the available credits)
-        if let Some(t) = self
-            .credits
-            .update(production::available_credits(w, house))
-        {
+        if let Some(t) = self.credits.update(production::available_credits(w, house)) {
             // spec: S-0416 claim 4 (a tick sound when the counter moves)
             self.cues.push(UiCue::CreditTick {
                 rising: t == Tick::Rising,
@@ -255,7 +252,8 @@ impl Play {
         let on = radar::available(w, house);
         if on != self.radar_on {
             // spec: S-0410 claim 3 (the radar's on and off sounds)
-            self.cues.push(if on { UiCue::RadarOn } else { UiCue::RadarOff });
+            self.cues
+                .push(if on { UiCue::RadarOn } else { UiCue::RadarOff });
             self.radar_on = on;
         }
         let model = self.hud_model(&|_| String::new(), &|_| None);
@@ -560,8 +558,8 @@ impl Play {
             Button::Left => Click::Left,
             Button::Right => Click::Right,
         };
-        let held = glasnost_sim::econ::sidebar::icon_state(w, self.local, t)
-            .is_some_and(|s| s.on_hold);
+        let held =
+            glasnost_sim::econ::sidebar::icon_state(w, self.local, t).is_some_and(|s| s.on_hold);
         // spec: S-0411 claim 12 (training for infantry, building for every other kind)
         let infantry = t.kind == glasnost_sim::rules::Kind::Infantry;
         // spec: S-0411 claim 12 (an already active line: the click adds a queued copy)

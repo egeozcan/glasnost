@@ -76,7 +76,8 @@ pub enum Choice {
 pub fn table_c(offer: Offer, shrouded: bool, retain_damaging_entry: bool) -> Choice {
     use Action as A;
     let arrow = Frames::ARROW;
-    let pick = |revealed: Frames, under: Frames| Choice::Show(if shrouded { under } else { revealed });
+    let pick =
+        |revealed: Frames, under: Frames| Choice::Show(if shrouded { under } else { revealed });
     // spec: S-0214 table C (move frames 31–40)
     let mv = Frames::range(31, 40);
     // spec: S-0214 table C (no-move 41)
@@ -276,29 +277,59 @@ mod tests {
     #[test]
     fn claim_21_table_c() {
         let show = |o, s| table_c(o, s, true);
-        assert_eq!(show(act(Action::Nothing), false), Choice::Show(Frames::ARROW));
-        assert_eq!(show(act(Action::Move), true), Choice::Show(Frames::range(31, 40)));
-        assert_eq!(show(act(Action::NoMove), false), Choice::Show(Frames::one(41)));
+        assert_eq!(
+            show(act(Action::Nothing), false),
+            Choice::Show(Frames::ARROW)
+        );
+        assert_eq!(
+            show(act(Action::Move), true),
+            Choice::Show(Frames::range(31, 40))
+        );
+        assert_eq!(
+            show(act(Action::NoMove), false),
+            Choice::Show(Frames::one(41))
+        );
         assert_eq!(show(act(Action::Select), true), Choice::Show(Frames::ARROW));
         let shroud_mover = Offer::Action {
             action: Action::NoMove,
             in_range: false,
             shroud_moves: true,
         };
-        assert_eq!(show(shroud_mover, true), Choice::Show(Frames::range(31, 40)));
+        assert_eq!(
+            show(shroud_mover, true),
+            Choice::Show(Frames::range(31, 40))
+        );
         assert_eq!(show(shroud_mover, false), Choice::Show(Frames::one(41)));
         let attack = |in_range| Offer::Action {
             action: Action::Attack,
             in_range,
             shroud_moves: false,
         };
-        assert_eq!(show(attack(true), false), Choice::Show(Frames::range(53, 57)));
-        assert_eq!(show(attack(false), false), Choice::Show(Frames::range(58, 62)));
-        assert_eq!(show(attack(true), true), Choice::Show(Frames::range(31, 40)));
+        assert_eq!(
+            show(attack(true), false),
+            Choice::Show(Frames::range(53, 57))
+        );
+        assert_eq!(
+            show(attack(false), false),
+            Choice::Show(Frames::range(58, 62))
+        );
+        assert_eq!(
+            show(attack(true), true),
+            Choice::Show(Frames::range(31, 40))
+        );
         assert_eq!(show(Offer::Sell, true), Choice::Show(Frames::one(149)));
-        assert_eq!(show(Offer::RepairSwitch, false), Choice::Show(Frames::range(170, 189)));
-        assert_eq!(show(Offer::AttackMove, true), Choice::Show(Frames::range(404, 412)));
-        assert_eq!(show(act(Action::Bomb), false), Choice::Show(Frames::one(204)));
+        assert_eq!(
+            show(Offer::RepairSwitch, false),
+            Choice::Show(Frames::range(170, 189))
+        );
+        assert_eq!(
+            show(Offer::AttackMove, true),
+            Choice::Show(Frames::range(404, 412))
+        );
+        assert_eq!(
+            show(act(Action::Bomb), false),
+            Choice::Show(Frames::one(204))
+        );
     }
 
     // spec: S-0214 claim 21 and Edge cases (damaging entry keeps the previous image under quirks.damaging_entry_cursor_retained; off, the capture frames; shrouded, the arrow)
@@ -306,7 +337,10 @@ mod tests {
     fn claim_21_damaging_entry_retention() {
         let de = act(Action::DamagingEntry);
         assert_eq!(table_c(de, false, true), Choice::Retain);
-        assert_eq!(table_c(de, false, false), Choice::Show(Frames::range(89, 98)));
+        assert_eq!(
+            table_c(de, false, false),
+            Choice::Show(Frames::range(89, 98))
+        );
         assert_eq!(table_c(de, true, true), Choice::Show(Frames::ARROW));
         let mut a = Animator::default();
         let (f, _) = a.frame(table_c(act(Action::Move), false, true), 0);

@@ -166,7 +166,10 @@ fn claim_1_set_up_turreted_defence_is_queued_not_current() {
     for _ in 0..300 {
         glasnost_sim::tick::step(&mut w);
         let o = w.obj(tower).unwrap();
-        assert_eq!((o.beh.queued, o.beh.current), (Some(Behaviour::Guard), None));
+        assert_eq!(
+            (o.beh.queued, o.beh.current),
+            (Some(Behaviour::Guard), None)
+        );
     }
 }
 

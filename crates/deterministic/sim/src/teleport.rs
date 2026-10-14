@@ -124,7 +124,11 @@ pub fn removal_marks(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
     let Some(t) = o.teleport.as_ref() else {
         return vec![actual];
     };
-    let own = t.mark.map(|c| (c, t.mark_layer)).or(t.held).unwrap_or(actual);
+    let own = t
+        .mark
+        .map(|c| (c, t.mark_layer))
+        .or(t.held)
+        .unwrap_or(actual);
     let mut held = vec![own];
     if let Some(d) = t.deck_mark {
         held.push((d, Layer::Deck));

@@ -355,7 +355,11 @@ pub fn view(
     // shortage and further shortage (the colours are our look).
     d.fill(l.power, colour::BACKDROP);
     let mut x = l.power.x + 1;
-    for (ext, ink) in m.meter.iter().zip([colour::GOOD, colour::ACCENT, colour::BAD]) {
+    for (ext, ink) in m
+        .meter
+        .iter()
+        .zip([colour::GOOD, colour::ACCENT, colour::BAD])
+    {
         d.fill(Rect::new(x, l.power.y + 1, *ext, l.power.h - 2), ink);
         x += ext;
     }

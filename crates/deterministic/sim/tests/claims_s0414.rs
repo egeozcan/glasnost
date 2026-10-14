@@ -450,7 +450,10 @@ fn final_tick_adds_nothing() {
     w.houses[2].allies = vec![B, C];
     common::run(&mut w, 2);
     // The decision did not make its tick final: the tick number advanced.
-    assert_eq!((w.econ.end.ended, w.econ.end.over, w.tick), (Some(1), Some(2), 2));
+    assert_eq!(
+        (w.econ.end.ended, w.econ.end.over, w.tick),
+        (Some(1), Some(2), 2)
+    );
     common::run(&mut w, 1);
     assert_eq!(w.tick, 2, "the final tick added nothing");
     assert!(victory::outcome(&w).is_some());
@@ -952,7 +955,11 @@ fn f(w: &World, x: i64) -> F64 {
 fn claim_20_built_total() {
     let mut w = stats_scene().build();
     let _ = armed(&mut w);
-    assert_eq!(stats::built_total(&w, A), 0, "created objects raise nothing");
+    assert_eq!(
+        stats::built_total(&w, A),
+        0,
+        "created objects raise nothing"
+    );
     let tank = type_ref(&w, Kind::Vehicle, "TANK");
     let man = type_ref(&w, Kind::Infantry, "MAN");
     let ds = type_ref(&w, Kind::Vehicle, "DS");
@@ -975,17 +982,31 @@ fn claim_21_kills_and_losses() {
     assert_eq!(st(&w, B).losses, 1);
     let d = spawn(&mut w, Kind::Vehicle, "DS", 1, 2, 4);
     lethal(&mut w, d, Some(a), None);
-    assert_eq!((st(&w, A).kills, st(&w, A).score, st(&w, B).losses), (1, 100, 1));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
+        (1, 100, 1)
+    );
     let i = spawn(&mut w, Kind::Vehicle, "INS", 1, 4, 4);
     lethal(&mut w, i, Some(a), None);
-    assert_eq!((st(&w, A).kills, st(&w, B).losses), (2, 2), "an insignificant unit still counts");
+    assert_eq!(
+        (st(&w, A).kills, st(&w, B).losses),
+        (2, 2),
+        "an insignificant unit still counts"
+    );
     let ib = spawn(&mut w, Kind::Building, "INSB", 1, 6, 6);
     lethal(&mut w, ib, Some(a), None);
-    assert_eq!((st(&w, A).kills, st(&w, B).losses), (2, 2), "an insignificant building does not");
+    assert_eq!(
+        (st(&w, A).kills, st(&w, B).losses),
+        (2, 2),
+        "an insignificant building does not"
+    );
     assert_eq!(st(&w, A).score, 250, "but gives destruction score");
     let n = spawn(&mut w, Kind::Vehicle, "TANK", 1, 8, 4);
     lethal(&mut w, n, None, Some(A));
-    assert_eq!((st(&w, A).kills, st(&w, A).score, st(&w, B).losses), (2, 250, 3));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
+        (2, 250, 3)
+    );
 }
 
 // spec: S-0414 claims 21 and 22 (the same house's victim: a kill and a loss, but no destruction score since a house allies itself)
@@ -995,7 +1016,10 @@ fn claim_22_allied_victim() {
     let [a, _, _] = armed(&mut w);
     let own = spawn(&mut w, Kind::Vehicle, "TANK", 0, 0, 4);
     lethal(&mut w, own, Some(a), None);
-    assert_eq!((st(&w, A).kills, st(&w, A).score, st(&w, A).losses), (1, 0, 1));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, A).losses),
+        (1, 0, 1)
+    );
 }
 
 // spec: S-0414 claims 21 and 22 (an ownership gain: one kill and the old owner's price to the gaining house, no loss to the losing one; quirks.ownership_gain_counts_as_kill off: no kill, the score unchanged)
@@ -1011,7 +1035,11 @@ fn claim_21_ownership_gain() {
             w.obj_mut(id).unwrap().owner = Some(B);
             glasnost_sim::econ::events::owner_changed(&mut w, id, Some(A));
         }
-        assert_eq!(st(&w, B).kills, i32::from(on), "a not-scored object gives no kill");
+        assert_eq!(
+            st(&w, B).kills,
+            i32::from(on),
+            "a not-scored object gives no kill"
+        );
         assert_eq!(st(&w, B).score, 200, "no flag exclusion for the score");
         assert_eq!(st(&w, A).losses, 0);
         // spec: S-0414 claim 21 (a return to an earlier owner is another gain)

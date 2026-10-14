@@ -1965,7 +1965,10 @@ impl Quirks {
                 "placed_buildings_not_ever_built",
                 self.placed_buildings_not_ever_built,
             ),
-            ("prerequisite_names_dropped", self.prerequisite_names_dropped),
+            (
+                "prerequisite_names_dropped",
+                self.prerequisite_names_dropped,
+            ),
             (
                 "ownership_gain_counts_as_kill",
                 self.ownership_gain_counts_as_kill,

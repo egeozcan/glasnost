@@ -137,12 +137,21 @@ fn image_views_draw_like_uploaded_images() {
             depth_or_array_layers: 1,
         },
     );
-    let quads = [Quad::image(1, (w as i32, h as i32), [0, 0, w as i32, h as i32])];
+    let quads = [Quad::image(
+        1,
+        (w as i32, h as i32),
+        [0, 0, w as i32, h as i32],
+    )];
     let mut atlas = Atlas::default();
     let mut batch = Batch2d::new(&device, OFFSCREEN_FORMAT);
     batch.upload_atlas(&queue, &mut atlas);
     batch.set_palettes(&device, &queue, &[palette(0)]);
-    batch.set_image_view(&device, 1, &texture.create_view(&Default::default()), (w, h));
+    batch.set_image_view(
+        &device,
+        1,
+        &texture.create_view(&Default::default()),
+        (w, h),
+    );
     batch.prepare(&device, &queue, (w, h), &quads);
     let got = render_rgba(&device, &queue, w, h, |pass| batch.draw(pass));
     for (i, (g, e)) in got.chunks(4).zip(rgba.chunks(4)).enumerate() {

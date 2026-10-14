@@ -30,8 +30,8 @@ use glasnost_sim::world::{GameSetup, ObjectId};
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::font;
 use glasnost_ui::geom::{Point, Rect};
-use glasnost_ui::modes::{self, Mode};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
+use glasnost_ui::modes::{self, Mode};
 use glasnost_ui::widget::Targets;
 use glasnost_vfs::{FileRef, Vfs};
 
@@ -195,8 +195,14 @@ impl Session {
             .catalogue
             .clone()
             .ok_or("the game has no tile catalogue")?;
-        let game = Game::new(live.rules.clone(), &loaded.map, &map_id, catalogue, setup.clone())
-            .map_err(|e| format!("the game did not start: {e}"))?;
+        let game = Game::new(
+            live.rules.clone(),
+            &loaded.map,
+            &map_id,
+            catalogue,
+            setup.clone(),
+        )
+        .map_err(|e| format!("the game did not start: {e}"))?;
         debug_assert_eq!(
             glasnost_sim::save::state_hash(&game.world),
             glasnost_sim::save::state_hash(&live.world),
@@ -252,7 +258,10 @@ impl Session {
     }
 
     /// Calls `f` with the live drawing state holding the canonical world.
-    pub fn with_live<R>(&mut self, f: impl FnOnce(&mut Live, &Inputs, &mut Scene) -> R) -> Option<R> {
+    pub fn with_live<R>(
+        &mut self,
+        f: impl FnOnce(&mut Live, &Inputs, &mut Scene) -> R,
+    ) -> Option<R> {
         let (inputs, live) = self.loaded.split();
         let live = live?;
         std::mem::swap(&mut live.world, &mut self.play.game.world);
@@ -307,7 +316,13 @@ impl Session {
         let f = self.loaded.map.footprint;
         let size = self.view_size();
         // spec: S-0101 claim 8 (every request is limited by F5; the stored centre is the limited one)
-        let c = limit_centre(requested, size, f.width, f.local, &ProjectionQuirks::default());
+        let c = limit_centre(
+            requested,
+            size,
+            f.width,
+            f.local,
+            &ProjectionQuirks::default(),
+        );
         let (dx, dy) = (c.0 - self.centre.0, c.1 - self.centre.1);
         // spec: S-0102 Terms (a view jump moves by more than the view's width across or its height up or down)
         let big = dx.abs() > size.0 || dy.abs() > size.1;
@@ -468,7 +483,10 @@ impl Session {
             &q,
         );
         let code = self.scene.object_at(qx, qy, &self.filter);
-        let id = code.and_then(|c| self.with_live(|live, _, _| live.object_of_code(c)).flatten());
+        let id = code.and_then(|c| {
+            self.with_live(|live, _, _| live.object_of_code(c))
+                .flatten()
+        });
         (CellXY::new(cell.0, cell.1), id)
     }
 
@@ -774,7 +792,11 @@ impl Session {
         if let Some(p) = self.pointer.filter(|&p| m.contains(p)) {
             let (cell, _) = self.under(p);
             if let Some((cells, ok)) = self.play.preview(cell) {
-                let fill = if ok { [60, 220, 80, 110] } else { [230, 50, 40, 110] };
+                let fill = if ok {
+                    [60, 220, 80, 110]
+                } else {
+                    [230, 50, 40, 110]
+                };
                 for c in cells {
                     let level = self
                         .play
@@ -795,7 +817,10 @@ impl Session {
             let ids = self.play.selection.clone();
             let assets = &self.loaded.assets;
             match self.loaded.live.as_ref() {
-                Some(l) => ids.into_iter().filter(|&id| !l.bracket_drawn(assets, id)).collect(),
+                Some(l) => ids
+                    .into_iter()
+                    .filter(|&id| !l.bracket_drawn(assets, id))
+                    .collect(),
                 None => ids,
             }
         };
@@ -817,7 +842,10 @@ impl Session {
         if let (Some(drag), Some(p)) = (self.drag, self.pointer)
             && drag.active
         {
-            d.frame(Rect::spanning(drag.press, band::limit(p, m)), colour::ACCENT);
+            d.frame(
+                Rect::spanning(drag.press, band::limit(p, m)),
+                colour::ACCENT,
+            );
         }
         // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
         let mut y = m.y;
@@ -864,7 +892,11 @@ impl Session {
 fn diamond(d: &mut DrawList, x: i32, y: i32, rgba: [u8; 4], clip: Rect) {
     // spec: S-0101 F1 (a cell's diamond: 60 × 30 pixels below its top corner)
     for row in 0..30 {
-        let half = if row < 15 { 2 * row + 2 } else { 2 * (29 - row) + 2 };
+        let half = if row < 15 {
+            2 * row + 2
+        } else {
+            2 * (29 - row) + 2
+        };
         let r = Rect::new(x - half, y + row, 2 * half, 1).intersect(&clip);
         if !r.is_empty() {
             d.fill(r, rgba);

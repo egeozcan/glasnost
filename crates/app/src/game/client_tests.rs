@@ -70,7 +70,10 @@ fn menu_setup_and_start_hand_out_jobs() {
     click(&mut c, install);
     assert!(c.pick_install);
 
-    c.done(Done::Prepared(Vfs::default(), Ok(Box::new(synthetic_install()))));
+    c.done(Done::Prepared(
+        Vfs::default(),
+        Ok(Box::new(synthetic_install())),
+    ));
     assert!(c.status.contains("synthetic"));
     let _ = c.frame_rgba();
     let skirmish = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
@@ -111,10 +114,22 @@ fn menu_setup_and_start_hand_out_jobs() {
 #[test]
 fn claims_22_23_default_keys() {
     use glasnost_sim::targeting::KeyCommand;
-    assert_eq!(bound(Key::Char('s')), Some(Bound::Command(KeyCommand::Stop)));
-    assert_eq!(bound(Key::Char('x')), Some(Bound::Command(KeyCommand::Scatter)));
-    assert_eq!(bound(Key::Char('g')), Some(Bound::Command(KeyCommand::Guard)));
-    assert_eq!(bound(Key::Char('d')), Some(Bound::Command(KeyCommand::Deploy)));
+    assert_eq!(
+        bound(Key::Char('s')),
+        Some(Bound::Command(KeyCommand::Stop))
+    );
+    assert_eq!(
+        bound(Key::Char('x')),
+        Some(Bound::Command(KeyCommand::Scatter))
+    );
+    assert_eq!(
+        bound(Key::Char('g')),
+        Some(Bound::Command(KeyCommand::Guard))
+    );
+    assert_eq!(
+        bound(Key::Char('d')),
+        Some(Bound::Command(KeyCommand::Deploy))
+    );
     assert_eq!(bound(Key::Char('c')), Some(Bound::Cheer));
     assert_eq!(bound(Key::Escape), Some(Bound::Options));
     for k in [Key::Left, Key::Right, Key::Up, Key::Down] {

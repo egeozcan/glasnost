@@ -100,7 +100,10 @@ fn claim_38_refresh_on_removal() {
     let r = w.reference_point(ids[1]);
     let s = rec.start.expect("a base-start cell");
     let (dx, dy) = (s.x - r.x / 256, s.y - r.y / 256);
-    assert!(dx.abs() <= 1 && dy.abs() <= 1 && (dx, dy) != (0, 0), "{dx} {dy}");
+    assert!(
+        dx.abs() <= 1 && dy.abs() <= 1 && (dx, dy) != (0, 0),
+        "{dx} {dy}"
+    );
     glasnost_sim::objects::remove(&mut w, ids[1]);
     let rec = &w.houses[0].base;
     assert_eq!((rec.start, rec.radius), (None, 0));

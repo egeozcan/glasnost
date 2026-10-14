@@ -833,7 +833,13 @@ fn import_reports_errors_and_departures() {
 /// double read would store 16777100; trunc toward zero for negatives)
 #[test]
 fn building_light_reads_single_precision() {
-    assert_eq!(layers::building_light_thousandths(b"16777.1"), Some(16_777_099));
-    assert_eq!(layers::building_light_thousandths(b"-16777.1"), Some(-16_777_099));
+    assert_eq!(
+        layers::building_light_thousandths(b"16777.1"),
+        Some(16_777_099)
+    );
+    assert_eq!(
+        layers::building_light_thousandths(b"-16777.1"),
+        Some(-16_777_099)
+    );
     assert_eq!(layers::building_light_thousandths(b"0.75"), Some(750));
 }

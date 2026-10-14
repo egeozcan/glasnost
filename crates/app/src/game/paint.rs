@@ -158,7 +158,10 @@ impl Painter {
                     clip,
                 } => {
                     if let Some(s) = self.sprites.get(&(*id, *frame)) {
-                        out.extend(batch2d::clip(Quad::sprite(*x, *y, s.region, s.row), r4(*clip)));
+                        out.extend(batch2d::clip(
+                            Quad::sprite(*x, *y, s.region, s.row),
+                            r4(*clip),
+                        ));
                     }
                 }
                 Prim::Image { id, rect } => {
@@ -213,8 +216,14 @@ mod tests {
         );
         let px = p.reference(&q, &images, (40, 20));
         // The image's corner is white; the panel's interior is the panel colour.
-        assert_eq!(&px[(12 * 40 + 12) * 4..(12 * 40 + 12) * 4 + 3], &[255, 255, 255]);
-        assert_eq!(&px[(18 * 40 + 30) * 4..(18 * 40 + 30) * 4 + 3], &colour::PANEL[..3]);
+        assert_eq!(
+            &px[(12 * 40 + 12) * 4..(12 * 40 + 12) * 4 + 3],
+            &[255, 255, 255]
+        );
+        assert_eq!(
+            &px[(18 * 40 + 30) * 4..(18 * 40 + 30) * 4 + 3],
+            &colour::PANEL[..3]
+        );
     }
 
     #[test]
@@ -232,6 +241,10 @@ mod tests {
         assert_eq!(q[0].dst, [0, 0, 2, 4]);
         let px = p.reference(&q, &BTreeMap::new(), (4, 4));
         assert_eq!(&px[0..3], &[10, 20, 30]);
-        assert_eq!(&px[3 * 4..3 * 4 + 3], &[0, 0, 0], "clipped column stays black");
+        assert_eq!(
+            &px[3 * 4..3 * 4 + 3],
+            &[0, 0, 0],
+            "clipped column stays black"
+        );
     }
 }

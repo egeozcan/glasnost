@@ -1005,15 +1005,14 @@ impl SimRules {
             .collect();
         // spec: S-0306 Constants (gravity absent: 3 leptons per tick²)
         let gravity = g.gravity.unwrap_or(3);
-        let (weapons_c, projectiles_c, warheads_c, weapon_index) =
-            crate::combat::data::tables(
-                &s.weapons,
-                &s.projectiles,
-                &s.warheads,
-                gravity,
-                quirks.negative_range_fields,
-                mode,
-            );
+        let (weapons_c, projectiles_c, warheads_c, weapon_index) = crate::combat::data::tables(
+            &s.weapons,
+            &s.projectiles,
+            &s.warheads,
+            gravity,
+            quirks.negative_range_fields,
+            mode,
+        );
         // spec: S-0309 Import mapping (the game-wide default coefficients; engine default 0)
         let coefficient_defaults: [F64; 5] = g
             .coefficient_defaults

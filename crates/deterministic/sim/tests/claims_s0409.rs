@@ -877,7 +877,10 @@ fn coincident_setup(regrow: bool) -> (World, Vec<CellXY>, Vec<CellXY>) {
             }
         }
     }
-    assert!(!pending.is_empty() && !edge.is_empty(), "the fixture touches");
+    assert!(
+        !pending.is_empty() && !edge.is_empty(),
+        "the fixture touches"
+    );
     assert!(w.tick < 360);
     (w, pending, edge)
 }
@@ -894,7 +897,10 @@ fn claim_18_regrowth_before_a_coincident_sweep() {
             assert!(!shroud::explored(&w, A, p), "pending {p:?} gone at 360");
         }
         for &e in &edge {
-            assert!(shroud::explored(&w, A, e), "neighbour {e:?} still explored at 360");
+            assert!(
+                shroud::explored(&w, A, e),
+                "neighbour {e:?} still explored at 360"
+            );
         }
         while w.tick <= 450 {
             step(&mut w);

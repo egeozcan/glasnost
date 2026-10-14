@@ -3781,7 +3781,10 @@ mod tests {
             [0.0, 0.0, 0.0, 0.0],
         ]);
         let painter = draw_model(&m, 0, &flat, None, false, &q()).unwrap();
-        assert_eq!(painter.opaque().iter().map(|p| p.1).collect::<Vec<_>>(), [51]);
+        assert_eq!(
+            painter.opaque().iter().map(|p| p.1).collect::<Vec<_>>(),
+            [51]
+        );
         let depth = draw_model(&m, 0, &flat, None, true, &q()).unwrap();
         // Two-pixel output in depth mode; both show the smaller tuple.
         assert!(!depth.opaque().is_empty());

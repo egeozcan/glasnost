@@ -366,8 +366,16 @@ fn claim_19_later_choice_clears_by_actual_position() {
     let next = cell(6, 0);
     order_move(&mut w, id, next);
     run(&mut w, 1);
-    assert_eq!(sides(&w, to), (vec![p], vec![]), "deck cleared, ground left");
-    assert_eq!(sides(&w, next).0.len(), 1, "the next landing point is marked");
+    assert_eq!(
+        sides(&w, to),
+        (vec![p], vec![]),
+        "deck cleared, ground left"
+    );
+    assert_eq!(
+        sides(&w, next).0.len(),
+        1,
+        "the next landing point is marked"
+    );
     run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == next);
     assert!(w.cells.list(to, Layer::Ground).is_empty());
     assert!(w.cells.list(to, Layer::Deck).is_empty());

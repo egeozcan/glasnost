@@ -10,8 +10,8 @@
 
 use std::collections::BTreeMap;
 
-use glasnost_audio::catalog::SoundCatalog;
 use glasnost_audio::bank::SoundBank;
+use glasnost_audio::catalog::SoundCatalog;
 use glasnost_audio::events::{Audio, local_voice_set};
 use glasnost_audio::mixer::View as SoundView;
 use glasnost_audio::speech::SpeechCatalog;
@@ -572,7 +572,8 @@ impl Client {
                 } else {
                     self.status.clone()
                 };
-                let (d, t) = menu::view(size, &status, self.install.is_some(), self.can_quit, hover);
+                let (d, t) =
+                    menu::view(size, &status, self.install.is_some(), self.can_quit, hover);
                 self.menu_targets = t;
                 d
             }
@@ -661,7 +662,11 @@ impl Default for Client {
 
 fn busy_veil(d: &mut DrawList, size: (i32, i32), status: &str) {
     d.fill(Rect::new(0, 0, size.0, size.1), colour::VEIL);
-    d.text_centred(Rect::new(0, size.1 / 2 - 8, size.0, 16), status, colour::TEXT);
+    d.text_centred(
+        Rect::new(0, size.1 / 2 - 8, size.0, 16),
+        status,
+        colour::TEXT,
+    );
 }
 
 /// What a pressed key does in a running game.

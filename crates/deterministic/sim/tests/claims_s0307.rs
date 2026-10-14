@@ -1638,9 +1638,8 @@ fn claim_21_outside_area_cell_is_in_no_reach_region() {
     }
     map.footprint = fp;
     map.cells = grid;
-    let mut w =
-        glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(1))
-            .expect("synthetic test game loads");
+    let mut w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(1))
+        .expect("synthetic test game loads");
     glasnost_sim::regions::ensure(&mut w);
     let inside = cell_of(0, 0);
     assert!(w.cells.usable(inside));
@@ -1735,18 +1734,33 @@ fn quirk_negative_range_fields_off() {
     // With an air bonus of 3 cells, an airborne target at ⌊r(500² + 250²)⌋ ≈ 559:
     // on, R = −384 + 768 = 384 (out); off, R = 0 + 768 (in).
     let mut on_r = base("-1.5");
-    on_r.sim.vehicles.get_mut("CART").unwrap().combat.air_range_bonus = Some(d("3"));
+    on_r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .air_range_bonus = Some(d("3"));
     let mut off_r = on_r.clone();
     off_r.globals.quirks.negative_range_fields = false;
     for (r, fires) in [(&on_r, false), (&off_r, true)] {
         let mut s = setup(r, 1, 0);
         let a = s.w.obj(s.a).unwrap().pos;
         put(&mut s.w, s.t, Pos::new(a.x + 500, a.y, 250));
-        assert_eq!(test(&s), fires, "switch {}", r.globals.quirks.negative_range_fields);
+        assert_eq!(
+            test(&s),
+            fires,
+            "switch {}",
+            r.globals.quirks.negative_range_fields
+        );
     }
     // A negative air bonus becomes 0: range 3 cells, bonus −2, the same airborne target.
     let mut nb = off("3");
-    nb.sim.vehicles.get_mut("CART").unwrap().combat.air_range_bonus = Some(d("-2"));
+    nb.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .air_range_bonus = Some(d("-2"));
     let mut s = setup(&nb, 1, 0);
     let a = s.w.obj(s.a).unwrap().pos;
     put(&mut s.w, s.t, Pos::new(a.x + 500, a.y, 250));

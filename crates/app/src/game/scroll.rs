@@ -112,8 +112,9 @@ pub fn magnitude(ae: i32, mu: F64) -> i32 {
     let i = (LAST_INDEX - ae).clamp(0, LAST_INDEX) as usize;
     // spec: S-0101 F9 (floating-point product rounded toward zero, then truncation toward zero, S-0205)
     let m = dbl(MAGNITUDE[i]).mul(mu, Rounding::TowardZero);
-    m.trunc_i128()
-        .map_or(0, |v| v.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32)
+    m.trunc_i128().map_or(0, |v| {
+        v.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+    })
 }
 
 impl EdgeScroll {
@@ -287,7 +288,10 @@ mod tests {
                 assert_eq!(d.1, 0);
                 seen.push(d.0);
             }
-            let mut expect: Vec<i32> = (r + 1..=8).rev().map(|i| MAGNITUDE[i as usize] as i32).collect();
+            let mut expect: Vec<i32> = (r + 1..=8)
+                .rev()
+                .map(|i| MAGNITUDE[i as usize] as i32)
+                .collect();
             expect.resize(16, MAGNITUDE[(r + 1) as usize] as i32);
             assert_eq!(seen, expect, "r = {r}");
         }
@@ -323,7 +327,10 @@ mod tests {
         for k in 6..12u64 {
             run_on.push(e.cycle(Some((400, 300)), client, 3, one(), 16 * k, |_| false));
         }
-        assert_eq!(run_on, [(192, 0), (128, 0), (64, 0), (32, 0), (0, 0), (0, 0)]);
+        assert_eq!(
+            run_on,
+            [(192, 0), (128, 0), (64, 0), (32, 0), (0, 0), (0, 0)]
+        );
         let mut e = EdgeScroll::default();
         assert_eq!(
             e.cycle(Some((799, 300)), client, 3, one(), 0, |_| true),

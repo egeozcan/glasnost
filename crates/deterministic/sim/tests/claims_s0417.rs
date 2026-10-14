@@ -121,7 +121,11 @@ fn edge_short_list_words() {
         assert_eq!(n < 11, short, "{fw} × {fh} {refinery}: {n}");
         // spec: S-0417 Edge cases (the special pair follows L: L = 10 for the 2 × 1 and 1 × 2 words, L < 10 for the other short words)
         if short {
-            assert_eq!(n == 10, matches!((fw, fh), (2, 1) | (1, 2)), "{fw} × {fh}: {n}");
+            assert_eq!(
+                n == 10,
+                matches!((fw, fh), (2, 1) | (1, 2)),
+                "{fw} × {fh}: {n}"
+            );
         }
     }
 }

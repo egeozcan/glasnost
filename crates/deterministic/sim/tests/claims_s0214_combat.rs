@@ -157,7 +157,13 @@ fn claim_12_selection_order() {
     let r = targeting::click(&w, ALPHA, &sel, ClickOn::Object(second), force);
     assert_eq!(r.selection, Some(vec![first, cart, medic]));
     // And adds it again at the front.
-    let again = targeting::click(&w, ALPHA, &[first, cart, medic], ClickOn::Object(second), force);
+    let again = targeting::click(
+        &w,
+        ALPHA,
+        &[first, cart, medic],
+        ClickOn::Object(second),
+        force,
+    );
     assert_eq!(again.selection, Some(vec![second, first, cart, medic]));
 }
 
@@ -168,7 +174,10 @@ fn claim_12_zero_primary_damage_is_not_positive() {
     r.sim.weapons.get_mut("Gun").unwrap().damage = Some(0);
     let mut w = game(&r);
     let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, mid(SIZE, 2, 0), 0);
-    assert!(!targeting::positive_primary(&w, tank), "0 damage is not positive");
+    assert!(
+        !targeting::positive_primary(&w, tank),
+        "0 damage is not positive"
+    );
 }
 
 // spec: S-0214 claim 19 (a box adds own infantry, vehicles and aircraft not yet selected; never enemy objects or ordinary buildings)
@@ -182,7 +191,10 @@ fn claim_19_box_eligibility() {
     let tower = spawn(&mut w, Kind::Building, "TOWER", 0, mid(SIZE, 8, 0), 0);
     assert!(targeting::box_eligible(&w, ALPHA, &[], cart));
     assert!(targeting::box_eligible(&w, ALPHA, &[], walker));
-    assert!(!targeting::box_eligible(&w, ALPHA, &[cart], cart), "already selected");
+    assert!(
+        !targeting::box_eligible(&w, ALPHA, &[cart], cart),
+        "already selected"
+    );
     assert!(!targeting::box_eligible(&w, ALPHA, &[], enemy));
     assert!(!targeting::box_eligible(&w, ALPHA, &[], tower));
 }
@@ -196,9 +208,21 @@ fn claim_21_attack_cursor_context() {
     let b = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 1), 0);
     let near = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 1, 0), 0);
     let far = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 14, 0), 0);
-    assert!(targeting::attack_cursor_in_range(&w, &[a], ClickOn::Object(near)));
-    assert!(!targeting::attack_cursor_in_range(&w, &[a], ClickOn::Object(far)));
-    assert!(!targeting::attack_cursor_in_range(&w, &[a, b], ClickOn::Object(near)));
+    assert!(targeting::attack_cursor_in_range(
+        &w,
+        &[a],
+        ClickOn::Object(near)
+    ));
+    assert!(!targeting::attack_cursor_in_range(
+        &w,
+        &[a],
+        ClickOn::Object(far)
+    ));
+    assert!(!targeting::attack_cursor_in_range(
+        &w,
+        &[a, b],
+        ClickOn::Object(near)
+    ));
 }
 
 // spec: S-0214 table C and claim 5 (the attack-move frames when the gesture turns the representative's move or attack into an attack-move; not without the gesture)
@@ -213,8 +237,20 @@ fn claim_21_attack_move_cursor() {
         force_select: true,
         ..Modifiers::default()
     };
-    assert!(targeting::shows_attack_move(&w, ALPHA, &[a], empty, gesture));
-    assert!(!targeting::shows_attack_move(&w, ALPHA, &[a], empty, Modifiers::default()));
+    assert!(targeting::shows_attack_move(
+        &w,
+        ALPHA,
+        &[a],
+        empty,
+        gesture
+    ));
+    assert!(!targeting::shows_attack_move(
+        &w,
+        ALPHA,
+        &[a],
+        empty,
+        Modifiers::default()
+    ));
 }
 
 // spec: S-0214 F5 (i = x mod n, unsigned remainder; none for n = 0, no value taken)

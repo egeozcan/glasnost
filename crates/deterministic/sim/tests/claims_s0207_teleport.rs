@@ -700,7 +700,10 @@ fn claim_20_aircraft_removed_before_the_jump() {
     run(&mut w, 1);
     assert!(present(&w, dc, Layer::Ground));
     glasnost_sim::objects::remove(&mut w, id);
-    assert!(present(&w, dc, Layer::Ground), "pending reservation retained");
+    assert!(
+        present(&w, dc, Layer::Ground),
+        "pending reservation retained"
+    );
     assert!(!present(&w, cell(0, 0), Layer::Ground));
     assert!(present(&w, cell(0, 1), Layer::Ground));
 }
@@ -765,7 +768,11 @@ fn claim_21_previous_deck_landing() {
     assert_eq!(vehicle_flags(&w, dc), (true, true));
     // As the factory exit gives it (S-0417 claim 5).
     glasnost_sim::econ::release::install_temporary_drive(&mut w, id);
-    assert_eq!(vehicle_flags(&w, dc), (true, true), "installation clears neither");
+    assert_eq!(
+        vehicle_flags(&w, dc),
+        (true, true),
+        "installation clears neither"
+    );
     let away = cell(0, -10);
     order_move(&mut w, id, away);
     run_until(&mut w, 800, |w| w.obj(id).unwrap().pos.cell() == away);
@@ -780,7 +787,11 @@ fn claim_21_previous_deck_landing() {
     // Driving marked its current cell at its actual height: the deck.
     let o = w.obj(id).unwrap();
     assert_eq!(o.layer, Layer::Deck);
-    assert_eq!(vehicle_flags(&w, o.pos.cell()), (false, true), "the current cell's mark");
+    assert_eq!(
+        vehicle_flags(&w, o.pos.cell()),
+        (false, true),
+        "the current cell's mark"
+    );
 }
 
 // spec: S-0207 Edge cases (quirks.teleport_vehicle_ground_reservation off: removal clears both a pending reservation and actual occupancy, leaving no orphan)

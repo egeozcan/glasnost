@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use glasnost_render::batch2d::Batch2d;
-use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
 use glasnost_render::gpu::{self, BackendChoice};
+use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
 use glasnost_render::wgpu;
 use glasnost_sim::targeting::Modifiers;
 use glasnost_ui::geom::Point;
@@ -21,8 +21,8 @@ use winit::window::{Window, WindowId};
 use super::client::{Client, Done, Key, run_job};
 use super::play::Button;
 use super::session::{MAP_IMAGE, Session};
-use glasnost_ui::shell::Screen;
 use crate::Status;
+use glasnost_ui::shell::Screen;
 
 /// Options for [`run_game`].
 #[derive(Clone, Debug, Default)]
@@ -85,7 +85,10 @@ fn now_ms() -> i64 {
     {
         use std::sync::OnceLock;
         static START: OnceLock<std::time::Instant> = OnceLock::new();
-        START.get_or_init(std::time::Instant::now).elapsed().as_millis() as i64
+        START
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_millis() as i64
     }
     #[cfg(target_arch = "wasm32")]
     {
@@ -313,10 +316,9 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     keyboard::Key::Named(NamedKey::ArrowRight) => Some(Key::Right),
                     keyboard::Key::Named(NamedKey::ArrowUp) => Some(Key::Up),
                     keyboard::Key::Named(NamedKey::ArrowDown) => Some(Key::Down),
-                    keyboard::Key::Character(s) if !event.repeat => s
-                        .chars()
-                        .next()
-                        .map(|c| Key::Char(c.to_ascii_lowercase())),
+                    keyboard::Key::Character(s) if !event.repeat => {
+                        s.chars().next().map(|c| Key::Char(c.to_ascii_lowercase()))
+                    }
                     _ => None,
                 };
                 if let Some(k) = key {
