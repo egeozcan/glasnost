@@ -36,7 +36,7 @@ An open-source (GPL-3.0-or-later) reimplementation of *Command & Conquer: Yuri's
 | D3 | **AI:** our own, from scratch. No reimplementation of ai.ini/aimd.ini TeamTypes or ScriptTypes. Issues only human-possible orders, sees only its own shroud, deterministic inside the tick. Top difficulty uncapped. **Lower difficulties are simpler strategy modules, not APM or reaction-time caps.** | DECIDED |
 | D4 | **Target game:** Yuri's Revenge only. No plain-RA2 rules mode. (YR still mounts the RA2 base archives underneath its own.) | DECIDED |
 | D5 | **Data baseline:** stock YR 1.001. Rules from the single highest-precedence rulesmd (the 1.001 copy in expandmd01) plus artmd; art and sound from the YR archives including the RA2 base archives. | DECIDED |
-| D6 | **Rules:** our own format (JSONC + schema generated from Rust types; numbers never via f64; inheritance; mod patch layers; rules hash pinned in replays). The user's INI files are *imported*, not interpreted. Stock numbers are never committed. YR quirks are named switches defaulting to YR behaviour. | DECIDED |
+| D6 | **Rules:** our own format (JSONC + schema generated from Rust types; numbers never via f64; inheritance; mod patch layers; rules hash pinned in replays). The user's INI files are *imported*, not interpreted. Stock numbers are never committed. YR quirks are named switches defaulting to YR behaviour; obvious bugs with no gameplay impact are fixed instead (§3). | DECIDED |
 | D7 | **Process:** two teams. Spec side: a local Claude Code session (cloud-hosted Claude model) decompiles the stock, hash-checked gamemd.exe and writes behavioural specs, starting now. Every spec is scrubbed before entering `spec/`. Implementation side: isolated Claude Code sessions in this repo only. | DECIDED |
 | D8 | **Fidelity:** exact formulas, rounding, timings and the original RNG algorithm where cheap; YR quirks by default; statistical match for battle outcomes; no replay or lockstep compatibility with original clients (§6.1). | DECIDED |
 | D9 | **Language and graphics:** Rust stable, wgpu with both backends. Core renderer within the WebGL2 feature set (works on Firefox Linux). WebGPU-only extras behind runtime checks. Native Vulkan build for GPU debugging. | DECIDED |
@@ -90,7 +90,7 @@ Decompiler raw notes never leave `~/glasnost-spec-dirty`. Personal machine detai
 - constants with units (ticks, leptons, per-mille);
 - state machines as tables of state, event and result, in **our own glossary**;
 - ordering as an observable consequence ("damage from both shots in one tick is applied before death checks");
-- edge cases and original bugs, as behaviour (they become `quirks.*` switches, §4.6);
+- edge cases and original bugs, as behaviour (they become `quirks.*` switches, §4.6). An obvious original bug with no gameplay impact (a display glitch, a drawing artefact, a view that jumps) is not kept: the spec records it in one sentence and states the fixed behaviour as the rule, with no switch;
 - for every claim: a confidence level; a backing of `measured` (M-id), `measurable` or `unmeasured`; a proposed measurement scenario for each `measurable` claim.
 
 **Never write:**
