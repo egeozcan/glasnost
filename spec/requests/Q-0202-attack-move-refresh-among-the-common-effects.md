@@ -1,9 +1,9 @@
 ---
 id: Q-0202
 title: Where the attack-move refresh falls among the other common effects of a fall-back to rest
-status: open
+status: answered
 related: [S-0215, S-0309]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

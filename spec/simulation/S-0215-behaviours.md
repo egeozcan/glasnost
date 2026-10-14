@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202]
 supersedes: []
 ---
 
@@ -23,7 +23,7 @@ behaviour, which resting behaviour it falls back to, and the per-behaviour prope
 rules data can set. It also gives what the general-purpose behaviours and a gate's *open* behaviour
 do at each processing, the approach step by which an attacking infantry unit or vehicle decides
 whether to keep, renew or take a destination towards its target (claim 37, answering the behaviour
-side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 18), the area-guard threshold's engine default (the guard stray distance has
+side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 21), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
 that own the other behaviours (harvesting, structures, superweapons, team scripts).
 
@@ -45,7 +45,7 @@ S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry movement
 (occupancy and crowding), S-0210 (crushing), S-0212 (pathfinding), S-0213 (human orders), S-0214
 (order targeting rules), S-0301 (the firing cycle), S-0307 (weapon range test), S-0308 (weapon
 choice), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle) and
-S-0412 (skirmish setup rules). All cited specs are approved; references also follow their current correction drafts.
+S-0412 (skirmish setup rules) and S-0417 (factory unloading, structures). All cited specs are approved; references also follow their current correction drafts.
 This spec cites S-0412's Terms, its claims 3, 4 and 5 and its scenario K10 for the house skill
 level and the difficulty index of each house at game start (claim 5 for the index of the neutral
 and special houses).
@@ -60,12 +60,15 @@ refuses only requests with a threat point (claims 17 and 19), with the vehicle's
 destination left to S-0207 claim 16. It answers request Q-0030, where within a gate's own turn its
 door reaches rest, in claim 35 (d) and scenario B28 case g. Q-0072 is answered in part:
 claim 37 gives the approach triggers, destination retention and renewal, and the building and
-deployed-infantry exceptions. S-0307 claims 15 to 18 give covered searches and failure outcomes.
+deployed-infantry exceptions. S-0307 claims 15 to 21 give covered searches and failure outcomes.
 S-0207 claim 19 gives driving, sailing and hovering outcomes after coming in range. S-0208 claims 16 and 17 give the ordinary walker's stopping and destination outcomes.
 Exceptional searches remain open, so this is not a complete answer to Q-0072. Q-0161 is
 answered in full by claim 37 a2: the per-tick approach follows processing and the per-tick
 search, rechecks its conditions independently of a processing's approach, and can drop a
-newly acquired target on that same tick.
+newly acquired target on that same tick. Q-0202 is answered by claim 13: refresh precedes
+rather than follows the destination rows, with route-generated orders distinguished from
+same-fall-back destination changes. Previously claim 13 and S-0309 claim 23 b already gave
+refresh before the rest tables, but neither settled these collisions.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -350,11 +353,11 @@ Terms used by this spec:
   starts to cloak and which cells a sensor covers; this spec uses them only as a revert cause
   and its exception (claim 10).
 - **Chrono move, leaving stage, phase-in:** a chrono move teleports an actor to another place, by a
-  superweapon or by its own teleporting locomotor. Its **leaving stage** is the first part of the
-  move, from the moment the jump begins until the actor leaves its old place (its position
-  changes to the new place). Its **phase-in** is the part that follows, during which the actor
-  reappears at its new place. The superweapon and locomotion topics own the move, its parts and
-  their lengths.
+  superweapon or by its own teleporting locomotor. A superweapon move's **leaving stage** runs
+  from the beginning of departure until its position changes. A teleporting locomotor's own
+  jump has no leaving stage (S-0207 claim 20 d). **Phase-in** is reappearance at the new place.
+  The superweapon topic owns its move's stages and lengths. S-0207 claim 20 f and F9 own the
+  locomotor jump's phase-in length and harvester exception.
 - **Tunnel:** a pair of linked tunnel entrances on a map through which infantry and vehicles
   travel out of sight to the other entrance. The movement topic owns it.
 - **Radiation level:** the integer strength of radiation at a cell, which radiation weapons
@@ -621,6 +624,11 @@ Terms used by this spec:
       target is removed,
     - the target goes off the map (for example it enters a transport or a building), or is
       removed,
+    - the target makes its teleporting locomotor's own jump (S-0207 claim 20 e), except for an
+      attacker whose erasing weapon remains locked onto the living target. Other attackers
+      revert if overridden, then drop the jumping object if it is still their target; a revert
+      that restores another target keeps that restored target. Projectiles lose the jumping
+      target as S-0207 states,
     - the target changes owner (for example by mind control, or a building taken by a building
       taker), except for an actor whose erasing weapon is locked onto that target (the target is
       being erased by it),
@@ -628,12 +636,13 @@ Terms used by this spec:
       when the target belongs to the actor's own house or a sensor of the actor's house covers the
       target's cell (Terms, *cloak* and *sensor*).
 
-    The first two causes have no exception: they revert the actor whoever owns the target and
+    The destruction and off-map/removal causes have no exception: they revert the actor whoever owns the target and
     whatever covers its cell. The revert brings back the target that the override put aside even
     when that is the very object that caused the revert (an actor that already had its attacker
     as target when it overrode, which claim 18 allows only for owners that are not
-    human-controlled): after a revert by the first, second or fourth cause that object is the
-    actor's target again, and after a revert by an owner change the actor has no target. What the
+    human-controlled): after a revert by destruction, off-map/removal or cloak/underground that object is the
+    actor's target again, and after a revert by an owner change or locomotor jump the actor has
+    no such target. What the
     actor then does with such a target belongs to the target-acquisition specs. Clearing the target by
     any other rule (the leash of claim 26, an order) does not revert. Other users of override and
     revert are outside this spec: team logic, and some movement situations, among them S-0207
@@ -642,7 +651,8 @@ Terms used by this spec:
     house is not allied with that object, or against the wall when no object is listed and the
     cell holds a wall (with an allied first object, or with no object and no wall, there is no
     override).
-    - Backing: `measurable` (scenario B7: case b for the revert at the killing hit of an attacker
+    - Backing: `measurable` (B18 d for the locomotor jump's ordinary target-loss and revert,
+      scenario B7: case b for the revert at the killing hit of an attacker
       that leaves play at once, case i for one that stays in play after the killing hit, case j
       for a target that goes off the map and for the target brought back, case k for an owner
       change, and case h for a target
@@ -652,9 +662,9 @@ Terms used by this spec:
         cloak, when an underground object goes underground and what a sensor covers belong to the
         visibility and movement topics, which no spec states, so no setup here can make a target
         start to cloak or go underground at a known tick,
-      - the erasing-weapon exception to the owner change, because it needs an erasing weapon
-        locked onto a target at the moment that target changes owner, and whether the lock
-        survives the owner change belongs to the combat topic, which no spec states,
+      - the erasing-weapon exceptions to owner change and a locomotor jump, because each needs an erasing weapon
+        locked onto a target at the moment of that event. Whether either event is reachable
+        with the lock retained belongs to the erasing-weapon rules; no setup here establishes it,
       - a removal that follows neither a killing hit nor going off the map, because every removal
         that a setup here can make comes after one of those, which has already caused the revert,
       - the suspended slot kept across a force, because the only force that a setup here can give
@@ -805,25 +815,49 @@ Terms used by this spec:
 
     | Situation | Effect |
     |---|---|
-    | its own locomotor has been temporarily replaced by another (for example while it is carried by another object) | it gets its own locomotor back (confidence low) |
-    | it is a vehicle with approach destinations | the first of them becomes its destination and is removed from the list; the route row and the guard-spot row do not apply in this fall-back |
-    | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it heads for the next point of the route |
-    | it is an infantry unit that is not a harvesting slave, its guard spot is on another cell, the approach row does not apply, and it has not got its own locomotor back in this fall-back (confidence low) | the guard spot becomes its destination; unless its current behaviour is *area guard*, it also queues *move* and forgets the guard spot |
+    | its own locomotor has been temporarily replaced by another (for example while it is carried by another object) | it gets its own locomotor back; S-0417 claim 5 establishes temporary driving during factory exit |
+    | it is a vehicle with approach destinations remaining after refresh | the first of them becomes its destination and is removed from the list; the route row and the guard-spot row do not apply in this fall-back |
+    | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it issues the action of the next route point as an order; this is not an immediate destination assignment |
+    | it is an infantry unit that is not a harvesting slave, its guard spot is on another cell, the approach row does not apply, and it has not got its own locomotor back in this fall-back | the guard spot becomes its destination; unless its current behaviour is *area guard*, it also queues *move* and forgets the guard spot |
 
-    Where several rows give a destination, the one the actor is left with is the guard spot if the
-    guard-spot row applies; otherwise the next point of the route if the route row applies; otherwise
-    the first approach destination if the approach row applies. The common effects never send a
+    The approach row prevents the route and guard-spot rows. Otherwise the guard-spot row's
+    destination survives this fall-back. A route point issues an order through the ordinary order
+    timing of S-0213 claim 1, so its destination and behaviour do not replace the actor's state
+    within this fall-back. Its later application is governed by the order specs. This corrects
+    the earlier claim that the next route point immediately supplied a destination. The common effects never send a
     scatter request. The scatter that can follow a fall-back to rest in *capture*, *sabotage* and
     *eaten* is sent by that processing (claim 28), not by the fall-back.
 
     These effects take place at most once per actor per tick: in a second fall-back to rest on the
     same tick none of them happens, and only the table of claim 14 or 15 applies. An actor using a temporal
-    weapon also lets its victim go. Attack-move memory is refreshed among these common effects,
-    before the rest table judges the actor: S-0309 claim 23 (b) owns its removal or resumption.
-    Thus row 1 of claims 14 and 15 applies only when memory remains after that refresh. If
-    memory is removed, ordinary rest rules apply on the same fall-back; if the attack move is
-    resumed, its behaviour has already been queued with an immediate start as S-0309 states.
-    The refresh shares this once-per-tick limit and is not part of the per-tick start of claim 11.
+    weapon also lets its victim go. Attack-move memory is refreshed before the table's effects:
+    S-0309 claim 23 (b) owns removal and resumption. The rows judge the current behaviour and
+    destinations left by that refresh, including any readiness-dependent immediate start.
+    Row 1 of claims 14 and 15 sees only memory that survived the refresh. The refresh shares
+    the once-per-tick limit and is not part of the per-tick start of claim 11.
+
+    **Collisions with attack-move refresh (Q-0202).**
+    - An eligible infantry guard-spot row replaces a resumed attack-move destination with the
+      guard spot. Unless *area guard* is still current, it queues *move* without an immediate
+      start and forgets the guard spot. A resumed *move* that already started remains current,
+      now directed to the guard spot. If readiness prevented the resumed start, *move* remains
+      queued and the previous behaviour remains current. With target-only memory, the resumed
+      *attack* target is kept, but the guard-spot row can queue *move* instead: an already-started
+      *attack* remains current with *move* queued, or the queued *attack* is replaced by *move*
+      if it did not start. Claim 7 still governs refusal and redundant queue requests.
+    - For a vehicle, the approach row uses the list left after refresh, not a saved copy from
+      before it. Resuming a different destination assigns that destination by the vehicle's
+      normal rules, discarding the previous approach entries; any entries supplied by that
+      assignment are the list the row sees. Resuming target-only memory assigns no destination,
+      so a surviving approach entry can become the destination. That row itself queues no
+      behaviour: the resumed *attack* is current if it could start, queued otherwise.
+    - A route row that remains eligible issues its next-point order even when memory survives.
+      Within this fall-back it leaves the refreshed destination, target and slots alone; an
+      eligible infantry guard-spot row can still replace the destination. A later route order
+      takes effect at the order boundary, not as a second refresh or an immediate start here.
+    - Removing memory because the actor is neither engaged nor in *guard* does not suppress
+      the approach, route or guard-spot rows. They apply as without memory; the ordinary rest
+      table then judges their resulting state. Removal alone queues no behaviour.
 
     **Whose route (original only).** In the route row, the original takes the route's next point
     from the routes of the house played on the machine running the game, not from those of the
@@ -835,25 +869,30 @@ Terms used by this spec:
     middle of a route (for example a mind-controlled vehicle), and whether an owner change keeps
     the route is not established (Open questions).
     - Backing: `measurable` (scenario B15: cases a and d for the guard-spot row, case b for the
-      route row; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
+      route row's eventual movement; B15 e and S-0417 U6 for temporary driving restoration,
+      B33 for route-order timing; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
       rest table and its resumption or removal outcomes). The original's choice of the local player's routes over the owner's is
       `unmeasured`: it differs from the owner's routes only for an actor that follows a route while
       its owner is not the house played on the machine. Network games, where that is common, are
       out of scope here (S-0202, claim 12); in a skirmish the only known way is an owner change
       during a route, and since it is not established that a route survives an owner change, no
-      setup is known that is sure to produce the case. The locomotor row and the approach row are `unmeasured`: which situations replace an
-      actor's locomotor for a while, and which fill a vehicle's approach destinations, are not
-      established (Open questions), so no setup is known that puts an actor in either situation
-      at a fall-back to rest. Also `unmeasured`: the route row's condition on a *patrol* that has
+      setup is known that is sure to produce the case. The approach row and its refresh collision
+      are `unmeasured`: no known input reliably provides specified approach entries at a
+      fall-back. Temporary driving restoration is measurable for a factory-produced teleporting
+      vehicle; other temporary replacements remain `unmeasured` without an established setup.
+      The guard-spot/memory and route/memory collisions are `unmeasured`: ordinary attack-move
+      input clears the guard spot and ends the route, and no stock input sequence reliably keeps
+      both states. B33 gives conditional recorder checks, not a way to manufacture them. Also `unmeasured`: the route row's condition on a *patrol* that has
       begun, because the *patrol* processing belongs to other topics (claim 34), and the rule of at
       most once per tick, which needs two fall-backs of one actor in one tick, which no setup is
       known to time. Scenario B15, case d, backs the guard-spot row for a unit whose current
       behaviour is not *area guard*.
     - Confidence: medium (the effects and which destination remains, and that the original uses
       the local player's routes); high (that no scatter request
-      is sent, and that memory refresh precedes the rest table); the memory lifecycle has
-      S-0309 claim 23's confidence; low (the locomotor row and its effect on the guard-spot row, and which rules fill
-      the approach destinations)
+      is sent, and that memory refresh precedes the destination rows and rest table),
+      medium for route-order timing and vehicle assignment's list effects; the memory lifecycle has
+      S-0309 claim 23's confidence; medium (factory-exit restoration and its guard-spot exclusion), low (other temporary
+      replacements and which rules fill the approach destinations)
 
 14. **Falling back to rest: infantry.** When an infantry unit falls back to rest, after the common
     effects of claim 13 the result is the first matching row:
@@ -892,7 +931,7 @@ Terms used by this spec:
     7 to 10). Our AI can get the same result by ordering its resting infantry to guard an area.
     - Backing: `measurable` (scenario B4 for rows 7, 9, 10, 11 and 12, and S-0412 scenario K10
       for the level 0 that sends the neutral and special houses' infantry to row 7; row 4 by
-      scenario B15 case c; row 6 by scenario B6 case e; scenario B29, case a, for row 2, for row 5 (a3) and for the
+      scenario B15 case f; row 6 by scenario B6 case e; scenario B29, case a, for row 2, for row 5 (a3) and for the
       *area guard* exception with a target; S-0309 scenario A6, parts g, n and o, for row 1's
       memory remaining after refresh, and ordinary rest after removal). These parts are `unmeasured`:
       - the *patrol* exception, because the *patrol* processing belongs to other topics (claim 34)
@@ -960,7 +999,7 @@ Terms used by this spec:
     resting vehicles to guard an area.
     - Backing: `measurable` (scenario B4 for rows 4, 7, 10, 12, the team-member part of row 11
       and the skirmish skill levels of the human-controlled and computer player houses; S-0412
-      scenario K10 for the level 0 of the neutral and special houses; row 3 by scenario B15 case b, row 9 by scenario B6 case e; scenario B29 for row 8, row 12's
+      scenario K10 for the level 0 of the neutral and special houses; row 3 by scenario B15 case f, row 9 by scenario B6 case e; scenario B29 for row 8, row 12's
       bunker variant and the exceptions for *area guard* and *eaten*; S-0309 scenario A6,
       parts g, n and o, for row 1's memory and rest after removal; S-0402 claim 11 and its
       scenario H12 for a harvester staying in *unload* without contact).
@@ -1810,7 +1849,8 @@ apply in our engine to the actors of every player house.
     - *harvest*: economy, the harvest cycle,
     - *construction*, *selling*, *repair*: structures (build-up, selling, repair bays and service
       depots); *open* for buildings is claim 35,
-    - *unload* for vehicles and buildings: transports, vehicle deploying, and structures,
+    - *unload* for vehicles: transports and vehicle deploying; for factory buildings:
+      S-0417 (structures, factory unloading); other building unloading: structures,
     - *missile*: buildings only (superweapons and structures); infantry, vehicles and aircraft
       process it by the default rule of claim 4 (table T1),
     - *paradrop approach*, *paradrop overfly*, *spy-plane approach*, *spy-plane overfly*: aircraft
@@ -2033,7 +2073,7 @@ apply in our engine to the actors of every player house.
       |---|---|
       | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | destination unchanged: an absent one stays absent, and an airborne actor's held one stays held |
       | not the case above, and the actor is a vehicle with at least one approach destination (Terms) | it takes the first approach destination as its destination, that entry leaves the list, and the step ends |
-      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 17, subject to that spec's open questions; the failure nearby-cell search is known to centre on the target only in claim 17's empty-radius case |
+      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 21, subject to that spec's close-range and jumpjet gaps; claim 17 supplies the ordinary failure centre after candidate trials as well as with empty radii |
 
       (f2) **Deploy-to-fire vehicle.** A vehicle whose type deploys to fire (S-0301), standing on
       a cell where its deploy test fails (S-0301, the must-deploy answer), searches as in the
@@ -2061,7 +2101,7 @@ apply in our engine to the actors of every player house.
       crushing approaches of S-0210 claim 11 (its attack-target variant for the original's
       computer-controlled houses, which is the original's only, and its omni-crusher variant), and
       a balloon-hover type whose weapon chosen for the target has a vertical projectile (S-0307
-      claim 18). Search failure can also give hunter-seeker types and vehicle-thief infantry the
+      claim 18), including a cell target, which becomes its destination without a search. Search failure can also give hunter-seeker types and vehicle-thief infantry the
       target object as destination (S-0307 claim 17), but that is not an earlier replacement of
       the step.
     - (i) **Coming into range during movement.** The step does not require arrival before
@@ -2614,7 +2654,8 @@ absent key keeps the value the earlier layers left).
 |---|---|---|---|
 | `NormalTargetingDelay` | `[General]` | *N* of F6 | integer ticks; engine default 27 |
 | `GuardAreaTargetingDelay` | `[General]` | *N* of F6 in *area guard* | integer ticks; engine default 36 |
-| `AIAutoDeployFrameDelay` | `[General]` | auto-deploy delay list *A* of claim 31 (in our engine read only for the units of the neutral and special houses, by their difficulty index 1) | list of integers in ticks, entries for difficulty indexes 0, 1 and 2 in that order (Terms, *difficulty index*); absent keeps the held list; engine default open (Open questions) |
+| No data key | not applicable | claim 13's refresh priority, destination collisions and route-order timing (Q-0202) | fixed behaviour; memory is created by orders (S-0213), not an imported field; no absent-key default |
+| `AIAutoDeployFrameDelay` | `[General]` | auto-deploy delay list *A* of claim 31 (in our engine read only for the units of the neutral and special houses, by their difficulty index 1) | decimal-prefix signed 32-bit integer list in ticks, S-0003 claim 22 and C20: no scalar hexadecimal form, unreadable non-empty items retain a place with 0, empty items are skipped, 511-byte text limit subject to the physical-line cut; present non-empty replaces the list, missing or empty keeps it; entries for indexes 0, 1 and 2 (Terms); engine starting default open (Open questions) |
 | `PlayerReturnFire` | combat-damage settings section (S-0006) | lifts the behaviour restriction of claim 18 | boolean |
 | `PlayerScatter` | combat-damage settings section (S-0006) | player-scatter setting of claim 19 (the scatter from damage; S-0208 claims 11 and 15 for infantry) | boolean |
 | `MaxIQLevels` | `[IQ]` | house skill level of the houses of the original's computer players in a skirmish (claim 15; S-0412, claim 3); not used for AI houses of our engine, nor for the neutral and special houses, which keep 0 | integer |
@@ -3178,18 +3219,18 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   unarmed vehicle of the human-controlled house, in *move*, a planned route of three move points,
   each 6 cells from the last, and commit it. Expected: when it arrives at the first point and
   falls back to rest, the next point becomes its destination with no new order, while the
-  recorder shows its queued destinations empty; *move* stays current and nothing is queued (row 3
-  queues *move*, which is already current, so by claim 7 no slot changes); and it heads there.
-  If row 3 did not apply, row 7 would clear its destination and queue *guard*, which the recorder
-  would show. (c) Claim 14, row 4: the same as (b) with an infantry unit of the human-controlled
+  recorder shows its queued destinations empty. Record the route-generated order and its
+  boundary of application: the next point is not assigned inside the fall-back. With no other
+  destination, that fall-back can queue *guard* under claim 15; the later route order replaces
+  it with *move*. It then heads to the next point. (c) Claim 14, row 4: the same as (b) with an infantry unit of the human-controlled
   house, of a type that does not default to area guard and without the guard-area veterancy
-  ability. Expected: as in (b); if row 4 did not apply, row 12 would queue *guard*. A run in which
+  ability. Expected: as in (b), with claim 14's ordinary rest table allowed to queue *guard*
+  before the route-generated order applies. A run in which
   the recorder shows a current behaviour other than *move* when the unit reaches the first point
   is invalid. Falsified in (a) by a unit that falls back to rest away from the guard spot and
-  stays there; in (b) and (c) by an actor that stops at the first point, by *guard* (or *area
-  guard*) queued at that fall-back, by an empty destination after it, or by one that heads on
-  only through a non-empty list of queued destinations (that would be the queued-destinations
-  row of claims 14 and 15, not the route row). (d) Guard-spot row outside *area guard*: the
+  stays there; in (b) and (c) by an actor that never takes the next route point, by immediate
+  assignment within the fall-back rather than an order boundary, or by continuation only through
+  a non-empty queued-destinations list (that would be the queued-destinations row, not the route). (d) Guard-spot row outside *area guard*: the
   recorder also reads the guard spot. An armed infantry unit of the human-controlled house, of a
   type that does not default to area guard, is given an area-guard order on a cell 5 cells away
   and arrives. An enemy unit beyond its weapon range and within (*S* + 0.5) × 256 leptons (F7)
@@ -3200,7 +3241,21 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   *move* is queued, and the guard spot is empty. A run in which the recorder shows no guard spot,
   or a current behaviour other than *attack*, just before that processing is invalid. Falsified
   by a destination other than the guard spot's cell, by no *move* queued, or by a guard spot kept.
-  Runs: three each.
+  Runs: three each. (e) Temporary driving: produce a stock teleporting vehicle at a stock
+  ground vehicle factory with no rally point, recording locomotion, contact, behaviours and
+  fall-backs as S-0417 U6/U8 propose. Expected: factory exit uses temporary driving and the first
+  eligible fall-back restores teleporting locomotion. After release, order a distant clear cell:
+  it jumps rather than driving there. Failure to restore at that fall-back, or later continued
+  driving, falsifies the restoration. Three runs; no modified locomotor data is needed.
+  (f) Rest with an existing destination: a named test map gives *move* the no-threat property,
+  clears its zombie and retaliate properties, and turns player scatter off. Order a plain long
+  move to a non-area-guard-default infantry unit and an unarmed vehicle, with no route,
+  guard spot, scatter ability or queued destinations. An enemy damages each while it is still
+  moving, leaving it alive. Record its damage-time fall-back, destination and slots. Expected:
+  the destination survives and no resting *guard* is queued, because the destination row queues
+  the already-current *move*. Loss of the destination or a queued *guard* on that fall-back
+  falsifies the destination row's precedence. Three runs per kind; a run without the damage-time
+  fall-back is invalid, not confirming evidence.
 - **B16 (claims 11 and 32, buildings).** (a) Record the processing intervals of an armed defensive
   building without the SAM flag while it attacks a stationary target in range, with a weapon whose
   rate-of-fire field (in a named test file) is 20 ticks or more: expected an interval of 1 tick
@@ -3312,17 +3367,24 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   single just above 0.001, so *D*<sub>r</sub> = 0; an actor in *move* or *guard* then has a
   processing tick at least every 2 ticks, and one in *area guard* at least every 5).
   (a) Chrono move: an armed vehicle of the human-controlled house in *guard* is moved by the
-  chronosphere; repeat with an armed vehicle that is not a harvester, whose type the test file
-  gives a teleporting locomotor, ordered to move 10 cells. Expected: from the start of the jump
-  until its position changes to the new place (the leaving stage), the expiry tick of its
-  processing timer does not move forward and target and destination are empty; during the
-  phase-in that follows, processing ticks come at least every 5 ticks again, whichever of *move*,
+  chronosphere. Expected: during its leaving stage the processing timer's expiry does not move
+  forward and target and destination are empty; during phase-in processing comes at least every
+  5 ticks. Separately, order an armed non-harvester vehicle, given teleporting locomotion by the
+  named test map, to a clear cell 10 cells away. Expected: no leaving stage and no corresponding
+  processing exclusion; its jump follows S-0207 claim 20 d, and its phase-in lasts F9 of that
+  spec. During phase-in processing continues at least every 5 ticks, whichever of *move*,
   *guard* or *area guard* is current. (b) Erasing: the same vehicle without a chrono move is locked onto by an erasing
   weapon; expected no processing tick from the lock-on until it is removed (or let go), and target
   and destination empty on those ticks. (c) A test map with a tunnel: an infantry unit and a
   vehicle ordered through it show no processing tick while inside. Falsified by a processing tick
   during the leaving stage, while being erased or inside the tunnel, or by a gap of more than 5
-  ticks between processing ticks during a phase-in. Runs: three each.
+  ticks between processing ticks during a phase-in. (d) Jumping retaliation target: an armed
+  observer first retaliates against an enemy non-harvester teleporting vehicle, then that vehicle
+  is moved by a test-map team to another clear cell. Record observer target, suspended behaviour
+  and slots on the jump tick. Expected: override reverts on that tick and the jumping vehicle
+  is not retained as target. Repeat with an ordered attack rather than retaliation: target drops
+  without a revert. Retained target or a revert postponed to phase-in end falsifies the rule.
+  Erasing weapons are excluded. Runs: three each.
 - **B19 (claim 31).** (a) A computer-controlled deployer infantry type that deploys to fire, not
   immune to radiation, with a negative undeploy delay, placed in *guard* on its guard spot without
   a destination, once for each computer entry of the setup screen (hard, normal and easy computer,
@@ -3777,6 +3839,35 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   alone cannot count the two unchanged-state steps (claim 37 a2, backing).
   Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. Run without a director or mods, apart from the named test data. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle, infantry; only infantry for e).
 
+- **B33 (claim 13, Q-0202).** Common setup and fixed game speed 2. First repeat B15 b/c on a
+  tiny open map with three ordinary move route points, no held attack-move input modifiers and
+  no enemies near the route. Record destination, current/queued behaviour and issued/applied
+  orders around each arrival fall-back. Expected: a next-point order is issued, but does not
+  supply a destination until its ordinary order boundary. Immediate replacement during the
+  fall-back falsifies the route distinction. Three runs per actor kind.
+
+  The following are conditional checks, not reproducible setup claims. Ordinary attack-move
+  input clears the guard spot and ends a route, so do not write state to manufacture a collision.
+  If a recorded stock input sequence produces one, preserve that sequence as the setup, then
+  replay it three times under the common setup. Record state immediately before and after the
+  fall-back, distinguishing memory's destination from the actor's destination.
+  - Guard spot and resumable memory: expect the guard spot as final destination, with current
+    and queued behaviours exactly as claim 13's readiness cases state; memory remains and
+    engagement ends. A final remembered destination instead falsifies the priority.
+  - Vehicle approach entries and resumable memory: record the list before refresh and after
+    any destination assignment. Expect the approach row to use only the remaining list, never
+    a saved pre-refresh entry. Target-only resumption can retain an entry; if consumed it
+    becomes destination without replacing the resumed *attack* slot state. The contrary
+    falsifies the list/slot distinction.
+  - Route and resumable memory: expect the refreshed state at fall-back completion, unless
+    the guard-spot or surviving approach row changes it; the route's generated order acts at
+    its later boundary. Immediate route destination replacement falsifies this result.
+  - Repeat any available guard-spot/route case with non-engaged memory outside *guard*:
+    expect removal, the same applicable row effects as a no-memory control, and ordinary
+    rest-table outcome. Suppression solely because memory existed falsifies claim 13.
+  These collision cases remain `unmeasured` until a legal input sequence establishes the
+  prerequisites; this scenario proposes recording them, not a state-writing harness.
+
 ## Open questions
 
 - Whether any stock map, campaign mission or team script puts an actor into *queued move* or
@@ -3797,8 +3888,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   behaviour of an unarmed building current is not established here.
 - The guard spot's reference point when the guard spot is a cell (F4): presumably the cell's centre
   at the cell's height.
-- Which situations fill a vehicle's approach destinations, and which temporarily replace an
-  actor's locomotor (claim 13).
+- Which situations fill a vehicle's approach destinations (claim 13). S-0417 claim 5 now
+  establishes factory-exit temporary driving for teleporting and tunnelling vehicles.
+  Other temporary replacements remain outside the established setups here.
 - Whether an actor that changes owner (for example by mind control) in the middle of a route keeps
   following that route (claim 13, whose route). If it does, the original takes the route's next
   point from the routes of the house played on the machine, which in a skirmish differ from the
@@ -3832,10 +3924,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   search, no idle action). The two differ in the draws and the targeting-timer restart of that
   first processing; scenario B10 (g) checks only the guard spot afterwards.
 
-- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 18 cover open and
-  obstructed level ground, specified failures and balloon-hover destinations, not every search.
-  In particular the nearby-cell search centre after non-empty candidate failure is not yet
-  established; it must not be assumed to be the target's cell.
+- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 21 cover ordinary
+  ground candidates on terrain and bridges, ordinary cell targets, failure centres after trials,
+  usable-area exceptions and balloon-hover destinations. Close-range and jumpjet searches
+  and their exceptional failure centres remain open.
 - Which parts of the approach fill a vehicle's approach destinations (Terms; claim 37 f).
 - The in-the-playfield mark (Terms; claim 37 f): which objects other than ones arriving from
   outside the usable area lack it.
@@ -3843,6 +3935,16 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   per-tick drop of claim 37 a, the only way an actor in those behaviours reaches the step, so they
   stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
   scenario B32 (c and c2).
+
+### Cross-spec changes required in this round
+
+- S-0309 claim 23 b should cite claim 13 here for assignments that can supersede the refresh
+  result, and for route-generated orders rather than immediate route destination changes.
+- S-0213 claim 16 should point to claim 13 here for that route-order timing, while retaining
+  its unresolved full route-action and looping scope.
+- S-0207 claim 20 e's blanket attacker target-loss wording should follow claim 10's conditional
+  live erasing-lock exception and its distinction between a dropped jumping target and some
+  other target restored by a revert. No stock setup establishes the lock/jump combination.
 
 ## Questions for the project lead
 
