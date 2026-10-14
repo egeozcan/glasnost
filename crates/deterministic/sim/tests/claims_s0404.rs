@@ -1144,6 +1144,36 @@ fn claim_11_draws() {
     assert_eq!(tick_draws(&mut w), 0);
 }
 
+// spec: S-0404 claim 11 (starts take their creation draws at their causing action: several production orders in one tick give successive values in order of application, S-0213 claim 3, not in line order)
+#[test]
+fn claim_11_creation_draws_in_application_order() {
+    for grunt_first in [true, false] {
+        let mut w = game(&ruleset());
+        building(&mut w, "WARFACT", 0, 0, 0);
+        building(&mut w, "BARRACKS", 0, 0, 6);
+        ready(&mut w);
+        set_credits(&mut w, 0, 1_000_000);
+        let grunt = t(&w, Kind::Infantry, "GRUNT");
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        let order = if grunt_first { [grunt, tank] } else { [tank, grunt] };
+        for what in order {
+            assert!(issue(&mut w, 0, Order::Build { what }));
+        }
+        step(&mut w);
+        // Objects are numbered in creation order, so the earlier id took the earlier draw.
+        let object = |w: &World, what| {
+            w.econ
+                .lines
+                .lines
+                .iter()
+                .find_map(|l| l.item.as_ref().filter(|i| i.t == what).map(|i| i.object))
+                .unwrap()
+        };
+        let (g, k) = (object(&w, grunt), object(&w, tank));
+        assert_eq!(g < k, grunt_first, "grunt first {grunt_first}");
+    }
+}
+
 // spec: S-0404 claim 12 (an AI house produces only through orders)
 #[test]
 fn claim_12_no_orders_no_production() {

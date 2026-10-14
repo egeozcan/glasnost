@@ -838,7 +838,7 @@ fn factories(w: &World, house: HouseId, f: impl Fn(&Object) -> bool) -> Vec<Obje
 /// `forced`): its object is created (one creation draw, claim 11).
 fn start_item(w: &mut World, li: usize, t: TypeRef, forced: bool) {
     let house = w.econ.lines.lines[li].house;
-    // spec: S-0404 claim 11 (starting an item creates its object: one creation draw)
+    // spec: S-0404 claim 11 (starting an item creates its object: one creation draw, taken at the start's causing action, so same-tick starts draw in order of application, no value reserved ahead)
     let object = crate::objects::create(w, t.kind, t.index, Some(house));
     let p = price(w, house, t);
     let r = period(w, house, t);

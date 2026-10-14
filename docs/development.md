@@ -305,7 +305,6 @@ Provisional rules of M5a, each tied to a request:
 | `econ::release::ring` | with `quirks.foundation_exit_lists` off, a foundation without cells (0 × 0) has an empty exit list, as with the switch on | Q-0195 |
 | `econ::tech::recheck` (full tab) | S-0004 claim 11's 76-item cap is not applied: every offered type gets an icon and stays in the taken-up set | Q-0196 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
-| `econ::production`, `econ::release::clone_copies` | objects created on the same tick take their creation draws in application order: orders in arrival order, line starts in S-0404 claim 1's line order; cloning copies in acquisition order, each created and released before the next | Q-0226 |
 
 ## Own AI (M5b)
 

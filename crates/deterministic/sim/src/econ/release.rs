@@ -865,7 +865,7 @@ fn clone_copies(w: &mut World, k: &crate::world::Object, unit: ObjectId) {
         })
         .collect();
     for cb in cloners {
-        // spec: S-0404 claim 14 (a new infantry unit of the same type for its owner: a newly created object, its creation draw, S-0202 claim 10)
+        // spec: S-0404 claim 14 (a new infantry unit of the same type for its owner: a newly created object, its creation draw, S-0202 claim 10; copies in cloning-building acquisition order, an earlier copy's placement draws before the next copy's creation draw)
         let copy = crate::objects::create(w, u.0, u.1, Some(owner));
         // spec: S-0404 claim 14 (released by claim 13's infantry row; nothing paid or refunded)
         if infantry(w, cb, copy, false) != Outcome::Released {
