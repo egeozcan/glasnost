@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -298,7 +298,10 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     event's effects and draws precede the type's resource chain reaction, when enabled; S-0401
     claim 20 owns that reaction and its draws. Consequently a crater from this immediate middle
     event can empty the animation's cell before the reaction tests it, leaving no reaction draws
-    or detonation. When resource remains, the reaction removes all of it. So an
+    or detonation. A crater take from stage 6 instead leaves the resource overlay at stage 0
+    (claim 14), so an enabled, unsuppressed reaction still empties that cell and follows
+    S-0401 claim 20's normal draw and detonation rules. When resource remains, the reaction
+    removes all of it. So an
     animation plays its start sound once for each type it plays as: at creation (or at the end of
     the loop delay its creator gave), and at each follow-up switch. One with random loop delays also
     plays it at every pass that follows a delay *D* > 0. A trigger-played animation has no loop
@@ -319,8 +322,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     provided μ ≠ 0, so it can happen once per pass, and for reversed and ping-pong animations on the
     way down as well. μ is ⌊*N* / 2⌋ of the sprite that claim 25 names, whatever the type's fields
     say. It does not happen on the advances of a bouncing type (the start event's middle event of
-    claim 13 still does). An animation that never shows image frame μ (because *a* > μ, or its loop
-    range excludes it) has no middle event, except through claim 13.
+    claim 13 still does). An animation whose advances never reach image frame μ has no middle
+    event, except through claim 13. Reaching μ on an ending advance still produces the event,
+    even though that image frame is not drawn (State and ordering).
     These rules apply during map loading too. A tile animation (S-0010 claim 19) or an overlay's
     cell animation (S-0009 claim 12) with μ = 0 produces this event at creation, not at its first
     update. The event requests the type's particle count of its named particle type when a particle
@@ -375,7 +379,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       backing (R14 A to E) and confidence, including its medium-confidence placement and
       resource-removal recalculation composition.
       Reverse/ping-pong repeated events and bouncing-type suppression are `unmeasured`
-      here: none of these scenarios supplies those playback types. The exact floating-point
+      here: none of these scenarios supplies those playback types. A middle event on an
+      ending advance is also `unmeasured` here: none sets μ at the tested pass's end limit.
+      The exact floating-point
       threshold edge is also `unmeasured`: 32 observed incoming states need not produce
       either integer immediately beside it; AN23 tests predictions only for values reached.
     - Confidence: high for event timing, the request gates, the choice and resource removal,
@@ -517,7 +523,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       visibility). Visibility at fade levels 11 to 14 is `unmeasured`: AN22 records it but
       does not establish a tick-by-tick fade fixture or a falsifier. Sensor-covered viewers
       and intermediate level-band boundaries are also `unmeasured` here: neither scenario
-      supplies those cases.
+      supplies those cases. Negative-end fade comparisons and F4's equivalence over the
+      entire 32-bit integer domain are `unmeasured`: AN14 uses only end values 10 and 0,
+      and a finite set of playback runs cannot exercise that whole domain.
     - Confidence: high for the table and the fade thresholds; medium for the source of *t* and for
       which viewers the building is cloaked from (the cloaking specs own that rule); low for the
       visibility of slot animations at fade levels 11 to 14, which depends on how the cloaking specs
@@ -819,7 +827,6 @@ advance of the same update. So:
   *E*<sub>s</sub> even when the end field is given (claims 6 and 25). Off: an absent loop end
   takes the end field *E*. Stock data is affected only where a type gives an end field without a
   loop end and loops, is reversed or is a shadow type.
-- **Explicit end field or loop end 0** (no switch). Kept as 0, except for new-theater types at the theater refresh (claim 25). Both are what the original does; the importer warns about an explicit 0. This is an importer-warning edge case, not a mod-configurable playback quirk; no alternative behaviour is defined.
 - **`quirks.anim_followup_start_doubled`** (default: on). The follow-up type starts at *k* = *a*′,
   showing image frame 2*a*′ (claim 15). Off: it starts at *k*<sub>0</sub> of F3 for the follow-up
   type: *k* = 0, or *k* = λ<sub>e</sub>′ − 1 when the animation is reversed under the follow-up
@@ -920,7 +927,11 @@ results are design rules (confidence: high), not oracle measurements. The missin
 missing-sprite behaviours in Edge cases are `unmeasured` (confidence: high): the scenarios
 all supply a valid type and sprite, so cannot test those failure paths.
 
-The importer warns, so that a mod author learns of each quirk, for:
+An explicitly written zero end field or loop end is an input-value rule, not an optional
+playback quirk. Its result is claim 25 and F2's result, including the new-theater refresh
+exception. The importer warns but does not change that result.
+
+The importer warns about the following inputs, including quirk-sensitive values, for:
 - a `RandomRate` pair written in ascending order (claim 3),
 - a `Rate` above 900 (claim 2),
 - a `LoopCount` outside 0 to 255 other than −1 (claim 7),
@@ -1038,7 +1049,8 @@ building that can cloak), it sets them in the test map's override section, which
   - Runs: one per type.
   - Expected: Q1 shows 7 … 1, then 8 … 1, then is removed; image frame 0 never shown. Q2 shows 10
     (its first pass ends on the first advance, claim 8), then 11, 10, 9 … 4, then is removed.
-  - Falsified if: Q1 shows image frame 0, Q1's first pass starts at 8, or Q2's sequence differs.
+  - Falsified if: either sequence differs, including Q1 showing image frame 0 or starting
+    its first pass at 8.
 - **AN7 (claim 9).** Test types P1 (ping-pong, loop count 1, end 6, rate 300), P2 (ping-pong, loop
   count −1, start 0, loop end 5, rate 300), P3 (ping-pong, loop count −1, start 4, loop start 4,
   loop end 8, rate 300), P4 (ping-pong, shadow flag, loop count 1, end 6, loop end 3, rate 300, a
@@ -1049,8 +1061,8 @@ building that can cloak), it sets them in the test map's override section, which
   - Expected: P1 cycles 0 … 6, 5 … 0, 1 … without ending, image frame 6 drawn only if *N* > 6; P2
     cycles 0 … 5 … 0 without ending; P3 shows 4 … 8, then 7 … 0, then nothing, without ending; P4
     shows 0, 1, 2 and is removed, without turning.
-  - Falsified if: P3 turns at image frame 4 coming down, P1, P2 or P3 is removed, or P4 shows image
-    frame 3 or keeps playing.
+  - Falsified if: any recorded sequence differs from its prediction, P3 turns at image
+    frame 4 coming down, P1, P2 or P3 is removed, or P4 shows image frame 3 or keeps playing.
 - **AN8 (claim 10).** Test types S1 (shadow flag, loop end 3, end 6, loop count 1, rate 300), S2
   (shadow and flat flags) and S3 (shadow and tiled flags), each on a sprite with shadows, played by
   a trigger action.
@@ -1097,7 +1109,8 @@ building that can cloak), it sets them in the test map's override section, which
   - Expected: F shows 0 1 2 3, then G shows image frames 4, 5, … *N*<sub>G</sub> + 1 at 6 ticks each
     (the last two blank), one pass, then removal. F2 shows 3, 2, 1, then G2 shows 4, 3, 2, 1, 0 and
     then nothing, and is not removed.
-  - Falsified if: G starts at image frame 2 or plays two passes, G2 plays upwards, or G2 ends.
+  - Falsified if: either image-frame sequence or any predicted hold differs, G starts at
+    image frame 2 or plays two passes, G2 plays upwards, or G2 ends.
 - **AN12 (claims 17, 18).** The test copy of the art database gives the explosion animation of one
   stock weapon a damage of 0.375, rate 300, one pass and end 10. A unit fires the weapon at a stock
   building that the game-wide warhead damages (checked in a pilot run). A control run plays the same
@@ -1142,7 +1155,7 @@ building that can cloak), it sets them in the test map's override section, which
     animation is no longer drawn from the tick the vehicle is removed, and it is gone from the game
     no later than the next tick, with no image frame change in between.
   - Falsified if: the difference changes while attached, the animation is drawn after the vehicle's
-    removal, or its image frame changes after that.
+    removal, it still exists after the following tick, or its image frame changes after removal.
 - **AN16 (claims 21, 23).** A test building that needs power, with test slot animations of rate 9
   (100 ticks each image frame).
   - Part (a), power: one *freeze-unpowered* slot; power is cut for 250 ticks just after an advance.
