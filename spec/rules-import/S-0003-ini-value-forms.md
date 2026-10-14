@@ -2,7 +2,7 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,8 +25,10 @@ S-0002, and the floating-point rounding mode these value forms rely on (claim 17
 to S-0205 (number domains). These claims cover skirmish imports; network games and campaigns
 are out of scope.
 
-**Joint hand-off checks.** Retain claim 9's original-versus-engine distinction in
-S-0009's header-pair claims and mapping. Claim 14's trigger-name exceptions remain
+**Joint hand-off checks.** Confirm claim 9 against S-0009 claim 29 and its header-pair
+Import mapping in the versions handed off together: unread components are unspecified
+in the original; completion from the value in force is our engine's departure, with
+an importer warning. Missing or empty pairs keep the whole value in force. Claim 14's trigger-name exceptions remain
 aligned with S-0011 claims 5 and 21. S-0011's reveal scope and S-0409 claim 17 already
 agree on every player house in our engine, including observers; that design rule
 is not an extension of this spec's type-reference rule.
@@ -782,7 +784,7 @@ unspecified in the original; our engine leaves the value in force and warns (cla
 | C9 | Percentage fields (Terms, claim 18) known here: `ConditionYellow`, `ConditionRed` (in `[AudioVisual]`); `RefundPercent`, `RepairPercent`, `SpyMoneyStealPercent`, `CrewEscape` (in `[General]`). Topic specs may mark further decimal fields | Decimal with optional `%` (claims 6 to 8). Both health ratios keep the widened-single input, or its double percent product, as doubles, as claim 7 specifies; missing or empty keeps the value in force, with starting defaults owned by S-0302. Other fields' storage precision and defaults remain their topic specs'. A value without `%` above 1 in magnitude raises claim 18's importer warning; the value is unchanged |
 | C10 | Boolean fields such as `Selectable` | Boolean (claim 2) |
 | C11 | `Speed` and `Strength` of a type | Integer (claim 3) |
-| C12 | `Waypoint1` … `WaypointN` in a map's `[Header]`, *N* = the header's start-position count (S-0009) | Integer pair (claim 9). An unread number is unspecified in the original; in our engine it is the matching number of the value in force |
+| C12 | `Waypoint1` … `WaypointN` in a map's `[Header]`, *N* = the header's start-position count (S-0009) | Integer pair (claim 9). An unread number is unspecified in the original; our engine keeps the matching number of the value in force and warns (a departure). Missing or empty keeps the whole pair in force. S-0009 claim 29 owns which marks supply that value for pairs beyond the eighth |
 | C13 | Rectangles in a map, such as `LocalSize` and `Size` in `[Map]` and the preview's `Size` | Integer quadruple (claim 10). Absent or empty: 0, 0, 0, 0. The map consequences and each field's component fallback are in S-0009 |
 | C14 | `MovementZone`, `SpeedType`, `Pip` of a type, `Foundation` of a building (art file) | Named value (claim 16) |
 | C15 | Warhead `AnimList`; `[CombatDamage]` `SplashList`; type `DebrisAnims`, `Explosion`, `DestroyAnim`; `[General]` `DamageFireTypes`, `MetallicDebris` | Animation-name lists, 127-byte text limit. Claims 12, 14 and 19: `none` and `<none>` are omitted, not empty slots. Start empty; missing or empty keeps the list in force |
