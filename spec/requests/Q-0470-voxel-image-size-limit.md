@@ -1,9 +1,9 @@
 ---
 id: Q-0470
 title: Size limit for enlarged voxel images
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
