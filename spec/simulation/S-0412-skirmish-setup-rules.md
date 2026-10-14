@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -389,18 +389,20 @@ S-0413 claim 6). In addition:
 
 11. **The bases and short-game settings together.** With the bases setting off, no house receives
     a base unit (S-0009 claim 45). With the short-game setting on as well, a house passes the
-    short-game test (S-0414 claim 2) only through a counted building (S-0414's sense, Terms) or a vehicle of one of the
-    first three base-unit types, which it then owns by other means: a building or vehicle
+    short-game test (S-0414 claim 2) only through a counted building (S-0414's sense, Terms) or a qualifying vehicle of one of the
+    first three base-unit types, which it then owns by other means. A vehicle marked insignificant
+    or not scored does not qualify (S-0414 claim 2). Those objects can be: a building or vehicle
     pre-placed for it by the map (S-0009 claim 27: a human-controlled house never keeps a
     pre-placed building, but keeps a pre-placed vehicle), or a vehicle of such a type among its
     budget units, when the budget pool holds one. A house with none of these at tick 1, the first
     tick with a defeat test, fails the test then. On a map that pre-places none of them, and
-    with a unit-count setting that gives no such vehicle, every non-passive house fails in tick 1
-    (quirk `quirks.short_game_without_bases`). The houses are tested in house order, in which the
+    with a unit-count setting that gives no such vehicle, every tested non-passive house fails in tick 1
+    (quirk `quirks.short_game_without_bases`); our engine sets an observer's house aside
+    from defeat testing and the end test (S-0414 claims 1 and 6). The houses are tested in house order, in which the
     human participant's house comes first (S-0009 claim 19). In our engine the game ends in tick 1,
     at the first of these defeats after which no hostile pair remains, and the houses still
     undefeated then fail the test in the same tick as well. With `quirks.defeat_during_end_delay`
-    on, that failure defeats them, so every player house loses, all in tick 1; with it off, they
+    on, that failure defeats them, so every tested player house loses, all in tick 1; with it off, they
     keep their win (S-0414 claims 6, 9 and 10). The original ends the game already at the human's defeat, the first of the tick
     (S-0414 claim 6, departure); the human's loss in tick 1 is the same. Where the map does
     pre-place such objects, only the houses without any fail, and the game goes on or ends as
@@ -471,8 +473,7 @@ S-0413 claim 6). In addition:
     - Confidence: medium for the list rule, the order and the early stop; low for the placements
       and their draws; medium that the family is the selector (K8 part d)
 
-14. **The order of game start (Q-0192).** Game start takes place once the map is loaded and the houses
-    exist, and is over before tick 0. This claim is the one place that states the observable order
+14. **The order of game start (Q-0192).** The game-start operations covered here take place after the map is loaded and the houses exist, and are complete before tick 0. This claim is the one place that states the observable order
     of what it draws and changes (S-0407 claim 14 and S-0413 claim 6 point here; the table "Game
     start, in observable order" in State and ordering sums it up). It covers the standard
     skirmish game mode; what other modes add at game start, such as a whole-map reveal, is outside
@@ -493,7 +494,11 @@ S-0413 claim 6). In addition:
       follow claim 13, not the standard mode's base-unit draw sequence. Scenario K9 part a
       tests the group order in both families; S-0202 R10 tests the later animation draws.
     - **Removed houses.** A house that the unused-house cleanup (S-0009 claim 28) removes takes no
-      draw for starting units and receives no starting units (K9 part d). It also gets no
+      draw for starting units and receives no starting units (S-0009 claim 28). Cleanup follows
+      the second whole-map terrain recalculation and precedes the late start-position phase.
+      Conditional tile-animation draws caused by removing its grounded objects belong to
+      that earlier cleanup, not to the starting-unit group (S-0202 claim 14).
+      It also gets no
       left-over budget, none of the extra credits of claim 3, none of the alliances of claim 8 and
       no new wall-owner flag value.
     - **Balances.** The left-over budget credited to a house is what its own starting units left
@@ -520,12 +525,14 @@ S-0413 claim 6). In addition:
     - Backing: `measurable` (scenario K9 part a, with the random-state recorder of the measurement
       setup, for the starting-unit, crate and lab draw groups and their order; S-0202 R10,
       including variants A and B, for the later tag and tile-animation ordering and the
-      no-unit and early-stop cases; K9 part d for the cleanup before the starting
-      units; the balances through K9 parts b and c). The unobservable orders named above are not
-      measurable and are not claimed.
+      no-unit and early-stop cases; the balances through K9 parts b and c).
+      Cleanup's position and the removed house's absence from starting-unit draws are
+      `unmeasured`: no discriminating no-computer-player skirmish fixture is established
+      (S-0009 claim 28; S-0202 deferred R11; K9 part d is a conditional diagnostic).
+      The unobservable orders named above are not measurable and are not claimed.
     - Confidence: high for the draw groups and their order and for the balances; medium for the
-      cleanup before the starting units (S-0009 claim 28 backs that a removed house gets none; K9
-      part d is the first scenario that separates the order through the draw count)
+      cleanup before the starting units (S-0009 claim 28 backs that a removed house gets none.
+      The conditional diagnostic K9 part d is not a completed or established skirmish test)
 
 ## Formulas
 
@@ -581,7 +588,7 @@ resolution").
 | Before seeding | random countries and colours resolved (claims 6, 7) | this spec |
 | House creation | player houses get the credits setting (claim 2), the index and row of claims 4 and 5; neutral and special houses get 0 credits and, by claim 5, an index and no row; the place of this step relative to map loading is S-0009's | values: this spec; order: S-0009 claim 19 |
 | Map loading | start positions, map objects | S-0009 |
-| Game start | the unused-house cleanup: a removed house takes no starting-unit draw and receives nothing from the rows below (claim 14) | S-0009 claim 28; claim 14 |
+| Map loading, after the second terrain recalculation and before the late phase | the unused-house cleanup: removal-cell recalculations can take tile-animation draws here; a removed house takes no starting-unit draw and receives nothing from the later game-start rows (claim 14) | S-0009 claim 28; S-0202 claim 14; claim 14 |
 | Game start, first group of draws | starting units of the remaining houses; each house's balance gains what its own starting units left of its budget | S-0009 claims 45, 46; claim 13 for the all-base-units family |
 | Game start, after the starting units | crates placed when the crate setting is on; the second group of draws | claim 10 |
 | Game start, not ordered against other houses | the extra credits of claim 3 for each house that gets them, computed on a balance that includes the house's own left-over budget (claim 14) | claim 3; claim 14 |
@@ -608,11 +615,12 @@ resolution").
   max(*C*<sub>min</sub>, 0) when the skirmish has no human participant, claim 10). Off: every
   player house counts.
 - **`quirks.short_game_without_bases`** (claim 11; default on, original). Short game with bases
-  off fails every non-passive house that owns no counted building and no vehicle of the first
-  three base-unit types, in tick 1. When neither the map nor the budget units supply any of those
+  off fails every tested non-passive house that owns no counted building and no qualifying vehicle of the first
+  three base-unit types, in tick 1 (S-0414 claim 2 excludes insignificant and not-scored
+  vehicles; our engine sets an observer's house aside, S-0414 claim 1). When neither the map nor the budget units supply any of those
   objects, the original ends at the human's defeat with a loss in tick 1 (S-0414 claim 6,
   departure). Our engine instead ends at the first defeat that leaves no hostile pair, and the
-  remaining houses are defeated later in house order in the same tick. Every player house loses
+  remaining houses are defeated later in house order in the same tick. Every tested player house loses
   when `quirks.defeat_during_end_delay` is on; with it off, those undefeated at the end keep
   their wins (S-0414 claims 6, 9 and 10; claim 11). Off: such a setup is refused.
 - **Extra-credit percentage list too short** (claim 3). When the list holds fewer entries than the
@@ -922,15 +930,21 @@ setup.
   credits for the special house (*M* = 0); (2) the override removed so the special country is
   passive: expected 0 credits. Falsified if either shows credits above 0.
 
-- *Part d (the cleanup before the starting units, claim 14).* Setup: S-0009 scenario M16's map,
+- *Part d (conditional cleanup diagnostic, claim 14).* No discriminating skirmish fixture
+  with no computer player is established (S-0009 claim 28; S-0202 deferred R11).
+  The following proposal is conditional on establishing such a fixture, not measurable
+  backing at present. Setup: S-0009 scenario M16's map,
   type overrides and neutral-country override, played as a skirmish with the human only (no
   computer player, fewer players than the maximum, so the cleanup runs), the bases setting off in
   a loose base-rules copy as in part b, and a unit-count setting above 0. Run 1 with the neutral
   override present (the cleanup removes the neutral house); run 2 without it (the neutral country
-  stays passive and the house never receives units). Observable: the number of raw values taken
-  between the game's seeding and tick 0, and the units around the neutral house's start position.
-  Expected: the same count in both runs and no neutral unit in either (a removed house takes no
-  starting-unit draws). Falsified if run 1 takes more draws than run 2, or shows any neutral unit.
+  stays passive and the house never receives units). Observable: stream-state checkpoints
+  around cleanup, the late phase and starting-unit generation, and the units around the neutral
+  house's start position. Expected: no neutral unit in either run, and no starting-unit draw
+  attributed to the removed neutral house in run 1. Cleanup can itself take conditional
+  tile-animation draws; changing passivity can also change late-phase draws, so equal
+  whole-load counts are not required. Falsified by a neutral starting unit in run 1 or a
+  starting-unit draw attributed to that removed house, not by an earlier cleanup draw.
 
 **K10: the skill level of the non-player houses (claim 3).** Setup: S-0209 scenario C7 part (c)
 (a one-cell-wide corridor; an infantry unit of the special house, a stock type that is not a
@@ -964,12 +978,16 @@ order; their current texts already agree, so no last-lab correction remains outs
 There is no assertion that the recalculation is the final loading-draw group:
 S-0202 claim 14 also owns subsequent resource-glint draws. Neither question of Q-0192 is
 left open. This ordering does not supply downstream particle or smudge draw counts and
-must never be used to treat them as zero. Approved S-0202 revision 11 leaves those counts
-unresolved; its current revision 12 draft claim 15 supplies creation-draw rules for joint
-review, with scenario R14 proposed rather than measured. Sign-off must confirm that
+must never be used to treat them as zero. S-0202 claim 15 supplies creation-draw rules.
+Approved revision 12 and the current revision 13 draft contain them, with scenario R14
+proposed rather than measured. Sign-off must confirm that
 extension and update any coordination note that still calls those creation counts unresolved.
 
-S-0414 claims 6, 9 and 10 own the end-test and end-delay rules used by claim 11. Claims 3, 4
+S-0414 claims 1, 2, 6, 9 and 10 own the defeat-test, end-test and end-delay rules used
+by claim 11: observer houses are set aside, insignificant and not-scored base-unit vehicles
+never qualify, and later same-tick defeats change pending wins only under
+`quirks.defeat_during_end_delay`. Claims 8 and 16 retain the final-tick commitment boundary.
+Claim 11's tick-1 defeats precede that boundary. Claims 3, 4
 and 5 and scenario K10 remain unchanged from approved revision 1: S-0215's current revision
 cites those approved rules, so that dependency needs no simultaneous hand-off. S-0009's current
 claims 45 and 46 already scope their starting-unit rules to standard skirmish mode and defer
