@@ -220,6 +220,30 @@ pub fn edge(dir: (i32, i32), blocked: bool, w: i32, h: i32) -> Option<(Frames, (
     Some((Frames::one(f), (place(hx, w), place(hy, h))))
 }
 
+/// The right-drag cursor (S-0101 claim 17): its static full-size frame for
+/// the refused one-pixel screen directions `[up, right, down, left]`, and
+/// its hot spot, the centre of a full canvas of `w` × `h` pixels.
+pub fn drag(refused: [bool; 4], w: i32, h: i32) -> (Frames, (i32, i32)) {
+    // spec: S-0101 claim 17 (the frame by the refused screen directions, zero-based: none 385, Up 386, Up and Right 387, Right 388, Right and Down 389, Down 390, Down and Left 391, Left 392, Left and Up 393, any other combination 385)
+    let frame = match refused {
+        [true, false, false, false] => 386,
+        [true, true, false, false] => 387,
+        [false, true, false, false] => 388,
+        [false, true, true, false] => 389,
+        [false, false, true, false] => 390,
+        [false, false, true, true] => 391,
+        [false, false, false, true] => 392,
+        [true, false, false, true] => 393,
+        _ => 385,
+    };
+    // spec: S-0101 claim 17 (the hot spot is the full canvas centre (⌊w/2⌋, ⌊h/2⌋))
+    (Frames::one(frame), (w.div_euclid(2), h.div_euclid(2)))
+}
+
+/// The one-pixel screen directions S-0101 claim 17 tries: up, right, down,
+/// left.
+pub const DRAG_TRIALS: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)]; // spec: S-0101 claim 17 (a one-pixel view-centre request in each of the four screen directions)
+
 /// Milliseconds per unit of the presentation clock.
 // spec: S-0214 claim 22 (the 16-millisecond presentation clock)
 const CLOCK_MS: i64 = 16;
@@ -413,5 +437,24 @@ mod tests {
         let still = Choice::Show(Frames::one(41));
         assert_eq!(a.frame(still, 20_000).1, 41);
         assert_eq!(a.frame(still, 30_000).1, 41);
+    }
+
+    /// spec: S-0101 claim 17 (the drag-scroll frame by refused directions, 385 to 393, any other combination 385; the hot spot the canvas centre)
+    #[test]
+    fn s0101_claim_17_drag_cursor() {
+        let f = |r: [bool; 4]| drag(r, 55, 43).0.first;
+        assert_eq!(f([false; 4]), 385);
+        assert_eq!(f([true, false, false, false]), 386);
+        assert_eq!(f([true, true, false, false]), 387);
+        assert_eq!(f([false, true, false, false]), 388);
+        assert_eq!(f([false, true, true, false]), 389);
+        assert_eq!(f([false, false, true, false]), 390);
+        assert_eq!(f([false, false, true, true]), 391);
+        assert_eq!(f([false, false, false, true]), 392);
+        assert_eq!(f([true, false, false, true]), 393);
+        assert_eq!(f([true, false, true, false]), 385);
+        assert_eq!(f([true; 4]), 385);
+        assert_eq!(drag([false; 4], 55, 43).1, (27, 21));
+        assert_eq!(DRAG_TRIALS, [(0, -1), (1, 0), (0, 1), (-1, 0)]);
     }
 }
