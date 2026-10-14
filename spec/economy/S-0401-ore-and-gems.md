@@ -2,7 +2,7 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,8 +27,10 @@ house gets for them, are S-0402's.
 **Joint hand-off.** At sign-off, check claim 20 and E17 against S-0109 claim 13 and
 S-0011 claim 36 and T21: creation-time resource chain reaction is enabled, and only
 later start events of a trigger-played animation suppress it. Hand off these aligned
-revisions together. S-0202 claims 10 and 15 and R14 own the immediate middle-event
-draw composition; later particle updates remain outside that established scope.
+revisions together. S-0202 claims 10 and 15 and R14 own the middle-event
+draw composition during loading and play, including later playback events; subsequent
+particle updates remain outside that established scope. Check claim 16c and E13 against
+S-0202 claim 15 and R14: taking 6 bales leaves a stage-6 cell at stage 0, not empty.
 
 ## Terms
 
@@ -414,8 +416,11 @@ claim 4), which can take more than one raw draw. In addition:
       when the animation's height above the terrain is below 30 leptons, and its type has the
       crater flag and either no scorch flag or the scorch flag with a draw that does not choose the
       scorch mark (S-0109 gives the draw), 6 bales are taken from the cell the animation is in.
-      This is independent of whether a crater is then drawn or created. A type with the crater
-      flag and the large-crater flag takes the same 6 bales.
+      This is independent of whether a crater is then drawn or created. Under claim 3, a cell
+      at stage 6 or above retains its resource overlay at stage *d* − 6; a cell at stage 0
+      through 5 is emptied. In particular, stage 6 becomes stage 0, not empty. These integer
+      stage changes involve no rounding. A type with the crater flag and the large-crater
+      flag takes the same 6 bales.
     - (d) **Steep slopes** (S-0211, claim 7): a cell whose slope no longer allows resource loses it
       when its land type is worked out again.
     - (e) **Laser-fence lines** (S-0202, Terms, *fence line*): when a line of fence sections is
@@ -864,9 +869,13 @@ on flat ground with no building. *Observable:* the stage of each target cell per
 the random-state recorder the draws at the middle event. *Expected:* the crater-only target falls
 to stage 2 at the middle event; the crater-and-scorch target falls to stage 2 when the draw
 gives a crater and stays at 8 when it gives a scorch mark (over 20 seeds both occur); the
-scorch-only target stays at 8. A fourth run from a high bridge deck (height 30 or more above the
-terrain) leaves the stage unchanged. *Falsified if:* the stage falls by any other amount, the
-crater-and-scorch case always removes or never removes, or the scorch-only target changes.
+scorch-only target stays at 8. Repeat the crater-only case at incoming stages 0, 5, 6 and 7:
+stages 0 and 5 lose their resource overlay, stage 6 retains it at stage 0, and stage 7 retains
+it at stage 1. Record overlay presence as well as stage, since an emptied cell also has stage
+0. A fourth run from a high bridge deck (height 30 or more above the terrain) leaves the stage
+unchanged. *Falsified if:* the stage falls by any other amount, a boundary case differs in stage
+or overlay presence, the crater-and-scorch case always removes or never removes, or the
+scorch-only target changes.
 
 **E14. Fence lines, the waypoint trigger and a building on a resource cell (claim 16, parts e, f
 and the paragraph after the list).** Parts A and B use growth and spread fractions 0 for every
