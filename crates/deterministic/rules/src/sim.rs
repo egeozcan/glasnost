@@ -750,6 +750,12 @@ pub struct General {
     /// `[IQ] RepairSell` (S-0314 claim 8).
     #[serde(default)]
     pub iq_repair_sell: Option<i32>,
+    /// `[AI] CreditReserve` (S-0314 claim 12).
+    #[serde(default)]
+    pub credit_reserve: Option<i32>,
+    /// `[IQ] SellBack` (S-0314 claim 14).
+    #[serde(default)]
+    pub iq_sell_back: Option<i32>,
     /// Game-wide economy values (M5, S-0401 to S-0416).
     #[serde(default)]
     pub economy: crate::sim_econ::EconGeneral,

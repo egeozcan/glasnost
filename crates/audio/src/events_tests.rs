@@ -784,12 +784,11 @@ fn turret_sound() {
     let mut u = Rng::new(1);
     a.tick(&w, &[], &mut u);
     assert_eq!(a.mixer().alive(), 0);
-    let tick = w.tick;
-    let o = w.obj_mut(tank).expect("tank");
-    o.turret.t0 = tick;
-    o.turret.duration = 100;
+    // spec: S-0206 claim 17 (the sound update reads the latest rotation sample)
+    w.obj_mut(tank).expect("tank").rotation_sample = true;
     a.tick(&w, &[], &mut u);
     assert_eq!(heard(&mut a, 0), ["Whirr"]);
+    w.obj_mut(tank).expect("tank").rotation_sample = false;
     w.tick += 10_000;
     a.tick(&w, &[], &mut u);
     render(&mut a, 100);

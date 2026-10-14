@@ -321,6 +321,7 @@ const WALL_MODEL: &[u8] = b"WallModel"; // spec: S-0306 Import mapping (`[WallMo
 const ELEVATION_MODEL: &[u8] = b"ElevationModel"; // spec: S-0307 Import mapping (`[ElevationModel]`)
 /// The AI intelligence levels section.
 const IQ: &[u8] = b"IQ"; // spec: S-0314 Import mapping (`[IQ]`)
+const AI: &[u8] = b"AI"; // spec: S-0314 Import mapping (`[AI]`)
 
 /// Game-wide combat fields: our name, section, key, form, spec.
 const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
@@ -622,6 +623,8 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0307",
     ),
     ("iq_repair_sell", IQ, "RepairSell", Int, "S-0314"),
+    ("credit_reserve", AI, "CreditReserve", Int, "S-0314"),
+    ("iq_sell_back", IQ, "SellBack", Int, "S-0314"),
 ];
 
 /// The crew types of `[General]` and our field names (S-0312 Import

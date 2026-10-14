@@ -280,7 +280,6 @@ Provisional rules of combat, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
-| `combat::heal` (automatic repair and sale) | no house repairs or sells a building by itself at any repair-and-sell threshold; only the repair and sell orders do (S-0314 claim 8 leaves the conditions after the skill-level gate open) | Q-0341 |
 
 ## Simulation (M5a: economy and base building)
 
@@ -297,7 +296,6 @@ Provisional rules of M5a, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
-| `econ::release::arrival`, `walk` | a walking unit's cell-arrival update (S-0417 claims 7 and 10) is the arrival tick of S-0208 claim 6; S-0417 revision 3 defines it for driving vehicles only | Q-0295 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 
 ## Own AI (M5b)

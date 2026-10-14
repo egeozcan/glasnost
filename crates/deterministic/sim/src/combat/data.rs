@@ -774,6 +774,10 @@ pub struct CombatGeneral {
     pub elevation_cap: F64,
     /// The repair-and-sell threshold.
     pub iq_repair_sell: i32,
+    /// The repair reserve, in credits (S-0314 claim 12).
+    pub credit_reserve: i32,
+    /// The sale threshold (S-0314 claim 14), compared as unsigned.
+    pub iq_sell_back: i32,
     /// The normal row's rate-of-fire factor ℓ.
     pub row_rof: F64,
     /// The normal row's firepower factor φᵣ.
@@ -1413,6 +1417,10 @@ pub fn combat_rules(
         elevation_cap: dec(&g.elevation_bonus_cap, mode).unwrap_or(F64::ZERO),
         // spec: S-0314 Constants (repair-and-sell threshold absent: 3)
         iq_repair_sell: g.iq_repair_sell.unwrap_or(3),
+        // spec: S-0314 Constants (repair reserve absent: 1000 credits)
+        credit_reserve: g.credit_reserve.unwrap_or(1000),
+        // spec: S-0314 Constants (sale threshold absent: 2)
+        iq_sell_back: g.iq_sell_back.unwrap_or(2),
         // spec: S-0301 Import mapping (row ROF absent: 1.0); S-0302 Import mapping (row FirePower absent: 1.0)
         row_rof: dec(&row.rof, mode).unwrap_or(one),
         row_firepower: dec(&row.firepower, mode).unwrap_or(one),

@@ -817,7 +817,6 @@ impl Audio {
 
     /// Movement, turret and promotion sounds from the world (claim 23).
     fn scan(&mut self, w: &World, unsync: &mut Rng) {
-        let tick = w.tick;
         let gone: Vec<ObjectId> = self
             .motion
             .keys()
@@ -874,7 +873,8 @@ impl Audio {
             }
             if let Some(turret) = self.single(ts.turret_rotate.as_ref()) {
                 let t_anchor = TURRET_ANCHOR | anchor;
-                let turning = o.turret.turning(tick);
+                // spec: S-0206 claim 17 (the sound update uses the latest rotation sample, not the facing again)
+                let turning = o.rotation_sample;
                 let live = self
                     .turrets
                     .get(&id)

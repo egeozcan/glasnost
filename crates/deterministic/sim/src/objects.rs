@@ -51,9 +51,12 @@ pub fn occ_quirks(w: &World) -> OccupancyQuirks {
 /// vehicle, aircraft or building object takes one raw value from the
 /// scenario random stream (S-0202 claim 10).
 pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>) -> ObjectId {
+    let mut report_value = 0;
     if kind != Kind::Terrain {
         // spec: S-0202 claim 10 (the creation draw: one raw value)
-        let _ = w.rng.raw();
+        let x = w.rng.raw();
+        // spec: S-0202 claim 10 (Q-0327: the report value r = x mod 65536, kept without another draw)
+        report_value = (x & 0xFFFF) as u16;
     }
     let id = w.new_id();
     let r = w.rules_arc();
@@ -88,6 +91,8 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
         turret: Turning::at(0),
         // spec: S-0206 claim 9 (a vehicle that never fired counts as having last fired 100 ticks before tick 0)
         last_fired: -100,
+        report_value,
+        rotation_sample: false,
         beh: Behaviours::default(),
         target: None,
         dest: None,
@@ -651,6 +656,12 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     if let Some(o) = w.obj_mut(id) {
                         o.econ.building.switched_off = true;
                     }
+                }
+                if fields.ai_repair == Some(true)
+                    && let Some(o) = w.obj_mut(id)
+                {
+                    // spec: S-0314 claim 13 and Import mapping (the map's computer-repair field, nonzero: set)
+                    o.combat.computer_repair = true;
                 }
                 // spec: S-0009 claim 40 (min(c, 3) upgrade fields, each naming a building type, placed right after the building)
                 let c = fields.upgrade_count.unwrap_or(0).clamp(0, 3) as usize; // spec: S-0009 claim 40 (a count above 3: our engine uses 3)

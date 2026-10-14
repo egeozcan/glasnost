@@ -61,3 +61,76 @@ fn turret_rests_on_the_destination_then_the_body() {
     assert_eq!(o.dest, None, "the cart arrived");
     assert_eq!(o.turret.value(w.tick), o.body.value(w.tick));
 }
+
+fn turret_game(
+    spins: bool,
+    rot: i32,
+) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId) {
+    let mut r = testkit::ruleset();
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.turret = Some(true);
+    cart.rot = Some(rot);
+    if spins {
+        cart.turret_spins = Some(true);
+    }
+    let rules = Arc::new(SimRules::new(&r, "turret-sample"));
+    let mut w = new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(2),
+    )
+    .unwrap();
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    let id = testkit::house_objects(&w, 0)
+        .into_iter()
+        .find(|&i| {
+            w.obj(i)
+                .is_some_and(|o| o.kind == Kind::Vehicle && o.type_index == 0)
+        })
+        .unwrap();
+    (w, id)
+}
+
+// spec: S-0206 claim 17 (a spinning turret's rotation sample is turning, though it never counts for the re-aim gate)
+#[test]
+fn rotation_sample_spinning_turret() {
+    let (mut w, id) = turret_game(true, 1);
+    for _ in 0..3 {
+        tick::step(&mut w);
+        assert!(w.obj(id).unwrap().rotation_sample);
+    }
+}
+
+// spec: S-0206 claim 17 (a turret at rest samples not turning; a turn of positive duration begun by the rows samples turning)
+#[test]
+fn rotation_sample_follows_the_rows() {
+    let (mut w, id) = turret_game(false, 1);
+    for _ in 0..40 {
+        tick::step(&mut w);
+    }
+    assert!(!w.obj(id).unwrap().rotation_sample, "at rest");
+    let o = w.obj(id).unwrap();
+    // A destination behind the vehicle: a turn of positive duration.
+    let back = glasnost_map::CellXY::new(o.pos.cell().x - 6, o.pos.cell().y + 6);
+    orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: id,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(back)),
+        },
+    );
+    let mut seen = false;
+    for _ in 0..6 {
+        tick::step(&mut w);
+        let o = w.obj(id).unwrap();
+        seen |= o.rotation_sample;
+    }
+    assert!(seen, "the turn was sampled");
+}

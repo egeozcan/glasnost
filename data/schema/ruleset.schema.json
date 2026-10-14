@@ -3899,6 +3899,15 @@
             }
           ]
         },
+        "credit_reserve": {
+          "description": "`[AI] CreditReserve` (S-0314 claim 12).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "crew_escape": {
           "description": "`[General] CrewEscape` (S-0312 claim 13), a double.",
           "anyOf": [
@@ -4161,6 +4170,15 @@
         },
         "iq_scatter": {
           "description": "`[IQ] Scatter` (S-0209 claim 11).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iq_sell_back": {
+          "description": "`[IQ] SellBack` (S-0314 claim 14).",
           "type": [
             "integer",
             "null"
