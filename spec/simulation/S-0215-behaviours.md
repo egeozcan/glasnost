@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,10 +45,10 @@ S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry movement
 (occupancy and crowding), S-0210 (crushing), S-0212 (pathfinding), S-0213 (human orders), S-0214
 (order targeting rules), S-0301 (the firing cycle), S-0307 (weapon range test), S-0308 (weapon
 choice), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle) and
-S-0412 (skirmish setup rules). All cited specs are approved; S-0412 is approved at revision 2.
-This spec cites S-0412's Terms, its claims 3, 4 and 5 and its scenario K10 (the house skill level
-and the difficulty index of each house at game start, claim 5 for the index of the neutral and
-special houses) as that approved revision states them.
+S-0412 (skirmish setup rules). All cited specs are approved; references also follow their current correction drafts.
+This spec cites S-0412's Terms, its claims 3, 4 and 5 and its scenario K10 for the house skill
+level and the difficulty index of each house at game start (claim 5 for the index of the neutral
+and special houses).
 
 **Requests.** This spec answers request Q-0020 in two of its parts: the engine default of the
 area-guard threshold (claim 36 a) and the gate's *open* behaviour, which decides when a gate is
@@ -167,8 +167,9 @@ Terms used by this spec:
 - **Ready mark:** a per-building yes/no state that makes a building ready to change (claim 11).
   Some building processings set it (claim 32); a successful per-tick start of the building clears
   it. It is internal state; only its effect on when queued behaviours start is observable.
-- **Attack-move order, attack-move memory, eligible for attack-move:** as S-0213 (human orders)
-  and S-0214 (order targeting rules) define them. An attack-move order is the order that the
+- **Attack-move order, attack-move memory, eligible for attack-move:** S-0213 (human orders)
+  owns the order and its initial memory; S-0214 (order targeting rules) owns eligibility.
+  S-0309 claim 23 owns the memory's searches, refresh, removal and resumption. An attack-move order is the order that the
   attack-move gesture gives; the memory is what such an order leaves on a mobile actor (that its
   *move* or *attack* is an attack move, and where to); eligibility is a property of the actor's
   type (infantry or vehicle, with a weapon in its first slot, not marked as preventing attack-move; never
@@ -514,20 +515,21 @@ Terms used by this spec:
    new behaviour stays queued and the rate is that of the behaviour still current. The infantry
    rules of claims 23 and 27 that end with 1 tick take no rate at all.
 
-   **The delay's draw comes last.** Within one processing, the draw of the delay itself (the
-   *U*(*a*, *b*) of its formula, where it has one) is the last draw the processing takes from the
-   scenario random stream. Every other draw of the same processing comes before it: the draws of a
-   target search that the processing runs (claims 26 and 27, including the search's own
-   *U*(0, 2) for the targeting timer, claim 33), and the draws of the rules it applies, such as
-   approaching a target, an idle action or a scatter request, whose number belongs to their own
-   specs. So in an *area guard* processing whose search runs, the targeting timer's *U*(0, 2) is
-   drawn before the delay's *U*(1, 5).
+   **Observable random-stream result.** In a processing that takes a delay draw, its delay
+   receives the stream value after the values assigned to every other draw belonging to that
+   processing. Those other draws include a target search (claims 26 and 27, including the
+   search's *U*(0, 2) for the targeting timer, claim 33), and rules such as approaching a target,
+   an idle action or a scatter request, whose draw counts belong to their own specs. Thus, in an
+   *area guard* processing whose search runs, the targeting-timer value corresponds to the
+   earlier *U*(0, 2) assignment and the delay to the subsequent *U*(1, 5) assignment. The required
+   results are these timer values and the resulting random-stream state, not an internal
+   execution order.
    - Backing: `measurable` (scenario B2 for the rate delay and the standard delay, its third run
      for a rate written with a percent sign under the original's rounding; scenarios B11
      case e and B21 for the rate of a behaviour the processing has started, and scenario B22 for the rate of the
-     current behaviour under a shared processing; scenarios B9 case b, B11 case b and B21 for fixed
-     delays taking no draw; scenario B27, case d, for the delay's draw coming after the search's
-     draw in *area guard*; scenario B30, case a, for a rate whose product with 900 reaches 2⁶³,
+     current behaviour under a shared processing; scenarios B11 case b and B21 for fixed
+     delays taking no draw; scenario B27, case d, for the timer and delay draw assignments
+     in *area guard*; scenario B30, case a, for a rate whose product with 900 reaches 2⁶³,
      which F1 turns into 0). The not-a-number case of F1 and F9 is `unmeasured`: S-0003's decimal
      form never yields a not-a-number, so imported data cannot reach it (F1). That the delay's draw also follows the search of *hunt* and the draws
      of approaching, idle actions and scatter requests is `unmeasured`: the search's own draws are
@@ -816,8 +818,12 @@ Terms used by this spec:
 
     These effects take place at most once per actor per tick: in a second fall-back to rest on the
     same tick none of them happens, and only the table of claim 14 or 15 applies. An actor using a temporal
-    weapon also lets its victim go, and an actor with attack-move memory may resume its attack move; the
-    combat and order specs own those effects.
+    weapon also lets its victim go. Attack-move memory is refreshed among these common effects,
+    before the rest table judges the actor: S-0309 claim 23 (b) owns its removal or resumption.
+    Thus row 1 of claims 14 and 15 applies only when memory remains after that refresh. If
+    memory is removed, ordinary rest rules apply on the same fall-back; if the attack move is
+    resumed, its behaviour has already been queued with an immediate start as S-0309 states.
+    The refresh shares this once-per-tick limit and is not part of the per-tick start of claim 11.
 
     **Whose route (original only).** In the route row, the original takes the route's next point
     from the routes of the house played on the machine running the game, not from those of the
@@ -829,7 +835,8 @@ Terms used by this spec:
     middle of a route (for example a mind-controlled vehicle), and whether an owner change keeps
     the route is not established (Open questions).
     - Backing: `measurable` (scenario B15: cases a and d for the guard-spot row, case b for the
-      route row). The original's choice of the local player's routes over the owner's is
+      route row; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
+      rest table and its resumption or removal outcomes). The original's choice of the local player's routes over the owner's is
       `unmeasured`: it differs from the owner's routes only for an actor that follows a route while
       its owner is not the house played on the machine. Network games, where that is common, are
       out of scope here (S-0202, claim 12); in a skirmish the only known way is an owner change
@@ -844,7 +851,8 @@ Terms used by this spec:
       behaviour is not *area guard*.
     - Confidence: medium (the effects and which destination remains, and that the original uses
       the local player's routes); high (that no scatter request
-      is sent); low (the locomotor row and its effect on the guard-spot row, and which rules fill
+      is sent, and that memory refresh precedes the rest table); the memory lifecycle has
+      S-0309 claim 23's confidence; low (the locomotor row and its effect on the guard-spot row, and which rules fill
       the approach destinations)
 
 14. **Falling back to rest: infantry.** When an infantry unit falls back to rest, after the common
@@ -885,14 +893,13 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B4 for rows 7, 9, 10, 11 and 12, and S-0412 scenario K10
       for the level 0 that sends the neutral and special houses' infantry to row 7; row 4 by
       scenario B15 case c; row 6 by scenario B6 case e; scenario B29, case a, for row 2, for row 5 (a3) and for the
-      *area guard* exception with a target). These parts are `unmeasured`:
+      *area guard* exception with a target; S-0309 scenario A6, parts g, n and o, for row 1's
+      memory remaining after refresh, and ordinary rest after removal). These parts are `unmeasured`:
       - the *patrol* exception, because the *patrol* processing belongs to other topics (claim 34)
         and may queue a behaviour of its own at the same moment,
       - row 3, the queued destinations, which the order rules fill (S-0213) and for which no input
         is known here,
-      - row 1's attack-move memory, whose life belongs to S-0213 and S-0214 (it is cleared and set
-        by the order rules, so a fall-back test here could not tell the memory from an ordinary
-        stop), and row 1's *wait* case, which differs from the later rows only for a unit with a
+      - row 1's *wait* case, which differs from the later rows only for a unit with a
         target or a destination (claim 7 already refuses a queued *guard* under *wait*), while no
         setup is known that gives a unit in *wait* a target or a destination at a fall-back to rest,
       - row 8, the harvesting slave of a computer-controlled owner, which is the original's only
@@ -920,7 +927,11 @@ Terms used by this spec:
     No row queues anything while the current behaviour is *patrol*, *area guard*, *unload* or
     *eaten*, or while it is *enter* towards a bunker it is in contact with and the vehicle does not
     yet stand on that bunker's cell; the clearing of target and destination in rows 4 and 7 still
-    happens then. Every "queue" of this table is a queue without an immediate start. Unlike
+    happens then. A vehicle left in *unload* with nothing queued stays in *unload*: falling back
+    does not itself start a resting behaviour. For a harvester that loses contact while unloading,
+    S-0402 claim 11 owns the repeated fall-back and retained load, and
+    `quirks.unload_without_contact_stalls` (default original) and its alternative.
+    Every "queue" of this table is a queue without an immediate start. Unlike
     infantry, rows 10 to 12 do not look at whether the owner is human-controlled; only the owner's
     house skill level counts. In a skirmish of the original a human-controlled house and the
     neutral and special houses have skill level 0, and the house of every computer player has the
@@ -950,9 +961,15 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B4 for rows 4, 7, 10, 12, the team-member part of row 11
       and the skirmish skill levels of the human-controlled and computer player houses; S-0412
       scenario K10 for the level 0 of the neutral and special houses; row 3 by scenario B15 case b, row 9 by scenario B6 case e; scenario B29 for row 8, row 12's
-      bunker variant and the exceptions for *area guard* and *eaten*). These parts are
-      `unmeasured`:
-      - row 2, the queued destinations, and row 1's attack-move memory (see claim 14),
+      bunker variant and the exceptions for *area guard* and *eaten*; S-0309 scenario A6,
+      parts g, n and o, for row 1's memory and rest after removal; S-0402 claim 11 and its
+      scenario H12 for a harvester staying in *unload* without contact).
+      These parts are `unmeasured`:
+      - row 2, the queued destinations: no input here is known to fill that list (as for
+        claim 14, row 3),
+      - row 1's *wait* case: no setup is known that makes a waiting vehicle fall back to rest
+        with a destination or another state that would distinguish row 1 from the later rows.
+        Queueing *guard* is already refused under *wait* (claim 7),
       - row 4's case of a harvester in contact with another object or with *harvest* current or
         queued: the processings that would make such a harvester fall back to rest belong to the
         economy topic's harvest cycle (S-0402), so no setup here can time a fall-back in that state,
@@ -964,8 +981,8 @@ Terms used by this spec:
         (nothing queued) and cannot be told apart from it,
       - the slave-master and harvesting-slave parts of row 11, which concern the economy topic's
         units,
-      - the exceptions for *patrol*, *unload* and *enter* towards a bunker: the *patrol* and
-        vehicle *unload* processings belong to other topics (claim 34), which may queue a
+      - the exceptions for *patrol*, non-harvester *unload* and *enter* towards a bunker: the *patrol* and
+        non-harvester *unload* processings belong to other topics (claim 34), which may queue a
         behaviour of their own at the same moment, and the *enter* case lasts only while the
         vehicle drives onto the bunker's cell, which no setup here can time a fall-back into,
       - the campaign skill levels: campaigns are out of scope for now (decision of the project
@@ -1099,7 +1116,9 @@ Terms used by this spec:
     other actor).
     - Backing: `measurable` (scenario B6 for vehicles, case 2 in part b, with its variant for the
       original's computer-controlled owners, and case 1 in part d; S-0208 scenario W7 for
-      infantry)
+      infantry). Case 1 for aircraft is `unmeasured` here: B6 tests driving vehicles only, and
+      no scenario establishes an aircraft's acceptance or movement following this request.
+      Those outcomes belong to the aircraft topic.
     - Confidence: high (the gate on requests that are not forced, for vehicles; the options of the
       request from damage); medium (the conditions of the two cases, for non-infantry actors)
 
@@ -1197,8 +1216,13 @@ apply in our engine to the actors of every player house.
       only (note for AI designers):** an infiltrator, occupier or assaulter of the original's
       computer player that is attacking a building it may take goes straight for it, in *capture*; our
       AI can get the same result with a capture or occupy order (S-0213, S-0214).
-    - Backing: `measurable` (scenario B9; cases b, c and d for the infantry table; scenario B24,
-      case d for the hover-attack cell and case c for the charge-target check)
+    - Backing: `measurable` (scenario B9; cases c and d for the second and third infantry
+      rows; scenario B24, case d for the hover-attack cell and case c for the charge-target check).
+      The explosive-charges row is `unmeasured`: S-0214 translates a player's attack order on
+      a building that accepts charges into *sabotage*, and S-0309 claim 18 prevents such a
+      human-controlled unit from retaliating against a building. B9 (b)'s former retaliation
+      setup therefore cannot reach *attack* with that target. No replacement input that isolates
+      this row is established here.
     - Confidence: high (the delay rule, and that the 1-tick rows replace the general rules and take
       no draw); medium (the conditions of the infantry rows)
 
@@ -1377,7 +1401,10 @@ apply in our engine to the actors of every player house.
     take a new target around its guard spot in the same processing, and never engages, in that
     processing, the target the leash made it drop.
 
-    An actor without a guard spot does none of this. In a processing that none of rows 1 to 5 ends,
+    An actor without a guard spot does none of this. Whether a spot first acquired as the actor's
+    own cell in this processing already qualifies for the table is not established (Open
+    questions); the table's same-processing outcomes are specified here only for a spot held
+    when the processing began. In a processing that none of rows 1 to 5 ends,
     any actor, with or without a guard spot, that has no target once the leash and the search have
     taken effect and whose secondary weapon charges friendly buildings looks for a charge target as
     in *guard*.
@@ -1402,7 +1429,10 @@ apply in our engine to the actors of every player house.
       that finds a target takes no draw is `measurable` by scenario B27, case f: the search of a
       player house's actor takes only its timer draw and none for the objects it tests or scores
       (S-0309, claim 12, and its State and ordering), so the stream on that tick tells a draw of
-      the delay apart from the search's.
+      the delay apart from the search's. The leash and search table in the processing that
+      first acquires its own cell as guard spot is `unmeasured`: B10 (g) records the spot only
+      afterwards and does not distinguish a same-processing search from one deferred to the
+      next processing (Open questions).
     - Confidence: high (the guard spot and delay rules); medium (the leash, the order of leash and
       search, the slave-master rows, the computer-only rules and the harvester rule)
 
@@ -1688,6 +1718,11 @@ apply in our engine to the actors of every player house.
       row, case k for the aiming tolerance, case l for firing both weapons and case m for the
       out-of-stage rule, with a test gate type that has the SAM flag; no stock type reaches that
       rule). These parts are `unmeasured`:
+      - the unchecked secondary shot when that weapon's own firing check would refuse it:
+        B16 (l) supplies a secondary weapon that can hit the target and proves two shots despite
+        the rearm countdown begun by the primary, but does not separately test an out-of-range
+        or otherwise illegal secondary weapon. No scenario here isolates those other refusal
+        categories from the primary check,
       - the out-of-stage rule after a *repair* or *missile* processing: the structures and
         superweapons specs own those processings and the values they leave, so no setup here can
         put a building in such a stage on purpose,
@@ -1695,6 +1730,15 @@ apply in our engine to the actors of every player house.
         cannon, the superweapon buildings and the empty occupiable building), because the only
         observable difference from the general rule needs such a building to hold a target at a
         processing, and no setup is known that gives one,
+      - the non-SAM answers *illegal*, *impossible* and *out of ammunition*: B16 (e) isolates
+        *out of range*, not these other reasons for returning to *guard*. No scenario here
+        supplies a separately identified illegal or impossible target or exhausts a building's
+        ammunition while it still holds its target,
+      - the SAM answer-specific transitions other than *can fire*, rearming and target loss:
+        B16 does not isolate *not facing*, *illegal*, *impossible*, *out of range* or each
+        remaining answer in the *aimed* stage. Its timing runs cannot distinguish these
+        individual reasons without recording and setting up the corresponding firing-check
+        result at that stage,
       - in the non-SAM row of other answers, the answers *busy*, *cloaked*, *moving* and *must
         deploy*. S-0301 (claim 9) gives *moving* only to a firer that moves and *must deploy* only
         to a vehicle, so no building gets them; it gives *busy* to a firer launching spawned
@@ -1740,8 +1784,11 @@ apply in our engine to the actors of every player house.
     - (c) a target that the per-tick search finds on a tick is first acted on by the processing of
       a later tick, never by the processing of the same tick, and the drop rule of the same tick
       does not remove it,
-    - (d) every draw that the actor's processing takes on a tick comes before every draw of its
-      per-tick search on that tick, including the search's *U*(0, 2) for the targeting timer.
+    - (d) when both the actor's processing and its per-tick search draw on the same tick,
+      the processing's choices receive the earlier stream values, and the per-tick search's
+      choices receive the subsequent stream values. This includes the search's *U*(0, 2) for
+      the targeting timer. The choices and resulting random-stream state must match these
+      assignments; no internal execution order is prescribed.
 
     For an actor that carries an attack-move memory, parts (a), (c) and (d) hold as stated, with
     its attack-move search as the per-tick search: a behaviour that this search starts with an
@@ -1793,8 +1840,9 @@ apply in our engine to the actors of every player house.
     - (a) **Start.** Every gate starts with its door at rest closed, whether the map places it or a
       house builds it. Only the *open* processing below moves the door.
     - (b) **Who opens it.** The *closed friendly gate* outcome of S-0209 makes the gate open; no
-      other rule is known to start *open* on a gate, apart from data that names *open* as a
-      placed building's behaviour (Import mapping, behaviour names). When that outcome arises and the
+      other rule is known to start *open* on a gate. Map building entries do not carry a
+      behaviour (claim 4); the general data vocabulary in Import mapping does not add such
+      a field. When that outcome arises and the
       gate's current behaviour is not *open*, or its door is closing or at rest closed, the gate
       drops any queued behaviour, and *open* becomes current at once, whether or not the gate is
       ready to change (a behaviour start, so the progress count is 0 and the gate is processed at
@@ -1852,8 +1900,9 @@ apply in our engine to the actors of every player house.
     - (e) **Consequences.** A friendly unit at a closed gate waits about *T*<sub>d</sub> ticks
       (S-0209: it waits without a new path search) and then passes. A gate stays open as long as
       something stands in its foundation cells, and closes no earlier than *T*<sub>c</sub> ticks
-      after it began to open and no later than one Std after the last processing that found its
-      cells empty with the countdown run out. A unit that reaches a closing gate makes it reverse
+      after it began to open. More precisely, it begins closing at the processing after the
+      first *waiting* processing that finds its cells empty with the countdown run out, one Std
+      later; reaching rest closed then takes the door time of part d. A unit that reaches a closing gate makes it reverse
       by (b).
 
     **Quirk `quirks.gate_reverse_snaps`** (default on, the original). A door that reverses from
@@ -1866,8 +1915,8 @@ apply in our engine to the actors of every player house.
       case d for the reversal quirk, case g for where within the gate's turn the door reaches rest (part d), case f for the conversion of a gate time that does not fit,
       and scenario B30, case b, for a gate time whose product with 900 reaches 2⁶³).
       `unmeasured`: the non-gate row of (c), since no stock rule
-      gives a building that is not a gate the behaviour *open* and a map that does would show no
-      effect beyond a later *guard*; and the "door at rest closed" row of stage *opening*, which no
+      gives a building that is not a gate the behaviour *open*, map building entries carry no
+      behaviour, and no other input that reaches this row is established; and the "door at rest closed" row of stage *opening*, which no
       known situation reaches (only a reversal stops an opening door, and only stage *start*
       reverses)
     - Confidence: high for part a, the passage state and the door time; medium for part b (stated as its
@@ -2017,11 +2066,18 @@ apply in our engine to the actors of every player house.
       the step.
     - (i) **Coming into range during movement.** The step does not require arrival before
       firing, and coming into range does not itself remove a destination (part e). For driving,
-      sailing and hovering vehicles, S-0207 claim 19 owns the subsequent movement: driving
-      and sailing continue to their destination, while hovering discards stored steps at step
-      points and can wait for a path retry, without ending the approach for good. Firing during
-      that movement remains subject to the firing check (S-0301, S-0310). S-0208 claims 16
-      and 17 own infantry stopping: an ordinary walker in *attack*, *area guard*, *hunt* or
+      sailing and hovering vehicles, S-0207 claim 19 owns the subsequent movement. Driving
+      and sailing stop at a track target, clear their destination and discard remaining steps
+      when the target is mobile, the current behaviour (or queued one if none is current) is
+      *attack*, *area guard*, *hunt* or *rescue*, no approach destinations remain, and that
+      claim's arrival range test passes. They keep their target. Hovering discards stored steps
+      at step points while in range, subject to that claim's chase exception. A transition
+      leaving no next step applies the same conditional stop; when those conditions fail,
+      a running retry delay can leave the destination kept while the vehicle waits. Choosing
+      a next step in that transition does not apply the stop. Neither rule stops a vehicle
+      between arrival points solely because it came into range. Firing during movement
+      remains subject to the firing check (S-0301, S-0310). S-0208 claims 16
+      and 17 and scenario W10 own infantry stopping: an ordinary walker in *attack*, *area guard*, *hunt* or
       *rescue* clears its destination and keeps its target on the first arrival tick at which
       a mobile target passes that claim's range test. Normally that test measures to the
       target's cell centre, not its own reference point; open-topped types have the separate
@@ -2039,13 +2095,18 @@ apply in our engine to the actors of every player house.
       destination or target outcomes are measurable by B32 g.
       Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
       rules belong to the combat topic, which no spec states); the draining case of part d (the
-      draining link belongs to the structures and combat topics); the *sticky* and *any other*
+      draining link belongs to the structures and combat topics, and no scenario establishes
+      that link while testing approach); the *sticky* and *any other*
       rows of part d (an actor in those behaviours takes the step only by the per-tick case of
       part a, whose own drop of a target out of range for an actor without a destination gives
       the same observable result for every row that drops, and for the rows that keep the target
       the outcome is S-0307's search); the in-the-playfield exception
       (no setup here has an attacker outside the usable area in range of its target); part f2,
-      whose cell test is S-0301's; the computer-controlled rows of parts d and g.
+      because no B32 case puts a deploy-to-fire vehicle on a cell that fails its deploy test
+      while isolating the changed radius and renewal threshold; the computer-controlled rows
+      of parts d and g, because B32 tests human-controlled attackers only and supplies neither
+      a computer-controlled non-approaching hunting unit nor a deployed computer-controlled
+      unit at an identified approach step.
     - Confidence: high (parts a, b, c, d, e and the outcomes of part f); medium (the per-tick rule of
       part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types).
       High for part a2's ordering and independent eligibility.
@@ -2307,8 +2368,8 @@ Where a processing makes another behaviour current before choosing a delay from 
 general *hunt* row, and the enter-nearest rows when an occupy instruction's immediate start makes
 *capture* current), the rate is that of the behaviour it made current (claim 6).
 
-Within one processing, the delay's own draw is the last draw the processing takes (claim 6, "the
-delay's draw comes last").
+The delay value uses the stream position after the assignments to the processing's other draws
+(claim 6, observable random-stream result).
 
 ## State and ordering
 
@@ -2367,9 +2428,10 @@ adds none of its own:
   processing already took an approach step (claim 37 a2),
 - whether the per-tick search runs is decided by the current behaviour as that tick's processing
   leaves it (claim 33, part b),
-- every draw that the actor's processing takes on a tick comes before the draws of its per-tick
-  search on that tick (claim 33, part d), and within the processing the delay's draw is the last
-  (claim 6),
+- the processing's choices receive earlier stream values than the per-tick search's choices
+  on the same tick (claim 33, part d); the processing's delay receives the value after its other
+  draw assignments (claim 6). These constrain outcomes and resulting stream state, not internal
+  execution order,
 - for an actor that is ready to change, a behaviour order's behaviour becomes current and is
   processed at the actor's first update after the order takes effect (claim 12; in a single-player
   game that is its update on the next tick, S-0203, claim 7),
@@ -2936,17 +2998,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   move; record intervals while the 2-D distance is 300 to 700 leptons, and while it is beyond 768
   (approaching). Expected: 31 or 32 at close range (trunc(63/2) = 31, trunc(64/2) = trunc(65/2) =
   32, so 32 about twice as often as 31) and 63, 64 or 65 beyond. Falsified by no halving, or
-  halving outside the band. Runs: repeated approaches until 100 intervals per band are recorded. (b) Infantry rules, explosive charges:
-  an armed infantry unit of the human-controlled house in *guard*, whose type has the
-  explosive-charges flag, stands within its sight but outside its own weapon range of an enemy
-  defensive building whose type accepts charges and whose weapon reaches it. When the building
-  fires, the unit retaliates (claim 18): *attack* becomes current with the building as target.
-  (A player's order cannot set this up: S-0214 turns an attack order by such a unit on such a
-  building into *sabotage*. A run in which it does not retaliate is invalid.) Expected: while it walks to the building with *attack* current and
-  *sabotage* queued (it is not ready to change while it moves, claim 11), every processing
-  interval is exactly 1 tick, and its processing ticks show no more draws than its
-  non-processing ticks of the same walk (count draws as in the common setup). Falsified by any
-  interval other than 1 tick in that phase, or by one extra draw on its processing ticks. (c) Deployed infantry of the human-controlled house: a deployer type
+  halving outside the band. Runs: repeated approaches until 100 intervals per band are recorded.
+  (b) Explosive-charges row: no runnable scenario is established. An attack order is translated
+  into *sabotage* by S-0214, and the former retaliation proposal is excluded by S-0309 claim 18.
+  This row is unmeasured, not supported by discarding every non-retaliating run.
+  (c) Deployed infantry of the human-controlled house: a deployer type
   that deploys to fire, deployed, ordered to attack an enemy in weapon range, with the rate of
   *attack* set to 0.07 and the close-range flag set on its type by the test file, so that the
   halving of the general rule would apply in the close-range band. Expected: intervals 63, 64 or 65 even when the 2-D
@@ -2956,7 +3012,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     can reach. Expected: at its first *attack* processing with that building as target, *capture* is
     current on the same tick with the building as destination, and the next processing comes exactly
     1 tick later with no extra draw on the processing tick. Falsified by *capture* only queued, by
-    another interval, or by an extra draw. Runs: 100 intervals in (b) and (c); three in (d).
+    another interval, or by an extra draw. Runs: 100 intervals in (c); three in (d).
 - **B10 (claims 24, 26, 33, F5, F6).** (a) An armed vehicle in *guard*: record targeting-timer
   restarts; expected intervals *N* + 0, 1 or 2 with the normal targeting delay. (b) The same in
   *area guard*; expected the area-guard targeting delay + 0, 1 or 2, and processing intervals
@@ -3359,11 +3415,15 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Distributed-fire row: a named test file sets the distributed-fire flag on an armed vehicle
   type and the rate of *guard* to 0.07 (*D*<sub>r</sub> = 63). The vehicle of the human-controlled
   house stands in *guard* with three enemy units in its weapon range. Expected: at a processing
-  at which the recorder shows the candidate list non-empty, the next processing comes 1 tick later
-  and the processing tick takes no more raw values than the comparison ticks (no draw for the
-  delay); at a processing at which the list is empty the interval is 63 to 65. Falsified by an
-  interval of 63 to 65 after a non-empty reading, or by an extra draw. A run in which the list is
-  never non-empty is invalid. Runs: 100 processings. (b) Charge target: an infantry type whose
+  at which the recorder shows the candidate list non-empty and the weapon is not rearming,
+  the next processing comes 1 tick later and the processing tick takes no more raw values than
+  the comparison ticks (no draw for the delay); with an empty list and no rearm time remaining
+  the interval is 63 to 65. A processing while the weapon is rearming instead chooses its
+  remaining rearm time (claim 24), and does not test the distributed-fire row. For processings
+  without rearm time remaining, falsified by an interval other than 1 tick after a non-empty
+  reading, an interval outside 63 to 65 after an empty reading, or an extra delay draw with a
+  non-empty list. A run with no non-empty reading while the weapon is not rearming leaves this
+  row untested. Runs: 100 processings. (b) Charge target: an infantry type whose
   secondary weapon charges friendly buildings stands in *guard*, with no target, next to a friendly
   building that can be charged on one of the 8 cells around it; repeat with the unit in *area
   guard*. Expected: at its first processing the building is its target and *attack* is queued
@@ -3659,8 +3719,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   while it is held, even after the range test passes (when the attacker stops belongs to the
   movement specs). Renewals are expected only while the target is out of range of the attacker.
   Falsified by a renewal at or below the threshold, a renewal on a tick that is not a processing
-  tick, or a destination cleared by an attack processing because the target came
-  in range.
+  tick, no renewal at the first processing above the threshold while the target is out of range,
+  any replacement of a held destination with the can-recalculate property *no*, or a destination
+  cleared by an attack processing because the target came in range.
   (c) As (a), first run, with the attacker's type given the can-approach property *no*. Expected:
   the attacker still approaches (the *attack* exception of claim 37 d). Then the guard key command
   (S-0213 claim 18) puts it in *area guard* and an enemy vehicle drives into its sight but out of
@@ -3714,9 +3775,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   in-range case, repeat (d) with the unreachable target stationary in range across a known
   attack processing tick: expected target kept and no destination, but these end states
   alone cannot count the two unchanged-state steps (claim 37 a2, backing).
-  Tool: read-only recorder and scripted input of the measurement setup. Director and mods
-  off apart from the named test data. Runs: three valid search ticks of each kind in case g,
-  and three per other case and attacker kind (vehicle, infantry; only infantry for e).
+  Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. Run without a director or mods, apart from the named test data. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle, infantry; only infantry for e).
 
 ## Open questions
 
