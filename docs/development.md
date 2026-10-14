@@ -260,6 +260,7 @@ Provisional rules of the simulation, each tied to a request:
 | `teleport::landing_point` | the entry outcome of S-0207 claim 20 (b) is asked at the destination cell's own level, 4 levels up in deck mode; a destination cell in no reach region of the zone gives the nearby-cell search the "no region" value as its reach condition, and no cell found removes the destination | Q-0232 |
 | `teleport::jump` | each of claim 20 (e)'s two warp animations takes S-0202 claim 10's creation draws in the jump tick | Q-0232 |
 | `rules` (locomotor) | an infantry or aircraft type with the teleporting locomotor gets no locomotor and does not move by itself (an infantry unit's landing point, claim 20 c; an aircraft's occupancy mark, layer and landing height) | Q-0181, Q-0232 |
+| `teleport::is_teleporter`, `econ::release::restore_locomotor` | a teleporting vehicle that drives temporarily (S-0417 claim 5) takes no landing point and does not jump; the teleporting locomotor it gets back (S-0215 claim 13 row 1) holds no landing point and no phasing in, and its mark is set on its own cell | Q-0233 |
 
 ## Simulation (M4: combat)
 

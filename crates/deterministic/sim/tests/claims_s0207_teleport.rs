@@ -276,3 +276,43 @@ fn f9_phasing_in_delay() {
     assert_eq!(delay(-32, true, -500, 0), -160);
     assert_eq!(delay(0, true, 3, 0), 3);
 }
+
+// spec: S-0417 claim 5 (a teleporting vehicle temporarily receives driving locomotion: it takes no landing point and does not jump) and S-0215 claim 13 row 1 (it gets its own locomotor back; interim: with no landing point fixed and its mark on its own cell, request Q-0233)
+#[test]
+fn temporary_drive_then_own_locomotor_back() {
+    let s = scene(false);
+    let (mut w, id) = start(&s);
+    // As the factory exit gives it (S-0417 claim 5).
+    glasnost_sim::drive::release_claims(&mut w, id);
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.drive = Some(glasnost_sim::drive::DriveState::new());
+        o.econ.temporary_drive = true;
+    }
+    let dc = cell(0, -15);
+    order_move(&mut w, id, dc);
+    run(&mut w, 2);
+    let o = w.obj(id).unwrap();
+    assert_ne!(o.pos, centre(&w, dc));
+    assert_eq!(o.teleport.as_ref().and_then(|t| t.landing), None);
+    assert!(!marked(&w, dc));
+    // It gets its own locomotor back at a fall-back to rest, with no destination.
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.dest = None;
+        o.path.steps.clear();
+    }
+    assert!(glasnost_sim::econ::release::restore_locomotor(&mut w, id));
+    let here = w.obj(id).unwrap().pos.cell();
+    assert!(marked(&w, here));
+    assert_eq!(
+        w.obj(id).unwrap().teleport,
+        Some(teleport::TeleportState::default())
+    );
+    let to = cell(6, -3);
+    order_move(&mut w, id, to);
+    run(&mut w, 1);
+    assert!(marked(&w, to) && !marked(&w, here));
+    run(&mut w, 1);
+    assert_eq!(w.obj(id).unwrap().pos, centre(&w, to));
+}
