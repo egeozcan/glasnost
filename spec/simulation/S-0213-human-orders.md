@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -596,8 +596,7 @@ Terms).
     The refusal gives a message and the game-wide refusal sound. Multiple route-mode refusal
     notices before the next tick completes share one message-and-sound cue, but completing a
     tick permits a new cue: a refused click made seconds later in the same running game is not
-    silent because of an earlier refusal. This corrects S-0701 claim 24's once-per-game
-    assertion (now corrected in its current claim 24). Claim 25 specifies the message's
+    silent because of an earlier refusal (S-0701 claim 24). Claim 25 specifies the message's
     imported text, lifetime and shared display capacity.
     - Backing: `measurable` (Scenario O8, including its repeated-refusal test)
     The same-tick duplicate-notice limit is `unmeasured`: no setup here creates multiple
@@ -1909,8 +1908,8 @@ off together at sign-off:
   production lines and house updates. Its preserved row labels remain compatible with S-0201's
   cited timing rules. No change to the order boundary or precedence here is needed.
 - **Route cues already agree:** current S-0701 claim 24 and Scenario F8 allow another
-  message-and-sound cue after a completed tick, matching claim 16 and O8 here. Its older
-  once-per-game assertion is corrected; no further companion edit is required.
+  message-and-sound cue after a completed tick, matching claim 16 and O8 here.
+  No further companion edit is required.
 - **Behaviour coordination:** S-0215's cross-spec section lists matching movement,
   occupancy, search, placement and factory contracts in S-0207, S-0209, S-0307,
   S-0406, S-0417, S-0212 and S-0208, including the shared
