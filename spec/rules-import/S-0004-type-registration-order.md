@@ -2,7 +2,7 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -43,7 +43,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
    - Backing: `measurable` for the rebuilt registries (scenario G, second game) and for tiberiums being kept (S-0006, scenario G). `measurable` for sides being emptied (scenario E, E5); the deferred campaign side order is covered by S-0006 scenario U2.
    - Confidence: high (medium for sides, including the deferred campaign exception)
 
-2. **A type list registers names in entry order.** The entries of a type list take effect in the order they appear in the file. Each entry's value is a type name, and its effect depends on that name:
+2. **A type list registers names in entry order.** The positions of a type list follow entry order in the file. At each position, the entry's key is looked up by name as S-0002 claim 4 specifies: if the key occurs more than once, the value of the winning occurrence is used at every position for that key, not necessarily the value written on that position's line. That value is a type name, and its effect depends on that name:
 
    | Entry value | Effect |
    |---|---|
@@ -63,7 +63,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
 
    An absent key keeps the field's value in all four, except the first, where an absent key counts as an empty value (S-0006, claim 5).
 
-   The entry's key (the text left of `=`) plays no part for ordinary lists. Only its position counts. The exceptions are sides (claim 9) and tiberiums (claim 10). Which of two entries with the same key survives is defined in S-0002, and case rules for section and key names in S-0001.
+   For ordinary lists, an entry's key (the text left of `=`) does not itself name the type, but when a key is repeated it determines which value is used at each position, as S-0002 claim 4 specifies. The position of each entry counts. The side list and tiberium list are exceptions in which keys carry additional meaning (claims 9 and 10). Which occurrence of a repeated key supplies the value is defined in S-0002, and case rules for section and key names are in S-0001.
    - Backing: `measurable` for the existing-name and reserved-name rows (scenario A) and for the empty row (scenario A, A4: a section with an empty name exists when a file writes `[]` with entries under it, S-0001 claim 6). The particle exceptions: the empty-name case is measurable through S-0006 scenario D4. The `none` case is `measurable` for the emitted particle type (scenario A, A3) and for the attached particle system (scenario I, I4, which also covers its `<none>` and empty values). The emitted particle type called none reads no section in the layer that creates it (claim 6: particles come before particle systems), but it does read its section in every later layer (claims 6 and 7), so a particle system that names it in the base rules shows the particle section a test map gives it. The next-particle and spawned-particle rows are `unmeasured`: the spawned particle type is an art-file field of an animation, and a particle's next particle shows only inside an effect whose look belongs to the particle spec. Both use the same name lookup as the emitted particle type, which A3 measures.
    - Confidence: high (medium for the next-particle and spawned-particle rows)
 
@@ -164,7 +164,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
    - Backing: `measurable`: scenario B for the sampled unread consequences; I2 for a vehicle named by a building; J1 for the second warhead reading (with and without the special-weapon settings section); J2 for animation art in the next layer; G4 for animations before buildings before overlays. `unmeasured` for the remaining individual rank relations and their unsampled consequences, including same-kind creation being read in the same pass: the scenarios do not isolate them, and ordinary play exposes properties rather than all ranks. A finite same-kind reference-chain scenario is still needed; K5 tests non-completion, not the full rank table.
    - Confidence: high for the pass order and the unread consequence; medium for the second warhead reading and for animation art in the next layer (no measurement has been made yet).
 
-7. **A type with no section of its own is left untouched.** If a layer has no section named after a type, that type reads nothing in that layer. Its values stay as they were, and nothing is reset. Section lookup uses the stored name, which may be truncated (claim 5). The stored spelling is the one the type was first registered with. Type-name lookup ignores letter case (claim 2), but section names are matched exactly (S-0001). So a section spelled in a different case from the first registration is not found.
+7. **A type with no section of its own is left untouched.** If a layer has no section named after a type, that type reads nothing in that layer. Its values stay as they were, and nothing is reset. Section lookup uses the stored name, which may be truncated (claim 5). The stored spelling is the one the type was first registered with. Type-name lookup ignores letter case (claim 2), but section names are matched by exact bytes, except that S-0002 claim 3's name-hash identity rule treats different names with the same name hash as one name when `quirks.ini_hash_identity` is on. So a section spelled in a different case from the first registration is not found unless it shares that name hash.
    - Backing: `measurable` (scenario H)
    - Confidence: high
 
@@ -215,7 +215,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
 
     The build category uses S-0302 claim 5's import rule: cut to 31 bytes, then trim surrounding whitespace, then compare the whole text without regard to ASCII letter case. A nonempty unknown word sets the unspecified category, not the earlier category; an absent or empty key keeps the held category, initially unspecified. Only the combat category selects the second tab; an unspecified category selects the first.
 
-    A tab holds at most 76 items. An otherwise eligible item that becomes available while its tab is full is not shown. Eligibility therefore does not guarantee a shown icon. Whether a suppressed type is offered for order legality, whether or when it gains an icon after space opens, and whether losing availability while suppressed gives cancellation orders remain unresolved (S-0411 claims 2 and 13 and open question 9). No cancellation or refill rule is inferred from suppression. An item already shown (the same type) is not added twice. Two different types are two items even if their names are equal.
+    A tab holds at most 76 items. An otherwise eligible item that becomes available while its tab is full is not shown. Eligibility therefore does not guarantee a shown icon. Whether a suppressed type is offered for order legality, whether or when it gains an icon after space opens, and whether losing availability while suppressed gives cancellation orders remain unresolved (S-0407 open question 4; S-0411 claims 2 and 13 and open question 9). Neither offer legality nor cancellation or refill behaviour is inferred from suppression. An item already shown (the same type) is not added twice. Two different types are two items even if their names are equal.
 
     Items are kept in sorted order. A newly available item is placed in front of the first item already in the tab that it sorts before. If it sorts before none of them, it is placed after all of them. "Item *a* sorts before item *b*" is decided by the first rule below that tells them apart:
     1. A superweapon sorts before anything that is not a superweapon. Two superweapons sort by recharge time in ticks (Formulas), shortest first, and then by display name as in rule 6, including its tie rule. Rules 2 to 5 do not apply to two superweapons.
