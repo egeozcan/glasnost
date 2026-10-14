@@ -1092,6 +1092,7 @@ fn queueing_cell(w: &mut World, refinery: ObjectId) -> Option<CellXY> {
 /// contact with a dock-unload refinery, it asks to dock, and the first
 /// matching row of claim 10's table applies. Every processing is followed
 /// by the next after the standard delay of *enter*.
+// Q-0197 (interim: claim 10's second route, asking for unload on finishing entering a cell beside the refinery, is not implemented)
 pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return 1;
