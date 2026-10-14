@@ -1,9 +1,9 @@
 ---
 id: Q-0235
 title: Which occupancy record teleporting infantry land in on a high bridge, and what a refused new destination does to an earlier landing
-status: open
+status: answered
 related: [S-0208, S-0207, S-0209]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need

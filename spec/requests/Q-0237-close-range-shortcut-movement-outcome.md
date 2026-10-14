@@ -1,9 +1,9 @@
 ---
 id: Q-0237
 title: What a close-range attacker does after the approach shortcut sends it to a standing position in its own cell
-status: open
+status: answered
 related: [S-0307, S-0208, S-0209, S-0215]
-answered-by: []
+answered-by: [S-0307]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0072, Q-0201, Q-0181]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235]
 supersedes: []
 ---
 
@@ -31,7 +31,9 @@ points to S-0209 and S-0209 decides. This spec owns the infantry scatter from da
 choice for infantry using the teleporting locomotor (claims 19 and 20). S-0207 claim 20 already
 answers Q-0181's jump timing, phasing-in and successive-jump questions; its part c left the
 infantry landing point open. Claims 19 and 20 answer that part. They do not cover a superweapon
-teleport. S-0417 claim 10 supplies a concrete infantry factory-release tether situation.
+teleport. Q-0235 question 3 was already answered by S-0207 claim 20 e's corrected
+bridge-deck landing rule; claim 19 here makes the position-choice record, reservation
+record and refused replacement explicit for all four questions. S-0417 claim 10 supplies a concrete infantry factory-release tether situation.
 For an infantry unit that approaches its target, S-0215 claim 37 owns when the approach step runs
 and whether it keeps, renews or takes a destination, S-0307 owns the approach position and the
 outcomes of a failed search, including claim 22's close-range searches. This spec owns the
@@ -745,6 +747,10 @@ used by this spec:
     in progress ends on the tick on which it starts its firing sequence. By S-0310 claim 8 the check
     answers *moving* while the speed fraction is above 0.1, so this happens only to a walker that is
     already standing (for example blocked, S-0209), never in the middle of a step.
+    S-0307 claim 22(b)'s close-range shortcut also requests movement within the walker's
+    own cell while assigning the target's cell as destination. Claim 21 below owns its
+    second position choice and walking outcome; the immediate walking target need not be
+    the shortcut's first chosen point on a bridge deck.
     - Backing: `measurable` (scenario W10, parts a, b, b2 and b3 for the rule; part c checks
       only the exception's end state)
     - Confidence: medium for the rule and its four behaviours; medium for the measured point being
@@ -791,10 +797,15 @@ used by this spec:
     For infantry, let *P* be the destination point supplied to the locomotor, and *C* its cell.
     The desired standing position is the position class of *P*, not the position class of the
     unit's departure point. Occupants are normally respected: use claim 3's position-choice
-    table with that desired class, including its draw and its refusal cases. The standing-position
-    height is claim 1's surface height, with deck mode on only when *C* carries a high bridge and
-    the unit's present height exceeds the terrain surface height at *P* by more than 312 leptons
+    table with that desired class, including its draw and its refusal cases. For this choice,
+    read the deck occupancy record only in standing-position deck mode, and the ground
+    record otherwise. This mode is on only when *C* carries a high bridge and the unit's
+    present height exceeds the terrain surface height at *P* by more than 312 leptons
     (3 height levels of 104 leptons). This strict comparison uses integer lepton heights.
+    The choice's height is claim 1's surface height at the selected position, plus 416
+    leptons in this mode. Thus a ground-height departure normally chooses using ground
+    occupancy even for a destination carrying a high bridge; the entry check below
+    independently reads deck occupancy.
 
     A ready queued behaviour can start when the landing point is chosen (S-0215); the current
     behaviour below is the one then in force. Occupants are ignored when it is *capture*, *sabotage*, *enter*
@@ -833,10 +844,35 @@ used by this spec:
     The point is fixed when the destination is supplied, not followed as the object moves.
     S-0207 claim 20 e owns the height at the actual jump, which can differ from the point chosen
     here on a bridge. An infantry unit reserves its chosen standing position, not a
-    vehicle-present mark (S-0209 claim 1).
-    - Backing: `measurable` (scenario W11)
-    - Confidence: high for position choice, the four behaviours, the cell/object distinction and
-      draws; medium for the search choices and bridge consequences
+    vehicle-present mark (S-0209 claim 1). The reservation uses the chosen point's height:
+    it goes into the deck record when its cell carries a high bridge and its height is at
+    least 416 leptons above the terrain surface at that point, and into ground otherwise.
+    For the initial choice this is the same record the standing-position choice read.
+    For the fallback choice the original standing-position deck mode is retained, even
+    when the found cell differs from the requested cell; the reservation still uses the
+    found cell and chosen height, not the nearby search's deck mode.
+
+    At the actual jump onto a high-bridge cell the infantry is listed on the deck and has
+    deck height, regardless of the earlier position-choice mode (S-0207 claim 20 e).
+    Subsequent occupancy, scatter and movement use its deck status, not ground status
+    merely because the earlier reservation used ground. The teleporting locomotor still
+    governs movement until some rule changes it; this is not a change to walking locomotion.
+
+    **Refused replacement before the jump (Q-0235).** When a new destination reaches this
+    landing-point choice before an earlier chosen landing point has been jumped to, the
+    earlier reservation is released. A successful new choice reserves the new point.
+    If the new choice is refused, including when an object-destination fallback finds no
+    cell or no position, the earlier landing point is discarded, not retained: there is
+    no jump to it. The destination is removed and the infantry's occupancy entry is restored
+    at its present position, using that position's height and cell for the record choice.
+    Its listing has stayed at the departure cell throughout. This differs from the retained
+    earlier landing point of non-infantry in S-0207 claim 20 b. It concerns a destination
+    that reaches landing choice, not one rejected earlier by S-0207 claim 20 a's disabling
+    conditions.
+    - Backing: `measurable` (scenario W11, especially parts d and h for Q-0235)
+    - Confidence: high for position choice, record choice, reservation, refused replacement,
+      the four behaviours, the cell/object distinction and draws; medium for the search
+      choices and combined bridge consequences
 
 20. **Placement-time clearing is not owner-dependent.** When placement's fall-back to rest
     supplies a destination to an infantry unit with the teleporting locomotor, the destination
@@ -1011,6 +1047,7 @@ positions are never taken, as claim 3 says).
 | Walk-end height threshold | 208 | leptons; the absolute height difference must be strictly less than this value (two height levels) | claim 16 |
 | High-bridge addition to a cell locomotor destination | 414 | leptons | claim 18; independent of the walker's layer |
 | Height above destination terrain surface needed for teleport standing-position deck mode | more than 312 | leptons | claim 19; strict integer comparison |
+| Height above chosen-point terrain surface needed for an infantry deck reservation | at least 416 | leptons | claim 19; high-bridge cell required |
 
 ## State and ordering
 
@@ -1031,6 +1068,7 @@ positions are never taken, as claim 3 says).
 | Teleporting infantry, destination supplied | first landing choice succeeds | reserves the chosen standing position; jump follows S-0207 claim 20 |
 | Teleporting infantry, first landing choice refused | cell destination | no jump, destination removed |
 | Teleporting infantry, first landing choice refused | object destination | nearby search and second position choice of claim 19; no jump if either finds nothing |
+| Teleporting infantry, earlier landing reserved but not jumped to | replacement landing choice refused, including failed fallback | earlier reservation released, no retained landing point, destination removed, present-position entry restored (claim 19) |
 
 Ordering stated as consequences (the draw counts and order are checked with the read-only recorder
 of the random stream, scenario W9): the random draw of claim 3 happens on the tick on which the walker
@@ -1182,13 +1220,15 @@ W10).
 | Art, image section, `Crawls` | can crawl | boolean | yes (S-0107) |
 | Rules, infantry type section, `Cyborg`, `Fraidycat` | cyborg, fraidycat | boolean | no (S-0107) |
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
-| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
+| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's record choice and refused-replacement rule | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
 | Rules, infantry type section, `SpeedType`, `MovementZone` | landing-search locomotion class and movement zone (claim 19) | named choices parsed by S-0211 Import mapping | S-0211's defaults and layering rules |
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
 | Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
-| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9), and landing surface heights and bridge recognition (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
+| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9), and landing surface heights, bridge recognition and occupancy-record selection (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
 
 The scatter property of each behaviour (claim 11) is imported by S-0215.
+Claim 19's 312-lepton strict choice threshold, 416-lepton reservation threshold and
+refused-replacement outcome are engine rules, with no separate imported setting.
 
 ## Measurement scenarios
 
@@ -1973,7 +2013,7 @@ cases).**
   by the completion test despite the 414-lepton mismatch, the unit is moved vertically to
   satisfy that test, or the specified later failed search keeps the destination.
 
-**Scenario W11: teleporting infantry landing (claims 19 and 20; Q-0181).**
+**Scenario W11: teleporting infantry landing (claims 19 and 20; Q-0181, Q-0235).**
 - *Setup:* a tiny flat clear skirmish map, a human player's stock teleporting infantry, one
   bystander computer player kept outside the observed area, game speed index 2, director and
   mods off. Use scripted orders and a read-only recorder for positions, destinations, occupancy
@@ -1987,20 +2027,44 @@ cases).**
   choice. Also use a blocked object destination in a behaviour outside those four and compare
   its search result with S-0212 claim 25. Repeat on a slope, a high bridge and with destination
   and departure in different reach regions, logging the inputs to claim 19's search. The named
-  test data is removed afterwards. (d) Use a high bridge and vary the departure elevation above and
-  below claim 19's 312-lepton boundary. (e) Order across a cliff and to an isolated island.
+  test data is removed afterwards. (d) Use a high bridge over enterable ground, with
+  different allied infantry side positions occupied in ground and deck records. Vary
+  departure elevation below and above claim 19's 312-lepton boundary using ground starts
+  and elevated banks, without writing game state. Record the applied destination to
+  exclude click substitution. Also use an empty ground record with all deck side positions
+  taken: below the boundary the position choice can succeed but the entry check refuses.
+  After each successful jump record deck status, listing and both occupancy records.
+  Once phasing in ends, issue a player scatter and record the centre and occupancy
+  conditions of the resulting destination choice. (e) Order across a cliff and to an isolated island.
   (f) Place the stock teleporting infantry by a production release or map-trigger placement
   with ground infantry occupants nearby. Identify any destination supplied during placement,
   then compare that event with a later ordinary move, for human and non-player owners where
   placement can be arranged. Do not manufacture a destination by writing game state.
+  (h) On flat ground give a move to empty cell *A*, then a replacement move to cell *B*
+  with all three allied infantry side positions taken, using scripted ordinary input.
+  Record each applied destination and movement update. A qualifying run must show *A*'s
+  reservation followed by *B*'s refusal before any jump; two inputs that collapse to one
+  destination or straddle a jump do not test replacement. Repeat with *B* impassable but
+  its standing positions free, to distinguish entry refusal from position refusal.
+  Seek three qualifying runs for each refusal kind; if normal input cannot arrange the
+  interval, report that limitation rather than writing game state.
 - *Observable:* landing cell, standing position and height, refusals, occupants' destinations,
-  and draws attributable to position choice or scatter rather than other actors.
+  ground and deck records and listings at assignment and after the jump, the unit's deck
+  status, and draws attributable to position choice or scatter rather than other actors.
+  In h also record *A*'s released reservation and the departure-position mark through the
+  next three movement updates.
 - *Expected:* (a) a centre desired point gets only a free side position by table O, with its
   one draw when that row is reached; a fully occupied side record refuses without moving to
   an empty neighbour. (b) no fallback for a cell destination. (c) an enter destination meeting
   the exception can choose the centre without a draw; a refused object destination alone
   permits the nearby search, then the centre-desired position choice. (d) point selection
-  uses the strict height boundary, while actual jump height follows S-0207 claim 20 e.
+  reads and reserves ground below or at the strict height boundary and deck above it,
+  while the independent initial entry check reads deck for every high-bridge cell.
+  Thus a fully taken deck rejects the low-departure case even with free ground positions.
+  Actual jump height and listing are on the deck in both successful cases, following
+  S-0207 claim 20 e; later scatter uses deck status. (h) *A*'s reservation is removed,
+  the departure-position entry is restored, the destination clears and no jump to *A*
+  occurs, for both position refusal and entry refusal at *B*.
   (e) no connecting path is needed. (f) where placement supplies a destination, ground
   occupants receive the forced move-anywhere request, irrespective of owner; an ordinary
   later move does not reproduce that placement-only request. (g) On a named test map with
@@ -2010,7 +2074,11 @@ cases).**
 - *Falsifiers:* a cell refusal landing in a neighbouring empty cell, a position not given by
   the stated table, an incorrect draw count, a fallback requiring a path, or an owner-only
   difference in placement clearing, or refusal of the −6 cell with a free standing position
-  while the default quirk is on. A placement that supplies no destination is not evidence
+  while the default quirk is on. In d, using deck for the low-departure position choice,
+  reserving in a record different from that specified, or a successful jump leaving the
+  infantry listed on ground falsifies the respective rule. In h, retaining *A* or its
+  reservation, failing to restore the departure mark, or jumping to *A* falsifies the
+  replacement outcome. A placement that supplies no destination is not evidence
   for or against claim 20.
 
 **Scenario W12: candidate factory tether damage test (claim 15).**

@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,10 +25,10 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Paired revisions.** S-0404 revision 7 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 8 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary (claims 7 and 13).
-S-0407 revision 8 distinguishes cancellation orders issued
+S-0407 revision 10 distinguishes cancellation orders issued
 at the recheck from their application at the tick's end, exempt held-item resume from the
 issue-time limit test, and retain the application-time limit test on queued starts (claims
 13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
@@ -36,10 +36,10 @@ icon order used by claim 13 below. Its T14 run 7 distinguishes the permanent-rem
 from the later sidebar cancellation boundary. The former per-tick-removal correction requests are resolved.
 Claim 15 answers Q-0196: full-tab suppression excludes a type from the offer, gives no
 removal orders for it, and retries admission only at a later recheck. S-0004 claim 11 retains
-capacity and sorting ownership. At joint hand-off, S-0004 claim 11 and Open question 7,
-S-0407 Terms, claims 1 and 17 and Open question 4, and S-0404 claim 9 must replace their
-unresolved full-tab passages with pointers to claim 15. Their admission rules must preserve
-its delayed refill rather than removing old icons before judging admission capacity.
+capacity and sorting ownership. S-0004 claim 11 and Open question 7,
+S-0407 Terms, claims 1 and 17 and Open question 4, and S-0404 claim 9 now delegate
+full-tab consequences to claim 15. At joint hand-off, confirm these paired passages
+preserve delayed refill rather than removing old icons before judging admission capacity.
 
 ## Terms
 

@@ -2,13 +2,13 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0130, Q-0131]
+requests: [Q-0130, Q-0131, Q-0225]
 supersedes: []
 ---
 
@@ -106,8 +106,9 @@ house state, on or off). In addition:
      for a human-controlled house: a computer-controlled house receives *P* in full. In our engine
      every player house, AI houses included, receives the refund given above (glossary *AI house*); the
      original's full refund is recorded for the designers of our AI only. The neutral and
-     special houses keep the original's rule (full *P*), though no rule of the original makes them
-     sell.
+     special houses keep the original's rule (full *P*). Whether they sell automatically is
+     governed by S-0314 claim 8: a passing skill-level gate is necessary but does not by itself
+     establish that a sale occurs.
    - Backing: `measurable` (scenario S1, parts a to e)
    - Confidence: high (the formula, no health dependence, the percentage only for human-controlled
      houses), medium (the refund override)
@@ -173,7 +174,6 @@ house state, on or off). In addition:
      its level field or the target type's limit. Only the sold position is cleared; lower
      recorded upgrades are not cleared. The next sale sells the building, since its count is 0.
      Their power no longer counts at count 0 (the count gate of S-0405 claims 1 and 2).
-     S-0405 claims 1 and 2 already state this count gate; no cross-spec change is required.
    - A count of 0 sells the building, even if positions still hold upgrades. A positive count
      whose position is empty is the bad-data departure in Edge cases; this can occur after
      selling a level-field upgrade without the turret flag.
@@ -333,8 +333,8 @@ house state, on or off). In addition:
 13. **Repair belongs to S-0314.** The repair order (S-0213, claim 13) switches a building's repair
     on and off; while it is on, the timing, the step and when repair switches off are S-0314's
     (claim 8) and the step cost is S-0314's (claim 5, with the adjusted cost of claim 2 of this spec
-    for a building type). The automatic repair and sale gated by the house skill level are S-0314's too
-    (claim 8).
+    for a building type). S-0314 claim 8 specifies the skill-level gate for automatic building
+    repair and sale; it does not specify the complete automatic-start outcomes when the gate passes.
     - Backing: `measurable` (S-0314 scenario H5)
     - Confidence: high
 
@@ -399,8 +399,11 @@ house state, on or off). In addition:
     stops the sale as claim 6 gives.
     - A positive-delay range with *n* ≤ 1 never reports completion: each advance runs past
       the end and wraps without landing on its last stage, or on stage 23. The building
-      stays in build-down and pays no refund, although claim 6's releases have already
-      occurred. A non-positive count uses delay 1 by S-0108 claim 5 and therefore falls
+      remains in *selling*, in build-down, with no sale removal or refund, although claim 6's
+      releases have already occurred. The stalled sale itself neither changes nor freezes its
+      health: without another effect its health stays unchanged; damage, repair and destruction
+      retain their ordinary rules (claim 6; S-0314 claim 8). The stage-23 exception cannot rescue
+      these ranges, even for a type naming a vehicle to pack into without a guard spot. A non-positive count uses delay 1 by S-0108 claim 5 and therefore falls
       in this case. A one-stage range with zero delay instead follows the zero-delay rule
       above. This is the sale effect of `quirks.single_stage_buildup_never_completes`
       (S-0406 claim 18; Edge cases below).
@@ -585,6 +588,9 @@ tick the building disappears.
 | Rules, type section, `Crewed` | building has a crew (claim 7, through S-0312 F5) | boolean | owned by S-0312 |
 | Rules, `[General]`, `SurvivorRate` | nothing: the original reads it but no rule uses it | decimal | — |
 | Rules, `[AudioVisual]`, `SellSound` | the sell sound (claims 6, 12) | sound name | sound specs |
+| Rules, `[General]`, `BuildupTime` | build-down stage delay through S-0108 claim 5, including the non-positive-count delay of 1 tick (claim 17) | decimal, game minutes | S-0108 Import mapping owns the default and layering |
+| Art, building section, `GateStages` | gate stage count, whose construction range has one more stage (claim 17) | integer | S-0108 Import mapping owns the default |
+| Rules, building section, `UndeploysInto` | packing-capable type for the stage-23 completion test (claim 17), not a way to finish a positive-delay range of one stage or fewer | vehicle type name | none; S-0415 Import mapping owns resolution |
 
 ## Measurement scenarios
 
@@ -816,12 +822,14 @@ tick number. Any game speed.
   and speed; void a run if the bystander affects the observed area or is defeated.
 - *Procedure:* sell each ordinary building and pack up each packing variant with scripted
   input. With a read-only recorder, log each tick's build-down stage, behaviour, foundation
-  occupancy and house credits, from order application through removal. Record *D*, the
+  occupancy, health and house credits, from order application through removal. Record *D*, the
   restart at stage 0, rather than assuming it equals the order tick. Repeat the no-sprite
   cases of S3 c/d, logging their order-application ticks too. For the positive-delay
   one-stage and zero-stage types, record for 100 ticks after *D*, including the first
   wrap and later wraps. On our engine only, repeat these with the shared single-stage
-  quirk off.
+  quirk off. Disable self-healing and leave repair off in the stalled-sale runs. In separate
+  repetitions after the first wrap, apply a nonlethal hit of known resolved damage, and then
+  a killing hit, to distinguish a stalled sale from an invulnerable or health-frozen building.
 - *Observable:* *D*, last stage seen before removal, removal tick, refund tick, and any
   packed vehicle's appearance. Record the ready mark and the actual range for gate and
   theater variants; for degenerate ranges, record wraps and the continued presence of
@@ -834,14 +842,18 @@ tick number. Any game speed.
   no-sprite firestorm-wall orders remove in the application tick with no refund. Tick
   intervals agree at both speeds. Positive-delay *n* = 1 and *n* = 0 never set the
   ready mark, stay in build-down through all 100 observed ticks and give no refund,
-  including the packing-capable variants. A one-stage zero-delay range instead completes
+  including the packing-capable variants. Health stays unchanged in the undisturbed runs.
+  the nonlethal hit lowers it by the resolved damage without completing the sale, and the
+  killing hit stops the sale with no refund and removes it as claim 6 specifies.
+  A one-stage zero-delay range instead completes
   at *D* + 1. On our engine with the shared quirk off, the positive-delay one-stage
   type completes at *D* + 2 and the zero-stage type at *D* + 1.
 - *Falsified if:* payment/removal is one tick after the report, uses *n* rather than *n* − 1
   advances, uses a gate's sprite half-count or a theater sprite's half-count, ignores the
   stage-23 early report or applies it with a guard spot, pays at *D* for zero delay, or
   treats an ordinary no-sprite order as a zero-delay refunded sale, or a positive-delay
-  one-stage or zero-stage range reports completion, pays or removes on any observed wrap.
+  one-stage or zero-stage range reports completion, pays or removes on any observed wrap,
+  changes health merely because it wraps, or prevents the ordinary effects of either hit.
 
 ## Open questions
 

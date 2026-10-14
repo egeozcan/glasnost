@@ -1,9 +1,9 @@
 ---
 id: Q-0216
 title: Where a top-down normal-mode-0 span's empty count lands, against its colours
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need

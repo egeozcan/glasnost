@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2673,6 +2673,13 @@ That moment is called the *window*. Common setup:
 - A human-controlled house that the computer takes over during the game appears to be given the
   maximum skill level then. That belongs to the future network-game spec (network games are out of
   scope for now, the project lead's decision of 2026-10-09).
+- Whether between-point movement (S-0207 claim 4) can put a driving vehicle's position in a
+  cell before that cell's vehicle-present flag has been set for its movement remains open.
+  Claim 1 establishes reservations at step start and the stated release moments, not an
+  exhaustive comparison of every between-point position with the cells reserved. Scenario C28
+  checks ordinary straight and two-cell-curve cases; it does not settle every track or chained
+  curve. This is a shared clarification for S-0207 and S-0209: any resolution must reconcile the
+  position rule with the reservation and release rules and be handed off in both specs together.
 - When hovering vehicles, ships and walking vehicles clear their vehicle-present flags (claim 1) is
   not established. The driving vehicle's moments are claim 1's. Whether a vehicle that is removed from
   the map in the middle of a track clears the flags it set ahead of itself is not established either.

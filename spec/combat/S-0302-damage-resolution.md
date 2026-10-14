@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -367,9 +367,13 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    but not including 100 % becomes 0. The game-wide minimum-damage field has no effect anywhere,
    whatever its value. A negative versus value gives a result of 0 or below; a result below 0
    makes the hit heal (claim 11). A non-negative maximum does not limit a negative result.
-   A negative maximum still applies as F3's minimum of the result and the maximum (D3 part c).
+   A negative maximum still applies as F3's minimum of the result and the maximum for a positive
+   delivered amount made negative by its versus value (D3 part c). It does not apply to a negative
+   delivered amount: that amount follows the negative path above, unchanged within healing reach,
+   with no cap.
    - Backing: `measurable` (scenario D1 for versus and truncation, D3 for the cap, the unused
-     minimum and a maximum of 0 or below, D4 for the negative path, D9 for the inert map, D25 for a positive hit against a
+     minimum and a maximum of 0 or below, D4 for the negative path and S-0314 H1 part c for its
+     bypass of a negative maximum, D9 for the inert map, D25 for a positive hit against a
      negative versus value; the falloff at distances above 0 through S-0303's scenario A1, which
      measures the same formula); `unmeasured` (a hit that comes without a warhead: only scripted
      sources deliver one, and no known scripted source can be set up to deliver it)

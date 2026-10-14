@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -28,10 +28,15 @@ Network games and campaigns are out of scope. Claim 24 preserves a deferred fog 
 at sign-off, and hand the two revisions off together. Creation-time sound and resource chain
 reaction are enabled; their suppression applies only to later start events. Revise S-0401
 claim 20 in the same hand-off so its trigger-played suppression rule is limited to later start
-events and does not suppress the creation-time chain reaction.
-Also confirm S-0202 claims 10 and 15 and scenario R14 against claims 14 and 25.
+events and does not suppress the creation-time chain reaction. S-0202 claim 15 must also
+replace its resource-removal description with taking 6 bales under S-0401 claim 3.
+A resource cell at stage 6 becomes stage 0, not empty.
+Also confirm S-0202 claims 10 and 15 and scenario R14 against claims 13, 14 and 25.
 S-0202 claim 15 completes the downstream particle creation and smudge selection and placement
-draw rules for immediate middle events during map loading; those effects are not draw-free.
+draw rules during map loading and play, including trigger-created animations and later playback
+middle events; those effects are not draw-free. This spec retains ownership of event timing,
+sprite-derived μ and the height gate. Confirm S-0011 claim 36's composition pointer covers
+that during-play scope too; subsequent particle updates remain outside this hand-off.
 
 ## Terms
 
@@ -320,8 +325,10 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     type is given and the count is positive, otherwise none. Particle creation is not gated by
     height. The particle requests precede any random choice between a scorch mark and a crater,
     so their creation draws change the stream state used by that choice. S-0202 claim 15 owns
-    the particle creation draw groups for immediate middle events during map loading, including
-    their conditional speed, lifetime and colour draws; scenario R14 A tests their composition.
+    the particle creation draw groups during loading and play, including their conditional speed,
+    lifetime and colour draws. Its R14 A and D test their composition, including trigger-created
+    animations and middle events later in playback. The creator and loading/play phase do not
+    change the event gates or draw composition.
 
     The scorch marks and craters of the middle event are attempted only when the animation's
     height above the terrain (glossary) is less than 30 leptons. For world position (X, Y, Z),
@@ -349,18 +356,19 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     in that mode. With `quirks.chop_rounding` off, use that floating-point comparison in the
     selected mode instead of assuming the integer threshold remains equivalent. This choice is
     made even if the chosen effect cannot subsequently be placed. S-0202 claim 15 owns the
-    smudge candidate preferences and selection draws for immediate map-load middle events,
+    smudge candidate preferences and selection draws during loading and play,
     using S-0312 claim 26's footprint fit and draw-free placement rules. These draws are separate
-    from the scorch-or-crater choice. A crater request removes 6 resource levels from the
-    animation's cell, bounded below by no resource, before placement is attempted, so failure
-    to place a crater does not undo that removal. S-0202 claim 15 also owns the loading-phase
-    relation to the overlay data stream and the conditional creation draws of a tile animation
-    started by resource-removal recalculation. Those draws precede smudge selection, rather than
-    adding a fixed draw count to every crater request.
+    from the scorch-or-crater choice. A crater request takes 6 bales from the animation's cell
+    under S-0401 claim 3 before placement is attempted; the resulting cell stage and any bales
+    delivered follow that claim, so failure to place a crater does not undo the removal.
+    S-0202 claim 15 also owns the loading-phase relation to the overlay data stream and the conditional resource-removal effects before
+    smudge selection: tile-animation creation from recalculation and neighbour spread-offer
+    draws. The same conditional effects apply during play; they do not add a fixed draw count
+    to every crater request.
     - Backing: `measurable` (AN10, AN19, AN23) for their forward and creation-time
       events, height/flag cases, particle-before-choice order and resource removal.
-      Downstream map-load creation and selection draws have S-0202 claim 15's backing
-      (R14 A to C) and confidence, including its medium-confidence placement and
+      Downstream creation and selection draws during loading and play have S-0202 claim 15's
+      backing (R14 A to E) and confidence, including its medium-confidence placement and
       resource-removal recalculation composition.
       Reverse/ping-pong repeated events and bouncing-type suppression are `unmeasured`
       here: none of these scenarios supplies those playback types. The exact floating-point
@@ -442,7 +450,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     - damage is delivered per advance (claim 17), so its rate in ticks follows N(*d*, *s*),
     - the middle event creates craters, which remove resource from cells, and decides between a
       scorch mark and a crater with a draw from the scenario random stream (claim 14,
-      S-0202 claim 15 owns the immediate map-load composition); its tick follows the stages,
+      S-0202 claim 15 owns the composition during loading and play); its tick follows the stages,
     - the start event at the end of a loop delay and the ranged draw of claim 11 happen at pass ends,
     - the follow-up switch, with its possible random rate, and the creation of infantry at the end
       (claim 16) happen at the end.
@@ -783,7 +791,8 @@ advance of the same update. So:
 
 - **`quirks.anim_fast_rate_freezes`** (default: on). A rate field above 900 gives a delay of 0, so
   the animation never advances or ends through playback (claim 2). Off: a positive rate gives *d* =
-  max(1, ⌊900 / ρ⌋). Rates of 0 or below still give 0 in both settings.
+  max(1, ⌊900 / ρ⌋). Rates of 0 or below still give 0 in both settings, except that −1
+  keeps the held delay (claim 2).
 - **`quirks.anim_random_rate_collapse`** (default: on). A random rate pair is clamped after
   conversion, so an ascending pair collapses to its faster end and takes no draw (claim 3). Off:
   the converted pair is put in order and the delay is a ranged draw over [min(*d*<sub>1</sub>,
@@ -884,7 +893,7 @@ forms are those of S-0003.
 | `SpawnsParticle` | particle-type name | particle requests of the middle event (claim 14) | none |
 | `NumParticles` | integer | number of particle requests per middle event (claim 14) | 0 |
 | `Scorch`, `Crater` | boolean | scorch and crater requests of the middle event (claim 14) | no |
-| `ForceBigCraters` | boolean | request a large crater when a crater is chosen (S-0202 claim 15 owns map-load size selection) | no |
+| `ForceBigCraters` | boolean | request a large crater when a crater is chosen (S-0202 claim 15 owns size selection during loading and play) | no |
 | `Bouncer`, `IsMeteor` | boolean | bouncing type (Terms) | no |
 | `MakeInfantry` | integer | infantry created at the end (claim 16) | −1 (none) |
 | `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007), and so claim 25 | no |
@@ -1252,15 +1261,20 @@ building that can cloak), it sets them in the test map's override section, which
     ground and repeat with world heights giving Z − H of −1, 0, 29 and 30 leptons. The tile
     displacement or terrain in the displaced cell supplies these differences where available,
     record the actual difference rather than assuming the creator cell's height. For a crater
-    case also put resource in the displaced cell and record its level before and after the
-    event. Include a separate case whose crater placement is blocked but whose cell has resource.
+    case also put resource in the displaced cell and record both overlay presence and the
+    stage of the resource cell immediately before and after the event. Use separate cells at
+    stages 0, 5, 6 and 7 (purpose-made test values), with growth and unrelated removal excluded
+    during observation. Include a separate case whose crater placement is blocked but whose
+    cell has resource.
     If the map creators cannot reach a listed difference, use a weapon-impact animation at that
     height to test the boundary, and record that it is not a map-load observation.
     Expected: events occur at creation during loading when μ = 0. Differences below 30 permit
-    the requested ground effect, 30 forbids it. A crater request removes up to 6 resource levels
-    even in the blocked-placement case. A ground effect at 30, no removal in the blocked case,
-    or an event deferred to the first update falsifies the corresponding rule. An inability to
-    reach a boundary is inconclusive, not confirmation.
+    the requested ground effect, 30 forbids it. An eligible crater request takes 6 bales under
+    S-0401 claim 3, even in the blocked-placement case: starting stages 0 and 5 lose their
+    resource overlay, stage 6 keeps it at stage 0, and stage 7 keeps it at stage 1. At height
+    difference 30 the resource is unchanged. A different overlay/stage result, a ground effect
+    at 30, no removal in the blocked case, or an event deferred to the first update falsifies
+    the corresponding rule. An inability to reach a boundary is inconclusive, not confirmation.
   - Part B, draws: repeat with neither flag, scorch only, crater only and both, with particles
     absent. Read stream state immediately before and after the scorch-or-crater choice, separately
     from smudge placement. Expected: only both flags below the height boundary take the choice
@@ -1269,10 +1283,11 @@ building that can cloak), it sets them in the test map's override section, which
     recording the state after particle creation and before the choice: that later state must
     predict the choice. A choice draw in another flag/height case, a different request from the
     predicted result, or particle creation after that choice falsifies the rule. Do not infer the
-    full event's draw count from the choice alone. S-0202 scenario R14 A to C supplies the
-    complementary full-composition tests: per-particle draw groups, smudge candidate selection
-    without placement draws, and any tile-animation draws caused by resource removal before
-    smudge selection.
+    full event's draw count from the choice alone. S-0202 scenario R14 A to E supplies the
+    complementary full-composition tests during loading and play: per-particle draw groups,
+    smudge candidate selection without placement draws, and conditional tile-animation and
+    neighbour spread-offer draws caused by resource removal before smudge selection. Its D
+    includes trigger-created animations and later playback events; E tests the shared height gate.
   - Part C, sprite: use named copies of stock sprites with different image-frame counts, one
     with a single image frame and the other with at least four. Use the lookup fixtures of AN18
     and S-0007 A8 to make the last successful type read find the first sprite and the theater
@@ -1290,8 +1305,11 @@ building that can cloak), it sets them in the test map's override section, which
 - Q-0046 is answered across specs. Claim 25 answers Q2c, including animations created during
   map loading. Claim 14 answers Q2b's event gates, height condition and scorch-or-crater choice.
   S-0202 claim 15 and R14 complete the downstream particle creation draws, smudge candidate
-  preferences, selection and draw-free placement, and the map-data and conditional
-  resource-removal recalculation composition. S-0401 claim 20 answers Q2a's chain-reaction
+  preferences, selection and draw-free placement during loading and play, including
+  trigger-created animations and later playback middle events. They also cover the map-data
+  relation and conditional resource-removal recalculation and neighbour spread-offer composition.
+  Event timing, sprite-derived μ and the height gate remain claims 13, 14 and 25's rules here.
+  S-0401 claim 20 answers Q2a's chain-reaction
   draw sequence, including its no-resource gate and ordering after the whole immediate middle
   event. Subsequent particle updates are not specified here.
 - Whether the first image frame is held one extra tick when *d* = 1 depends on the part of the tick

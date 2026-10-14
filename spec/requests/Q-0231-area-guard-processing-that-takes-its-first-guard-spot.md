@@ -1,9 +1,9 @@
 ---
 id: Q-0231
 title: Does the area-guard processing that takes its first guard spot run the leash and search table
-status: open
+status: answered
 related: [S-0215, S-0309]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

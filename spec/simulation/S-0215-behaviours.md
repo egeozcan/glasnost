@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231]
 supersedes: []
 ---
 
@@ -68,7 +68,11 @@ search, rechecks its conditions independently of a processing's approach, and ca
 newly acquired target on that same tick. Q-0202 is answered by claim 13: refresh precedes
 rather than follows the destination rows, with route-generated orders distinguished from
 same-fall-back destination changes. Previously claim 13 and S-0309 claim 23 b already gave
-refresh before the rest tables, but neither settled these collisions.
+refresh before the rest tables, but neither settled these collisions. Q-0231 is answered in full
+by claim 26: the newly taken own-cell guard spot qualifies in that same processing, including
+its search, targeting-timer restart and idle-action outcomes. The earlier version left that
+qualification open; S-0309's area-search rule already supplies candidate eligibility, not a
+one-processing deferral.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -740,7 +744,11 @@ Terms used by this spec:
       zero-delay range. For a turreted building this body-range rule applies only while its
       behaviour is *construction* or *selling*, including a queued one seen while none is current
       (claim 1). Running past the last stage and wrapping does not itself set the mark.
-      Other structures rules (repair, selling and others) also set or clear it.
+      Factory release and unloading neither set nor clear the mark. The factory's queued
+      *unload* and the *guard* queued at its end therefore wait for the same ready-mark rule
+      (S-0417 claim 2, `quirks.factory_unload_waits_ready_mark`, default original; that spec
+      owns the alternative). For an unarmed factory without a turret, its body range supplies
+      the mark. Other structures rules (repair, selling and others) also set or clear it.
       Each of the building's two
       per-tick starts clears the mark when it succeeds; nothing else of this spec clears it. So a
       behaviour queued for a building becomes current at the first of its per-tick starts at which
@@ -755,7 +763,8 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
       exceptions of queued *enter* and contact with a vehicle-factory building, and case c for a
       transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for
-      the construction ready mark and second start; scenario B33 for the body-range rule). Further parts are
+      the construction ready mark and second start; scenario B33 for the body-range rule,
+      and S-0417 U2 for factory release and unloading leaving the mark alone). Further parts are
       `unmeasured`. The deploying and undeploying transitions and the unfinished unload or deploy
       cycle: which vehicles have them, how long they last and how they end belong to the deploy
       specs, and no setup in this spec can time an order inside them (as for claim 22). The
@@ -1461,10 +1470,17 @@ apply in our engine to the actors of every player house.
     take a new target around its guard spot in the same processing, and never engages, in that
     processing, the target the leash made it drop.
 
-    An actor without a guard spot does none of this. Whether a spot first acquired as the actor's
-    own cell in this processing already qualifies for the table is not established (Open
-    questions); the table's same-processing outcomes are specified here only for a spot held
-    when the processing began. In a processing that none of rows 1 to 5 ends,
+    An actor without a guard spot does none of this. A guard spot taken as the actor's own cell
+    in this processing already qualifies for the table in that same processing (Q-0231).
+    Thus, with no target or destination, an expired targeting timer and passive acquisition
+    allowed, the actor searches around that cell and restarts the targeting timer with the
+    search's draw (claim 33). An eligible enemy selected by that search becomes its target on
+    this first processing, not a later one, and the delay is 1 tick with no delay draw. If the
+    search finds nothing, the actor attempts its idle action on this processing, including
+    an infantry unit's idle action as S-0107 defines it, then takes the ordinary delay specified below.
+    If searching is not allowed, the no-target row still attempts the idle action. These
+    results do not bypass the earlier rows or the infantry deployer rules.
+    In a processing that none of rows 1 to 5 ends,
     any actor, with or without a guard spot, that has no target once the leash and the search have
     taken effect and whose secondary weapon charges friendly buildings looks for a charge target as
     in *guard*.
@@ -1489,11 +1505,10 @@ apply in our engine to the actors of every player house.
       that finds a target takes no draw is `measurable` by scenario B27, case f: the search of a
       player house's actor takes only its timer draw and none for the objects it tests or scores
       (S-0309, claim 12, and its State and ordering), so the stream on that tick tells a draw of
-      the delay apart from the search's. The leash and search table in the processing that
-      first acquires its own cell as guard spot is `unmeasured`: B10 (g) records the spot only
-      afterwards and does not distinguish a same-processing search from one deferred to the
-      next processing (Open questions).
-    - Confidence: high (the guard spot and delay rules); medium (the leash, the order of leash and
+      the delay apart from the search's. The newly taken own-cell spot's same-processing
+      search, targeting-timer restart, acquisition and idle-action outcomes are `measurable`
+      (scenario B34).
+    - Confidence: high (the guard spot and delay rules and the newly taken spot's same-processing qualification); medium (the leash, the order of leash and
       search, the slave-master rows, the computer-only rules and the harvester rule)
 
 27. **Hunt.** At each processing, unless the actor's type has the stupid-hunt flag, it runs the
@@ -2095,7 +2110,7 @@ apply in our engine to the actors of every player house.
       |---|---|
       | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | destination unchanged: an absent one stays absent, and an airborne actor's held one stays held |
       | not the case above, and the actor is a vehicle with at least one approach destination (Terms) | it takes the first approach destination as its destination, that entry leaves the list, and the step ends |
-      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 24, with only the deploying-search gap remaining; claim 17 supplies the ordinary failure centre after candidate trials as well as with empty radii |
+      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 24, with only the deploying-search gap remaining; claim 17 supplies the failure centre after candidate trials as well as with empty radii |
 
       (f2) **Deploy-to-fire vehicle.** A vehicle whose type deploys to fire (S-0301), standing on
       a cell where its deploy test fails (S-0301, the must-deploy answer), searches as in the
@@ -2614,6 +2629,7 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 | Data input | Concept | Parse form and absent-key result |
 |---|---|---|
 | none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
+| none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
 
 **Behaviour property sections.** Each behaviour's properties come from a game-wide section of the
 rules data named after the behaviour. Section names are looked up exactly as S-0001 says (with
@@ -3911,6 +3927,33 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Runs: one per case. The observation area is the test building and its surrounding cells.
   the common bystander void rule applies. Remove the named test data afterwards.
 
+- **B34 (claim 26, Q-0231).** Tiny flat skirmish test map, game speed index 2, director and
+  mods off, one human-controlled house and one bystander computer player kept away from the
+  observed area. Place a stock armed vehicle, then in a separate run a stock armed infantry
+  unit that is not a deployer, in *area guard* with no guard spot. Use the read-only recorder
+  to identify its first processing and verify at entry: no target, no destination, nothing
+  queued, targeting timer expired and passive acquisition allowed. A run failing those
+  conditions is void; do not write state to manufacture them. Repeat with no enemy in search
+  range and with one eligible stock enemy as a named test object inside the area search range.
+  Record guard spot, target, both behaviour and targeting timers, infantry idle timer and
+  sequence, and scenario random-stream state
+  on that processing tick and the next processing. Three valid placements per kind and enemy
+  condition, 800 × 600; scripted input may keep other objects out of the observed area.
+  Expected: the spot is its own cell and the targeting timer restarts on the first processing
+  by claim 33's area-delay formula and timer draw. With the eligible enemy selected, the target
+  is acquired on that processing and the next processing is 1 tick later, with no delay draw.
+  With no enemy, the actor attempts its idle action and chooses claim 26's ordinary delay.
+  The timer draw has claim 6's earlier stream assignment than the delay draw. For infantry,
+  additionally require the idle timer expired, no movement, not prone, not in the attack
+  state, and a sequence eligible under S-0107 claim 14. Expect the idle timer to restart on
+  that first processing by that claim; a visible idle sequence is not required on every run. The idle
+  action's draws and eligibility remain owned by S-0107, not inferred from a total draw count.
+  Falsifiers: a targeting timer left expired until the next processing despite the verified
+  conditions, acquisition deferred despite the first search selecting the enemy, a delay draw
+  after successful acquisition, or no idle-action attempt in the eligible no-enemy infantry
+  run. Per-tick searches or actions of other objects must be separated by the recorder; if
+  they cannot be separated, that run cannot establish the draw assignment.
+
 ## Open questions
 
 - Whether any stock map, campaign mission or team script puts an actor into *queued move* or
@@ -3928,7 +3971,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   rules allow the override while the gate is in *open*.
 - Which additional structures rules set or clear a building's ready mark (claim 11), beyond
   the established processings and body-range rule. An unarmed building's own *guard*
-  processing never sets it, but its non-turreted body range can.
+  processing never sets it, but its non-turreted body range can. Factory release and unloading
+  neither set nor clear it: the queued *unload* and the *guard* queued at its end wait for
+  claim 11's ready-mark rule, with the body-range consequences of S-0417 claim 2 and
+  `quirks.factory_unload_waits_ready_mark` (default original). The factory case is resolved.
 - The guard spot's reference point when the guard spot is a cell (F4): presumably the cell's centre
   at the cell's height.
 - Which situations fill a vehicle's approach destinations (claim 13). S-0417 claim 5 now
@@ -3961,12 +4007,6 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   fall back to rest and start the resting behaviour at once before choosing its standard delay,
   which would then take the rate of the started behaviour (claim 6). The entry protocol's specs
   own those cases.
-- *Area guard* of an actor that has no guard spot when the processing begins (claim 26): whether
-  the own cell that it takes as its guard spot in that processing already counts for the leash and
-  search table of the same processing, or whether that processing does none of the table (no
-  search, no idle action). The two differ in the draws and the targeting-timer restart of that
-  first processing; scenario B10 (g) checks only the guard spot afterwards.
-
 - **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 24 cover ground
   candidates on terrain and bridges, cell targets including destroyable cliffs, failure centres
   after trials, usable-area exceptions, balloon-hover destinations, close-range searches and
@@ -3981,8 +4021,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ### Cross-spec changes to confirm
 
-- S-0309 claim 23 b should cite claim 13 here for assignments that can supersede the refresh
-  result, and for route-generated orders rather than immediate route destination changes.
+- S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
+  the refresh result and for route-generated orders rather than immediate destination changes.
 Joint hand-off checks: S-0213 revision 13 claim 16 already supplies the route-order timing
 pointer, and the current S-0207 claim 20 e already supplies claim 10's live erasing-lock exception
 and restored-target distinction. S-0307 revision 6 claims 15 to 24, S-0406 revision 4 claim 17

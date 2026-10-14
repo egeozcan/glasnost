@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -942,15 +942,19 @@ depend on the game speed, but they are not converted this way and are not speed-
 flash's steps during a timed freeze: it is the one switch through which game speed reaches game
 state in our engine. What turning it off does on each path it covers is given in claim G3, in the
 paragraph *Our engine*.
+S-0701 claim 28 also uses this normalisation for the low-funds announcement's speech-delay
+countdown. That countdown controls only what is heard (S-0701 claim 29): it is presentation
+timing, not another game-state timing exception under G3.
 
 **sprite.** A two-dimensional image stored in a shape file in the public "SHP" format: a numbered
 sequence of image frames, each a rectangle of palette indices. Infantry, buildings, animations and
-some vehicles and aircraft are drawn as sprites. A sprite that a type's art names for one role is
-called by that role: for a building the *body sprite*, *build-up sprite*, *bib sprite*, *deploying
+some vehicles are drawn as sprites. Aircraft bodies are drawn only as voxel models; an aircraft
+type without voxel art draws no body (S-0102 claim 21; S-0105). A sprite that a type's art names
+for one role is called by that role: for a building the *body sprite*, *build-up sprite*, *bib sprite*, *deploying
 sprite*, *roof-deploying sprite*, *under-door sprite* and *under-roof-door sprite*; for infantry the
 *body sprite*. Specs don't call them "sheets" or "images" (an *image name*, see *art database*, names
 an art section, not a sprite), and a numbered picture inside one is an
-*image frame*, never a bare "frame". See S-0007, S-0107 and S-0108.
+*image frame*, never a bare "frame". See S-0007, S-0102, S-0105, S-0107 and S-0108.
 
 **voxel model.** A volumetric model in the public "VXL" format, with a companion motion file in the
 public "HVA" format of the same base name. See S-0105.
@@ -964,10 +968,10 @@ battlefield view shows a window of it. See S-0101.
 
 ### movement
 
-**aircraft.** A type kind and its objects: units that fly, drawn as voxel models or sprites (see
-S-0007, claim 4, and S-0105). Infantry of a jumpjet type and hovering vehicles are not aircraft: an object's kind is the kind of
-its type. Which kinds can take off and land, and where, belongs to the
-aircraft specs.
+**aircraft.** A type kind and its objects: units that fly. Aircraft bodies are drawn only as voxel
+models; an aircraft type without voxel art draws no body (S-0102 claim 21; S-0105). Infantry of a
+jumpjet type and hovering vehicles are not aircraft: an object's kind is the kind of its type.
+Which kinds can take off and land, and where, belongs to the aircraft specs.
 
 **bridge, high bridge, bridge deck.** A *bridge* is a crossing of water or a gap built from bridge
 overlays. A *high bridge* is a bridge with a raised *bridge deck* that units can drive on and pass
@@ -1104,8 +1108,9 @@ report. Scatter for other unit kinds remains with their movement specs.
 move away from) and two yes/no options: *forced* and *move anywhere*. Each option bypasses
 only the gates that the receiver's owning spec names, not every refusal. S-0208 (claim 11)
 owns infantry acceptance, including when movement makes a forced request count as not forced.
-For vehicles, forced bypasses the scatter-property gate, and move-anywhere bypasses the ordinary
-destination gate; the other refusals remain (S-0207, claim 16). In particular, forced alone does
+For vehicles, forced bypasses the scatter-property gate and the target-dependent acceptance
+chance for a request with a threat point; move-anywhere bypasses the ordinary destination gate.
+The other refusals remain (S-0207, claim 16). In particular, forced alone does
 not bypass an existing destination, as S-0402 (claim 10) illustrates. S-0208 (Terms) lists the
 specs that send each kind of request.
 
@@ -1599,11 +1604,21 @@ Specs write "trigger action", not "script action".
 
 ### ui
 
+**announcement.** A spoken line of the battlefield announcer, from the announcement data.
+Announcements play one at a time separately from sound channels. See S-0701 (Terms, claims 26
+to 28).
+
+**audio clock.** Real time in milliseconds, distinct from ticks. S-0701 owns which sound timings
+use it rather than game time (Terms, claims 9 to 14, 27 and 29).
+
 **build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type *offered* to the local
 player, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
 S-0411 what an icon shows and which orders its clicks give (Terms, claims 1 to 12), and
 capacity-aware offers and delayed refill (claim 15); S-0404 and
 S-0407 use the term. Specs write "build icon"; "cameo" means the same.
+
+**channel.** In audio, one of the 16 mixing voices on which sound instances play; announcements
+play separately. This is not a colour component in rendering. See S-0701 (Terms, claims 9 and 27).
 
 **free mover.** An actor that the click rules of S-0214 treat apart when it is sent to a cell or an
 object: one that is in the air, is an aircraft, is of an *underground type* or is of a jumpjet infantry type,
@@ -1612,15 +1627,38 @@ with the conditions S-0214 gives. S-0214 owns the term (Terms) and its rules (cl
 **lobby.** The pre-game screen of a skirmish or network game, where the players, their countries,
 colours, teams and start positions and the game mode are chosen.
 
+**positional sound.** A sound request at a map position, whose level and left-right placement
+follow from where that position appears in the battlefield view. See S-0701 (Terms, claim 6,
+Formulas F2).
+
 **radar, radar map, radar building.** A house *has radar* while the conditions of S-0410 (claim
 1) hold. The *radar map* is the picture in the sidebar's radar panel, and a *radar building* is a
 building whose type has the radar flag. S-0410 owns the three terms (Terms, claims 1 to 11), and
 S-0405 (claim 12) and S-0409 use them.
 
+**response.** A spoken acknowledgement by one of the local player's objects on selection, an
+order, damage or death. Its kind uses a list or a single sound entry on the object's type, with
+the fallbacks owned by S-0701 (Terms, claims 16 to 20, Formulas F6). S-0214's *selection
+responses* are the selection kind.
+
+**screen sound.** A sound request not tied to a map position, at full request level and centre
+left-right placement; the entry's own level still applies. See S-0701 (Terms, claim 5).
+
 **sidebar.** The panel beside the battlefield view during play, with the radar, the local
 player's credits and the build icons. S-0004 (claim 11) owns the order of the build icons, S-0411
 what the icons show and what clicking them does (see *build icon*), S-0416 the credits counter and
 S-0410 the radar map (see *radar*). The rest of its behaviour is left to later interface specs.
+
+**sound entry.** A named entry of the sound data, holding a list of samples and sound settings.
+In-game sounds other than music and announcements play sound entries. See S-0701 (Terms,
+claims 1 and 2).
+
+**sound instance.** One playing of a sound entry, from its request until it ends or is cut.
+See S-0701 (Terms, claims 8 to 14).
+
+**sound level.** Loudness on a scale from 0 (silent) to 16384 (full). A spec that instead uses a
+level fraction in 0 … 1 says so. This is not a height level. See S-0701 (Terms, claim 15,
+Formulas F1 to F4).
 
 **vehicle thief.** An infantry unit whose type has the imported vehicle-thief flag: it takes over a
 vehicle by entering it. Its rules belong to the special-abilities specs. See S-0209 and S-0214.
@@ -1966,12 +2004,6 @@ scenario T6, part G.
 - How game speed works in network games is left by S-0201 (claim 13) to a future network-game spec.
   Claims G2 and G3 cover skirmish games only, and S-0201 claim 6 (one drawn frame per cycle) covers
   single-player games only.
-- One further delay is believed to be converted with the same game-speed normalisation, but no spec
-  owns it and claim G3 does not cover it: the shortest time between two repeats of a spoken warning
-  to a house (for example the warning that a house cannot pay for what it is building). It is
-  believed to affect only what is heard, not game state. If it reached game state, it would fall
-  under exception 1 of claim G3, and the spec that comes to own it would say how. Its exact rule,
-  and which warnings it covers, should be settled by the interface specs.
 
 ## Questions for the project lead
 

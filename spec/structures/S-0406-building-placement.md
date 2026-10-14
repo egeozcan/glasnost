@@ -2,7 +2,7 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -461,11 +461,10 @@ names the top-left cell of the foundation. In addition:
     cases and quirks), whose importer warning covers it.
     A place order of an upgrade type that names such a building passes claim 4 whatever its ring
     holds, for human input and for an AI house alike; claim 5's shroud condition is still asked of
-    the upgrade type's foundation rectangle at the named cell. This differs from S-0404 claim 10's
-    current general place-order legality rule. The paired revision of S-0404 claim 10 must state
-    that an upgrade place order is exempt from adjacency but remains subject to the shroud condition
-    stated here; ordinary building place orders retain claim 10's adjacency and explored-ground
-    conditions. S-0408 (claim 5) owns which upgrade a sale removes.
+    the upgrade type's foundation rectangle at the named cell. This follows S-0404 claim 10's
+    legality rule: an upgrade place order is exempt from adjacency but remains subject to explored
+    ground; ordinary building place orders retain both conditions. S-0408 (claim 5) owns which
+    upgrade a sale removes.
     - Backing: `measurable` (scenario PL10: parts a and b for the room rule, part c for a type
       without room, part d for the position, the full repair and the power and prerequisite
       effects, part e for the adjacency replacement, part f for the shroud condition, part g for
@@ -617,8 +616,10 @@ names the top-left cell of the foundation. In addition:
     - a theater-refreshed range with *N_b* = 1 or *N_b* = 0.
 
     No stock data reaches this case. `quirks.single_stage_buildup_never_completes` (default on).
-    The importer warns about such types in both states of the switch.
-    - Backing: `measurable` (PL11 e)
+    The importer warns about such types in both states of the switch. This switch is shared
+    with selling: S-0408 claim 17 owns the same failure to complete for a positive-delay
+    build-down with 1 stage or fewer, and the resulting absence of a sale refund or removal.
+    - Backing: `measurable` (PL11 e; S-0408 S10 for the selling effect)
     - Confidence: medium
 
 ## Formulas
@@ -753,7 +754,14 @@ Observable consequences:
   *d_b* ticks after the range starts. A placed building then reaches *construction* at
   *T* + *d_b* and hands over *d_b* ticks after *C*, and a deployed one hands over at
   *C* + *d_b*. Ranges with at least 2 stages are unchanged. The importer warns about such types
-  in both states (Import mapping).
+  in both states (Import mapping). The same switch governs selling (S-0408 claim 17):
+  with it on, a positive-delay build-down of one stage or fewer never completes, so the
+  building remains and no sale refund is paid, even though sale releases have already
+  occurred. With it off, completion is reported on the first wrap, giving an ordinary
+  sale's payment and removal at *D* + *d_b*, where *D* is the build-down-start tick.
+  This is exact integer arithmetic in ticks, assuming uninterrupted building turns and
+  selling processing (S-0408 F4). Zero-delay ranges are unchanged; S-0408 S10 measures
+  the selling effect. Construction timings above are unchanged.
 - **Upgrade beyond the third position** (claim 12, F5). A target type whose upgrade count is above
   3 lets level-less upgrades reach *c*′ above 3. The original records them in no position and
   alters some other part of the building's state, with effects not established; our engine records

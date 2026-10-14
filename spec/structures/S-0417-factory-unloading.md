@@ -2,13 +2,13 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0222, Q-0223]
+requests: [Q-0221, Q-0222, Q-0223]
 supersedes: []
 ---
 
@@ -21,21 +21,20 @@ vehicle exit movement, the first destinations of released infantry, the tether g
 released aircraft, the destination chosen on release from contact, and the release details that
 S-0404 leaves to this spec (claim 14). S-0404 claim 13 owns release positions, facings, busy and
 failed results, and refunds; S-0404 claim 15 owns aircraft pad positions. Skirmish only: campaigns
-and network games are out of scope. This answers Q-0222 and Q-0223 and most of Q-0120 and Q-0221.
-Still open: what moves a released infantry unit when there is no rally point (Open question 3),
-the draws of putting a released unit on the map (Open question 8), and the design choices of Q-0221 that await the
-project lead (Questions for the project lead 1 and 2). These proposals are not settled
-implementation rules; this revision cannot be signed off until those decisions are applied.
+and network games are out of scope. This answers Q-0221, Q-0222 and Q-0223 and most of Q-0120.
+Still open: what moves a released infantry unit when there is no rally point (Open question 3)
+and the draws of putting a released unit on the map (Open question 8). Claim 14 owns the
+contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
+the search's no-draw rule; their untested cases remain qualified there.
 
-**Cross-spec changes to confirm at hand-off.** S-0404 claim 13 must say release queues
-*unload*, rather than starting it immediately, and delegate the contact-place count, infantry
-candidate acceptance and edge-entry nearby destination to claim 14 here. Its nearby-search draw
-question is resolved; initial-placement draws remain open. S-0212 table T5 needs the aircraft
-factory edge-entry-without-rally row with claim 14's parameters, and claim 25's selection-tick
-list needs the release tick for that search. S-0215's ready-mark open
-question should record that factory release and unloading neither set nor clear the mark,
-with the start consequences owned by claim 2 here. These changes must be checked together
-with this revision; they are not implied edits to the other files.
+**Paired hand-off confirmations.** S-0404 revision 8 claim 13 fulfils the release hand-off:
+release queues *unload*, and contact-place count, infantry candidate acceptance and edge-entry
+nearby destination refer to claim 14 here. Initial-placement draws remain open. The current
+S-0212 table T5 includes the aircraft factory edge-entry-without-rally row with claim 14's
+parameters, and claim 25 uses the release tick to select its destination. The current S-0215
+claim 11 records that factory release and unloading neither set nor clear the ready mark,
+with start consequences owned by claim 2 here. Confirm these companion passages at sign-off.
+No further change to them is requested by this revision.
 
 ## Terms
 
@@ -118,8 +117,8 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
    pair (*a*, *b*) from S-0404 Constants. E is (*x*₀ + *a* − 1, *y*₀ + *b*). The track ends at
    E's centre, at ground height under the movement rules. S-0404's lists do not generally put E
    inside the foundation: for example, its 3 × 2 word gives (*x*₀, *y*₀ − 1).
-   Shorter lists use the special results in Edge cases. Selection always uses the original lists
-   in the default configuration; the proposed rule for S-0404's full rings is in Edge cases.
+   Shorter lists use the results in Edge cases. Apron selection uses the original lists under
+   either state of S-0404's full-ring switch, as specified in Edge cases.
    - Backing: `measurable` (U4 for stock factory types). Other foundation words are `unmeasured`:
      no stock vehicle factory using those words is established for this scenario.
    - Confidence: high
@@ -468,38 +467,38 @@ relative actor update orders; confidence medium.
 
 ## Edge cases and quirks
 
-- **Short exit lists: proposed `quirks.factory_apron_short_list`.** The original has definite
+- **Short exit lists: `quirks.factory_apron_short_list`.** The original has definite
   special results, not arbitrary results outside the list. For the 2 × 1 and 1 × 2 words the
   pair used by F3 is (32767, 32767) cells. For the 1 × 1, 3 × 3 refinery, 6 × 4 and 0 × 0 words
   it is (0, 0) cells. The former give an outlying apron, with signed wrapping; the latter give
-  (*x*₀ − 1, *y*₀). Original results are the proposed default.
+  (*x*₀ − 1, *y*₀). Default original: use these special pairs.
   - **The outlying apron in the original.** With F3's signed wrapping, the 2 × 1 and 1 × 2 apron
     selects no legal cell (S-0009 Terms and claim 1) for any top-left cell a map can have. The
     original then reads E as a cell holding no object: the apron is never blocked and no clearing request is
     sent. At letting out, the exit-track instruction is accepted, and the first point carries the
     vehicle to E's centre plus (−670, −68) leptons, far off the map. What follows has not been
     traced, and our engine cannot hold an object off the map.
-  - **Proposed handling of an apron that is not a legal map cell** (the cell that E's coordinates
-    select, S-0009 Terms and claim 1, is not a legal cell; proposed under both states of
-    `quirks.factory_apron_short_list`; awaiting Questions for the project lead 1). The lead must
-    decide whether this is a no-switch departure or quirk-controlled behaviour. Until then it
-    is a proposal, not a settled default. The apron counts as free, as in the original. At
-    letting out, the exit instruction is refused and u stays where it appeared. u gives its clear
-    report at once, as on a cell-arrival update with no destination, so K closes; claim 8's reply
-    then applies. This would be a documented departure from the off-map journey.
+  - **An apron that is not a legal map cell.** When E's coordinates select no legal cell
+    (S-0009 Terms and claim 1), the apron counts as free, as in the original. At letting out,
+    the exit instruction is refused and u stays where it appeared. u gives its clear report
+    at once, as on a cell-arrival update with no destination, so K can close under table S1.
+    Claim 8's reply then applies. This is a documented departure from the off-map journey,
+    applying under both states of `quirks.factory_apron_short_list`.
   - **E a legal cell outside the usable area**, for example a factory at the map edge, is an
     ordinary apron: claims 4 to 8 apply unchanged.
-  - **Proposed fixed alternative** (switch off; awaiting Questions for the project lead 1). The
+  - **Fixed alternative** (switch off). The
     pair used by F3 is the last pair of the foundation's list (S-0404 Constants): for the 2 × 1,
     1 × 2, 1 × 1, 3 × 3 refinery and 6 × 4 words, the last listed pair. For the 0 × 0 word, whose
     list is empty, it is (0, 0). Lists of eleven or more entries keep their eleventh pair.
-  - **With S-0404's `quirks.foundation_exit_lists` off** (proposed; awaiting the project lead,
-    Questions for the project lead 2). E still uses the original lists' pairs (this edge case and claim 3), whatever
-    that switch's state. The apron table is separate from the infantry exit search, so the full
-    ring's length never matters here, and a ring shorter than eleven entries cannot arise for E.
+  - **With S-0404's `quirks.foundation_exit_lists` off.** E still uses the original lists' pairs
+    (this edge case and claim 3), whatever that switch's state. With
+    `quirks.factory_apron_short_list` off, its last-pair alternative likewise uses the original
+    short list, not the full ring. The apron selection is separate from the infantry exit
+    search, so the full ring's length never matters here.
   - Backing: `unmeasured` (no stock ground vehicle factory with these words is known; the
-    proposals are design). Confidence high (pairs, the apron read as free, the accepted
-    instruction); low (what the original does after the off-map placement).
+    fixed alternative, invalid-cell handling and independence from full rings are design).
+    Confidence high (pairs, the apron read as free, the accepted original instruction and
+    the decided design rules); low (what the original does after the off-map placement).
 - **`quirks.factory_unload_waits_ready_mark`.** Proposed default original: a factory's queued
   *unload* and the *guard* queued at its end both wait for the ready mark (claim 2), so a factory
   whose body range never sets the mark either never starts unloading a released vehicle or, once
@@ -709,22 +708,14 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
 4. Failed temporary driving replacement and refused exit-track instructions: subsequent damage,
    movement and contact loss remain untraced. They must not be implemented as guaranteed
    permanent waits on the evidence here.
-5. Moved to Questions for the project lead 1; this number is retained for existing references.
-6. Moved to Questions for the project lead 2; this number is retained for existing references.
+5. Q-0221 short-list alternative and illegal-apron handling: resolved by the decided rules in
+   Edge cases. Switch off uses the last pair, or (0, 0) for an empty list. An illegal apron is
+   free, the exit instruction is refused and the clear report is immediate under either state.
+6. Q-0221 full-ring interaction: resolved. Apron selection retains the original lists' pairs
+   under either state of S-0404's full-ring option, as specified in Edge cases.
 7. Existing destination of a unit or building at the run-away reply: the additional interaction
    is untraced; no stock produced-unit setup is established.
 8. Whether putting a released unit on the map takes random draws of its own (Q-0120, question 5).
    The search and destination rules of this spec take none, but placement's own effects have not
    been traced.
 
-## Questions for the project lead
-
-1. Q-0221, questions 1 and 2: confirm or replace the proposed off state of
-   `quirks.factory_apron_short_list` (the last pair of a short list, (0, 0) for the empty list).
-   Decide whether the proposed handling of an apron that is not a legal map cell (free apron,
-   refused exit instruction, immediate clear report) is a no-switch departure or quirk-controlled
-   behaviour, and whether it needs an importer warning. The original's special pairs are
-   definite; its later off-map journey is untraced, not established as undefined.
-2. Q-0221, question 3: confirm or replace the proposal that E retains the original lists' pairs
-   with S-0404's `quirks.foundation_exit_lists` off. Under that proposal ring length is irrelevant.
-   Neither proposal is settled by the implementer's interim workaround.

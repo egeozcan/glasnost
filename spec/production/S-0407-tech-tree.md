@@ -2,13 +2,13 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0191]
+requests: [Q-0191, Q-0196]
 supersedes: []
 ---
 
@@ -102,9 +102,11 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 - **Taken-up set.** A per-house set of types: the types whose build icon the house's strip holds
   (S-0411 claim 2). The original keeps it only for the local player, as the entries of its sidebar, and
   our engine keeps one for every player house (claim 13). It changes only at a recheck of the
-  offer (claim 12, the closed list of events that call for one), and what it holds after a recheck is: a type is in the set exactly when claim 1
+  offer (claim 12, the closed list of events that call for one). Subject to the capacity-aware
+  admission rule of S-0411 claim 15, a type is in the set after a recheck exactly when claim 1
   (a) and (b) both hold and, in addition, either the type was already in the set before the recheck
-  or the house has a *qualifying factory* (Terms) at the recheck. This admission rule assumes space in the type's sidebar tab: S-0004 claim 11 suppresses an otherwise eligible new icon when the tab is full. Whether that suppressed type belongs to the taken-up set for order legality, and when a freed slot admits it, remain open (Open question 4). No cancellation rule is asserted here for a suppressed type. A type for which (a) or (b)
+  or the house has a *qualifying factory* (Terms) at the recheck. Full-tab suppression and
+  later admission are governed by S-0411 claim 15. A type for which (a) or (b)
   fails leaves the set (or stays out of it) even when a qualifying factory exists. A type that has left the set is *not* remembered as taken up: when it is allowed again it
   needs a qualifying factory again at the recheck that follows. A type is *taken up* while it is in
   the set. Between two rechecks the set does not change.
@@ -131,14 +133,19 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
      | yes | no | no | no |
      | no | yes or no | yes or no | no |
 
-     The admission rows assume space in the sidebar tab (S-0004 claim 11). A full tab suppresses
-     a new icon; its offer membership and later admission are not established here (Open question 4).
+     Full-tab suppression, offer membership, delayed admission and the absence of
+     suppression-removal orders are governed by S-0411 claim 15. In particular, capacity is
+     judged before removals at a recheck, and a vacancy created by a removal is not filled until
+     a later recheck. The admission rows above are subject to that capacity-aware rule.
+     A candidate with an allowed or at-limit answer and a qualifying factory can occupy a
+     place against other candidates even when (b) fails and it is removed in that recheck.
+     Its removal does not free that place for another candidate at the same recheck.
 
      (Example of the last row: a naval vehicle type whose other conditions are met, while the
      house has a switched-on factory building of the vehicle kind that is not naval and no naval
-     factory building: a qualifying factory exists, but (b) fails, so the type never enters the
-     set.)
-     So (c) matters only for a type that becomes allowed while the house has no qualifying factory
+     factory building: a qualifying factory exists, but (b) fails, so the type is absent from the
+     set after the recheck.)
+     Apart from capacity, (c) matters only for a type that becomes allowed while the house has no qualifying factory
      of its kind (Terms: for example, every factory building of the kind is switched off, or queued
      to be sold): it is not offered until a recheck finds a qualifying factory.
    The offer is worked out again only after the events of claim 12, which is a closed list. Between
@@ -155,8 +162,12 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    A held-item resume is exempt from this issue-time limit test; its own icon shows its item state
    rather than darkening (S-0411 claims 3 and 4). The neutral and special houses build nothing.
    - Backing: `measurable` (scenarios T1 and T2; the frozen offer by T14 runs 7 and 8,
-     queued-sale factory exclusion by S-0411 S2's sale extensions)
-   - Confidence: high (a and b, except queued-sale factory exclusion, medium); medium (c and the frozen offer: the taken-up set is inferred from
+     queued-sale factory exclusion by S-0411 S2's sale extensions; capacity-aware admission
+     and suppressed losses by S-0411 S10). The every-player capacity extension is
+     `unmeasured`, a project rule rather than an observable rule of the original's computer production
+   - Confidence: high (capacity and absence of suppressed-type removal orders, as in S-0411
+     claim 15; every-player extension as a project rule); medium (retry timing and competing
+     admissions, as in S-0411 claim 15). High (a and b, except queued-sale factory exclusion, medium); medium (c and the frozen offer: the taken-up set is inferred from
      when the original's sidebar gains and loses an icon, which it does for the local player only,
      and the original removes an icon only at a recheck; this spec states which types are in the
      set after a recheck, and S-0411 (claim 2) gives the removal of an icon that left the set, and
@@ -497,8 +508,8 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 
     These results describe icon order and, through S-0411 claim 13, later automatic cancellation
     order and possible intermediate starts. They do not require a particular representation
-    of the taken-up set. Full-tab offer legality, cancellation and later refill remain Open
-    question 4; no outcome for a suppressed type is added here.
+    of the taken-up set. Full-tab offer legality, cancellation and later admission are governed by
+    S-0411 claim 15, including its delayed-refill rule.
     - Backing: `measurable` (T15); the every-player extension follows claim 13 and is
       `unmeasured`, a design rule not observable in the original
     - Confidence: high (increasing indices within one kind and unchanged existing icons),
@@ -541,7 +552,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 | Tech level meaning "never" | −1 | level | claim 5 |
 | Build limit absent-key default | 2³¹ − 1 | objects | claim 9 |
 | Country-list index modulus | 32 | registration indices | F1 |
-| Stolen-tech side values | 0, 1, other | side value (an enumeration, no unit) | claim 6; the values of the base-planning-side field |
+| Stolen-tech side values | 0, 1, other | enumeration values | claim 6; the values of the base-planning-side field |
 | Generic groups | 6 | groups | power, factory, barracks, radar, tech, refinery |
 
 ## State and ordering
@@ -1075,8 +1086,7 @@ Backing).
    or another transfer of ownership was not verified; T8 (e) uses two buildings placed one after
    the other. A measurement would capture an older building after a newer one is placed and
    repeat (e).
-4. S-0004 claim 11 suppresses a newly available icon when its tab is full. The admission rules
-   here cover types with space in their tab; they do not establish offer membership, order legality,
-   cancellation or later refill for a suppressed type. S-0004 scenario F4 tests suppression.
-   S-0411 claim 2 leaves later admission unresolved. Those cases need further investigation
-   before a complete capacity-aware taken-up-set rule can be stated.
+4. Resolved by S-0411 claim 15. A suppressed type is absent from the taken-up set, so orders
+   for it are not legal; it gives no suppression-removal orders; and its admission is reconsidered
+   only at a later qualifying recheck. Capacity is judged before removals at each recheck,
+   and admission order follows claim 17.

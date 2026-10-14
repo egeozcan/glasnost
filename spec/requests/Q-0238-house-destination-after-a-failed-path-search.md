@@ -1,9 +1,9 @@
 ---
 id: Q-0238
 title: Which cell a neutral or special house gives its unit that gave up after a failed path search
-status: open
+status: answered
 related: [S-0212, S-0215]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need

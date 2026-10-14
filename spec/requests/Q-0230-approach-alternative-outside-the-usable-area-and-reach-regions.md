@@ -1,9 +1,9 @@
 ---
 id: Q-0230
 title: Can an approach alternative outside the usable area be in the actor's reach region
-status: open
+status: answered
 related: [S-0307, S-0211, S-0212]
-answered-by: []
+answered-by: [S-0307]
 ---
 
 ## Need
