@@ -280,7 +280,8 @@ Provisional rules of combat, each tied to a request:
 |---|---|---|
 | `combat::range::approach_search`, `approach::search` | the ordinary search of S-0307 claims 15 to 21 is applied unchanged to the cases those claims leave open: close-range types, jumpjet actors (their failure centre included) and destroyable-cliff cell targets; an alternative off the legal cells never passes the clear-cell test | Q-0172 |
 | `combat::range::approach_search` | an alternative outside the usable area fails the clear-cell test's reach-region condition (S-0211's off-map category, S-0212 claims 2 to 4), so `quirks.approach_alternative_outside_area` has no effect | Q-0230 |
-| `process::fall_back` | the attack-move refresh of S-0309 claim 23 (b) runs after the other common effects of S-0215 claim 13, so a resumed attack move's destination replaces a guard spot, route point or approach destination given in the same fall-back | Q-0202 |
+| `process::fall_back` | the attack-move refresh of S-0309 claim 23 (b) runs before the rest table (S-0215 claims 13 to 15, settled) but after the other common effects of claim 13, so a resumed attack move's destination replaces a guard spot, route point or approach destination given in the same fall-back | Q-0202 |
+| `process` (area guard) | the processing that takes the actor's own cell as its first guard spot runs none of S-0215 claim 26's leash and search table (no search, no idle action); the table applies from the next processing | Q-0231 |
 
 ## Simulation (M5a: economy and base building)
 

@@ -174,7 +174,7 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         }
         // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick; the rest table judges the state after it)
         // spec: S-0215 claim 13 (an actor with attack-move memory may resume its attack move)
-        // Its place after the other common effects is interim, request Q-0202.
+        // It runs before the rest table (S-0215 r17); its place after the other common effects is interim, request Q-0202.
         refresh_attack_move(w, id);
     }
     match o.kind {
@@ -946,6 +946,7 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     if o.kind == Kind::Vehicle && crate::seams::slave_group_at_rest(w, id) {
         crate::seams::wake_slaves(w, id);
     }
+    // spec: S-0215 claim 26 (the leash and search table for a guard spot held when the processing began; a spot first taken in this processing does none of the table: interim, request Q-0231)
     if let Some(gs) = o.guard_spot {
         let gp = match gs {
             Target::Object(x) => w.reference_point(x),
