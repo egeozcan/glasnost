@@ -93,6 +93,15 @@ impl Loaded {
         )
     }
 
+    /// Each house's radar colour by house index (S-0410 claim 8, with
+    /// [`build::owner_radar_colour`]'s interim reading, Q-0417).
+    pub fn house_radar_colours(&self, w: &glasnost_sim::world::World) -> Vec<[u8; 3]> {
+        w.houses
+            .iter()
+            .map(|h| build::owner_radar_colour(&self.import, &self.options, h.name.as_bytes()))
+            .collect()
+    }
+
     /// Runs one tick of the live game and redraws its objects into
     /// [`Built::scene`] (headless use; the viewer keeps its scene apart).
     pub fn tick(&mut self) {
@@ -238,6 +247,11 @@ pub async fn load_with(
             .filter_map(|(h, v)| Some((live::name_bytes(&h.name), v.colour?)))
             .collect();
     }
+    let map_houses = make.is_none() && !options.skirmish && options.slots.is_empty();
+    if map_houses {
+        // Outside a skirmish the map's own houses get interim colour slots (Q-0416).
+        options.slots = build::map_owner_slots(&map);
+    }
     let inputs = Inputs {
         map: &map,
         import: &import,
@@ -249,6 +263,9 @@ pub async fn load_with(
         cells: cells.as_ref(),
     };
     let (mut built, painter) = build::build_parts_with(&inputs, started.is_ok(), canvas);
+    if map_houses && !options.slots.is_empty() {
+        built.notes.insert(build::MAP_HOUSE_COLOURS_NOTE.into());
+    }
     let mut canvas = VoxelCanvas::new();
     let live = match started {
         Ok(s) => Some(Live::new(&inputs, &mut built, painter, s)),

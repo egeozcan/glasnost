@@ -24,31 +24,27 @@ const DISPLAY_BITS: Bits = Bits([5, 6, 5]); // spec: S-0410 Terms (5 bits red, 6
 /// neutral grey of the viewer's house colours).
 const NEUTRAL: Rgb = [160, 160, 160]; // nocite: placeholder colour of our viewer
 
-/// Placeholder house colours by house index (our own; the lobby colours
-/// of S-0103 come with the M5b sidebar).
-const HOUSE_COLOURS: [Rgb; 8] = [
-    [230, 200, 40],
-    [220, 40, 40],
-    [40, 120, 230],
-    [40, 200, 80],
-    [230, 120, 30],
-    [160, 60, 200],
-    [60, 200, 200],
-    [230, 120, 180],
-]; // nocite: placeholder colours of our viewer
-
 /// The radar state of one game.
 pub struct Radar {
     grid: Grid,
     img: Image,
     terrain: Vec<Rgb>,
     arrivals: Arrivals,
+    /// Each house's colour, by house index (S-0410 claim 8).
+    colours: Vec<Rgb>,
 }
 
 impl Radar {
     /// The radar of a game, from each cell's tile radar colour (S-0010
-    /// claim 20); `None` when the map has no usable cell.
-    pub fn new(w: &World, theater: Theater, tile_colours: &BTreeMap<CellXY, Rgb>) -> Option<Self> {
+    /// claim 20), with each house's colour by house index
+    /// ([`super::load::Loaded::house_radar_colours`]); `None` when the map
+    /// has no usable cell.
+    pub fn new(
+        w: &World,
+        theater: Theater,
+        tile_colours: &BTreeMap<CellXY, Rgb>,
+        colours: Vec<Rgb>,
+    ) -> Option<Self> {
         let grid = minimap::grid(w)?;
         let img = minimap::image(&grid);
         let snow = theater == Theater::Snow;
@@ -75,6 +71,7 @@ impl Radar {
             img,
             terrain,
             arrivals: Arrivals::default(),
+            colours,
         })
     }
 
@@ -95,7 +92,13 @@ impl Radar {
         if !radar::available(w, house) {
             return out;
         }
-        let colour = |h: HouseId| HOUSE_COLOURS[usize::from(h.0) % HOUSE_COLOURS.len()];
+        // spec: S-0410 claim 8 (a shown object in its owner's house colour)
+        let colour = |h: HouseId| {
+            self.colours
+                .get(usize::from(h.0))
+                .copied()
+                .unwrap_or(NEUTRAL)
+        };
         let flash = |_| 0;
         let view = View {
             house,

@@ -221,10 +221,14 @@ impl MapPane {
             .live
             .as_ref()
             .map_or((HouseId(0), 0), |l| (l.default_house(), l.setup.game_speed));
-        let radar = loaded
-            .live
-            .as_ref()
-            .and_then(|l| Radar::new(&l.world, map_theater(&loaded), &loaded.tile_colours));
+        let radar = loaded.live.as_ref().and_then(|l| {
+            Radar::new(
+                &l.world,
+                map_theater(&loaded),
+                &loaded.tile_colours,
+                loaded.house_radar_colours(&l.world),
+            )
+        });
         // In a skirmish the view starts on the controlled house's base unit.
         let start = loaded
             .live

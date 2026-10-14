@@ -195,6 +195,9 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
+/// The scene note for [`map_owner_slots`]' interim colours.
+pub const MAP_HOUSE_COLOURS_NOTE: &str = notes::MAP_HOUSE_COLOURS;
+
 mod notes {
     pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
@@ -203,6 +206,7 @@ mod notes {
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
+    pub const MAP_HOUSE_COLOURS: &str = "the map's own houses take lobby colour slots 0 to 7 in turn, in the order they first own an object (no spec gives their colour outside a skirmish; Q-0416)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
     pub const SLOT_ANIM_DRAW_POINT: &str = "a slot animation's draw point is taken as the screen pixel of its position moved down by its type's vertical draw shift (no spec gives an animation's draw point, S-0102 claim 19)";
     pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20) has no spec";
@@ -270,6 +274,79 @@ fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
         .keys
         .get(key)?
         .derived
+}
+
+/// The colour definition an owner shows (S-0103 claim 10), and whether
+/// the choice is ours (an owner no skirmish house carries).
+pub fn owner_definition(import: &Import, options: &Options, owner: &[u8]) -> ([u8; 3], bool) {
+    let colours = &import.outcome.colours;
+    let by_name = |n: &[u8]| {
+        colours
+            .iter()
+            .find(|c| c.name.eq_ignore_ascii_case(n))
+            .map(|c| c.hsv)
+    };
+    let by_slot = |s: u8| {
+        glasnost_render::palette::slot_position(s)
+            .and_then(|p| colours.get(p))
+            .map(|c| c.hsv)
+    };
+    let grey = by_name(LIGHT_GREY).unwrap_or([0, 0, 200]);
+    let named = options
+        .slots
+        .iter()
+        .find(|(n, _)| n.as_slice() == owner)
+        .map(|(_, s)| *s);
+    if let Some(s) = named {
+        // spec: S-0103 claim 10 (a house's lobby colour slot picks its colour definition)
+        (by_slot(s).unwrap_or(grey), false)
+    } else if owner == NEUTRAL || owner == SPECIAL {
+        (grey, false)
+    } else if owner == HUMAN {
+        (by_slot(options.human_slot).unwrap_or(grey), false)
+    } else if owner == COMPUTER {
+        (by_slot(options.computer_slot).unwrap_or(grey), false)
+    } else {
+        (grey, true)
+    }
+}
+
+/// An owner's radar colour: the brightest entry of its colour
+/// definition's ramp (S-0103 claim 6), our reading of S-0410 claim 8's
+/// "8-bit triple of the house's colour definition" (Q-0417).
+pub fn owner_radar_colour(import: &Import, options: &Options, owner: &[u8]) -> [u8; 3] {
+    let (hsv, _) = owner_definition(import, options, owner);
+    let c = glasnost_render::palette::ramp(hsv)[0];
+    [c.r, c.g, c.b]
+}
+
+/// Interim lobby colour slots for the owners of `map`'s objects that no
+/// rule of S-0103 claim 10 colours outside a skirmish: every owner but the
+/// neutral and special houses and the two player placeholders, in the order
+/// it first owns an object (vehicles, infantry, aircraft, buildings), takes
+/// slot 0, 1, … 7, 0, … (our convention, Q-0416).
+pub fn map_owner_slots(map: &Map) -> Vec<(Vec<u8>, u8)> {
+    let o = &map.objects;
+    let owners = o
+        .units
+        .iter()
+        .map(|x| &x.placed)
+        .chain(o.infantry.iter().map(|x| &x.placed))
+        .chain(o.aircraft.iter().map(|x| &x.placed))
+        .chain(o.structures.iter().map(|x| &x.placed))
+        .map(|p| p.owner.as_slice());
+    let mut out: Vec<(Vec<u8>, u8)> = Vec::new();
+    for owner in owners {
+        if [NEUTRAL, SPECIAL, HUMAN, COMPUTER].contains(&owner)
+            || out.iter().any(|(n, _)| n.as_slice() == owner)
+        {
+            continue;
+        }
+        // nocite: our convention (Q-0416): the eight lobby colour slots of S-0103 claim 10 in turn
+        let slot = (out.len() % 8) as u8;
+        out.push((owner.to_vec(), slot));
+    }
+    out
 }
 
 /// Every file the scene of `map` may read: tile files (found with the
@@ -767,37 +844,7 @@ impl Builder<'_> {
     /// The colour definition an owner shows (S-0103 claim 10), and whether
     /// the choice is ours (an owner no skirmish house carries).
     fn owner_colour(&self, owner: &[u8]) -> ([u8; 3], bool) {
-        let colours = &self.import.outcome.colours;
-        let by_name = |n: &[u8]| {
-            colours
-                .iter()
-                .find(|c| c.name.eq_ignore_ascii_case(n))
-                .map(|c| c.hsv)
-        };
-        let by_slot = |s: u8| {
-            glasnost_render::palette::slot_position(s)
-                .and_then(|p| colours.get(p))
-                .map(|c| c.hsv)
-        };
-        let grey = by_name(LIGHT_GREY).unwrap_or([0, 0, 200]);
-        let named = self
-            .options
-            .slots
-            .iter()
-            .find(|(n, _)| n.as_slice() == owner)
-            .map(|(_, s)| *s);
-        if let Some(s) = named {
-            // spec: S-0103 claim 10 (a house's lobby colour slot picks its colour definition)
-            (by_slot(s).unwrap_or(grey), false)
-        } else if owner == NEUTRAL || owner == SPECIAL {
-            (grey, false)
-        } else if owner == HUMAN {
-            (by_slot(self.options.human_slot).unwrap_or(grey), false)
-        } else if owner == COMPUTER {
-            (by_slot(self.options.computer_slot).unwrap_or(grey), false)
-        } else {
-            (grey, true)
-        }
+        owner_definition(self.import, self.options, owner)
     }
 
     /// Whether an owner's objects appear (S-0009 claim 27, in the skirmish

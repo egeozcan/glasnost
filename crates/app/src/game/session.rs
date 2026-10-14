@@ -209,7 +209,12 @@ impl Session {
             "the drawn copy and the game start alike"
         );
         let local = local_house(&setup).ok_or("the setup has no person's house")?;
-        let radar = Radar::new(&game.world, loaded.map.theater, &loaded.tile_colours);
+        let radar = Radar::new(
+            &game.world,
+            loaded.map.theater,
+            &loaded.tile_colours,
+            loaded.house_radar_colours(&game.world),
+        );
         let speed = game.world.game_speed;
         let start = game
             .world

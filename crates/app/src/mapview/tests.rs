@@ -1204,3 +1204,49 @@ fn slot_animation_detail_level() {
     let n = |b: &Built| b.scene.items.len() - b.scene.cell_pass_len;
     assert_eq!((n(&high), n(&low)), (6, 5));
 }
+
+/// Interim (Q-0416): the map's own houses take lobby colour slots 0 … 7 in turn, in the order
+/// they first own an object; the neutral and special houses and the player placeholders keep
+/// the rules of S-0103 claim 10 and S-0009 Import mapping.
+#[test]
+fn map_owner_slots_in_first_owning_order() {
+    let ctx = context();
+    let (_, map) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n1=Soviets,HUTX,256,2,2,0\n\
+          [Units]\n0=Americans,CARX,256,6,9,64\n1=Special,CARX,256,6,8,64\n\
+          2=<human player>,CARX,256,6,7,64\n3=Computer,CARX,256,6,6,64\n\
+          [Infantry]\n0=Americans,MANX,256,9,11,0,Guard,64\n1=Yuri,MANX,256,9,13,0,Guard,0\n",
+        &Options::default(),
+    );
+    assert_eq!(
+        super::build::map_owner_slots(&map),
+        [
+            (b"Americans".to_vec(), 0),
+            (b"Yuri".to_vec(), 1),
+            (b"Soviets".to_vec(), 2)
+        ]
+    );
+}
+
+/// spec: S-0103 claim 10 (a slot picks the definition at position P(s): slot 0 → position 1,
+/// slot 1 → position 5); the neutral house shows light grey. Interim radar colour (Q-0417):
+/// the brightest ramp entry of that definition (S-0103 claim 6).
+#[test]
+fn owner_definition_and_radar_colour() {
+    let (import, _, _) = context();
+    let options = Options {
+        slots: vec![(b"Americans".to_vec(), 0), (b"Yuri".to_vec(), 1)],
+        ..Options::default()
+    };
+    let def = |o: &[u8]| super::build::owner_definition(&import, &options, o).0;
+    assert_eq!(def(b"Americans"), [10, 200, 200]);
+    assert_eq!(def(b"Yuri"), [50, 200, 200]);
+    assert_eq!(def(b"Neutral"), [0, 0, 150]);
+    let c = glasnost_render::palette::ramp([10, 200, 200])[0];
+    assert_eq!(
+        super::build::owner_radar_colour(&import, &options, b"Americans"),
+        [c.r, c.g, c.b]
+    );
+}
