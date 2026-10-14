@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -673,16 +673,18 @@ used by this spec only:
 21. **Kinds started by other mechanics.** These kinds are started by mechanics that other specs
     own, which also say when: *deploy* and *undeploy* (deployment, which also plays the type's
     deploy and undeploy sounds when those kinds start), *deployed* (deployment and claim 11),
-    *cheer* (the celebration order), *parachute* (paradrops, forced), *shovel* (harvesting),
+    *cheer* (the celebration order and successful slave-release transfers under S-0312 claims 30
+    and 31), *parachute* (paradrops, forced), *shovel* (harvesting),
     *air-death-start* (the jumpjet locomotor) and *air-death-end* (the end of an air death, forced).
     *idle-a* and *idle-b* can also be started by scripted idle orders. Their timing (claims 4 and 5)
     and their completion (State and ordering) are given here. *air-death-fall* is started only by
     the completion of *air-death-start*. It has no completion rule of its own, so when it completes
     the general follow-up rows apply (`quirks.air_death_fall_generic_follow_up`).
     - Backing: `measurable` for deploy/undeploy starts (M7(b)), parachute starts (M7(c)), and
-      harvesting starts of shovel (M7(c), M17(a)). `unmeasured` for the air-death starts and
+      harvesting starts of shovel (M7(c), M17(a)), and slave-release cheer requests (M19).
+      `unmeasured` for the air-death starts and
       follow-up: no controlled scenario is known that starts these kinds through the jumpjet
-      locomotor. The start rules for cheer, scripted idle orders and the deployment sounds are
+      locomotor. Celebration-order cheer starts, scripted idle orders and the deployment sounds are
       also `unmeasured` here: no controlled legal skirmish trigger for celebration or scripted idle
       orders is specified here, and the deployment-sound start boundary has no isolated observation
       in the proposed deployment runs.
@@ -1156,6 +1158,14 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   Claim 19 uses the generic infantry-shadow sprite for an airborne infantry unit.
 
 ## Measurement scenarios
+
+**M19 (claim 21, slave-release cheer).** Use S-0312 claims 30 and 31's scenarios D21
+and D22, including their stock-data setup, speed 6, director and mods off, and run counts.
+Record the released on-map slaves' sequence requests and drawn image frames at transfer.
+Expected: every successful release transfer requests *cheer*, subject to claim 6's start
+rules; hidden removal and the no-recipient damage path make no such request. A successful
+transfer without the request, or a release cheer request on either excluded path, falsifies
+this claim. A refused request need not produce a visible cheer.
 
 Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, director and mods off, and the glossary's measurement setup (an unmodified install with stock data, no loose
 override files and no engine add-ons), a tiny flat map with clear terrain and one water and beach
@@ -1689,11 +1699,11 @@ whose …") means any stock type with that property; the property is a precondit
     Falsified by the full-name section's frames or by failure of the control. Runs: three per
     variant. ASCII makes the byte count explicit; no decoded-character limit is assumed.
 
-**Cross-spec scenario alignment needed.** S-0202 scenarios R5(a) and R6(a) must count the
-behaviour-processing delay draws (S-0215 claims 6 and 24) as M9(b) does, and R5(a) must distinguish
-idle-timer expiry from the first eligible later processing. Their no-computer-player setup also
-needs a viable skirmish opponent and accounting for its unrelated draws, rather than assuming an
-empty global stream. These scenario corrections do not change S-0202's generator or F4's constant.
+**Cross-spec scenario alignment confirmed.** S-0202 scenarios R5(a) and R6(a) count the
+behaviour-processing delay draws (S-0215 claims 6 and 24), and R5(a) distinguishes idle-timer
+expiry from the first eligible later processing. Their setup includes a distant bystander computer
+player and accounts for its unrelated draws. These scenario corrections do not change S-0202's
+generator or F4's constant.
 
 ## Open questions
 
