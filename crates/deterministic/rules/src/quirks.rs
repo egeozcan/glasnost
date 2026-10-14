@@ -747,6 +747,12 @@ pub struct Quirks {
     // spec: S-0312 claim 23
     #[serde(default = "on")]
     pub barrel_probe_top_left_only: bool,
+    /// A smudge footprint cell beyond the map edge is tested as a
+    /// placeholder cell that holds nothing and has the theater's first tile
+    /// type; off: a footprint beyond the map edge does not fit.
+    // spec: S-0312 claim 26, Edge cases
+    #[serde(default = "on")]
+    pub smudge_footprints_beyond_map_edge: bool,
     /// A building's turret displacement does not turn with its aim.
     // spec: S-0313 claim 4
     #[serde(default = "on")]
@@ -1362,6 +1368,7 @@ impl Default for Quirks {
             death_weapon_unplaced_projectile: true,
             rubble_overlay_by_index: true,
             barrel_probe_top_left_only: true,
+            smudge_footprints_beyond_map_edge: true,
             building_fire_point_shift_fixed: true,
             negative_self_heal_counts: true,
             fraidycat_ammo_panic_ignores_fearless: true,
@@ -1899,6 +1906,10 @@ impl Quirks {
             (
                 "barrel_probe_top_left_only",
                 self.barrel_probe_top_left_only,
+            ),
+            (
+                "smudge_footprints_beyond_map_edge",
+                self.smudge_footprints_beyond_map_edge,
             ),
             (
                 "building_fire_point_shift_fixed",

@@ -1176,6 +1176,27 @@ fn quirk_building_smudge_discarded_draws_off() {
     assert_eq!(w.rng, rr);
 }
 
+// spec: S-0312 claim 26 and Edge cases (quirks.smudge_footprints_beyond_map_edge, default on; smudge types are not modelled, so no type fits under either setting: n = 0, no smudge draw, and the building's draws are claim 19's alone)
+#[test]
+fn quirk_smudge_footprints_beyond_map_edge_both_settings() {
+    assert!(
+        glasnost_rules::quirks::Quirks::default().smudge_footprints_beyond_map_edge,
+        "the default is the original"
+    );
+    for on in [true, false] {
+        let mut r = building_rules(3, 3);
+        r.globals.quirks.smudge_footprints_beyond_map_edge = on;
+        let mut w = game(&r);
+        let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+        let mut rr = w.rng.clone();
+        let expect = replay_building(&w, &mut rr, id, true);
+        w.effects.clear();
+        kill(&mut w, id);
+        assert_eq!(anims(&w), expect, "switch {on}");
+        assert_eq!(w.rng, rr, "switch {on}");
+    }
+}
+
 // ---------------------------------------------------------------- F2
 
 // spec: S-0312 F2 (b = 0 points to map north, 64 east, 128 south, 192 west, r leptons away; z unchanged)
