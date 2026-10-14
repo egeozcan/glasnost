@@ -6657,11 +6657,6 @@
           "type": "boolean",
           "default": true
         },
-        "route_refusal_notice_once": {
-          "description": "The route-mode refusal message and sound are given at most once per game; off: every refused route-mode click gives them.",
-          "type": "boolean",
-          "default": true
-        },
         "rubble_overlay_by_index": {
           "description": "Rubble is the overlay type at a fixed registration index.",
           "type": "boolean",

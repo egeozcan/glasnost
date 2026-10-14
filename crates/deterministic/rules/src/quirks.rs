@@ -1095,10 +1095,6 @@ pub struct Quirks {
     // spec: S-0701 claim 26, Edge cases
     #[serde(default = "on")]
     pub announcement_volume_ignored: bool,
-    /// The route-mode refusal message and sound are given at most once per game; off: every refused route-mode click gives them.
-    // spec: S-0701 claim 24, Edge cases
-    #[serde(default = "on")]
-    pub route_refusal_notice_once: bool,
 }
 
 impl Default for Quirks {
@@ -1370,7 +1366,6 @@ impl Default for Quirks {
             damage_sound_doubled: true,
             deploy_command_silent: true,
             announcement_volume_ignored: true,
-            route_refusal_notice_once: true,
         }
     }
 }
@@ -2002,7 +1997,6 @@ impl Quirks {
                 "announcement_volume_ignored",
                 self.announcement_volume_ignored,
             ),
-            ("route_refusal_notice_once", self.route_refusal_notice_once),
         ]
     }
 
