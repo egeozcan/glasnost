@@ -896,6 +896,17 @@ impl Builder<'_> {
                 jsonc::array(v.iter().map(|&x| int_node(x)).collect()),
             );
         }
+        // spec: S-0108 Import mapping (AnimIdle: three integers start, count, delay, absent 0, 1, 0; unread components keep the held values, with a warning)
+        if let Some(v) = self.art_tuple_from::<3>(kind, index, t, "AnimIdle", [0, 1, 0]) {
+            econ.put(
+                "anim_idle",
+                jsonc::array(v.iter().map(|&x| int_node(x)).collect()),
+            );
+        }
+        // spec: S-0108 Import mapping (Normalized: a boolean, absent false)
+        if let Some(v) = self.art_bool(kind, index, t, "Normalized") {
+            econ.put("normalized", jsonc::boolean(v));
+        }
         // spec: S-0108 Import mapping (Buildup: a name; none gives no build-up sprite, an empty value keeps the earlier name)
         let buildup =
             self.art_values(kind, index, t, "Buildup")

@@ -25,6 +25,10 @@ pub struct Quirks {
     // spec: S-0201 claim 11; glossary G3
     #[serde(default = "on")]
     pub speed_normalised_delays: bool,
+    /// A building body range's speed normalisation follows two rules: an immediate entry needs the art's normalised mark and excludes construction; a deferred entry and every wrap ignore the mark and cover construction and idle only.
+    // spec: S-0108 Edge cases (quirks.building_wrap_normalisation; the simulation's idle body range, S-0215 claim 11)
+    #[serde(default = "on")]
+    pub building_wrap_normalisation: bool,
     /// A chrono flash restores the order block in force when it started, so a block from game start or an earlier run outlasts it.
     // spec: S-0201 Edge cases
     #[serde(default = "on")]
@@ -1034,6 +1038,7 @@ impl Default for Quirks {
         Self {
             chop_rounding: true,
             speed_normalised_delays: true,
+            building_wrap_normalisation: true,
             chrono_flash_keeps_order_block: true,
             ranged_draw_half_span: true,
             random_magnitude_overflow: true,
@@ -1291,6 +1296,10 @@ impl Quirks {
         vec![
             ("chop_rounding", self.chop_rounding),
             ("speed_normalised_delays", self.speed_normalised_delays),
+            (
+                "building_wrap_normalisation",
+                self.building_wrap_normalisation,
+            ),
             (
                 "chrono_flash_keeps_order_block",
                 self.chrono_flash_keeps_order_block,

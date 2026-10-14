@@ -501,7 +501,8 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
         ob.beh.queue(Some(Behaviour::Guard));
         ob.beh.ready_mark = true;
     }
-    w.note("S-0406 claim 15: the idle body animation state is requested at the handover (a seam: no animation state in the simulation)");
+    // spec: S-0406 claim 15 and S-0108 claim 6 (the idle body is requested at the handover: a deferred change the building's own behaviour requests, shown on this tick, delay N(d, s))
+    crate::econ::body::enter_idle(w, id, false);
     // spec: S-0402 claim 18 (the grand opening, at the end of the build-up in the building's own turn: its free unit)
     crate::econ::harvest::grand_opening(w, id);
     CONSTRUCTION_DELAY

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::world::ObjectId;
 
+pub mod body;
 pub mod deploy;
 pub mod events;
 pub mod harvest;
@@ -124,6 +125,10 @@ pub struct ObjectEcon {
     /// Driving temporarily for a factory exit (S-0417 claim 5).
     #[serde(default)]
     pub temporary_drive: bool,
+    /// A building's running *idle* body range (S-0108 claim 6, S-0215
+    /// claim 11); none outside the idle state.
+    #[serde(default)]
+    pub idle_body: Option<body::IdleBody>,
 }
 
 /// The world's economy state (M5a), one field per topic.

@@ -1113,8 +1113,8 @@ fn s0215_gate_open_and_close_cycle() {
     assert!((s + 180..=s + 180 + 2 * 16).contains(&c), "{c}");
     assert_eq!(closed, Some(c + 90));
     let b = &w.obj(gate).unwrap().beh;
-    assert_eq!(b.progress, 5);
-    assert_eq!(b.queued, Some(Behaviour::Guard));
+    // The finished stage queued guard; the zero-delay idle body range of the test gate sets the ready mark on every turn, so guard is current by now, its start resetting the progress count (S-0215 claims 3 and 11).
+    assert_eq!((b.current, b.queued, b.progress), (Some(Behaviour::Guard), None, 0));
     assert!(!process::gate_open(&w, gate));
 }
 
@@ -1238,7 +1238,8 @@ fn s0215_open_without_a_gate() {
     let taken = w.rng.taken();
     process::turn(&mut w, hut);
     let b = &w.obj(hut).unwrap().beh;
-    assert_eq!((b.last, b.queued), (Some((t, 1)), Some(Behaviour::Guard)));
+    // Guard queued; the hut's zero-delay idle body range has set the ready mark, so the second per-tick start may already have made it current (S-0215 claims 1 and 11).
+    assert_eq!((b.last, b.seen()), (Some((t, 1)), Some(Behaviour::Guard)));
     assert_eq!(w.rng.taken(), taken);
     let cart = of(&w, 0, Kind::Vehicle, 0)[0];
     w.obj_mut(cart).unwrap().beh.force(Behaviour::Open, t, true);

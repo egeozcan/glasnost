@@ -574,10 +574,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             };
             let t = w.tick;
             if kind == Kind::Building {
-                // spec: S-0009 claim 40 (a pre-placed building is complete and starts in the guard behaviour)
-                if let Some(o) = w.obj_mut(id) {
-                    o.beh.force(Behaviour::Guard, t, stale);
-                }
+                // spec: S-0009 claim 40 and S-0215 claim 1 (a pre-placed building is complete: the idle body and guard queued)
+                crate::econ::body::set_up(w, id);
             } else if let Some(b) = fields.behaviour.as_deref().and_then(behaviour_by_name) {
                 // spec: S-0009 claim 41 (the behaviour the object starts with; none: the placement fall-back)
                 if let Some(o) = w.obj_mut(id) {
@@ -634,10 +632,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                         continue;
                     };
                     let uid = create(w, Kind::Building, ui, Some(owner));
-                    // spec: S-0009 claim 40 (the upgrades start at full health, at the same cell and facing)
-                    if let Some(o) = w.obj_mut(uid) {
-                        o.beh.force(Behaviour::Guard, t, stale);
-                    }
+                    // spec: S-0009 claim 40 and S-0215 claim 1 (the upgrades start at full health, at the same cell and facing, set up as buildings)
+                    crate::econ::body::set_up(w, uid);
                     place(w, uid, pos, facing);
                 }
             }

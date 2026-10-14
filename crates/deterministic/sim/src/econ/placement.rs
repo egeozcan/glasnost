@@ -701,6 +701,8 @@ pub fn begin_construction(w: &mut World, id: ObjectId, deployed: bool) {
     let t = w.tick;
     // spec: S-0406 Edge cases (quirks.placed_buildup_twice off: a place order sets the ready mark at entry, as a deploy does)
     let mark = deployed || !w.rules().quirks.placed_buildup_twice;
+    // spec: S-0108 claim 6 (entering construction leaves the idle body)
+    crate::econ::body::leave_idle(w, id);
     if let Some(o) = w.obj_mut(id) {
         // spec: S-0406 claim 17 (at entry: no current behaviour and construction queued; stage 0, timed from the entry tick)
         o.beh.current = None;
