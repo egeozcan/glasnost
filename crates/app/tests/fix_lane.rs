@@ -797,3 +797,85 @@ fn spawner_weapon_attack() {
     }
     shots.save(&mut c, "spawner-attack");
 }
+
+/// A vehicle harvester beside a refinery of its dock list, put on
+/// *harvest*: views once it is loading with its harvesting sprite shown
+/// (S-0402 claim 5a, F8) and a few ticks later.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn harvester_mining() {
+    use glasnost_sim::econ::harvest;
+    let Some((mut c, shots)) = start((1280, 800)) else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let mut clock = 0i64;
+    let base = deploy(&mut c, &mut clock);
+    let s = c.session.as_mut().unwrap();
+    let local = s.play.local;
+    let w = s.play.world();
+    let r = w.rules();
+    let (harv, dock) = r
+        .econ
+        .harvest
+        .vehicles
+        .iter()
+        .enumerate()
+        .find(|(_, u)| u.harvester && !u.teleporter && !u.slave_miner && !u.docks.is_empty())
+        .map(|(i, u)| {
+            (
+                r.vehicles[i].name.clone(),
+                r.buildings[u.docks[0] as usize].name.clone(),
+            )
+        })
+        .expect("a vehicle harvester type");
+    println!("harvester {harv}, refinery {dock}");
+    let at = CellXY::new(base.x + 5, base.y - 1);
+    glasnost_sim::testkit::spawn(
+        &mut s.play.game.world,
+        Kind::Building,
+        &dock,
+        local.0,
+        at,
+        0,
+    );
+    let hat = CellXY::new(base.x + 4, base.y + 4);
+    let h = glasnost_sim::testkit::spawn(
+        &mut s.play.game.world,
+        Kind::Vehicle,
+        &harv,
+        local.0,
+        hat,
+        0,
+    );
+    let t = s.play.game.world.tick;
+    s.play.game.world.obj_mut(h).unwrap().beh.force(
+        glasnost_sim::rules::Behaviour::Harvest,
+        t,
+        true,
+    );
+    let mut shown = None;
+    for _ in 0..3000 {
+        ticks(&mut c, &mut clock, 1);
+        let w = c.session.as_ref().unwrap().play.world();
+        if harvest::display_shown(w, h) {
+            shown = w.obj(h).map(|o| o.pos.cell());
+            println!("tick {}: loading at {shown:?}, sprite shown", w.tick);
+            break;
+        }
+    }
+    let Some(cell) = shown else {
+        println!("the harvester never showed its harvesting sprite");
+        return;
+    };
+    look_at(&mut c, cell);
+    ticks(&mut c, &mut clock, 1);
+    shots.save(&mut c, "harvest");
+    if let Some(p) = point_of(&mut c, None, Some(h)) {
+        shots.zoom(&mut c, "harvest", p);
+    }
+    ticks(&mut c, &mut clock, 7);
+    if let Some(p) = point_of(&mut c, None, Some(h)) {
+        shots.zoom(&mut c, "harvest-later", p);
+    }
+}
