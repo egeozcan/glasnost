@@ -2,7 +2,7 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
