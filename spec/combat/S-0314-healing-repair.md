@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -200,7 +200,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    house is the local player. It tries to create the *unit repaired* radar event, the kind that
    depots and hospitals share (claim 7). If a nearby event of that kind suppresses creation,
    neither a new event nor the announcement is raised. S-0701 F7 owns the distance test and
-   lifetime, including the unresolved zoom-in duration; S-0011 claim 32 owns triggered events.
+   lifetime: the event's unresolved zoom-in phase is followed by its post-zoom duration, not
+   included in that duration. The total time from repair completion to expiry therefore remains
+   unresolved. S-0011 claim 32 owns triggered events.
    The *unit repaired* row and cross-creator suppression retain F7's `unmeasured` backing:
    its scenarios do not isolate that kind or the full set of creators. H4 part f tests only
    the depot-completion cases stated there, not an exact total lifetime.
