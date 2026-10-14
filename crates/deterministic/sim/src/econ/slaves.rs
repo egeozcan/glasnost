@@ -85,9 +85,6 @@ pub struct SlaveGroup {
     pub last_rest: i32,
     /// The tick the next group update becomes due.
     pub next_update: i32,
-    /// The cell remembered at an automatic pack-up (claims 22 and 25): the
-    /// building's own top-left cell.
-    pub remembered: Option<CellXY>,
 }
 
 /// A slave's harvest phase (S-0402 claim 14).
@@ -251,7 +248,6 @@ pub fn created(w: &mut World, id: ObjectId) {
             last_rest: 0,
             // spec: S-0402 claim 21 (its first group update becomes due 10 ticks after creation)
             next_update: t.wrapping_add(PERIOD),
-            remembered: None,
         });
     }
 }
@@ -449,10 +445,11 @@ pub fn master_sold(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The old group of a building whose pack-up failed at its return cell
-/// (S-0415 claim 11): ended as a removal without a killing hit (S-0312
-/// claim 31), not handed to the refused vehicle.
-pub fn end_refused(w: &mut World, g: SlaveGroup) {
+/// A detached group ended as a removal without a killing hit (S-0312
+/// claim 31): the old group of a building whose pack-up failed at its
+/// return cell (S-0415 claim 11), and the return vehicle's temporary
+/// hidden group of a pack-up (S-0402 claim 19a).
+pub fn end_removed(w: &mut World, g: SlaveGroup) {
     end_group(w, g, End::Removed);
 }
 
@@ -870,9 +867,36 @@ fn building_update(w: &mut World, id: ObjectId) -> bool {
         GroupState::CheckingField => !check_field(w, id),
         // spec: S-0402 claim 27 (packing, still a building: waits for conversion; no field check or emergence)
         GroupState::Packing => false,
-        GroupState::Travelling | GroupState::FieldSeeking | GroupState::Retrying => {
-            // spec: S-0402 claim 22 (a travelling master that has become a building puts the group at rest); field seeking and retrying alike (Q-0442)
-            set_group(w, id, |g| g.state = GroupState::AtRest);
+        GroupState::FieldSeeking => {
+            let t = w.tick;
+            let range = w.rules().econ.harvest.slave_long_scan;
+            // spec: S-0402 claim 27 (field seeking, building: the long scan and site search of claim 22, the scan a deployed master's, claim 26; construction or selling does not suppress this row)
+            let field = building_ring(w, id, range);
+            match field.and_then(|f| site_search(w, id, f)) {
+                Some((_, s)) => {
+                    // spec: S-0402 claim 27 (success offers the site as the building's destination and queues move without an immediate start, under the ordinary rules, which a selling building can refuse, S-0215 claim 7; the group enters travelling regardless)
+                    // interim: Q-0500 (the destination offered is the object's destination, as for a vehicle, not its guard spot; no separate destination refusal while selling)
+                    move_to(w, id, s);
+                    set_group(w, id, |g| g.state = GroupState::Travelling);
+                }
+                None => {
+                    // spec: S-0402 claim 27 (failure puts the group at rest and records this tick as last-rest)
+                    set_group(w, id, |g| {
+                        g.state = GroupState::AtRest;
+                        g.last_rest = t;
+                    });
+                }
+            }
+            // spec: S-0402 claim 27 (no emergence or field-check transition in this update)
+            false
+        }
+        GroupState::Travelling | GroupState::Retrying => {
+            let t = w.tick;
+            // spec: S-0402 claims 22 and 27 (travelling or retrying deployment, building: at rest, this tick recorded as last-rest, without field search, deployment attempt or emergence)
+            set_group(w, id, |g| {
+                g.state = GroupState::AtRest;
+                g.last_rest = t;
+            });
             false
         }
     }
@@ -914,11 +938,12 @@ fn check_field(w: &mut World, id: ObjectId) -> bool {
     };
     // spec: S-0402 F7 and claim 25 (packing-up is requested exactly when c + d(S, F) < d(A, F); equality does not)
     if f7_packs_up(correction, s, a, f, table, mode) && super::deploy::packs_up(w, id) {
-        // spec: S-0402 claims 22 and 25 (the remembered cell of an automatic pack-up is the building's own top-left cell A); claim 27 (the group packs)
-        set_group(w, id, |g| {
-            g.remembered = Some(a);
-            g.state = GroupState::Packing;
-        });
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0402 claims 22, 25 and 28 (the remembered cell of an automatic pack-up is the building's own top-left cell A; it is the building's one remembered destination, its guard spot, and replaces any earlier guard spot)
+            ob.guard_spot = Some(Target::Cell(a));
+        }
+        // spec: S-0402 claim 27 (the group packs)
+        set_group(w, id, |g| g.state = GroupState::Packing);
         // spec: S-0402 claim 22 and S-0415 claims 9 and 10 (the automatic packing-up)
         super::sell::start_pack_up(w, id);
         return true;
@@ -927,15 +952,11 @@ fn check_field(w: &mut World, id: ObjectId) -> bool {
 }
 
 /// The remembered destination of a slave-master building (S-0402 claim
-/// 28): an automatic pack-up's remembered cell, else its guard spot.
+/// 28): its guard spot, which an automatic pack-up sets to its old
+/// top-left cell and a later order can replace.
 fn remembered_destination(w: &World, id: ObjectId) -> Option<Target> {
-    let o = w.obj(id)?;
-    o.econ
-        .group
-        .as_ref()
-        .and_then(|g| g.remembered)
-        .map(Target::Cell)
-        .or(o.guard_spot)
+    // spec: S-0402 claim 28 (one remembered destination: the automatic old-cell memory and the guard spot are the same, with no automatic-over-manual priority)
+    w.obj(id)?.guard_spot
 }
 
 /// The first processing of selling or packing of a slave-master building
@@ -964,11 +985,8 @@ pub fn first_sale_processing(w: &mut World, id: ObjectId) {
         // spec: S-0402 claim 28 and S-0415 claim 10 (a found site replaces the remembered destination the vehicle inherits)
         ob.guard_spot = Some(Target::Cell(s));
     }
-    set_group(w, id, |g| {
-        g.remembered = None;
-        // spec: S-0402 claim 28 (the group enters packing)
-        g.state = GroupState::Packing;
-    });
+    // spec: S-0402 claim 28 (the group enters packing)
+    set_group(w, id, |g| g.state = GroupState::Packing);
     // spec: S-0402 claim 28 (it recalls its slaves)
     recall(w, id);
 }
