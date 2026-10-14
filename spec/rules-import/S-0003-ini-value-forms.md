@@ -2,7 +2,7 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,7 +25,9 @@ S-0002, and the floating-point rounding mode these value forms rely on (claim 17
 to S-0205 (number domains). These claims cover skirmish imports; network games and campaigns
 are out of scope.
 
-**Joint hand-off checks.** Confirm claim 9 against S-0009 claim 29 and its header-pair
+**Joint hand-off checks.** Confirm claim 14's four particle-reference exclusions against
+S-0004 claim 2 and its field-specific switches in the versions handed off together.
+Confirm claim 9 against S-0009 claim 29 and its header-pair
 Import mapping in the versions handed off together: unread components are unspecified
 in the original; completion from the value in force is our engine's departure, with
 an importer warning. Missing or empty pairs keep the whole value in force. Confirm claim 14's trigger-name exceptions against S-0011 claims 5 and 21
@@ -229,18 +231,9 @@ our engine's result.
      overflow to infinity); low (the original's results in the three cases)
 
 7. **A `%` anywhere means "divide by 100".** If the stored value contains a `%` byte anywhere, the
-   decimal from claim 6 is multiplied by *c*, the double nearest to 0.01. The multiplication is done
-   in double precision, **rounded toward zero**, because the original does its floating-point
-   arithmetic in that rounding mode (claim 17). `50%` gives 0.5, `0.5%` gives 0.005, `50 %` gives 0.5, `100%%` gives 1.0, and
-   `10%` gives 0.09999999999999999 (one unit below 0.1). Without a `%`, the number is taken as it is:
-   **`50` in a percentage field means 50.0, i.e. 5000 %**, not 0.5. Percentage fields and plain
-   decimal fields are therefore one and the same form. Our importer reproduces this and warns for a
-   likely forgotten `%` (claim 18).
+   decimal from claim 6 is multiplied by *c*, the double nearest to 0.01. In the original, the multiplication is done in double precision and rounded toward zero (claim 17). In our engine, the multiplication follows `quirks.chop_rounding`: it is rounded toward zero when that switch is on, and to nearest, ties to even, when it is off (S-0205). `50%` gives 0.5, `0.5%` gives 0.005, `50 %` gives 0.5, `100%%` gives 1.0, and with the original rounding mode `10%` gives 0.09999999999999999 (one unit below 0.1). Without a `%`, the number is taken as it is: **`50` in a percentage field means 50.0, i.e. 5000 %**, not 0.5. Percentage fields and plain decimal fields are therefore one and the same form. Our importer reproduces the original result at the default switch setting and warns for a likely forgotten `%` (claim 18).
 
-   Some fields keep the value in single precision. For those the double result is narrowed to single,
-   also rounded toward zero: `10%` in such a field is 0.0999999940395… (the single just below 0.1),
-   while `0.1` without `%` stays 0.100000001490116… Which fields are single precision belongs to the
-   topic specs that define them. The red and yellow health ratios are held as doubles, but their
+   Some fields keep the value in single precision. In the original, and in our engine with `quirks.chop_rounding` on, the double result is narrowed to single toward zero: `10%` in such a field is 0.0999999940395… (the single just below 0.1), while `0.1` without `%` stays 0.100000001490116… With that switch off, the multiplication and narrowing use nearest rounding, ties to even, as S-0205 specifies. Which fields are single precision belongs to the topic specs that define them. The red and yellow health ratios are held as doubles, but their
    text still undergoes claim 6's single conversion first: without `%`, widening that single
    is exact, not a fresh conversion of the text to double. With `%`, the double product is kept
    without a final single narrowing. For example, `0.6` without `%` gives exactly
@@ -366,13 +359,7 @@ our engine's result.
     known here is the armour-modifier list of a warhead, with one item per armour class, so *k* is the
     number of armour classes (Constants). The *j*-th item belongs to the *j*-th armour class in the
     fixed class order given in Import mapping (row C5). Each item is converted on its own:
-    - an item containing `%` gives the item's *integer* decimal prefix (claim 3, decimal form) times
-      *c*, in double precision rounded toward zero, so `12.5%` gives 0.12, not 0.125, and `1e2%`
-      gives 0.01, not 1.0. Quirk `quirks.percent_list_integer_prefix` (Edge cases). While it is on,
-      as in the original, the importer warns for every item containing `%` whose decimal (the
-      conversion of the next bullet, at 53 bits) differs from its integer prefix, as for `12.5%` and
-      `1e2%` but not `12%` or `12.0%`. With it off, an item containing `%` gives its decimal at 53
-      bits times *c*, rounded toward zero, so `12.5%` gives exactly 0.125,
+    - an item containing `%` gives the item's *integer* decimal prefix (claim 3, decimal form) times *c*, in double precision. In the original this product is rounded toward zero; in our engine it follows `quirks.chop_rounding`, using toward-zero rounding when that switch is on and nearest rounding, ties to even, when it is off (S-0205). Thus, with the original rounding mode, `12.5%` gives 0.12, not 0.125, and `1e2%` gives 0.01, not 1.0. Quirk `quirks.percent_list_integer_prefix` (Edge cases). While it is on, as in the original, the importer warns for every item containing `%` whose decimal (the conversion of the next bullet, at 53 bits) differs from its integer prefix, as for `12.5%` and `1e2%` but not `12%` or `12.0%`. With it off, an item containing `%` gives its decimal at 53 bits times *c*, with the product rounded according to `quirks.chop_rounding` as above, so `12.5%` gives exactly 0.125.
     - an item without `%` gives a decimal converted to **double** precision (not single, unlike
       claim 6), with claim 6's rounding rule applied at 53 significant bits instead of 24, so `0.125`
       gives 0.125 and `0.1` the double nearest to 0.1. Claim 6's overflow to infinity and its three
@@ -399,12 +386,22 @@ our engine's result.
 
 14. **Ordinary type references match case-insensitively.** For list-section values, weapon,
     warhead and prerequisite references, the name is compared with existing type names using ASCII
-    case folding (A–Z only). `alpha` finds the type `Alpha`. The values `none` and `<none>`, in any
-    case, mean "no type" and never create one. Section and key names, by contrast, are case-sensitive
+    case folding (A–Z only). `alpha` finds the type `Alpha`. Except for the fields excluded below,
+    the values `none` and `<none>`, in any case, mean "no type" and never create one.
+    Section and key names, by contrast, are case-sensitive
     (S-0001 claim 13). What follows from that for a type whose section is spelled in a different case
     is specified in S-0004 (type registration), claim 7.
 
-    This rule excludes the trigger owner-country field and the exact trigger-event type-name
+    The reserved-name rule excludes four fields covered by S-0004 claim 2: a particle
+    system's emitted particle type, a particle type's next particle type, an animation's
+    spawned particle type and a weapon's attached particle system. In those fields bare
+    `none` can name and create a type. Their field-specific `none`, `<none>`, empty-value
+    and absent-key effects belong to S-0004 claim 2, including its pointer to S-0006
+    claim 5 for the emitted particle type. S-0004 also owns their switches
+    `quirks.particle_none_is_a_name` and `quirks.attached_system_none_keeps`; this spec
+    defines no additional switch or generalisation to other references or lists.
+
+    This rule also excludes the trigger owner-country field and the exact trigger-event type-name
     rules of S-0011 claims 5 and 21. S-0011 claim 21's type-exists and type-does-not-exist
     events require an exact, case-sensitive type name,
     and treat both no-type spellings as ordinary names, not markers. Its claim 5's trigger
@@ -417,10 +414,13 @@ our engine's result.
     switches here. A building's factory kind is a vocabulary word (claim 21), not a
     reference to a registered type, and does not use this claim's marker rules.
     - Backing: `measurable` (scenario V9; S-0011 T14 for event letter case and T22 for
-      owner lookup); `unmeasured` for event marker handling, as S-0011 claim 21 explains:
+      owner lookup; S-0004 A3 and I4 and S-0006 D4 for their sampled particle-reference
+      exceptions); `unmeasured` for the next-particle and spawned-particle exceptions,
+      for the reasons in S-0004 claim 2, and for event marker handling, as S-0011 claim 21 explains:
       ordinary lookup failure and marker rejection are indistinguishable when no type has
       that exact marker name
-    - Confidence: high
+    - Confidence: high; medium for the next-particle and spawned-particle exceptions,
+      as in S-0004 claim 2
 
 15. **Type names longer than 24 bytes** are cut when the type is created, and they then no longer
     match their own full spelling. The consequences and the switch `quirks.long_name_duplicates` are
@@ -678,14 +678,13 @@ These are exactly the whole numbers below 2⁶⁴ for which the rule and RN give
 with *r* = 1/2 and *t* even both keep *t*. No decimal raises both warnings. Neither test changes the
 result.
 
-Percentages (claim 7), with *y* the signed result of claim 6. A value with no number is claim 8's
-case: in our engine it leaves the value in force, and neither line below applies.
+Percentages (claim 7), with *y* the signed result of claim 6. Let *Q*₅₃(*z*) and *Q*₂₄(*z*) mean rounding *z* according to `quirks.chop_rounding`: RZ₅₃ and RZ₂₄ when the switch is on, and RN₅₃ and RN₂₄ when it is off (S-0205). A value with no number is claim 8's case: in our engine it leaves the value in force, and neither line below applies.
 
 > *c* = RN₅₃(1/100)
 >
 > without `%`: result = *y*
 >
-> with `%`: result = RZ₅₃(*y* × *c*), a double; in a single-precision field, RZ₂₄(RZ₅₃(*y* × *c*))
+> with `%`: result = Q₅₃(*y* × *c*), a double; in a single-precision field, Q₂₄(Q₅₃(*y* × *c*))
 
 Missing-`%` warning (claim 18). With *y* the decimal of claim 6 (for an armour-modifier item, the
 double of claim 13), the importer warns for a value of a percentage field, or an armour-modifier item,
@@ -696,12 +695,9 @@ exactly when
 The comparison is exact, on the value as converted; infinity counts as greater than 1. The warning
 never changes the result.
 
-Fixed-count percentage list item (claim 13), with *i* the integer from the item's decimal prefix
-(claim 3, decimal form):
+Fixed-count percentage list item (claim 13), with *i* the integer from the item's decimal prefix (claim 3, decimal form), and *Q*₅₃ as defined under Percentages:
 
-> with `%`: RZ₅₃(*i* × *c*), where *i* = 0 if the item has no digits; with
-> `quirks.percent_list_integer_prefix` off, RZ₅₃(*d* × *c*) instead, where *d* is the item's
-> decimal by claim 6's conversion with *P* = 53 (+0.0 if the item has no number)
+> with `%`: Q₅₃(*i* × *c*), where *i* = 0 if the item has no digits; with `quirks.percent_list_integer_prefix` off, Q₅₃(*d* × *c*) instead, where *d* is the item's decimal by claim 6's conversion with *P* = 53 (+0.0 if the item has no number)
 >
 > without `%`: claim 6's conversion with *P* = 53, giving a double (largest finite, smallest normal and
 > smallest subnormal values of the double format); +0.0 if the item has no number
@@ -843,7 +839,7 @@ unspecified in the original; our engine leaves the value in force and warns (cla
 Common setup: a tiny purpose-made multiplayer map whose INI part carries an override section for
 one buildable infantry type of the player's side (the test type). The glossary's *measurement
 setup* applies: stock data, no mods and no engine add-on active, any game speed. A presentation-only
-display compatibility layer may be used and is named generically in the measurement record. V6 and V11 use
+display compatibility layer may be used and is named generically in the measurement record. Unless a scenario gives another count, run each stated test variant once. V6 and V11 use
 a named test file, a loose rules copy that is removed after the run. Scenarios built on another
 spec's scenario use that scenario's named test data.
 
