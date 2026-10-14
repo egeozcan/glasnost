@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312]
 supersedes: []
 ---
 
@@ -74,12 +74,13 @@ its search, targeting-timer restart and idle-action outcomes. The earlier versio
 qualification open; S-0309's area-search rule already supplies candidate eligibility, not a
 one-processing deferral. Q-0241 question 3 is clarified by claim 1: set-up supplies queued
 *guard*, not a guaranteed current *guard* on tick 0. The automatic start of a set-up turreted
-building and the upgrade comparison remain open (B36); this revision does not endorse a
-set-up ready mark as a replacement rule. Q-0238 is only partly answered: S-0212 claim 23a
-already supplies same-tick destination assignment, queue-only *area guard* and the final
-nearby search. Claim 38 here supplies the centre-choice draw sequence and the base/start
-preference, but leaves the exact chosen cell and no-base geometric fallback open. Keep both
-requests open until their missing parts are established and the complementary specs approved.
+building and the upgrade comparison remain open and `unmeasured` (claim 1, B36); this
+revision does not endorse a set-up ready mark as a replacement rule. Q-0312 is answered
+by claim 38 and F11–F12: the selected centre, no-base fallback, house records and exact
+ranged/raw draw assignments. Q-0238 is answered jointly: S-0212 claim 23a already
+supplies same-tick destination assignment, queue-only *area guard* and the final nearby
+search; claim 38 supplies its centre. Keep Q-0238 open until the complementary revisions
+are approved together. Q-0241 remains open for its bootstrap and upgrade comparison.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -422,10 +423,17 @@ Terms used by this spec:
    does not itself set that mark. In particular, merely having a weapon is not a set-up
    ready-mark setter. When placement does not find the actor ready, its queue remains
    pending under claim 11. The first automatic start for a set-up turreted building is
-   not established here (Q-0241, Open questions).
+   not established here (Q-0241, Open questions). The armed, unarmed and map-installed
+   upgrade cases share the established placement rule, but that alone does not establish
+   whether their first automatic starts coincide or happen at all. No bootstrap tick is
+   specified for any of those three cases.
    - Backing: `measurable` (scenario B1, reading the slots with the recorder; S-0406 PL11 for
-     construction entry and the queued-behaviour query; scenario B35 for game-set-up buildings; B36 for the initial mark and queued/current distinction)
-   - Confidence: high
+     construction entry and the queued-behaviour query; scenario B35 for game-set-up buildings; B36 for the initial mark and queued/current distinction).
+     The bootstrap and comparison of its tick across armed, unarmed and upgraded cases
+     are `unmeasured`: no verified later rule supplies the missing start, and no oracle
+     recording has yet identified one. B36 is the settling investigation, not backing for
+     a conjectured first-tick start or a claim that the queue remains pending forever.
+   - Confidence: high for placement; low for the unresolved bootstrap
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
    turn in the turn pass of S-0203, tick order, which says which objects
@@ -2210,35 +2218,56 @@ apply in our engine to the actors of every player house.
       part a, the in-the-playfield mark, part f2, part g's deployed infantry and zero-speed types).
       High for part a2's ordering and independent eligibility.
 
-38. **House-selected centre after path give-up (Q-0238, partial).** This complements
+38. **House-selected centre after path give-up (Q-0238 and Q-0312).** This complements
     S-0212 claim 23a and its final nearby-search row in T5. It applies to the original's
-    non-human-owned units and, in our engine, only to the neutral and special houses,
-    not player houses. Both non-player houses use the same selection rule.
+    non-human-owned infantry and vehicles and, in our engine, only to the neutral and
+    special houses, not player houses. Both non-player houses use the same rule.
 
-    The house's recorded base centre is preferred to its recorded base-start cell. When
-    neither exists, the point used for the random displacement is world position
-    (0, 0, 0) leptons, not the failing unit's own position. This is the empty world
-    point tested by this selection. Absence of a base or start does not bypass the
-    choice or its draws. The exact base-centre maintenance, displacement formula and
-    correction into the usable area remain open; no final destination cell is asserted
-    by this partial claim.
+    **House records.** A house begins with no recorded base centre or base-start cell,
+    and a recorded base radius of 0 leptons. A start assignment supplies a base-start
+    cell (S-0009); having map buildings is not required for a start assignment. A
+    separately set base centre takes precedence over the base-start cell. Its setting
+    and clearing by map actions are owned by the trigger topic, not inferred from the
+    unit's position. With no such action the centre stays absent.
 
-    For the draw sequence, let *R* be the house's recorded base radius clamped to
-    768 … 2048 leptons, in exact integer arithmetic. Infantry and vehicles always
-    use the central choice, irrespective of their weapons: no outer-choice index
-    is drawn. One *U*(0, *R*) supplies the displacement radius, followed by exactly
-    one raw scenario-stream value for direction. The direction uses only the low
-    eight bits of that raw value, but still consumes the whole value. An empty
-    generated point falls back to the recorded base-centre/base-start cell without
-    another draw. Converting the selected point to a cell and correcting it into
-    the usable area take no draw. The final nearby search likewise takes none
-    (S-0212 claim 25). The ranged draw may consume multiple raw values through
-    S-0202's rejection rule; this is one ranged request plus one raw direction draw,
-    not a promise of exactly two raw values in total.
+    Entry or removal of an owned building, and a building's owner change for both
+    affected houses, refresh the base-start cell and radius from the house's surviving
+    on-map buildings with positive health. This refresh clears the previous base-start
+    cell and radius, even if the cell came from a start assignment. With no owned
+    buildings the cleared state remains. Otherwise the weighted horizontal mean and
+    radius follow F12. The mean's cell is replaced by a nearby-cell result: *foot*
+    class, *normal* movement zone, no reach-region restriction, deck mode, no height,
+    no-overlay or burrowing condition, no reference cell, and no bridge exclusion,
+    using S-0212 claim 25. That result, possibly absent, is the new base-start cell.
+    No draw is taken by this refresh. Damage or a price-factor change alone does not
+    refresh these records: the choice uses the last recorded values.
+
+    **Selected centre.** Prefer the recorded base centre, then the base-start cell.
+    The displacement starts from that cell's reference point at its terrain height.
+    When neither exists, it starts from world position (0, 0, 0) leptons, not the
+    failing unit's position. F11 gives the displacement, snapping and usable-area
+    correction, including this no-base case. Thus the no-base answer is a
+    map-dependent cell obtained by correcting a point near the world origin, not
+    automatically no cell, a start waypoint, or a cell near the failed unit.
+    Snapping makes both horizontal world coordinates cell-centre coordinates, so
+    the generated world point cannot be empty; no empty-point retry or fallback
+    occurs in this infantry/vehicle use. The centre is not yet the destination: S-0212's final search
+    applies the unit's ground reach region and can still yield no destination.
+
+    **Random assignments.** Let *R* be the recorded radius clamped to 768 … 2048
+    leptons, in exact integer arithmetic. Infantry and vehicles always use this
+    central choice irrespective of their weapons: there is no outer-choice index
+    draw. One *U*(0, *R*) supplies the displacement radius, followed by exactly one
+    raw scenario-stream value for direction. Only its low eight bits affect the
+    direction, but the whole value is consumed. Neither a missing base/start nor a
+    correction at a map edge suppresses these assignments. Conversion, correction,
+    fallback and the final nearby search take no draw. The number of ranged requests
+    and raw direction draws is the same for both houses and all maps. The number of
+    raw values consumed by the ranged request can differ through S-0202's rejection
+    rule; the draw ranges can differ through the recorded radius.
     - Backing: `measurable` (B37, with S-0212 P26 for the final search and timing)
-    - Confidence: high for the base/start preference, zero-origin fallback and draw
-      assignments; medium for the empty generated-point fallback, pending the
-      conditional observations of B37
+    - Confidence: high for selection and draw assignments; medium for record-refresh
+      geometry and usable-area correction
 
 ## Formulas
 
@@ -2385,6 +2414,85 @@ integer product (reduced modulo 2³² into the signed range when it overflows, w
 reaches). The comparison is strict. *r*′ is the ρ′ of S-0307's F4, so for the vehicle of claim 37
 f2 the replaced value also starts that search (before S-0307 adds the building lengthening, which
 the renewal threshold never includes).
+
+**F11. House-selected centre** (claim 38). Let *P* = (*X*, *Y*, *Z*) be the preferred
+recorded cell's reference point, or (0, 0, 0) leptons when neither cell exists. Let
+*r* = *U*(0, *R*) in leptons, *b* be the subsequent raw value mod 256, and
+*f* = 256*b* facing units. Form the point
+
+> θ = (*f̂* − 16383) × (−9.587672516830327 × 10⁻⁵) radians
+>
+> *A* = trunc(*X* + *r* × cosT θ),  *B* = trunc(*Y* − *r* × sinT θ),  *C* = *Z*
+
+*f̂* is *f* reduced into −32768 … 32767, exactly. This is the same reverse-facing
+scale and floating-point grouping as S-0208 F3, with distance *r* instead of speed.
+The angle multiplier is the double specified there. Each floating-point operation
+is rounded to double under S-0205's rounding rule before the next, and trunc converts
+to an integer toward zero. sinT and cosT are S-0105 F1's table trigonometry.
+The shared switches `quirks.table_direction`, `quirks.table_trig_negative_bias` and
+`quirks.chop_rounding` have their owning specs' alternatives here too.
+
+If either trunc(*A* / 256) or trunc(*B* / 256) is outside 0 … 511, the point is
+*P* instead. The retained point is snapped horizontally to
+(256⌊*A* / 256⌋ + 128, 256⌊*B* / 256⌋ + 128), keeping its height.
+The selected cell has coordinates trunc of each snapped coordinate divided by 256,
+not floor division. In particular a snapped coordinate of −128 leptons selects
+coordinate 0. Each snapped world coordinate is congruent to 128 modulo 256, so
+the point cannot equal the empty world point (0, 0, 0).
+All integer divisions here state their rounding explicitly; snapping uses floor,
+whereas conversion to cell coordinates truncates toward zero.
+
+For usable-area correction let (*x*, *y*) be that cell, *W* the map width, and
+(*Lx*, *Ly*, *Lw*, *Lh*) the local area, in S-0009's units. A cell already passing
+S-0009's height-aware usable test is unchanged. Otherwise define *d* = *x* − *y*
+and the integer displacement *a* by this table:
+
+| Condition | *a*, in cells |
+|---|---|
+| *d* ≥ 2(*Lx* + *Lw*) − *W* | −trunc((2(1 − *Lx* − *Lw*) + *W* + *d*) / 2) |
+| *d* ≤ 2*Lx* − *W* | trunc((2*Lx* + 2 − *W* − *d*) / 2) |
+| otherwise | 0 |
+
+The lateral candidate is (*u*, *v*) = (*x* + *a*, *y* − *a*). At this candidate
+let *h* be the terrain height level, plus 1 when it is sloped and
+*u* + *v* < *W* + 4 + 2*Ly* + its height level. For a non-legal candidate use
+S-0009 claim 44's stand-in cell for those terrain properties. The corrected centre is:
+
+| Lateral candidate | Result |
+|---|---|
+| *u* + *v* ≤ *W* + 2*Ly* + *h* | (*u* + *k*, *v* + *k*), the smallest positive integer *k* for which that cell passes the height-aware usable test |
+| *u* + *v* > *W* + 2 + 2(*Ly* + *Lh*) + *h* | (*u* − *k*, *v* − *k*), the smallest positive integer *k* passing that test |
+| otherwise | (*u*, *v*) |
+
+These corrections use exact integer arithmetic on supported maps. They are not a
+nearest-Euclidean-cell projection: the result follows a diagonal and each tested
+cell's own height-aware boundary. No randomness is added by correction.
+
+**F12. House base-record refresh** (claim 38). Let *N* be the house's number of owned
+buildings, and *B* its on-map buildings with positive health. For each such building
+let *p*ᵢ be its type's current purchase price for this house in credits (S-0404 claim 2),
+*w*ᵢ = max(0, trunc(*p*ᵢ / 1000) + 1), and (*X*ᵢ, *Y*ᵢ, *Z*ᵢ) its reference point.
+Let *Q* = Σ*w*ᵢ. With *N* > 0 and *Q* > 0 the mean cell before the nearby search is
+
+> (trunc(trunc(Σ(*w*ᵢ × *X*ᵢ) / *Q*) / 256),
+>  trunc(trunc(Σ(*w*ᵢ × *Y*ᵢ) / *Q*) / 256))
+
+The mean's two cell coordinates are each reduced modulo 65536 into
+−32768 … 32767, as in S-0009's cell-coordinate conversion. With *N* = 0, or
+*Q* ≤ 0, the base-start cell stays absent. The preferred recorded
+cell after the search supplies reference point *P* for the radius; when absent,
+*P* is (0, 0, 0) leptons. The new recorded radius is 0 when *N* = 0, 512 leptons
+when *N* > 0 and *Q* ≤ 1, and otherwise
+
+> radius = max(512, trunc(Σ distance₃(*P*, (*X*ᵢ, *Y*ᵢ, *Z*ᵢ)) / *Q*)) leptons
+
+The distance sum includes each member of *B* once, not *w*ᵢ times: the price weights
+only the mean and the denominator. distance₃ is F4's table-root distance truncated
+toward zero. Integer sums and products in this refresh wrap as signed 32-bit values
+(the wrap defined in F0); all displayed divisions truncate toward zero. Price's own
+floating-point operations belong to S-0404; distance's belong to F4. The remaining
+arithmetic is integer arithmetic. The minimum 512 leptons of this record is separate
+from the 768-lepton minimum used by the later random choice.
 
 ## Constants
 
@@ -2683,7 +2791,9 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 | none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 | none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
 | none | initial ready mark and queued/current distinction for set-up buildings (claim 1, Q-0241) | fixed behaviour, not a new data flag; building map entry, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
-| none | house-centre preference and random draws after path give-up (claim 38, Q-0238) | fixed behaviour, no per-behaviour rate or absent-key setting; house radius and centre maintenance remain open |
+| none | house-centre selection after path give-up (claim 38, Q-0238, Q-0312) | fixed behaviour and constants, F11–F12; no per-behaviour rate or new setting |
+| building type `Cost` and its price factors | price weight of base-record refresh (claim 38, F12) | integer cost and price-factor parsing/defaults stay with S-0403, S-0404 and S-0413; use the current purchase price, not a copied stock cost |
+| map geometry and start assignment | usable-area correction and recorded base-start cell (claim 38) | parse forms and absent-key rules stay with S-0009; no implicit unit-relative centre |
 
 **Behaviour property sections.** Each behaviour's properties come from a game-wide section of the
 rules data named after the behaviour. Section names are looked up exactly as S-0001 says (with
@@ -4018,23 +4128,47 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Repeat with a named test type identical except unarmed, and a non-turreted base
   with a turret-bearing upgrade installed by the map. Three runs per case; remove
   named data afterwards. Record the first mark setter and first start if either occurs:
-  their ticks are investigation results, not predicted by this revision. Do not inject
-  a ready mark or force a start to make the test succeed. Enemy action before the first
-  recorded turn invalidates the placement observation.
+  their ticks are investigation results, not predicted by this revision. Capture each
+  pre-turn and both per-tick-start boundaries, including the host before and after each
+  upgrade installation, rather than only end-of-tick snapshots. Also run all three
+  cases for the human owner without orders, keeping the enemy unable to damage them.
+  A first-start recording must identify the event that supplies readiness or bypasses
+  it, then repeat without that event as a control. If no start occurs by tick 1000,
+  report a bounded pending queue, not proof of perpetual inactivity. This settles the
+  bootstrap tick and armed/unarmed/upgrade comparison when a repeatable first event is
+  found; otherwise Q-0241 remains open. Do not inject a ready mark or force a start.
+  Enemy action before the first recorded turn invalidates the placement observation.
 
-- **B37 (claim 38, Q-0238).** Reuse S-0212 P26's unreachable-destination skirmish
-  setup for the neutral and special houses, speed 2, 800 × 600, director and mods off.
-  A read-only recorder records the house's base centre, base-start cell and base radius,
-  the selected centre and scenario random-stream state
-  at give-up. Three valid runs per owner with no recorded base/start, then with a map
-  placing that owner's base buildings. Separate unrelated draws from other objects.
-  Expect the ranged/raw assignments of claim 38, including direction randomness when
-  no base/start exists, and no further draw for cell correction or final nearby search.
-  Any choice-index draw, absence of the required direction draw, or
-  a final-search draw falsifies the draw rule. Record conditional empty-point fallback
-  cases only if reached without writing state; otherwise that branch remains untested.
-  The exact cell is recorded to investigate the remaining geometric question, not
-  compared against a conjectured centre equal to the unit's position.
+- **B37 (claim 38, Q-0238 and Q-0312).** Reuse S-0212 P26's unreachable-destination
+  skirmish setup for the neutral and special houses, speed 2, 800 × 600, director and
+  mods off. Use the read-only recorder, not writes, to record the house's base centre,
+  base-start cell, radius, selected centre, final destination and scenario random-stream
+  state at give-up. Separate unrelated draws from other objects. Three valid runs per
+  owner and case. Cases: no base/start; a start assigned by ordinary setup; one and
+  then two owned map buildings of unequal purchase prices; loss or owner change of
+  one of them; loss of the last building. Keep the units in the same area while moving
+  the buildings between runs, and move the failing unit between two unreachable areas
+  while keeping the house records fixed. Use a flat map first, then a plateau at the
+  local area's top edge, then a smaller local area shifted within the map.
+
+  Expected: initial empty records/zero radius without a start or building; base-record
+  updates exactly as F12, including unweighted distance sum divided by price-weight
+  sum and no refresh on damage alone. Compute the selected centre from the recorded
+  radius/direction values by F11, including snapping, whole-point rejection outside
+  the coordinate bounds, lateral correction and the first usable diagonal cell.
+  The no-base result uses zero world origin and still consumes the ranged radius
+  assignment followed by one raw direction value. Moving only the failing unit cannot
+  alter that centre for identical house records and draw results, although its reach
+  region can alter the final nearby-search result. Compare that result separately
+  against S-0212 T5, not against the centre itself. Falsifiers include a different
+  centre from F11, a radius/record change contrary to F12, a unit-relative no-base
+  point, an outer-choice index draw, omitted direction draw, or a correction/final-search
+  draw. Record the seed; repeat naturally different seeds rather than writing the
+  stream. A separately set centre case may be checked only when reached by ordinary
+  map actions; otherwise record it untested. A snapped empty world point would
+  falsify the no-retry qualification.
+  Named test-map rules may give unequal invented prices and keep buildings alive
+  long enough to record refresh. Remove the named test data afterwards.
 
 ## Open questions
 
@@ -4046,11 +4180,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   event. The armed/unarmed and set-up-upgrade comparisons are B36. No first-tick ready
   mark is adopted as a workaround here. Question 3's queued/current ambiguity is resolved
   by claim 1; S-0009 claim 40 needs the same wording.
-- **Q-0238 question 1:** establish the complete geometric centre choice, house radius
-  and centre maintenance, and usable-area correction when neither base nor start exists.
-  Claim 38 settles the base/start preference and draw assignments, not the final cell.
-  S-0212 claim 23a already settles question 3 and the final nearby search. The request
-  must remain open until this complementary answer is complete and approved.
+- **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
+  geometric answer, also answering Q-0312. S-0212 claim 23a supplies the same-tick queue
+  and destination rules and final nearby search. Keep Q-0238 open until the
+  complementary revisions are approved together; no request status is changed here.
 
 - Whether any stock map, campaign mission or team script puts an actor into *queued move* or
   *attack move*. The program itself never makes *queued move* current, and makes *attack move*
@@ -4117,18 +4250,25 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ### Cross-spec changes to confirm
 
-- S-0009 claim 40 should say set-up queues *guard*, rather than promising it current.
-  Claim 1 and B36 here clarify Q-0241 question 3; its bootstrap remains open.
-- S-0212 claim 23a should cite claim 38 here for the complete central-choice draw
-  sequence for infantry and vehicles. Keep Q-0238 open for the exact centre geometry
-  and no-base usable-area correction; its request record presently says answered.
+- S-0009 claim 40 already says set-up queues *guard* without promising it current.
+  Retain that correction at hand-off. Q-0241's bootstrap remains open.
+- S-0212 claim 23a, T5 and its Q-0238 hand-off question should replace their remaining
+  open-centre qualifications by claim 38 and F11–F12 here. Add the base-record-refresh
+  nearby-search use to T5 with claim 38's parameters. Q-0238 must remain open until
+  these complementary revisions are approved together.
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
 Joint hand-off checks: S-0213 revision 13 claim 16 already supplies the route-order timing
 pointer, and the current S-0207 claim 20 e already supplies claim 10's live erasing-lock exception
-and restored-target distinction. S-0307 revision 6 claims 15 to 24, S-0406 revision 4 claim 17
-and S-0417 revision 2 claims 4 and 13 supply the expanded search, construction and factory
-contracts cited here. Hand these versions off together; no further edit to them is requested.
+and restored-target distinction. S-0307 revision 8 claims 15 to 24, approved revision 9
+claims 15 to 25 and current revision 10's matching contracts, S-0406 revision 7 claim 17 and S-0417's current claims 4 and 13 supply the expanded search,
+construction and factory contracts cited here. Hand these corrections off together; no further
+behavioural edit to them is requested. Also confirm S-0207 claim 20 a/e with S-0209's
+matching ground-reservation and bridge-record consequences and their shared
+`quirks.teleport_vehicle_ground_reservation`; S-0212 claim 22 with S-0207 claim 15 and
+D17 d3 for immediate fresh search and same-tick follow-up; and S-0208 claim 19 with
+claim 10 here for teleport landing and target-loss/reversion. These are coordination
+checks, not additional rules of this spec.
 
 ## Questions for the project lead
 
