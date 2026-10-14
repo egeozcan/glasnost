@@ -1,9 +1,9 @@
 ---
 id: Q-0132
 title: What stops the vehicle of a pack-up from being put on the map
-status: open
+status: answered
 related: [S-0415, S-0209]
-answered-by: []
+answered-by: [S-0415]
 ---
 
 ## Need
