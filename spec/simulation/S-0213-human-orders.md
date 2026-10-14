@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530]
 supersedes: []
 ---
 
@@ -81,7 +81,7 @@ Terms).
   lose when that manoeuvre ends or the link is broken off. S-0417 identifies ground vehicle
   factory release and successful infantry factory or cloning-building release exchanges
   (claims 1, 7 and 10). A docked aircraft is tethered at release unless its type must return
-  to a dock (S-0417 revision 2, claim 11); landing and take-off timing remains provisional,
+  to a dock (S-0417, claim 11); landing and take-off timing remains provisional,
   and other exchanges remain open.
   While tethered, the unit ignores stop, scatter and deploy
   orders (table T1), and a behaviour order keeps the link, except at a building of the unloading kind (table T3, part b).
@@ -838,7 +838,8 @@ Terms).
     lifetime when added, so lines added across a clock boundary can expire on different
     updates. In the original the
     first line begins 3 pixels right of the battlefield's left edge, at its top edge,
-    with 19 pixels between line origins. These pixel positions describe the original
+    with a fixed 19 pixels between line origins, independent of the imported font's
+    line pitch and bitmap height. These pixel positions describe the original
     display, not a simulation-state rule. This claim specifies the shared display
     contract used by route refusals, not new events for sidebar, placement or sell/repair
     feedback; those remain with S-0411, S-0406 and S-0408 respectively.
@@ -860,6 +861,30 @@ Terms).
     status-text metrics, splitting, control characters, fallback use and foreground
     selection.
 
+    **Vertical metrics (Q-0530 questions 2 and 3).** The top stored row of each
+    ordinary or fallback glyph lies at its line origin; row r lies at y + r,
+    where y is that origin's vertical pixel position and r is counted from zero.
+    No baseline adjustment, centring or displacement depends on bitmap height H
+    or line pitch P. Blank leading bitmap rows remain blank rows at those positions.
+    Changing P does not move subsequent stored lines, including wrapped lines,
+    or change their capacity, lifetime or horizontal splitting.
+
+    P instead supplies each stored line's vertical clipping height. In our engine,
+    a glyph row is eligible to paint exactly when 0 ≤ r < min(H, P), also subject
+    to the display surface's bounds. These are integer pixel quantities with exact
+    arithmetic, no rounding and no floating point. A zero pitch paints no rows.
+    A pitch smaller than H clips the bottom, rather than shifting or scaling the
+    glyph. A pitch greater than 19 pixels can permit tall masks of neighbouring
+    lines to overlap, without enlarging their origin spacing. It neither reserves
+    an opaque background rectangle nor clears a pitch-sized band: clear mask pixels
+    remain transparent. The original has a cosmetic clipping bug: it includes the
+    bottom boundary at y + P, permitting row P when H > P; our engine excludes
+    that extra row, with no quirk switch.
+    - Backing: `measurable` (Scenario O21 d) for fixed spacing, top-row placement,
+      clipping and transparency. Excluding the extra bottom row is a presentation
+      design rule, not an oracle prediction.
+    - Confidence: high
+
     **Glyph selection and drawing (Q-0501, questions 2 to 4).** Each unsigned
     16-bit text unit independently selects the font's imported glyph mapping,
     without reducing it to its low byte or combining surrogate pairs. A mapping
@@ -878,7 +903,13 @@ Terms).
     88), within that glyph's stored width and the font's bitmap height, and its
     width is the capital X's stored width. Thus changing that imported X changes
     both the fallback shape and its advance. These statements cover a valid font
-    with a mapped capital X; behaviour for a font without one remains open.
+    with a mapped capital X. S-0014 claim 4 owns the original's usable mapped-text
+    case without X, with no defined missing-character fallback. Under S-0014
+    claim 6 our engine rejects that font, or any structurally invalid resolved font,
+    as a whole: report a missing-asset diagnostic naming the file and reason and
+    omit status text, without partial use or a substitute font. This rejection
+    is a design rule, not a prediction of the original's malformed-font response.
+    Its engine acceptance test is S-0014 Scenario F5.
 
     Glyph masks have two values: zero leaves the destination pixel unchanged,
     and one paints the notice's foreground. They do not select palette indices.
@@ -1138,8 +1169,10 @@ only when they actually assign a destination.
 | String-table entry `MSG:PlannerMaximum` | route-holder-limit text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic, not substitute stock English |
 | String-table entry `MSG:PlanningModeHeteroSel` | incompatible-selection text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic |
 | No rules, art or map key | route refusal duration and shared status display (claim 25) | fixed presentation rules | 480 clock units of 16 milliseconds; six lines |
-| Game font file `GAME.FNT` | status-text glyph mapping, masks, widths and bitmap height (claim 25) | unsigned 16-bit text-unit mapping; zero means missing, positive values select zero-based glyph number value minus one; widths in integer pixels, binary masks; resolved through S-0005 claims 1 to 4 and 18a | no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text; binary layout and masks are S-0014 claims 1–3, fallback image and transparency are claims 4 and 5 |
-| Mapped capital X in `GAME.FNT` | generated fallback shape and width (claim 25) | text unit 88, complemented mask with the same width and bitmap height | no reserved fallback entry; a font without a mapped X is outside the defined valid-font scope |
+| Game font file `GAME.FNT` | status-text glyph mapping, masks, widths, bitmap height and line pitch (claim 25) | unsigned 16-bit text-unit mapping; zero means missing, positive values select zero-based glyph number value minus one; widths in integer pixels, binary masks; resolved through S-0005 claims 1 to 4 and 18a | no original status text without a loaded font; our engine reports a missing-asset diagnostic naming the file and reason and omits the text for missing files or whole-font rejection under S-0014 claim 6; no partial use or substitute font; binary layout and masks are S-0014 claims 1–3, fallback image and transparency are claims 4 and 5 |
+| Common bitmap height in `GAME.FNT` | stored glyph row count H (claim 25) | unsigned integer pixels, S-0014 claim 1; row zero starts at the line origin | no independent absent-field default; incomplete files are rejected under S-0014 claim 6 |
+| Header line pitch in `GAME.FNT` | stored status line's clipping height P (claim 25) | unsigned integer pixels, S-0014 claim 1; does not set the fixed 19-pixel origin spacing; our engine paints only rows below min(H, P) | no independent absent-field default; incomplete files are rejected under S-0014 claim 6 |
+| Mapped capital X in `GAME.FNT` | generated fallback shape and width (claim 25) | text unit 88, complemented mask with the same width and bitmap height | no reserved fallback entry; an absent X mapping rejects the entire font under S-0014 claim 6; the original's mapped-text case without X is claim 4 |
 | Rules `[Colors]` | route-notice foreground (claim 25) | local player's chosen definition, parsed by S-0103 claims 4 and 5; unmodified HSV converted and packed by claims 6 and 9 | colour-definition import defaults remain S-0103's; no font palette or battlefield lighting |
 | No rules, art or map key | status-text splitting (claim 25) | fixed integer-pixel budgets, 111-character limit, one-pixel character spacing and 64-pixel tab stops | claim 25's initial and resized budgets and separator rules |
 | No rules, art or map key | acceptance of arrow events during an order block (claim 23) | fixed input rule, subject to the presentation quirk | presses and releases made during the block discarded |
@@ -1853,6 +1886,34 @@ applied: a cue is not proof that an order passed its application checks.
   falsifies the documented original defect. This tests status drawing and metrics.
   S-0014 claims 1–3 own the binary file-layout contract.
 
+**Scenario O21 d: fixed line spacing, pitch clipping and glyph top (claim 25; Q-0530).**
+- *Setup:* O21's skirmish fixture and void rule, speed 6, 800 × 600, director and
+  unrelated mods off. Named test assets are a string table with short invented
+  refusal text and structurally valid font copies under S-0014 claims 1–3, all
+  with mapped X. Use positive-width synthetic glyphs with distinguishable set
+  pixels in their first, middle and final rows. Keep text comfortably below the
+  horizontal budget. Restore assets afterwards.
+- *Procedure:* show two notices before either expires, and separately one notice
+  containing an explicit break and one that wraps. Repeat with copies differing
+  only in P: below H, equal to H, above H, and zero. Include a valid tall-mask
+  copy with both H and P above 19 pixels, and a height-only variation that still
+  fits its records. Use asymmetric row marks to distinguish overlap from a moved
+  origin. Repeat each variant three times against two battlefield backgrounds.
+  Capture again after expiry to check that no blank band remains.
+- *Observable:* first stored row positions, differences between successive line
+  origins, visible bottom row, wrapping, retained line count and background pixels.
+- *Expected:* origins remain 19 pixels apart with the first at battlefield top.
+  Stored row zero starts at each origin, regardless of H or P. The oracle clips
+  rows below row P but can paint row P itself when H > P, including row zero at
+  zero pitch. Our engine instead clips to min(H, P) rows and paints none at zero
+  pitch. Tall admitted masks can overlap; P does not re-space the lines or clear
+  a background band. Width-based breaks and capacity remain unchanged.
+- *Falsified if:* changing P moves an origin, changes horizontal splitting or
+  capacity, shifts the glyph top, or paints oracle rows beyond P; failure to
+  paint a set boundary pixel at row P with H > P falsifies the recorded cosmetic
+  defect. The corrected clipping is an engine acceptance check, not an oracle
+  prediction. S-0014 F5 supplies invalid-font acceptance tests separately.
+
 **Scenario O22: arrows during order blocks (claim 23, Q-0391).**
 - *Setup:* a large flat skirmish map, no scroll limits near the observed view,
   speed 6, 800 × 600, fresh unconflicted arrow bindings, pointer in the interior.
@@ -1897,7 +1958,12 @@ extension is a design rule and has no oracle measurement.
   makes it explicit. Question 1's binary font-file layout is answered by S-0014
   claims 1–3; its claims 4 and 5 specify fallback image and transparency.
   S-0005 claim 18a retains file identity and lookup ownership.
-  A font lacking a mapped capital X is outside the defined valid-font scope here.
+  S-0014 claims 4 and 6 now define missing-X original usability and our engine's
+  whole-font rejection; claim 25 and Import mapping here apply that policy.
+- Q-0530 questions 2 and 3 are answered by claim 25 and O21 d: origin spacing
+  stays fixed, pitch controls vertical clipping, and row zero starts at the origin.
+  Question 1 is owned and answered by S-0014 claims 4 and 6, including its F4/F5
+  tests. No part owned here remains open.
 - Q-0393's four shared-status-display questions are answered by claim 25 and O21 b.
   S-0411 claim 17 already excludes sidebar production labels from this display.
   Their font and layout are not changed by the status-text contract here.

@@ -3,7 +3,7 @@ id: Q-0530
 title: What does our engine do with a game font outside S-0014's valid scope, and does the font's line pitch place status lines?
 status: answered
 related: [S-0014, S-0213, S-0005]
-answered-by: [S-0014]
+answered-by: [S-0014, S-0213]
 ---
 
 ## Need
