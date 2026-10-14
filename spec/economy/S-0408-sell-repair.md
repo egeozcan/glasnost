@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -183,7 +183,7 @@ house state, on or off). In addition:
      by comparing the scenario random stream's state before and after the sale)
    - Confidence: high (the count changes, including the turret exception and the wall tower); medium (the refund, the creation draw)
 
-6. **The course of a sale.** The selling behaviour's processings are 1 tick apart (claim 16).
+6. **The course of a sale.** Subject to S-0215 claim 2's processing gates, the selling behaviour's processings are 1 tick apart (claim 16).
    The sale of a building without upgrades has the following observable states. A building that packs up goes through the same course with the differences of S-0415 (claim 9), among them which buildings release survivors, passengers and garrison (`quirks.packup_release_by_guard_spot`); the releases below are those of an ordinary sale.
 
    | Sale state or condition | Observable result |
@@ -191,15 +191,15 @@ house state, on or off). In addition:
    | First processing | Every docked unit (for example, a harvester unloading at a refinery, a vehicle on a repair depot, or an aircraft on its pad) is told to leave; a vehicle held in the building's bunker is let out; burning-damage animations end. No other release occurs and build-down has not begun. |
    | A later processing while any unit remains docked | The sale waits. |
    | First processing at which no unit is docked | Absorbed passengers, garrisoned infantry and then sale survivors (claims 7 to 9) are released, in that order. The local player hears the sell sound for an own building, and build-down begins. The order is observable in the positions taken (an earlier unit can occupy a standing position a later unit would otherwise take) and in the order of release draws (claim 9 for the occupants). |
-   | Build-down | It lasts for the time S-0108, claim 5, gives. |
-   | First processing after build-down has finished | The house receives the building's refund (claim 1), then the value of its stored resources (claim 10), and the building is removed. |
+   | Build-down | Its range and stage delay are S-0108's (claim 5); its completion and removal tick are claim 17 below. |
+   | Processing that finds build-down complete | In that same tick the house receives the building's refund (claim 1), then the value of its stored resources (claim 10), and the building is removed. There is no extra tick after the completion report. |
 
    For a refinery, being told to leave has the effects of S-0402 claim 11: an unloading
    harvester leaves its unloading state, scatters, starts *harvest* with its unpaid load,
    and loses contact; a harvester still in *enter* queues *guard* and scatters instead.
    S-0402 scenario H12 measures both cases.
 
-   With no unit docked, the release and build-down-start state is reached on the second processing, one tick after the first.
+   With no unit docked and uninterrupted processing, the release and build-down-start state is reached on the second processing, one tick after the first. The build-down restarts at stage 0 then, with a fresh stage delay; any completion report from before that restart is discarded.
 
    The building is not in operation from the start of the sale (S-0405, claim 8), so a defence stops
    firing at once, but a power plant keeps its output until it is removed (S-0405, claim 3). A
@@ -306,8 +306,7 @@ house state, on or off). In addition:
     while a building occupies its cell (S-0213, claim 12; otherwise the order does nothing) is
     removed at once, with no animation and no survivors; its house receives its refund (claim 1) and
     its passengers are dealt with (open question). The local player hears the unit-sold announcement
-    for an own unit. No input creates such an order (S-0213, claim 12; S-0214, claim 13), so in a
-    skirmish no unit is ever sold; the rule is stated so that every sell order has a defined result.
+    for an own unit. No input creates such an order (S-0213, claim 12; S-0214, claim 13), so in a skirmish no unit is ever sold. The removal, refund and announcement are specified here; how the unit's passengers are handled remains an open question and is not specified by this claim.
     - Backing: `unmeasured` (no input creates a sell order for a vehicle or aircraft, so neither
       scripted input nor an AI house under the same input rules can reach the rule; no scenario)
     - Confidence: medium (the refund, the immediate removal), low (the passengers)
@@ -357,7 +356,8 @@ house state, on or off). In addition:
 
 ### Timing
 
-16. **The selling behaviour runs every tick.** At every stage of a sale (the first processing, a wait
+16. **The selling behaviour runs every tick.** Subject to S-0215 claim 2's processing gates,
+    at every stage of a sale (the first processing, a wait
     for a docked unit, the start of the build-down, the wait for the build-down, the final
     processing), the *selling* behaviour is processed again on the next tick (a processing delay of 1
     in the terms of S-0215, claim 2), and its timing takes no draw. The processings of a sale
@@ -365,6 +365,37 @@ house state, on or off). In addition:
     of this behaviour's processing but gives no delay.)
     - Backing: `measurable` (scenario S5, the tick of each stage)
     - Confidence: high
+
+17. **Exact build-down completion and refund tick.** Let *D* be the tick at which the sale
+    starts its build-down (claim 6), *n* its actual stage count and *d_b* its stage delay in ticks
+    (S-0108 claim 5). In uninterrupted play, for *n* ≥ 2 and *d_b* ≥ 1, removal and payment
+    occur at *D* + (*n* − 1) × *d_b*, on the tick the last stage is reached, not a tick later.
+    The building need not remain on the map for a drawn frame showing that last stage.
+    - A gate uses *n* = *G* + 1, with *G* S-0108's gate stage count. Reversing the displayed
+      frames changes neither the advancing stage nor the refund tick. After a successful
+      theater-flag refresh, use the whole sprite count and special delay of S-0108 claim 5,
+      for gates too, not the ordinary half-count range.
+    - A building whose type names a vehicle to pack into and which has no guard spot reports
+      completion also when its advancing build-down reaches stage 23. For a positive-delay
+      range of at least 2 stages, its completion tick is therefore
+      *D* + min(*n* − 1, 23) × *d_b*. This applies even when S-0213's pack-up conditions
+      make it sell as an ordinary building. A guard spot suppresses this early report.
+      Whether the completed sequence gives a refund or a vehicle is still S-0415's rule.
+    - A zero-delay build-down does not advance its stage but reports completion on the next
+      eligible building turn. With uninterrupted processing it pays and removes at *D* + 1,
+      not at *D*. This applies to a sellable type with a build-up sprite and zero delay.
+    - No build-up sprite is a different case: claim 4 applies at the sell order's application,
+      without any build-down. An ordinary type remains and pays nothing; a firestorm-wall
+      type is removed in that application tick and pays nothing. The default one-stage,
+      zero-delay construction range of such a type does not create a sale or a refund.
+    These formulas assume no interrupted building turns, processing gates, intervening
+    behaviour change or restarted animation. A completion report that cannot be acted on
+    immediately is acted on at the next eligible selling processing; a killing hit instead
+    stops the sale as claim 6 gives. Positive-delay one-stage and non-positive-count ranges
+    remain open, as in S-0108 and S-0406; none of these duration formulas covers them.
+    - Backing: `measurable` (scenario S10; S3 parts c and d for no-sprite orders)
+    - Confidence: high (same-tick report, restart, ordinary and early completion); medium
+      (gate and theater ranges, zero-delay completion)
 
 ## Formulas
 
@@ -406,6 +437,21 @@ balance (possible through a negative refund, Edge cases) this differs from trunc
 first, which is why the order of payments matters there: the refund first, then the resource types in
 storage order (claim 10).
 
+**F4, sale completion tick** (claim 17). *D* is the build-down-start tick, not the sell-order
+or first-processing tick. *n* and *d_b* are S-0108's actual construction range.
+
+> *E* = *D* + (*n* − 1) × *d_b*, for *n* ≥ 2 and *d_b* ≥ 1.
+>
+> *E* = *D* + min(*n* − 1, 23) × *d_b* instead when the type names a vehicle to pack into
+> and the building has no guard spot.
+>
+> *E* = *D* + 1 for a zero-delay build-down in uninterrupted play.
+
+Integers, in ticks; exact multiplication and addition, no rounding. S-0108 owns the
+floating-point calculation and rounding of *d_b*. Payment and removal share tick *E* for
+an ordinary sale. S-0415 owns the result for packing up. No formula applies to a no-sprite
+sell order (claim 4).
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -413,6 +459,7 @@ storage order (claim 10).
 | Refund percentage, absent-key default | 0.5 | fraction | Claim 1 |
 | Refund override, absent-key default | 0 | credits | Claim 1; 0 means no override |
 | Selling processing delay | 1 | ticks | Claim 16 |
+| Early completion stage for a packing-capable type without a guard spot | 23 | stage advances from build-down start | Claim 17 |
 | Engineer chance for a building that produces buildings (and has never changed owner) | percent draw below 25 | percent | Claim 7 (as S-0312 claim 18) |
 | Engineers per sale, at most | 1 | infantry units | Claim 7 |
 | Desired point of sale survivors and absorbed passengers within the chosen cell | 128, 164 | leptons along map x, map y from the top corner | Claims 7 and 8; class centre (S-0208 claim 2) |
@@ -433,7 +480,7 @@ storage order (claim 10).
 | *selling*, a later processing | nothing docked | absorbed passengers, garrison, sale survivors released (claims 7 to 9); sell sound; build-down begins |
 | building, any behaviour, type with no build-up sprite | sell order, type with the firestorm-wall flag | removed at once; no refund, no survivors (claim 4) |
 | building, any behaviour, type with no build-up sprite and no firestorm-wall flag | sell order | nothing (claim 4) |
-| build-down | build-down finished, next processing | refund and stored resources credited; building removed |
+| build-down | completion report, eligible selling processing on this turn | refund and stored resources credited; building removed on the report tick (claim 17) |
 | *selling*, any stage (the build-down included) | building destroyed | sale stops; no refund or further sale survivors; awaits its own next eligible turn, with a second destruction-survivor and smudge round on removal (claim 6; S-0312 claim 21) |
 | *selling* | sell order | nothing changes, except that the local player hears the order sound again for an own building (claim 4) |
 | vehicle or aircraft on a building | sell order (no input creates one) | refund; removed at once (claim 11) |
@@ -730,12 +777,43 @@ tick number. Any game speed.
 - *Expected:* *repair switch* only over the damaged ordinary building.
 - *Falsified if:* it is offered at full health, on either test type or on the vehicle-like building.
 
+**S10: exact removal timing (claim 17).**
+- *Setup:* flat purpose-made skirmish map, one distant bystander computer player kept outside
+  the observed area; director and mods off except named test data. Use crew-less own buildings
+  without contacts, country cost factors 1 and no cost bonuses. Test ordinary ranges with
+  invented stage counts 6 and 30 and positive delays 2 and 3 ticks, a gate with a known gate
+  range, and theater-flag ordinary and gate types with 30 whole sprite frames after refresh
+  (S-0108 B19's test-file setup). Include a build-up sprite with zero stage delay. For the
+  early-report variants use a building that names a vehicle to pack into and a 30-stage range,
+  once with no guard spot and once with a guard spot. S-0415 D6/D7 supply reachable pack-up
+  inputs. Any game speed; repeat each variant once at another speed. One sale per variant
+  and speed; void a run if the bystander affects the observed area or is defeated.
+- *Procedure:* sell each ordinary building and pack up each packing variant with scripted
+  input. With a read-only recorder, log each tick's build-down stage, behaviour, foundation
+  occupancy and house credits, from order application through removal. Record *D*, the
+  restart at stage 0, rather than assuming it equals the order tick. Repeat the no-sprite
+  cases of S3 c/d, logging their order-application ticks too.
+- *Observable:* *D*, last stage seen before removal, removal tick, refund tick, and any
+  packed vehicle's appearance. Record the actual range for gate and theater variants.
+- *Expected:* ordinary positive-delay refunds and removal at *D* + (*n* − 1) × *d_b*.
+  6 stages at delay 2 give *D* + 10 ticks. The theater test range is 30 stages at delay 2,
+  giving *D* + 58, for the gate too. The packing-capable 30-stage, delay-3 variant with no
+  guard spot completes at *D* + 69; with a guard spot at *D* + 87. Its vehicle/refund result
+  follows S-0415. Zero delay completes at *D* + 1. No-sprite ordinary orders do nothing.
+  no-sprite firestorm-wall orders remove in the application tick with no refund. Tick
+  intervals agree at both speeds.
+- *Falsified if:* payment/removal is one tick after the report, uses *n* rather than *n* − 1
+  advances, uses a gate's sprite half-count or a theater sprite's half-count, ignores the
+  stage-23 early report or applies it with a guard spot, pays at *D* for zero delay, or
+  treats an ordinary no-sprite order as a zero-delay refunded sale.
+
 ## Open questions
 
 - Whether the occupants of a garrison leave before the sale survivors (claim 9; S5 part a), which
   the structures specs' account of the occupants' leaving can settle.
-- The exact processing at which the build-down starts and the releases happen (claim 6, ±1 tick),
-  and which links make a docked unit that keeps the sale waiting (claim 6).
+- Which links make a docked unit that keeps the sale waiting (claim 6).
+- Positive-delay one-stage and non-positive-count build-down completion (claim 17; S10 may
+  be extended with exploratory ranges, but no duration is asserted for them).
 - Whether any skirmish path fills a building's own storage, so that claim 10 can occur.
 - In which order a building's storage lists its resource types, the order in which claim 10 pays
   them (F3).
