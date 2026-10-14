@@ -2,7 +2,7 @@
 id: S-0403
 title: Build time (progress steps, base time from cost, country and type factors, low power, several factories, walls)
 topic: production
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -254,10 +254,9 @@ from the step that starts after tick *t* at the earliest, never the step that fa
   default on = original). Claim 6 counts every factory building of the kind: one still in build-up,
   an unpowered one, one being sold, and one whose type the item's owners cannot use (for example a
   captured factory of another side). With the switch off, only factory buildings that could make the
-  item with power and dock occupancy ignored count (S-0404, claim 3's conditions without the power
-  switch and the free dock: not being sold, of a type whose owner countries share at least one
-  country with the item type's, of the matching naval or ground kind, and with the tech-tree rules
-  allowing the type).
+  item with power and dock occupancy ignored count (S-0404, Terms, *could make*: neither being
+  sold nor queued to be sold, matching owner-country overlap and naval or ground kind, and
+  passing the build-limit test with its production allowance, not the full tech-tree test).
 - **Step period cap** (`quirks.build_step_period_cap`, default on = original). *R* never exceeds 255,
   so no uninterrupted build lasts more than 13770 ticks, however high *T*. With the switch off, *R*
   = max(1, *T* ÷ 54) without the upper limit.
@@ -304,11 +303,13 @@ observed area is the human player's base: its factory buildings, power plants an
 places. Each case is run once, since no formula of this spec draws a random number; a run that the
 bystander's void rule voids is repeated. "Done tick" is the tick in which
 the item becomes done: for a building, the tick its build icon first shows the ready state; for a
-unit, the tick before the one at the end of which it leaves its factory building, because the
-interface's automatic place order for a finished unit is issued in the next tick and applied at the
-end of it (S-0411, claim 9, whose scenario S7 measures that one-tick delay). A unit's done tick is
-thus inferred from its leaving tick, with a hold or a blocked exit excluded from every scenario
-that infers a done tick this way. Every item whose done tick is observed is ordered by scripted
+unit, the tick before the one at whose end a successful automatic place order releases it from
+its production line (S-0404, claims 7 and 13), because that order is issued in the next tick and
+applied at its end (S-0411, claim 9, whose scenario S7 measures that one-tick delay). Record the
+unit's appearance on the map, not its later movement out of the factory building (S-0417).
+Infer a unit's done tick this way only when the recorder confirms successful automatic release
+at the expected boundary, with no hold or missing eligible factory; a busy or failed release
+refund is not a completion observable. Every item whose done tick is observed is ordered by scripted
 input at a known tick *n*, as in B1, and an expected time *T* stands for the done tick *n* + 54*R*
 with *R* from F7. Credits are kept far above every price so that money never stops a line. Ticks are read from
 the tick counter of the measurement setup's recorder or from drawn frames (one per tick in a
@@ -321,8 +322,9 @@ single-player game).
 - Observable: done tick; the image frame of the build icon's clock at each drawn frame (S-0411,
   claim 8).
 - Expected: done at *n* + 54*R* with *R* = 100, 100, 100, 1, 1 and 255; the clock's image frame changes every
-  *R* ticks, 54 times; the unit leaves its factory at the end of the tick after its done tick (S-0411, claim 9), so
-  at the end of tick *n* + 54*R* + 1.
+  *R* ticks, 54 times; a successful automatic release puts the unit on the map at the end of
+  tick *n* + 54*R* + 1 (S-0411, claim 9; S-0404, claims 7 and 13), independently of later
+  unloading movement (S-0417).
 - Falsified if: any done tick differs, the clock changes at another period, or the 20000 case is not
   capped at 13770 ticks.
 
