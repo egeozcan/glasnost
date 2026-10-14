@@ -295,12 +295,14 @@ fn arrival_tests_apply(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
 }
 
-/// Whether a walker's target is in range for S-0208 claim 17. For a type
-/// that is not open-topped: S-0307's range test with the weapon S-0308
-/// selects for the target, run as if the target were the cell holding it
-/// (that cell's centre is the measured point). For an open-topped type: the
-/// 3-D approximate distance between the two reference points is below the
-/// weapon range ρ of S-0307 claim 13.
+/// Whether an actor's target is in range for the arrival-time stop of a
+/// walker (S-0208 claim 17) or of a driving vehicle (S-0207 claim 19 a),
+/// whose arrival range tests are the same. For a type that is not
+/// open-topped: S-0307's range test with the weapon S-0308 selects for the
+/// target, run as if the target were the cell holding it (that cell's
+/// centre at surface height is the measured point). For an open-topped
+/// type: the 3-D approximate distance between the two reference points is
+/// below the weapon range ρ of S-0307 claim 13.
 pub fn walker_in_range(w: &World, id: ObjectId, target: ObjectId) -> bool {
     let (Some(o), Some(x)) = (w.obj(id), w.obj(target)) else {
         return false;
@@ -318,6 +320,7 @@ pub fn walker_in_range(w: &World, id: ObjectId, target: ObjectId) -> bool {
             i64::from(a.z - b.z),
         );
         // spec: S-0208 claim 17 (open-topped: trunc(√̃(Δx² + Δy² + Δz²)) between the reference points, strictly below ρ)
+        // spec: S-0207 claim 19 (a) (open-topped: trunc(r(Δx² + Δy² + Δz²)) < ρ between the reference points, r as in F5)
         let d = root_floor(
             (dx * dx + dy * dy + dz * dz) as u64,
             r.quirks.table_root_distance,
@@ -327,7 +330,38 @@ pub fn walker_in_range(w: &World, id: ObjectId, target: ObjectId) -> bool {
         return d < i64::from(rho);
     }
     // spec: S-0208 claim 17 (S-0307's range test against the target's cell, whose centre is the measured point)
+    // spec: S-0207 claim 19 (a) (S-0307's weapon range test to the target's cell centre at terrain surface height, as for a cell target)
     crate::combat::range::in_range(w, id, weapon, Some(Target::Cell(x.pos.cell())), None)
+}
+
+/// The conditions of the arrival-time stop shared by a walker (S-0208
+/// claim 17) and a driving vehicle at a track target (S-0207 claim 19 a):
+/// a mobile target, the current behaviour (else the queued one) *attack*,
+/// *area guard*, *hunt* or *rescue*, a destination held, no approach
+/// destinations, and the arrival range test.
+pub fn arrival_stop_holds(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let (Some(Target::Object(x)), Some(_)) = (o.target, o.dest) else {
+        return false;
+    };
+    // spec: S-0208 claim 17 (the target is an infantry unit, vehicle or aircraft)
+    // spec: S-0207 claim 19 (a) (the target is an infantry unit, vehicle or aircraft, not a building, cell, overlay or terrain object)
+    if !w
+        .obj(x)
+        .is_some_and(|t| matches!(t.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft))
+    {
+        return false;
+    }
+    // spec: S-0208 claim 17 (the current behaviour, or the queued one when there is none: attack, area guard, hunt or rescue)
+    // spec: S-0207 claim 19 (a) (the same behaviours)
+    if !matches!(
+        o.beh.current.or(o.beh.queued),
+        Some(Behaviour::Attack | Behaviour::AreaGuard | Behaviour::Hunt | Behaviour::Rescue)
+    ) {
+        return false;
+    }
+    // spec: S-0207 claim 19 (a) (no approach destinations: no rule fills them yet, S-0215 Terms)
+    walker_in_range(w, id, x)
 }
 
 /// S-0208 claim 17: on its arrival tick, a walker whose target is a mobile
@@ -338,25 +372,7 @@ fn approach_stop(w: &mut World, id: ObjectId) {
     if !arrival_tests_apply(w, id) {
         return;
     }
-    let Some(o) = w.obj(id) else { return };
-    let (Some(Target::Object(x)), Some(_)) = (o.target, o.dest) else {
-        return;
-    };
-    // spec: S-0208 claim 17 (the target is an infantry unit, vehicle or aircraft)
-    if !w
-        .obj(x)
-        .is_some_and(|t| matches!(t.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft))
-    {
-        return;
-    }
-    // spec: S-0208 claim 17 (the current behaviour, or the queued one when there is none: attack, area guard, hunt or rescue)
-    if !matches!(
-        o.beh.current.or(o.beh.queued),
-        Some(Behaviour::Attack | Behaviour::AreaGuard | Behaviour::Hunt | Behaviour::Rescue)
-    ) {
-        return;
-    }
-    if walker_in_range(w, id, x)
+    if arrival_stop_holds(w, id)
         && let Some(ob) = w.obj_mut(id)
     {
         // spec: S-0208 claim 17 (the unit loses its destination and keeps its target)

@@ -1095,6 +1095,10 @@ pub struct UnitType {
     /// `Teleporter`: a self-teleporting type (S-0214 claim 11).
     #[serde(default)]
     pub teleporter: Option<bool>,
+    /// `Selectable`: the type permits selection (S-0214 Terms and claim
+    /// 16; absent: yes).
+    #[serde(default)]
+    pub selectable: Option<bool>,
     /// The combat fields shared with buildings (M4).
     #[serde(default)]
     pub combat: CombatFields,
@@ -1382,6 +1386,10 @@ pub struct BuildingType {
     /// `InvisibleInGame`.
     #[serde(default)]
     pub invisible_in_game: Option<bool>,
+    /// `Selectable`: the type permits selection (S-0214 Terms and claim
+    /// 16; absent: yes).
+    #[serde(default)]
+    pub selectable: Option<bool>,
     /// `LaserFence`.
     #[serde(default)]
     pub laser_fence: Option<bool>,
@@ -1412,9 +1420,12 @@ pub struct BuildingType {
     /// `NumberImpassableRows` (S-0209 Terms); absent: none.
     #[serde(default)]
     pub number_impassable_rows: Option<i32>,
-    /// `Factory`, the kind it builds in our words (`infantry`, `vehicle`,
-    /// `aircraft`, `building`; the importer maps the original's words by
-    /// S-0003 claim 21).
+    /// `Factory`, the imported factory category in our words: the kind it
+    /// builds (`infantry`, `vehicle`, `aircraft`, `building`) or a
+    /// recognised category that builds nothing (`terrain`,
+    /// `infantry_object`, `vehicle_object`, `aircraft_object`,
+    /// `building_object`); the importer maps the original's words by
+    /// S-0003 claim 21.
     #[serde(default)]
     pub factory: Option<String>,
     /// `WeaponsFactory`.

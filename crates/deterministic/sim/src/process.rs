@@ -168,6 +168,10 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
                 crate::infantry::destination_assigned(w, id, o.dest);
             }
         }
+        // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick; the rest table judges the state after it)
+        // spec: S-0215 claim 13 (an actor with attack-move memory may resume its attack move)
+        // Its place after the other common effects is interim, request Q-0202.
+        refresh_attack_move(w, id);
     }
     match o.kind {
         Kind::Infantry => fall_back_infantry(w, id),
@@ -387,7 +391,6 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         door_update(w, id);
     }
-    resume_attack_move(w, id);
     // spec: S-0215 claim 11 (the per-tick start of infantry, vehicles and buildings)
     let ready_now = ready(w, id);
     let Some(o) = w.obj(id) else { return };
@@ -436,10 +439,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
         if kind == Kind::Building {
             second_start(w, id);
         }
-        // spec: S-0215 claim 37 (a) (the per-tick approach of an actor that cannot reach its target; its place in the tick is interim, request Q-0161)
-        crate::approach::per_tick(w, id);
         // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing)
         crate::combat::acquire::per_tick(w, id);
+        // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target, after the per-tick search on a tick without processing too)
+        crate::approach::per_tick(w, id);
         return;
     }
     let d = process(w, id);
@@ -449,22 +452,24 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         second_start(w, id);
     }
-    // spec: S-0215 claim 37 (a) (the per-tick approach of an actor that cannot reach its target; its place in the tick is interim, request Q-0161)
-    crate::approach::per_tick(w, id);
     // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
     crate::combat::acquire::per_tick(w, id);
+    // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target follows the processing and the per-tick search, with no one-step-per-tick limit)
+    crate::approach::per_tick(w, id);
 }
 
-/// The attack-move resumption at the start of an object's tick (S-0309
-/// claim 23 (b)): when engaged (which it then no longer is), or not engaged
-/// and in *guard*.
-fn resume_attack_move(w: &mut World, id: ObjectId) {
+/// The attack-move refresh among the common effects of a fall-back to rest
+/// (S-0309 claim 23 (b)): resumed when engaged (which it then no longer is)
+/// or in *guard*, else removed.
+fn refresh_attack_move(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(ob) = w.obj_mut(id) else { return };
     let Some(mem) = ob.attack_move else { return };
-    // spec: S-0309 claim 23 (b) (resumed when engaged, or not engaged and in guard)
+    // spec: S-0309 claim 23 (b) (resumed when engaged or in guard; otherwise the memory is removed, with its engaged mark)
     if !(ob.combat.engaged || ob.beh.current == Some(Behaviour::Guard)) {
+        ob.attack_move = None;
+        ob.combat.engaged = false; // spec: S-0309 claim 23 (c) (removing the memory ends the engaged mark)
         return;
     }
     // spec: S-0309 claim 23 (c) (resuming ends the engaged mark)

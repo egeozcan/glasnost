@@ -272,36 +272,99 @@ fn zero_speed_still_approaches() {
     );
 }
 
-// spec: S-0207 claim 19 (a) (a driving vehicle never stops, nor loses its destination or a stored step, because its target came in range; it drives on to its destination)
-#[test]
-fn driving_attacker_keeps_its_move_in_range() {
+/// Drives a CRUSHER in `b` whose target is a sturdy CART at (12, 0)
+/// towards (10, 0) until its destination is gone; returns the world, the
+/// attacker and the target.
+fn drive_with_target(b: Behaviour) -> (World, ObjectId, ObjectId) {
     let r = rules(None, None);
     let mut w = testkit::game_with(&r, SIZE, 3);
-    let (a, t) = duel(&mut w, 0, 12, Behaviour::Attack);
+    let (a, t) = duel(&mut w, 0, 12, b);
     // A sturdy target, so that it outlives the drive.
     w.obj_mut(t).unwrap().health = i32::MAX / 2;
-    let goal = at(10, 0);
-    w.obj_mut(a).unwrap().dest = Some(Target::Cell(goal));
-    let mut in_range_moving = false;
+    w.obj_mut(a).unwrap().dest = Some(Target::Cell(at(10, 0)));
     for _ in 0..400 {
-        let before = w.obj(a).unwrap().path.steps.clone();
         testkit::run(&mut w, 1);
-        let o = w.obj(a).unwrap();
-        if o.dest.is_none() {
-            assert_eq!(o.pos.cell(), goal, "stopped only at the destination");
+        if w.obj(a).unwrap().dest.is_none() {
             break;
         }
-        if approach::in_range(&w, a, Target::Object(t)) {
-            in_range_moving = true;
-            assert_eq!(o.dest, Some(Target::Cell(goal)));
-            // No step is dropped: at most the one just taken is gone.
-            assert!(
-                o.path.steps.len() + 1 >= before.len(),
-                "steps kept: {before:?} -> {:?}",
-                o.path.steps
-            );
-        }
     }
-    assert!(in_range_moving, "the target came in range on the way");
-    assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(t)));
+    (w, a, t)
+}
+
+// spec: S-0207 claim 19 (a) (at a track target, a driving vehicle in attack with a mobile target whose arrival range test passes clears its destination, discards its steps and keeps its target, beginning no further track)
+#[test]
+fn driving_attacker_stops_at_a_track_target_in_range() {
+    let (w, a, t) = drive_with_target(Behaviour::Attack);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, None);
+    assert!(o.path.steps.is_empty());
+    assert_eq!(o.target, Some(Target::Object(t)));
+    assert!(
+        o.pos.x < at(10, 0).x * 256,
+        "stopped short of the destination"
+    );
+    assert_eq!(
+        (o.pos.x.rem_euclid(256), o.pos.y.rem_euclid(256)),
+        (128, 128),
+        "stopped at a track target (a cell centre), not between them"
+    );
+    assert!(glasnost_sim::walk::walker_in_range(&w, a, t));
+}
+
+// spec: S-0207 claim 19 (a) (if a condition fails, range alone does not clear the destination: here the behaviour is move)
+#[test]
+fn driving_mover_keeps_its_move_in_range() {
+    let (w, a, t) = drive_with_target(Behaviour::Move);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.pos.cell(), at(10, 0), "drove on to its destination");
+    assert_eq!(o.target, Some(Target::Object(t)));
+}
+
+/// A CRUSHER of house 0 at (0, 0) in *guard* with no target, guard range 10
+/// cells, and a CART of house 1 at (8, 0): out of weapon range, inside the
+/// guard range.
+fn guard_search(w: &mut World) -> ObjectId {
+    let a = testkit::spawn(w, Kind::Vehicle, "CRUSHER", 0, at(0, 0), 0);
+    testkit::spawn(w, Kind::Vehicle, "CART", 1, at(8, 0), 0);
+    let o = w.obj_mut(a).unwrap();
+    o.beh.current = Some(Behaviour::Guard);
+    o.target = None;
+    o.targeting_timer = 0;
+    a
+}
+
+fn guard_rules() -> Ruleset {
+    let mut r = rules(None, None);
+    r.sim.vehicles.get_mut("CRUSHER").unwrap().guard_range =
+        Some(glasnost_rules::sim::Decimal("10".into()));
+    r
+}
+
+// spec: S-0215 claim 37 (a2) (the per-tick approach follows the per-tick search: a target found by that search is dropped on that very tick when unreachable and out of range, with no destination held)
+// spec: S-0215 claim 33 (b) and (d) (the per-tick search in guard)
+#[test]
+fn per_tick_approach_follows_the_per_tick_search() {
+    let r = guard_rules();
+    // Control: the search finds the target on reachable ground and it is kept.
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let a = guard_search(&mut w);
+    testkit::run(&mut w, 1);
+    assert!(
+        w.obj(a).unwrap().target.is_some(),
+        "control: the search acquires the target"
+    );
+    // Behind the wall: the search alone finds it.
+    let mut w = walled_game(&r);
+    let a = guard_search(&mut w);
+    glasnost_sim::combat::acquire::per_tick(&mut w, a);
+    assert!(w.obj(a).unwrap().target.is_some(), "the search acquires");
+    // Through a tick it is gone by the end of its acquisition tick.
+    let mut w = walled_game(&r);
+    let a = guard_search(&mut w);
+    let before = w.tick;
+    testkit::run(&mut w, 1);
+    let o = w.obj(a).unwrap();
+    assert!(o.targeting_timer > before, "the targeting timer restarted");
+    assert_eq!(o.target, None, "dropped on its acquisition tick");
+    assert_eq!(o.dest, None);
 }

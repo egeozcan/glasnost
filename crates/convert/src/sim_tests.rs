@@ -905,6 +905,16 @@ ROT=300
     assert!(!warned(&w, "Wall ROT"));
 }
 
+/// spec: S-0214 Import mapping (Selectable, on units and buildings)
+#[test]
+fn selectable_flag() {
+    let base = "[VehicleTypes]\n1=Cart\n[BuildingTypes]\n1=Door\n\
+                [Cart]\nSelectable=no\n[Door]\nSelectable=no\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.vehicles["Cart"].selectable, Some(false));
+    assert_eq!(s.buildings["Door"].selectable, Some(false));
+}
+
 /// spec: S-0214 Import mapping (Teleporter); S-0215 Import mapping (DeployTime and GateCloseDelay, game minutes)
 #[test]
 fn teleporter_and_gate_times() {

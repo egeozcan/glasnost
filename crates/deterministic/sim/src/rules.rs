@@ -210,9 +210,50 @@ pub struct BuildingRules {
     pub building: crate::combat::data::BuildingCombat,
     /// The kind of object it makes, for a factory building (S-0403 Terms).
     pub factory: Option<FactoryKind>,
+    /// The imported factory category, producing or not (S-0003 claim 21;
+    /// S-0213 claim 13, S-0214 claim 17); `None` for no factory.
+    pub factory_category: Option<FactoryCategory>,
     /// The naval flag (S-0403 Terms: a naval factory building of vehicles;
     /// S-0406 claim 3 d).
     pub naval: bool,
+}
+
+/// A building's imported factory category (S-0003 claim 21): one of the
+/// four producing kinds, or a recognised category that produces none of
+/// them (S-0214 claim 17).
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub enum FactoryCategory {
+    /// A producing kind.
+    Produces(FactoryKind),
+    /// The terrain-type word.
+    Terrain,
+    /// The infantry-object word.
+    InfantryObject,
+    /// The vehicle-object word.
+    VehicleObject,
+    /// The aircraft-object word.
+    AircraftObject,
+    /// The building-object word.
+    BuildingObject,
+}
+
+impl FactoryCategory {
+    /// The category of our format's factory word.
+    pub fn from_word(w: &str) -> Option<Self> {
+        if let Some(k) = FactoryKind::from_word(w) {
+            return Some(Self::Produces(k));
+        }
+        Some(match w {
+            "terrain" => Self::Terrain,
+            "infantry_object" => Self::InfantryObject,
+            "vehicle_object" => Self::VehicleObject,
+            "aircraft_object" => Self::AircraftObject,
+            "building_object" => Self::BuildingObject,
+            _ => return None,
+        })
+    }
 }
 
 /// The kind of object a factory building makes (S-0403 Terms, *factory
@@ -1351,9 +1392,12 @@ fn building_rules(
     };
     // spec: S-0403 Terms and Import mapping (Factory: the kind of object named; absent: none), S-0403 Import mapping (Naval absent: no)
     let factory = bt.factory.as_deref().and_then(FactoryKind::from_word);
+    // spec: S-0214 Import mapping (Factory: the imported category, including recognised non-producing ones; absent: no factory)
+    let factory_category = bt.factory.as_deref().and_then(FactoryCategory::from_word);
     let naval = bt.naval.unwrap_or(false);
     BuildingRules {
         factory,
+        factory_category,
         naval,
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),

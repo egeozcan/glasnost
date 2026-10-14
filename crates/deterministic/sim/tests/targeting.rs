@@ -802,3 +802,117 @@ mod r12 {
         assert_eq!(toggle(ghost).selection, None);
     }
 }
+
+mod r14 {
+    use super::*;
+    use crate::common::{Scene, cell, run};
+    use glasnost_rules::sim::BuildingType;
+
+    /// Buildings of house 0 with the given factory words, one per cell
+    /// (2k, 0); returns the world and the buildings in that order.
+    fn buildings(types: &[(&str, Option<&str>, bool)]) -> (World, Vec<ObjectId>) {
+        let mut s = Scene::new();
+        for (i, (n, factory, cloning)) in types.iter().enumerate() {
+            s.building(
+                n,
+                BuildingType {
+                    strength: Some(300),
+                    foundation: Some([1, 1]),
+                    factory: factory.map(str::to_owned),
+                    cloning: Some(*cloning),
+                    ..Default::default()
+                },
+            );
+            s.place_structure(0, n, cell(2 * i as i32, 0));
+        }
+        let mut w = s.build();
+        run(&mut w, 1);
+        let ids = (0..types.len())
+            .map(|i| {
+                w.objects
+                    .values()
+                    .find(|o| o.pos.cell() == cell(2 * i as i32, 0))
+                    .unwrap()
+                    .id
+            })
+            .collect();
+        (w, ids)
+    }
+
+    fn deploy(w: &World, b: ObjectId) -> Vec<Order> {
+        targeting::click(w, ALPHA, &[b], ClickOn::Object(b), Modifiers::default()).orders
+    }
+
+    // spec: S-0214 claim 17 (a recognised non-producing category counts as factory-marked for rows B3 and B5 and table M's deploy row)
+    // spec: S-0214 table B rows B3 and B5, table M part 3 (deploy: a primary order if factory-marked)
+    // spec: S-0213 claim 13 (the primary order: any category but no factory; it clears others of exactly the same category)
+    #[test]
+    fn factory_marked_deploy_and_primary() {
+        let (mut w, ids) = buildings(&[
+            ("TESTFACT", Some("vehicle"), false),
+            ("TESTTERR", Some("terrain"), false),
+            ("TESTTERR2", Some("terrain"), false),
+            ("TESTPLAIN", None, false),
+        ]);
+        let (fact, terr, terr2, plain) = (ids[0], ids[1], ids[2], ids[3]);
+        for b in [fact, terr, terr2] {
+            assert_eq!(deploy(&w, b), vec![Order::Primary { actor: b }]);
+        }
+        assert!(deploy(&w, plain).is_empty(), "no factory: nothing");
+        let primary = |w: &World, b: ObjectId| w.obj(b).unwrap().econ.building.primary;
+        // Past the order block of the game start (S-0213 claim 1).
+        while w.tick <= w.orders_blocked_through {
+            run(&mut w, 1);
+        }
+        for b in [fact, terr, plain] {
+            assert!(glasnost_sim::orders::issue(
+                &mut w,
+                ALPHA,
+                Order::Primary { actor: b }
+            ));
+        }
+        run(&mut w, 1);
+        assert!(primary(&w, fact) && primary(&w, terr));
+        assert!(!primary(&w, plain), "the no-factory value is not changed");
+        // B3: already primary, nothing.
+        assert!(deploy(&w, terr).is_empty());
+        // The second terrain-category building takes the mark from the first, not from the vehicle factory.
+        assert!(glasnost_sim::orders::issue(
+            &mut w,
+            ALPHA,
+            Order::Primary { actor: terr2 }
+        ));
+        run(&mut w, 1);
+        assert!(primary(&w, terr2) && !primary(&w, terr) && primary(&w, fact));
+    }
+
+    // spec: S-0214 Terms (rally-capable: a factory of infantry or vehicles, a cloning building or a repair depot) and claim 17 (a non-producing category alone does not grant it, nor cancels cloning)
+    #[test]
+    fn rally_capable_by_category() {
+        let (w, ids) = buildings(&[
+            ("TESTBARR", Some("infantry"), false),
+            ("TESTTERR", Some("terrain"), false),
+            ("TESTCLONE", Some("infantry_object"), true),
+            ("TESTAIR", Some("aircraft"), false),
+        ]);
+        let spot = |b: ObjectId| {
+            targeting::click(
+                &w,
+                ALPHA,
+                &[b],
+                ClickOn::Cell(cell(3, 4)),
+                Modifiers::default(),
+            )
+            .orders
+            .iter()
+            .any(|o| matches!(o, Order::GuardSpot { .. }))
+        };
+        assert!(spot(ids[0]), "a factory of infantry");
+        assert!(!spot(ids[1]), "a non-producing category alone");
+        assert!(
+            spot(ids[2]),
+            "a cloning building of a non-producing category"
+        );
+        assert!(!spot(ids[3]), "a factory of aircraft");
+    }
+}
