@@ -2,7 +2,7 @@
 id: S-0005
 title: Data file precedence (loose files, archive mount order, name lookup)
 topic: rules-import
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,8 +23,8 @@ is matched inside an archive, and which copy of each stock rules, art and game-m
 therefore reads; how those files are then layered is S-0006. Sample-bank and announcement-file
 lookup is included; sample selection is S-0701. This revision's implementation scope is skirmish.
 Older campaign and network references are deferred context, not requirements for those modes.
-Font-file lookup is included in claim 18a; font encoding and drawing are outside this spec.
-Q-0501 remains open for a separately scoped font-format contract.
+Font-file lookup is included in claim 18a; S-0014 claims 1–3 supply the font's binary
+layout. S-0213 claim 25 owns status-text use and metrics.
 
 ## Terms
 
@@ -536,7 +536,8 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     resolved by the ordinary loose-file and archive precedence of claims 1 to 8. With stock
     data and no loose override, it comes from `local.mix`, nested inside `ra2.mix`.
     S-0213 claim 25 owns status-text metrics, fallback use and line splitting.
-    This claim supplies only the file identity and precedence, not its binary encoding.
+    This claim supplies only the file identity and precedence; S-0014 claims 1–3
+    supply its binary layout.
     - Backing: `measurable` (Scenario M26)
     - Confidence: high
 
@@ -981,7 +982,7 @@ regard to letter case):
 | game-mode files named in the mode list | rules layer of the selected mode (S-0006) | `localmd.mix` |
 | `uimd.ini` | interface layout file (claim 16a) | `localmd.mix` |
 | `keyboardmd.ini` | keyboard file | `langmd.mix` |
-| `game.fnt` | bitmap font used by S-0213 claim 25; file identity and precedence only (claim 18a) | `local.mix`, inside `ra2.mix`; no host-font substitution when missing (S-0213 claim 25) |
+| `game.fnt` | bitmap font used by S-0213 claim 25; file identity and precedence only (claim 18a), binary layout in S-0014 claims 1–3 | `local.mix`, inside `ra2.mix`; no host-font substitution when missing (S-0213 claim 25) |
 | `langrule.ini` | language rules file (claim 21) | absent |
 | `rulemd*.ini` (loose only) | alternative rules candidates (claim 20) | absent |
 | `ra2md.ini` (loose only) | settings file | loose |
@@ -2166,11 +2167,3 @@ mean those sides' names as the stock side list writes them.
   at the first request may be used together with the picture of a copy read later. What is drawn when
   the two copies differ in number of image frames or size is not specified; the scenarios avoid it by keeping both
   the same.
-
-## Questions for the project lead
-
-- Q-0501 needs an assigned formats-spec owner for the font's binary encoding, and confirmation
-  of where its detailed drawing contract belongs. Neither is supplied here. The earlier
-  assertion that an unspecified public font format suffices is withdrawn. S-0213 claim 25
-  still owns status-text use and metrics, but does not supply the missing file layout.
-  Q-0501 remains open pending that contract; this draft must not be used to close it.
