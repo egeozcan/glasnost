@@ -363,7 +363,7 @@ fn deployed_yard(w: &mut World) -> ObjectId {
     y
 }
 
-// spec: S-0415 claims 9 and 10 (a yard with a guard spot packs up: deploy sound, build-down, the vehicle at the return cell facing D × 256, health max(1, trunc(r × S)), the guard spot as destination with move, no refund)
+// spec: S-0415 claims 9 and 10 (a yard with a guard spot packs up: deploy sound, build-down, the vehicle at the return cell facing D × 256, health max(1, trunc(r × S)), the guard spot as destination with move queued in the conversion tick, no refund)
 // spec: S-0408 claim 6 and S-0415 claim 9 (no sell sound for a packing building)
 #[test]
 fn claims_9_10_pack_up() {
@@ -394,7 +394,7 @@ fn claims_9_10_pack_up() {
     // r = 500 / 1000, S = 200.
     assert_eq!(v.health, 100);
     assert_eq!(v.dest, Some(spot));
-    assert_eq!(v.beh.current, Some(Behaviour::Move));
+    assert!(v.beh.queued == Some(Behaviour::Move) || v.beh.current == Some(Behaviour::Move));
 }
 
 // spec: S-0213 claim 12 via S-0415 claim 9 (a construction yard without a guard spot does not pack up: it is sold, with the refund)

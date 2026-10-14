@@ -1,5 +1,6 @@
 //! Claim tests for slave miners and their slaves (S-0402 claims 14 and 19
-//! to 25, F7; S-0312 claim 30; S-0408 claim 10a; S-0213 claim 8 and table
+//! to 28, F7; S-0312 claims 30 and 31; S-0408 claim 10a; S-0415 claim 11;
+//! S-0213 claim 8 and table
 //! T3 (h); S-0209 claim 4 row WP2) on synthetic data: an invented slave
 //! infantry type, slave-miner vehicle and building types and values, no
 //! stock data. Houses Alpha (0) and Beta (1) of the testkit's sandbox game,
@@ -58,6 +59,16 @@ fn rules() -> Ruleset {
         ..Default::default()
     };
     slave.econ.harvest_rate = Some(3);
+    // A cheer sequence, so that a cheer request (S-0107 claim 6) is seen.
+    slave.sequences.insert(
+        "cheer".into(),
+        glasnost_rules::sim::SequenceEntry {
+            start: 0,
+            count: 8,
+            multiplier: 0,
+            direction: None,
+        },
+    );
     r.sim.infantry.insert("SLAVE".into(), slave);
     for (n, into) in [("SMV", "SMB"), ("SMV2", "SMB2")] {
         let mut v = wheel();
@@ -247,7 +258,7 @@ fn claim_19_no_count() {
     assert!(group(&w, m).members.is_empty());
 }
 
-// spec: S-0402 claims 21 and 22 (a deployed master with a short-scan field works; each ready slave is offered the foundation cell (W − 1, ⌊H/2⌋) in reverse creation order, one ranged draw each)
+// spec: S-0402 claims 21, 22 and 27 (an at-rest deployed group enters checking the field at its first update, without a check or emergence; at the next update a short-scan field keeps it and each ready slave is offered the foundation cell (W − 1, ⌊H/2⌋) in reverse slave-place order, one ranged draw each, facing 0)
 #[test]
 fn claim_21_building_emergence() {
     let r = rules();
@@ -256,22 +267,30 @@ fn claim_21_building_emergence() {
     let b = place_building(&mut w, "SMB", 0, at(1, -1));
     let ids = slaves::slaves_of(&w, b);
     let created = w.tick;
-    let mut draws = 0;
     while group(&w, b).state == GroupState::AtRest {
-        assert!(on_map(&w, b).is_empty());
+        testkit::run(&mut w, 1);
+    }
+    // The first update is in the tick numbered 10 after the creation tick's.
+    assert_eq!(w.tick - created, 10 + 1);
+    assert_eq!(group(&w, b).state, GroupState::CheckingField);
+    assert!(on_map(&w, b).is_empty());
+    let mut draws = 0;
+    while on_map(&w, b).is_empty() {
         let before = w.rng.taken();
         testkit::run(&mut w, 1);
         draws = w.rng.taken() - before;
     }
-    // The first update is in the tick numbered 10 after the creation tick's.
-    assert_eq!(w.tick - created, 10 + 1);
-    assert_eq!(group(&w, b).state, GroupState::Working);
+    assert_eq!(w.tick - created, 20 + 1);
+    // spec: S-0402 claim 27 (checking the field: a found field keeps the group checking)
+    assert_eq!(group(&w, b).state, GroupState::CheckingField);
     let out = on_map(&w, b);
     assert_eq!(out.len(), SLAVES as usize);
     let unloading = at(3, 0);
     for &s in &out {
         assert_eq!(w.obj(s).unwrap().pos.cell(), unloading);
         assert_eq!(w.obj(s).unwrap().target, Some(Target::Object(b)));
+        // spec: S-0402 claim 21 (facing 0, map north)
+        assert_eq!(w.body_facing(s), 0);
     }
     // Reverse initial creation order in the update order.
     let order: Vec<ObjectId> = w
@@ -417,6 +436,35 @@ fn claim_22_directed_harvest_deploys() {
     assert_eq!(slaves::slaves_of(&w, b).len(), SLAVES as usize, "{g:?}");
 }
 
+// spec: S-0402 claim 22 (at each processing of harvest: with a destination a site search near it, move to the site and travelling; without one guard queued, at rest with last-rest the current tick; in every case the standard delay with its one ranged draw, S-0215 claim 6)
+#[test]
+fn claim_22_harvest_processing() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
+    testkit::run(&mut w, 3);
+    w.obj_mut(m).unwrap().beh.queued = None;
+    w.obj_mut(m).unwrap().beh.current = Some(Behaviour::Harvest);
+    let before = w.rng.taken();
+    assert!(slaves::process_harvest(&mut w, m).is_some());
+    assert_eq!(w.rng.taken() - before, 1);
+    assert_eq!(w.obj(m).unwrap().beh.queued, Some(Behaviour::Guard));
+    assert_eq!(group(&w, m).state, GroupState::AtRest);
+    assert_eq!(group(&w, m).last_rest, w.tick);
+    w.obj_mut(m).unwrap().dest = Some(Target::Cell(at(6, 0)));
+    for _ in 0..2 {
+        let before = w.rng.taken();
+        assert!(slaves::process_harvest(&mut w, m).is_some());
+        assert_eq!(w.rng.taken() - before, 1);
+        assert_eq!(group(&w, m).state, GroupState::Travelling);
+        let Some(Target::Cell(site)) = w.obj(m).unwrap().dest else {
+            panic!("a site")
+        };
+        assert_ne!(site, at(6, 0));
+        // The next processing searches again, near the site now held.
+    }
+}
+
 // spec: S-0402 claim 24 (the top-left cell of a free W × H rectangle near the centre, no overlay; the vehicle destination shifted by one along each axis whose size exceeds 2)
 #[test]
 fn claim_24_site_search() {
@@ -460,7 +508,7 @@ fn f7_relocation_comparison() {
     assert!(!f7(0, p(0, 0), p(0, 0), p(32767, 32767)));
 }
 
-// spec: S-0312 claim 30 (a killing hit on a master: hidden slaves are removed, slaves on the map lose their master and go to the attacker's house, target and destination cleared and guard queued)
+// spec: S-0312 claim 30 (a killing hit on a master: hidden slaves are removed, slaves on the map lose their master and go to the attacker's house, target and destination cleared, guard queued and cheer requested)
 #[test]
 fn claim_30_destroyed_masters() {
     let r = rules();
@@ -491,6 +539,11 @@ fn claim_30_destroyed_masters() {
         assert_eq!(o.target, None);
         assert_eq!(o.dest, None);
         assert!(o.beh.queued == Some(Behaviour::Guard) || o.beh.current == Some(Behaviour::Guard));
+        // spec: S-0312 claim 30 (a successful transfer requests cheer after the reset)
+        assert_eq!(
+            o.infantry.as_ref().unwrap().seq,
+            Some(glasnost_sim::infantry::Seq::Cheer)
+        );
     }
 }
 
@@ -523,9 +576,22 @@ fn claim_10a_sold_master() {
     }
 }
 
-// spec: S-0402 claim 22 and S-0415 claim 10 (packing up hands the group to the vehicle, no new slaves; its first group update recalls the slaves, which go inside, and starts field seeking)
+/// The vehicle master of the game (after a pack-up).
+fn vehicle_master(w: &World) -> ObjectId {
+    w.objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle && o.econ.group.is_some())
+        .map(|o| o.id)
+        .expect("the vehicle master")
+}
+
+fn recalled(w: &World, s: ObjectId) -> bool {
+    slaves::slave_of(w, s).is_some_and(|x| x.recalled)
+}
+
+// spec: S-0402 claim 28 and S-0415 claim 10 (a manual pack-up on clear ground: the vehicle takes the same slaves; a group still checking the field becomes at rest at the vehicle's update, last-rest that update, with no recall)
 #[test]
-fn claim_22_pack_up_transfers_and_recalls() {
+fn claim_28_manual_pack_up_rests_without_recall() {
     let r = rules();
     let mut w = game_on(&r, &field(5, -1, 5), false);
     let b = working_building(&mut w);
@@ -533,22 +599,304 @@ fn claim_22_pack_up_transfers_and_recalls() {
     unblock(&mut w);
     assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
     until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
-    let v = w
+    let v = vehicle_master(&w);
+    assert_eq!(slaves::slaves_of(&w, v), ids);
+    assert_eq!(group(&w, v).state, GroupState::CheckingField);
+    let t = until(&mut w, 20, |w| {
+        group(w, v).state != GroupState::CheckingField
+    })
+    .expect("updated");
+    let g = group(&w, v);
+    assert_eq!(g.state, GroupState::AtRest);
+    assert_eq!(g.last_rest, t - 1);
+    for &s in &ids {
+        assert!(!recalled(&w, s));
+    }
+}
+
+/// A deployed SMB at top-left `at(0, −1)` with no resource anywhere, run
+/// until its group's second update; and its top-left cell A.
+fn no_field_building(r: &Ruleset) -> (World, ObjectId, CellXY) {
+    let mut w = game_on(r, &[], false);
+    let b = place_building(&mut w, "SMB", 0, at(0, -1));
+    let a = w.obj(b).unwrap().pos.cell();
+    until(&mut w, 30, |w| {
+        w.obj(b).is_none() || group(w, b).state == GroupState::CheckingField
+    })
+    .expect("checking");
+    (w, b, a)
+}
+
+// spec: S-0402 claim 25 (no field and no site: the comparison uses cell (0, 0), F7 holds, an automatic pack-up with A remembered); S-0415 claim 10 (the vehicle gets A as its destination with move queued in the conversion tick)
+// spec: S-0402 claims 22 and 27 (the packing group at the first update that sees the vehicle: recall and field seeking, no search in that update)
+#[test]
+fn claim_25_failed_search_packs_toward_origin() {
+    let r = rules();
+    let (mut w, b, a) = no_field_building(&r);
+    assert!(w.rules().quirks.slave_relocation_failed_search_origin);
+    until(&mut w, 15, |w| {
+        w.obj(b).is_none() || group(w, b).state == GroupState::Packing
+    })
+    .expect("packing");
+    // spec: S-0402 claim 25 (with a packing request no emergence)
+    assert!(on_map(&w, b).is_empty());
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(a)));
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    assert_eq!(group(&w, v).state, GroupState::Packing);
+    assert_eq!(group(&w, v).remembered, None);
+    until(&mut w, 20, |w| group(w, v).state != GroupState::Packing).expect("updated");
+    assert_eq!(group(&w, v).state, GroupState::FieldSeeking);
+}
+
+// spec: S-0402 claim 25 (quirks.slave_relocation_failed_search_origin off: a failed field or site search leaves the miner deployed; with no packing request, emergence still happens and the check repeats at every update)
+#[test]
+fn claim_25_quirk_off_stays_deployed() {
+    let mut r = rules();
+    r.globals.quirks.slave_relocation_failed_search_origin = false;
+    let (mut w, b, _) = no_field_building(&r);
+    until(&mut w, 15, |w| !on_map(w, b).is_empty()).expect("emerged");
+    testkit::run(&mut w, 100);
+    assert!(w.obj(b).is_some());
+    assert_eq!(group(&w, b).state, GroupState::CheckingField);
+}
+
+// spec: S-0402 claim 26 (a deployed master's scans centre on the cell of its reference point and need only tiberium land: ore two cells beyond the centre of a 3 × 3 master, outside the reach of its top-left and unloading cells, is a short-scan field)
+#[test]
+fn claim_26_deployed_scan_centre() {
+    let mut r = rules();
+    r.sim.general.economy.slave_miner_short_scan = dec("3");
+    r.sim.general.economy.slave_miner_long_scan = dec("0");
+    let mut w = game_on(&r, &[(at(-1, 2), ORE, 5)], false);
+    let b = place_building(&mut w, "SMB", 0, at(0, -1));
+    until(&mut w, 30, |w| !on_map(w, b).is_empty()).expect("emerged");
+    assert_eq!(group(&w, b).state, GroupState::CheckingField);
+}
+
+// spec: S-0402 claim 27 (an at-rest group of a building whose current behaviour is selling remains at rest)
+#[test]
+fn claim_27_at_rest_while_selling() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    unblock(&mut w);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    let due = group(&w, b).next_update;
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    while w.tick <= due {
+        testkit::run(&mut w, 1);
+        if w.obj(b).is_none() {
+            break;
+        }
+        assert_eq!(group(&w, b).state, GroupState::AtRest);
+        assert!(on_map(&w, b).is_empty());
+    }
+    assert!(
+        w.tick > due,
+        "the building was gone before its first update"
+    );
+}
+
+// spec: S-0402 claim 28 (the first processing of selling or packing of a slave master whose remembered destination is a resource-land cell other than its own top-left cell: the directed site rule; a found site replaces the destination, the slaves are recalled, the group enters packing); S-0408 claim 6; S-0415 claim 10 (the vehicle's destination)
+#[test]
+fn claim_28_directed_pack_up() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let out = on_map(&w, b);
+    unblock(&mut w);
+    w.obj_mut(b).unwrap().guard_spot = Some(Target::Cell(at(6, 0)));
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    until(&mut w, 30, |w| group(w, b).state == GroupState::Packing).expect("packing");
+    let Some(Target::Cell(site)) = w.obj(b).unwrap().guard_spot else {
+        panic!("a site")
+    };
+    assert_ne!(site, at(6, 0));
+    for &s in &out {
+        assert!(recalled(&w, s));
+    }
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(site)));
+}
+
+// spec: S-0402 claim 28 (a remembered destination that is not resource land: no change, no recall)
+#[test]
+fn claim_28_non_resource_destination_changes_nothing() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let out = on_map(&w, b);
+    unblock(&mut w);
+    let spot = Some(Target::Cell(at(-5, -5)));
+    w.obj_mut(b).unwrap().guard_spot = spot;
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    until(&mut w, 30, |w| {
+        w.obj(b)
+            .is_some_and(|o| o.beh.current == Some(Behaviour::Selling))
+    })
+    .expect("selling");
+    testkit::run(&mut w, 1);
+    assert_ne!(group(&w, b).state, GroupState::Packing);
+    assert_eq!(w.obj(b).unwrap().guard_spot, spot);
+    for &s in &out {
+        assert!(!recalled(&w, s));
+    }
+}
+
+// spec: S-0402 claim 26 (a slave's harvest processing: on a non-resource cell, guard queued with a 1-tick delay; capacity 0, guard queued with a 1-tick delay and nothing taken; a negative capacity under quirks.slave_negative_capacity_stalls stays in harvest with delay h and takes nothing, with the quirk off it is treated as 0)
+#[test]
+fn claim_26_slave_processing_capacity() {
+    for (storage, stalls) in [(0, true), (-1, true), (-1, false)] {
+        let mut r = rules();
+        r.sim.infantry.get_mut("SLAVE").unwrap().storage = Some(storage);
+        r.globals.quirks.slave_negative_capacity_stalls = stalls;
+        let mut w = game_on(&r, &field(5, -1, 5), false);
+        let b = working_building(&mut w);
+        let s = on_map(&w, b)[0];
+        if let Some(o) = w.obj_mut(s) {
+            o.dest = None;
+            o.beh.queued = None;
+        }
+        let c = w.obj(s).unwrap().pos.cell();
+        // A non-resource cell: guard queued, 1 tick.
+        assert_eq!(slaves::process_slave(&mut w, s), 1);
+        assert_eq!(w.obj(s).unwrap().beh.queued, Some(Behaviour::Guard));
+        w.obj_mut(s).unwrap().beh.queued = None;
+        put(&mut w, c, ORE, 5);
+        let d = slaves::process_slave(&mut w, s);
+        assert_eq!(stage(&w, c), Some(5));
+        assert!(
+            slaves::slave_of(&w, s)
+                .unwrap()
+                .load
+                .iter()
+                .all(|&x| x == 0)
+        );
+        if storage < 0 && stalls {
+            assert_eq!(d, 3, "harvest rate h");
+            assert_eq!(w.obj(s).unwrap().beh.queued, None);
+        } else {
+            assert_eq!(d, 1);
+            assert_eq!(w.obj(s).unwrap().beh.queued, Some(Behaviour::Guard));
+        }
+    }
+}
+
+// spec: S-0312 claim 31 (a removal without a killing hit: hidden slaves destroyed without credit, a loss each; slaves on the map go to the first civilian-side house, target and destination reset, guard queued and cheer requested)
+#[test]
+fn s0312_claim_31_removed_master() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), true);
+    let v = place_vehicle(&mut w, "SMV", 0, at(-8, 8), 0);
+    let hidden = slaves::slaves_of(&w, v);
+    let b = working_building(&mut w);
+    let out = on_map(&w, b);
+    let lost = stats::of(&w, HouseId(0)).losses;
+    glasnost_sim::objects::remove(&mut w, v);
+    for &s in &hidden {
+        assert!(w.obj(s).is_none());
+    }
+    assert_eq!(stats::of(&w, HouseId(0)).losses, lost + SLAVES);
+    glasnost_sim::objects::remove(&mut w, b);
+    for &s in &out {
+        let o = w.obj(s).unwrap();
+        assert_eq!(o.owner, Some(HouseId(2)));
+        assert!(!slaves::is_slave(&w, s));
+        assert_eq!(o.target, None);
+        assert_eq!(o.dest, None);
+        assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+        assert_eq!(
+            o.infantry.as_ref().unwrap().seq,
+            Some(glasnost_sim::infantry::Seq::Cheer)
+        );
+    }
+}
+
+// spec: S-0312 claim 31 (no recipient: the bare hit of the slave's health with the demolition warhead, no reset; a warhead that does no damage leaves it alive with its owner)
+#[test]
+fn s0312_claim_31_no_recipient() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let out = on_map(&w, b);
+    glasnost_sim::objects::remove(&mut w, b);
+    for &s in &out {
+        assert!(w.obj(s).is_none_or(|o| o.health == 0 || o.combat.killed));
+    }
+    let mut r = rules();
+    r.sim.warheads.get_mut("DEMO").unwrap().verses =
+        Some((0..11).map(|_| Decimal("0".into())).collect());
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let out = on_map(&w, b);
+    glasnost_sim::objects::remove(&mut w, b);
+    for &s in &out {
+        let o = w.obj(s).unwrap();
+        assert!(o.health > 0);
+        assert_eq!(o.owner, Some(HouseId(0)));
+        assert!(!slaves::is_slave(&w, s));
+        assert_ne!(
+            o.infantry.as_ref().unwrap().seq,
+            Some(glasnost_sim::infantry::Seq::Cheer)
+        );
+    }
+}
+
+/// A working SMB whose return cell holds another house's vehicle, sold:
+/// the pack-up fails (S-0415 claims 11 and 12). The old slaves on the map
+/// and the world.
+fn failed_pack_up(r: &Ruleset) -> (World, Vec<ObjectId>, Vec<ObjectId>) {
+    let mut w = game_on(r, &field(5, -1, 5), true);
+    let b = working_building(&mut w);
+    let ids = slaves::slaves_of(&w, b);
+    let out = on_map(&w, b);
+    unblock(&mut w);
+    place_vehicle(&mut w, "HARV", 1, at(1, 0), 0);
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("removed");
+    (w, ids, out)
+}
+
+// spec: S-0415 claim 11 and S-0312 claim 31 (a refused pack-up does not transfer the old group: its slaves on the map go to the civilian-side house; the retained vehicle keeps its own newly created group, off the map)
+#[test]
+fn s0415_claim_11_failed_pack_up_ends_old_group() {
+    let r = rules();
+    let (w, ids, out) = failed_pack_up(&r);
+    for &s in &out {
+        assert_eq!(w.obj(s).unwrap().owner, Some(HouseId(2)));
+        assert!(!slaves::is_slave(&w, s));
+    }
+    let smv = w.rules().index_of(Kind::Vehicle, "SMV").unwrap();
+    let kept: Vec<_> = w
         .objects
         .values()
-        .find(|o| o.kind == Kind::Vehicle && o.econ.group.is_some())
-        .map(|o| o.id)
-        .expect("the vehicle master");
-    assert_eq!(slaves::slaves_of(&w, v), ids);
-    until(&mut w, 20, |w| {
-        ids.iter()
-            .all(|&s| !w.obj(s).unwrap().on_map || slaves::slave_of(w, s).unwrap().recalled)
-    })
-    .expect("recalled");
-    until(&mut w, 600, |w| {
-        group(w, v).members.iter().all(|m| m.inside)
-    })
-    .expect("inside");
+        .filter(|o| o.kind == Kind::Vehicle && o.type_index == smv)
+        .collect();
+    assert_eq!(kept.len(), 1);
+    assert!(!kept[0].on_map);
+    let new = slaves::slaves_of(&w, kept[0].id);
+    assert_eq!(new.len(), SLAVES as usize);
+    assert!(new.iter().all(|s| !ids.contains(s)));
+}
+
+// spec: S-0415 claim 11 (quirks.failed_packup_keeps_vehicle off: neither the vehicle nor a group of its own remains; the old group still ends by S-0312 claim 31)
+#[test]
+fn s0415_claim_11_failed_pack_up_quirk_off() {
+    let mut r = rules();
+    r.globals.quirks.failed_packup_keeps_vehicle = false;
+    let (w, _, out) = failed_pack_up(&r);
+    for &s in &out {
+        assert_eq!(w.obj(s).unwrap().owner, Some(HouseId(2)));
+    }
+    let smv = w.rules().index_of(Kind::Vehicle, "SMV").unwrap();
+    assert!(
+        w.objects
+            .values()
+            .all(|o| o.kind != Kind::Vehicle || o.type_index != smv)
+    );
+    assert!(w.objects.values().all(|o| o.econ.group.is_none()));
 }
 
 /// A vehicle master whose slaves are out (handed over from a working
@@ -557,13 +905,6 @@ fn vehicle_with_slaves_out(w: &mut World) -> (ObjectId, Vec<ObjectId>) {
     let b = working_building(w);
     let v = place_vehicle(w, "SLAVEM", 0, at(-8, 8), 0);
     slaves::transfer(w, b, v);
-    w.obj_mut(v)
-        .unwrap()
-        .econ
-        .group
-        .as_mut()
-        .unwrap()
-        .pending_seek = false;
     let out = on_map(w, v);
     assert_eq!(out.len(), SLAVES as usize);
     unblock(w);

@@ -604,6 +604,8 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
                 sell_upgrade(w, id, u);
                 return SELLING_DELAY;
             }
+            // spec: S-0408 claim 6 and S-0402 claim 28 (a slave-master building's first processing: the conditional resource-directed site rule)
+            crate::econ::slaves::first_sale_processing(w, id);
             // spec: S-0408 claim 6 (first processing: docked units told to leave; a bunkered vehicle let out; burning animations end) and S-0402 claim 11 (a refinery's harvesters)
             crate::econ::harvest::refinery_sold(w, id);
             w.note("S-0408 claim 6: bunkered vehicles, other docked services and burning animations are other topics' (seams)");
@@ -737,6 +739,8 @@ fn finish(w: &mut World, id: ObjectId, packs: bool) {
     // spec: S-0408 claim 6 (the refund, then stored resources, and the building is removed)
     credit(w, house, amount);
     // spec: S-0408 claim 10 (stored resources: no skirmish path fills a building's storage; nothing stored)
+    // spec: S-0408 claim 10a (a true sale's slave cleanup, as a consequence of removing the master; its exact tick against the refund is open)
+    crate::econ::slaves::master_sold(w, id);
     crate::objects::remove(w, id);
 }
 

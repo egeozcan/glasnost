@@ -6858,6 +6858,16 @@
           "type": "boolean",
           "default": true
         },
+        "slave_negative_capacity_stalls": {
+          "description": "A slave of negative storage stays in *harvest* on its resource cell\nwithout loading; off: it is treated as a slave of storage 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "slave_relocation_failed_search_origin": {
+          "description": "A deployed slave miner whose long scan finds no field, or whose site\nsearch finds no site, still makes the F7 comparison with cell (0, 0)\nfor the missing result; off: either failure leaves it deployed.",
+          "type": "boolean",
+          "default": true
+        },
         "slow_walker_stall": {
           "description": "A walker of speed 1 heading between east and south stalls.",
           "type": "boolean",

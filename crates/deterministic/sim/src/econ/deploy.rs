@@ -431,7 +431,8 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         // spec: S-0415 claim 10 and F2 (health max(1, trunc(r × S)); the building's experience)
         ob.health = health;
     }
-    super::slaves::transfer(w, id, vid);
+    // spec: S-0415 claims 10 and 11 (the take-over of the slaves requires successful placement: the group is held apart until the return-cell test)
+    let group = super::slaves::detach(w, id);
     crate::objects::remove(w, id);
     // spec: S-0415 claim 12 (the test is made before the vehicle inherits the building's experience or the guard spot)
     let accepted = can_stand(w, vid, c);
@@ -439,21 +440,30 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         ob.combat.experience = o.combat.experience;
     }
     if accepted {
+        // spec: S-0415 claim 10 and S-0402 claim 25 (an automatic pack-up's remembered cell, the building's old top-left cell, is the vehicle's immediate destination; otherwise the guard spot)
+        let automatic = group.as_ref().and_then(|g| g.remembered);
+        let dest = automatic.map(Target::Cell).or(o.guard_spot);
+        if let Some(mut g) = group {
+            g.remembered = None;
+            // spec: S-0415 claim 10 (the vehicle takes over the building's slaves; the group state is unchanged by the conversion, S-0402 claims 22 and 28)
+            super::slaves::attach(w, vid, g);
+        }
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
-        if let Some(ob) = w.obj_mut(vid) {
-            if o.guard_spot.is_some() {
-                // spec: S-0415 claim 10 (a guard spot: the vehicle's destination, with move)
-                ob.beh.force(Behaviour::Move, tick, stale);
-            } else {
-                ob.beh.force(Behaviour::Guard, tick, stale);
-            }
+        if dest.is_none()
+            && let Some(ob) = w.obj_mut(vid)
+        {
+            ob.beh.force(Behaviour::Guard, tick, stale);
         }
         // spec: S-0415 claim 10 (the centre of the return cell, facing D × 256)
         crate::objects::place(w, vid, Pos::centre(c, z), facing_of(d));
-        if let Some(spot) = o.guard_spot {
-            // spec: S-0415 claim 10 and S-0207 claim 20 (a) (the destination given once the vehicle is on the map: a teleporter's mark moves at once)
+        if let Some(spot) = dest {
+            // spec: S-0415 claim 10 and S-0207 claim 20 (a) (the destination given once the vehicle is on the map, in the conversion tick: a teleporter's mark moves at once)
             super::assign_destination(w, vid, Some(spot));
+            if let Some(ob) = w.obj_mut(vid) {
+                // spec: S-0415 claim 10 (the destination with move queued, in the conversion tick: after the placement, so that the placement's fall-back does not replace it)
+                ob.beh.queue(Some(Behaviour::Move));
+            }
         }
         retarget(w, id, vid, false);
     } else {
@@ -469,10 +479,16 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
             h.credits = h.credits.wrapping_add(amount);
         }
+        if let Some(g) = group {
+            // spec: S-0415 claim 11 and S-0312 claim 31 (refusal does not transfer the old group: the building's removal ends it without a killing hit)
+            super::slaves::end_refused(w, g);
+        }
         // spec: S-0415 claim 11 and Edge cases (quirks.failed_packup_keeps_vehicle: the vehicle goes on existing off the map)
-        if !w.rules().quirks.failed_packup_keeps_vehicle {
-            // spec: S-0408 claim 10a (a removal of the master that transfers no group: its slaves are dealt with as after a true sale)
-            super::slaves::master_sold(w, vid);
+        if w.rules().quirks.failed_packup_keeps_vehicle {
+            // spec: S-0415 claim 11 and S-0402 claim 19 (the retained vehicle keeps its own newly created hidden group, not the old slaves; when it is created is Q-0441)
+            super::slaves::created(w, vid);
+        } else {
+            // spec: S-0415 claim 11 (quirk off: the refused vehicle and its new group do not remain)
             w.objects.remove(&vid);
         }
     }

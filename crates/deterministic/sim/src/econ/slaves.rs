@@ -1,9 +1,10 @@
-//! Slave groups (S-0402 claims 14 and 19 to 25): a slave master's hidden
-//! and working slaves, the group update, emergence, the slaves' own
-//! harvest, delivery, regeneration and reload, the slave miner's directed
-//! harvest, field seeking, deployment and relocation, and what becomes of
-//! the slaves when the master is destroyed or sold (S-0312 claim 30,
-//! S-0408 claim 10a).
+//! Slave groups (S-0402 claims 14 and 19 to 28): a slave master's hidden
+//! and working slaves, the group update in slave-place order, emergence,
+//! the slaves' own load steps, delivery, regeneration and reload, the
+//! slave miner's directed harvest, field seeking, deployment and
+//! relocation, and what becomes of the slaves when the master is destroyed,
+//! sold or otherwise removed (S-0312 claims 30 and 31, S-0408 claim 10a,
+//! S-0415 claim 11).
 //!
 //! The interim rules this module takes where the specs leave a case open
 //! are listed in docs/development.md (slave miners).
@@ -30,7 +31,7 @@ pub const PERIOD: i32 = 10; // spec: S-0402 claim 21 (the first group update 10 
 /// The wait after a failed automatic deployment.
 pub const RETRY_WAIT: i32 = 30; // spec: S-0402 claims 21 and 22 (a failed automatic deployment starts a 30-tick wait)
 
-/// The state of a slave group (S-0402 claims 21 and 22).
+/// The state of a slave group (S-0402 claims 21, 22 and 27).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GroupState {
     /// At rest: no slave sent out since the group last came together.
@@ -42,11 +43,18 @@ pub enum GroupState {
     Travelling,
     /// Waiting to retry a failed deployment.
     Retrying,
-    /// Working: ready slaves are offered places.
+    /// Working: a vehicle's ready slaves are offered places; a building
+    /// waits here for the end of its construction state.
     Working,
+    /// Checking the field (a deployed master): the field and relocation
+    /// rule, and emergence unless packing is requested.
+    CheckingField,
+    /// Packing: waiting for the conversion into a vehicle.
+    Packing,
 }
 
-/// One slot of a slave group, in initial creation order.
+/// One slave place of a group (S-0402 Terms, *slave place*), numbered by
+/// initial creation order; a replacement keeps its place.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Member {
     /// The slave, none after it was lost (until its replacement).
@@ -77,15 +85,9 @@ pub struct SlaveGroup {
     pub last_rest: i32,
     /// The tick the next group update becomes due.
     pub next_update: i32,
-    /// The cell remembered at an automatic pack-up (claim 22).
+    /// The cell remembered at an automatic pack-up (claims 22 and 25): the
+    /// building's own top-left cell.
     pub remembered: Option<CellXY>,
-    /// The group came to a vehicle by conversion and has not yet been seen
-    /// by a group update of it (claim 22).
-    pub pending_seek: bool,
-    /// The site the current *harvest* sent the vehicle to, with that
-    /// behaviour's start tick (claim 22): the vehicle drives there in
-    /// *harvest* until *move* can start.
-    pub directed: Option<(i32, CellXY)>,
 }
 
 /// A slave's harvest phase (S-0402 claim 14).
@@ -250,8 +252,6 @@ pub fn created(w: &mut World, id: ObjectId) {
             // spec: S-0402 claim 21 (its first group update becomes due 10 ticks after creation)
             next_update: t.wrapping_add(PERIOD),
             remembered: None,
-            pending_seek: false,
-            directed: None,
         });
     }
 }
@@ -259,14 +259,21 @@ pub fn created(w: &mut World, id: ObjectId) {
 /// A conversion hands the group of `from` to `to` (S-0415 claims 6 and
 /// 10; S-0402 claims 19 and 22).
 pub fn transfer(w: &mut World, from: ObjectId, to: ObjectId) {
-    let Some(mut g) = w.obj_mut(from).and_then(|o| o.econ.group.take()) else {
-        return;
-    };
-    let to_vehicle = w.obj(to).is_some_and(|o| o.kind == Kind::Vehicle);
-    if to_vehicle {
-        // spec: S-0402 claim 22 (after conversion the group recalls its slaves and enters field seeking at the first group update that sees the vehicle)
-        g.pending_seek = true;
+    if let Some(g) = detach(w, from) {
+        attach(w, to, g);
     }
+}
+
+/// Takes a master's group off it, to be attached to the object of a
+/// successful conversion or ended (S-0415 claims 10 and 11).
+pub fn detach(w: &mut World, id: ObjectId) -> Option<SlaveGroup> {
+    w.obj_mut(id).and_then(|o| o.econ.group.take())
+}
+
+/// Makes `to` the master of a detached group (S-0415 claims 6 and 10).
+/// The conversion itself does not change the group state (S-0415 claim
+/// 10; S-0402 claims 22, 25 and 28 give the transitions at its updates).
+pub fn attach(w: &mut World, to: ObjectId, g: SlaveGroup) {
     for m in &g.members {
         if let Some(s) = m.id {
             set_slave(w, s, |x| x.master = Some(to));
@@ -279,11 +286,12 @@ pub fn transfer(w: &mut World, from: ObjectId, to: ObjectId) {
 }
 
 /// An object is about to be removed (`crate::objects::remove`): a master
-/// that still has its group frees its slaves as after a sale (S-0408 claim
-/// 10a), and a slave is lost to its master (S-0402 claim 14).
+/// that still has its group ends it as a removal without a killing hit
+/// (S-0312 claim 31), and a slave is lost to its master (S-0402 claim 14).
 pub fn removing(w: &mut World, id: ObjectId) {
-    if is_master(w, id) {
-        master_sold(w, id);
+    if let Some(g) = detach(w, id) {
+        // spec: S-0312 claim 31 (removal without a killing hit ends an untransferred group)
+        end_group(w, g, End::Removed);
     }
     lost(w, id);
 }
@@ -320,7 +328,7 @@ fn civilian_recipient(w: &World) -> Option<HouseId> {
 }
 
 /// A freed slave's guard reset: target and destination cleared, *guard*
-/// queued (S-0312 claim 30; S-0408 claim 10a).
+/// queued (S-0312 claims 30 and 31; S-0408 claim 10a).
 fn free_to_guard(w: &mut World, s: ObjectId) {
     if let Some(ob) = w.obj_mut(s) {
         ob.target = None;
@@ -328,17 +336,29 @@ fn free_to_guard(w: &mut World, s: ObjectId) {
         ob.queued_dests.clear();
         ob.path.steps.clear();
         ob.path.retry_at = 0;
-        // spec: S-0312 claim 30 and S-0408 claim 10a (queued to guard)
+        // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (queued to guard)
         ob.beh.queue(Some(Behaviour::Guard));
     }
     super::assign_destination(w, s, None);
 }
 
-/// Ends a master's group: `hit` is the killing hit (S-0312 claim 30),
-/// none for a removal by sale (S-0408 claim 10a).
-fn end_group(w: &mut World, id: ObjectId, hit: Option<&Hit>) {
-    let Some(g) = w.obj_mut(id).and_then(|o| o.econ.group.take()) else {
-        return;
+/// How a group ends.
+#[derive(Clone, Copy)]
+enum End<'a> {
+    /// A killing hit on the master (S-0312 claim 30).
+    Killed(&'a Hit),
+    /// A true sale of a building master (S-0408 claim 10a).
+    Sold,
+    /// Any other removal of the master without a killing hit, a failed
+    /// pack-up included (S-0312 claim 31; S-0415 claim 11).
+    Removed,
+}
+
+/// Ends a detached group (S-0312 claims 30 and 31; S-0408 claim 10a).
+fn end_group(w: &mut World, g: SlaveGroup, how: End<'_>) {
+    let hit = match how {
+        End::Killed(h) => Some(h),
+        End::Sold | End::Removed => None,
     };
     // spec: S-0312 claim 30 (an attacking house supplied without an attacker object does not stand in for it)
     let attacker = hit.and_then(|h| h.attacker).filter(|&a| w.obj(a).is_some());
@@ -348,65 +368,92 @@ fn end_group(w: &mut World, id: ObjectId, hit: Option<&Hit>) {
         let Some(so) = w.obj(s).cloned() else {
             continue;
         };
-        // spec: S-0312 claim 30 and S-0408 claim 10a (every existing slave loses its master; the group makes no further replacements)
+        // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (every existing slave loses its master; the group makes no further replacements)
         if let Some(ob) = w.obj_mut(s) {
             ob.econ.slave = None;
         }
         if !so.on_map {
-            if let Some(h) = hit {
-                // spec: S-0312 claim 30 (a slave inside is destroyed, credited to the killing hit's known attacker; claim 29's common group of notifications)
-                crate::combat::death::destruction_raises(w, s, h);
-                super::stats::destruction(w, s, attacker);
+            match how {
+                End::Killed(h) => {
+                    // spec: S-0312 claim 30 (a slave inside is destroyed, credited to the killing hit's known attacker; claim 29's common group of notifications)
+                    crate::combat::death::destruction_raises(w, s, h);
+                    super::stats::destruction(w, s, attacker);
+                }
+                End::Removed => {
+                    // spec: S-0312 claim 31 (destroyed without attacker credit, with claim 30's common destruction notifications; no death effects of its own)
+                    crate::combat::death::destruction_raises(w, s, &no_attacker_hit(w, 0));
+                    super::stats::destruction(w, s, None);
+                }
+                // spec: S-0408 claim 10a (a sold master's slave inside is removed without being placed; Q-0440)
+                End::Sold => {}
             }
-            // spec: S-0312 claim 30 and S-0408 claim 10a (a slave inside is removed without being placed)
+            // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (a slave inside is removed without being placed)
             crate::objects::remove(w, s);
             continue;
         }
-        // spec: S-0312 claim 30 (with a known attacker: the attacker's current house, even an ally of the master's; otherwise, and for a sale, the first civilian-side house, S-0408 claim 10a)
+        // spec: S-0312 claim 30 (with a known attacker: the attacker's current house, even an ally of the master's; otherwise the first civilian-side house); claim 31 and S-0408 claim 10a (the first civilian-side house)
         let recipient = match (hit, attacker_house) {
             (Some(_), Some(h)) => Some(h),
             _ => civilian_recipient(w),
         };
-        free_to_guard(w, s);
         match recipient {
             Some(h) => {
+                // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (a transferred slave: target and destination cleared, guard queued)
+                free_to_guard(w, s);
                 if so.owner != Some(h) {
                     if let Some(ob) = w.obj_mut(s) {
                         ob.owner = Some(h);
                     }
                     super::events::owner_changed(w, s, so.owner);
                 }
+                if !matches!(how, End::Sold) {
+                    // spec: S-0312 claims 30 and 31 (a successful transfer requests cheer, S-0107 claim 21, after the target and destination reset; not forced)
+                    crate::infantry::request(w, s, crate::infantry::Seq::Cheer, false);
+                }
             }
             None => {
                 let health = w.obj(s).map_or(0, |o| o.health);
-                let warhead = w.rules().combat.general.c4_warhead;
-                // spec: S-0312 claim 30 and S-0408 claim 10a (no recipient: a hit of its current health with the demolition warhead, no attacker, neither marker)
-                crate::combat::damage::apply(
-                    w,
-                    s,
-                    Hit {
-                        amount: health,
-                        warhead,
-                        distance: 0,
-                        attacker: None,
-                        house: None,
-                        ignore_defences: false,
-                        no_escape: false,
-                    },
-                );
+                // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (no recipient: instead a hit of its current health with the demolition warhead, no attacker, neither marker; no target or destination reset, guard or cheer)
+                crate::combat::damage::apply(w, s, no_attacker_hit(w, health));
             }
         }
     }
 }
 
-/// A killing hit on a master, before its debris (S-0312 claim 30).
-pub fn master_killed(w: &mut World, id: ObjectId, hit: &Hit) {
-    end_group(w, id, Some(hit));
+/// A hit of `amount` with the demolition warhead, no attacker and neither
+/// marker (S-0312 claims 30 and 31; S-0408 claim 10a).
+fn no_attacker_hit(w: &World, amount: i32) -> Hit {
+    Hit {
+        amount,
+        warhead: w.rules().combat.general.c4_warhead,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    }
 }
 
-/// A master removed by a true sale (S-0408 claim 10a).
+/// A killing hit on a master, before its debris (S-0312 claim 30).
+pub fn master_killed(w: &mut World, id: ObjectId, hit: &Hit) {
+    if let Some(g) = detach(w, id) {
+        end_group(w, g, End::Killed(hit));
+    }
+}
+
+/// A building master about to be removed by a true sale (S-0408 claim
+/// 10a), called before its removal.
 pub fn master_sold(w: &mut World, id: ObjectId) {
-    end_group(w, id, None);
+    if let Some(g) = detach(w, id) {
+        end_group(w, g, End::Sold);
+    }
+}
+
+/// The old group of a building whose pack-up failed at its return cell
+/// (S-0415 claim 11): ended as a removal without a killing hit (S-0312
+/// claim 31), not handed to the refused vehicle.
+pub fn end_refused(w: &mut World, g: SlaveGroup) {
+    end_group(w, g, End::Removed);
 }
 
 /// The master's unloading cell (S-0209 Terms; S-0402 claim 14): the cell
@@ -473,8 +520,8 @@ fn move_to(w: &mut World, id: ObjectId, c: CellXY) {
     }
 }
 
-/// The group update of a master, called in its turn (S-0402 claims 21 and
-/// 22).
+/// The group update of a master, called in its turn (S-0402 claims 21,
+/// 22 and 25 to 28; S-0203 claim 12).
 pub fn group_turn(w: &mut World, id: ObjectId) {
     let Some(g) = group(w, id) else { return };
     let t = w.tick;
@@ -484,84 +531,151 @@ pub fn group_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0402 claim 21 (subsequent uninterrupted group updates 10 ticks apart)
     set_group(w, id, |g| g.next_update = t.wrapping_add(PERIOD));
-    regenerate(w, id);
-    reload(w, id);
-    recalled(w, id);
-    match w.obj(id).map(|o| o.kind) {
+    // spec: S-0402 claim 26 and S-0203 claim 12 (the slaves' group-state effects in slave-place order, earliest first, one pass, before the master's decisions)
+    for i in 0..g.members.len() {
+        place_effects(w, id, i);
+    }
+    let emergence = match w.obj(id).map(|o| o.kind) {
         Some(Kind::Vehicle) => vehicle_update(w, id),
         Some(Kind::Building) => building_update(w, id),
-        _ => {}
+        _ => false,
+    };
+    if emergence {
+        emerge(w, id);
     }
-    emerge(w, id);
 }
 
-/// Replacements for lost slaves whose regeneration delay has elapsed
-/// (S-0402 claims 14, 19, 21 and 23).
-fn regenerate(w: &mut World, id: ObjectId) {
+/// The group-state effects of slave place `i` (S-0402 claims 14, 21 and
+/// 26): a replacement, a reload completion, or an outside slave's search,
+/// transitions and delivery.
+fn place_effects(w: &mut World, id: ObjectId, i: usize) {
     let Some(g) = group(w, id) else { return };
-    let t = w.tick;
-    // spec: S-0402 claim 23 (a replacement belongs to the master's current house)
-    let owner = w.obj(id).and_then(|o| o.owner);
-    for (i, m) in g.members.iter().enumerate() {
-        // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
-        if m.id.is_some() || t.wrapping_sub(m.since) < g.regen {
-            continue;
-        }
-        let s = new_slave(w, id, g.slave_type, owner);
-        set_group(w, id, |g| {
-            if let Some(x) = g.members.get_mut(i) {
-                // spec: S-0402 claim 14 (a replacement is created inside the miner) and claim 19 (ready)
-                *x = Member {
-                    id: Some(s),
-                    inside: true,
-                    ready: true,
-                    since: t,
-                };
-            }
-        });
-    }
-}
-
-/// Slaves inside whose reload delay has elapsed (S-0402 claims 14 and 21).
-fn reload(w: &mut World, id: ObjectId) {
-    let Some(g) = group(w, id) else { return };
-    let t = w.tick;
-    for (i, m) in g.members.iter().enumerate() {
-        let Some(s) = m.id else { continue };
-        // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
-        if !m.inside || m.ready || t.wrapping_sub(m.since) < g.reload {
-            continue;
-        }
-        let strength = crate::combat::damage::strength(w, s);
-        if let Some(o) = w.obj_mut(s) {
-            // spec: S-0402 claim 14 (its health is restored to its strength)
-            o.health = strength;
-        }
-        set_group(w, id, |g| {
-            if let Some(x) = g.members.get_mut(i) {
-                // spec: S-0402 claim 14 (it is ready to leave again)
-                x.ready = true;
-            }
-        });
-    }
-}
-
-/// Recalled slaves walk back to the master and go inside.
-fn recalled(w: &mut World, id: ObjectId) {
-    let Some(c) = unloading_cell(w, id) else {
+    let Some(m) = g.members.get(i).cloned() else {
         return;
     };
-    for s in slaves_of(w, id) {
-        let Some(o) = w.obj(s).cloned() else { continue };
-        if !o.on_map || !slave_state(w, s).is_some_and(|x| x.recalled) {
-            continue;
+    let t = w.tick;
+    let Some(s) = m.id else {
+        // spec: S-0402 claims 21 and 26 (every place whose loss timer has expired, t − a ≥ r, gets a replacement attempt)
+        if t.wrapping_sub(m.since) >= g.regen {
+            // spec: S-0402 claim 23 (a replacement belongs to the master's current house)
+            let owner = w.obj(id).and_then(|o| o.owner);
+            let s = new_slave(w, id, g.slave_type, owner);
+            set_group(w, id, |g| {
+                if let Some(x) = g.members.get_mut(i) {
+                    // spec: S-0402 claim 14 (a replacement is created inside the miner), claim 19 (ready) and the Terms (it keeps its place)
+                    *x = Member {
+                        id: Some(s),
+                        inside: true,
+                        ready: true,
+                        since: t,
+                    };
+                }
+            });
         }
-        if o.pos.cell() == c && !crate::occupancy::in_progress(w, s) {
-            deliver(w, id, s);
-        } else if o.dest != Some(Target::Cell(c)) {
-            // spec: S-0209 Terms (returning slaves are sent to the unloading cell with a plain move)
-            move_to(w, s, c);
+        return;
+    };
+    if m.inside {
+        // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
+        if !m.ready && t.wrapping_sub(m.since) >= g.reload {
+            let strength = crate::combat::damage::strength(w, s);
+            if let Some(o) = w.obj_mut(s) {
+                // spec: S-0402 claim 14 (its health is restored to its strength)
+                o.health = strength;
+            }
+            set_group(w, id, |g| {
+                if let Some(x) = g.members.get_mut(i) {
+                    // spec: S-0402 claim 14 (it is ready to leave again)
+                    x.ready = true;
+                }
+            });
         }
+        return;
+    }
+    if w.obj(s).is_some_and(|o| o.on_map) {
+        outside_slave(w, id, s);
+    }
+}
+
+/// An outside slave's group-update effects (S-0402 claims 14 and 26):
+/// seeking, arrival at a resource cell, a full or exhausted load and
+/// delivery.
+fn outside_slave(w: &mut World, master: ObjectId, s: ObjectId) {
+    let Some(st) = slave_state(w, s) else { return };
+    if st.phase == SlavePhase::Returning {
+        return_step(w, s, master);
+        return;
+    }
+    let Some(o) = w.obj(s).cloned() else { return };
+    let here = o.pos.cell();
+    if slave_full(w, s, &st.load) {
+        // spec: S-0402 claims 14 and 26 (a full load, detected at a group update: it remembers its cell and walks back to the miner)
+        set_slave(w, s, |x| {
+            x.remembered = Some(here);
+            x.phase = SlavePhase::Returning;
+        });
+        return_step(w, s, master);
+        return;
+    }
+    // spec: S-0402 claim 26 (arrival is checked at a group update: a slave still walking waits)
+    if o.dest.is_some() || crate::occupancy::in_progress(w, s) {
+        return;
+    }
+    if let Some(c) = st.remembered {
+        set_slave(w, s, |x| x.remembered = None);
+        if c != here {
+            // spec: S-0402 claim 14 (it walks to the cell it remembered)
+            walk_to(w, s, c);
+            return;
+        }
+    }
+    // spec: S-0402 claim 26 (a slave actually loading in harvest on its resource cell keeps loading in its own turns)
+    if o.beh.current == Some(Behaviour::Harvest) && resource::resource_at(w, here).is_some() {
+        return;
+    }
+    let range = w.rules().econ.harvest.slave_scan;
+    let reference = crate::occupancy::reference_level(w, s);
+    // spec: S-0402 claims 14 and 26 (it searches again: ring search with the slave scan range, from itself; no draws)
+    let found = harvest::ring_search_with(w, here, range, &mut |w, c| {
+        slave_accepts(w, s, here, c, reference)
+    });
+    match found {
+        Some(c) if c == here => {
+            set_slave(w, s, |x| x.phase = SlavePhase::Loading);
+            if o.beh.current != Some(Behaviour::Harvest)
+                && let Some(ob) = w.obj_mut(s)
+            {
+                // spec: S-0402 claim 26 (arrival at a selected resource cell queues harvest again)
+                ob.beh.queue(Some(Behaviour::Harvest));
+            }
+        }
+        Some(c) => {
+            set_slave(w, s, |x| x.phase = SlavePhase::Seeking);
+            // spec: S-0402 claim 14 (it walks to the cell found)
+            walk_to(w, s, c);
+        }
+        None => {
+            // spec: S-0402 claim 14 (when a search finds nothing it walks back with what it has)
+            set_slave(w, s, |x| x.phase = SlavePhase::Returning);
+            return_step(w, s, master);
+        }
+    }
+}
+
+/// A returning slave at a group update: delivery in the unloading cell
+/// with no destination, else it walks there (S-0402 claims 14 and 26;
+/// S-0213 claim 8).
+fn return_step(w: &mut World, id: ObjectId, m: ObjectId) {
+    let Some(c) = unloading_cell(w, m) else {
+        return;
+    };
+    let Some(o) = w.obj(id).cloned() else { return };
+    let idle = o.dest.is_none() && !crate::occupancy::in_progress(w, id);
+    if o.pos.cell() == c && idle {
+        // spec: S-0402 claim 14 (at a group update, a returning slave in the unloading cell with no destination delivers)
+        deliver(w, m, id);
+    } else if o.dest != Some(Target::Cell(c)) {
+        // spec: S-0402 claim 14 and S-0209 Terms (it walks back to the miner, to the unloading cell, with a plain move)
+        walk_to(w, id, c);
     }
 }
 
@@ -585,7 +699,7 @@ fn deliver(w: &mut World, master: ObjectId, s: ObjectId) {
     set_group(w, master, |g| {
         for m in g.members.iter_mut() {
             if m.id == Some(s) {
-                // spec: S-0402 claim 14 (it starts the slave reload field's delay)
+                // spec: S-0402 claim 14 (it starts the slave reload field's delay); claim 21 (it cannot finish reload in this update, even with delay 0)
                 m.inside = true;
                 m.ready = false;
                 m.since = t;
@@ -594,25 +708,34 @@ fn deliver(w: &mut World, master: ObjectId, s: ObjectId) {
     });
 }
 
-/// The group update of a vehicle master (S-0402 claim 22).
-fn vehicle_update(w: &mut World, id: ObjectId) {
-    let Some(g) = group(w, id) else { return };
+/// The group update's decision for a vehicle master (S-0402 claims 22, 25
+/// and 28). Returns whether ready slaves are offered places.
+fn vehicle_update(w: &mut World, id: ObjectId) -> bool {
+    let Some(g) = group(w, id) else { return false };
     let t = w.tick;
-    if g.pending_seek {
-        recall(w, id);
-        // spec: S-0402 claim 22 (after conversion: recall and field seeking at the first group update that sees the vehicle)
-        set_group(w, id, |g| {
-            g.pending_seek = false;
-            g.state = GroupState::FieldSeeking;
-        });
-    }
-    let Some(o) = w.obj(id).cloned() else { return };
-    match group(w, id).map(|g| g.state) {
-        Some(GroupState::FieldSeeking) => {
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    match g.state {
+        GroupState::Packing => {
+            recall(w, id);
+            // spec: S-0402 claims 22, 25 and 27 (a packing group at the first update that sees the vehicle: recalls its slaves and enters field seeking; that update does not also seek a field, and offers no emergence)
+            set_group(w, id, |g| g.state = GroupState::FieldSeeking);
+            return false;
+        }
+        GroupState::CheckingField => {
+            // spec: S-0402 claim 28 (a group still checking the field becomes at rest when its update sees a vehicle, last-rest this update, no recall)
+            set_group(w, id, |g| {
+                g.state = GroupState::AtRest;
+                g.last_rest = t;
+            });
+            return false;
+        }
+        GroupState::FieldSeeking => {
             if o.dest.is_some() {
-                // spec: S-0402 claim 22 (a seeking vehicle already with a destination enters travelling without replacing it)
+                // spec: S-0402 claims 22 and 25 (a seeking vehicle already with a destination enters travelling without replacing it)
                 set_group(w, id, |g| g.state = GroupState::Travelling);
-                return;
+                return false;
             }
             let range = w.rules().econ.harvest.slave_long_scan;
             // spec: S-0402 claim 22 (it seeks a field with the miner's long scan range and searches for a site near the result)
@@ -632,17 +755,17 @@ fn vehicle_update(w: &mut World, id: ObjectId) {
                 }
             }
         }
-        Some(GroupState::Travelling) => {
-            // spec: S-0402 claim 22 (a travelling vehicle with no destination attempts deployment at its next group update)
+        GroupState::Travelling => {
+            // spec: S-0402 claims 22 and 28 (a travelling vehicle with no destination attempts deployment at a due group update, not on arrival)
             if o.dest.is_none() {
                 try_deploy(w, id, GroupState::Travelling);
             }
         }
-        Some(GroupState::Retrying) => {
+        GroupState::Retrying => {
             // spec: S-0402 claim 22 (the next update retries deployment)
             try_deploy(w, id, GroupState::Retrying);
         }
-        Some(GroupState::Working) => {
+        GroupState::Working => {
             if o.econ.deploy.turning {
                 try_deploy(w, id, GroupState::Working);
             } else if o.beh.seen() == Some(Behaviour::Guard) {
@@ -650,8 +773,12 @@ fn vehicle_update(w: &mut World, id: ObjectId) {
                 set_group(w, id, |g| g.state = GroupState::Travelling);
             }
         }
-        _ => {}
+        // spec: S-0402 claim 28 (an at-rest group stays at rest; waking is claim 14's)
+        GroupState::AtRest => {}
     }
+    // spec: S-0402 claim 21 (a working group offers each ready hidden slave a place)
+    w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle)
+        && group(w, id).is_some_and(|g| g.state == GroupState::Working)
 }
 
 /// One automatic deployment attempt (S-0402 claim 22; S-0415 claims 2 to
@@ -697,6 +824,8 @@ fn try_deploy(w: &mut World, id: ObjectId, from: GroupState) {
     }
 }
 
+/// Whether *construction* or *selling* is a building's current behaviour
+/// (S-0402 claim 27's at-rest rows).
 fn in_construction_or_selling(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         matches!(
@@ -706,60 +835,142 @@ fn in_construction_or_selling(w: &World, id: ObjectId) -> bool {
     })
 }
 
-/// The ring search of a building master: usable tiberium-land cells only
-/// (a building has no movement zone for claim 4's connection test).
-fn building_ring(w: &mut World, from: CellXY, range: i32) -> Option<CellXY> {
-    harvest::ring_search_with(w, from, range, &mut |w, c| {
-        // spec: S-0402 claim 4 (in the usable area; land type tiberium)
-        w.cells.usable(c) && w.cells.cell(c).is_some_and(|x| x.land == land::TIBERIUM)
+/// A deployed master's short or long scan (S-0402 claim 26): centred on
+/// the cell of its reference point; any candidate of land type tiberium,
+/// with no entry, occupancy, reach-region, shroud or usable-area test.
+fn building_ring(w: &mut World, id: ObjectId, range: i32) -> Option<CellXY> {
+    // spec: S-0402 claim 26 (the scans centre on the cell of the master's reference point, not its top-left or unloading cell)
+    let centre = w.reference_point(id).cell();
+    harvest::ring_search_with(w, centre, range, &mut |w, c| {
+        // spec: S-0402 claim 26 (other candidates need only tiberium land)
+        w.cells.cell(c).is_some_and(|x| x.land == land::TIBERIUM)
     })
 }
 
-/// The group update of a building master (S-0402 claims 22 and 25).
-fn building_update(w: &mut World, id: ObjectId) {
-    let Some(g) = group(w, id) else { return };
-    // spec: S-0402 claim 22 (relocation checks after construction, excluding current construction and selling)
-    if in_construction_or_selling(w, id) {
-        return;
+/// The group update's decision for a building master (S-0402 claims 22
+/// and 25 to 27). Returns whether ready slaves are offered places.
+fn building_update(w: &mut World, id: ObjectId) -> bool {
+    let Some(g) = group(w, id) else { return false };
+    match g.state {
+        GroupState::AtRest => {
+            // spec: S-0402 claim 27 (at rest, building in construction or selling: remains at rest; otherwise enters checking the field; no check or emergence in this update)
+            if !in_construction_or_selling(w, id) {
+                set_group(w, id, |g| g.state = GroupState::CheckingField);
+            }
+            false
+        }
+        GroupState::Working => {
+            // spec: S-0402 claims 22 and 27 (working, building outside its construction state: enters checking the field; no check or emergence in this update)
+            if !crate::econ::placement::first_start_withheld(w, id) {
+                set_group(w, id, |g| g.state = GroupState::CheckingField);
+            }
+            false
+        }
+        // spec: S-0402 claim 27 (checking the field: the field and relocation rule, emergence unless packing is requested; no construction or selling exclusion)
+        GroupState::CheckingField => !check_field(w, id),
+        // spec: S-0402 claim 27 (packing, still a building: waits for conversion; no field check or emergence)
+        GroupState::Packing => false,
+        GroupState::Travelling | GroupState::FieldSeeking | GroupState::Retrying => {
+            // spec: S-0402 claim 22 (a travelling master that has become a building puts the group at rest); field seeking and retrying alike (Q-0442)
+            set_group(w, id, |g| g.state = GroupState::AtRest);
+            false
+        }
     }
-    if g.state == GroupState::Travelling {
-        // spec: S-0402 claim 22 (a travelling master that has become a building puts the group at rest)
-        set_group(w, id, |g| g.state = GroupState::AtRest);
-        return;
-    }
-    let Some(tl) = w.obj(id).map(|o| o.pos.cell()) else {
-        return;
+}
+
+/// The field and relocation rule of a deployed master checking the field
+/// (S-0402 claims 22, 24 and 25, F7). Returns whether packing was
+/// requested.
+fn check_field(w: &mut World, id: ObjectId) -> bool {
+    let Some(a) = w.obj(id).map(|o| o.pos.cell()) else {
+        return false;
     };
     let (short, long, correction) = {
         let h = &w.rules().econ.harvest;
         (h.slave_short_scan, h.slave_long_scan, h.scan_correction)
     };
     // spec: S-0402 claim 22 (a short-scan field keeps it where it is and permits release of ready slaves)
-    if building_ring(w, tl, short).is_some() {
-        set_group(w, id, |g| g.state = GroupState::Working);
-        return;
+    if building_ring(w, id, short).is_some() {
+        return false;
     }
     // spec: S-0402 claim 22 (with no short-scan field the long scan seeks another field; claim 24's site near it)
-    let field = building_ring(w, tl, long);
-    let site = field.and_then(|f| site_search(w, id, f).map(|(_, s)| (f, s)));
-    let Some((f, s)) = site else {
-        // Claim 25: no long-scan field, or no site; interim: it keeps working (docs/development.md).
-        set_group(w, id, |g| g.state = GroupState::Working);
-        return;
-    };
+    let field = building_ring(w, id, long);
+    // spec: S-0402 claim 25 (a missing result is cell (0, 0) for the comparison, not a usable destination)
+    let origin = CellXY::new(0, 0);
+    // spec: S-0402 claim 25 (with no field, the site search is still made around (0, 0))
+    let f = field.unwrap_or(origin);
+    let site = site_search(w, id, f).map(|(_, s)| s);
+    // spec: S-0402 claim 25 (quirks.slave_relocation_failed_search_origin off: either failure leaves the miner deployed without a packing request)
+    if (field.is_none() || site.is_none())
+        && !w.rules().quirks.slave_relocation_failed_search_origin
+    {
+        return false;
+    }
+    // spec: S-0402 claim 25 (a missing site is (0, 0), without the foundation-size shifts)
+    let s = site.unwrap_or(origin);
     let (table, mode) = {
         let r = w.rules();
         (r.quirks.table_root_distance, r.mode)
     };
-    // spec: S-0402 F7 (packing-up is requested exactly when c + d(S, F) < d(A, F); equality does not)
-    if f7_packs_up(correction, s, tl, f, table, mode) && super::deploy::packs_up(w, id) {
-        // spec: S-0402 claim 22 (the remembered cell of an automatic pack-up is the building's own top-left cell)
-        set_group(w, id, |g| g.remembered = Some(tl));
+    // spec: S-0402 F7 and claim 25 (packing-up is requested exactly when c + d(S, F) < d(A, F); equality does not)
+    if f7_packs_up(correction, s, a, f, table, mode) && super::deploy::packs_up(w, id) {
+        // spec: S-0402 claims 22 and 25 (the remembered cell of an automatic pack-up is the building's own top-left cell A); claim 27 (the group packs)
+        set_group(w, id, |g| {
+            g.remembered = Some(a);
+            g.state = GroupState::Packing;
+        });
         // spec: S-0402 claim 22 and S-0415 claims 9 and 10 (the automatic packing-up)
         super::sell::start_pack_up(w, id);
-    } else {
-        set_group(w, id, |g| g.state = GroupState::Working);
+        return true;
     }
+    false
+}
+
+/// The remembered destination of a slave-master building (S-0402 claim
+/// 28): an automatic pack-up's remembered cell, else its guard spot.
+fn remembered_destination(w: &World, id: ObjectId) -> Option<Target> {
+    let o = w.obj(id)?;
+    o.econ
+        .group
+        .as_ref()
+        .and_then(|g| g.remembered)
+        .map(Target::Cell)
+        .or(o.guard_spot)
+}
+
+/// The first processing of selling or packing of a slave-master building
+/// (S-0402 claim 28; S-0408 claim 6): the directed site rule, only for a
+/// remembered destination on a resource-land cell other than the
+/// building's own top-left cell.
+pub fn first_sale_processing(w: &mut World, id: ObjectId) {
+    if !is_master(w, id) {
+        return;
+    }
+    let Some(tl) = w.obj(id).map(|o| o.pos.cell()) else {
+        return;
+    };
+    // spec: S-0402 claim 28 (only a remembered destination that is a resource-land cell other than its own top-left cell; otherwise nothing)
+    let Some(Target::Cell(d)) = remembered_destination(w, id) else {
+        return;
+    };
+    if d == tl || w.cells.cell(d).is_none_or(|x| x.land != land::TIBERIUM) {
+        return;
+    }
+    // spec: S-0402 claims 24 and 28 (the directed site search near the remembered destination; a failed search changes nothing)
+    let Some((_, s)) = site_search(w, id, d) else {
+        return;
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0402 claim 28 and S-0415 claim 10 (a found site replaces the remembered destination the vehicle inherits)
+        ob.guard_spot = Some(Target::Cell(s));
+    }
+    set_group(w, id, |g| {
+        g.remembered = None;
+        // spec: S-0402 claim 28 (the group enters packing)
+        g.state = GroupState::Packing;
+    });
+    // spec: S-0402 claim 28 (it recalls its slaves)
+    recall(w, id);
 }
 
 /// F7 (S-0402): whether a deployed master at top-left cell `a` requests
@@ -855,9 +1066,6 @@ fn footprint_ok(w: &World, tl: CellXY, size: (i32, i32), reach: Reach) -> bool {
 /// Ready hidden slaves are offered places (S-0402 claim 21).
 fn emerge(w: &mut World, id: ObjectId) {
     let Some(g) = group(w, id) else { return };
-    if g.state != GroupState::Working || in_construction_or_selling(w, id) {
-        return;
-    }
     let Some(o) = w.obj(id).cloned() else { return };
     let Some(c) = unloading_cell(w, id) else {
         return;
@@ -869,8 +1077,7 @@ fn emerge(w: &mut World, id: ObjectId) {
     };
     let t = w.tick;
     let stale = stale(w);
-    let facing = o.body.value(t);
-    // spec: S-0402 claim 21 (offers in reverse initial creation order)
+    // spec: S-0402 claim 21 (offers in reverse slave-place order)
     for (i, m) in g.members.iter().enumerate().rev() {
         let Some(s) = m.id else { continue };
         if !m.inside || !m.ready {
@@ -886,7 +1093,8 @@ fn emerge(w: &mut World, id: ObjectId) {
         if let Some(so) = w.obj_mut(s) {
             so.layer = layer;
         }
-        crate::objects::place(w, s, Pos::new(x, y, z), facing);
+        // spec: S-0402 claim 21 (every successful emergence starts with facing 0, map north, independent of the master's facing)
+        crate::objects::place(w, s, Pos::new(x, y, z), EMERGENCE_FACING);
         if !w.obj(s).is_some_and(|x| x.on_map) {
             continue;
         }
@@ -907,11 +1115,18 @@ fn emerge(w: &mut World, id: ObjectId) {
     }
 }
 
+/// The facing of an emerging slave (S-0402 claim 21).
+// spec: S-0402 claim 21 (facing 0, map north)
+const EMERGENCE_FACING: glasnost_num::geom::Facing = 0;
+
+/// Whether a slave's load is full (S-0402 claims 14 and 26): only a
+/// positive capacity fills; a capacity of 0 or less never makes an empty
+/// slave full (its fill ratio is 0).
 fn slave_full(w: &World, id: ObjectId, load: &[i32]) -> bool {
     let cap = slave_rules(w, id).1;
     let total: i32 = load.iter().sum();
-    // spec: S-0402 claim 14 (its capacity is its type's storage field); interim for a capacity of 0 or less: counted as full
-    cap <= 0 || total >= cap
+    // spec: S-0402 claim 14 (its capacity is its type's storage field); claim 26 (capacity 0 or less: fill ratio 0, not full)
+    cap > 0 && total >= cap
 }
 
 /// (harvest rate h, capacity) of a slave's type.
@@ -925,8 +1140,7 @@ fn slave_rules(w: &World, id: ObjectId) -> (i32, i32) {
         .map_or((1, 0), |x| (x.harvest_rate, x.capacity))
 }
 
-/// The acceptability test of a slave's ring search: claim 4's, for an
-/// infantry mover.
+/// The acceptability test of a slave's ring search (S-0402 claim 26).
 fn slave_accepts(w: &mut World, id: ObjectId, from: CellXY, c: CellXY, reference: i32) -> bool {
     // spec: S-0402 claim 4 (in the usable area, height-aware; land type tiberium)
     if !w.cells.usable(c) || w.cells.cell(c).is_none_or(|x| x.land != land::TIBERIUM) {
@@ -940,112 +1154,70 @@ fn slave_accepts(w: &mut World, id: ObjectId, from: CellXY, c: CellXY, reference
         return false;
     };
     regions::ensure(w);
-    // spec: S-0402 claim 4 (the movement zone connects it with the searcher's cell)
+    // spec: S-0402 claim 26 (its own movement-zone connection from its heading-point cell)
     let connected = matches!(
         (regions::reach_in(w, from, z), regions::reach_in(w, c, z)),
         (Reach::Region(x), Reach::Region(y)) if x == y
     );
-    // spec: S-0402 claim 4 (the entry outcome clear, here for an infantry mover, S-0209 claim 4)
+    // spec: S-0402 claim 26 (its own infantry entry outcome, S-0209 claim 4, must be clear; another slave or unit is not a blanket refusal)
     connected
         && crate::occupancy::infantry_outcome(w, id, c, reference)
             == crate::occupancy::Outcome::Clear
 }
 
-/// The processing of *harvest* by a slave (S-0402 claim 14). Returns the
-/// delay: the harvest rate h of its type.
+/// The delay after a slave's *harvest* processing that queued *guard*
+/// (S-0402 claim 26).
+// spec: S-0402 claim 26 (a 1-tick next-processing delay)
+const GUARD_QUEUED_DELAY: i32 = 1;
+
+/// The processing of *harvest* by a slave (S-0402 claims 14 and 26): one
+/// load step at its type's interval *h*; searching, arrival, fullness and
+/// delivery belong to the group update. Returns the delay.
 pub fn process_slave(w: &mut World, id: ObjectId) -> i32 {
-    let (h, _) = slave_rules(w, id);
-    let Some(m) = master_of(w, id) else { return h };
+    let (h, cap) = slave_rules(w, id);
     let Some(st) = slave_state(w, id) else {
         return h;
     };
     let Some(o) = w.obj(id).cloned() else {
         return h;
     };
+    // spec: S-0402 claim 26 (only a slave actually loading takes load steps: one still walking takes none)
+    if o.dest.is_some() || crate::occupancy::in_progress(w, id) {
+        return h;
+    }
     let here = o.pos.cell();
-    let moving = o.dest.is_some() || crate::occupancy::in_progress(w, id);
-    match st.phase {
-        SlavePhase::Seeking => {
-            if slave_full(w, id, &st.load) {
-                set_slave(w, id, |x| x.phase = SlavePhase::Returning);
-                return_step(w, id, m);
-                return h;
-            }
-            if let Some(c) = st.remembered {
-                // spec: S-0402 claim 14 (it walks to the cell it remembered)
-                set_slave(w, id, |x| x.remembered = None);
-                walk_to(w, id, c);
-                return h;
-            }
-            if moving {
-                return h;
-            }
-            let range = w.rules().econ.harvest.slave_scan;
-            let reference = crate::occupancy::reference_level(w, id);
-            // spec: S-0402 claim 14 (ring search with the slave scan range, from itself)
-            let found = harvest::ring_search_with(w, here, range, &mut |w, c| {
-                slave_accepts(w, id, here, c, reference)
-            });
-            match found {
-                Some(c) if c == here => set_slave(w, id, |x| x.phase = SlavePhase::Loading),
-                // spec: S-0402 claim 14 (it walks to the cell found)
-                Some(c) => walk_to(w, id, c),
-                None => {
-                    // spec: S-0402 claim 14 (when a search finds nothing it walks back with what it has)
-                    set_slave(w, id, |x| x.phase = SlavePhase::Returning);
-                    return_step(w, id, m);
-                }
-            }
+    let resource = resource::resource_at(w, here);
+    // spec: S-0402 claim 26 (a processing on a non-resource cell or while full, and a capacity of 0, or a negative one with quirks.slave_negative_capacity_stalls off: guard queued, a 1-tick delay)
+    let negative_stalls = w.rules().quirks.slave_negative_capacity_stalls;
+    let guard = resource.is_none()
+        || slave_full(w, id, &st.load)
+        || cap == 0
+        || (cap < 0 && !negative_stalls);
+    if guard {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.queue(Some(Behaviour::Guard));
         }
-        SlavePhase::Loading => {
-            if moving {
-                return h;
+        return GUARD_QUEUED_DELAY;
+    }
+    let Some((tib, _)) = resource else { return h };
+    let total: i32 = st.load.iter().sum();
+    // spec: S-0402 claim 26 and S-0205 (the bale amount min(1, C − load), truncated toward zero; for a negative capacity it is negative, and a non-positive take delivers nothing and changes no stage, S-0401 claim 3)
+    let take = 1.min(cap.saturating_sub(total));
+    if take <= 0 {
+        // spec: S-0402 claim 26 (quirks.slave_negative_capacity_stalls: it remains in harvest with the next processing after h ticks)
+        return h;
+    }
+    // spec: S-0402 claim 14 (it loads one bale, S-0401 claim 3, at each successful processing of its harvest, every h ticks)
+    let got = resource::take_bales(w, here, take);
+    if got > 0 {
+        set_slave(w, id, |x| {
+            if let Some(a) = x.load.get_mut(tib) {
+                *a += got;
             }
-            let Some((tib, _)) = resource::resource_at(w, here) else {
-                // spec: S-0402 claim 14 (when its cell is exhausted it searches again)
-                set_slave(w, id, |x| x.phase = SlavePhase::Seeking);
-                return h;
-            };
-            // spec: S-0402 claim 14 (it loads one bale, S-0401 claim 3, at each processing of its harvest)
-            let got = resource::take_bales(w, here, 1);
-            if got <= 0 {
-                set_slave(w, id, |x| x.phase = SlavePhase::Seeking);
-                return h;
-            }
-            set_slave(w, id, |x| {
-                if let Some(a) = x.load.get_mut(tib) {
-                    *a += got;
-                }
-            });
-            let load = slave_state(w, id).map(|x| x.load).unwrap_or_default();
-            if slave_full(w, id, &load) {
-                // spec: S-0402 claim 14 (when full it remembers its cell and walks back to the miner)
-                set_slave(w, id, |x| {
-                    x.remembered = Some(here);
-                    x.phase = SlavePhase::Returning;
-                });
-                return_step(w, id, m);
-            }
-        }
-        SlavePhase::Returning => return_step(w, id, m),
+            x.phase = SlavePhase::Loading;
+        });
     }
     h
-}
-
-/// A returning slave: delivery at the unloading cell, else it walks there
-/// (S-0402 claim 14).
-fn return_step(w: &mut World, id: ObjectId, m: ObjectId) {
-    let Some(c) = unloading_cell(w, m) else {
-        return;
-    };
-    let Some(o) = w.obj(id).cloned() else { return };
-    if o.pos.cell() == c && !crate::occupancy::in_progress(w, id) {
-        // spec: S-0402 claim 14 (a slave that reaches the miner delivers)
-        deliver(w, m, id);
-    } else if o.dest != Some(Target::Cell(c)) {
-        // spec: S-0402 claim 14 (it walks back to the miner, to the unloading cell)
-        walk_to(w, id, c);
-    }
 }
 
 /// The *harvest* processing of a slave miner with a slave group (S-0402
@@ -1056,47 +1228,29 @@ pub fn process_harvest(w: &mut World, id: ObjectId) -> Option<i32> {
     }
     let t = w.tick;
     let o = w.obj(id)?.clone();
-    if let Some((start, site)) = group(w, id).and_then(|g| g.directed)
-        && start == o.beh.start_tick
-        && o.dest == Some(Target::Cell(site))
-    {
-        // spec: S-0402 claim 22 (it moves to the site found, move queued; one search per harvest)
-        return Some(1);
-    }
     let centre = match o.dest {
         Some(Target::Cell(c)) => Some(c),
         Some(Target::Object(x)) => w.obj(x).map(|x| x.pos.cell()),
         None => None,
     };
-    match centre {
-        Some(c) => match site_search(w, id, c) {
-            Some((_, s)) => {
-                // spec: S-0402 claim 22 (an explicitly directed vehicle moves to a found site with move queued, travelling)
-                move_to(w, id, s);
-                let start = o.beh.start_tick;
-                set_group(w, id, |g| {
-                    g.state = GroupState::Travelling;
-                    g.directed = Some((start, s));
-                });
-            }
-            None => {
-                if let Some(ob) = w.obj_mut(id) {
-                    // spec: S-0402 claim 22 (the site search fails: guard queued, at rest, last-rest the current tick)
-                    ob.beh.queue(Some(Behaviour::Guard));
-                }
-                set_group(w, id, |g| {
-                    g.state = GroupState::AtRest;
-                    g.last_rest = t;
-                });
-            }
-        },
+    // spec: S-0402 claim 22 (at each processing of harvest a vehicle with a destination searches for a site near it; without a destination no field or site search)
+    match centre.and_then(|c| site_search(w, id, c)) {
+        Some((_, s)) => {
+            // spec: S-0402 claim 22 (it moves to a found site with move queued and puts the group into travelling)
+            move_to(w, id, s);
+            set_group(w, id, |g| g.state = GroupState::Travelling);
+        }
         None => {
-            // Interim (docs/development.md): harvest without a destination queues guard.
             if let Some(ob) = w.obj_mut(id) {
+                // spec: S-0402 claim 22 (a failed site search, or no destination: guard queued, at rest, last-rest the current tick)
                 ob.beh.queue(Some(Behaviour::Guard));
             }
+            set_group(w, id, |g| {
+                g.state = GroupState::AtRest;
+                g.last_rest = t;
+            });
         }
     }
-    // Interim (docs/development.md): the delay of 1 tick.
-    Some(1)
+    // spec: S-0402 claim 22 and S-0215 claim 6 (in every case the standard delay of harvest, with its one ranged draw)
+    Some(crate::process::standard_delay(w, id))
 }
