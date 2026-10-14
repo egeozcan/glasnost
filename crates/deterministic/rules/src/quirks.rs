@@ -125,6 +125,10 @@ pub struct Quirks {
     // spec: S-0207 claim 12
     #[serde(default = "on")]
     pub drive_track_end_cap: bool,
+    /// A vehicle that comes to rest keeps its leftover progress budget for its next move; off: the budget is cleared at rest.
+    // spec: S-0207 claim 3, Edge cases (quirks.drive_leftover_kept_at_rest)
+    #[serde(default = "on")]
+    pub drive_leftover_kept_at_rest: bool,
     /// A unit standing at the top position is recorded as taking the centre.
     // spec: S-0208 claim 2
     #[serde(default = "on")]
@@ -1087,6 +1091,7 @@ impl Default for Quirks {
             drive_brake_floor_raises: true,
             drive_subpoint_compounding: true,
             drive_track_end_cap: true,
+            drive_leftover_kept_at_rest: true,
             top_position_counts_as_centre: true,
             prone_noncrawler_speedup: true,
             walker_overshoot: true,
@@ -1375,6 +1380,10 @@ impl Quirks {
                 self.drive_subpoint_compounding,
             ),
             ("drive_track_end_cap", self.drive_track_end_cap),
+            (
+                "drive_leftover_kept_at_rest",
+                self.drive_leftover_kept_at_rest,
+            ),
             (
                 "top_position_counts_as_centre",
                 self.top_position_counts_as_centre,

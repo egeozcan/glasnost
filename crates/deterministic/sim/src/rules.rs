@@ -1270,8 +1270,10 @@ fn unit_rules(
         (Kind::Vehicle, rs::Locomotor::Drive) => Locomotor::Drive,
         // spec: S-0208 (an infantry unit with the walking locomotor)
         (Kind::Infantry, rs::Locomotor::Walk) => Locomotor::Walk,
-        // spec: S-0207 claim 20 and S-0208 claim 19 (a vehicle or infantry unit with the teleporting locomotor; an aircraft's occupancy mark is open, request Q-0232, and it is not moved)
-        (Kind::Vehicle | Kind::Infantry, rs::Locomotor::Teleport) => Locomotor::Teleport,
+        // spec: S-0207 claim 20 and S-0208 claim 19 (every object with the teleporting locomotor moves by it: vehicles, infantry and aircraft)
+        (Kind::Vehicle | Kind::Infantry | Kind::Aircraft, rs::Locomotor::Teleport) => {
+            Locomotor::Teleport
+        }
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {
