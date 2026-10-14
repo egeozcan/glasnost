@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -59,9 +59,9 @@ not rules for implementing them.
   11 cited as a draft of its batch. A draft of a later batch is still planned.
 - This revision cites approved specs at their indexed revisions and the latest revisions of
   them in its current correction batch. S-0401 to S-0416 are now approved; their revised drafts
-  in this batch are plain spec pointers, not planned specs. S-0417 is a draft in this batch and
-  likewise a plain pointer. Sign-off checks every cross-spec change against the versions handed
-  off together.
+  in this batch are plain spec pointers, not planned specs. S-0417 is also approved; its revised
+  draft in this batch is likewise a plain pointer. Sign-off checks every cross-spec change against
+  the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
   just the Q-IDs it answers. Specs therefore don't say that no request tracks a question.
@@ -1045,17 +1045,22 @@ overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *parti
 *blocked* and *off-map*. See S-0211 (Terms, claim 11).
 
 **tether link, tethered.** A link that two objects in *contact* both hold during some exchanges.
-An object that holds one is *tethered*. Both hold it from the moment one of them begins a loading or
-unloading manoeuvre with the other, gives the other clearance to unload, or docks at a refinery,
-and both lose it when that manoeuvre ends or the link is broken off. See S-0208
-(Terms). Concrete factory examples are a ground vehicle leaving its factory, whose clear
+An object that holds one is *tethered*. Contact alone does not imply a tether. The spec that owns
+an exchange says whether and when the link starts and ends; the term itself does not promise
+that every loading, unloading or docking manoeuvre creates one. See S-0208 (Terms).
+Concrete factory examples are a ground vehicle leaving its factory, whose clear
 report ends contact and tether (S-0417, claims 2 and 7), and an infantry factory or cloning
 building giving a released infantry unit clearance to unload, tethering it when the contact
 exchange succeeds until its next cell-arrival clear report (S-0417, claim 10).
-Which situations of play set the link is not fully known (S-0208 and S-0213, Open questions).
-S-0213's probable aircraft-on-pad example remains provisional: S-0417 (claim 11) does not
-establish a newly released aircraft's release-to-landing tether timing. What a tether changes
-is owned by the specs that use it, for example S-0213 (table T1) for orders.
+A newly released aircraft that appears docked at its factory is tethered from its release tick
+unless its type must return to a dock; that type refuses the release tether. Both cases establish
+contact (S-0417, claim 11). This release example is not provisional. Landing tethering and the
+ending of an aircraft tether when it leaves the ground remain provisional hypotheses, not
+established rules of this glossary (S-0213, Open questions; S-0417, claim 11 and Open questions).
+S-0417 must own any verified release-aircraft take-off rule; it cannot inherit that rule from
+this provisional pointer. Which other situations of play set the link
+is not fully known (S-0208 and S-0213, Open questions). What a tether changes is owned by the
+specs that use it, for example S-0213 (table T1) for orders.
 
 **train, train type.** A *train type* is a vehicle type with the imported train flag, and a
 *train* is a vehicle of such a type (S-0210, S-0212, S-0214). The flag is a field of the type; the
@@ -1146,6 +1151,11 @@ S-0309 uses it. How it starts and ends is left to a later warhead spec.
 
 **burst counter.** A per-firer count of the shots made in the current burst, shared by all weapons
 of the firer. S-0301 owns it (Terms, claim 4); S-0313 (claim 2) uses it.
+
+**close-range property.** An imported boolean type flag, not a description of a weapon's range.
+S-0307 owns the term and its effects on approach-position searches (Terms, claim 22).
+S-0215 uses the same flag for infantry in its close-range delay shortening (Formulas F3),
+whose separate weapon-range condition does not require the flag.
 
 **current weapon.** The weapon in the slot of an object's weapon number when its type is a
 multi-weapon type, and the weapon in its slot 0 otherwise. See S-0309 (Terms), with S-0308 for
