@@ -416,6 +416,68 @@ fn deck_overlay_shadow_skips_the_deck_levels() {
     assert_eq!((shadow.x, shadow.y), (body.x, body.y));
 }
 
+/// spec: S-0112 claim 1 (deck and marker cells come before the tiberium row: outside them ore and
+/// gems use the start-up resource table; a deck cell's overlay takes the tile table and the deck
+/// frame of claim 6; a marker cell draws no body), claim 8 (a marker cell's shadow is its own
+/// type's d + ⌊N/2⌋); S-0104 claims 3 and 13 (veinhole marker shadows are drawn)
+#[test]
+fn deck_and_marker_cells_come_before_the_ore_row() {
+    // Overlay types 0 … 167 (in place of the base list): a bridge position (24), a marker
+    // position (167) and an ordinary position (5), each with the tiberium flag.
+    let mut list = String::from("[OverlayTypes]\n");
+    for i in 0..168 {
+        list.push_str(&format!("{i}=OV{i}\n"));
+    }
+    let mut rules = RULES.replace("[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n", &list);
+    for i in [5, 24, 167] {
+        rules.push_str(&format!("[OV{i}]\nTiberium=yes\n"));
+    }
+    let mut ctx = context_with(&rules);
+    for i in [5usize, 24, 167] {
+        let file = format!("ov{i}.shp");
+        ctx.0
+            .arts
+            .insert((Kind::Overlays, i), art_of(&format!("OV{i}"), &file));
+        ctx.2
+            .insert(file.as_bytes(), shp((10, 10), 8, (2, 2), (4, 4)));
+    }
+    let m = MapText {
+        ini: "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n".into(),
+        terrain: Some(record_bytes(&[rec(0, 0, 0)])),
+        overlay: Some(overlay_stream(255, &[(5, 9, 24), (6, 9, 5), (7, 9, 167)])),
+        overlay_data: Some(overlay_stream(0, &[])),
+        ..Default::default()
+    };
+    let (b, _) = build_in(ctx, m.text().as_bytes(), &Options::default());
+    let of = |name: &str| -> Vec<Item> {
+        b.scene
+            .items
+            .iter()
+            .filter(|i| {
+                i.object
+                    .is_some_and(|o| b.objects[o as usize].type_name == name)
+            })
+            .copied()
+            .collect()
+    };
+    let pixel = |i: &Item| b.scene.images[i.image as usize].pixels()[0];
+    let body = |items: &[Item]| items.iter().find(|i| i.paint != Paint::Shadow).copied();
+    let (deck, ore, marker) = (of("OV24"), of("OV5"), of("OV167"));
+    let deck_body = body(&deck).expect("the deck cell's body");
+    let ore_body = body(&ore).expect("the ore cell's body");
+    // Deck cell (5, 9), data 0: claim 6's frame 0 + T(1, 1) = 2 (pixel 3), not the data value.
+    assert_eq!(pixel(&deck_body), 3);
+    // Ore outside deck and marker cells: the data value 0 (pixel 1).
+    assert_eq!(pixel(&ore_body), 1);
+    // The deck's tile-table row is not the start-up resource table's row of the ore.
+    assert_ne!(deck_body.paint, ore_body.paint);
+    // The marker cell draws no body; its shadow is its own type's 0 + ⌊8/2⌋ (pixel 5).
+    assert_eq!(body(&marker), None);
+    assert_eq!(marker.len(), 1);
+    assert_eq!(marker[0].paint, Paint::Shadow);
+    assert_eq!(pixel(&marker[0]), 5);
+}
+
 /// A 1 × 1 tile file whose diamond holds `value`, with an optional extra
 /// image (stored position, size) whose pixels hold `value + 1`; the tile
 /// cell's stored position is (100, 200).
