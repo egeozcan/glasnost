@@ -292,7 +292,7 @@ Provisional rules of M5a, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `econ::body::set_up` | a turreted building placed at game set-up also gets its ready mark, so its queued *guard* (S-0215 claim 1) becomes current at its first per-tick start; no rule of the specs is known to set it otherwise | Q-0241 |
+| `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `econ::release::arrival`, `walk` | a walking unit's cell-arrival update (S-0417 claims 7 and 10) is the arrival tick of S-0208 claim 6; S-0417 revision 3 defines it for driving vehicles only | Q-0295 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 

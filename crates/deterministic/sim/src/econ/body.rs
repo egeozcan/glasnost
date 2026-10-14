@@ -142,20 +142,16 @@ pub fn turn(w: &mut World, id: ObjectId) {
 
 /// A building placed at game set-up (S-0215 claim 1, S-0009 claim 40):
 /// the idle body at once and *guard* queued, with no current behaviour.
-/// A turreted building also gets its ready mark, so that its queued
-/// *guard* becomes current at its first per-tick start (interim, request
-/// Q-0241: no rule of the specs is known to set the mark for it).
+/// Placement leaves the ready mark as creation left it, clear; when the
+/// actor is not ready the queue stays pending (claim 11). The first
+/// automatic start of a set-up turreted building is open (Q-0241), so no
+/// bootstrap is invented here.
 pub fn set_up(w: &mut World, id: ObjectId) {
     // spec: S-0215 claim 1 and S-0108 claim 6 (at game set-up: the idle body, a change during set-up being immediate)
     enter_idle(w, id, true);
-    let turret = turreted(w, id);
     if let Some(o) = w.obj_mut(id) {
         o.beh.current = None;
-        // spec: S-0215 claim 1 (at game set-up a building receives guard queued)
+        // spec: S-0215 claim 1 (at game set-up a building receives guard queued; the choice of idle body and queued guard does not itself set the ready mark, and a weapon is not a set-up ready-mark setter)
         o.beh.queued = Some(crate::rules::Behaviour::Guard);
-        if turret {
-            // Q-0241 (interim: a set-up turreted building's ready mark is set, so guard starts at its first per-tick start)
-            o.beh.ready_mark = true;
-        }
     }
 }
