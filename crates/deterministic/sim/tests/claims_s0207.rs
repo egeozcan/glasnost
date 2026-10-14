@@ -873,7 +873,7 @@ fn accelerating_vehicle_gains_twice_at_track_boundary() {
 // Which locomotor a type has
 
 // spec: S-0207 claim 14 (absent: the teleporting locomotor whatever the kind; the driving locomotor drives a vehicle)
-// spec: S-0207 claim 20 (a vehicle with the teleporting locomotor jumps; an infantry unit's landing point is open, Q-0181)
+// spec: S-0207 claim 20 and S-0208 claim 19 (a vehicle or infantry unit with the teleporting locomotor jumps)
 #[test]
 fn locomotor_field_selects_how_a_type_moves() {
     use glasnost_rules::sim::Locomotor as L;
@@ -899,7 +899,7 @@ fn locomotor_field_selects_how_a_type_moves() {
     assert_eq!(unit(Kind::Vehicle, 0).type_locomotor(), L::Teleport);
     assert_eq!(unit(Kind::Infantry, 0).type_locomotor(), L::Teleport);
     assert_eq!(unit(Kind::Vehicle, 0).locomotor, Locomotor::Teleport);
-    assert_eq!(unit(Kind::Infantry, 0).locomotor, Locomotor::None);
+    assert_eq!(unit(Kind::Infantry, 0).locomotor, Locomotor::Teleport);
     assert_eq!(unit(Kind::Vehicle, 1).locomotor, Locomotor::Drive);
     // A vehicle type may name the walking locomotor; how it moves has no spec (Open questions).
     assert_eq!(unit(Kind::Vehicle, 2).type_locomotor(), L::Walk);

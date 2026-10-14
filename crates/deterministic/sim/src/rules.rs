@@ -57,7 +57,8 @@ pub enum Locomotor {
     Drive,
     /// The walking locomotor of infantry (S-0208).
     Walk,
-    /// The teleporting locomotor of a vehicle (S-0207 claim 20).
+    /// The teleporting locomotor of a vehicle or infantry unit (S-0207 claim
+    /// 20, S-0208 claim 19).
     Teleport,
     /// Not moved in M3: every other locomotor, and a locomotor on a kind
     /// whose movement with it no spec gives (S-0207 Open questions).
@@ -417,9 +418,9 @@ pub struct AnimRules {
     pub bouncing: bool,
     /// Its start event can take draws that are not taken yet: a resource
     /// chain reaction (S-0401 claim 20, the economy topic's seam) or the
-    /// middle event's particles and smudges (S-0109 claim 14, request
-    /// Q-0182). The importer carries no image-frame counts, so μ (S-0109
-    /// claim 25) is not known and every type with one of the effects counts.
+    /// middle event's particles and smudges (S-0109 claim 14, S-0202 claim
+    /// 15). The importer carries no image-frame counts, so μ (S-0109 claim
+    /// 25) is not known and every type with one of the effects counts.
     pub start_effects: bool,
 }
 
@@ -1226,8 +1227,8 @@ fn unit_rules(
         (Kind::Vehicle, rs::Locomotor::Drive) => Locomotor::Drive,
         // spec: S-0208 (an infantry unit with the walking locomotor)
         (Kind::Infantry, rs::Locomotor::Walk) => Locomotor::Walk,
-        // spec: S-0207 claim 20 (a vehicle with the teleporting locomotor; an infantry unit's landing point is open, request Q-0181, and an aircraft's occupancy mark request Q-0232: neither is moved)
-        (Kind::Vehicle, rs::Locomotor::Teleport) => Locomotor::Teleport,
+        // spec: S-0207 claim 20 and S-0208 claim 19 (a vehicle or infantry unit with the teleporting locomotor; an aircraft's occupancy mark is open, request Q-0232, and it is not moved)
+        (Kind::Vehicle | Kind::Infantry, rs::Locomotor::Teleport) => Locomotor::Teleport,
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {

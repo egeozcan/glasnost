@@ -578,6 +578,39 @@ fn stationary_friendly(w: &mut World, id: ObjectId, next: CellXY) {
     );
 }
 
+/// The standing position a unit gets in cell `c` for a desired point of
+/// class `class` (S-0208 claims 3 and 4), reading the occupancy record of
+/// layer `l`. `ignore` is claim 4's case: occupants are ignored and the
+/// position is the class's own, without a draw. A centre class otherwise
+/// takes one ranged draw.
+pub(crate) fn choose_position(
+    w: &mut World,
+    c: CellXY,
+    l: Layer,
+    class: u8,
+    ignore: bool,
+) -> Option<u8> {
+    let half = w.rules().quirks.ranged_draw_half_span;
+    if ignore {
+        // spec: S-0208 claim 4 (occupants ignored: the standing position of the desired point's class, no draw)
+        Some(class)
+    } else if occupancy::no_position_by_flags(w, c, l) {
+        // spec: S-0208 claim 3 (first row: vehicle-present, or object-present without an open gate)
+        None
+    } else if class != position::CENTRE {
+        let rec = w.cells.occ(c, l).copied().unwrap_or_default();
+        if !rec.taken(class) {
+            Some(class)
+        } else {
+            occupancy::first_free(w, c, l, row_for(class, 0))
+        }
+    } else {
+        // spec: S-0208 claim 3 (centre class: one ranged draw over 0 … 3 picks the row)
+        let k = w.rng.ranged(0, 3, half);
+        occupancy::first_free(w, c, l, row_for(class, k))
+    }
+}
+
 /// Chooses the walking target in the next cell (S-0208 claims 3 and 4).
 /// Returns whether a target was chosen.
 fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
@@ -600,24 +633,8 @@ fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
     };
     // The second case of claim 4 (an enslaved unit at its master's unloading cell) needs
     // enslaved units, which no topic of M3 creates.
-    let pos = if mission {
-        // spec: S-0208 claim 4 (the mission target's cell: occupants ignored, no draw)
-        Some(class)
-    } else if occupancy::no_position_by_flags(w, next, o.layer) {
-        // spec: S-0208 claim 3 (first row: vehicle-present, or object-present without an open gate)
-        None
-    } else if class != position::CENTRE {
-        let rec = w.cells.occ(next, o.layer).copied().unwrap_or_default();
-        if !rec.taken(class) {
-            Some(class)
-        } else {
-            occupancy::first_free(w, next, o.layer, row_for(class, 0))
-        }
-    } else {
-        // spec: S-0208 claim 3 (centre class: one ranged draw over 0 … 3 picks the row)
-        let k = w.rng.ranged(0, 3, q.ranged_draw_half_span);
-        occupancy::first_free(w, next, o.layer, row_for(class, k))
-    };
+    // spec: S-0208 claim 4 (the mission target's cell: occupants ignored, no draw)
+    let pos = choose_position(w, next, o.layer, class, mission);
     let Some(p) = pos else { return false };
     let (u, v) = standing_point(p);
     let (x, y) = (256 * next.x + u, 256 * next.y + v); // spec: S-0208 table P (a standing position within the cell)

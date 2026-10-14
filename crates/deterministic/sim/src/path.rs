@@ -2067,6 +2067,15 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 let c = o.pos.cell();
                 (g.x - c.x).abs().max((g.y - c.y).abs()) <= 1
             });
+            // spec: S-0212 claim 23 row 2 (or not on a bridge deck while the destination is a bridge cell)
+            let off_deck = o.layer != Layer::Deck && goal.is_some_and(|g| w.high_bridge(g));
+            // spec: S-0212 claim 23 row 2 and Departure D5 (guard for a human-controlled owner, AI houses included; the neutral and special houses keep area guard)
+            let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
+            let give_up = if human {
+                Behaviour::Guard
+            } else {
+                Behaviour::AreaGuard
+            };
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
                 // spec: S-0212 claim 23 (the unit stops and the retry delay R starts)
@@ -2074,10 +2083,12 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 if drive {
                     ob.dest = None;
                 }
-                if !near {
-                    // spec: S-0212 claim 23 (more than 1 cell away: it gives up, its destination is cleared and it queues guard)
+                if !near || off_deck {
+                    // spec: S-0212 claim 23 row 2 (it gives up: its destination is cleared and it queues guard or area guard)
                     ob.dest = None;
-                    ob.beh.queue(Some(Behaviour::Guard));
+                    ob.beh.queue(Some(give_up));
+                    // The house's new destination for a neutral or special house's unit is
+                    // not given (interim, request Q-0238).
                 }
             }
         }

@@ -909,7 +909,7 @@ impl Builder<'_> {
                 }
                 list.map(jsonc::array)
             }
-            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim for the lists S-0003 does not name, as request Q-0171's workaround; Q-0171 itself is answered for the auto-deploy list, claim 22)
+            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim for the lists S-0003 does not name, request Q-0234; Q-0171 is answered for the auto-deploy list only, claim 22)
             Ints => fold(state, None, |v, _| {
                 Some(
                     value::list(v, value::COMMON_TEXT_LIMIT)

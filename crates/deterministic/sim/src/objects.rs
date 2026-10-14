@@ -270,6 +270,12 @@ pub fn remove(w: &mut World, id: ObjectId) {
             if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
                 w.cells.clear_infantry(wt.cell(), o.layer, id, q);
             }
+            // spec: S-0208 claim 19 (a teleporting unit's reserved standing position)
+            if let Some(t) = o.teleport.as_ref()
+                && let Some(c) = t.mark
+            {
+                w.cells.clear_infantry(c, t.mark_layer, id, q);
+            }
             w.cells.clear_infantry(cell, o.layer, id, q);
         }
         Kind::Vehicle => {
