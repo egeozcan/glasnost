@@ -442,6 +442,7 @@ impl SoundEntry {
         Self {
             name: name.to_owned(),
             samples: samples.iter().map(|s| (*s).to_owned()).collect(),
+            // spec: S-0701 Constants and F1 (default volume 80 %, below 100, so quirks.full_volume_16383 does not change it)
             level: entry_level(percent(DEFAULT_VOLUME), true),
             vshift: 0,
             min_level: min_level(percent(DEFAULT_MIN_VOLUME)),
