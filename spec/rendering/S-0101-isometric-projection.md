@@ -2,11 +2,11 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -22,12 +22,6 @@ local area, and how a screen pixel is turned back into a ground position or a ce
 Every integer step is exact; the two calculations covered here that the original does in floating
 point are named, with their rounding direction, and each is given an exact equivalent.
 This spec covers skirmish; network games and campaigns are out of scope.
-
-**Cross-spec clarification required at hand-off.** S-0102 claim 15's description of a deck as
-"lifted 4 levels above its cell" must distinguish the deck's world height and depth from its image
-placement. S-0102 claim 24 already specifies that placement, including the deck-cell shifts. The
-two claims must agree without applying an additional four-level screen lift to claim 24's draw
-point. This revision removes S-0101's competing bridge-deck assertion; S-0102 owns the clarification.
 
 ## Terms
 
@@ -248,8 +242,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     fields, crates and the like) and their shadows are lifted on the screen like terrain tiles:
     by exactly 15 pixels per height level of their own cell (integer, no rounding), never by *L(z)*.
     - **Bridge decks are outside this claim.** Their placement and lift belong to S-0102
-      claims 15 and 24, subject to the clarification named in Summary. This spec supplies
-      no separate bridge-deck screen-lift formula. Their
+      claims 15 and 24. This spec supplies no separate bridge-deck screen-lift formula. Their
       depth and the world height of objects on them remain as specified by S-0102.
     - Consequence outside bridge-deck cells: an overlay stays aligned with its cell's tile at
       every level. On a cell at level 20 or above, an object standing on the same cell is drawn
@@ -747,9 +740,6 @@ a reading mistake.
   bridge.
 - The view size *W*, *H* for each resolution belongs to a later user-interface spec, not yet
   written.
-- Overlay image and shadow placement is specified by S-0102 claim 24, not an open question
-  here. The bridge wording of S-0102 claim 15 needs the clarification named in Summary before
-  hand-off; it must not be inferred from claim 11.
 - Whether any game mode lifts the scroll limits. None is known in skirmish play.
 - Whether the screen band also decides anything else drawn for a building, such as its selection
   outline, its health bar and other status markers. The original appears to draw these only while
