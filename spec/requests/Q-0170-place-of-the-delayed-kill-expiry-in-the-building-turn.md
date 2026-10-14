@@ -1,9 +1,9 @@
 ---
 id: Q-0170
 title: Where in a building's turn the delayed-kill expiry hit comes
-status: open
+status: answered
 related: [S-0302, S-0312, S-0203]
-answered-by: []
+answered-by: [S-0302]
 ---
 
 ## Need

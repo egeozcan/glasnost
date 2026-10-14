@@ -2,7 +2,7 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-This spec covers how the palette files become palettes, how a colour definition becomes the 16-entry house-colour ramp, which colour definition each house shows, and which palette each kind of drawn object uses. It also says which palette indices keep their colour under coloured light. How a palette is shaded by light into rows of hi-colour pixels is in S-0104 (lighting). This spec only names the inputs to that shading.
+This spec covers skirmish rendering; network games and campaigns are out of scope. It describes how the palette files become palettes, how a colour definition becomes the 16-entry house-colour ramp, which colour definition each house shows, and which palette each kind of drawn object uses. It also says which palette indices keep their colour under coloured light. How a palette is shaded by light into rows of hi-colour pixels is in S-0104 (lighting). This spec only names the inputs to that shading.
 
 ## Terms
 
@@ -68,22 +68,22 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
    - Before the first theater load of a session, the unit palette in force is the snow theater's unit palette, loaded from its file (×4, claim 1) when the program starts. The tile palette in force is all black: every component 0.
    - The unit-palette rule applies on every load. If the unit palette file stays missing for *n* loads in a row, a component that was *c* in the file last loaded becomes (4^(*n*+1)·*c*) mod 256. From *n* = 3 on, every component is 0. Before the first load, the "file last loaded" is the snow unit palette file.
    - House-colour palettes are built from whichever unit palette is in force (claim 3).
-   - Backing: `measurable` (PB) for the unit and tile palette names. `measurable` (PH) for the missing unit and tile palette files, the palettes in force before the first load and the repeated multiplication. `unmeasured` for the theater palette's per-theater file names and missing-file row during theater loading, because no drawing subject here is established to show that loaded palette directly. The resource table shows the temperate palette read at program start instead (S-0112, claims 1 and 2).
+   - Backing: `measurable` (PB) for the unit and tile palette names in all six theaters. `measurable` (PH) for the missing unit and tile palette files, the palettes in force before the first load and the repeated multiplication. `unmeasured` for the theater palette's per-theater file names and missing-file row during theater loading, because no drawing subject here is established to show that loaded palette directly. The resource table shows the temperate palette read at program start instead (S-0112, claims 1 and 2).
    - Confidence: high for the names, the table and the repeated multiplication. Medium for the palettes in force before the first load.
 
 3. **When palettes are loaded and house-colour palettes built.** The unit, tile and theater palettes are reloaded only when a game starts in a different theater from the previous game of the session. The first game of a session always loads them. Every game, whatever its theater, builds all its house-colour palettes afresh from that game's colour definitions and the unit palette then in force. When the theater's unit palette file is found, that palette is the one in force; when it is missing, the missing-file rule in claim 2 determines which palette is in force. The anim palette never changes during a session (claim 1).
-   - Backing: `measurable` (PB for the theater change; PH for the rule that a game in the same theater keeps the loaded palettes rather than reading the files again, which is visible only through claim 2's missing-file behaviour)
+   - Backing: `measurable` (PB for the theater change and PI for fresh house-colour palettes in successive games; PH for the rule that a game in the same theater keeps the loaded palettes rather than reading the files again, which is visible only through claim 2's missing-file behaviour)
    - Confidence: high
 
 4. **Parsing a colour definition.** The value is read as up to three decimal integers separated by commas. Each integer may carry a sign and may have spaces before it. A comma must follow an integer directly.
    - Reading stops at the first character that does not fit this form. Every integer not read by then is 0. So `10,abc,20` gives (10, 0, 0), and `10 ,20,30` gives (10, 0, 0).
    - Each integer read is stored as its value mod 256, taken as a non-negative remainder: 300 becomes 44, −1 becomes 255 and −86 becomes 170.
    - Characters after the 63rd character of the value have no effect.
-   - Backing: `measurable` (PI). A house can show only definitions that the base rules create (claim 10), as long as the base rules define the light-grey name (PF confirms this first), so a test map cannot supply a malformed one; PI uses a loose copy of the base rules instead.
-   - Confidence: high. Medium for integers outside −2 147 483 648 … 2 147 483 647, which are expected to reduce the same way, mod 256.
+   - Backing: `measurable` (PI). With base rules that supply all selected positions and the light-grey name (claim 10; PF confirms the name first), a house shows only definitions the base rules create, so a test map cannot supply a malformed one; PI uses a loose copy of the base rules instead.
+   - Confidence: high. Medium for integers outside −2 147 483 648 … 2 147 483 647, which are expected to reduce the same way, mod 256; this overflow extension is `unmeasured`, because PI does not test overflowing integers and their parsing is not isolated here.
 
-5. **Two palettes per colour definition, and the first definition of a name wins.** Each colour definition has a single-shade and a 53-shade house-colour palette with the same ramp (S-0104 shades them). A house's units, infantry, aircraft and buildings are drawn with its 53-shade palette, except where claim 8 says otherwise (claims 8 and 10). The single-shade palette is shown only by animations flagged for the alternative palette (claim 8). Names are compared ignoring case. When any later rules layer (the language rules file, the game-mode file or the map) defines a colour name that already exists, the existing definition is kept with its original value. Every house that shows that name keeps the earlier ramp, and nothing at a later position is created.
-   - Backing: `measurable` (PE for the two variants, PF for the name rule)
+5. **Two palettes per colour definition, and the first definition of a name wins.** Each colour definition has a single-shade and a 53-shade house-colour palette with the same ramp (S-0104 shades them). A house's units, infantry, aircraft and buildings are drawn with its 53-shade palette, except where claim 8 says otherwise (claims 8 and 10). Among the battlefield subjects covered by claim 8, the single-shade palette is shown only by animations flagged for the alternative palette. Names are compared ignoring case. When any later rules layer (the language rules file, the game-mode file or the map) defines a colour name that already exists, the existing definition is kept with its original value. Every house that shows that name keeps the earlier ramp, and nothing at a later position is created.
+   - Backing: `measurable` (PE for the two variants, PF for the shown-name rule). Definition positions are tested by PC; the statement that higher-layer names append and duplicates create no hidden extra definition is `unmeasured`: stock skirmish lobby choices expose the existing base-rules positions, not the count or positions of newly appended definitions.
    - Confidence: high
 
 6. **The house-colour ramp.** For a definition (H, S, V), entry 16 + *i* for *i* = 0 … 15 is the hue H with saturation *S_i* and value *V_i* (Formulas), converted to RGB by the integer HSV conversion in Formulas. Entry 16 is the brightest, and the value falls with *i*.
@@ -95,17 +95,16 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 
 7. **Tint-exempt indices.** In the shade tables of house-colour palettes, indices 240–254 are tint-exempt and indices 1–239 and 255 follow the light's colour. Index 0 is transparent in every shade row (S-0104). In the shade tables of the tile palette no index is tint-exempt.
    - **Brightness.** A tint-exempt entry ignores brightness too, except in the darkest rows. In a 53-row table it is at its full palette colour in row 6 and every later row (S-0104, claim 6). At the default light-alpha value, row 6 is reached at a brightness of 236 ‰ (S-0104, claim 15). So at any brightness from 236 ‰ up, a tint-exempt pixel looks the same however bright or dark the rest of the object is drawn.
-   - **When the exemption shows.** A 53-shade house-colour palette is shaded with white light, apart from two cases (S-0104, claims 3 and 17):
-     - during a global effect (ion storm, nuke or chrono flash, psychic dominator), when it takes the effect's tint,
-     - from the moment a trigger action sets one channel of the map tint, when it takes the whole new map tint as its own tint, which it shows from then on whenever no global effect is in force (S-0104, claim 17).
-   - Light-source colours never reach a house-colour palette, and neither does the map tint before such a trigger action. Single-shade house-colour palettes are never tinted (S-0104, claim 3). So the exemption is visible only during a global effect or after a trigger action has changed the map tint.
-   - Backing: `measurable` (PD)
+   - **When the exemption shows.** A 53-shade house-colour palette starts with white light. Global-effect tint changes follow S-0104 claims 2, 3 and 5: they occur at the specified lighting re-evaluations, not simply whenever an effect is in force. In particular a chrono flash alone does not change an existing palette's tint, and a tint applied by a re-evaluation during that flash can remain after it ends.
+   - A trigger action that sets one map-tint channel applies the whole new map tint immediately and makes it the palette's own tint (S-0104, claim 17), even during a global effect. A later lighting re-evaluation may replace the displayed tint with the then-selected effect tint, or restore the palette's own tint when no effect wins. The exemption is visible whenever one of these events has left a non-white displayed tint.
+   - Light-source colours never reach a house-colour palette, and neither does the map tint before such a trigger action. Single-shade house-colour palettes are never tinted (S-0104, claim 3).
+   - Backing: `measurable` (PD for exemption under storm and trigger tint; S-0104 L2 and L21 for re-evaluation timing, overlaps and trigger actions; PD's low-light part for rows 0–6)
    - Confidence: high
 
 8. **Which palette an object uses.**
    - **Terrain tiles** use the tile palette, shaded by their own cell's light colour (S-0104).
    - **Units, infantry, aircraft and buildings** use their owner's 53-shade house-colour palette, except as below.
-   - **A building flagged in its art to use the terrain palette** uses the tile palette instead. It is shaded with the light colour of the cell under the building's centre and shows no house colour.
+   - **A building flagged in its art to use the terrain palette** uses the tile palette instead. Its body and sprite parts are shaded with the light colour and scaled ground level of the cell under the building's centre and show no house colour (S-0104, claim 13, including the larger-coordinate cell at an even foundation's centre). S-0104 also owns the brightness of its voxel parts.
    - **Animations** take their palette from the first row of this table that applies to them. An animation that meets several conditions uses the earliest row it meets.
 
    | Precedence | Animation | Palette | Light and brightness |
@@ -122,23 +121,23 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
      - A building's own animation is when the animation's art flag for drawing with its object is set, and the flag is set when absent (Import mapping). With the flag off, the animation takes its palette from row 4 or 5, by its own art flags.
      - A projectile coming down by parachute is the exception. It gets a different parachute animation (Import mapping), which is not drawn with it: that animation takes its palette and brightness from row 4 or 5, by its own art flags, like an animation that belongs to no object.
    - **Brightness of row 3.**
-     - A building's own animation is drawn at the building's own brightness and follows it while it plays: when the building's light changes, the animation changes with it. With no flash or effect on the building, that brightness is the unscaled ground level (S-0104) of the building's cell. How flashing, or an effect that changes the building's brightness, changes it is not established (Open questions).
-     - A parachute is drawn at the unscaled ground level of the carried object's cell, taken once when the parachute opens. It does not follow later light changes while the object comes down (Edge cases).
+     - A building's own animation is drawn at the building's brightness: the unscaled ground level of its top-left foundation cell (S-0104, claim 13), even for a terrain-palette building. Its brightness is set when the animation starts and set again on every tick, so it follows changes to the building's light. S-0104 owns the alternative cell source under its building-light quirk switch. How flashing, or an effect that changes the building's brightness, changes it is not established (Open questions).
+     - A parachute is drawn at the unscaled ground level of the carried object's cell on the tick the parachute is created (S-0104, claim 13). It is not updated during the fall (Edge cases).
      - A deploy or undeploy animation is drawn at brightness 1000 (neutral), whatever the cell's light (Edge cases).
    - An animation flagged in its art to use normal light is drawn at brightness 1000 instead of the brightness in the last column. This changes nothing for row 4.
-   - **Ore and gem overlays** are drawn at neutral brightness and ignore the cell's light level (S-0104, claim 13). They use the start-up resource table: a 53-row untinted table built at program start from the temperate theater palette and unchanged when theaters are loaded (S-0112, claims 1 and 2). Shroud cover pieces and light-glow images can still change their shade row through the per-pixel light-alpha value (S-0112, claim 1; S-0110, claims 5 and 6).
-   - **Other overlays, smudges and terrain objects.** S-0112 claims 1 to 3 own their palettes, tint and brightness. S-0112 claim 1's first-applicable-row rule also owns exceptions to the ore and gem rule above, including deck-cell precedence.
-   - Backing: `measurable` (S-0112 scenarios OV1, OV2 and OV18 for ore and gem palette, tint, theater independence and per-pixel shade-row changes; PE for the object kinds and rows 1 to 5, the parachute, the normal-light flag and the brightness of row 3, a light change during a parachute's descent and during a building's own animation included; PJ for a building's own animation with the drawing-with-object flag off and for the precedence of rows 1, 2 and 3 over row 4). `unmeasured` for the projectile's parachute, because the measurement setup offers no known way to make a projectile come down by parachute (Open questions). `unmeasured` for the precedence between rows 1, 2 and 3, because no way is known to create an animation that meets two of those conditions; it matters only if one exists.
-   - Confidence: high for tiles, terrain-palette buildings, units, infantry, aircraft and buildings, and rows 1, 4 and 5. High for the palette of deploy, undeploy and parachute animations and for the projectile exception. Medium for rows 2 and 3 otherwise, for the brightness of row 3 and for the precedence between rows. High for the ore and gem overlay palette and tint, as specified by S-0112 claims 1 and 2.
+   - **Ore and gem overlays outside deck and marker cells** are drawn at neutral brightness and ignore the cell's light level (S-0104, claim 13). They use the start-up resource table: a 53-row untinted table built at program start from the temperate theater palette and unchanged when theaters are loaded (S-0112, claims 1 and 2). A drawn overlay in a deck cell instead uses the cell's tile shade table and scaled raised light level, whatever its type. S-0112 claim 1 owns this precedence and the marker-cell exclusion. Shroud cover pieces and light-glow images can still change ore and gem shade rows through the per-pixel light-alpha value (S-0112, claim 1; S-0110, claims 5 and 6).
+   - **Other overlays, smudges and terrain objects.** S-0112 claims 1 to 3 own their palettes, tint and brightness.
+   - Backing: `measurable` (S-0112 scenarios OV1, OV2 and OV18 for ore and gem palette, tint, theater independence and per-pixel shade-row changes, and OV7 part C for deck-cell precedence; S-0104 L23 parts B and E for the building animation's top-left source, tick updates and the terrain-palette building's centre-cell source; PE for the object kinds and rows 1 to 5, the parachute, the normal-light flag and the brightness of row 3, a light change during a parachute's descent and during a building's own animation included; PJ for a building's own animation with the drawing-with-object flag off and for the precedence of rows 1, 2 and 3 over row 4). `unmeasured` for the projectile's parachute, because the measurement setup offers no known way to make a projectile come down by parachute (Open questions). `unmeasured` for the precedence between rows 1, 2 and 3, because no way is known to create an animation that meets two of those conditions; it matters only if one exists. The terrain-palette building's own-animation source is `unmeasured` until a suitable stock subject for the L23 repeat is identified. The distinction between the parachute's creation tick and a later visible opening tick is `unmeasured`: PE tests brightness kept during the fall but establishes no separate, observable opening event.
+   - Confidence: high for tiles, terrain-palette buildings, units, infantry, aircraft and buildings, and rows 1, 4 and 5. High for the palette of deploy, undeploy and parachute animations and for the projectile exception. Medium for rows 2 and 3 otherwise, for the brightness of row 3 and for the precedence between rows. High for the ore and gem overlay palette and tint outside deck and marker cells, as specified by S-0112 claims 1 and 2; medium for deck-cell precedence, as specified by S-0112 claim 1.
 
 9. **Output pixel format.** Shading turns every palette into 16-bit hi-colour pixels in the display surface's pixel layout. Each 8-bit component keeps only its top bits: 5 bits red, 6 green and 5 blue in the 5-6-5 layout, and 5 bits each in the 5-5-5 layout. A 24- or 32-bit display therefore shows only colours that survive this 16-bit step.
-   - Backing: `measurable` (PA)
+   - Backing: `measurable` (PA) for 5-6-5 output. The 5-5-5 variant is `unmeasured`: PA fixes a 5-6-5 display path, and no supported path exposing 5-5-5 is established for the measurement setup here.
    - Confidence: high that the shade tables are 16-bit. Medium for which layout a given display path presents.
 
 10. **Which colour definition a house shows.** In a skirmish:
     - A player house shows the definition at a fixed position chosen by its lobby colour slot *s*: position *P*(*s*) in the table below.
     - Both non-player houses (the neutral house and the special house) show the definition with a fixed name, the light-grey name in Import mapping.
-    - Lobby slots choose by position among the base rules' definitions, so a later rules layer cannot change which definition a player house shows. Whenever the base rules define the light-grey name, a later layer cannot change the non-player houses' colour either (claim 5).
+    - When the base rules supply all positions selected by the lobby table, a later rules layer cannot change which definition a player house shows. Whenever the base rules define the light-grey name, a later layer cannot change the non-player houses' colour either (claim 5).
 
     | Lobby colour slot *s* | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
     |---|---|---|---|---|---|---|---|---|
@@ -161,7 +160,7 @@ All arithmetic is on integers unless stated otherwise. "÷" is integer division 
 
 > *S_i* = ⌊σ_i · S⌋, *V_i* = ⌊γ_i · V⌋
 
-- σ_i and γ_i are the single-precision constants in the Constants table: the original's single-precision values of the sine and cosine of the angles below, each angle first rounded to the nearest 1/8192 of a turn (halves rounded up). The original computes the products in floating point. Each product is exact in double precision, and ⌊ ⌋ truncates it to an integer from 0 to 255.
+- σ_i and γ_i are the single-precision constants in the Constants table: the original's single-precision values of the sine and cosine of the angles below, each angle first rounded to the nearest 1/8192 of a turn (halves rounded up). The original computes the products in floating point. Each product is exact in double precision, so the floating-point rounding mode does not change it, and ⌊ ⌋ truncates it to an integer from 0 to 255.
 
 > β_i = 50° + *i* · (40/15)° (for σ_i = sin β_i)
 >
@@ -239,8 +238,8 @@ Theaters. These names are engine constants of the original, not stock data. Each
 - **Black last ramp entry.** Entry 31 is always black (claim 6). This is how the original behaves, not a bug, so it gets no switch.
 - **The first definition of a name wins.** A later rules layer cannot change an existing colour definition (claim 5). `quirks.colour_redefinition_ignored` (default on). Off: a later layer's value replaces the earlier one for that name and keeps its position, and every house showing the name shows the new ramp.
 - **Alternative-palette animations use the first colour definition, not the owner's** (claim 8, row 4). `quirks.alt_palette_first_definition` (default on). Off: the animation uses its owner's single-shade house-colour palette, and the first colour definition's when it has no owner.
-- **Parachutes keep the light of the moment they open** (claim 8, row 3). If the light changes while an object comes down, its parachute keeps the brightness it opened with while the object follows the new light. `quirks.parachute_brightness_fixed` (default on). Off: the parachute follows the unscaled ground level of the carried object's current cell, as a building's own animation follows its building.
-- **Deploy and undeploy animations ignore the light** (claim 8, row 3). They are drawn at brightness 1000, so at night a deploying unit's animation is brighter than the unit. `quirks.deploy_animation_neutral_brightness` (default on). Off: they are drawn at the deploying unit's own brightness (S-0104, claim 13).
+- **Parachutes keep the light of their creation tick** (claim 8, row 3). If the light changes while an object comes down, its parachute keeps its creation-tick brightness while the object follows the new light. `quirks.parachute_brightness_fixed` (default on). Off: the parachute follows the unscaled ground level of the carried object's current cell, as a building's own animation follows its building.
+- **Deploy and undeploy animations ignore the light** (claim 8, row 3). They are drawn at brightness 1000, so at night a deploying unit's animation is brighter than the unit. S-0104's `quirks.deploy_animation_unlit` (default on) owns this rule. Off: they take the unscaled ground level of the unit's cell (S-0104, claim 13 and Edge cases), without extra unit light or a height term.
 - **Vein animations use the local player's colour** (claim 8, row 1). Different players can see them in different colours. `quirks.veins_local_player_colour` (default on). Off: vein animations use the anim palette, like any other animation (row 5), so every player sees the same colours.
 
 ## Import mapping
@@ -260,16 +259,20 @@ Theaters. These names are engine constants of the original, not stock data. Each
 
 ## Measurement scenarios
 
-Scenario labels PA to PJ are local to this spec; they are not measurement-record IDs. The ore and gem rules of claim 8 use S-0112's scenarios OV1 (palette and theater independence), OV2 (brightness and tint) and OV18 (shroud and glow shade-row changes), with the setup, procedure, observables, expected results and falsifiers given there.
+S-0104 scenario L23 part B tests the building animation's top-left foundation cell and per-tick light following; part E tests the terrain-palette building's centre-cell source. Repeat part B's two light placements with a terrain-palette building that plays an own animation drawn with it: the animation must still match the top-left reference, even when the body's light follows the centre cell. Record equivalent animation image frames; a match to the centre-cell reference instead falsifies the own-animation source. If no suitable stock subject is found, this last comparison remains unmeasured. Their setups, pixel observables, expected reference matches and falsifiers apply to claim 8 here.
 
-All scenarios run under the *measurement setup* (glossary): an unmodified install, stock data and no engine add-ons, with the three allowances the glossary lists. Every scenario that reads pixels may use a presentation-only display compatibility layer (Display path below). Scenarios PG to PJ add named test files, and each says which: a loose palette file that overrides a shipped one on purpose (PG), a loose copy of a stock archive with two palette files left out to make them absent (PH), a loose copy of the base rules (PI), or a copy of the art database in a loose test archive that wins over the stock archives (PJ; S-0005 and S-0007 say how such an archive ranks). The test files are used only for the scenario that names them and are removed after the run.
+Scenario labels PA to PJ are local to this spec; they are not measurement-record IDs. The ore and gem rules of claim 8 use S-0112's scenarios OV1 (palette and theater independence), OV2 (brightness and tint), OV7 part C (deck-cell precedence) and OV18 (shroud and glow shade-row changes), with the setup, procedure, observables, expected results and falsifiers given there.
+
+All scenarios run under the *measurement setup* (glossary): an unmodified install, stock data and no engine add-ons, with the allowances the glossary lists. Every scenario that reads pixels may use a presentation-only display compatibility layer (Display path below). PF and scenarios PG to PJ add named test files, and each says which: test language and game-mode rules copies (PF), a loose palette file that overrides a shipped one on purpose (PG), loose copies of stock archives with the named palette files left out to make them absent (PH), a loose copy of the base rules (PI), or a copy of the art database in a loose test archive that wins over the stock archives (PJ; S-0005 and S-0007 say how such an archive ranks). The test files are used only for the scenario that names them and are removed after the run.
+
+**Common setup and recording.** Use game speed index 2, detail level 2 and 800×600, with the director and unrelated mods off. Each skirmish has a local human-controlled player and one bystander computer player in a separated start area; where a scenario names computer-owned subjects, those are exceptions to the separation. The observed area contains only the named test subjects, and the glossary's bystander void rule applies. Human-owned map objects removed by skirmish loading must instead be created in play, or placed under a retained owner for tests that do not depend on ownership. Use scripted input and lossless, tick-labelled screen capture; any missing harness support is a proposal for the user, not assumed installed. Unless cover or glow is explicitly tested by the cited scenario, sample explored pixels far from shroud edges and glow images, with light-alpha 127. Pause only after a required event has completed; timing tests need a capture for each tick.
 
 Every scenario that reads pixels shares these rules:
 - **Display path.** Record how the game's 16-bit output reaches the screen (the display path) and the pixel layout it presents. If a display compatibility layer is used, the measurement record names it generically, by what it does (for example "presents the game's 16-bit surface as 32-bit pixels, unscaled, without waiting for the monitor's refresh"), not by product. Such a layer must not scale, filter or colour-convert beyond widening each 16-bit pixel. Take screenshots at the game's own resolution, unscaled and unfiltered.
-- **Reading a pixel.** For each screenshot pixel, use only the top bits of each 8-bit channel: red₅ = ⌊R/8⌋, green₆ = ⌊G/4⌋ and blue₅ = ⌊B/8⌋ in the 5-6-5 layout, and red₅ = ⌊R/8⌋, green₅ = ⌊G/8⌋ and blue₅ = ⌊B/8⌋ in the 5-5-5 layout. PA needs a 5-6-5 display path. Where another scenario writes expected top bits in the 5-6-5 layout (the worked examples of PC, and PG), a 5-5-5 display path shows green₅ = ⌊green₆ / 2⌋ instead, with red and blue unchanged. These are the hi-colour pixel's own components, whether the display path fills the low bits with zeros or with copies of the top bits.
+- **Reading a pixel.** Sample only identified, non-transparent pixels, not palette index 0 or shadow pixels. For each screenshot pixel, use only the top bits of each 8-bit channel: red₅ = ⌊R/8⌋, green₆ = ⌊G/4⌋ and blue₅ = ⌊B/8⌋ in the 5-6-5 layout, and red₅ = ⌊R/8⌋, green₅ = ⌊G/8⌋ and blue₅ = ⌊B/8⌋ in the 5-5-5 layout. PA needs a 5-6-5 display path. Where another scenario writes expected top bits in the 5-6-5 layout (the worked examples of PC, and PG), a 5-5-5 display path shows green₅ = ⌊green₆ / 2⌋ instead, with red and blue unchanged. These are the hi-colour pixel's own components, whether the display path fills the low bits with zeros or with copies of the top bits.
 - **Expected values.** Each one comes from the formulas here and in S-0104, applied to stock files that the measurer reads at measurement time: palette files and colour definitions. The spec gives no stock values.
 - **Lit components.** Under test lighting, a tinted entry with 8-bit component *u* is shown as *u* − 1 for *u* ≥ 1 and as 0 for *u* = 0 (S-0104, claim 7). A tint-exempt entry, and every entry of the anim palette, is shown as *u* (S-0104, claims 6 and 7).
-- **Runs.** No scenario involves a random draw, so one run per configuration is enough unless the scenario says otherwise.
+- **Runs.** The palette and brightness rules tested here are deterministic. Other play, such as an explosion's animation choice, may use random draws; compare identified image frames and palette indices, not unqualified screenshot equality. One run per configuration is enough unless the scenario says otherwise.
 
 **PA: palette ×4 and the 16-bit output (claims 1 and 9).**
 - *Setup:* a purpose-made flat temperate map with test lighting, and a display path that presents a 5-6-5 surface.
@@ -286,25 +289,25 @@ Every scenario that reads pixels shares these rules:
   - If S-0104's claim 7 (the −1) is falsified by its own scenario, recompute the expectation with 4*c* in place of 4*c* − 1 before judging this one.
 
 **PB: theater palette files, theater change and the anim palette (claims 1, 2 and 3).**
-- *Setup:* two purpose-made flat maps with test lighting, one temperate and one snow. Each has the same human-owned infantry unit on open ground, and a pre-placed unit of the computer player for the human to destroy.
-- *Procedure:* in one session, play the temperate map, the snow map, then the temperate map again. In each, screenshot the infantry unit, flat clear terrain, and the explosion when the computer's unit is destroyed.
+- *Setup:* six purpose-made flat maps with test lighting, one for each theater in Constants. Each has the same human-owned infantry unit on open ground, and a pre-placed unit of the computer player for the human to destroy.
+- *Procedure:* in one session, play temperate, snow, urban, desert, new urban, lunar, then temperate again. In each, screenshot the infantry unit, flat clear terrain, and the explosion when the computer's unit is destroyed.
 - *Observable:* top bits of the infantry's pixels outside the remap range, of tile pixels, and of explosion pixels whose palette indices are known from their image frames.
-- *Runs:* 1 sequence of three games.
+- *Runs:* 1 sequence of seven games.
 - *Expected:*
-  - Infantry pixels match the PA formula applied to the unit palette file of that game's theater (`UNITTEM.PAL`, then `UNITSNO.PAL`). At the tint-exempt indices 240–254 they show the top bits of 4*c* without the −1 (Lit components).
-  - Tile pixels match it applied to that theater's tile palette file (`ISOTEM.PAL`, `ISOSNO.PAL`).
-  - Explosion pixels show the top bits of 4*c* exactly (no −1), with *c* from the anim palette file, and are identical in all three games.
-  - The third game matches the first.
-- *Falsified if:* any pixel follows another file, an explosion pixel differs between theaters, or the third game differs from the first.
+  - Infantry pixels match the PA formula applied to the unit palette file of that game's theater, named by claim 2 and Constants. At the tint-exempt indices 240–254 they show the top bits of 4*c* without the −1 (Lit components).
+  - Tile pixels match it applied to that theater's tile palette file, named by claim 2 and Constants.
+  - Explosion pixels show the top bits of 4*c* exactly (no −1), with *c* from the anim palette file, for the same image frame and palette index in all seven games.
+  - The last game's identified pixels match the first.
+- *Falsified if:* any pixel follows another file, an explosion pixel differs between theaters, or the last game's identified pixels differ from the first.
 
 **PC: house-colour ramp and lobby colours (claims 6 and 10).**
-- *Setup:* a purpose-made flat temperate map with test lighting. The human player and a pre-placed human-owned infantry unit stand on open flat ground. A pre-placed building is owned by the neutral house. (Infantry are sprites. A voxel vehicle's face shading changes which palette index is drawn, S-0105.)
-- *Procedure:* one game per lobby colour slot *s* = 0 … 7, each with the human player in slot *s*. In each, screenshot the infantry and the neutral building.
-- *Observable:* top bits of the infantry's pixels whose palette index *n* is in the remap range (known from the sprite's image frames), and the same for the neutral building.
+- *Setup:* a purpose-made flat temperate map with test lighting. The human player and a pre-placed human-owned infantry unit stand on open flat ground. One pre-placed building is owned by the neutral house and another by the special house. Ensure the special house is retained by skirmish loading (S-0009); if it is absent, that part cannot yield a measurement. (Infantry are sprites. A voxel vehicle's face shading changes which palette index is drawn, S-0105.)
+- *Procedure:* one game per lobby colour slot *s* = 0 … 7, each with the human player in slot *s*. In each, screenshot the infantry and both non-player buildings.
+- *Observable:* top bits of the infantry's pixels whose palette index *n* is in the remap range (known from the sprite's image frames), and the same for both non-player buildings.
 - *Runs:* 8 games (one per slot).
 - *Expected:*
   - For slot *s*, read (H, S, V) of the colour definition at position *P*(*s*) of the stock base rules' colour section. Count only the lines that create a definition: a line with an empty value takes no position (Terms, *definition position*). Compute entry *n* by the ramp formulas, take the lit component (−1 rule), then the top bits.
-  - The neutral building's remap pixels follow the same computation for the light-grey definition (Import mapping).
+  - Both non-player buildings' remap pixels follow the same computation for the light-grey definition (Import mapping).
   - Entry 31 shows (0, 0, 0).
   - To check the computation itself, the worked example (0, 255, 255) lit and packed to 5-6-5 is (31,14,7), (28,11,5), (27,9,4), (26,7,3), (24,6,3), (23,4,2), (21,3,1), (19,2,1), (17,1,0), (14,0,0), (12,0,0), (10,0,0), (7,0,0), (5,0,0), (2,0,0), (0,0,0).
   - For (170, 128, 200) it is (14,29,24), (13,27,22), (12,25,21), (11,23,20), (10,21,19), (9,19,18), (8,17,16), (7,15,15), (6,13,13), (5,11,11), (4,9,9), (3,7,7), (2,5,5), (1,3,3), (0,1,1), (0,0,0).
@@ -320,7 +323,7 @@ Every scenario that reads pixels shares these rules:
   - Run 2: play the same map with its map tint set strongly red (for example red 1.5, green 0.5, blue 0.5), no storm and no trigger action that changes the tint, and screenshot the building.
   - Run 3: play the map with test lighting and no storm, plus a trigger action that sets the map's red tint to 0.50 on a fixed tick. Screenshot the building before and after the action.
 - *Observable:* top bits of the building's pixels at indices 240–254 and at other indices.
-- *Runs:* 3.
+- *Runs:* 3 tint runs, plus the low-light part below.
 - *Expected:*
   - Run 1: every pixel at indices 240–254 is identical before and during the storm, at its full palette colour (Lit components). The other indices become darker and shift towards the storm tint: their red falls further than their green and blue.
   - Run 2: the building takes no red cast. Any change from its test-lighting colours is the same proportion in all three channels, within one step of the top bits.
@@ -330,11 +333,12 @@ Every scenario that reads pixels shares these rules:
   - In run 2, the building's pixels turn redder relative to their green and blue.
   - In run 3, any pixel at indices 240–254 changes at the action, or the other indices keep their colour (the tint set by the trigger action does not reach the house-colour palette).
   - Run 1 says nothing about claim 7 if the other indices do not change during the storm, because then the storm was not in force or its set was not applied. Check the map instead.
+- *Low-light part:* repeat the building test with no global effect or tint-changing trigger, under neutral test lighting except map ambients 0.00, 0.10, 0.18, 0.23, 0.24 and 0.30. These select rows 0, 2, 4, 5, 6 and 7 respectively at light-alpha 127. Record the same identified tint-exempt pixels in six games. Expected: the rows below 6 follow S-0104's tint-exempt shade formula, row 0 is black, and rows 6 and 7 both show the full palette colour. Any different computed pixel value, or continued brightening between rows 6 and 7, falsifies the respective rule. Choose non-black palette entries so the comparison is discriminating.
 
 **PE: palette by object kind (claims 5 and 8).** One map, purpose-made.
 - *Setup:*
   - Two houses: the human player (lobby slot *a*) and an allied computer player (slot *b* ≠ *a*).
-  - The computer player owns a vehicle, an infantry unit, a building with an animation of its own whose art leaves the drawing-with-object flag at its default, and a building flagged to use the terrain palette.
+  - The computer player owns a vehicle, an infantry unit, an aircraft, a building with an animation of its own whose art leaves the drawing-with-object flag at its default, and a building flagged to use the terrain palette.
   - The human player owns a stock vehicle that plays an animation when it deploys and when it undeploys. Prefer one whose deploy animation's image frames use indices in the remap range.
   - A trigger action of the test map drops a team of stock infantry by parachute for the computer player, onto open flat ground, on a fixed tick.
   - A vein field with its vein animations; whoever owns it, it is not the human player.
@@ -345,11 +349,11 @@ Every scenario that reads pixels shares these rules:
 - *Procedure:*
   - Screenshot every item under both lighting configurations. Deploy the human player's vehicle and screenshot its deploy animation, then undeploy it and screenshot its undeploy animation. Screenshot the parachutes while the infantry come down.
   - Play again with the human player in slot *b* and the computer player in slot *a*, and screenshot the vein field.
-  - Light-change run: test lighting, with the ambient change step and rate set in the test map's game-wide visual section so that a full fade (S-0104, claim 4) ends well before the parachutes land, and the paratroopers dropped from as high as the trigger action allows. A trigger action lowers the base ambient to 0.43 (S-0104, claim 14) on a tick just after the parachutes open, while the building's own animation is playing. Once the fade has ended and before the parachutes land, screenshot the parachutes, the falling infantry, the building and its own animation.
-- *Observable:* top bits of each item's pixels, compared with the ramps computed as in PC, and with the unit palette and anim palette files (Lit components). For the palette of an animation without remap pixels, use indices at which the unit palette file and the anim palette file differ.
+  - Light-change run: test lighting, with the ambient change step and rate set in the test map's game-wide visual section so that a full fade (S-0104, claim 4) ends well before the parachutes land, and the paratroopers dropped from as high as the trigger action allows. A trigger action lowers the base ambient to 0.43 (S-0104, claim 14) on a tick after the parachute animations have been created, while the building's own animation is playing. Once the fade has ended and before the parachutes land, screenshot the parachutes, the falling infantry, the building and its own animation.
+- *Observable:* top bits of each item's pixels, compared with the ramps computed as in PC, and with the unit palette and anim palette files (Lit components). For the palette of an animation without remap pixels, use indices at which the unit palette file and the anim palette file differ. For voxel subjects, determine the output palette index with S-0105's face-shading formulas for the recorded image and facing before comparing palette values; compare equivalent faces and facings across runs.
 - *Runs:* 2 lighting configurations, plus 1 game with the slots swapped, plus the light-change run.
 - *Expected:*
-  - The vehicle, the infantry and the building show slot *b*'s ramp, and all three darken at ambient 0.43 (53-shade). Under both configurations the vehicle and the infantry are drawn at the cell's unscaled ground level, because test lighting sets the extra-light fields to 0 (S-0104, claim 13).
+  - The vehicle, the infantry, the aircraft and the building show slot *b*'s ramp, and all four darken at ambient 0.43 (53-shade). Under both configurations the vehicle and the infantry are drawn at the cell's unscaled ground level, because test lighting sets the extra-light fields to 0 (S-0104, claim 13).
   - The building's own animation shows slot *b*'s ramp, its other pixels follow the unit palette file, and it darkens at ambient 0.43 to the same shade row as the infantry.
   - The deploy and undeploy animations show slot *a*'s ramp where they have remap pixels, and their other pixels follow the unit palette file. They show the same pixels under both lighting configurations (brightness 1000), while the vehicle itself darkens at 0.43.
   - The parachutes show slot *b*'s ramp where they have remap pixels, and their other pixels follow the unit palette file. They darken at ambient 0.43 to the same shade row as the infantry on the ground.
@@ -368,12 +372,12 @@ Every scenario that reads pixels shares these rules:
 - *Scope of a failure:* the building's own animation, the deploy and undeploy animations and the parachutes falsify only row 3 and its brightness rules; the animated tile falsifies only row 2.
 
 **PF: the first definition of a name wins (claim 5).**
-- *Setup:* the PC map, with an override colour section in the map that defines the light-grey name again, spelled exactly as in the base rules, as (0, 255, 255). Confirm first that the base rules define that name.
-- *Procedure:* screenshot the neutral building.
-- *Observable:* top bits of its remap pixels.
-- *Runs:* 1, plus the PC screenshot as the reference.
-- *Expected:* identical to PC (the stock light-grey ramp).
-- *Falsified if:* the neutral building shows the red ramp of (0, 255, 255).
+- *Setup:* the PC map. Run 1 has an override colour section in the map that defines the light-grey name again, spelled exactly as in the base rules, as (0, 255, 255). Confirm first that the base rules define that name. Run 2 repeats it with mixed letter case. Run 3 removes the map override and puts the mixed-case redefinition in a named test copy of the selected game-mode file. Run 4 instead puts it in a named valid language rules test file, with the matching integrity digest required by S-0006. All test files contain their respective colour section, and the language file must pass validation so the run does not merely skip it. Keep a bystander alive after taking the screenshot.
+- *Procedure:* screenshot the neutral building in each run. Then play an unaltered PC map in the same session and screenshot it again, to test that the previous game's definitions do not leak into this game. Remove the named test rules files before that following game.
+- *Observable:* top bits of the neutral building's remap pixels in both games of each sequence.
+- *Runs:* 4 sequences of two games, plus the PC reference.
+- *Expected:* every sampled ramp is identical to PC, not the red test ramp. The mixed-case entries keep the same definition as the exact-case entry. The following game also shows PC's ramp.
+- *Falsified if:* any sampled pixel differs from PC, in particular if a valid higher layer supplies the red ramp, mixed case creates a different shown definition, or the following game's ramp depends on the preceding map.
 
 **PG: component wrap (claim 1). Test data: a loose palette file.**
 - *Setup:* the PA map, with a loose copy of the temperate tile palette file whose entry for one known terrain index has components 64, 65 and 100.
@@ -383,41 +387,47 @@ Every scenario that reads pixels shares these rules:
 - *Expected:* the palette components are 0, 4 and 144, so the 5-6-5 top bits after the −1 are red₅ 0, green₆ 0 and blue₅ 17.
 - *Falsified if:* any of them shows as a clamped 252 (top bits 31, 62 and 31), or as any other value.
 
-**PH: missing palette files (claims 2 and 3). Test data: a loose copy of a stock archive with two members left out.**
+**PH: missing palette files (claims 2 and 3). Test data: loose copies of stock archives with named members left out.**
 - *Setup:*
   - Make the desert unit palette file and the desert tile palette file absent: for the stock nested archive that holds them, place a loose copy of it, minus those two files (S-0005, claim 3). If the two files are held by different archives, or a file is also held by another archive or as a loose file, every such copy is replaced or removed the same way, so that neither file can be found at all. Keep every other member, the desert theater palette file included.
+  - Make the urban unit palette file absent by the same method. Keep the urban tile palette present.
   - The snow unit palette file must stay, because it is read when the program starts.
-  - Use the PB maps, with a desert map in place of the snow map.
+  - Use the temperate, desert and urban maps of PB.
 - *Procedure:*
   - In one session, play the temperate map, then the desert map, and screenshot the PB items.
   - In a new session, play the desert map first, then the desert map again.
   - In a third session, play temperate, desert, temperate and desert again.
-- *Observable:* top bits of infantry and tile pixels.
+  - In a fourth session, play desert, urban and desert, without a successful unit palette load in between.
+- *Observable:* top bits of infantry pixels outside the remap range and of tile pixels; sample remap pixels separately to confirm that the house-colour ramp is still computed as in PC.
 - *Runs:* 1 per session.
 - *Expected:*
   - Temperate then desert: on the desert map, infantry show the temperate unit palette file with each component (16·*c*) mod 256, and tiles keep the temperate tile colours.
   - Desert first: infantry show the snow unit palette file with each component (16·*c*) mod 256, and tiles are black.
   - In the third session, the second desert game again shows the temperate unit palette file multiplied by 16, not by 64.
   - In the second session, the second game on the desert map shows the same pixels as the first.
+  - In the fourth session, the unit palette's non-remap entries come from the snow file with multipliers 16, 64 and 256 modulo 256 respectively; thus they are all black in the third game. House-colour ramps remain those computed in PC. The first game's tiles are black, the urban game's tiles follow its file, and the last game's tiles keep the urban tile colours.
 - *Falsified if:* any of these differs.
 
 **PI: colour definition parsing (claim 4). Test data: a loose copy of the base rules.**
 - *Setup:* a loose copy of the base rules whose colour definitions at positions *P*(0) … *P*(5) are `300,255,255`, `-86,255,255`, `10,abc,20`, `10, 128, 200`, `10 ,128,200` and a value of 66 characters: `10,128,` followed by 56 zeros and then `200`. No line before any of these positions (the highest is *P*(3) = 14) has an empty value, so every line holds its intended position (Terms, *definition position*). Use the PC map.
-- *Procedure:* as in PC, slots 0 to 5.
+- *Procedure:* as in PC, slots 0 to 5 in successive games of one session, then repeat slot 0. Keep the loose base-rules copy unchanged through these seven games. Before an eighth game in the same theater, change only the definition at position *P*(0) to `170,128,200`, and select slot 0 again.
 - *Observable:* top bits of remap pixels.
-- *Runs:* 6 games.
+- *Runs:* 8 games.
 - *Expected:*
   - Slot 0 shows the ramp of (44, 255, 255), a yellow.
   - Slot 1 shows the ramp of (170, 255, 255).
   - Slots 2 and 4 show an all-black remap range.
   - Slot 5 shows an all-black remap range too: only the first 63 characters are read, which end inside the zeros, so the value is (10, 128, 0).
   - Slot 3 shows the ramp of (10, 128, 200).
+  - The repeated slot 0 again shows the (44, 255, 255) ramp, not the previous game's slot-5 ramp. In the eighth game it instead shows the (170, 128, 200) worked-example ramp, confirming that the new game takes fresh definitions even without a theater change.
 - *Falsified if:*
   - slot 0 shows red (clamped to 255) or black (value rejected),
   - slot 1 shows red (clamped to 0),
   - slot 2 or 4 shows a non-black ramp (a bad character skipped),
   - slot 3 is black (spaces rejected),
-  - or slot 5 shows the ramp of (10, 128, 200), like slot 3 (characters after the 63rd read).
+  - slot 5 shows the ramp of (10, 128, 200), like slot 3 (characters after the 63rd read),
+  - the repeated slot 0 inherits a ramp from the preceding game,
+  - or the eighth game keeps the earlier slot-0 ramp despite the changed base-rules definition.
 
 **PJ: drawing-with-object flag off, and precedence (claim 8). Test data: a copy of the art database in a test expansion archive.**
 - *Setup:*
@@ -447,7 +457,7 @@ Every scenario that reads pixels shares these rules:
 - **Snow unit palette missing at program start.** What the game does if the snow unit palette file itself is missing when the program starts is not established.
 - **The theater palette after theater loading.** The start-up resource table uses the temperate theater palette read at program start (S-0112, claims 1 and 2). Whether any drawing depends directly on the theater palette loaded later for the current theater remains open. That loaded palette is also an input to shade-table building (S-0104), with no visible effect established on 16-bit output.
 - **Rows 2 and 3 of claim 8.** Which animations count as terrain animations, beyond animated terrain tiles, is not fully established. The list of an object's own animations (claim 8, row 3) may also be incomplete.
-- **Brightness of a building's own animation.** How a building's flashing, or an effect that changes the building's brightness, changes the brightness its own animation takes (claim 8) is not established. Which cell of a multi-cell building gives the ground level is not established either; under the uniform test lighting it makes no difference.
+- **Brightness of a building's own animation.** How a building's flashing, or an effect that changes the building's brightness, changes the brightness its own animation takes (claim 8) is not established (S-0104, claim 13).
 - **Projectiles by parachute.** What makes a projectile come down by parachute, and whether stock play ever does, is not established. Until a way is known, the projectile exception of claim 8 cannot be measured. What happens when the rules name no parachute animation (the "not established" defaults in Import mapping) is not established either.
 - **Disguise.** An object whose disguise is in effect against the local player (glossary, *disguise*) may be drawn in the disguise house's colour. That belongs with the disguise rules and is not claimed here.
 - **Types with their own palette.** A type may be drawn with a palette of its own, recoloured per house. Whether stock data uses this, and which key selects it, is open.

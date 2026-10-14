@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 20
+revision: 21
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,9 +25,9 @@ steps (speed, turning, collisions, blocked-step reactions) belongs to the moveme
 covers skirmish games. Network games and campaigns are out of scope for now, and the few mentions
 of them describe the original only.
 
-**Cross-spec change required at hand-off.** S-0207 claim 15, its state table, D17 part d3
-and its blocked-first-check Open question must follow claim 22's immediate fresh search,
-not the former delayed-search reading.
+**Cross-spec confirmation at hand-off.** Retain the coordinated immediate fresh search of
+claim 22 and S-0207 claim 15, its state table and D17 part d3. S-0207's current draft
+has removed the former delayed-search Open question; hand off these revisions together.
 
 ## Terms
 
@@ -92,6 +92,8 @@ claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). Th
   a *start cell* and a *far end*), which are this spec's bridge links (claim 3).
 - From S-0009 (map file semantics): the *visiting order* of the map's cells (its claim 3) and the
   order of the overlay type stream (its claim 12: increasing y, and within one y increasing x).
+- From S-0402 (harvest cycle): the *harvester*, *refinery*, *queueing cell* and *free unit*
+  (its Terms), used by the nearby-cell searches of its claims 9, 13 and 18 (table T5).
 - From S-0214 (order targeting rules): the *free mover* of its Terms, which decides the no-move
   rows of table T5, and the *destroyable-cliff cell*, a cell whose tile is the first tile of that
   role or the tile after it (its Terms).
@@ -1234,8 +1236,8 @@ Terms specific to this spec:
     fails in the search or fails at the gate. In particular, a successful fresh search does not
     remove the delay as it does for the driving locomotor. S-0207 claim 19 gives the waits
     this produces when a hovering unit discards its path while its target is in range.
-    - Backing: `measurable` (S-0207 scenario D21 runs 3 and 3c for the hovering delay after
-      success; scenario P19 for its failed-search and failed-gate cases; scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
+    - Backing: `measurable` (S-0207 scenario D21 run 4 for the retained-destination hovering
+      retry wait after success; scenario P19 for its failed-search and failed-gate cases; scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
       exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
       re-paths and C19 for the immediate new path). `unmeasured` for a walker's delay after a failed
       search or a failed gate: what a walker does after such a failure belongs to S-0209 and S-0215,
@@ -1243,7 +1245,7 @@ Terms specific to this spec:
       decide. `unmeasured` for the delay after a follower car's computation, for the reason claim 26
       gives
     - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated,
-      low for the exact tick of the hovering search after a wait, tested by S-0207 D21)
+      low for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4)
 
 22. **Blocked next step (drive locomotor).** For a unit with the drive locomotor, when the entry
     outcome for the next stored step is *moving blocker*, the unit starts a blockage timer of *B*
@@ -1352,7 +1354,8 @@ Terms specific to this spec:
 
     The search examines single cells. Each use of the search fixes a centre, a locomotion class, a
     movement zone and whether the use is in **deck mode**, and optionally a reach region, the height
-    condition, the further test and a reference cell. Deck mode has the three effects given below:
+    condition, the further test, a no-overlay condition and a reference cell. A use may also
+    exclude bridge cells. Deck mode has the three effects given below:
     a bridge cell's reach region is read for its deck, a bridge-cell centre's level includes the
     deck (claim 24's switch aside, below), and the ring cut-off of the collection is the first ring that contains any collected
     cell rather than the first that contains one passing the visibility test. Table T5
@@ -1375,9 +1378,19 @@ Terms specific to this spec:
     | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
     | Rally point (S-0213 claim 20) | the clicked cell | *foot*; *amphibious* for a naval factory; *winged* for an aircraft factory | *normal*; *amphibious-crusher* for a naval factory; *fly* for an aircraft factory | that of the building's own cell for that zone | the centre is a bridge cell | no | no | none |
+    | Harvester queueing (S-0402 claim 9) | the queueing cell of S-0402 | *wheel* | *normal* | none | never | no | no | the refinery's top-left cell |
+    | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
+    | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
+    | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
+
+    Both free-unit searches exclude bridge cells. Only the first free-unit search requires
+    the **no-overlay condition**: the cell must hold no overlay of any kind, resources included.
+    No other row of T5 asks for that condition.
 
     A cell **qualifies** when all of these hold:
     - it is inside the usable area,
+    - when the user asks for the no-overlay condition, it holds no overlay of any kind,
+    - when the user excludes bridge cells, it is not a bridge cell,
     - when the user gives a reach region, the cell lies in it (claim 4). A bridge cell's reach
       region is read for its deck when the use is in deck mode, and for its ground otherwise,
     - it is enterable by class (S-0211 claim 10) for the user's locomotion class with the user's
@@ -1392,8 +1405,8 @@ Terms specific to this spec:
       bridge cell. The centre's level is its height level, plus 4 only when the centre is a bridge
       cell and the use is in deck mode (in claim 24's use, `quirks.substitution_centre_ground_level`
       off changes this to plus 4 whenever the centre is a bridge cell; no other use is changed).
-      Bridge cells may qualify except in the empty-radius approach-failure row of T5, which
-      excludes them independently of locomotion class,
+      Bridge cells may qualify except in the empty-radius approach-failure and both free-unit
+      rows of T5, which exclude them independently of locomotion class,
     - when the user asks for it, it passes the *further test* of a cell, which is the burrowing test
       of S-0010 claim 17: the test of whether a tunnelling unit may dig in or come up on the cell.
       S-0010 claims 17 and 25 give the whole test, among its conditions the tileset's
@@ -1412,8 +1425,8 @@ Terms specific to this spec:
         the centre included, must pass, whether or not the clicked cell passes. A subterranean unit
         on the surface, and every other free mover, gets no further test.
 
-    For locomotion class *winged*, only the first condition, the height condition, the further
-    test and any user's bridge exclusion apply: the reach region, the class rule and the occupancy record are not consulted. In
+    For locomotion class *winged*, only the usable-area condition, any no-overlay condition,
+    the height condition, the further test and any user's bridge exclusion apply: the reach region, the class rule and the occupancy record are not consulted. In
     claim 24 the centre is the destination, whose occupant gave the outcome that started the search,
     so it normally does not qualify, and the double entry of the centre matters only where the
     centre can be empty.
@@ -1433,20 +1446,23 @@ Terms specific to this spec:
     result is the preferred cell nearest to the reference cell: the one with the smallest table
     square root of (Δx² + Δy²) in cells (S-0204), which for the distances of this search orders the
     cells exactly as the true distance does. On equal distance the first collected wins. When the
-    user gives no reference cell (every user but claim 24), the result is instead the preferred cell
+    user gives no reference cell (as listed in T5), the result is instead the preferred cell
     at position (*N* mod *n*) in collection order, counting from 0, where *n* is the number of
     preferred cells, a centre collected twice counting twice, and *N* is the tick number (S-0201)
     in force when the search is made: for a scatter, that of the tick of the scatter request; for a
     move order or a rally point, the one in force when the click is handled, since the search is
     made then (S-0213 claim 20, S-0214 claim 11); for the empty-radius approach failure,
-    the tick of that failure. S-0307 claim 16 owns qualification of obstructed approach
+    the tick of that failure; for an idle harvester's step-off, the tick of that processing
+    (S-0402 claim 13). S-0307 claim 16 owns qualification of obstructed approach
     positions before failure, including its two alternative coarse-estimate tests. These are
     not nearby-cell-search qualification and do not change the failure row's parameters.
     When no cell qualifies, there is no result. No draw from
     any random stream is taken.
     - Backing: `measurable` for the ring rule, the scan order and the distance choice (scenario P7,
       runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
-      class rule with walls (P7 run 9, P16), for the empty-radius approach-failure parameters
+      class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
+      parameters (S-0402 scenario H11), and for both free-unit searches and the no-overlay
+      condition (S-0402 scenario H13 parts b and c), for the empty-radius approach-failure parameters
       (S-0307 scenario RG12), and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
@@ -1465,7 +1481,9 @@ Terms specific to this spec:
       `unmeasured` for the failure row's bridge exclusion in isolation: RG12 has no bridges,
       and on its flat ground the height condition already rejects a neighbouring deck 4 levels
       higher. The exclusion is independent of that height condition, but no scenario here
-      isolates it on raised terrain.
+      isolates it on raised terrain. The free-unit searches' bridge exclusion is also
+      `unmeasured` in isolation: S-0402 H13 uses level ground, where the height condition
+      already rejects neighbouring decks 4 levels higher.
       `unmeasured` for the winged class, which no unit of this spec's scenarios has (S-0213's
       scenario O14, step 5, covers the rally point of an aircraft factory)
     - Confidence: high for the occupancy condition and the class rule. Medium for the ring rule, the
@@ -1989,10 +2007,9 @@ S-0209's Import mapping says.
 **Common setup.** The glossary's *measurement setup*: unmodified install, stock data, no engine
 add-ons, a purpose-made test map unless stated, skirmish, game speed free (results are in ticks and
 cells). One human-controlled house with the test units. A computer-controlled house of the original only where a
-scenario says so, otherwise no opponent. Such a house shows the original's rules for a computer-controlled owner, which our engine's *AI houses* do not have (Edge cases and quirks). Record, with a recorder that reads the running game's state
-or a screen capture that keeps every drawn frame, per tick: each test unit's cell and destination,
-its current behaviour, whether it is a team member, and the tick count. Where the recorder can read
-it, also record each test unit's stored path. Where a scenario changes a rules value it does so
+scenario says so, otherwise no opponent. Such a house shows the original's rules for a computer-controlled owner, which our engine's *AI houses* do not have (Edge cases and quirks). Record, for each tick, each test unit's cell and destination,
+its current behaviour, whether it is a team member, and the tick count. Also record each test
+unit's stored path. Where a scenario changes a rules value it does so
 through the test map's override section (a named test file), named in the scenario and removed after
 the run. A land-type override gives every multiplier key the scenario needs, because the rest of that
 row resets (S-0006 claim 5). No stock value is assumed: expected numbers are computed from the fields'
@@ -2016,8 +2033,8 @@ draws (claim 25), so one run per variant is enough unless stated.
     away, once on open ground and once with a 7-cell wall line across the direct route,
     perpendicular to it and centred 19 cells from the start, so that the route bends around the wall
     after its 20th step.
-  - Observable: the sequence of cells entered, and from a recorder the ticks of the unit's path
-    computations and of any refused step.
+  - Observable: the sequence of cells entered, the ticks of the unit's path computations, and the
+    tick of any refused step.
   - Expected, independent of tie order: (a) the cells entered, except those of straightened
     stretches and those with the corridor exemption (the first cell entered, and in the wall runs
     the cells next to a wall section), lie in a chain of aligned 2 × 2 blocks that connects the
@@ -2720,14 +2737,13 @@ part d3's narrow clear-ground corridor, unarmed human-owned mover and enemy bloc
 one bystander computer player isolated from the observed corridor. Game speed 2, director
 and mods off, except the named test map and retry-delay override. Set the path-retry delay
 to 1 game minute. Introduce the blocker by the map's supported reinforcement trigger after
-the mover has a stored path, before its check of the blocked cell. A read-only recorder takes
-stored steps, destination, track state, search ticks and retry timer each tick. The run qualifies
+the mover has a stored path, before its check of the blocked cell. For each tick, record the
+stored steps, destination, track state, search occurrences and retry-timer state. The run qualifies
 only if the refused first check occurs with the retry timer still running and the old step
 still stored. Obtain one qualifying run; otherwise report inconclusive. Expected: a mode-0
 search occurs on the refusal tick despite the timer. A found path is checked again that tick.
 A failed search follows claim 23. Falsifier: no search on the refusal tick and a later search
-only after the timer expires. Scripted input plus the movement recorder is the proposed tool.
-Void the run if the bystander enters the corridor or acts on either test unit.
+only after the timer expires. Use the stated setup and record the stated observables. Void the run if the bystander enters the corridor or acts on either test unit.
 
 **P19. Failed search beside the destination: ship and hovering (claims 21 and 23).**
 Use a tiny level map with an isolated bystander computer player, game speed 2, director and
@@ -2738,15 +2754,15 @@ reach region. An override makes that tile's land multiplier zero for the mover's
 class, without changing its passability category or reach region. Set the retry delay to
 0.1 game minutes, giving *R* = 90 ticks. Give a move order to the tile from 10 cells away.
 Record search ticks, destination, position, stored steps, retry timer and queued behaviour
-with a read-only movement recorder. Obtain one qualifying run per locomotor: the mover must
+for each tick. Obtain one qualifying run per locomotor: the mover must
 reach a neighbouring cell and then fail a search within 1 cell of the destination, with no
 destination substitution or gate failure. Expected: on that failed-search tick the mover
 loses its destination and starts *R*, without queuing a behaviour. For hovering, the fresh
 search that fails waits for *R* counted from the preceding successful fresh search. Falsified
 if either mover keeps its destination after the qualifying failure, or if the hovering fresh
 search occurs before that delay expires. A run with another unit entering the observed area,
-a substitution, or no qualifying search is void or inconclusive, not a falsifier. Scripted
-input and the read-only movement recorder are the proposed tool. A separate hovering run
+a substitution, or no qualifying search is void or inconclusive, not a falsifier. Use the stated
+setup and record the stated observables. A separate hovering run
 orders the mover to a cell on an isolated island in another reach region while its timer is
 expired. Expected: no step, a gate failure, destination cleared, and *R* starting on that tick.
 A different timer value falsifies the failed-gate delay rule of claim 21.

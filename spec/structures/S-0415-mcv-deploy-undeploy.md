@@ -2,13 +2,13 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0132]
 supersedes: []
 ---
 
@@ -51,6 +51,11 @@ vehicle's movement is heading to (S-0207). In addition:
 - **Still.** A vehicle is *still* when it is not moving along the ground. Turning in place does not
   count as moving.
 - **Sale refund.** The amount a sale of the building would pay its house (S-0408, claim 1).
+- **Return cell.** The cell where the packed-up vehicle is offered a place on the map (claim 10,
+  F3). This is not a search for an exit cell.
+- **Entry outcome.** S-0209's answer for a vehicle and a cell (Terms, claim 5), including its
+  terrain checks. Claim 12 uses that answer, not the substitutions for starting a movement step
+  in S-0209 claim 5f.
 - **Redeploy setting.** S-0412's setup value (a lobby check box) that says whether a deployed base
   unit may pack up again. S-0213 (claim 12) and S-0214 (Terms, *movable*) call it "the game option
   that lets construction yards be packed up again". It is one of S-0213's pack-up conditions for
@@ -238,8 +243,9 @@ vehicle's movement is heading to (S-0207). In addition:
      pack-up sound: a packing building whose type has no pack-up sound makes no sound at the start of
      the build-down at all,
    - its construction state runs backwards (the build-down, S-0108) as in any sale,
-   - when the build-down has finished, the vehicle of claim 10 appears and the building is removed in
-     the same tick. The house receives no refund.
+   - when the build-down has finished and the return cell accepts the vehicle (claim 12), the
+     vehicle of claim 10 appears and the building is removed in the same tick. The house receives
+     no refund. Refusal has claim 11's outcome instead.
    A building that is sold instead of packing up plays the sell sound as S-0408 gives it; when its
    type has a pack-up sound and its house is the local player's, that sound also plays at the start
    of its build-down (`quirks.packup_sound_on_sale`).
@@ -281,8 +287,8 @@ vehicle's movement is heading to (S-0207). In addition:
     - Confidence: high (position, facing, health, the move); medium (the take-overs); low (the
       facing for a deploy facing outside 0 … 255)
 
-11. **A failed pack-up.** When the vehicle cannot be put on the map at its cell (for example
-    because a building now stands there), the house receives the building's sale refund instead
+11. **A failed pack-up.** When the vehicle cannot be put on the map at its return cell (claim 12),
+    the house receives the building's sale refund instead
     and the building is still removed. The house goes on owning a vehicle of the undeploys-into type
     that is never on the map, and that vehicle counts in the house's owned count for build limits
     (S-0407, claim 9) (`quirks.failed_packup_keeps_vehicle`). For victory and defeat (S-0414 claims 2
@@ -297,6 +303,47 @@ vehicle's movement is heading to (S-0207). In addition:
     - Backing: `measurable` (scenario D8, including its variants for the short-game setting and
       for the two marks)
     - Confidence: medium (the refund); low (the vehicle that goes on existing)
+
+12. **Which return cells accept the vehicle.** At the completion of the build-down, the packing
+    building itself no longer occupies the map for this test. The newly created vehicle is
+    accepted exactly when its entry outcome for the return cell is *clear*, using S-0209 claim 5
+    with no required approach direction or source height, no bridge-deck request and no
+    movement-step substitutions. The vehicle has not yet inherited the guard spot as a destination
+    or the building's experience. Thus this is not a test using the building's locomotion or the
+    vehicle's eventual veterancy abilities. Other outcomes, including *cloaked blocker*, *moving
+    blocker*, *friendly obstacle*, *enemy obstacle* and *stationary friendly*, all refuse it.
+
+    The following consequences assume no other blocker or special occupant override of S-0209
+    claim 5, and ordinary ground-layer placement:
+
+    | Return cell contents or condition | Result |
+    |---|---|
+    | own or allied vehicle standing there | refused |
+    | enemy vehicle that the new vehicle cannot crush | refused, whether cloaked or visible |
+    | own or allied infantry standing there, even one unit in one standing position | refused |
+    | enemy infantry, all crushable by the new vehicle, with no vehicle-present flag | accepted |
+    | enemy infantry that the new vehicle cannot crush | refused |
+    | tree or another ordinary terrain object not crushable by the new vehicle | refused, even when its weapon can damage that object |
+    | wall the vehicle cannot crush | refused, even when its weapon can damage walls |
+    | wall the vehicle can crush, owned by an allied house | refused |
+    | wall the vehicle can crush, not owned by an allied house | accepted when the terrain checks also pass |
+    | resource overlay on land with a nonzero multiplier for the vehicle's locomotion class | accepted |
+    | land with a zero multiplier for that class, such as water for a class forbidden there | refused |
+
+    Enemy crushable vehicles and terrain objects, movement reservations and exceptional buildings
+    follow the same entry-outcome tables rather than a separate blanket refusal by object kind.
+    The refusal does not ask nearby cells, wait for an occupant to move, request it to scatter,
+    attack it or retry later. A clear neighbour does not rescue the pack-up. The only completion
+    outcome of refusal is claim 11's refund, building removal and retained off-map vehicle under
+    the default quirk setting.
+
+    Q-0132's general vehicle and infantry entry outcomes were already covered by S-0209 claim 5.
+    The refund was already covered by claim 11 here. This claim supplies the missing connection
+    between those outcomes and pack-up placement, and the absence of an alternative placement.
+    - Backing: `measurable` (scenario D14); special entry-outcome cases retain the backings and
+      open questions of S-0209 and S-0211 rather than gaining new claims here
+    - Confidence: high (only *clear* accepts, the packing building does not block, no alternative
+      cell or retry); medium (the listed consequences, pending D14)
 
 ## Formulas
 
@@ -401,6 +448,10 @@ and stands on a valid anchor completes at its first *unload* processing, without
 | `EVA_CannotDeployHere` (eva, announcement entry) | the refusal announcement (claim 4); which sound it plays is for the sound specs | entry name | none (no announcement) |
 | `DeploySound` (rules, type) | deploy sound of the deploying vehicle (claim 6) and of the packing building (claim 9) | sound name | none |
 | `PackupSound` (rules, building type) | pack-up sound (claim 9) | sound name | none |
+| `SpeedType`, `MovementZone`, `Locomotor` (rules, vehicle type) | the new vehicle's locomotion class, movement zone and locomotor used by the return-cell test (claim 12) | names; locomotor is a class identifier | S-0211 and the movement specs own their defaults; no pack-up-specific replacement |
+| `Crusher` (rules, vehicle type), `Crushable` (rules, occupant or overlay type) | crushing eligibility in the return-cell entry outcome (claim 12) | booleans | S-0210 owns the defaults; no pack-up-specific replacement |
+| `Wall` (rules, overlay type) | the return cell's wall classification (claim 12) | boolean | no, as S-0209 and S-0211 |
+| `Foot`, `Track`, `Wheel`, `Hover`, `Float`, `Amphibious`, `FloatBeach` (rules, land-type sections) | land multipliers used by the return-cell test (claim 12) | decimal or percent, capped at 1.0 (S-0211) | S-0211 claim 2 and Import mapping; no pack-up-specific replacement |
 
 ## Measurement scenarios
 
@@ -676,6 +727,46 @@ are repetitions that guard against void runs.
   at the pack-up has that facing.
 - Falsified if: a building appears, or the settled facing differs. The facings that are found settle
   Open question 4.
+
+**D14. Return-cell refusal and no alternative cell (Q-0132).**
+- Setup: the standard measurement setup above, game speed index 2, 800 × 600 pixels, director
+  and mods off. A tiny map has a packing yard with the redeploy setting on and a guard spot,
+  and all eight neighbours of its return cell are clear. Use named map overrides for a second
+  packing building with a zero-size foundation, so that the return cell can contain the test
+  occupant or overlay without that building's own foundation displacing it. The yard run covers
+  ordinary packing, and the zero-size test type isolates the entry test. Use a stock ground
+  vehicle type as the return type, then named map overrides that change only its crusher flag or
+  locomotion class where a pair below needs it. The bystander owns only the named enemy test
+  occupants in the observed area and is otherwise kept away as in the common setup.
+- Procedure: pack up by a move click to a distant clear cell. In separate runs arrange that the
+  return cell at completion contains (a) an own standing vehicle, (b) an enemy noncrushable vehicle,
+  (c) one own standing infantry unit, (d) three own standing infantry units, (e) one or three
+  enemy crushable infantry units, with a crusher and a noncrusher return type, (f) a tree,
+  (g) an uncrushable wall, (h) a crushable wall under an allied owner and under an enemy owner,
+  with a crusher return type, (i) ore, and (j) water, with a wheeled return type whose water
+  multiplier is zero. Include an empty clear-ground control. Put the contents there by the test
+  map or a test trigger before completion; record their actual state rather than assuming the
+  trigger succeeded. For water and ore, use the zero-size test building. In the water case,
+  repeat with an amphibious class whose water multiplier is positive. Keep the vehicle's weapons,
+  the map land multipliers and all other settings unchanged within each paired test.
+- Runs: 3 valid runs per case. The observed area is the 15 × 15 cells around the packing building.
+  Void a run if the required contents are absent at completion, an occupant is moving rather than
+  standing, or a named enemy acts on the building before completion.
+- Observable: the return cell's contents and occupancy reservations in the completion tick, every
+  newly created vehicle's type, cell and on-map status, the building's removal tick and the credits
+  delta. Continue recording for 30 ticks, with no additional orders, to detect a late appearance.
+  Record health and owner as needed to calculate the sale refund by S-0408.
+- Expected: clear-ground control succeeds with no refund. Cases a to d, the noncrusher part of e,
+  f, g, the allied-wall part of h and the wheeled-water part of j refuse: the sale refund is paid,
+  the building disappears and no vehicle appears anywhere, despite clear neighbours. The crusher
+  part of e succeeds. The enemy-wall part of h succeeds when its land multiplier is nonzero.
+  Cases i and the amphibious-water part of j succeed. A successful vehicle appears at the return cell
+  in the building's removal tick, before moving towards the guard spot, not at a neighbour.
+  Failed cases have the off-map owned count of D8 and never retry in the following 30 ticks.
+- Falsified if: any refusal case produces an on-map vehicle, any acceptance case instead pays
+  the refund, a refused vehicle appears in a neighbouring cell or later, or the packing building
+  itself prevents the clear-ground control. Record unexpected occupant damage separately: this
+  scenario tests admission, not the later crushing effects owned by S-0210.
 
 ## Open questions
 

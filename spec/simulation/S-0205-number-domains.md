@@ -2,11 +2,11 @@
 id: S-0205
 title: Number domains (integers, floating point, the round-toward-zero mode, conversions)
 topic: simulation
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -363,6 +363,7 @@ Observable ordering: none; the mode applies to every calculation alike.
   | S-0212, F3 (retry delay), F5 (threat term), F7 (threat tests) | Only for a field with a percent sign, or (F5, F7) a threat value of 2²⁹ or more; otherwise each product is exact, or (the absent-key default of F3) far from a whole number | Each product rounds to nearest |
   | S-0213, claim 7 (group destinations: the points along a placement line) | Yes | The floating-point steps along the line round to nearest; the conversion of each point to a cell still truncates |
   | S-0215, F1 (rate delay) | Only for a rate with a percent sign | The product rounds to nearest: `6%` gives 54 ticks instead of 53. A rate without a percent sign gives the same ticks in both settings (a rate written as 0.06 gives 53, from its single-precision reading) |
+  | S-0302, F1 (shot damage), F2 (defences), F3 (modification), F5 (damage-state thresholds), F6 (readiness loss), F7 (delayed-kill countdown) | Yes | Every RZ₅₃ and RZ₂₄ in these formulas is replaced by RN₅₃ and RN₂₄ respectively; integer conversions still truncate toward zero |
 
 - **Integer division by zero, and −2147483648 ÷ −1** (departure, claim 3).
 - **Squares from the library power function** (claim 5). Our engine uses the exact square rounded
@@ -474,21 +475,17 @@ All scenarios use the measurement setup.
 
 **Questions for the project lead**
 
-- **Other specs that disagree with this one, for sign-off.**
-  - S-0004 (revision 6 draft) now agrees: scenario F3 writes superweapon *A*'s recharge time as
+- **Other specs checked against this one.**
+  - Approved S-0004 revision 10 agrees: scenario F3 writes superweapon *A*'s recharge time as
     `30%`, which gives 269 ticks (claim 9), and keeps `0.3` for *B* and for the control pair, which
-    tie at 270 ticks. Approved S-0004 revision 3 still reads 0.3 as 269 ticks, so the revision 6
-    draft has to be the one that is approved.
-  - S-0215 (claim 6 and its Edge cases, "Rate precision") attributes the one-tick shortfall of a
-    rate written as 0.06 partly to the round-toward-zero product. The product of the single value
-    with 900 is exact (claim 9), so the shortfall comes from the single-precision reading alone,
-    and the rate delay depends on `quirks.chop_rounding` only for a rate written with a percent
-    sign.
-  - S-0109, F4 leaves the working precision *w* for a negative end value to this spec: it is 53
-    bits (claim 4).
-  - S-0003, S-0009, S-0104, S-0107 and the glossary draft no longer call this spec planned. Still
-    calling it planned: S-0004 (two places, in the Formulas and in the Edge cases), S-0101 (three
-    places), S-0105 (two places) and S-0108 (three places); their next revisions can drop that
-    word (the glossary convention already tells a reader to ignore it). The approved glossary
-    in the hand-off copy still has the old wording in its entries on the list of planned specs and
-    on the round-toward-zero mode; the glossary draft is the one to approve.
+    tie at 270 ticks.
+  - Approved S-0215 revision 16 agrees: it attributes the one-tick shortfall of a rate written as
+    0.06 to the single-precision reading alone. The product of the single value with 900 is exact
+    (claim 9), so the rate delay depends on `quirks.chop_rounding` only for a rate written with a
+    percent sign.
+  - Approved S-0109 revision 9 uses the 53-bit significand for the floating-point products of F4,
+    including for a negative end value (claim 4).
+  - The approved S-0004, S-0101, S-0105 and S-0108 versions no longer call this spec planned. The
+    approved glossary also no longer has the old planned-spec wording for S-0205 in its planned
+    specs and round-toward-zero mode entries. No companion-spec wording change is required for
+    these points.

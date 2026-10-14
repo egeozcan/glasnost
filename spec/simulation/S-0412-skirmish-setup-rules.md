@@ -2,13 +2,13 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0045]
+requests: [Q-0045, Q-0192]
 supersedes: []
 ---
 
@@ -471,7 +471,7 @@ S-0413 claim 6). In addition:
     - Confidence: medium for the list rule, the order and the early stop; low for the placements
       and their draws; medium that the family is the selector (K8 part d)
 
-14. **The order of game start.** Game start takes place once the map is loaded and the houses
+14. **The order of game start (Q-0192).** Game start takes place once the map is loaded and the houses
     exist, and is over before tick 0. This claim is the one place that states the observable order
     of what it draws and changes (S-0407 claim 14 and S-0413 claim 6 point here; the table "Game
     start, in observable order" in State and ordering sums it up). It covers the standard
@@ -485,7 +485,8 @@ S-0413 claim 6). In addition:
       of S-0407 claim 14 hold; the end-of-loading tag draws (S-0011 claim 34); and the
       game-start tile-animation creation draws described by S-0202 claim 14. The last group
       draws only when that pass starts an animation. Thus secret-lab choices are not the last
-      loading draws. The game-start recalculation follows crates, secret labs and tags even
+      loading draws: their choices affect the stream values received by the later tags and
+      tile animations. The game-start recalculation follows crates, secret labs and tags even
       when no starting units were placed or their placement stopped early. This claim fixes
       these relative positions, not an exhaustive last-draw boundary for loading.
       The all-base-units family retains this group order, but its starting-unit group's draws
@@ -652,6 +653,12 @@ bases setting), `TechLevel` (the game's tech level) and `AlliesAllowed` and `All
 | mode list file, section `Unholy` | the all-base-units family (claim 13): every mode listed under this section has the rule; the section name is fixed by the program | mode entries | no family, no mode |
 | `[General]` `BaseUnit` | base-unit list (claim 13; S-0009) | list of vehicle type names | empty |
 | difficulty sections `Easy`, `Normal`, `Difficult` | the three difficulty rows (claims 4, 5; S-0301, S-0302) | — | — |
+| theater section named by the tileset's `SetName`, `TileNNAnim`, `TileNNAttachesTo` | tile-animation eligibility for the later draw group of claim 14; full placement mapping belongs to S-0010 claim 19 | animation-type name and integer sub-tile index; NN is the tile number within its set, formatted as S-0010 specifies | no animation; attaches-to −1, which never starts |
+
+No setup value or data key selects the relative draw-group order of claim 14: it is fixed.
+End-of-loading tag eligibility, timer fields and their parse forms and defaults remain owned
+by S-0011 claims 13, 14 and 34 and its Import mapping; applicable animation-creation draws
+remain owned by S-0202 claim 10.
 
 The settings file's skirmish section remembers the lobby's last choices (credits, unit count, the
 check boxes and the computer slots), it is interface data and feeds no rule here.
@@ -946,6 +953,17 @@ not hold and the run says nothing).
 - Whether *H* in claim 10 is the human count on every way a skirmish can start.
 
 ## Cross-spec hand-off
+
+**Q-0192 is already resolved behaviourally in approved revision 4**, claim 14, its ordering
+table and K9 part a. This revision records both questions as answered: tile-animation draws
+of the game-start pass follow secret-lab choices and end-of-loading tag draws, and the table
+lists those later groups. Approved S-0202 revision 10 claim 14 and S-0011 revision 7 claim 34
+already give that order. Their current drafts and S-0009's current loading table agree.
+Joint sign-off confirms S-0407 claim 14 against this order; its statement that S-0412 still
+requires removal of a last-lab assertion is obsolete and needs updating, not a behaviour
+change. There is no assertion that the recalculation is the final loading-draw group:
+S-0202 claim 14 also owns subsequent resource-glint draws. Neither question of Q-0192 is
+left open.
 
 S-0414 claims 6, 9 and 10 own the end-test and end-delay rules used by claim 11. Claims 3, 4
 and 5 and scenario K10 remain unchanged from approved revision 1: S-0215's current revision

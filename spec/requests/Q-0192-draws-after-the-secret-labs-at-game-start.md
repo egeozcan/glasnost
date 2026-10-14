@@ -1,9 +1,9 @@
 ---
 id: Q-0192
 title: Are the secret-lab draws the last draws of game start, or do the game-start pass's tile-animation draws follow them?
-status: open
+status: answered
 related: [S-0412, S-0202, S-0010, S-0407]
-answered-by: []
+answered-by: [S-0412]
 ---
 
 ## Need

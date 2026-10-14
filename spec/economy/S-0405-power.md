@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0180]
 supersedes: []
 ---
 
@@ -40,7 +40,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
 - **Switched on, switched off.** The state of a building's power switch, which the power orders of
   S-0213 (claim 13) change. S-0213 calls the two states *online* and *offline*; this spec writes
   "switched on" and "switched off" for the same states. A building is switched on when it is created
-  in play, unless the map places it switched off (S-0009).
+  in play. A map's request to start it switched off is subject to claim 18; S-0009 owns the
+  map field's encoding.
 - **Base output, base drain.** Two non-negative integers of a building type, both read from one
   signed integer field, the *power field*: a value of 0 or more is the base output and gives a base
   drain of 0; a negative value *v* gives a base drain of −*v* and a base output of 0 (Import
@@ -219,8 +220,12 @@ house's own update in a tick, which comes after the turn pass and before orders 
    lowers the house's output in its update of tick *n* if the house is due then for any reason: the
    plant took its turn after the damage in tick *n*, or some other event of the list made the house
    due. Otherwise the plant notices the drop in its turn of tick *n* + 1 and the output falls in the
-   update of tick *n* + 1.
-   - Backing: `measurable` (scenario W5, parts a to c for health and switch timing; W1, W2, W4
+   update of tick *n* + 1. Surrender or defeat destruction during the house's own update
+   happens after that update's power evaluation: it makes power due for the next house update,
+   without changing the totals already published in the current one (S-0414 claim 16).
+   A later evaluation still counts buildings by claim 3, including those awaiting removal.
+   - Backing: `measurable` (S-0414 scenario V12 for house-update destruction,
+     scenario W5, parts a to c for health and switch timing; W1, W2, W4
      and W12 for the resulting totals after erasure, passengers, placement, removal, blackout,
      draining and upgrades); `unmeasured` for owner-change timing and the exact recheck timing
      after passengers, erasure, draining and upgrades (those scenarios read settled totals, and
@@ -337,8 +342,7 @@ house's own update in a tick, which comes after the turn pass and before orders 
       needs-power flag (input produces no order for it), and the immediate light effect (W7
       specifies an animation, not a light-equipped test type), and for the gap's switch-off
       timing and its restoration while charged (W6 tests a house-power change, not these
-      switch-only cases). S-0409 claim 11 and its ordering text need this switch-effect exception
-      to their operation-only description; it does not change the gap's shape or cell effects.
+      switch-only cases). S-0409 claim 11 already states the immediate switch-off exception and the next-building-turn restoration rule; this claim is consistent with that rule and does not change the gap's shape or cell effects.
     - Confidence: high (the drain-or-flag condition and order eligibility), medium (the pulse
       condition, immediate lights and animations)
 
@@ -412,6 +416,23 @@ house's own update in a tick, which comes after the turn pass and before orders 
       scenario uses a human house, and the absence of an exception cannot be shown by one scenario)
     - Confidence: medium
 
+18. **Map-requested power state (Q-0180).** A pre-placed building starts switched on when the
+    map's switched-on flag is set or absent. A flag of 0 starts it switched off only when its
+    type has a base drain above 0 or the needs-power flag; otherwise it stays switched on.
+    Thus a pure power-producing type with neither condition still makes power despite a flag
+    of 0. Unlike power orders, this initial-state rule does not exclude the firestorm-wall
+    flag: a firestorm-wall type meeting either condition starts switched off with a map flag
+    of 0, and one meeting neither starts switched on. The power-mode flag does not decide
+    this initial state.
+
+    Later power orders follow claim 10 without an exception for map placement. A non-firestorm
+    building that started switched off can be switched on by an applicable power-on order
+    when it is not under a pulse. A firestorm-wall building cannot be switched on by such an
+    order. Input must still offer the order under S-0214 claim 13. A pure producer that stayed
+    on at placement has no off state to restore.
+    - Backing: `measurable` (W13 for start states and subsequent input; W7 for the pulse gate)
+    - Confidence: high
+
 ## Formulas
 
 All results in power units are integers (S-0205, claim 1). The formulas display RZ₅₃ for
@@ -429,15 +450,11 @@ The health ratio is formed as one double division and the product as one double 
 in floating point in the original. Example (invented values): *P* = 120, *H* = 333, *S* = 500:
 *H* / *S* = 0.666 (RZ₅₃ of it is just below 0.666), times 120 is just below 79.92, so the output is 79.
 
-> *P* = base output + [absorbing and extra output > 0] × extra output × *n*<sub>a</sub> + Σ base
-> output of the upgrades recorded in the building's three upgrade positions (Terms, *upgrade
-> positions*). Integer arithmetic, exact.
+> *P* = base output + passenger contribution + Σ base output of the upgrades recorded in the building's three upgrade positions (Terms, *upgrade positions*). Integer arithmetic, exact. The passenger contribution is extra output × *n*<sub>a</sub> when the building is absorbing and its extra output is above 0; otherwise it is 0.
 
 **F2, building drain** (claim 2):
 
-> drain = base drain + Σ base drain of the upgrades in the three upgrade positions + [super-gap
-> active] × extra drain, when the
-> building is switched on and not being erased; 0 otherwise. Integer arithmetic, exact.
+> When the building is switched on and not being erased, drain = base drain + Σ base drain of the upgrades in the three upgrade positions + super-gap contribution; otherwise drain = 0. Integer arithmetic, exact. The super-gap contribution is extra drain while the super-gap is active; otherwise it is 0.
 
 **F3, power fraction** (claim 4):
 
@@ -478,7 +495,9 @@ precision before it uses it.
 
 Observable ordering: a building's in-operation state uses the house totals as last worked out
 (claim 7), so a defence that loses power by a building's death in tick *n* still fires in the turns
-of tick *n* that come before the house's update, and stops in tick *n* + 1.
+of tick *n* that come before the house's update, and stops in tick *n* + 1. Destruction
+by that house update's surrender or defeat is later than its power evaluation: the old totals
+remain through tick *n*, and the re-evaluation is in tick *n* + 1 (claim 7, S-0414 claim 16).
 
 ## Edge cases and quirks
 
@@ -536,7 +555,8 @@ of tick *n* that come before the house's update, and stops in tick *n* + 1.
 | Rules, building section, `SuperGapRadiusInCells` | super-gap radius (claim 16; this spec owns the key) | integer, cells | 0 |
 | Rules, `[General]`, `SpyPowerBlackout` | spy blackout length *d* (claim 6) | integer, ticks | 0; keeps |
 | Rules, `[General]`, `LowPowerPenaltyModifier`, `MinLowPowerProductionSpeed`, `MaxLowPowerProductionSpeed` | production slowdown (claim 11) | owned by S-0403 | S-0403 |
-| Map, building entry, switched-on flag | switched on or off at the start (Terms) | owned by S-0009 | S-0009 |
+| Map, `[Structures]`, switched-on field of a building entry | request for initial power state, subject to claim 18, not an unconditional off state | comma-separated integer field, position and parsing owned by S-0009; 0 requests off, nonzero requests on | on |
+| Rules, building section, `IsFirestormWall` | exclusion of later power orders (claim 10), not of map-requested off state (claim 18) | boolean, owned by S-0213 | no |
 
 The radar flag and the free-radar map flag are mapped in S-0410, the spy satellite flag and the normal
 gap radius in S-0409.
@@ -838,6 +858,29 @@ switched off the house has full power (W3's second pair).
   (d) *D* 0 with *O* 130 after the first sale, then *O* 110 and 100 after the next two.
   (e) *O* 110 and *D* 0 despite the empty lower positions.
 - *Falsified if:* any sum differs from the expected value in its part.
+
+**W13: map-requested power state (claim 18, Q-0180).**
+- *Setup:* a named test map defines full-health test building types: P with base output 100,
+  no base drain and no needs-power flag; C with base drain 40; N with base output 10,
+  no base drain and the needs-power flag. Give all three the power-mode flag. Add two
+  firestorm-wall variants, F with C's drain and G with P's output and no needs-power flag.
+  Pre-place each with switched-on field 0. Control runs use field 1 and an absent field.
+  Use the map-owner setup of S-0009 to give the human player the test objects. Keep enough
+  other generation for full power; the observed area is these buildings. Game speed 2,
+  director and unrelated mods off, one distant bystander under the common void rule.
+- *Procedure:* record switch states and totals from the first visible tick. Click each
+  building in power mode after setup, then record its switch and the next house totals.
+- *Runs:* three for each field variant.
+- *Observable:* switch state per building, output and drain, and whether input gives a power
+  order; use read-only recording and ordinary scripted input, never state writes.
+- *Expected:* with field 0, P and G start on, C, N and F start off. P and G each contribute
+  output 100; C, N and F contribute neither output nor drain. Clicks switch C and N on,
+  restoring drain 40 and output 10 at the next house update. Neither firestorm-wall variant
+  changes through a power order; P remains on because input offers no power order for it.
+  With field 1 or absent, all start on. A separate run without the power-mode flag has
+  the same initial states but offers no power-mode order.
+- *Falsified if:* any initial state differs, a flag-0 pure producer loses output, a later
+  applicable power-on fails without a pulse, or a firestorm-wall power order changes state.
 
 ## Open questions
 

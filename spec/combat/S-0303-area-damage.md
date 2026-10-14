@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061]
 supersedes: []
@@ -91,14 +91,16 @@ addition:
 
 ### When area damage happens and what it reaches
 
-1. **One detonation, all at once.** A detonation's effects are observable within the turn of
-   whatever caused it (for a projectile, S-0203 claim 5), before any other object acts. Before
+1. **One detonation, all at once.** A detonation applied during an object's turn completes
+   within that turn (for a projectile, S-0203 claim 5), before any other object acts. A detonation
+   applied outside all object turns completes at that same out-of-turn place in the tick
+   (S-0203 claim 1; S-0312 claim 1), before any object takes its next turn. Before
    the detonation has finished, every hit, wall hit and other effect of claims 3 to 20 has taken
    effect. If a hit sets off another detonation (an object's death weapon, S-0312, or an exploding
    overlay, claim 19), its effects occur before the outer detonation's later hit effects. Thus
    nested effects can change the outcome of later hits of the outer detonation (claim 11).
    - Backing: `measurable` (scenario A11: a death weapon going off between two hits of one
-     detonation)
+     detonation; S-0203 scenario O10 for out-of-turn damage)
    - Confidence: high
 
 2. **Detonations that do nothing.** The area damage of a detonation whose damage amount is 0, or
@@ -184,11 +186,14 @@ addition:
    many foundation cells inside the spread takes several hits from one detonation, and a large
    building takes more damage from a wide spread than a small one with the same armour
    (`quirks.area_damage_per_foundation_cell`). Once a hit has destroyed it, its remaining hits from
-   the same detonation do nothing (claim 9). With S-0302's minimum for undemolishable buildings
+   the same detonation do nothing (claim 9), except that a building kept alive and in play with
+   positive health by S-0302's delayed-kill rule remains eligible for its later entries in that
+   detonation; those hits follow S-0302 claim 16. With S-0302's minimum for undemolishable buildings
    (claim 7), even hits that the falloff or the versus value bring to 0 cost such a building 1
    health point each.
-   - Backing: `measurable` (scenario A3)
-   - Confidence: high
+   - Backing: `measurable` (scenario A3; S-0302 scenario D13 part d for the delayed-kill exception)
+   - Confidence: high for per-cell hits and exclusions; medium for the delayed-kill exception,
+     as S-0302 claim 16
 
 9. **Objects left out.** A candidate object receives no hit when any of these holds:
    - it is the source object, unless the source object's type has the self-damage flag set, or
@@ -550,11 +555,14 @@ lies outside the list (Edge cases).
 
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). All debris is created at the projectile position *Q* (claim 22).
 
-When the warhead lists *m* > 0 retained debris types *t*₀ … *t*ₘ₋₁, with respective maxima *u*₀ … *u*ₘ₋₁, let the initial remainder be ℓ₀ = *N*. For every index *j* with ℓⱼ > 0, the type index is *i*ⱼ = *j* mod *m*, and raw*ⱼ* is the next scenario-random-stream value, read as a signed integer. For that index, the assigned piece count and the next remainder are
+For a nonempty retained type list, number the *m* types from 0 to *m* − 1 and pair each type with its corresponding maximum. Begin with remainder ℓ₀ = *N*. For each assignment state *j* with ℓⱼ > 0, the next scenario-random-stream value is read as a signed integer, raw*ⱼ*. Let *i*ⱼ be the remainder of *j* divided by *m*. The assigned count and next remainder are given by the following state table:
 
-> *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢⱼ + 1), ℓⱼ), ℓⱼ₊₁ = ℓⱼ − *g*ⱼ.
+| Condition | Assigned pieces | Next remainder | Stream value consumed |
+|---|---|---|---|
+| ℓⱼ > 0 | *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢⱼ + 1), ℓⱼ), of type *t*ᵢⱼ | ℓⱼ₊₁ = ℓⱼ − *g*ⱼ | one signed raw value |
+| ℓⱼ = 0 | none | unchanged | none |
 
-The *g*ⱼ pieces have type *t*ᵢⱼ. The remainder operation is the "magnitude first" remainder of S-0202 claim 6. The assignments end when a remainder becomes 0; the raw value at the index that produces 0 is included. If no remainder becomes 0, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
+The remainder operation is the magnitude-first remainder of S-0202 claim 6. Assignment ends when the remainder first becomes 0; the raw value that produces 0 is included. If the remainder never becomes 0, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
 
 **F7. Flying-object search** (claims 6 and 11). Let *W* and *H* be the map's width and height
 (S-0009) and *B* = *W* + *H* − 1, the largest cell coordinate of the map along either axis. Sector
@@ -589,13 +597,7 @@ sectors *C* + *k*(*d*ₓ, *d*ᵧ) for *k* = 1, 2, …, each clamped as above, an
 order: north and west with (−1, −1), south and west with (−1, +1), north and east with (+1, −1),
 and south and east with (+1, +1).
 
-The candidates are the tracked flying objects registered in these sectors, sector after sector in
-the order *C*, east run, north run, south run, west run, then the four diagonal groups (within a
-group the diagonal sectors from *C* outwards, then the two extra sectors in the order given), and
-within a sector in the order in which the objects were registered there. Since no diagonal group
-reaches further than its two runs, which stop at the map's edges, the clamping never makes two of
-these sectors the same, and each candidate appears once. Sectors further from *C* than these, for example
-(−3, −1) from *C* when every run is at least 3 long, are not searched. Units: cells, sectors.
+The ordered sector set consists of *C*, followed by the nonempty east, north, south and west runs, then the four diagonal groups, in the orders defined above. Within each diagonal group, sectors follow the stated outward-diagonal order and then the stated order of its two extra sectors. The candidate sequence contains the tracked flying objects registered in those sectors: sector order determines the order between sectors, and registration order determines the order within each sector. Each candidate occurs once. Sectors outside this set, including (−3, −1) from *C* when every run is at least 3 long, are not searched. Units: cells, sectors.
 
 With `quirks.flying_search_sectors` off, the candidates are every tracked flying object, in the
 order of registration, each once.
@@ -657,7 +659,7 @@ twice as two, is 1, 9, 21, 37, 61, 89, 121, 161, 205, 253, 309, 369 (368 distinc
   twice, so it is scanned twice: its wall overlay takes two wall hits (claim 16), its resource
   overlay is reduced twice (claim 17), and each object there that passes claim 9 is a candidate
   twice, so it takes two hits, at the two places of the order (claim 11; the second does nothing
-  if the first destroyed it). Cells that are not in the list: (3, −11) and the metric-11 cells
+  if the first destroyed it, with claim 8's delayed-kill exception). Cells that are not in the list: (3, −11) and the metric-11 cells
   (±2, ±10) and (±3, ±10). The list also holds seven cells of metric 12: (±2, ±11), (−3, 11),
   (3, 11) and (−3, −11).
 
@@ -912,8 +914,11 @@ hit). Variant b: F3 with *d* = ⌊*r*(*n*)⌋ − 208 for the distance the recor
 measured distance of 300 that is *d* = 92 and a loss of 94, against 80 if the full distance were
 used and 100 if *d* were 0. *Variant c:* repeat with the can-be-demolished flag off and a zero
 versus value: each eligible foundation entry costs 1 health point. Then restore versus 100 % and
-lower the building's starting health below one hit; it dies once and later entries produce no
-further death effects. *Falsified if:* any main-part loss differs from 100 per eligible cell,
+lower the building's starting health below one hit, with the warhead's delayed-kill flag off.
+It dies once and later entries produce no further death effects. The delayed-kill exception is
+measured by S-0302 scenario D13 part d: an eligible multi-cell building remains at 1 health
+and each later lethal foundation-cell hit credits another destruction under the default quirk,
+without the death effects that await actual destruction. *Falsified if:* any main-part loss differs from 100 per eligible cell,
 any variant-b loss differs from F3 at the recorded reduced distance, variant c does not lose
 1 per entry with zero versus, or the destroyed building produces repeated death effects.
 

@@ -1,9 +1,9 @@
 ---
 id: Q-0200
 title: The scatter centre cell of a vehicle, now that S-0208 takes it from the walking target
-status: open
+status: answered
 related: [S-0207, S-0208]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

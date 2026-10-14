@@ -1,9 +1,9 @@
 ---
 id: Q-0133
 title: The facing a building gets when it is placed or deployed
-status: open
+status: answered
 related: [S-0406, S-0415, S-0204]
-answered-by: []
+answered-by: [S-0406]
 ---
 
 ## Need

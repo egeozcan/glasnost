@@ -1,9 +1,9 @@
 ---
 id: Q-0131
 title: A building's upgrade count after one of its upgrades is sold
-status: open
+status: answered
 related: [S-0406, S-0408]
-answered-by: []
+answered-by: [S-0408]
 ---
 
 ## Need

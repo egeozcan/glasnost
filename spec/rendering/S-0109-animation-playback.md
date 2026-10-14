@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,6 +22,10 @@ events tied to its stages), which sprite its derived playback fields come from, 
 it draws and how (translucency, shadow, detail level, attachment to another object). Render layers
 and depth are S-0102's, palettes and brightness S-0103's and S-0104's, building slot animations
 S-0108's, and sprite lookup and the theater refresh S-0007's.
+
+**Joint hand-off.** Check S-0011 claim 36 and scenario T21 against claim 13 of this revision
+at sign-off, and hand the two revisions off together. Creation-time sound and resource chain
+reaction are enabled; their suppression applies only to later start events.
 
 ## Terms
 
@@ -49,7 +53,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 | repeat factor *m* | An integer that the creator of an animation may give with it (default 1): the number of times the type's passes are repeated. A factor below 1 counts as 1. |
 | loop delay | A count of updates during which an animation does not advance, after its creation (when its creator asks for one) or between two passes (claim 11). |
 | update | The processing an animation receives in its turn (S-0203, Terms): animations take turns and enter the update order of S-0203 when they are created (S-0203, claims 2 to 4). So an animation receives one update per tick while it exists, except a tick whose turn a removal costs it (S-0203, claim 10) and a tick in which it is created after the turn pass. |
-| start event, middle event | Effects tied to playback (claims 13 and 14): the start event plays the type's start sound and the type's resource chain reaction, and the middle event creates the type's particles, scorch marks and craters. Those effects belong to their own specs; this spec says when they happen. |
+| start event, middle event | Effects tied to playback (claims 13 and 14): the start event normally plays the type's start sound and the type's resource chain reaction, and the middle event creates the type's particles, scorch marks and craters. A creation start event happens at creation with no loop delay; later start events happen at loop-delay ends or follow-up switches. A trigger-played animation suppresses sound and chain reaction only at those later events (claim 13). Those effects belong to their own specs; this spec says when they happen. |
 | follow-up type | The type named by the animation type's follow-up field (claim 15). |
 | current type | The type an animation plays as: its creation type, or the follow-up type after a follow-up switch, claim 15. |
 | reversed | An animation is reversed while its current type has the reverse flag or its creator asked for reverse play. The test is made against the current type, so it can change when the animation switches to a follow-up type, claim 15. The step σ is separate state. |
@@ -265,7 +269,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     one when μ = 0, happen as for any other animation.
     - Backing: `measurable` (scenarios AN9, AN10, AN21, and S-0401 E17 for the immediate
       middle event preceding the chain reaction)
-    - Confidence: high for event timing and the middle-before-reaction order; the reaction's
+    - Confidence: high for event timing, the trigger-played creation/later distinction and the
+      middle-before-reaction order; the reaction's
       effects and composed draw sequence have the confidence of S-0401 claim 20
 
 14. **Middle event.** The middle event happens on every advance after which *a* + *k* = μ,
@@ -685,7 +690,7 @@ restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*
 | created | no loop delay | start event in the same tick; *playing* |
 | *delayed* | count reaches 0 | start event; no advance on that update; *playing*. The count and the start event go on while the animation is held (claim 23) |
 | *playing* | held (claim 23) | no advance on that update; the clock of claim 5 keeps running |
-| *playing* | *d* ticks since the last advance, update not skipped, not held, *d* > 0 | advance; in the same update, damage (claim 17), the middle event if *a* + *k* = μ, and the turn (ping-pong, claim 9) or, without a turn, the end of the pass (F3) |
+| *playing* | *d* ticks have passed since the last advance, the update is not skipped, the animation is not held, and *d* > 0 | The image stage advances. That advance delivers any damage due under claim 17 and produces the middle event when *a* + *k* = μ. The resulting stage then follows the ping-pong turning rule of claim 9; if it does not turn, the pass-end rule F3 determines whether the pass ends. |
 | *playing* | pass ends with *r* ≥ 2 | new pass (F3); if the random loop delay pair is not (0, 0), ranged draw of *D*, and *delayed* when *D* > 0 |
 | *playing* | pass ends with *r* ≤ 1, follow-up type named | follow-up switch of claim 15, start event, *playing* |
 | *playing* | pass ends with *r* ≤ 1, no follow-up type | infantry created if the type makes infantry; removed |
@@ -957,7 +962,8 @@ building that can cloak), it sets them in the test map's override section, which
     sound at creation only and none after either gap.
   - Falsified if: a gap lies outside 31 … 61, the animation vanishes during a gap, the weapon run's
     sound plays once per animation, or the trigger-played run has no creation sound or plays a
-    sound after a gap.
+    sound after a gap. A contrary trigger-played result calls for investigation of claim 13,
+    not adoption of creation-time suppression as an alternative rule.
 - **AN10 (claims 13, 14).** A test type with the scorch flag (no crater flag), rate 300, on a sprite
   with *N* ≥ 4, played by a trigger action, once with start 0 (M1) and once with start ⌊*N*/2⌋ + 1
   (M2).
@@ -1109,7 +1115,8 @@ building that can cloak), it sets them in the test map's override section, which
   - Expected: in both test runs the cell holds no resource from the tick the animation is created
     (its creation start event, claim 13). The control leaves the cell's resource unchanged.
   - Falsified if: resource remains in either test cell immediately after animation creation, or
-    the control removes it.
+    the control removes it. A contrary trigger-played result calls for investigation of claim 13:
+    creation-time suppression is not an established alternative behaviour.
 - **AN22 (claim 20, cloaked buildings).** A skirmish on a test map whose override section makes a
   stock building type that has slot animations able to cloak. The test copy of the art database gives
   its slot animations three test types: K1 with neither the translucent flag nor a translucency field,

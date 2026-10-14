@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200]
 supersedes: []
 ---
 
@@ -21,8 +21,9 @@ progress along fixed cell-to-cell tracks (straight, diagonal and two-cell curves
 between track points, and what it does when the cell of its next step may not be entered. It also
 states which locomotor a mobile type has (claim 14) and how every vehicle, whatever its locomotor,
 answers a scatter request (claim 16), while where a vehicle may go (S-0211), which steps it takes
-(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16 and 19) are
-left to other specs. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
+(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16, 19 and 20) are
+left to other specs. Claim 20 states how an object with the teleporting locomotor moves on its
+own: where it lands, what the jump does and how long it then phases in. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
 that approaches a target stops once the target is in range, and what happens to its destination. This spec covers skirmish. Network games and campaigns are out of scope.
 
@@ -44,7 +45,7 @@ as in the glossary. From S-0209: the *entry outcome* and its values (*clear*, *c
 blocker*, *moving blocker*, *closed friendly gate*, *friendly obstacle*, *enemy obstacle*,
 *stationary friendly*, *blocked*), *cell layer*, *listed*, *allied* (the mover's view unless
 stated), *contact*, the *close-enough distance* (its Formulas F2) and the *path retry timer*. From
-S-0208 (Terms): the *scatter centre cell*, the *screen-cover check* and the rounding of a facing to
+S-0208 (Terms): the *screen-cover check* and the rounding of a facing to
 the eight step directions (its Formulas F6). From S-0212: the *nearby-cell search* of its claim 25
 and a *fresh search* (its claim 20). From S-0215: *behaviour* and the behaviour names (*sleep*,
 *sticky*, *unload*, *guard*, *move*, *attack*), the *current* and *queued* behaviour (its claim 1),
@@ -66,7 +67,9 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
   - and claim 1 is a rule of the type's speed field, which holds for the speed field of an
     infantry type too (S-0208 uses it).
 
-  - claim 19 and scenario D21 cover vehicles with driving, ship and hovering locomotors.
+  - claim 19 and scenario D21 cover vehicles with driving, ship and hovering locomotors,
+  - claim 20 and scenario D22 cover every object, of any kind, that moves with the teleporting
+    locomotor (the landing point of an infantry unit is left open).
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -106,6 +109,19 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
 - **Move destination.** The point the vehicle's current move order leads to, in leptons. It is used
   for braking (claim 10) and for giving up a move (claim 15). When the destination cell is a
   high-bridge cell, its height is the deck's height.
+- **Heading point.** The point a vehicle's locomotor is moving the vehicle towards at this moment,
+  if any. For the driving locomotor it is the track target of the track the vehicle is on, from
+  the tick its track begins until the tick that track ends; it moves one cell on with the track
+  target when a curve is chained (claim 8). A drive vehicle that stands still, turns in place
+  before a step, waits (claim 15) or is between two tracks has no heading point. A vehicle with the
+  teleporting locomotor has none either (claim 20). The heading point of the ship, hovering and
+  other locomotors belongs to their specs (Open questions).
+- **Vehicle scatter centre cell.** The cell around which a vehicle that accepts a scatter request
+  looks for its new destination (claim 16): the cell of its heading point when it has one, and
+  otherwise its own cell. For a vehicle travelling through a tunnel (S-0212 Terms), the tunnel's
+  exit cell takes the place of its own cell, as for infantry (S-0208 Terms *scatter reference
+  point*). For a drive vehicle it is never the cell of the move destination unless the vehicle is
+  on the track that ends there.
 - **Slowdown distance** *D*ₛ, **acceleration factor** *a*, **deceleration factor** *η* and the
   **acceleration flag.** Fields of the vehicle's type (Import mapping), in leptons (*D*ₛ) and as plain
   numbers (*a*, *η*).
@@ -745,8 +761,7 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
 
     A request **without a threat point** that is not refused takes no random draw. The vehicle's
     destination becomes the cell that the nearby-cell search of S-0212 (claim 25) gives around its
-    scatter centre cell (S-0208 Terms, with the vehicle's move destination as its locomotor
-    destination), in the same use as an infantry scatter (S-0212 table T5, row *Scatter*), with the
+    vehicle scatter centre cell (Terms), in the same use as an infantry scatter (S-0212 table T5, row *Scatter*), with the
     vehicle's own locomotion class. Its behaviours are not changed: no *move* is queued, so it drives
     there in the behaviour it has. When the search gives no cell, it does not move. A vehicle that
     had a destination (it accepted a move-anywhere request) loses that destination to the scatter
@@ -761,7 +776,7 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
     arithmetic, where *d*₀ is the facing from the threat point to the vehicle's own position rounded
     to the nearest of the eight step directions (S-0208 Formulas F6) and *j* is one ranged draw from
     the scenario random stream over 0 to 2, taken after the draw over 1 to 4 when both are taken.
-    The candidates are the eight neighbours of its scatter centre cell in the step directions *d*,
+    The candidates are the eight neighbours of its vehicle scatter centre cell in the step directions *d*,
     *d* + 1, …, *d* + 7 (mod 8), in that order of preference. A candidate qualifies when it lies
     inside the usable area and the vehicle's entry outcome for it is *clear* (S-0209 claim 5). Its
     destination is the first qualifying candidate that passes the screen-cover check (S-0208 Terms)
@@ -778,11 +793,21 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       move-anywhere, so a vehicle accepts them even when it has a destination.
     - The scatter off a building of S-0215 claim 28 and the scatter from damage of S-0215 claim 19
       are forced and have no threat point, so they follow the first case above.
+    - The search and the eight neighbours are centred on the vehicle scatter centre cell (Terms),
+      never on the cell of the move destination as such. A drive vehicle that stands still, turns in
+      place or waits between tracks searches around its own cell; one that is on a track searches
+      around the cell of that track's target, the cell one step ahead (two for a two-cell curve).
+      The known senders of a request that a vehicle with a destination accepts (move-anywhere) send
+      it only to a vehicle that does not count as moving (S-0209 claims 5 and 8, claim 15 here,
+      S-0212 claim 27), so in stock play the
+      centre is almost always the vehicle's own cell. The track-target case arises when the vehicle
+      is on a track without a destination, for example while it finishes its track after a stop
+      order.
     - Backing: `measurable` (scenario D18: part a for the search without a draw and the behaviours
       left unchanged, part b for case e, part c for case a, part d for case b, part e for the
       threat-point case and its direction draw, part f for case d, part g for case f; scenario D17
       part a for a move-anywhere request, part c for the refusal in *sticky*; D18 part h for case
-      h). `unmeasured` for these parts, each for the reason given:
+      h; D18 part i for the vehicle scatter centre cell on a track and at rest). `unmeasured` for these parts, each for the reason given:
       - case c: every sender of a request to a vehicle whose options are known sends a forced one
         (S-0209 claim 12, S-0215 claims 19 and 28, claim 15 here), so no setup is known that sends
         a vehicle a request that is not forced.
@@ -795,7 +820,10 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
         known that times that request to a vehicle that is unloading passengers at that moment
     - Confidence: medium for cases a to f, h and i, for the search without a draw and for the
       behaviours left unchanged, and for the threat-point case and its draws (read; the bunker rule
-      of S-0215 claim 17 is the only identified sender). Low for cases g and j
+      of S-0215 claim 17 is the only identified sender). Low for cases g and j. High for the vehicle
+      scatter centre cell of a drive vehicle (the heading point was read wherever it is set and
+      cleared); medium for the tunnel exit; the heading point of the ship and hovering locomotors is
+      their specs'
 
 ### Engine defaults of the speed-fraction fields
 
@@ -933,6 +961,107 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       between choosing a next step and having none; medium for parts b, c and e (read, not
       observed); low for the exact tick of the search after a retained-destination wait in part d
 
+### Teleporting locomotor
+
+20. **How an object with the teleporting locomotor moves.** This claim holds for every object that
+    moves with the teleporting locomotor (claim 14), whatever its kind, except where it names
+    infantry. It covers only the object's own move to a destination. A superweapon or other effect
+    that teleports an object belongs to the superweapon and combat specs, even when it uses the same
+    locomotor.
+
+    - (a) **Taking a destination.** When the object is given a destination (its behaviour or an
+      order sets one, S-0215), the locomotor takes it at once. It drops the destination and does
+      nothing, when the object is disabled by an electromagnetic pulse, is under a paralysing
+      effect, is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
+      **landing point** *L* at once (part b). The vehicle-present mark of the occupancy record
+      (S-0209) moves at once from the cell of the object's old point to the cell of *L*. The old
+      point is the previous *L* when an earlier destination had fixed one that was not yet jumped
+      to, and otherwise the object's own position. The object stays listed in its old cell until the
+      jump. From then until the jump it counts as moving (S-0212 claim 27), and the point it
+      reports as its locomotor's goal is *L*.
+    - (b) **The landing point of an object that is not infantry.** When the object's entry outcome
+      for the destination cell (S-0209 claim 5) is *clear*, *L* is the centre of that cell, at height
+      *H*. Otherwise *L* is the
+      cell that a nearby-cell search (S-0212 claim 25) gives with these choices:
+      - centre: the destination cell,
+      - locomotion class and movement zone: the object's own (the zone is not simplified),
+      - reach region: that of the destination cell for the object's own zone,
+      - deck mode: when the destination cell is a high-bridge cell and the object's world height is
+        more than 312 leptons (3 height levels) above the surface height *H* at the destination,
+      - no height condition, no further test, no no-overlay condition, bridge cells allowed,
+      - no reference cell, so the pick depends on the tick number (S-0212 claim 25).
+
+      *L* is the centre of the chosen cell, and its height is *H* there. The point within the
+      destination cell does not matter. No path is searched, so the object can land beyond cliffs,
+      across water, on another island or at any height. Two cases leave *L* unchanged: the
+      object is held in place by a superweapon teleport's after-effect, or the search gives no
+      cell. Then, when *L* is still the object's own position or no *L* was ever fixed, no jump
+      happens and the destination is removed.
+    - (c) **The landing point of an infantry unit.** It differs: a standing position inside the
+      cell is chosen, and a nearby-cell search follows a refusal only for an object destination.
+      Its details are open (Open questions); S-0208 is their owner.
+    - (d) **When it jumps.** It jumps on its first movement update after *L* is fixed. A vehicle's
+      behaviour is processed before its locomotor in its update (S-0203), so a destination set by
+      its behaviour in its update is jumped to in that same tick. When an order makes the
+      destination appear belongs to S-0214 and S-0215. It does not turn first, does not wait, and has no leaving stage: it is never *being
+      erased* because of its own move. When *L* equals its own position, it does not jump, and the
+      destination is removed.
+    - (e) **What the jump does.** All of this happens in the tick of the jump. Every object that
+      has it as its target drops it, and every projectile aimed at it loses its target, so a shot
+      already in flight towards it misses (the same effect as becoming untargetable, S-0215 claim
+      10). A warp animation plays at the old point, then the departure sound at the old point.
+      The object is removed from its old cell's listing, takes position *L*, and is listed in *L*'s
+      cell. On a high-bridge cell it is put on the deck: its height is *H* + 416 leptons there,
+      and *H* elsewhere. Its facing does not change, and it stays in the ground layer. The arrival
+      sound plays at *L*. Entering *L*'s cell has the effects of a vehicle reaching a track target
+      in a new cell; the specs of those effects own them. It collects a crate lying on *L*'s cell
+      (claim 13 and the crate specs). It stops moving and its destination is removed, so its
+      behaviour falls back to rest (S-0215 claim 13). A second warp animation plays at *L*. A
+      parasite inside it is thrown out (the combat specs own how). Its type's departure and arrival
+      sounds override the game-wide ones.
+    - (f) **Phasing in.** At the jump the object starts *phasing in* (S-0214 Terms; *materialising*
+      in S-0301) for *D* ticks, *D* from F9. An object whose type has the harvester flag of a
+      vehicle type does not phase in at all. While phasing in:
+      - it stays where it landed,
+      - every new destination is dropped (part a), so orders that would move it are lost, not
+        delayed; S-0214 owns the refusal of player orders to a unit that is phasing in,
+      - a weapon's firing check gives the early *rearming* answer (S-0301 claim 9),
+      - its behaviour is still processed (S-0215 claim 2).
+
+      Phasing in ends on the first tick *t* after the jump tick *t*₀ for which *t* − *t*₀ ≥ *D*:
+      for *D* ≤ 0 that is *t*₀ + 1. Then, if the object has no target, and its targeting timer
+      (S-0309) has more than 10 ticks left, the timer is set to one ranged draw from the scenario
+      random stream over 4 to 8 ticks. The teleport case of S-0309 claim 1's search then runs, and
+      when that sets no target, the object falls back to its idle behaviour (S-0215 owns which).
+      A harvester-flag object, which does not phase in, has no such end.
+    - (g) **Successive jumps.** There is no delay of its own between jumps apart from phasing in.
+      After a jump the destination is gone, so a further jump needs a new destination from its
+      behaviour or an order. One given after phasing in ends is taken at once (part a). A
+      harvester-flag object can therefore jump on consecutive movement updates.
+    - (h) **A moving target or a new destination.** *L* is fixed when the destination is given and
+      is not followed afterwards. A new destination given before the jump replaces *L*, moving the
+      occupancy mark again (part a). Because the jump follows on the next movement update, a target
+      that moves rarely gets a chance to move in between. A destination given while the object is
+      phasing in is dropped. Whether a behaviour that chases a moving target gives a new
+      destination after the jump is S-0215's.
+    - (i) **Random draws.** The jump itself takes none. The landing search depends on the tick
+      number, not on a draw. The only draw is the one at the end of phasing in in part f.
+    - (j) **Other queries.** A request to turn the body turns it at the turn rate of S-0206, as for
+      other locomotors. Crushing, damage and visibility rules are not changed by the jump or by
+      phasing in, except for the target loss in part e.
+    - Backing: `measurable` (scenario D22: runs 1 and 2 for parts a, b, d, e and f with the
+      harvester exception, run 2 also for part g, run 3 for the occupied destination, run 4 for
+      cliffs and islands, run 5 for D against distance and each rules field, run 6 for an order
+      dropped while phasing in and for part h, run 7 for the draw at the end of phasing in and for
+      part i, run 8 for a shot in flight, run 9 for part j). Part c is open.
+      `unmeasured`: the occupancy mark moving before the jump, because the jump follows within the
+      same or the next movement update and no observable falls between them.
+    - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
+      (the search's choices were read, and the asked level of the entry outcome is not settled,
+      Open questions), for part a's list of disabling states, for part d's same-tick consequence and
+      for part h's consequences; low for
+      part j's statement that nothing else changes, and for part c
+
 ## Formulas
 
 Every floating-point operation in this spec, in the claims (the speed-fraction updates of claim 10
@@ -1006,6 +1135,17 @@ this distance too: off, *d*ₙ = ⌊√*n*⌋. Under `quirks.drive_nearest_from_
 *w* are replaced by (*x* mod 256) − 128 and (*y* mod 256) − 128, so the distance is measured from
 the cell's centre. Unit: leptons.
 
+**F9 Phasing-in delay** (claim 20 f). Integer arithmetic throughout. *d* = ⌊*r*(*n*)⌋, with *n* =
+Δ*x*² + Δ*y*² + Δ*z*² the squared distance in leptons from the object's position before the jump
+to *L*, and *r* the table square root of S-0204 (Formulas F1), as in F5 (the switch
+`quirks.table_root_distance` covers it too). With the trigger flag on, *q* = trunc(*d* / *k*), the
+division truncating toward zero, where *k* is the distance factor; with it off, *q* = 0. Then
+*D* = *q* when max(*q*, 0) > *m*, and *D* = *m* otherwise, where *m* is the minimum delay. Finally,
+when *d* < *g*, the range minimum, *D* = *m* whatever *q* is. An object whose type has the
+harvester flag of a vehicle type gets *D* = 0 and does not phase in. Unit: ticks. *D* is not
+always max(*q*, *m*): when *m* is negative, *D* = *q* even for a smaller negative *q*. Every *D* ≤ 0
+ends phasing in on the tick after the jump (claim 20 f), so the difference cannot be observed.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1049,6 +1189,14 @@ the cell's centre. Unit: leptons.
 | Point the nearest object is measured from | the cell's top corner: position (0, 0) within the cell | leptons | Claim 15 and F8; the residues *x* mod 256 and *y* mod 256 are taken from 0 to 255 |
 | Range of the target draw of a threat-point scatter | 1 to 4 (accepts on 1) | draw value | Claim 16 |
 | Range of the direction draw of a threat-point scatter | 0 to 2, minus 1 | step directions | Claim 16 |
+| Height above *H* at the destination from which a teleport landing search is in deck mode | more than 312 (3 height levels of 104) | leptons | Claim 20 b |
+| Height added on landing on a high-bridge cell | 416 (4 height levels of 104) | leptons | Claim 20 e |
+| Absent-key default: teleport distance factor *k* | 32 | leptons per tick | F9 |
+| Absent-key default: teleport trigger flag | on | boolean | F9 |
+| Absent-key default: teleport minimum delay *m* | 0 | ticks | F9 |
+| Absent-key default: teleport range minimum *g* | 0 | leptons | F9 |
+| Targeting-timer threshold at the end of phasing in | more than 10 | ticks | Claim 20 f |
+| Range of the targeting-timer draw at the end of phasing in | 4 to 8, both included | ticks | Claim 20 f |
 
 **T1 Track point tables.** Each table row gives a point in driving order. The index starts at 0. The columns *x* and *y* are the point's displacement from the track target in leptons along the map axes (*y* grows towards map south); *f* is its facing in 1/256 turn. The target itself, (0, 0), is not listed. Point numbers used for chain, entry and release points count from 0. A release point lies inside the curve's first cell (the cell its current step enters) and is the point at which that cell's occupancy record (glossary) stops showing a vehicle present, although the vehicle is still in the cell (S-0209 claim 1). The values include irregular points, including (−129, 129) in curve B and facings 66 then 64 in curve D. Curve F's point 0, (−512, 256, 32), is the track's own start (the centre of the cell the vehicle starts from); every other curve's first point lies one increment along the track. Curve F's point 0 still costs 7 progress units to pass and moves the vehicle 0 leptons; F3's cost of 399 includes it. All listed values are part of the original data and are kept.
 
@@ -1416,6 +1564,11 @@ of the first group.
 | holding a path found on this tick | repeated check: cloaked blocker or blocked | gives up the move |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
+| teleporting, idle | destination given, not disabled, not being erased, not phasing in | landing point *L* fixed at once, occupancy mark moved to *L*'s cell (claim 20 a, b) |
+| teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: targets and projectiles lose it, it is listed in *L*'s cell at *L*, crate collected, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
+| teleporting, *L* fixed | its next movement update, *L* equals its position or none was fixed | destination removed, no jump (claim 20 b, d) |
+| phasing in | destination given | dropped (claim 20 a) |
+| phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; with no target and more than 10 ticks on the targeting timer, one draw over 4 to 8 resets it; S-0309's teleport search, else its idle behaviour (claim 20 f) |
 
 A change of speed fraction takes effect in the progress of the same tick (claim 10).
 
@@ -1479,6 +1632,13 @@ its new destination from that tick.
 - **A type without a locomotor field teleports** (claim 14), whatever its kind. This is original
   behaviour and has no switch: it is the meaning of the absent key, and a mod that wants another
   locomotor names it.
+- **A teleport distance factor of 0 with the trigger flag on** (F9) makes the original divide by
+  zero and stop with a program error at the first jump. **Our engine** treats it as the trigger
+  flag off (*q* = 0) and gives an importer warning. This is a departure (bad data), with no switch.
+- **A teleporting object ignores terrain between its position and its landing point** (claim 20 b).
+  It can reach cells that no path reaches. This is original behaviour, not a bug, and has no switch.
+- **Orders given while phasing in are lost** (claim 20 f), not deferred to its end. Original
+  behaviour, no switch.
 - **`quirks.drive_giveup_ignores_contact`** (claim 15, F7). Default (original): at a step check the
   give-up test against stationary friends does not ask about contact, so a vehicle within the
   close-enough distance of its destination gives up even while it is in contact with another object,
@@ -1525,6 +1685,18 @@ its new destination from that tick.
 The rows for the type speed, country factor and faster ability also feed the lead estimate
 (claim 18). Its speed bonus and speed fraction are runtime state (claims 9 to 13), not separate
 imported lead fields. No key supplies a progress-to-lepton conversion or a waiting-speed override.
+
+| `[General]`, key `ChronoDistanceFactor` | distance factor *k* (F9) | integer (S-0003, claim 3), leptons per tick | keeps value; engine default 32 |
+| `[General]`, key `ChronoTrigger` | trigger flag (F9) | boolean | keeps value; engine default yes |
+| `[General]`, key `ChronoMinimumDelay` | minimum delay *m* (F9) | integer, ticks | keeps value; engine default 0 |
+| `[General]`, key `ChronoRangeMinimum` | range minimum *g* (F9) | integer, leptons | keeps value; engine default 0 |
+| `[General]`, key `WarpOut` | the warp animation played at both ends of a jump (claim 20 e) | animation type name | keeps value; with none in force, no animation is played |
+| `[AudioVisual]`, keys `ChronoOutSound`, `ChronoInSound` | game-wide departure and arrival sounds of a jump (claim 20 e) | sound name | keeps value; with none in force, no sound is played |
+| vehicle, infantry and aircraft type sections, keys `ChronoOutSound`, `ChronoInSound` | the type's own departure and arrival sounds, used instead of the game-wide ones when given | sound name | the game-wide sound |
+| vehicle type section, key `Harvester` | harvester flag: no phasing in after a jump (claim 20 f, F9); its economic meaning is S-0402's | boolean | keeps value; engine default no |
+
+The other chrono keys of `[General]` (the chronosphere's delays and its landing warhead) feed the
+superweapon specs, not claim 20.
 
 No other speed field of a country or of a difficulty level enters the formulas of this spec
 (Open questions).
@@ -1879,7 +2051,8 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
 - *Procedure:* place one unit of each of *A*, *B*, *B*′, *C*, *I*, *J*, *P* and *S* by the test map
   on open flat ground and order each to a cell 10 cells away. In a separate run, place a unit of type *U* by the map.
 - *Observable:* whether each unit's position moves along the ground from tick to tick or jumps to
-  the destination in one tick (teleporting); for *U*, whether the game runs.
+  the destination in one movement update and then phases in (teleporting, claim 20; D22 checks the
+  jump itself); for *U*, whether the game runs.
 - *Runs:* 1 each (no random draw decides the outcome).
 - *Expected:* *A*, *C*, *I* and *P* teleport; *B* and *B*′ drive; *S* drives (the ignored value keeps
   the stock layer's locomotor); *J* moves along the ground and does not teleport (how fast and along
@@ -2073,7 +2246,7 @@ cell before *X*.
     vehicle of the house enters the bunker, so that the bunker rule of S-0215 claim 17 sends *W* a
     forced request with the bunker's position as threat point. *Expected:* exactly one draw from the
     scenario random stream at that tick for *W*; *W* queues *move* and takes one of the eight
-    neighbours of its scatter centre cell, in the preference order of claim 16.
+    neighbours of its vehicle scatter centre cell, in the preference order of claim 16.
   - (f) An armed vehicle *T* of a stock type without a turret, idle in *guard*, and an enemy unit
     that map triggers move into *T*'s weapon range behind it, so that *T* turns its body by about
     1/2 turn to aim at it (S-0310), a turn that lasts several ticks. The scatter order is given by
@@ -2085,11 +2258,23 @@ cell before *X*.
     deploys where it stands, this part is skipped and case f stays unconfirmed.
   - (h) As (e), with *W* in *guard* and a named test file that gives *guard* the paralysed
     property (S-0215 claim 17). *Expected:* *W* stays where it is, and no draw is recorded for it (case h).
+  - (i) Vehicle scatter centre cell. *V* is ordered by scripted input to a cell *X* 12 cells away in
+    a straight line along open flat ground. While the recorder shows *V* on a straight track into
+    cell *K* (the cell one step ahead of its own cell), scripted input gives the *stop* order and,
+    on the first tick on which *V* has no destination, the scatter order (tick *N*). Repeat with
+    the scatter order given on the first tick after *V* has reached its track target and stands
+    still. *Expected:* while *V* is still on its track, its new destination is the qualifying cell
+    at position (*N* mod *n*) of the search's collection order around *K*, with *n* counted from
+    the occupancy marks the recorder shows around *K* (*V*'s own cell may not qualify); once it
+    stands still, the same around its own cell; in neither run a cell chosen around *X*. If *V*
+    has no destination only once it stands still, the first run is inconclusive and only the
+    second applies.
 - *Runs:* 3 each; (a) at three different *N*.
 - *Falsified if:* in (a) a draw is recorded, the behaviour becomes *move*, or another cell is chosen,
   in (b) the destination changes, in (c) or (d) a vehicle moves or gets a destination, in (e) no draw, two draws, or no
   *move*, in (f) *T* gets a destination while it turns or none in the control, in (g) the deployed
-  vehicle gets a destination, in (h) *W* moves or a draw is recorded for it.
+  vehicle gets a destination, in (h) *W* moves or a draw is recorded for it, in (i) the new destination
+  is a neighbour of *X*'s cell, or does not match the pick around the expected centre.
 
 **D19: engine defaults of the acceleration fields (claim 17).**
 - *Setup:* as D3 (speed field 20, acceleration flag on, a route of 30 cells north from rest), with
@@ -2220,6 +2405,60 @@ cell before *X*.
   except the target-object destinations of S-0215 claim 37 h and S-0307, whose setups are those
   specs'.
 
+**D22: the teleporting locomotor's own move (claim 20; Q-0181).**
+- *Setup:* open flat ground with a cliff ridge and a second island separated by water, as each run
+  needs. Units of the human player: the stock chrono miner *H* (a vehicle type with the harvester
+  flag and the teleporting locomotor), and a test vehicle type *T* that copies an armed stock
+  vehicle type without its locomotor field (as D16's *A*) and has the harvester flag off. An
+  ordinary driving harvester *G* as a control. Recorder as in D17, recording each tick the
+  position (leptons and height), the facing, the cell listings and occupancy marks, the
+  destination, whether the unit is phasing in, its targeting timer and the draws from the scenario
+  random stream.
+- *Procedure and expected:*
+  - Run 1 (timing and effects). *T* stands still; on tick *t* scripted input orders it to a cell 15
+    cells away. *Expected:* no turn and no movement before the jump; the jump on the tick on which the
+    recorder first shows the destination; on that tick its position becomes the destination cell's
+    centre at height *H*, its old cell no longer lists it, the new one does, its facing is unchanged,
+    its destination is gone and its behaviour falls back to rest; it is phasing in from that tick
+    until the tick F9 gives with the rules in force.
+  - Run 2 (harvester exception). As run 1 with *H*. *Expected:* the same jump, and no phasing in at
+    all: a further order on the next tick is obeyed with a jump on that tick.
+  - Run 3 (occupied destination). The destination cell holds a stationary friendly vehicle.
+    *Expected:* *T* lands on the cell that the nearby-cell search of claim 20 b gives (at position
+    (*N* mod *n*) of the collection order, *N* the tick number), not on the occupied cell. Variant:
+    every cell within the search's largest radius is occupied or unenterable. *Expected:* *T* does
+    not move and its destination is removed.
+  - Run 4 (no path needed). The destination is on top of a cliff with no ramp, and in a second run
+    on another island. *Expected:* *T* and *H* jump there in one movement update; *G*, given the same
+    order, does not arrive.
+  - Run 5 (delay against distance). Orders to cells at several distances from 1 to 30 cells, with
+    the stock rules and with test rules files that change, one at a time, the distance factor, the
+    trigger flag (off), the minimum delay and the range minimum. *Expected:* the number of ticks
+    spent phasing in equals F9's *D* in every run; with the trigger off it is the minimum delay; with
+    the distance below the range minimum it is the minimum delay.
+  - Run 6 (orders while phasing in). Scripted input gives *T* a move order on the second tick of
+    its phasing in. *Expected:* the order is lost: no jump during or after phasing in until a new
+    order is given after it ends.
+  - Run 7 (draw at the end). *T* without a target, ordered to jump at varied ticks so that its
+    targeting timer, read by the recorder at the end tick of phasing in, shows more than 10 ticks in
+    some runs and 10 or fewer in others; the runs are classified by that reading. *Expected:* in the
+    first class exactly one draw from the scenario random stream at the end tick, setting the timer
+    to a value from 4 to 8; none in the second class.
+  - Run 8 (shot in flight). An enemy unit fires a slow projectile at *T*; *T* is ordered to jump
+    while the projectile is in flight. *Expected:* the attacker loses *T* as its target on the jump
+    tick and the projectile does not hit *T*.
+  - Run 9 (hit and crushed while phasing in). While *T* phases in, an enemy unit fires at it from
+    in range, and in a second run an enemy crushing vehicle is ordered over *T*'s cell. *Expected:*
+    *T*'s recorded health falls as for a standing vehicle of its type, and the crushing vehicle
+    treats it as it treats such a vehicle (S-0210).
+- *Runs:* 3 each, run 3's main case at three different tick numbers; run 7 until each class has at
+  least 3 runs.
+- *Falsified if:* a turn or a wait precedes the jump, the jump comes a tick later than stated, the
+  facing changes, *T* lands on the occupied cell in run 3, *T* or *H* fails to reach the cliff top
+  or island in run 4, any phasing-in length differs from F9, *H* phases in, the order of run 6 is
+  carried out, the draw count of run 7 differs, the projectile of run 8 hits *T*, or in run 9 *T*
+  cannot be damaged or is treated differently by the crusher.
+
 ## Open questions
 
 - Whether any speed field of a country or of a difficulty level other than the country's vehicle
@@ -2236,6 +2475,22 @@ cell before *X*.
 - Whether a game started with the capture-the-flag option on places flags that a vehicle can carry
   (scenario D15 checks this as its precondition).
 - The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
+- The heading point (Terms) of the ship, hovering and other locomotors, which decides a vehicle
+  scatter centre cell for such vehicles (claim 16), was not read; their specs should give it.
+- The landing point of an infantry unit with the teleporting locomotor (claim 20 c) was read at low
+  confidence only. It appears to pick a standing position in the destination cell, to choose
+  differently for capture-like behaviours whose destination is an object, to fall back to a
+  nearby-cell search only for an object destination, and, for some owners, to send the cell's
+  occupants a forced, move-anywhere scatter request first. S-0208 should settle it; it is the open
+  part of Q-0181.
+- At which height level the entry outcome of claim 20 b is asked for the destination cell (the
+  ground or a bridge deck) was not settled.
+- What claim 20 b does when the destination cell lies in no reach region of the object's movement
+  zone (for example water for a ground vehicle): whether the search then finds any cell was not
+  checked (S-0212 claim 4 gives no region to such a cell).
+- Whether an object of a type without a locomotor field that is not infantry, landing by claim 20
+  on a cell where it cannot exist, starts sinking (see the sinking question above) was not traced, and
+  claim 20 b's search normally avoids such cells.
 - Whether a value of the locomotor field with further characters after the closing brace counts as
   a class identifier (claim 14) was not checked. The answer may depend on how the host system
   turns the text into an identifier, rather than on the game itself. Our importer treats such a

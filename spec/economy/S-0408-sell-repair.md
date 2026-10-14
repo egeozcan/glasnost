@@ -2,13 +2,13 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0131]
 supersedes: []
 ---
 
@@ -99,7 +99,8 @@ house state, on or off). In addition:
    stand at that moment (Formulas F1). The refund does not depend on the object's health, on its
    veterancy, or on the price the house paid for it: a house whose cost-bonus buildings changed since
    the purchase is refunded at the new factors. With a refund override the refund percentage and
-   the cost-bonus product play no part.
+   the cost-bonus product play no part. A free unit that cannot be placed pays this same refund
+   with *r* = 1, as S-0402 claim 18 gives: *P* without an override, or the override form otherwise.
    - *Computer-controlled houses in the original.* The original applies the refund percentage only
      for a human-controlled house: a computer-controlled house receives *P* in full. In our engine
      every player house, AI houses included, receives the refund given above (glossary *AI house*); the
@@ -155,17 +156,32 @@ house state, on or off). In addition:
    - Confidence: medium (the build-up condition, the second order), low (the firestorm-wall case,
      which part d measures; that part c's click path issues the order)
 
-5. **An upgraded building sells its top upgrade.** When a sale begins on a building that holds at
-   least one upgrade (S-0405, Terms), only the most recently added upgrade is sold: the house
-   receives the refund of claim 1 for the upgrade's type, the upgrade is removed, the house works out
-   its power again with the upgrade no longer counted (S-0405, claim 7), and the building goes to *guard*, otherwise unchanged. Each
-   further sale removes one more upgrade; a sale on a building without upgrades sells the building.
+5. **An upgraded building sells its top upgrade.** When a sale begins on a building with a
+   positive upgrade count (S-0406 claim 12), the upgrade recorded at that count's position is
+   sold: the house receives the refund of claim 1 for its type, that position is cleared, the
+   house works out its power again (S-0405 claim 7), and the building goes to *guard*. Its health
+   is unchanged. For contiguous upgrades this is the most recently added upgrade.
+   - When the sold upgrade's type has no turret flag, the integer count *c* becomes *c* − 1,
+     exactly, with no rounding. It drops by 1 even when that upgrade's level field raised it by
+     *n* above 1, and even on the wall tower type when *c* exceeds its type's upgrade count.
+     The count is not recomputed from occupied positions. A level-less upgrade can therefore
+     be added again when the new count is below the type's limit. A level-field upgrade still
+     needs count 0 (S-0406 claim 12), so selling a non-turret level-2 or level-3 upgrade does
+     not by itself permit another level-field upgrade.
+   - When the sold upgrade's type has the turret flag, the count becomes 0 instead, whatever
+     its level field or the target type's limit. Only the sold position is cleared; lower
+     recorded upgrades are not cleared. The next sale sells the building, since its count is 0.
+     Their power no longer counts at count 0 (the count gate of S-0405 claims 1 and 2).
+     This revision requires those claims to state that gate explicitly at hand-off.
+   - A count of 0 sells the building, even if positions still hold upgrades. A positive count
+     whose position is empty is the bad-data departure in Edge cases; this can occur after
+     selling a level-field upgrade without the turret flag.
    Selling an upgrade takes one creation draw of S-0202 (claim 10, every creation of a building
    object takes one), as the creation of a building object of the upgrade's type would, although
    no such object appears.
-   - Backing: `measurable` (scenario S4, parts a and b; the creation draw is counted in part b
+   - Backing: `measurable` (scenario S4, parts a to e; the creation draw is counted in part b
      by comparing the scenario random stream's state before and after the sale)
-   - Confidence: medium (one upgrade per sale, its refund, the creation draw)
+   - Confidence: high (the count changes, including the turret exception and the wall tower); medium (the refund, the creation draw)
 
 6. **The course of a sale.** The selling behaviour's processings are 1 tick apart (claim 16).
    The sale of a building without upgrades has the following observable states. A building that packs up goes through the same course with the differences of S-0415 (claim 9), among them which buildings release survivors, passengers and garrison (`quirks.packup_release_by_guard_spot`); the releases below are those of an ordinary sale.
@@ -177,6 +193,11 @@ house state, on or off). In addition:
    | First processing at which no unit is docked | Absorbed passengers, garrisoned infantry and then sale survivors (claims 7 to 9) are released, in that order. The local player hears the sell sound for an own building, and build-down begins. The order is observable in the positions taken (an earlier unit can occupy a standing position a later unit would otherwise take) and in the order of release draws (claim 9 for the occupants). |
    | Build-down | It lasts for the time S-0108, claim 5, gives. |
    | First processing after build-down has finished | The house receives the building's refund (claim 1), then the value of its stored resources (claim 10), and the building is removed. |
+
+   For a refinery, being told to leave has the effects of S-0402 claim 11: an unloading
+   harvester leaves its unloading state, scatters, starts *harvest* with its unpaid load,
+   and loses contact; a harvester still in *enter* queues *guard* and scatters instead.
+   S-0402 scenario H12 measures both cases.
 
    With no unit docked, the release and build-down-start state is reached on the second processing, one tick after the first.
 
@@ -406,7 +427,7 @@ storage order (claim 10).
 | State | Event | Result |
 |---|---|---|
 | building, any behaviour but *selling* | sell order, type with a build-up sprite | *selling* begins |
-| *selling*, first processing | building holds upgrades | top upgrade refunded and removed; building to *guard* (claim 5) |
+| *selling*, first processing | positive upgrade count | upgrade at that count's position sold; count reduced by 1 or reset to 0 for a turret upgrade; building to *guard* (claim 5); empty position follows the departure |
 | *selling*, first processing | no upgrades | docked units told to leave; bunkered vehicle let out; burning animations end |
 | *selling*, a later processing | a unit still docked | waits |
 | *selling*, a later processing | nothing docked | absorbed passengers, garrison, sale survivors released (claims 7 to 9); sell sound; build-down begins |
@@ -423,6 +444,14 @@ arrives in the same processing in which the building is removed, so a house's cr
 tick the building disappears.
 
 ## Edge cases and quirks
+
+- **Sale with an empty upgrade position** (bad-data departure, claim 5). The original fails
+  when a positive count names an empty position. Our engine pays no refund, takes no creation
+  draw, lowers the count by 1, leaves other positions and health unchanged, and returns to
+  *guard*. The importer warns about a non-turret level-field upgrade above 1, which can leave
+  this state after its sale, and about target limits above 3 (S-0406 claim 12). This also
+  defines a sale while the count is above 3: no position exists there in our engine, so the
+  same departure applies. This is not a quirk switch.
 
 - **A wall sale pays nothing** (`quirks.wall_sale_no_refund`, default: the original). With the
   switch off, the house receives the refund of claim 1 for the builder of the wall overlay (Terms).
@@ -472,6 +501,10 @@ tick the building disappears.
 |---|---|---|---|
 | Rules, `[General]`, `RefundPercent` | refund percentage *r* (claim 1) | decimal, a percent sign allowed (S-0003, claims 6 and 7), held as a double, narrowed to single (RZ₂₄) when used | 0.5; a layer without the key keeps the value in force |
 | Rules, type section, `Soylent` | refund override *v* (claim 1) | integer, credits | 0 |
+| Rules, upgrade building section, `Turret` | resets upgrade count to 0 on sale when yes; otherwise lowers it by 1 (claim 5) | boolean | no |
+| Rules, upgrade building section, `PowersUpToLevel` | upgrade level field; addition and room test owned by S-0406 claim 12; non-turret values 2 or 3 warn about an empty-position sale | integer | −1 |
+| Rules, target building section, `Upgrades` | type's upgrade count limit, owned by S-0406 claim 12; sale does not clamp to it | integer | 0 |
+| Rules, `[General]`, `WallTower` | wall tower type, owned by S-0406; no special count reduction on sale | building type name | none |
 | Rules, type section, `Cost` | cost field (claims 1, 2) | integer, credits | owned by the production specs |
 | Rules, building section, `FreeUnit` | the free unit whose cost is deducted (claim 2) | vehicle type name | none |
 | Rules, `[General]`, `PadAircraft` | pad aircraft list (claim 2) | list of aircraft type names | empty |
@@ -545,7 +578,8 @@ tick number. Any game speed.
 
 **S4: upgrades (claim 5).**
 - *Setup:* an own building holding two upgrades of different test types, the one added first of
-  cost 300 and the one added second of cost 500; refund percentage absent (so 0.5), country cost
+  cost 300 and the one added second of cost 500, both level-less and without a turret flag, with
+  refund percentage absent (so 0.5), country cost
   factors 1, no cost-bonus buildings.
 - *Procedure:* (a) sell it three times, waiting for each sale to end. (b) In a second run, on a
   map where nothing else takes a random draw, record the scenario random stream state before and
@@ -557,6 +591,28 @@ tick number. Any game speed.
   claim 5), taken at the sale's first processing, and no other.
 - *Falsified if:* the first sale removes the building or both upgrades, or in (b) an upgrade sale
   takes no draw or more than one.
+
+**S4 count variants (claim 5, Q-0131).**
+- *Setup:* named test data on the same flat skirmish map, one distant bystander computer player,
+  director and mods off apart from the named test data. Country factors 1 and no cost bonuses.
+  (c) A target with limit 2 and two level-less non-turret upgrades.
+  (d) An empty target with limit 3 and one non-turret level-3 upgrade.
+  (e) A wall tower target with limit 1 and one non-turret level-3 upgrade.
+  Repeat d and e with the upgrade's turret flag on. Also repeat c with only the top
+  upgrade's turret flag on. Any speed, one run per variant.
+- *Procedure:* sell one upgrade, then try a level-field upgrade and a level-less upgrade in
+  separate fresh repetitions. Record count, occupied upgrade positions, refund and placement
+  acceptance with a read-only recorder and scripted clicks. Do not issue a second sale on the
+  empty position in the original; it risks failure.
+- *Expected:* c has count 1 and room for a level-less replacement. Non-turret d and e have
+  count 2, with all positions empty: level-field placement refuses in both, level-less placement
+  succeeds only in d. Turret d and e have count 0 and accept a level-field replacement.
+  The turret variant of c has count 0 but retains the lower recorded upgrade; its power
+  contribution is 0, and a further sale sells the building rather than that upgrade.
+  Each successful upgrade sale gives the claim 1 refund. On our engine only, a further sale
+  on either empty count-2 position pays nothing and lowers the count to 1.
+- *Falsified if:* the original's count or acceptance differs, especially a non-turret level-3
+  sale restoring count 0, or a wall tower sale clamping the result to its type's limit.
 
 **S5: course of a sale (claim 6).**
 - *Setup:* an own crewed test building of cost 1000, holding an infantry garrison, with a known

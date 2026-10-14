@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -33,10 +33,12 @@ cover standard skirmish starting units; the all-base-units family follows S-0412
 including its different placement and draw rules. Sign-off checks these scopes against
 S-0412's revision in the same hand-off.
 
-**Cross-spec clarification required.** S-0012 claim 9 must limit its earlier-record
-prerequisite to partial coordinates: partial tile numbers after complete first-record
-coordinates also follow F3 (claim 7 below). Its R2 should include that first-record control,
-and its historical revision-12 hand-off request should acknowledge the approved revision 14.
+**Resolved S-0012 clarification.** S-0012 revision 2 claim 9, F3 and R2 supply the
+requested corrections. Joint sign-off confirms that partial coordinates use available bytes
+of a zero coordinate pair only after a complete record, while partial tile numbers after
+complete first-record coordinates follow F3 and have the R2 first-record control. Claim 7
+and M4 already agree. The historical revision-12 conflict is resolved: the corrections were
+already present in approved S-0009 revision 14 and retained in approved revision 15.
 
 **Joint hand-off checks.** Claim 29 and the header-pair Import mapping agree with S-0003
 claim 9: unread components are unspecified in the original, with deterministic completion
@@ -916,15 +918,15 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     mark means the position is taken by no player. Without header pairs beyond the eighth, every
     mark is −1 when the early phase starts, and claims 19 and 20 apply as written. When the header
     count N_h is 9 or more, each header pair i with 9 ≤ i ≤ min(N_h, 16) that is present in the map
-    (an *applied pair*) sets the marks of positions 2(i − 9) and 2(i − 9) + 1: its first number
-    becomes the mark of the first position and its second number the mark of the second. A pair in
-    that range that is absent, and every pair numbered above N_h (which is not read, claim 25),
-    leaves those two marks as they are. A missing or empty pair keeps the whole pair's value
-    in force. In a present nonempty pair, any component that cannot be read is unspecified in
-    the original, not the component in force (S-0003 claim 9). Our engine keeps every readable
-    component and supplies each unread one from the matching component of the value in force,
-    with an importer warning: a departure. For pairs 9 to 16 those fallback components are
-    the two marks at that phase, so early- and late-phase completion can differ.
+    (an *applied pair*) supplies the marks of positions 2(i − 9) and 2(i − 9) + 1: a readable
+    first or second number becomes the mark of its corresponding position. If a component
+    cannot be read, the original's mark for that component is unspecified; our engine keeps
+    that position's mark as it stood before the pair was applied and the importer warns
+    (S-0003 claim 9). A pair in that range that is absent, and every pair numbered above N_h
+    (which is not read, claim 25), leaves those two marks as they are. A missing or empty pair
+    keeps the whole pair's value in force. Unread-component completion is a departure.
+    For pairs 9 to 16 the fallback components are the two marks at that phase, so early-
+    and late-phase completion can differ.
     The pairs are applied twice, with these consequences:
     - **Early phase.** When chosen positions are given, each position's mark is, in order of
       precedence: the house number of the player who chose it, whatever a header pair says,
@@ -1595,34 +1597,11 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       cell is never usable, so it never accepts a unit, not even as the first element *b* of the
       ordering below.
 
-      **Candidate priority and draw boundary.** The table assigns each candidate or draw event
-      an integer rank. Here *r*₀ ≤ *r* ≤ 31 and *j* = 0 … 7, both integers, and
-      *q* = 17·(*r* − *r*₀), an exact integer with no rounding. Rank is a dimensionless
-      priority, not a tick or a prescribed internal processing step. *F*(*r*, *j*) is the
-      first-pass candidate of Formulas with step direction (*k*ᵣ + *j*) mod 8.
-      *G*(*r*, *j*) is its second-pass candidate, with the independently drawn x and y
-      displacements of that formula. Both coordinates are clamped to 1 … W + H − 1.
+      **Placement candidates and observable draws.** Let the first radius be 1 for a base unit whose direct placement has failed, and 4 for every other starting unit. At each radius through 31, the search has a first set of eight candidates and a second set of eight candidates. The first set lies one candidate in each of the eight step directions, at that radius from the base cell; the direction sequence begins at one ranged draw from 0 to 7 for that radius. The second set uses the same directions and radius, with each candidate independently displaced by either zero or one cell along each axis. For each such candidate, the x displacement is drawn first and its direction is chosen by a percent draw; the y displacement and its direction follow. A percent result below 50 moves toward higher coordinates, and every coordinate is clamped to 1 through W + H − 1.
 
-      | Candidate or draw event | Rank | Candidate cell | Associated draws, in stream order |
-      |---|---|---|---|
-      | Initial candidate | 0 | *b* | none |
-      | Radius orientation *ρ*(*r*) | *q* + 1 | none | *k*ᵣ = R(0, 7) |
-      | First-pass candidate *F*(*r*, *j*) | *q* + 2 + *j* | *F*(*r*, *j*) | none |
-      | Second-pass candidate *G*(*r*, *j*) | *q* + 10 + *j* | *G*(*r*, *j*) | *a*ₓ = R(0, 1), percent draw *p*ₓ, *a*ᵧ = R(0, 1), percent draw *p*ᵧ |
+      The base cell is considered before these candidates. It can accept a unit only in that initial consideration; later occurrences of the base cell cannot accept it. Among all accepting candidates, the search chooses the first in this order: base cell, then the eight first-set candidates in direction order, then the eight second-set candidates in direction order, followed by the same two sets at each succeeding radius. Thus the chosen cell and the random-stream position are unchanged by the search's internal representation or by whether candidates are tested before being stored. The search consumes exactly the draws associated with candidates through and including the chosen candidate, including draws for any ineligible repeated occurrence of the base cell; it consumes no later candidate draws. If no candidate accepts the unit, all candidates through radius 31 are considered, all their associated draws are consumed, and placement fails.
 
-      Only the rank-0 candidate may take the unit at *b*; a later candidate equal to *b*
-      is ineligible. The placement cell is the eligible, accepting candidate of least rank.
-      The unit stands at its centre, at the terrain's surface height there (on the ground,
-      under a bridge deck), with body facing 0. The stream contains exactly the associated
-      draws at ranks no greater than the placement candidate's rank, ordered by increasing
-      rank and within each rank as the table states. This includes draws of ineligible later
-      occurrences of *b*. These ranks fix observable placement and random-stream results,
-      not how an implementation represents or computes the candidates.
-
-      | Placement outcome | Observable random-stream consequence |
-      |---|---|
-      | An eligible candidate accepts the unit | draws through that candidate's rank, none at greater ranks |
-      | No eligible candidate accepts the unit | placement fails (claim 45); every associated draw is taken |
+      The two candidate sets and the coordinate clamping are given by the formulas under **Placement search candidate**. The acceptance test above applies to both sets. The chosen unit stands at the candidate cell's centre at its terrain surface height, on the ground below any bridge deck, facing 0.
 
     - **Draws of a placement itself.** Putting a vehicle of a type with either visceroid flag
       (Import mapping) on the map takes one draw R(0, 29) at that moment, right after the draws
@@ -2229,7 +2208,7 @@ the original's absent-key behaviour.
 | [Header] NumberStartingPoints | preview marker count N_h | integer | −1 (no markers) |
 | [Header] StartX, StartY | marker origin X0, Y0 | integer | −1 |
 | [Header] Width, Height | marker extent Wh, Hh | integer | −1. An explicit 0 makes the original crash when markers are drawn; our engine then draws no markers and an importer warns (Edge cases) |
-| [Header] Waypoint1 … WaypointN | marker pairs (xi, yi), read for i = 1 … N_h only (N = N_h, the marker count); pairs 9 … min(N_h, 16) are start position marks (claim 29) | two integers, by S-0003 claim 9. An unread component is unspecified in the original; our engine uses the matching component of the value in force and the importer warns | pairs 1 … 8: (0,0). Pairs 9 … 16: the marks stay as they are. Pairs above N_h: not read |
+| [Header] Waypoint1 … WaypointN | marker pairs (xi, yi), read for i = 1 … N_h only (N = N_h, the marker count); pairs 9 … min(N_h, 16) are start position marks (claim 29) | two integers, by S-0003 claim 9 (an unreadable component is unspecified in the original; our engine keeps the corresponding value in force, and the importer warns) | pairs 1 … 8: (0,0). Pairs 9 … 16: readable components set their corresponding marks; unreadable components are unspecified in the original and keep their prior marks in our engine. Missing or empty pairs keep both marks. Pairs above N_h: not read |
 | [Header] NumCoopHumanStartSpots | read; no skirmish effect established, so it has no unit here | integer | 4 |
 | [Preview] Size | preview width = third number, height = fourth | four integers | (0,0,0,0) (quirk); an empty value is the same as absent |
 | [PreviewPack] | preview pixels (claim 24) | encoded block | no preview |

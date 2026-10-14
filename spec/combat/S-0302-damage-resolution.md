@@ -2,13 +2,13 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0061, Q-0075, Q-0081]
+requests: [Q-0061, Q-0075, Q-0081, Q-0170]
 supersedes: []
 ---
 
@@ -761,6 +761,20 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     With `quirks.delay_kill_credited_again` off, repeated destruction registration at an expiry
     hit is suppressed too.
 
+    **Expiry-turn actions (Q-0170).** Expiry does not deprive a still-living building of the
+    actions due earlier in that same turn. Its behaviour is processed when due, including any
+    ordinary firing or sale progress; its due self-healing also occurs before the expiry hit.
+    A pending animation-delayed shot due in that turn is resolved under S-0301 claim 14 before
+    expiry: it fires if its normal firing check permits it, otherwise it is dropped. An expired
+    delayed-kill countdown alone does not refuse either kind of shot. Building repair due in
+    that turn likewise precedes expiry (S-0314). The expiry hit therefore takes the health left
+    after those actions, including any healing or repair, not the health at the start of the turn.
+    If an earlier action removes or destroys the building, there is no subsequent delayed-kill
+    expiry hit in that turn. A shot launched before a lethal expiry hit remains launched, but
+    that hit cuts its carried attacker and attacking house as claim 1 says; a later detonation
+    of that projectile is ownerless. These are observable consequences, not a requirement to
+    reproduce any other internal ordering within the turn.
+
     When the expiry hit reports *now dead*, all applicable shared and building death effects
     of S-0312 occur in that same building turn, with their normal draws and order. Its later
     removal, if any, follows S-0312 claim 21, not the countdown's duration. The hit still obeys
@@ -778,7 +792,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     invulnerability cancels a pending delayed-kill countdown, so expiry then delivers no hit.
     - Backing: `measurable` (scenario D13, including the tick of the credit and a second hit while
       a countdown runs, and its parts c1, c2 and d for the repeated credit; parts e to h for
-      expiry timing, its hit, credit, capture, sale, removal and cancellation; D24 for the credit); `unmeasured`
+      expiry timing, its hit, credit, capture, sale, removal and cancellation; part i for
+      behaviour, ordinary and animation-delayed firing, self-healing and repair before expiry
+      and the resulting health amount and ownerless shot; D24 for the credit); `unmeasured`
       (the *post-mortem* result of the hits: it has no known observable, claim 12, so
       no scenario tests it; healing and nonlethal hits during a delayed-kill countdown: D13
       tests lethal follow-up hits only, so it does not test their lack of credit or timer changes.
@@ -1058,6 +1074,10 @@ Damage-state results (claim 12) and what reports them:
 | now dead | Health reached 0 |
 | post-mortem | A hit put a building into a delayed kill, or hit it again with a delayed-kill warhead during the countdown (claim 16), or the target left play during the reactions to the hit (claim 12) |
 
+A still-living building whose delayed-kill countdown expires in its turn can make a due
+ordinary shot or resolve a due animation-delayed shot before the expiry hit. Due self-healing
+and paid repair affect the whole-current-health amount of that hit (claim 16, D13 part i).
+
 Observable consequences within one hit:
 - Armour bonuses alone never save a target from a hit, but a low versus value does, because the
   minimum of 1 applies to the defended amount (F2) and not to the result of the versus value (F3):
@@ -1175,7 +1195,7 @@ Observable consequences within one hit:
 | Rules, warhead section, `Sparky` | the warhead sets building fires (claim 13) | boolean | no |
 | Rules, warhead section, `Wood` | the warhead can damage terrain objects (claim 20); S-0303 (claim 16) owns its use on walls | boolean | no |
 | Rules, terrain type section, `SpawnsTiberium` | ore-spawning terrain type of claim 20 | boolean | no |
-| Rules, combat-damage section, `C4Warhead` | demolition warhead of claims 1 and 20 (S-0011 Import mapping owns the row) | warhead name | no warhead |
+| Rules, combat-damage section, `C4Warhead` | demolition warhead of claims 1, 16 and 20; claim 16's expiry-turn hit uses current health after due actions (S-0011 Import mapping owns the row) | warhead name | no warhead |
 | Foundation word of a building type (S-0108, Import mapping, foundation vocabulary): `3x3Refinery` | the 8-cell 3 × 3 foundation word of claim 13 | word (S-0108) | S-0108 |
 | Rules, general section, `DamageFireTypes` | the three damage-fire animations of claim 13, in list order | list of animation names (S-0003) | empty |
 | Rules, warhead section, `CausesDelayKill`, `DelayKillFrames`, `DelayKillAtMax` | claim 16, F7 (*F*, *α*) | boolean; integer; decimal (S-0003), held as a single | no; 5 ticks; 1.0 |
@@ -1195,7 +1215,8 @@ Observable consequences within one hit:
 | Rules, unit, infantry or aircraft type section, `DamageParticleSystems` | the list of claim 13, in list order | list of particle system names (S-0003) | empty |
 | Rules, particle system section, `BehavesLike` | eligible for claim 13 when the word is `Smoke` (letter case ignored); `Gas`, `Fire`, `Spark`, `Railgun` and unknown words are not | word | none, not eligible |
 | Rules, building type section, `BuildCat` | defence building only when `Combat` (claim 5) | first 31 bytes, then trim surrounding whitespace, whole-word comparison ignoring A–Z case. Accepted: `DontCare` (unspecified), `Tech`, `Power`, `Resource`, `Infrastructure`, `Combat`. Unknown nonempty word gives `DontCare`, not the held value | keeps held category, initially `DontCare` (not a defence) |
-| Rules, building type section, `EligibleForDelayKill` | claim 16 | boolean | no |
+| Rules, building type section, `EligibleForDelayKill` | claim 16, including expiry-turn actions; eligibility does not suppress due shots before expiry | boolean | no |
+| Art, building image section, `IsAnimDelayedFire`, `DelayedFireDelay` | pending shot resolved before delayed-kill expiry (claim 16); shot timing and firing check owned by S-0301 claim 14 | boolean; integer, ticks (S-0301 Import mapping) | S-0301 Import mapping |
 | Rules, combat-damage section, `MaxDamage` | *D*ₘₐₓ (F3) | integer | 1000 |
 | Rules, combat-damage section, `MinDamage` | nothing (claim 6); importer warning when given | integer | — |
 | Rules, combat-damage section, `OccupyDamageMultiplier`, `BunkerDamageMultiplier`, `OpenToppedDamageMultiplier` | *M*<sub>g</sub>, *M*<sub>b</sub>, *M*<sub>t</sub> (F1) | decimal (S-0003), held as a single | 1.0 each |
@@ -1423,6 +1444,28 @@ stated per destroyed vehicle, and the runs need not give equal values.
   first unblocked building turn, without restarting the countdown. *Falsified if* invulnerability
   merely postpones expiry or an electromagnetic pulse cancels it. Record ticks, health and
   animations as in (e).
+  (i) *Actions in the expiry turn (Q-0170).* Use (e)'s tiny map, game speed and
+  countdown, with a human-owned defensive test building and an enemy test target in range.
+  Keep the bystander outside the observed area under the common void rule. Give the building
+  no death weapon and make the demolition warhead lethal without delayed kills or immunities.
+  In separate runs align expiry with an ordinary shot due from its attack behaviour, and with
+  the due turn of an animation-delayed shot (S-0301 F12). Use a slow projectile that cannot
+  detonate until a later tick. For each run also run a control whose countdown ends one tick
+  later, to establish that the shot really is due and its normal checks pass. Record tick-stamped
+  projectile launches, the expiry hit, target health and attacker credit through the event and
+  read-only state recorder of (e). *Expected:* the expiry-turn shot launches before the killing
+  expiry hit in both variants; it later damages the target, but credits no attacker or attacking
+  house. The control's launch occurs on the same tick. Separately give the test building
+  self-healing and align expiry with a healing tick under S-0314 claim 9; then repeat with
+  paid repair due under S-0314 claim 11. Record the health gain or repair payment and the
+  expiry hit's delivered amount. *Expected:* the due healing or repair happens, and the expiry
+  amount equals the raised current health, so it still kills. The paid repair is not skipped
+  merely because expiry is due. Use (f)'s sale-removal control to confirm that a sale completing
+  earlier in the turn leaves no expiry hit. *Falsified if:* the matched control fires but the
+  expiry-turn run does not, a launched projectile is cancelled by expiry or retains attacker
+  credit after it, the due healing or repair is skipped, expiry uses the pre-healing health,
+  or an expiry hit follows the completed removal. Repeat each alignment over three recorded seeds.
+  These timing outcomes must not depend on the seed.
 - **D14 (claim 17).** A test map gives a stock flying infantry type (a jumpjet type) strength 1000, and
   a test warhead of infantry-death kind 9 with versus 250 % against its class and damage 50. Hit in
   the air: loss 2 (trunc(1 × 2.5)); standing at height 0: loss 125. With versus 100 %: loss 1 in the air.

@@ -2,7 +2,7 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -235,6 +235,11 @@ The crusher flag's effect in play is S-0210's (crushing).
    - an overlay is placed, removed or changed on the cell: ore grows, spreads or is harvested, a
      wall is built, damaged, sold or destroyed, a bridge is destroyed or repaired, a destroyed building
      leaves rubble, or an animation replaces the overlay.
+   - the animation start-event resource chain reaction of S-0401 claim 20 completes its
+     detonation: the cell containing the source animation's position is recomputed after the
+     detonation's effects, even when those effects change no terrain. This is separate from
+     the earlier recompute caused by emptying the resource cell. An empty debris list or a failed
+     debris trial does not skip it; a suppressed reaction or one that finds no resource does.
    - the cell's tile, sub-tile or ground level is changed, for example when a destroyable cliff or a
      bridge is destroyed or repaired. Some of these changes also recompute the neighbouring cells,
      and the specs of those events say which.
@@ -262,6 +267,7 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Recompute when an overlay is removed | `measurable` (scenario L6 part A: the destroyed low bridge) |
      | Recompute when an overlay is placed in play | `measurable` (S-0212 scenario P15 run (wb): a wall section built in a gap makes the gap's category *wall-like*, which zone *normal* may not cross; P15 case (b): a repaired bridge) |
      | Recompute when an overlay changes but keeps its type (ore growing or being harvested, a wall's damage stage) | `unmeasured`: the land type and the category depend only on the overlay's type and flags (claims 5 and 11), so such a recompute has no visible effect in this spec |
+     | Post-detonation recompute of the animation start-event resource chain reaction | `measurable` (S-0401 scenario E17, post-detonation terrain variant and its controls) |
      | Recompute when an animation replaces the overlay | `unmeasured`: which animations put which overlay types in place belongs to the animation specs, and no scenario of this spec sets one up |
      | Recompute when the cell's tile, sub-tile or ground level is changed in play | `measurable` (S-0212 scenario P15 case (k): a collapsed destroyable cliff leaves a passable cell, whose category follows only at a recompute) |
      | Recompute in the game-start pass after starting units are placed | `measurable` (S-0010 claim 12, scenario R1 part D2 for the surviving cell's land-type outcome and scenario G4 part C for animation outcomes); the exact count of whole-map recalculations is `unmeasured`, because the outcomes do not distinguish extra recalculations once terrain is stable |
@@ -274,7 +280,9 @@ The crusher flag's effect in play is S-0210's (crushing).
 
    - Confidence: high for rows 1, 4 and 5; medium for rows 2 and 3 (the map's tile numbers and
      sub-tiles must reach the recompute unchanged); high for the recompute at map load, on overlay
-     changes, on terrain-object removal and on the moves of vehicles and infantry; medium for a
+     changes, on terrain-object removal, on the moves of vehicles and infantry and for the
+     resource chain reaction's post-detonation recompute; medium for the composed chain-reaction
+     sequence during map loading (S-0401 claim 20), and for a
      terrain object put into a cell and for a building placed or removed (both `unmeasured`), for tile
      and level changes in play, for aircraft on the ground and for whether the list is complete
 
@@ -808,6 +816,14 @@ says otherwise, the test map also overrides the clear and road land types with e
 unit can reach the far side only through it, unless the scenario adds a route around it. Every
 scenario is deterministic: one run per map and per run letter is enough, unless the scenario says
 otherwise.
+
+**Resource chain-reaction recompute (claim 5).** S-0401 scenario E17's post-detonation
+terrain variant supplies the setup, procedure and controls. Expected: emptying leaves the
+smoothed replacement tile without its animation; the separate post-detonation recompute starts
+that tile's eligible animation and updates the land type even though the detonation changes no
+terrain. Empty-debris and failed-trial cases still recompute; no-resource and suppressed-reaction
+controls do not. A missing or premature animation start, a land type still reflecting the earlier
+tile, or recomputation in either control falsifies this trigger rule.
 
 **L1: multiplier and cap (claim 2).**
 - *Setup:* flat map of clear ground. A vehicle of class wheel and zone *normal*, with the

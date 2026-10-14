@@ -1,9 +1,9 @@
 ---
 id: Q-0190
 title: Does a factory building queued to be sold count for the factory checks of S-0404 claim 8?
-status: open
+status: answered
 related: [S-0404, S-0411, S-0407]
-answered-by: []
+answered-by: [S-0404]
 ---
 
 ## Need

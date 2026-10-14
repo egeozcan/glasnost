@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -97,7 +97,8 @@ Terms).
   (claim 2).
 - **Attack-move memory.** What an attack-move order leaves on its actor: that the actor's *move*
   or *attack* is an attack move, and the destination or target it is attack-moving to (claim 6).
-  What an actor with the memory does belongs to S-0215 and the combat specs.
+  S-0309 claim 23 owns the memory's lifecycle, searches and resumption; S-0215 owns the
+  ordinary rest outcomes after the memory is removed.
 - **Paralysed.** The state of an object that an electromagnetic-pulse effect has disabled for a
   number of ticks. Its rules belong to the combat specs.
 - **Berserk.** The state of an object that a weapon effect has driven to attack anything near it,
@@ -109,7 +110,7 @@ Terms).
   objects of its kind, when the house has several such factories (production specs).
 - **Rally-capable building.** As S-0214 (Terms) defines it: a factory of infantry or vehicles, a
   cloning building or a repair depot.
-- **Cycle, order block.** As S-0201 (Terms) defines them: an unfrozen cycle takes at most one
+- **Cycle, order block.** As S-0201 (Terms, *Cycle* and *Order block*) defines them: an unfrozen cycle takes at most one
   waiting input event and runs one tick; a frozen cycle takes no input and runs no tick. During
   an order block the game accepts no orders from the player.
 - **Construction yard.** In this spec, a building whose type has the construction-yard flag
@@ -155,7 +156,7 @@ Terms).
    that orders a selection issues one order per selected object, in selection order (S-0214), so
    when more than 128 objects are selected only the first 128 are ordered. The key commands of
    table T2 are limited in the same way: once the list is full, every further order of the
-   command is dropped. Since a cycle takes one input event (claim 1), the orders that the player's
+   command is dropped. Since an unfrozen cycle takes at most one input event (claim 1), the orders that the player's
    input issues in one tick all come from a single click or key command. The list holds the orders of
    the player at this machine, so in a skirmish game the limit is per human player (confidence:
    medium; how the orders of other players enter in a network game has not been studied).
@@ -259,10 +260,12 @@ Terms).
      destination (destination only) and *attack* with the object as its target (target only). What
      the attack-move memory holds is not recorded by the measurement setup, so the "memory holds"
      parts of the table and the removal of the memory by another behaviour order are `unmeasured`
-     (S-0215 owns what the memory changes). The rows that input cannot create are `unmeasured`,
+     (S-0309 claim 23 owns the memory's lifecycle, searches and resumption; S-0215 owns
+     ordinary rest outcomes after removal). The rows that input cannot create are `unmeasured`,
      since the measurement setup cannot issue them. Applying the translation at the time of
      application, not of issue, is `unmeasured` for the same reason.
-   - Confidence: high for the translation; medium for what the memory changes afterwards (S-0215)
+   - Confidence: high for the translation; later memory behaviour has the confidence of
+     S-0309 claim 23, with ordinary rest outcomes owned by S-0215
 
 7. **Group destinations.** When, within one house's behaviour orders of one tick, two or more
    orders in a row name the same behaviour, the same target and the same destination, and that
@@ -809,14 +812,15 @@ unconditional get-up effect of a move behaviour. Scatter and route following use
 only when they actually assign a destination.
 
 **Ordering consequences.**
-- Two orders of the same kind for the same actor issued in the same tick both take effect, with
-  the result of applying them in issue order: the later one wins wherever both change the same
-  thing. When a behaviour order and an order of another kind for the same actor are issued in the
-  same tick, the result is that of the other order followed by the behaviour order, whichever was
-  issued first (claim 3).
-- An order is applied after the tick's object updates, so an object destroyed during tick *N*
-  is no longer live when an order issued in tick *N* is applied, and every order kind that needs
-  its actor, target or destination to be live or valid has no effect (claim 4, table T1).
+- When two orders of the same kind for the same actor are issued in one tick, any state changed
+  by both has the value specified by the later-issued order. When a behaviour order and a
+  different-kind order affect the same actor in one tick, any state they both change has the
+  value specified by the behaviour order, regardless of issue order. Thus a behaviour order
+  issued before or after a stop, scatter or deploy order determines the conflicting state
+  (claim 3).
+- An order is applied after the tick's object updates. Consequently, an object destroyed during
+  tick *N* is no longer live when an order issued in tick *N* is applied; an order whose actor,
+  target or destination must then be live or valid has no effect (claim 4, table T1).
 
 ## Edge cases and quirks
 
@@ -1386,16 +1390,19 @@ game's normal input only, as a player would, and never writes into the game.
 
 ## Questions for the project lead
 
-No decision is pending: revision 6 applied the project lead's decisions of 2026-10-09 (AI houses,
-scripted input, the click marker). Revision 7 defers the surrender, alliance and power rows of
-table T1 to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end decision of 2026-10-11
-(play to the last side) is S-0414's. Items for the lead to route at sign-off:
+No decision is pending. The project lead's decisions of 2026-10-09 (AI houses,
+scripted input, the click marker) are applied. The surrender, alliance and power rows of
+table T1 defer to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end decision of
+2026-10-11 (play to the last side) is S-0414's. Items to confirm against the versions handed
+off together at sign-off:
 
 - **Cited specs:** pointers refer to the current approved specs and their latest working
   drafts in this correction round, under the glossary's convention. Confirm the versions
   handed off together, particularly the Q-0072 movement and approach pointers of claim 21.
-- **Input timing confirmation:** S-0201 Terms, *Cycle*, already cites claim 1 here for
-  the at-most-one-input-event limit in an unfrozen cycle; its claim 2 owns pacing.
-  No additional S-0201 change is required.
+- **Input timing wording satisfied, pending hand-off:** S-0201 Terms, *Cycle*, already
+  cites claim 1 here for the at-most-one-input-event limit in an unfrozen cycle; its claim 2
+  owns pacing. No additional S-0201 change is required. Confirm these passages and the
+  glossary's compatible cycle definition against the versions handed off together, not an
+  earlier revision list.
 - **Check at sign-off:** S-0208, Terms and claim 11, define the scatter request's threat point, *forced*,
   *move anywhere* and *effectively forced* that claim 9 uses.

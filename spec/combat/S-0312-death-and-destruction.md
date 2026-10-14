@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081]
 supersedes: []
 ---
 
@@ -380,8 +380,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       is not known) and for the *hunt* behaviour; low for the *move* behaviour of a survivor
       without an attack order
 
-19. **Other effects of a building's destruction.** In addition to the shared effects, a destroyed
-    building, in this order:
+19. **Other effects of a building's destruction.** In addition to the shared effects, the
+    following outcomes have the listed observable precedence and scenario-random-stream draw order; this
+    order does not prescribe an implementation's internal work sequence:
     - (a) leaves a smudge at the centre of the cell of its position, when its foundation is at least
       2 × 2: first one discarded ranged draw over 0 to *W* − 2 when *W* > 2 and one over 0 to *H* − 2
       when *H* > 2 (*W* × *H* its foundation), then a percent draw: below 50 a scorch mark, otherwise
@@ -448,10 +449,16 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       rubble and crate are not placed yet.
     - It takes its turns (S-0203), but its behaviour is not processed while its health is 0
       (S-0215 claim 2). In particular a sale cannot advance, release further sale survivors or
-      complete its refund after this death. When the building is still in play with 0 health,
-      and is neither being erased nor under an electromagnetic-pulse effect, its own turn removes
-      it after the general part of that turn. On an eligible removal turn, the building leaves play and ceases to occupy its foundation cells before any second-round survivor enters play. It then has a second round of claim 18 and claim 19(g). The survivor count *C* is worked out afresh by F5, so it is 0 when the killing damage ignored defences, which left the building without crew. The cells are taken in claim 18's order with the survivor-chance, survivor and smudge-step outcomes and all their draws, as in claim 19(g). Absorbed passengers have already come out or died, so none come out now. Because the building has left its cells, the smudge steps of this round are not refused by the building (claim 19(g)). Any passengers still inside die. Claim 20's rubble and crate are then placed; the building has already left the update order before this second round.
-      Quirk `quirks.building_removal_second_round` (Edge cases) covers this second round.
+      complete its refund after this death.
+
+      | State/event | Observable result |
+      |---|---|
+      | Destroyed building remains in play at 0 health; it is not being erased or affected by an electromagnetic pulse | Its own turn removes it after that turn's general part. Until then it occupies its foundation. |
+      | Eligible removal turn | The building leaves play and ceases to occupy its foundation before the second survivor and smudge round. |
+      | Second round, after the building has left play | Claim 18 and claim 19(g) apply again. The survivor count *C* is recalculated by F5 and is 0 when the killing damage ignored defences, which left the building without crew. Cells follow claim 18's order and the survivor-chance, survivor and smudge-step outcomes and draws of claim 19(g). Absorbed passengers have already come out or died, so none come out now. Because the building no longer occupies its cells, its presence does not refuse this round's smudges. Any passengers still inside die. Claim 20's rubble and crate are placed in this same removal turn, completing removal; the building has already left the update order before this round. |
+      | The building is still being erased or affected by an electromagnetic pulse | Removal and the second round wait for a later eligible own turn. |
+
+      This table states observable states and timing, not an implementation's update-loop sequence. Quirk `quirks.building_removal_second_round` (Edge cases) covers the second round.
     - So a building of an exploding type normally stays in play until its own next turn, which comes later in
       the same tick when its turn has not yet come in that tick's turn pass, and otherwise in the
       next tick. While it is under an electromagnetic-pulse effect, or being erased, the removal
@@ -460,12 +467,17 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       unaffected; after it there are only the destruction's survivor rounds, not the sale's.
       It pays no sale refund (S-0408 claim 6). A sale that already removed a still-living building
       before a pending delayed-kill expiry instead leaves no death at all (claim 3).
-    Whether a building awaiting removal can still be selected by a player is not known (Open
-    questions). This refines S-0203 claim 6b.
-    - Backing: `measurable` (scenario D14, variants c and g)
+    An otherwise selectable building awaiting removal remains selectable at 0 health, both
+    for an exploding type and for a building destroyed while being sold; being erased still
+    excludes selection (S-0214 claim 16). Selection neither restores health nor postpones
+    removal nor restarts a sale. S-0214 owns the battlefield-click conditions and scenario T12.
+    This refines S-0203 claim 6b and answers Q-0081 parts 3 and 4 together with S-0214 claim 16.
+    Claim 3 and S-0302 claim 16 answer parts 1 and 2.
+    - Backing: `measurable` (scenario D14, variants c, g and h; S-0214 scenario T12 for selection)
     - Confidence: high for immediate removal, the next eligible own-turn removal of exploding
       and selling buildings, occupancy until removal, the second round, the erasure and
-      electromagnetic-pulse exceptions, and the stopped sale; selection remains open
+      electromagnetic-pulse exceptions, the stopped sale and the selection rule; medium for
+      obtaining a click during the short interval in stock play (S-0214 claim 16)
 
 22. **Spilled resources.** In the original a building's holdings of each resource type are
     fractional amounts (single-precision floating point), and the building spills for as long as the
@@ -748,7 +760,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 4 | building | contacts (claim 17), garrison out | the contacts' deaths |
 | 5 | building | claim 19 (a) to (h), with claim 23 inside (c), claim 22 inside (d), and claims 24 and 18 inside (g); claim 18's cells start after the cells claim 24 used | as listed |
 | 6 | building | rubble and crate, leaving play (claims 20, 21); for a type with the explodes flag or a building being sold, awaiting removal instead | the crate's (when it leaves now) |
-| later turn | building awaiting removal | after the general part of its own turn: leaves play and its cells, then second round of claims 18 and 19 (g), passengers die, rubble and crate (claim 21) | the second round's, then the crate's |
+| later turn | building awaiting removal | after the general part of its own eligible turn: leaves play and its cells before the second round of claims 18 and 19 (g), then passengers die; removal completes and rubble and crate are placed in this same turn (claim 21) | the second round's, then the crate's |
 
 | State | Event | Result |
 |---|---|---|
@@ -761,7 +773,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | alive eligible building | lethal hit of a delay-kill warhead | 1 health point, countdown of *T* ticks (claim 3) |
 | building in a countdown | its turn at or after the end of the countdown | S-0302 claim 16's expiry hit; if it destroys the building, the death effects with no crew (claim 3) |
 | alive building, type with the explodes flag or behaviour the sale's | killing hit | death effects, then awaiting removal with 0 health (claim 21) |
-| awaiting removal | its own turn, still in play, not erased, no pulse effect | leaves play and its cells, then second round, then rubble and crate (claim 21) |
+| awaiting removal | its own turn, still in play, not erased, no pulse effect | leaves play and its cells before the second round; removal completes and rubble and crate are placed in the same turn (claim 21) |
 
 ## Edge cases and quirks
 
@@ -820,11 +832,13 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   can release up to twice the survivor count *C* in total, and it takes that round's draws. Off: it
   takes no second round; it leaves play and its cells, its remaining passengers die, and its
   rubble and crate are placed, taking no draws but the crate's. Turning it off changes every later draw.
-- **Smudge footprints beyond the map edge** (no switch). Claim 26 tests only the anchor cell for
-  lying on the map. A footprint cell beyond the map edge is tested in the original as a placeholder
-  cell that holds nothing and has the first tile type of the theater, so it is believed to pass
-  when that tile type's tileset has the morphable flag. Our engine does the same. This can matter
-  only for a smudge larger than one cell anchored on the last row or column of the map.
+- **Smudge footprints beyond the map edge** (ordinary specified behaviour; no switch). Claim 26
+  tests only the anchor cell for lying on the map. A footprint cell beyond the map edge is tested
+  in the original as a placeholder cell that holds nothing and has the first tile type of the
+  theater, so it is believed to pass when that tile type's tileset has the morphable flag. Our
+  engine does the same. This can matter only for a smudge larger than one cell anchored on the last
+  row or column of the map. This is treated as ordinary specified behaviour, not as a quirk, so no
+  alternative behaviour or switch is defined.
 - **Departure: absorbed passengers beyond the last cell** (no switch). With more absorbed passengers
   than foundation cells, the original goes on past the last foundation cell and places the rest at
   unspecified positions. Our engine treats each
@@ -971,7 +985,8 @@ another entry or variant c differs from the first setup.
 **D8. Sinking (claim 10).** *Setup:* a stock naval vessel whose weight meets the sinking weight,
 killed on water; variant b a test naval type with weight below it. *Observable:* whether the vessel
 sinks (stays in play at 1 health) or shows an explosion. *Expected:* the first sinks with no
-explosion animation; the second explodes. *Falsified if:* the first explodes. Claim 11 has no
+explosion animation; the second explodes. *Falsified if:* the first explodes, or the below-threshold
+vessel sinks instead of showing an explosion. Claim 11 has no
 scenario (it is `unmeasured`).
 
 **D9. Passengers of destroyed vehicles (claim 12).** *Setup:* a stock transport with five infantry,
@@ -989,8 +1004,9 @@ player), the human player's stay where they scattered to. *Falsified if:* any di
 times; crew escape chance from stock data. *Observable:* share with a crew, crew types, crew health.
 *Expected:* share within 3 standard errors of the chance; health between 5 and half the crew type's
 strength; the type matches F4 (about 15 % technicians for an armed vehicle). Variant b: a vehicle
-taken over by a vehicle thief always leaves that thief's type. Variant c: a test crate carrier with
-crates enabled leaves a crate. Variant d: the vehicle killed once while owned by the human player,
+taken over by a vehicle thief always leaves that thief's type. Variant c: a test crate carrier is killed while the game's crate setting allows crates and a free
+nearby cell is available; it leaves a crate. Failure to leave a crate under those conditions
+falsifies the result. Variant d: the vehicle killed once while owned by the human player,
 once by the computer player and once by the neutral house. *Observable of d:* each crew unit's behaviour and position some
 ticks after the kill. *Expected of d:* the human player's crew stays near where it scattered to
 (guard); the computer player's and the neutral house's crew walk towards the other player (hunt).
@@ -1176,11 +1192,6 @@ third shows one.
 - Which events set and clear a building's charge planter (claims 18 and 24).
 - Which situations of play are contacts of a building at the moment of its destruction (claim 17),
   beyond factory exits and docking.
-- Q-0081 parts 3 and 4, selection only: whether a player can still select a building that awaits
-  removal (claim 21). The general selection test has no health exclusion, but that alone does not
-  establish that a battlefield click can still find the destroyed building. Its stay normally
-  lasts less than one tick, so it matters only for a selection made in that window or while an
-  electromagnetic-pulse effect delays the removal.
 - Whether jumpjet types and other crashable vehicles crash by the same rules as aircraft (claim 16).
 - Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
   the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that

@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0133]
 supersedes: []
 ---
 
@@ -489,6 +489,57 @@ names the top-left cell of the foundation. In addition:
       scope
     - Confidence: high
 
+### Construction completion and initial facing
+
+14. **Construction processing.** While *construction* is current, every processing chooses
+    a delay of 1 tick, with no timing draw from the scenario random stream. Subject to
+    S-0215 claim 2's general processing gates, it is therefore processed on consecutive ticks.
+    Its first processing starts the construction animation range again at stage 0, even when
+    placement has already begun that range. The rate of the behaviour does not decide this
+    delay. Random draws caused by the effects of a completed building, such as a free unit
+    (S-0402 claim 18), are separate from this no-draw timing rule.
+    - Backing: `measurable` (PL11 a and b)
+    - Confidence: high (the delay, no timing draw and stage restart)
+
+15. **Handover after build-up.** Once the first *construction* processing has occurred,
+    a later processing that finds the build-up completion report ends construction in that
+    same tick. It requests the *idle* body animation state, completes the building's opening
+    effects (S-0108 claim 11, including the conditional free unit of S-0402 claim 18), and
+    queues *guard*. That queued *guard* becomes current at the building's second per-tick
+    start of the same tick (S-0215 claim 11), and is first processed on the next tick.
+    The completion does not itself clear the building's target. A target inherited at deploy
+    therefore survives this handover, unless another rule has removed or replaced it.
+    An armed building may then start *attack* from *guard* under S-0215 claim 32.
+
+    For an uninterrupted build-up with at least 2 stages and a positive stage delay,
+    the processing on the tick the last stage is reached already sees its completion report:
+    there is no additional tick between that report and handover. In terms of the first
+    construction processing tick *C*, the handover is at *C* + (*n* − 1) × *d_b* ticks,
+    using S-0108 claim 5's actual construction range (F6). A gate uses the same handover
+    rule and its gate range, not the ordinary sprite-half count. The special theater-refresh
+    range of that claim also remains applicable.
+
+    A zero-delay range reports completion at the next building turn despite its frozen
+    stage. Thus a type with no build-up sprite, whose default range has one stage and zero
+    delay, hands over at the processing after its first construction processing: *C* + 1
+    ticks in uninterrupted play. It does not wait forever for a sprite that does not exist.
+    The initial relation of *C* to the placement or deploy tick, and positive-delay
+    one-stage ranges, remain Open questions 5 and 6; F6 is not a formula from the placement
+    tick *T*.
+    - Backing: `measurable` (PL11 a to d)
+    - Confidence: high (same-tick report handover, queued guard, target retained and opening
+      effects); medium (F6 and the no-sprite case)
+
+16. **Facing of a placed building.** A place order puts an ordinary building on the map with
+    facing 0 facing units, map north. This is the facing used by S-0408 claim 8 for passenger
+    release; for a turreted building its turret facing also starts at 0. The click names a
+    cell, not a direction, and the facing of the factory building does not change this result.
+    Later aiming follows S-0215 and S-0310. There is no imported placement-facing field.
+    The facing of a building made by a vehicle deploy is owned by S-0415, not inferred from
+    the vehicle's turn to its deploy facing.
+    - Backing: `measurable` (PL12)
+    - Confidence: high
+
 ## Formulas
 
 > **F1. Adjacency ring.** For a foundation rectangle with top-left cell (*x*₀, *y*₀) and size *W* ×
@@ -516,6 +567,13 @@ names the top-left cell of the foundation. In addition:
 > *c*′ is 0 or above 3 it is not recorded (the original's other alteration of the building's
 > state in that case is a departure, claim 12). Integers, in upgrade-count units; exact, no rounding.
 
+> **F6. Handover relative to construction processing.** *H* = *C* + (*n* − 1) × *d_b*
+> for *n* ≥ 2 stages and *d_b* ≥ 1 tick per stage. For a zero-delay range, *H* = *C* + 1.
+> *C* is the first construction processing tick, not the placement tick. Integers in ticks,
+> exact multiplication and addition, no rounding. S-0108 owns the floating-point calculation
+> and rounding that produce *d_b*. These expressions assume no interrupted building turns
+> or processing gates during the interval, and no intervening behaviour or animation change.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -535,6 +593,8 @@ names the top-left cell of the foundation. In addition:
 | Upgrade positions of a building | 3 | positions | claim 12 |
 | Level field values that place on an empty building | 1 to 3 | levels | claim 12 |
 | Creation draws per filling wall | 1 | draws of S-0202 | claim 11 |
+| Construction processing delay | 1 | tick | claim 14, no timing draw |
+| Placement facing | 0 | facing units | claim 16, map north |
 
 ## State and ordering
 
@@ -543,7 +603,9 @@ names the top-left cell of the foundation. In addition:
 | Item done, placement mode on (human input) | click | Adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued; on failure the refusal sound plays and no order is issued. Placement mode is offered only while the item is done (S-0411) |
 | Item done (an AI house) | place order issued | Adjacency and explored ground are judged when the order is issued (claim 6) |
 | Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the refusal sound plays |
-| Order applied, every test passed | building put on the map | In that tick: walls removed underneath (claim 9), a wall type becomes its overlay (claim 10), the wall fill (claim 11), the item's line ends; the cell ends with an undamaged wall when the removal under a damaged own wall took place |
+| *construction*, after its first processing | last build-up stage reached, or zero-delay completion report | Construction completes, idle body requested and guard becomes current in this tick (claim 15) |
+| Newly completed, guard current | next tick's processing | Guard follows S-0215 claim 32, with the target kept across construction completion |
+| Order applied, every test passed | building put on the map | The item’s line ends in that tick. After placement, each cell has the contents specified by claims 9–11: applicable walls are removed, a wall-type placement leaves its wall overlay, and any applicable wall fill is present. When removal under a damaged own wall succeeds, that cell holds an undamaged wall. |
 
 Observable consequences:
 - A building is in play from the tick its place order is applied; the adjacency and prerequisites
@@ -636,6 +698,13 @@ Observable consequences:
 | `Morphable` (theater data, tileset; S-0010 owns it) | the tileset test of the to-tile rule (claim 3) | boolean | no |
 | `Buildable` (rules, land type section; S-0211 owns it) | buildable flag *B* (claim 3 d) | boolean | no |
 | The water role (theater data; S-0010 owns it) | start of the naval placement range (claim 3 d) | as in S-0010 | unset: tiles 0 to 12 |
+| `BuildupTime` (rules, `General`; S-0108 owns it) | build-up stage delay used by claim 15 | decimal, game minutes, converted and rounded by S-0108 F1 | S-0108 Import mapping |
+| `Gate` (rules, building type), `GateStages` (art, building's art section; S-0108 owns the stage count) | gate construction range used by claim 15 | boolean and integer stage count | no and 9 stages respectively |
+| `Rate` (rules, `Construction`; S-0215 owns its parsing) | ignored by the construction processing delay of claim 14 | decimal, game minutes | held value as in S-0215; no effect on this 1-tick delay |
+
+The build-up sprite resolves by S-0007's build-up file role. No build-up sprite gives
+S-0108's default zero-delay construction range, not a placement-facing default. No rules,
+art or map key supplies a direction to a place order (claim 16).
 
 
 ## Measurement scenarios
@@ -1015,6 +1084,49 @@ Each scenario names its observed area, the cells in which the void rule applies.
   output; (i) the first placement leaves the output unchanged or the test building not offered
   (the count was capped, as in part c), or the second placement succeeds.
 
+**PL11. Construction cadence and handover (Q-0130).**
+- Setup: the common skirmish measurement setup, game speed index 2, director and mods off
+  except named test data permitted by the measurement setup. Observed area: the building's
+  foundation and any inherited target. Use an unarmed test building with a known multi-stage
+  positive-delay build-up, plus a turreted copy with no enemy in sight. Test data give two
+  substantially different behaviour rates. Repeat the placement with a vehicle deploy into
+  the same type. Parts: (a) ordinary build-up, (b) a gate with a known gate range, (c) a type
+  whose build-up file does not resolve, (d) an armed deployed copy inheriting a live target.
+  Also record one positive-delay single-stage range as an exploratory run, with no predicted
+  completion tick, to resolve Open question 6.
+- Procedure: place or deploy at a recorded tick *T*. Record every building turn through
+  handover and the first following behaviour processing, with the permitted read-only
+  recorder and scripted input. Repeat 3 times per part and rate with recorded seeds.
+- Observable: current and queued behaviour, processing timer, body stage and animation state,
+  construction-completed state, target, and scenario random-stream state per tick. Record *C*,
+  the first construction processing, separately from *T*. An unarmed copy separates timing
+  draws from post-completion targeting or free-unit draws.
+- Expected: consecutive construction processings with delay 1 regardless of the imported
+  behaviour rate and no timing draw. The first processing restarts stage 0. For (a) and (b)
+  with at least 2 stages and positive delay, handover is F6's tick, with guard current and idle
+  body by the end of that turn, not one tick later. For (c), handover is *C* + 1. In (d),
+  construction completion keeps the inherited target, and the next guard processing may
+  start attack by S-0215 claim 32.
+- Falsified by any rate-dependent construction delay, timing draw, handover tick differing
+  from F6 in its stated domain, a no-sprite building never completing, or a target cleared
+  specifically by handover. Report the measured relation of *C* to *T* without assuming one; the scripted placements and tick-by-tick observations above establish that relation and resolve Open question 5.
+
+**PL12. Placement facing (Q-0133).**
+- Setup: the common skirmish setup, speed index 2, director and mods off. Observed area:
+  a legal foundation next to the base. Use a placed absorbing test building and a placed
+  turreted test defence, with no enemy in sight. Give pre-placed factory buildings differing
+  map facings in separate runs.
+- Procedure: place each done item and record its facing in the very tick it enters play,
+  before any later aiming. Complete the absorbing building, put infantry into it and sell it
+  without a target or other facing-changing event. Repeat 3 times for each factory facing.
+- Observable: building facing at insertion, turret facing at insertion, and released passenger
+  facings at the sale, using the read-only recorder. The released passenger observation is
+  a secondary check using S-0408 claim 8, not a substitute for the initial-facing record.
+- Expected: initial placement facing and initial turret facing 0 facing units regardless of
+  factory facing or clicked cell. Unchanged facing gives passengers facing 0 at release.
+- Falsified by a different initial facing or a dependence on factory facing or click position.
+  A later aiming turn alone does not falsify the initial-facing claim. Repeat the scripted placements and document the observed facings as described above.
+
 ## Open questions
 
 1. The firestorm-wall fill rule (claim 11), the fate of an own laser-fence building under a placed
@@ -1027,6 +1139,15 @@ Each scenario names its observed area, the cells in which the void rule applies.
    (claim 6): the original may hold the value of an earlier placement. No scenario is proposed
    until S-0411 fixes how placement mode starts.
 4. What a cell holds after a failed removal under a damaged wall (claim 10; scenario PL8 f).
+5. Q-0130 question 2: the exact first construction processing tick *C* relative to the tick *T*
+   a placed or deployed building enters play. Entry already starts the animation range, and
+   the first construction processing restarts it (claim 14); the initial queued-behaviour and
+   ready-state interaction has not been settled. F6 deliberately does not assume *C* = *T*
+   or *T* + 1. PL11 records both ticks. This prevents a complete answer to Q-0130 here.
+6. Q-0130 question 5: a positive-delay range with one stage, and non-positive stage counts.
+   The ordinary last-stage formula is not established for them. PL11 includes the one-stage
+   exploratory run; zero-delay ranges, including a type with no build-up sprite, are covered
+   by claim 15. Sale removal and refund timing (Q-0130 question 4) remain S-0408's.
 
 ## Questions for the project lead
 

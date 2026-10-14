@@ -2,13 +2,13 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0061, Q-0075, Q-0100]
+requests: [Q-0061, Q-0075, Q-0100, Q-0171]
 supersedes: []
 ---
 
@@ -24,6 +24,12 @@ the importer warn. Reading a file into sections and entries is S-0001, duplicate
 S-0002, and the floating-point rounding mode these value forms rely on (claim 17) belongs as a whole
 to S-0205 (number domains). These claims cover skirmish imports; network games and campaigns
 are out of scope.
+
+**Joint hand-off checks.** Retain claim 9's original-versus-engine distinction in
+S-0009's header-pair claims and mapping. Claim 14's trigger-name exceptions remain
+aligned with S-0011 claims 5 and 21. S-0011's reveal scope and S-0409 claim 17 already
+agree on every player house in our engine, including observers; that design rule
+is not an extension of this spec's type-reference rule.
 
 ## Terms
 
@@ -279,7 +285,7 @@ our engine's result.
    unspecified, and `a,2,3` leaves all three unspecified. The same holds for the map header's
    start-position pairs (Import mapping row C12): `5` gives 5 and an unspecified second number. A
    missing key, or one written with an empty value, gives the value in force for the whole pair or
-   triple. This corrects approved S-0009 claim 29 and Import mapping row C12, which currently say that an unreadable component takes the value in force in the original. Revise S-0009 with this spec so it states that the original's unreadable component is unspecified and our engine supplies the matching component of the value in force; confirm both revisions together at hand-off.
+   triple. S-0009 claim 29 and its header-pair Import mapping now state this distinction explicitly: completion from the value in force belongs to our engine only. Confirm that distinction in both final versions at joint hand-off.
 
    **Our engine** gives every unread component the matching component of the value in force, and
    keeps every component that was read; the importer warns. So `1,2` for a triple whose value in
@@ -540,6 +546,32 @@ our engine's result.
     - Backing: `measurable` (scenario V16)
     - Confidence: high
 
+### Auto-deploy integer list
+
+22. **Auto-deploy delays use decimal-prefix integer items, not scalar hexadecimal forms.**
+    The game-wide auto-deploy delay list uses the same item form and 511-byte text limit
+    as the debris maxima (claim 20). Each non-empty comma-separated item contributes
+    one signed 32-bit integer, using claim 3's decimal prefix and claim 4's wrapping.
+    `$10` contributes 0, `10h` contributes 10, and a `0x` prefix followed by `10`
+    contributes 0. An unreadable non-empty item contributes 0 and keeps its place,
+    not a prior value at that position. Empty items take no place: `5,,40` gives
+    (5, 40), while `5,abc,40` gives (5, 0, 40). A whitespace-only item remaining after claim 1's whole-text cut and trailing
+    trim is non-empty and contributes 0. Claim 12's splitting rules apply. Claim 3's no-digit,
+    trailing-text and overflow warnings apply item by item, with no hexadecimal
+    suffix exception. The imported quantities are ticks; conversion uses exact integer
+    arithmetic, with no floating-point calculation or rounding.
+
+    A present non-empty value replaces the whole held list. A missing or empty key
+    keeps the held list. S-0215 claim 31 owns which retained item a house uses, the
+    deployment test, and the safe result when the list has no item at that index.
+    This claim neither pads the list nor assigns meanings to extra entries. Claim 1's
+    text-cut warning applies.
+    - Backing: `measurable` (scenario V17 for item conversion, placement and text
+      extending beyond 127 bytes); `unmeasured` (the exact 511-byte reader limit:
+      S-0001's physical-line limit cuts file input sooner because the key and `=`
+      occupy part of the line)
+    - Confidence: high
+
 ## Formulas
 
 Notation. For a real number *z*: RN₅₃(*z*) and RN₂₄(*z*) are *z* rounded to the nearest double
@@ -648,7 +680,7 @@ integer from claim 9.
 | Percentage factor | RN₅₃(1/100), the double nearest to 0.01 | ratio | *c* in the formulas. Applied when `%` is present |
 | Tuple text limit | 63 | bytes | Integer pairs, triples and quadruples, colour and byte triples |
 | Common text limit | 127 | bytes | Most text and list fields |
-| Debris-maxima text limit | 511 | bytes | Claim 20; physical-line truncation normally imposes a smaller limit |
+| Decimal-integer-list text limit | 511 | bytes | Debris maxima and auto-deploy delays, claims 20 and 22; physical-line truncation imposes a smaller limit |
 | Type-list text limit | 31 | bytes | Values in type list sections |
 | Maximum stored type-name length | 24 | bytes | Longest type name kept when a type is created (claim 15) |
 | Integer width | 32 | bits | Integer results, two's complement, wrap modulo 2³² |
@@ -758,6 +790,8 @@ unspecified in the original; our engine leaves the value in force and warns (cla
 | C17 | Type or warhead `DebrisMaximums` | Decimal-prefix integer list (claim 20), 511-byte text limit. Unreadable non-empty items retain a place with 0; empty items are skipped. Start empty; missing or empty keeps the list in force |
 | C18 | Type `DestroyParticleSystems` | Particle-system-name list, 127-byte text limit; claims 12, 14 and 19. `none` and `<none>` are omitted, not slots. Start empty; missing or empty keeps the list in force |
 | C19 | Building type `Factory` | Named value (claim 21), 31-byte text limit. Producing vocabulary: `Infantry` immediately followed by `Type` = infantry, `Unit` immediately followed by `Type` = vehicles, `Aircraft` immediately followed by `Type` = aircraft, `Building` immediately followed by `Type` = buildings. Each is one word with no intervening space. Whole text compared ignoring ASCII case, after claim 1's cut and trailing trim. `<none>` explicitly means no factory; bare `none` is unmatched and also gives no factory. Missing or empty keeps the value in force, initially no factory. Non-empty unmatched text gives no factory, with a warning. Additional recognised words include `Terrain` immediately followed by `Type` (one word), and bare `Infantry`, `Unit`, `Aircraft` and `Building`; none names one of the four production kinds. These are not aliases for the four producing words ending in `Type` |
+
+| C20 | `[General]` `AIAutoDeployFrameDelay` | Decimal-prefix integer list in ticks (claim 22), 511-byte text limit, not 127. No scalar hexadecimal forms. Unreadable non-empty items give 0 and retain their place; empty items are skipped. Present non-empty replaces the list; missing or empty keeps the held list. Index selection, starting default and too-short-list outcome remain S-0215 claim 31 and its Import mapping |
 
 ## Measurement scenarios
 
@@ -951,6 +985,38 @@ spec's scenario use that scenario's named test data.
   negative variant, lost production in a positive variant, or the byte-32 suffix disabling
   production falsifies claim 21. The bystander's void rule applies to the factory and its
   release area. No claim that unrelated orders are unchanged is tested here.
+
+- **V17 (auto-deploy integer items, Q-0171).** Tiny purpose-made skirmish map,
+  game speed 2, one human and one distant bystander computer player, director and
+  mods off. Use S-0215 B19's auto-deploy setup with an undeployed neutral-house
+  infantry unit meeting claim 31's last-row conditions, no enemy or radiation in
+  its test area. The neutral house uses difficulty index 1. Named map overrides
+  set row C20's list; one run per spelling below. Record the standing-order start
+  tick, its processing ticks and the first start of the deploy sequence, with
+  tick-labelled video and a read-only recorder. Predict the first eligible
+  processing tick using S-0215 claim 31's strict delay test and its processing
+  delays; do not mistake a wait until the next processing tick for a parse change.
+
+  | List text | Retained entries | Delay at index 1, ticks |
+  |---|---|---|
+  | `5,abc,90` | 5, 0, 90 | 0 |
+  | `5,$10,90` | 5, 0, 90 | 0 |
+  | `5,10h,90` | 5, 10, 90 | 10 |
+  | `5,,40` | 5, 40 | 40 |
+  | `5, ,40` | 5, 0, 40 | 0 |
+  | `5,4294967336,90` | 5, 40, 90 | 40 |
+
+  Text-limit control: use `5` followed by 130 commas and then `40`, all on one
+  physical line. Expected delay: 40 ticks, matching `5,,40`; the second item lies
+  beyond byte 127 but below both the physical-line and 511-byte limits. For layer
+  retention, use a named loose base-rules copy with this list `5,40,90`, removed
+  after the test. Compare absent and empty map entries with `5,abc,90`: the first
+  two retain delay 40; the last replaces it with delay 0. Our engine also records
+  the imported list and warnings. A deployment tick inconsistent with the indicated
+  delay and S-0215's processing schedule falsifies the claim. In particular, delay
+  16 for the hexadecimal spellings, delay 90 for the unreadable item, or a missing
+  second entry in the long-comma control contradicts the proposed reader. Void a
+  run if the bystander interferes in the test area or is defeated.
 
 ## Open questions
 

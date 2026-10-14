@@ -2,13 +2,13 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0122]
+requests: [Q-0122, Q-0190]
 supersedes: []
 ---
 
@@ -21,13 +21,16 @@ hold, cancel and refunds, the queue, completion, and how factory buildings appea
 losing power affect the lines. Step length is S-0403, clicks are S-0411 and the credits display is
 S-0416; skirmish only, network games and campaigns are out of scope.
 
-**Paired revisions.** This revision is handed off with S-0407 revision 5, which separates the
-issue of claim 9's cancellation orders at the recheck from their application at the tick's end,
-exempts held-item resume from the issue-time limit test and keeps claim 10's application-time limit
-test on queued starts (S-0407, claims 13 and 16). S-0411 keeps its blocked-exit predictions open
-with this spec's claim 7, and its claim 14 states the continued steps and payments of a line whose
-factory building is being sold or queued to be sold. Every factory test of this spec excludes such
-a building (Terms).
+**Paired revisions.** S-0407 revision 6 separates the issue of claim 9's cancellation orders
+at the recheck from their application at the tick's end, exempts held-item resume from the
+issue-time limit test and keeps claim 10's application-time limit test on queued starts
+(S-0407, claims 13 and 16). S-0411 revision 7 specifies cancellation with refund at the
+place-order application boundary for a busy or failed unit release, without retry; no eligible
+factory leaves the item done (claims 7 and 13 below). Its claim 14 states the continued steps
+and payments while a factory is being sold or queued to be sold. The relevant factory-eligibility
+tests exclude such a building (Terms); claim 13's hand-off to an idle twin keeps its expressly
+stated exception. S-0402 claim 18 reads a produced building's recorded start price, and
+S-0414 claim 15 includes off-map production objects in destruction hits.
 
 ## Terms
 
@@ -167,11 +170,13 @@ addition:
    | Done item of the ordered type | The item is left as it is, and nothing is added. |
    | Any other line state | The type is added at the end of the queue unless the queue already holds the game-wide maximum number of queued types (Constants), in which case the order is refused and the local player hears a refusal sound. A type is also refused when its build limit forbids it at queue time; S-0407 (claim 16) owns that test, including how it counts the item in production, its rule for limits of 0 or below, and the different test for an aircraft type that must return to a dock. |
 
-   An aircraft order also fails the factory-eligibility test while every switched-on aircraft factory building of the house has all its docking places taken; it is then ignored even as a request to queue. An automatic hold means there is no switched-on factory building that could make the held item's type. An order for that type is therefore ignored and cannot resume the line until such a building is switched on; claim 8 then lifts the automatic hold by itself. An order for another type of the same line is judged by that other type's factory eligibility and, if eligible, is queued under the table's rule. A line on the forced-start hold of claim 10 likewise cannot be resumed while every factory building that could make its type is switched off. The item's object exists from the start but is not on the map. Its price at the start is the initial balance owed; it has no other effect unless `quirks.refund_at_current_price` is off (Edge cases, *Recorded price*).
-   - Backing: `measurable` (scenario P3, parts a to j, P7 for the done item and S-0411 S4 b2
-     for resume at and above the infantry limit)
+   An aircraft order also fails the factory-eligibility test while every switched-on aircraft factory building of the house has all its docking places taken; it is then ignored even as a request to queue. An automatic hold means there is no switched-on factory building that could make the held item's type. An order for that type is therefore ignored and cannot resume the line until such a building is switched on; claim 8 then lifts the automatic hold by itself. An order for another type of the same line is judged by that other type's factory eligibility and, if eligible, is queued under the table's rule. A line on the forced-start hold of claim 10 likewise cannot be resumed while every factory building that could make its type is switched off. The item's object exists from the start but is not on the map. Its price at the start is the initial balance owed and is retained for a produced building's free-unit condition (S-0402 claim 18; Edge cases, *Recorded price*), also when `quirks.refund_at_current_price` is on. Being off the map does not protect its object from defeat or surrender destruction hits: S-0414 claim 15 owns their eligibility and order. An item created before the remaining factory can receive its hit before that factory's loss cancels production; an item already deleted by factory-loss cancellation receives no later hit.
+   - Backing: `measurable` (scenario P3, parts a to j, P7 for the done item, S-0411 S4 b2
+     for resume at and above the infantry limit, S-0402 H13 for the start-price condition and
+     S-0414 V11 part c for off-map destruction hits)
    - Confidence: high (start, queue, limit, the free-dock condition for aircraft, and the
-     build-limit-only application test); medium (the other factory conditions)
+     build-limit-only application test and the retained start price); medium (the other factory
+     conditions and destruction before factory-loss cancellation)
 
 4. **Pay as you go.** Each progress step is paid when it is made. When the line's progress goes from *k* − 1 to *k* (*k* = 1 … 54), let *B*ₖ₋₁ be the balance owed before the step. For *k* = 1 … 53, the payment is
 
@@ -310,8 +315,20 @@ addition:
    listed event (another factory building of the kind placed, switched off or on, or changing
    owner) judges the line without the selling building, so it cancels the item when that building
    was the only one that could make it, and removes the queued types that only it could make.
-   - Backing: `measurable` (scenario P8, including run 10 for the build-limit-only test and run 11
-     for factories being sold)
+   **Two factories with one sale queued (Q-0190).** Let X and Y be the house's only two
+   factories of a unit line, both initially switched on, with Y queued to be sold. Assume
+   unchanged build limits that allow the item. When X is switched off, X still could make the
+   item with power ignored, but Y does not count: the running item goes on automatic hold at
+   that factory check. When X is destroyed instead, no other eligible factory remains, so the
+   permanent-removal rule cancels and refunds the item in the removal tick, without waiting
+   for sidebar cancellation orders. The leaving-map check also finds no eligible factory if
+   the item still exists then; an already-cancelled item is not refunded twice. In either
+   case that check removes every queued type that only Y could make. Sale queueing alone
+   removes no queued types before such a check. These exclusions and queue outcomes were
+   already specified by revision 4's Terms and this claim; this passage makes the three
+   requested consequences explicit.
+   - Backing: `measurable` (scenario P8, including run 10 for the build-limit-only test, run 11
+     for factories being sold and run 12 for Q-0190's queued-sale cases)
    - Confidence: medium (the conditions and the defence-line exception); high (that a player hold is
      never lifted by the check and that the factory check omits the full tech-tree conditions)
 
@@ -326,7 +343,7 @@ addition:
    fails without a recheck event causes no automatic orders until a later recheck removes the type:
    for example the start of a sale does not itself trigger a recheck (S-0407, claim 12).
    No rule is asserted here for a type whose icon a full sidebar tab suppressed (S-0004 claim 11,
-   S-0407 Open question 5).
+   S-0407 Open question 4).
    This happens only for the local player in the original; the original's computer-controlled
    houses keep building such items. In our engine it is a rule for every player house: the same
    cancel and cancel-all orders, with the conditions above, are issued automatically for every
@@ -572,8 +589,10 @@ Ordering consequences:
   paid (*P*′ > *P*); a house that gains a bonus building after the start and then cancels gets less
   than it paid, even a negative refund (claim 6). A bonus above 1 reverses both. With the switch
   off, the refund is the amount paid so far, the price at the start minus the balance owed, which is
-  what was paid and never negative for a non-negative price. Our engine then needs, per item, the
-  amount paid so far or equivalently the price at the start; with the switch on it needs neither.
+  what was paid and never negative for a non-negative price. With the switch off our engine needs,
+  per item, the amount paid so far or equivalently the price at the start. With the switch on the
+  refund needs neither, but the free-unit condition still needs a produced building's start price
+  (S-0402 claim 18).
 - **Forced start on a player hold** (`quirks.forced_start_player_hold`, default on = original, medium
   confidence). An item started by claim 10's forced start (from the queue after a cancel or a
   release, with no switched-on factory building, or no free dock for an aircraft, that could make its
@@ -594,12 +613,14 @@ Ordering consequences:
   available credits, but not at a negative *A* (claim 6).
 - **Price changes during a build** change neither the balance owed nor the remaining payments; only
   the refund (first quirk) and the price of later items.
-- **Recorded price.** After the start, an item's price at the start has no effect beyond being its
-  initial balance owed: the sale refund uses the adjusted cost and the factors of the moment (S-0408,
-  claim 1), and with the default `quirks.refund_at_current_price` the cancel refund uses the price
-  of the moment (claim 6). In the original the start price reaches only network-game
-  synchronisation, which is out of scope. With the default, our engine keeps no such record; with
-  `quirks.refund_at_current_price` off, it keeps the amount paid so far (that quirk).
+- **Recorded price.** Our engine records a produced building's price at its production start
+  and retains it through placement and build-up: S-0402 claim 18 compares that integer credit
+  amount with the type's adjusted cost to decide whether its free unit appears. Later price
+  changes do not replace this record. This is required even with the default
+  `quirks.refund_at_current_price`. The sale refund still uses the adjusted cost and factors of
+  the moment (S-0408 claim 1), and the default cancel refund uses the price of the moment
+  (claim 6). With the refund switch off, every item also needs its start price or amount paid
+  so far for that refund.
 - **Pad aircraft list shorter than 2** (departure, no switch). Claim 2's pad term reads the second
   pad aircraft type even when the game-wide list has only one, which gives an undefined result in
   the original. Our engine takes the same departure as S-0408 (Edge cases): a missing entry counts
@@ -651,14 +672,14 @@ Ordering consequences:
 | `InfantryCostBonus`, `UnitsCostBonus`, `AircraftCostBonus`, `BuildingsCostBonus`, `DefensesCostBonus` (rules, building type) | cost bonus *β* per kind | decimal, held as a single | 1.0 |
 | `BuildCat` (rules, building type) | combat category: defence line and defence factors | category name | not combat |
 | `Naval` (rules, vehicle type) | naval vehicle line | boolean | no |
-| `Factory` (rules, building type) | factory building of a kind | named value, one of the four producing words (S-0003, claim 21 and row C19) | none |
+| `Factory` (rules, building type) | factory building of a kind, including the matching-kind tests in claim 8 and Q-0190 | named value, one of the four producing words (S-0003, claim 21 and row C19) | none |
 | `MaximumQueuedObjects` (rules, `General`) | maximum queued types per line | integer | 5 |
 | `IncomeMult` (rules, country) | income factor *M* in F3 (S-0402, claim 12) | decimal, held as a single | 1.0 |
 | `Cost` (rules, difficulty-row sections; rules, country) | no effect (claim 2) | decimal | — |
 | `BuildLimit` (rules, type) | application and factory-check build limit with production allowance (claims 3, 8 and 10; S-0407 claim 9), plus the separate queue-time test (S-0407 claim 16) | signed 32-bit integer | 2³¹ − 1 |
 | `Owner` (rules, type and factory building type) | owner-country overlap in factory eligibility (Terms); not the house's own country | list of country names | none; no overlap |
 | `Prerequisite`, `TechLevel`, `RequiredHouses`, `ForbiddenHouses`, `RequiresStolenAlliedTech`, `RequiresStolenSovietTech`, `RequiresStolenThirdTech` (rules, type) | full tech-tree conditions for the offer, not retested by claims 3, 8 or 10 | forms and defaults owned by S-0407 Import mapping | S-0407 Import mapping |
-| `FreeUnit` (rules, building type) | the unit type that comes free with the building (claim 2) | type name | none |
+| `FreeUnit` (rules, building type) | the unit type included in the price (claim 2); its appearance uses the recorded start price under S-0402 claim 18 | type name | none |
 | `PadAircraft` (rules, `General`) | the pad aircraft types (claim 2) | list of type names | empty |
 | `SeparateAircraft` (rules, `General`) | the separate-aircraft flag (claim 2) | boolean | no |
 | `Dock` (rules, aircraft type) | dock types of an aircraft type; the first one is used in claim 2 and in S-0408's adjusted cost | list of type names | empty |
@@ -670,6 +691,11 @@ Ordering consequences:
 | `PoseDir` (rules, `AudioVisual`) | pose direction of an aircraft released onto a dock (claim 13) | integer, 1/256 turn | 0 |
 | `AirportBound` (rules, aircraft type) | the type must return to a dock: no edge entry (claim 13) | form owned by S-0407 Import mapping | S-0407 |
 | `Foundation` (art, building type) | foundation word, which selects the exit list (Constants) | owned by S-0406 Import mapping | S-0406 |
+
+Sale queueing is an order state, not an imported type flag. S-0213 claim 12 owns the sale
+order and S-0407 Terms define being sold and queued to be sold; no additional INI key is needed
+for Q-0190. The factory kind, owner-country overlap, naval match and build limit use the rows
+above.
 
 ## Measurement scenarios
 
@@ -895,6 +921,24 @@ disturbed, and the part is repeated; the three agreeing results are one observat
   appears from the other factory; the third factory's event leaves the item unchanged. Falsified
   if: the item is held or refunded at the start of the sale, or the unit comes out of the
   building being sold.
+- Run 12 (Q-0190). Setup: game speed 6, a tiny map, ample credits, two ground-vehicle
+  factories X and Y with overlapping owner countries for item A. Start A and queue type B
+  that only Y could make (owner-country overlap), with generous build limits. Queue Y's
+  sale while it is busy unloading an earlier vehicle. A read-only recorder must confirm
+  Y's queued selling behaviour and that its sale has not begun when the test event occurs.
+  Procedure: switch X off through an order; in a fresh run destroy X through a test trigger
+  instead. Record from before the event through the next house update and order boundary.
+  Void a run if Y starts selling or another recheck removes A or B before the event.
+  Observable: item identity, progress, hold state, queue contents, credits, factory states
+  and cancellation-order issue/application ticks. Expected: switch-off run, A enters automatic
+  hold at the switch-order boundary with no immediate refund, and B leaves the queue. The
+  ensuing offer recheck can later cancel A at its order boundary; that is not the factory
+  check's hold. Destruction run, A is cancelled with claim 6's refund in the removal tick
+  and B leaves the queue, independently of later sidebar orders and without a second refund.
+  Falsified if Y keeps A running after X's switch-off, keeps A alive after X's permanent
+  removal, or keeps B queued after either factory check. Repeat with Y's sale actually
+  running as a control: exclusion is the same. Use scripted input and the read-only recorder
+  of the measurement setup; no modified executable or harness change is required.
 
 **P9. Items whose type leaves the taken-up set.**
 - Setup: an item whose type needs a test prerequisite building and a queued copy; no factory

@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,7 +25,7 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Paired revisions.** S-0404 revision 4 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 5 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary (claims 7 and 13).
 S-0407 revision 5's corrections, retained in revision 6, distinguish cancellation orders issued

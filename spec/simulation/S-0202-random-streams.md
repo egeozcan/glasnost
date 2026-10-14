@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -42,9 +42,10 @@ addition:
   order they are taken. The 250 *seed values* x₋₂₅₀ … x₋₁ are the values the seeding function
   gives (claim 3); they are never returned as raw values themselves.
 - **Seed.** The 32-bit unsigned integer from which a stream's 250 seed values are computed.
-- **Ranged draw R(a, b).** The number in the inclusive range between two signed 32-bit integers *a*
-  and *b* that claim 4 derives from zero or more raw values. This refines the glossary's *ranged
-  draw*: one ranged draw may take no raw value, one, or several.
+- **Ranged draw R(a, b).** A draw with two signed 32-bit bounds *a* and *b*. Claim 4 gives
+  its inclusive-range result from zero or more raw values; claim 5 gives the exceptional spans,
+  including a result outside that range. This refines the glossary's *ranged draw*: one ranged
+  draw may take no raw value, one, or several.
 - **Unit-interval value.** A double-precision number from 0 to 1 derived from one ranged draw
   (claim 6, Formulas).
 - **Percent draw.** The ranged draw R(0, 99).
@@ -57,8 +58,11 @@ addition:
   scenario M2, sub-test "visiting order"). A pointer only.
 - **Tile animation.** The animation that a cell's tile names and that the cell starts when it is
   recalculated (S-0010, claim 19). It is a *terrain animation* in the glossary's sense.
-- **Cell animation.** The animation that the rules data attaches to an overlay type and that plays
-  on each cell holding that overlay, as S-0009 defines it (Terms).
+- **Resource glint.** An animation selected for a resource cell during game-start setup by
+  the game-wide glint animation and frequency fields (claim 14). Not a tile animation.
+- **Cell animation.** The animation attached to an overlay type and started by ordinary
+  placement, as the glossary and S-0009 define it. Its position is displaced from the overlay
+  cell, and low-bridge writes do not start it (claims 10 and 14).
 - **Edge neighbour.** One of the four cells one straight step away from a cell: the cells in step
   directions 0, 2, 4 and 6 (glossary *step direction*), that is map north, map east, map south and
   map west.
@@ -115,6 +119,9 @@ addition:
 
 ### The generator
 
+The engine requirements below cover skirmish only. Network games, campaigns and the
+original's recording modes are retained as deferred context, not implementation requirements.
+
 1. **State and output.** A stream's state is its 250 most recent values x<sub>N−250</sub> …
    x<sub>N−1</sub>, seed values included, where *N* is the number of raw values taken since the
    seeding; by claim 2 they determine every later raw value. Each raw value is the
@@ -141,21 +148,22 @@ addition:
 
 ### Ranged draws and derived forms
 
-4. **Range rule.** A ranged draw R(*a*, *b*) between signed 32-bit integers:
-   - if *a* = *b*, the result is *a* and no raw value is taken,
-   - otherwise the bounds may come in either order: with *lo* the smaller and *hi* the larger, and
-     *d* = *hi* − *lo* (an integer from 1 to 4294967295), the result is *lo* + *v*, where *v* =
-     *x* mod 2<sup>*m*</sup> for the first raw value *x*, counting from the stream's next one, with
-     *x* mod 2<sup>*m*</sup> ≤ *d*, and *m* is the number of binary digits of *d* (the smallest *m*
-     with *d* < 2<sup>*m*</sup>). So *v* is the lowest *m* bits of that raw value. The draw consumes
-     every raw value from the stream's next one up to that one, the rejected ones included.
-   - The spans of claim 5 behave differently.
+4. **Range rule.** Let *a* and *b* be signed 32-bit integers, *lo* = min(*a*, *b*),
+   *hi* = max(*a*, *b*), and *d* = *hi* − *lo*, calculated exactly as an integer in
+   0 … 4294967295. The result and stream consumption are:
 
-   The result is uniform over *lo* … *hi*. A range whose size *d* + 1 is a power of two takes
-   exactly one raw value. Otherwise the expected number of raw values is 2<sup>*m*</sup> / (*d* + 1),
-   which is below 2. For example R(0, 10) keeps 4 bits and rejects 11 … 15, so it takes 16/11 raw
-   values on average.
-   - Backing: `measurable` (scenarios R1, R5)
+   | Condition | Result | Raw values consumed |
+   |---|---|---|
+   | *d* = 0 | *a* | none |
+   | 1 ≤ *d* ≤ 2147483646 | Let *m* be the least positive integer such that *d* < 2<sup>*m*</sup>. Let *x* be the first raw value, beginning at the stream's next value, with *x* mod 2<sup>*m*</sup> ≤ *d*. The result is *lo* + (*x* mod 2<sup>*m*</sup>). | Every value from the next raw value through *x*, including rejected values |
+   | *d* ≥ 2147483647 | As specified in claim 5. | As specified in claim 5. |
+
+   For 1 ≤ *d* ≤ 2147483646, each integer in *lo* … *hi* is equally likely.
+   If *d* + 1 is a power of two, exactly one raw value is consumed. Otherwise the expected
+   number consumed is 2<sup>*m*</sup> / (*d* + 1), an exact rational less than 2.
+   For example, R(0, 10) retains the lowest 4 bits, rejects values 11 … 15, and consumes
+   16/11 raw values on average. The exceptional spans are defined separately in claim 5.
+   - Backing: `measurable` (R1 and R5 for ordinary ranges; R13 for equal and reversed bounds)
    - Confidence: high
 
 5. **Very wide spans.** Two spans fall outside claim 4, both reachable only when a range bound comes
@@ -211,7 +219,7 @@ addition:
    from the menus; because the clearing takes no draws, nothing observable in the scenario random
    stream depends on that order. Our engine takes no draws from the scenario random stream while it
    clears a game. (In the original this holds because the stream is suspended, Terms, while the
-   clearing runs: anything that asks it for a raw value then receives 0, so a ranged draw under
+   clearing runs: anything that asks it for a raw value then receives 0, so a ranged draw with span 0 … 2147483646 under
    claim 4 returns its lower bound, and the stream does not advance. Our engine need not have this
    state.)
    - Backing: `unmeasured` (the random-state recorder of the Measurement scenarios gives only the number
@@ -251,7 +259,8 @@ addition:
 
    | Part | Backing | Confidence |
    |---|---|---|
-   | Skirmish: same seed for both streams, seeded before the map is read | `measurable` (R2 a) | high |
+   | Skirmish: same seed for both streams | `measurable` (R2 a) | high |
+   | Skirmish: seeding precedes map reading | `unmeasured` (R2 a reads only at the first tick and does not isolate the seeding checkpoint before map reading) | high |
    | Skirmish: the seed is a millisecond counter (seeds of one session differ by the time between game starts) | `measurable` (R2 a; R4 for the change between launches) | high |
    | Skirmish: the counter counts from the start of the host computer | `measurable` (R2 a, secondary expectation) | medium (the measurement setup runs the original on a host layer that supplies the counter) |
    | Local network: one shared seed, in 0 … 32767 | `measurable` (R2 b) | medium |
@@ -478,7 +487,8 @@ addition:
       | Bridges: a tile animation started by a piece draws right after that piece's raw value | `measurable` (R8 H) |
       | Bridges: a piece outside the map still takes its raw value | `measurable` (R8 D, case vi) |
       | Veins: the placement draws, their order within a placement and across candidates | `measurable` (R8 B; the load-time pass uses the same placement rule as a placement during play) |
-      | Veins: the placement test, the table *Vein connections* and what a candidate holds when it is tried | `measurable` (R8 E) |
+      | Veins: rejection by a water neighbour or a wall neighbour, flat vein connections and what a candidate holds when it is tried | `measurable` (R8 E) |
+      | Veins: other land-type exclusions, slope thresholds, sloped placement and connections, and other vein-family overlay types | `unmeasured` (R8 B/E use flat sites with the vein flag on; no scenario part isolates these other conditions or formulas) |
       | Walls, ore and gems take no draw | `measurable` (R8 C) |
       | Crates, the high bridge overlays and the veinhole-monster overlay (and the monster it creates) take no draw | `unmeasured` (map crates are never created in a skirmish, S-0009 claim 12, and the high bridges and the veinhole monster need set-up conditions of rules that have no spec yet, so no scenario can yet place them in a known state) |
       | What sets off a vein placement during play; the recompute draws | `unmeasured` (the recompute's triggers are bound up with other effects, such as a harvesting unit's or a veinhole monster's own draws, that no spec lists yet, and one recompute gives at most five values, each telling only its remainder modulo 3, too few to find its place in the stream the way R8 does) |
@@ -579,8 +589,10 @@ addition:
     | The skirmish setup screens can reach the generator, in a game mode that offers it | `measurable` (R9) | medium |
     | Same algorithm; seeded from the seed setting, which lies in 0 … 65535 | `measurable` (R9 a) | medium |
     | The random-map setup screen chooses the setting with a ranged draw R(0, 65535) of the unsynchronised stream | `measurable` (R9 b) | medium |
-    | The setting is 0 until the screen's first such choice in a session, and a setting of 0 is replaced at game start by a ranged draw R(0, 65535) of the newly seeded unsynchronised stream | `measurable` (R9 e) | low |
-    | Used for nothing but generating the random map | `measurable` (R9 c) | medium |
+    | Without a random-settings choice in a fresh session, the game-start map-generator seed comes from R(0, 65535) of the newly seeded unsynchronised stream | `measurable` (R9 e) | low |
+    | The hidden setting is initially 0 and 0 selects the fallback | `unmeasured` (R9 e reads the resulting seed, not the hidden setting; no scenario part distinguishes the sentinel itself) | low |
+    | No map-generator-stream draw during R9's sampled play | `measurable` (R9 c) | medium |
+    | Used for nothing but generating the random map, across every possible feature | `unmeasured` (R9 c observes only one kind of play; a finite set of runs cannot establish an exhaustive list of users) | medium |
     | The third generator and its uses | `unmeasured` (a list of the only uses a generator has cannot be confirmed by any finite number of runs; its one use that reaches a game, the local-network seed, shows through that seed's range in R2 b) | medium |
     - Backing: `measurable` (scenario R9) for the parts so marked above; the rest `unmeasured`,
       with the reasons given above
@@ -604,6 +616,19 @@ addition:
       starting units are placed or the starting-unit step stops early without its final draw.
       It does not move ahead of crates or secret labs in those cases. Within the pass,
       creations occur in visiting order and take claim 10's applicable animation draws.
+    - After the game-start recalculation, resource-glint setup can take further scenario-stream
+      draws before tick 0. When a glint animation type is configured, each cell with a nonzero
+      contained resource value takes R(0, *f* − 1), where *f* is the imported glint frequency
+      (a signed 32-bit integer) and *f* − 1 wraps in signed 32-bit arithmetic (S-0205). Cells are tested in visiting order. Contained value is the resource's
+      imported value per bale times the cell's bale count, with signed 32-bit multiplication
+      wrapping as S-0205 specifies; empty cells and zero-value resource cells take no draw.
+      A zero result creates the glint animation with no loop delay, immediately taking all
+      applicable animation-creation and start-event draws of claim 10 before the next cell's
+      choice. A nonzero result creates nothing. With no configured animation, the whole group
+      takes no draw. For *f* = 1 the choice consumes no raw value and every eligible cell
+      creates an animation, whose own draws still apply. Other bounds obey claims 4 and 5,
+      including reversed bounds and extreme spans. Recalculation is therefore not an
+      exhaustive final-draw boundary for loading.
     - Low-bridge end markers write their end-row and piece types directly: neither those
       types' cell animations nor the marker type's cell animation start. Thus an end-row
       cell's write can take tile-animation creation draws from its recalculation, but no
@@ -617,12 +642,19 @@ addition:
     already excluded piece cell animations; the end-row and marker exclusions are now explicit.
     S-0009 claim 28 already put cleanup before the late phase but did not place it against
     the second pass. These refinements do not establish unresolved downstream particle or
-    smudge draw counts. S-0412 claim 14's assertion that secret labs take the last draws
-    before tick 0 needs correction: the game-start tile animations can draw later.
-    - Backing: `measurable` (R10 variants A and B for game-start placement, R11 for cleanup,
-      R12 for low-bridge cell-animation exclusion)
-    - Confidence: high for the relative loading positions and cell-animation exclusion,
-      medium for cleanup's recalculations and their conditional tile-animation draws
+    smudge draw counts. S-0412 claim 14 now fixes the relative positions without asserting
+    that secret labs or recalculation take the final loading draws.
+    - Backing: `measurable` (R10 variants A and B for game-start placement,
+      R12 for low-bridge cell-animation exclusion, R13 for resource-glint setup at
+      frequencies 0, 1 and 2). Glint choices at other frequencies and extreme-span
+      behaviour are `unmeasured`: R13 contains no part exercising those bounds; their
+      predictions follow claims 4/5 and the imported field's arithmetic.
+      Cleanup's position, recalculations and conditional animation draws are `unmeasured`:
+      the former R11 reused a deferred network fixture, and no discriminating skirmish
+      fixture with no computer player has been established.
+    - Confidence: high for the relative loading positions, cell-animation exclusion and
+      resource-glint draw rule; medium for cleanup's recalculations and their conditional
+      tile-animation draws
 
 ## Formulas
 
@@ -633,11 +665,16 @@ to 0 … 4294967295. For a value *t* in 0 … 2³² − 1, *σ*(*t*) is its sign
 **Raw sequence** (claims 1, 2): x<sub>n</sub> = x<sub>n−250</sub> ⊕ x<sub>n−147</sub> for n ≥ 0,
 with x<sub>k−250</sub> = F(*s*, *k*) for *k* = 0 … 249.
 
-**Mixing function F(s, k)** (claim 3). F acts on a pair of 32-bit unsigned values over four
-rounds, starting from *L*₀ = *s* and *R*₀ = *k*. For *i* = 0, 1, 2, 3:
+**Mixing function F(s, k)** (claim 3). The four rounds act on a pair of 32-bit unsigned values, starting from *L*₀ = *s* and *R*₀ = *k*:
 
-> *L*<sub>*i*+1</sub> = *R*<sub>*i*</sub> and *R*<sub>*i*+1</sub> = *L*<sub>*i*</sub> ⊕
-> *G*<sub>*i*</sub>(*R*<sub>*i*</sub>), and F(*s*, *k*) = *R*₄.
+| Round *i* | *L*<sub>*i*+1</sub> | *R*<sub>*i*+1</sub> |
+|---|---|---|
+| 0 | *R*<sub>0</sub> | *L*<sub>0</sub> ⊕ *G*<sub>0</sub>(*R*<sub>0</sub>) |
+| 1 | *R*<sub>1</sub> | *L*<sub>1</sub> ⊕ *G*<sub>1</sub>(*R*<sub>1</sub>) |
+| 2 | *R*<sub>2</sub> | *L*<sub>2</sub> ⊕ *G*<sub>2</sub>(*R*<sub>2</sub>) |
+| 3 | *R*<sub>3</sub> | *L*<sub>3</sub> ⊕ *G*<sub>3</sub>(*R*<sub>3</sub>) |
+
+F(*s*, *k*) = *R*₄. All values and operations have the unsigned 32-bit domains specified above.
 
 The round function *G*<sub>*i*</sub> of a 32-bit unsigned value *y*, with the constants
 *P*<sub>*i*</sub> and *Q*<sub>*i*</sub> of the table below and *A* = *y* ⊕ *P*<sub>*i*</sub>, is
@@ -835,6 +872,7 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | Fence lines | for each fence post on the map that can link to a matching post: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. Stock data has no fence posts, so this row is empty with stock data (low confidence) | fence rules (pointer); claim 10 |
 | End of loading | the tags created at the end of loading, in registration order | S-0011, claim 34 |
 | Game-start recalculation pass | in visiting order, the creation and immediate start-event draws of each tile animation this pass starts, after starting units, initial crates, secret labs and end-of-loading tags and before the first tick, even when no starting units were placed. A cell that started one in the second pass starts no second one and takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; claim 10 |
+| Resource-glint setup | after the game-start recalculation and before tick 0, in visiting order: each eligible cell's ranged choice, then any animation-creation and immediate start-event draws for a zero result, before the next cell's choice. No choices when no glint type is configured | claim 14 |
 
 S-0009 points to this table for the rows between the initial fill and the late phase, and states
 the starting units' draws itself (claim 46). S-0011's table *Load-time draw order* cites
@@ -845,7 +883,7 @@ nor S-0011 lists the *Fence lines* row; it matters only for data with fence post
 sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws,
 that each bridge or vein site follows the one before it in the stream, that the overlays of R8 C
 take no draw and, through R8 G, the total of the pre-placed objects' draws before the starting
-units, and R8 I and R10 for the cell-animation and game-start ordering): a group's position
+units, and R8 I, R10 and R13 for the cell-animation, game-start recalculation and resource-glint ordering): a group's position
 shows only as a shift of later draws, and the groups between the
 overlay type stream and the starting units are not yet predicted draw by draw on one map.
 
@@ -898,6 +936,11 @@ puts there. The placement rules of claim 10 read these keys:
 | `RandomRate` | an animation type's art section | two integers | no random rate; −1 preserves that end | creation stage-delay draw, S-0109 claim 3; applies equally to tile animations started by cleanup or the game-start pass |
 | `TileNNAnim`, `TileNNAttachesTo` | theater section named by the tileset's `SetName` | animation-type name and integer sub-tile index; NN is the tile number within its set | no animation, attaches-to −1 (never starts) | tile-animation eligibility for cleanup and game-start recalculations; full mapping and placement fields belong to S-0010 claim 19 and its Import mapping |
 | `TiberiumChainReaction` | an animation type's art section | boolean | no | start-event chain-reaction draws, S-0401 claim 20; no resource means no chain-reaction draws |
+| `OreTwinkle` | rules [General] | animation-type name, case-insensitive | no animation at database creation; omitted or empty layered values keep the value in force | resource-glint type for claim 14; its art settings determine applicable creation draws |
+| `OreTwinkleChance` | rules [AudioVisual] | signed integer | 50 at database creation; omitted or empty layered values keep the value in force | resource-glint frequency *f*, not a percentage; choice range R(0, *f* − 1), with subtraction wrapping in signed 32-bit arithmetic |
+
+The contained resource value used for glint eligibility comes from the resource cell and the
+resource value field imported by S-0401, not from the glint frequency.
 
 The land types and slope shapes that the vein placement test reads come from S-0211 and S-0106. The
 map-generator seed (claim 13) is chosen by the random-map setup screen, not read from a rules key. The
@@ -905,7 +948,9 @@ game seed is a game-setup value (claim 8).
 
 ## Measurement scenarios
 
-All scenarios use the measurement setup. Scenarios R2, R3, R5, R6, R7, R8 and R9 use the glossary's *random-state
+All scenarios use the measurement setup: skirmish at speed 4 unless a part explicitly
+names a deferred network or campaign test, with director and mods off except the named
+test data. Scenarios R2, R3, R5, R6, R7, R8 and R9 use the glossary's *random-state
 recorder*, which here means a read-only program that reads, without changing anything, the running original's seed of the current
 game and the current state of the scenario random stream: the 250 values x<sub>N−250</sub> …
 x<sub>N−1</sub>, seed values included, where *N* is the number of raw values taken since the
@@ -1034,10 +1079,11 @@ The recorder is part of the measurement setup (the project lead has approved it)
     table *Low-bridge end markers* require (for the other pairs: 124 north of 125, 234 west of 233,
     235 north of 236); both markers of the
     first bridge come before both markers of the second in the overlay type stream (S-0009, claim
-    12). 5 runs, then 5 more with the pair 233 and 234. *Expected:* there is a position *p* such
+    12). 5 runs for each of the four end-marker pairs, rotating the bridge geometry
+    to the y axis for pairs 124/125 and 235/236. *Expected:* there is a position *p* such
     that the first bridge's 12 pieces, in the order of claim 10, have overlay types *t*₀ +
-    (x<sub>*p*+*j*</sub> mod 4), *j* = 0 … 11, with *t*₀ from the Formulas table (74, or 205 for the
-    second family); and the second bridge's 12 pieces match x<sub>*p*+12</sub> …
+    (x<sub>*p*+*j*</sub> mod 4), *j* = 0 … 11, with *t*₀ from the Formulas table for
+    the tested pair; and the second bridge's 12 pieces match x<sub>*p*+12</sub> …
     x<sub>*p*+23</sub> in the same way. A wrong position matches one bridge with chance 4⁻¹², so
     the match is unique. The second bridge following straight on the first shows that the first
     took exactly 3*d* = 12 raw values. *Falsified if* no *p* matches in some run, the base type
@@ -1149,7 +1195,8 @@ The recorder is part of the measurement setup (the project lead has approved it)
     first tick equals the prediction in which each created object takes one creation draw, the
     visceroid vehicle also one ranged draw R(0, 29) (its raw values computed by the range rule),
     the infantry unit no placement draw, the upgrade a creation draw of its own, and each dropped
-    entry none. *Falsified if* the position fits instead a prediction without the R(0, 29) draw,
+    entry none. *Falsified if* the position fits instead a prediction missing an object's creation draw,
+    without the R(0, 29) draw,
     with a draw for the infantry unit's placement or without the upgrade's creation draw. *Inconclusive if* it fits no prediction (an
     unexplained draw, for example of the building's own placement, which the placement specs
     own).
@@ -1201,8 +1248,8 @@ The recorder is part of the measurement setup (the project lead has approved it)
   stream's raw values x₀, x₁, … from the game seed (claims 2, 3 and 8). *Expected:* the
   map-generator seed equals x<sub>*k*</sub> mod 65536 for some *k* below 1000 (a wrong hypothesis
   passes with chance about 1000 / 65536 per run, so all three runs pass with chance below 4 in a
-  million). *Falsified if* in some run the map-generator seed is 0 or matches no such
-  x<sub>*k*</sub>.
+  million). *Falsified if* in some run the map-generator seed matches no such
+  x<sub>*k*</sub>. A seed of 0 is allowed when the predicted draw gives 0.
 
 - **R10, game-start animation draws (claim 10, loading-draw table).** Reuse S-0010 G4 part C's
   named theater fixtures: run 1 starts an animation only in the game-start pass, and run 2 starts
@@ -1233,22 +1280,10 @@ The recorder is part of the measurement setup (the project lead has approved it)
   tags, with no synthetic final starting-unit draw in the early-stop case. A pass before
   those groups or an unexplained extra final draw falsifies the variant. Five runs each.
 
-- **R11, cleanup recalculation and draw position (claim 14; Q-0101 Q2/Q3).** Use the
-  no-computer-player game of S-0009 M16 variant A, with its named neutral-country override
-  and a neutral grounded unit on an isolated test tile's animation-attaching cell. Repeat
-  with a neutral one-cell building. Use S-0010 G4's named theater test data so this cell
-  has no tile-animation start recorded after the second pass but can start one on removal.
-  Give its animation a non-singleton random-rate range, no bounce and no start-event effects.
-  Speed 4, director and mods off except these named fixtures, five runs each. The read-only
-  recorder logs the end of the second pass, removal, tile-animation creation and beginning
-  of the late phase, with incoming/outgoing stream states and initial delay. Expected:
-  removal follows the second pass and precedes the late phase; creation occurs at removal
-  and advances the stream by exactly the predicted stage-delay ranged draw. In a control
-  whose cell already started its animation in the second pass, removal takes no new
-  animation-creation draw. Falsified by a different phase order, no recalculation on grounded
-  removal, delayed creation or a control recreation. If no stock-derived theater fixture
-  meets the missing-animation condition, that draw-count subtest is inconclusive, not a
-  zero-draw finding; the phase-order and removal-cell observations still test their parts.
+- **R11, cleanup (claim 14; Q-0101 Q2/Q3), deferred.** The former proposal used
+  S-0009 M16 variant A, which is a network game, not a skirmish fixture. It supplies no
+  skirmish backing. Cleanup remains unmeasured pending a supported skirmish setup with
+  no computer player that reaches cleanup and permits the conditional-animation control.
 
 - **R12, low-bridge writes do not start cell animations (claim 14; Q-0101 Q4).** Use R8 A's
   bridge geometry and recorder, speed 4, director and mods off except named test data.
@@ -1265,8 +1300,35 @@ The recorder is part of the measurement setup (the project lead has approved it)
   creation draws, without a cell-animation rate draw between them. This repeat separates
   the exclusion from suppression of all animations.
 
+- **R13, resource-glint setup (claim 14).** Small purpose-made skirmish map, one human
+  and one bystander computer player isolated from the observed resource area; speed 4,
+  director and mods off except named test data. Put at least eight isolated resource cells
+  with nonzero contained value in known visiting order, plus empty-cell and zero-value
+  resource controls. Configure a glint type with a distinguishable non-singleton random-rate
+  range, no bouncing motion and no start-event effects. Use frequency 2, then 1, then 0, then repeat
+  with no configured glint type; five runs each. Keep R10's game-start-only tile animation
+  as an ordering marker. A proposed read-only recorder logs the end of recalculation,
+  each glint choice's incoming/outgoing stream states, cell and result, each creation's
+  initial stage delay and outgoing state, and tick 0. Use each game's recorded seed, never
+  force one. Expected: the glint choices occur after the marker's creation and before
+  tick 0, in visiting order. At frequency 2 each eligible cell consumes one raw value for
+  R(0, 1); a zero result inserts exactly the predicted rate-draw consumption before the
+  next cell. Frequency 1 consumes no choice value but creates a glint on every eligible
+  cell, each with its predicted rate draw. Frequency 0 tests reversed bounds:
+  R(0, −1) consumes one raw value and returns −1 plus its lowest bit, so only a lowest
+  bit of 1 creates a glint. Empty and zero-value controls take no choice
+  or creation draw. No configured type means no glint draws. Falsified by a reversed
+  order, draws before recalculation finishes, a creation on a nonzero choice, any control
+  draw, a consumed choice value at frequency 1, a frequency-0 choice or consumption differing
+  from that prediction, or animation draws not fitting claim 10.
+  Void a run if the bystander acts in the observed area or is defeated before tick 0 is
+  recorded. Checkpoints, not just the first-tick animation count, distinguish animations
+  removed later and unrelated setup draws.
+
 ## Open questions
 
+- A discriminating skirmish fixture for cleanup's phase order and conditional tile-animation
+  draws is not established (claim 14; deferred R11).
 - Q-0046 is answered across specs: claim 10 covers immediate creation timing,
   cell-animation ordering and the no-resource chain-reaction case. Q1 belongs to S-0009,
   Q2a's resource-bearing sequence to S-0401 claim 20/E17, and Q2c's sprite-derived μ to

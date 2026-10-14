@@ -1,9 +1,9 @@
 ---
 id: Q-0191
 title: In which order are several types added to the sidebar when one recheck offers them together?
-status: open
+status: answered
 related: [S-0004, S-0407, S-0411]
-answered-by: []
+answered-by: [S-0407]
 ---
 
 ## Need
