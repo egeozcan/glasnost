@@ -374,10 +374,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0111 claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch)",
     ),
     (
-        "passenger_overflow_hides_pips",
-        "S-0111 claims 11 and 12: the pip scale is not drawn",
-    ),
-    (
         "pip_colour_default_shift",
         "S-0111 Edge cases: the passenger and occupant pip colours are not imported; the pip scale is not drawn",
     ),

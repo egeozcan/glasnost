@@ -200,7 +200,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `anim_reverse_raw_loop_end` | S-0109 | animation playback is not implemented |
 | `anim_translucency_levels` | S-0109 | animation playback is not implemented |
 | `building_resource_pips_hidden` | S-0111 | claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch) |
-| `passenger_overflow_hides_pips` | S-0111 | claims 11 and 12: the pip scale is not drawn |
 | `pip_colour_default_shift` | S-0111 | Edge cases: the passenger and occupant pip colours are not imported; the pip scale is not drawn |
 
 **Coverage.** `convert::coverage` gives every (category, key) of the rules and art files an outcome: `field` and `render` for keys interpreted per an approved spec, `folded` for type lists and similar, `unsupported` for keys kept as INI text because no approved spec maps them yet (the `spec` column names the specs whose import mapping mentions a key that is not converted yet).
