@@ -37,6 +37,11 @@ pub struct ViewQuirks {
     /// the count-step facing of the body facing turned an eighth of a turn
     /// clockwise.
     pub sprite_vehicle_eight_facings_only: bool,
+    /// `quirks.roof_unload_no_fallback` (S-0108 claim 22): a jumpjet or
+    /// balloon-hover unit unloading from a building without roof-deploying
+    /// or under-roof-door sprites keeps the body and draws no under-door
+    /// image. Off: the ordinary deploying and under-door sprites stand in.
+    pub roof_unload_no_fallback: bool,
 }
 
 impl Default for ViewQuirks {
@@ -46,13 +51,14 @@ impl Default for ViewQuirks {
             cliff_fudge_far_cliff_weaker: true,
             occupiable_hurt_rule: true,
             sprite_vehicle_eight_facings_only: true,
+            roof_unload_no_fallback: true,
         }
     }
 }
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 3] {
+    pub fn named(&self) -> [(&'static str, bool); 4] {
         [
             (
                 "cliff_fudge_far_cliff_weaker",
@@ -63,6 +69,7 @@ impl ViewQuirks {
                 "sprite_vehicle_eight_facings_only",
                 self.sprite_vehicle_eight_facings_only,
             ),
+            ("roof_unload_no_fallback", self.roof_unload_no_fallback),
         ]
     }
 }
@@ -237,10 +244,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0108 claims 11 and 12: building slot animations are not drawn",
     ),
     (
-        "roof_unload_no_fallback",
-        "S-0108 claim 22: the default (no fallback) is drawn; the off branch is in mapview::unload but has no switch field yet",
-    ),
-    (
         "theater_refresh_buildup_range",
         "S-0108 claim 5: no theater refresh",
     ),
@@ -313,6 +316,7 @@ mod tests {
             cliff_fudge_far_cliff_weaker: false,
             occupiable_hurt_rule: false,
             sprite_vehicle_eight_facings_only: false,
+            roof_unload_no_fallback: false,
         }
     }
 

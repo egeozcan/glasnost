@@ -2140,8 +2140,11 @@ impl Builder<'_> {
         };
         // spec: S-0108 claim 22 (while unloading, the deploying or roof-deploying sprite replaces the
         // body sprite; quirks.roof_unload_no_fallback on, its default: the switch is not yet a field)
-        let unload_sprites =
-            unloading.map(|u| unload::unload_sprites(&art.building_sprites, u.roof, true));
+        let unload_sprites = unloading.map(|u| {
+            // spec: S-0108 claim 22 (quirks.roof_unload_no_fallback)
+            let no_fallback = ViewQuirks::default().roof_unload_no_fallback;
+            unload::unload_sprites(&art.building_sprites, u.roof, no_fallback)
+        });
         let replaced = unload_sprites.and_then(|u| u.body);
         // spec: S-0108 claims 3 and 9 (N, the clamp and the shadow are the sprite in use's)
         let sprite = replaced.map_or(body_sprite, |(s, _)| s.to_vec());
@@ -2300,9 +2303,11 @@ impl Builder<'_> {
         if let Some(un) = unloading
             && let Some(door) = art.building_sprites.get("door")
         {
-            // spec: S-0108 Import mapping (the door-stage count and the damaged-door flag: absent-key
-            // defaults 0 and false; their key names are not given, Q-0540)
-            let (stages, damaged_door) = (0, false);
+            // spec: S-0108 claim 24 (`DoorStages` and `DamagedDoor` from the art section named by the image name)
+            let (stages, damaged_door) = unload::door_inputs(
+                self.art_value(Kind::Buildings, i, b"DoorStages"),
+                self.art_value(Kind::Buildings, i, b"DamagedDoor"),
+            );
             // spec: S-0108 F8, Edge cases (round-toward-zero mode: S-0205's switch, as the rules hold it)
             let mode = self.rules.map_or(Rounding::TowardZero, |r| r.mode);
             let frame = unload::door_frame(un.door, stages, damaged, damaged_door, mode);

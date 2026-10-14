@@ -656,7 +656,23 @@ fn unloading_items(
     roles: &[&'static str],
     unloading: Option<Unloading>,
 ) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
-    let (import, catalogue, assets) = unloading_context(roles);
+    unloading_items_with(roles, unloading, None, (256, 256))
+}
+
+/// As [`unloading_items`], with HUTX's image renamed and art sections
+/// `art` added (`Some((image, art))`), and with `health`.
+fn unloading_items_with(
+    roles: &[&'static str],
+    unloading: Option<Unloading>,
+    art: Option<(&str, &str)>,
+    health: (i32, i32),
+) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
+    let (mut import, catalogue, assets) = unloading_context(roles);
+    if let Some((image, text)) = art {
+        import.arts.get_mut(&(Kind::Buildings, 0)).unwrap().image = image.as_bytes().to_vec();
+        let f = import.art_file.as_mut().expect("an art file");
+        f.bytes.extend_from_slice(text.as_bytes());
+    }
     let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
     let map = decode(
         &doc,
@@ -688,7 +704,7 @@ fn unloading_items(
             idx: 0,
             cell,
             owner: b"Neutral".to_vec(),
-            health: (256, 256),
+            health,
             facing: 0,
             object: sim_code(ObjectId(5)),
             unloading,
@@ -782,7 +798,7 @@ fn roof_unload_without_roof_sprites_has_no_fallback() {
 }
 
 /// spec: S-0108 claim 23 (the door image in every door state of the unload, closed included;
-/// absent without a door sprite), F8 (D = 0, the Import mapping's absent-key default, Q-0540:
+/// absent without a door sprite), F8 and claim 24 (no `DoorStages`: D = 0, not inferred from the sprite:
 /// frame 0 in every state)
 #[test]
 fn door_image_in_every_door_state() {
@@ -803,6 +819,22 @@ fn door_image_in_every_door_state() {
     let roles = ["deploying", "under_door"];
     let items = unloading_items(&roles, unloading_with(false, DoorView::Open));
     assert!(items.iter().all(|i| i.0 != 3));
+}
+
+/// spec: S-0108 claim 24 (`DoorStages` is read from the art section named by the image name, not
+/// by the type name, in S-0003's partial integer form), claim 23 and F8 (open: D − 1)
+#[test]
+fn door_inputs_come_from_the_image_section() {
+    let art = (
+        "HUTXIMG",
+        "\n[HUTXIMG]\nFoundation=2x2\nAnimIdle=1,1,0\nDoorStages=4abc\nDamagedDoor=Yes please\n\
+         [HUTX]\nDoorStages=2\nDamagedDoor=no\n",
+    );
+    let open = unloading_with(false, DoorView::Open);
+    let items = unloading_items_with(&UNLOAD_ROLES, open, Some(art), (256, 256));
+    let doors: Vec<_> = items.iter().filter(|i| i.0 == 3).map(|i| i.4).collect();
+    // The first pixel is the frame + 1: frame 4 − 1 = 3 (the type section's 2 would give 1).
+    assert_eq!(doors, [4]);
 }
 
 /// spec: S-0417 Terms (unloading: the building's current behaviour is unload, a queued one is not),

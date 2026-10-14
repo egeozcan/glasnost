@@ -174,7 +174,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `turret_start_clears_damaged` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; the turret slot start and damage swaps are not played |
 | `enable_unfreezes_unpowered` | S-0108 claim 13 | slot animations do not advance, so freezing changes nothing; power is not applied to them |
 | `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; damage swaps are not played |
-| `roof_unload_no_fallback` | S-0108 claim 22 | units do not unload from buildings |
 | `theater_refresh_buildup_range` | S-0108 claim 5 | no theater refresh |
 | `anim_damage_starts_at_one` | S-0109 | animation playback is not implemented |
 | `anim_fast_rate_freezes` | S-0109 | animation playback is not implemented |

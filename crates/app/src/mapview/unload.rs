@@ -174,6 +174,26 @@ pub fn door_frame(
     p + if damaged && damaged_door { d64 } else { 0 }
 }
 
+/// The door-stage count *D* and the damaged-door flag of a building
+/// (S-0108 claim 24) from the values of `DoorStages` and `DamagedDoor` in
+/// the art section named by its image name; neither is inferred from the
+/// door sprite.
+pub fn door_inputs(stages: Option<&[u8]>, damaged: Option<&[u8]>) -> (i32, bool) {
+    // spec: S-0108 claim 24 (a missing or empty key keeps the value in force: initially 0 image frames and false)
+    let given = |v: &[u8]| !v.is_empty();
+    // spec: S-0108 claim 24 and Import mapping (`DoorStages`: a signed 32-bit integer read by S-0003 claims 3 to 5)
+    let d = stages
+        .filter(|v| given(v))
+        .and_then(glasnost_ini::value::integer)
+        .unwrap_or(0);
+    // spec: S-0108 claim 24 and Import mapping (`DamagedDoor`: a boolean read by S-0003 claim 2)
+    let f = damaged
+        .filter(|v| given(v))
+        .and_then(glasnost_ini::value::boolean)
+        .unwrap_or(false);
+    (d, f)
+}
+
 /// The door image's frame index into a door sprite of `count` image
 /// frames, if one is drawn (S-0108 claim 23: no clamp of claim 3; below 0
 /// or at or past the count draws nothing).
@@ -375,5 +395,15 @@ mod tests {
             ),
             DoorView::Opening { m: 5, r: 0 }
         );
+    }
+
+    // spec: S-0108 claim 24 and Import mapping (absent or empty keys: 0 and false; S-0003's partial forms: `4abc` is 4, `Yes please` true; a signed count)
+    #[test]
+    fn door_inputs_from_their_keys() {
+        assert_eq!(door_inputs(None, None), (0, false));
+        assert_eq!(door_inputs(Some(b""), Some(b"")), (0, false));
+        assert_eq!(door_inputs(Some(b"3"), Some(b"no")), (3, false));
+        assert_eq!(door_inputs(Some(b"4abc"), Some(b"Yes please")), (4, true));
+        assert_eq!(door_inputs(Some(b"-2"), Some(b"1")), (-2, true));
     }
 }

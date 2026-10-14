@@ -440,6 +440,8 @@ const NAMED: &[(&str, &[&str])] = &[
             "BuildupTime",
             "CanBeOccupied",
             "ChargedAnimTime",
+            "DamagedDoor",
+            "DoorStages",
             "ExtraDamageStage",
             "Gate",
             "GateStages",
