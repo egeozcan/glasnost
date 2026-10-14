@@ -1,9 +1,9 @@
 ---
 id: Q-0325
 title: Which announcement data entry each skirmish announcement of S-0701 claim 28 plays, and how its sample file is named
-status: open
+status: answered
 related: [S-0701, S-0415, S-0408, S-0411, S-0314, S-0405, S-0414]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

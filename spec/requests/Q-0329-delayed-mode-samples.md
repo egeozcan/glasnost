@@ -1,9 +1,9 @@
 ---
 id: Q-0329
 title: Delayed-mode sample sequence of a sound instance (attack, decay, waits and draws)
-status: open
+status: answered
 related: [S-0701]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

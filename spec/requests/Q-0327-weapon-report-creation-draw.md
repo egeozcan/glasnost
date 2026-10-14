@@ -3,7 +3,7 @@ id: Q-0327
 title: How the presentation learns an object's creation draw for its weapon report variant
 status: answered
 related: [S-0701, S-0202]
-answered-by: [S-0202]
+answered-by: [S-0202, S-0701]
 ---
 
 ## Need
