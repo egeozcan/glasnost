@@ -1007,6 +1007,15 @@ mod tests {
             &f,
         );
         assert_eq!(get(&o, &a, Kind::Vehicles, "Sled").image, b"Sled");
+        // spec: S-0007 claims 1 and 10 (only a non-empty later image key replaces; an empty one keeps the suffixed name)
+        let map = "[Sled]\nImage=\n";
+        let (o, a) = run(
+            &[(base, Role::Base), (map, Role::Map)],
+            "",
+            Theater::Snow,
+            &f,
+        );
+        assert_eq!(get(&o, &a, Kind::Vehicles, "Sled").image, b"SledA");
         // Set, cleared, set again: two As.
         let mode = "[Sled]\nAlternateArcticArt=no\n";
         let map = "[Sled]\nAlternateArcticArt=yes\n";
