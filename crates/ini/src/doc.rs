@@ -520,6 +520,126 @@ mod tests {
         assert!(w.is_empty());
     }
 
+    fn cost_int(text: &[u8], q: Quirks) -> Option<i32> {
+        let mut w = Vec::new();
+        let d = Document::parse(text, q, &mut w);
+        d.value(b"T", b"Cost").and_then(crate::value::integer)
+    }
+
+    /// spec: S-0001 claims 1, 2 and 3 (r4 scenarios L1c to L1e, L3f to L3h)
+    #[test]
+    fn high_bytes_bom_line_and_counted_bytes() {
+        let q = Quirks::default();
+        for b in 128..=255u8 {
+            // L1c: a byte 128 to 255 before the key is part of the key.
+            let mut t = b"[T]\n".to_vec();
+            t.push(b);
+            t.extend_from_slice(b"Cost=5\n");
+            assert_eq!(cost_int(&t, q), None, "L1c byte {b}");
+            // L1d: before the value it is kept, so no initial decimal number.
+            let mut t = b"[T]\nCost=".to_vec();
+            t.push(b);
+            t.extend_from_slice(b"5\n");
+            assert_eq!(cost_int(&t, q), Some(0), "L1d byte {b}");
+        }
+        // L1e: the mark followed by a line feed leaves the header intact.
+        assert_eq!(cost(&parse("\u{feff}\n[T]\nCost=5\n").0), Some("5"));
+        // L3f: CR bytes in the indentation do not count towards the limit.
+        let pad = format!("{}{}", "\r".repeat(20), " ".repeat(508));
+        assert_eq!(cost(&parse(&format!("{pad}[T]\nCost=5\n")).0), Some("5"));
+        // L3g: `1Fh` ending at byte 511 is read; L3h: one byte more cuts the `h`.
+        let zeros = "0".repeat(511 - "Cost=".len() - "1Fh".len());
+        let t = format!("[T]\nCost={zeros}1Fh\n");
+        assert_eq!(cost_int(t.as_bytes(), q), Some(31));
+        let t = format!("[T]\nCost=0{zeros}1Fh\n");
+        assert_eq!(cost_int(t.as_bytes(), q), Some(1));
+    }
+
+    /// spec: S-0001 claims 8, 11, 12 and 14 (r4 scenarios L6a, L6c, L9d, L12a; Import mapping row I5)
+    #[test]
+    fn comments_empty_prefix_sections_and_counts() {
+        let q = Quirks::default();
+        // L6a: the comment goes before the hexadecimal suffix is read.
+        assert_eq!(cost_int(b"[T]\nCost=1Fh;123\n", q), Some(31));
+        // L6c: the value before the comment is empty, so no entry.
+        assert_eq!(cost(&parse("[T]\nCost=;1Fh\n").0), None);
+        // L9d: an empty copy holding only an empty name-prefix line, in either
+        // order and in each spelling, does not compete with the test section.
+        for empty in ["Prefix=", "Prefix=   ", "Prefix= ; note"] {
+            let (d, _) = parse(&format!("[T]\n{empty}\n[T]\nCost=5\n"));
+            assert_eq!(cost(&d), Some("5"), "{empty:?} first");
+            assert_eq!(d.sections().len(), 1);
+            assert!(d.get(b"T", b"Prefix").is_none());
+            let (d, _) = parse(&format!("[T]\nCost=5\n[T]\n{empty}\n"));
+            assert_eq!(cost(&d), Some("5"), "{empty:?} second");
+            assert!(parse(&format!("[C]\n{empty}\n")).0.section(b"C").is_none());
+        }
+        // L12a: 5000 filler sections, then the test section with 5000 filler
+        // entries before the test entry: 5001 sections and 5001 entries.
+        let mut t = String::new();
+        for i in 1..=5000 {
+            t.push_str(&format!("[Filler{i}]\nFiller1=1\n"));
+        }
+        t.push_str("[T]\n");
+        for i in 1..=5000 {
+            t.push_str(&format!("Filler{i}=1\n"));
+        }
+        t.push_str("Cost=5\n");
+        let (d, _) = parse(&t);
+        assert_eq!(d.sections().len(), 5001);
+        assert_eq!(d.section(b"T").unwrap().entries().len(), 5001);
+        assert_eq!(cost(&d), Some("5"));
+    }
+
+    /// spec: S-0001 Edge cases (r4 importer acceptance checks: the warnings on L1a/L1b,
+    /// L2b/L2c, L7a/L7d and L4a, none on unchanged controls; switch-off results for L4a, L7a,
+    /// L7d and L7f)
+    #[test]
+    fn importer_acceptance_checks() {
+        let warned =
+            |text: &str, f: fn(&WarningKind) -> bool| parse(text).1.iter().any(|w| f(&w.kind));
+        let bom = |k: &WarningKind| matches!(k, WarningKind::ByteOrderMark);
+        let cr = |k: &WarningKind| matches!(k, WarningKind::StrayCarriageReturn);
+        let trim = |k: &WarningKind| matches!(k, WarningKind::TrimKeptWhitespace { .. });
+        let last = |k: &WarningKind| matches!(k, WarningKind::FinalLineIgnored);
+        assert!(warned("\u{feff}[T]\nCost=5\n", bom));
+        assert!(warned("\u{feff}; test\n[T]\nCost=5\n", bom));
+        assert!(warned("[T]\nCost=12\r3\n", cr));
+        assert!(warned("[T]\rCost=5\n", cr));
+        assert!(warned("[T]\n     Cost =5\n", trim));
+        assert!(warned("[T]\nCost=    1Fh  \n", trim));
+        assert!(warned("[T]\nCost=5", last));
+        // Unchanged controls: no warning at all.
+        for control in [
+            "[T]\nCost=5\n",
+            "[T]\r\nCost=5\r\n",
+            "[T]\nCost=1Fh\n",
+            "[T]\n    Cost =5\n",
+        ] {
+            assert!(parse(control).1.is_empty(), "{control:?}");
+        }
+        // L7d, L7e and L7f with the defect.
+        let on = Quirks::default();
+        assert_eq!(cost_int(b"[T]\nCost=    1Fh  \n", on), Some(1));
+        assert_eq!(cost_int(b"[T]\nCost=1Fh\n", on), Some(31));
+        let l7f = format!("{}Cost=     1Fh    ;\n", " ".repeat(16));
+        let l7f = format!("[T]\n{l7f}");
+        assert_eq!(cost_int(l7f.as_bytes(), on), Some(1));
+        // Switches off.
+        let off = Quirks {
+            ini_trim_defect: false,
+            ..Quirks::default()
+        };
+        assert_eq!(cost_int(b"[T]\n     Cost =5\n", off), Some(5));
+        assert_eq!(cost_int(b"[T]\nCost=    1Fh  \n", off), Some(31));
+        assert_eq!(cost_int(l7f.as_bytes(), off), Some(31));
+        let off = Quirks {
+            ini_final_line_needs_newline: false,
+            ..Quirks::default()
+        };
+        assert_eq!(cost_int(b"[T]\nCost=5", off), Some(5));
+    }
+
     /// spec: S-0002 claims 1, 2 and 4; Import mapping rows D-c to D-e
     #[test]
     fn duplicates() {
