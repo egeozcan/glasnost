@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0413, Q-0414]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414]
 supersedes: []
 ---
 
@@ -255,12 +255,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     harvester holds that refinery's dock. Dock ownership is not a prerequisite for
     leaving this cell to harvest, and the harvest rules do not replace that destination
     with *guard* merely because the departure cell is a docking cell. Whether movement
-    can find and follow the route, or drops the destination after failure, belongs to
-    S-0212 and S-0215, not to a special harvest retry timer. If it remains in seeking
-    with no destination or remembered cell, claim 3's search applies at its next
-    processing, with that claim's interval; if movement has ended *harvest*, this
-    does not itself resume it. Claim 13 governs rest and the original's computer-only
-    resumption rule.
+    can enter and persist on the cell and find a departure route is S-0212 claim 27a
+    (scenario P27). Failure classification and route retry delay are S-0212 claim 23,
+    not a special harvest retry timer. S-0215 claim 11a fixes give-up versus
+    retained-seeking outcomes and subsequent behaviour-start and processing timing.
+    If seeking survives with no destination or remembered cell, claim 3's search
+    applies at its next processing; a queued replacement behaviour can instead start
+    before another harvest processing. Ending *harvest* does not itself resume it.
+    Claim 13 governs rest and the original's computer-only resumption rule.
     - Backing: `measurable` (H20)
     - Confidence: high for the absence of a docking-cell exception in the harvest rules
 
@@ -773,7 +775,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     are 10 ticks apart during the master's turns, separate from the slaves' own harvesting
     processings. A failed automatic deployment starts a 30-tick wait before the next group
     update (claim 22). Regeneration and reload timers can expire between updates: their effects
-    wait for an update. For a non-negative delay *r* started in tick *a*, completion is observed
+    wait for an update. S-0203 claim 12 places the update relative to the master's
+    operation-state effects, animation advancement, paid repair and vehicle movement.
+    For a non-negative delay *r* started in tick *a*, completion is observed
     at the first eligible later group update in tick *t* with *t* − *a* ≥ *r*. These are exact
     integer ticks, without rounding. Normal suspension or loss of a master's turns can postpone
     the update further.
@@ -949,10 +953,25 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     takes load steps in its own turn, at its type's interval *h*. A processing on a
     non-resource cell or while full queues *guard* and has a 1-tick next-processing delay.
     Seeking and walking back do not run a separate *harvest* processing every *h* ticks.
-    A zero-capacity slave loads nothing: its *harvest* processing queues *guard* with a
-    1-tick delay, and a group update checking fullness treats its non-number fill ratio
-    as full, remembers the current cell and sends it back empty. Negative capacity
-    remains unsettled (Open questions).
+    A newly created slave with capacity 0 or less loads nothing, but is not full and
+    does not immediately return merely because of that capacity. Unlike a vehicle
+    harvester, a zero-capacity slave has fill ratio 0, not a non-number. Its *harvest*
+    processing queues *guard* with a 1-tick delay. At a group update checking a slave
+    still on resource land, no longer in *harvest*, the slave re-enters searching.
+    arrival at a selected resource cell queues *harvest* again. It can therefore
+    alternate searching and attempted harvesting without taking resources.
+
+    A negative-capacity slave starting empty has fill ratio 0 as well. On resource
+    land its *harvest* processing leaves the resource cell and load unchanged,
+    remains in *harvest* and schedules the next processing after *h* ticks. Its
+    requested bale amount is trunc(min(1, single(*C*) − 0)), using floating-point
+    arithmetic and round-toward-zero conversion to integer bales (S-0205). This
+    amount is negative; a non-positive take delivers nothing and changes no resource
+    stage (S-0401 claim 3). The group does not send it back for fullness: it can
+    remain harvesting an unchanged cell indefinitely. Exhaustion by another unit
+    still permits searching and an eventual empty return when no field is found.
+    `quirks.slave_negative_capacity_stalls` defaults to this original rule; off,
+    negative slave capacity uses the zero-capacity treatment above.
 
     A slave's field search uses claim 4's rings, worth and ties, but requires its own
     infantry entry outcome (S-0209 claim 4) to be *clear* and its own movement-zone
@@ -969,7 +988,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     promises neither a deployable site nor a reachable slave destination. Site tests
     remain claim 24's separate rule.
     - Backing: `measurable` (H21)
-    - Confidence: high for place ordering, clocks, zero capacity and deployed-scan
+    - Confidence: high for place ordering, clocks, non-positive capacity and deployed-scan
       qualification; medium for slave connectivity and scan-centre boundaries
 
 27. **Busy masters do not suspend all slave work (Q-0413).** Loss replacement, reload,
@@ -1208,6 +1227,12 @@ select which harvester takes the earlier turn.
   and returns to harvest; it never carries a bale, is never paid, and repeats the cycle. Our
   engine does the same (no switch; the importer warns). Confidence low for both outcomes, which
   scenario H1 variant d checks.
+- **Non-positive slave capacity** (claim 26). Neither zero nor negative capacity
+  makes an empty slave full. Zero capacity alternates guard and group-driven searches
+  without loading; negative capacity can stay harvesting unchanged resource land
+  indefinitely. `quirks.slave_negative_capacity_stalls` (default: original) retains
+  the latter outcome. Off, negative slave capacity uses the zero-capacity guard and
+  rescan treatment. This is not the vehicle's capacity-0 cycle above.
 - **More than four tiberiums** (claim 15): departure, importer warning.
 - **The refinery distance wraps** (claim 8, F5) for a distance of about 46341 leptons (181 cells)
   or more between the reference points, which a large map's diagonal can reach.
@@ -1259,7 +1284,7 @@ select which harvester takes the earlier turn.
 |---|---|---|---|
 | Rules, vehicle type section, `Harvester` | harvester (Terms) | boolean | no |
 | Rules, vehicle type section, `Weeder` | weeder (Edge cases) | boolean | no |
-| Rules, type section, `Storage` | harvester capacity *C* (claim 1), slave capacity and zero-capacity treatment (claim 26) | signed integer, bales | 0 |
+| Rules, type section, `Storage` | harvester capacity *C* (claim 1); slave capacity, including distinct zero and negative treatments (claim 26) | signed integer, bales; negative slave values are retained under the default quirk | 0 |
 | Rules, type section, `Dock` | dock types (Terms, claim 8) | list of building type names | empty |
 | Rules, type section, `Teleporter` | chrono miner (claim 17) | boolean | no |
 | Rules, type section, `ResourceGatherer`, `ResourceDestination` | together with an enslaves field, a slave miner (claim 14) | boolean | no |
@@ -1941,9 +1966,15 @@ is wrong). *Runs:* 3.
 - *Falsified if:* the docking exchange evicts A, expires B's reservation because
   time passed, queues B elsewhere or chooses another refinery, or harvest seeking
   refuses A's field destination solely because it starts on the docking cell.
-- *Tool:* scripted input with video and a read-only tick/state recorder. Movement
-  owners must determine whether A can stay there and the route-failure retry timing.
-  this scenario does not assume that every movement failure leaves *harvest* current.
+- *Route variants:* S-0212 claim 27a/P27 supplies docking-cell entry, persistence and
+  departure tests; claim 23 supplies failure classification and retry delay. Record
+  S-0215 claim 11a's distinction between failures retaining seeking and failures
+  queueing a replacement behaviour, including the later start and processing ticks.
+  A queued replacement need not wait for the old processing or route retry timer.
+  General scatter remains owned by the movement specs, not the docking exchange.
+- *Tool:* scripted input with video and a read-only tick/state recorder. Reachability
+  and route-failure overlaps must actually be observed; this scenario does not
+  assume that every movement failure leaves *harvest* current.
 
 **H21. Slave-place ordering, two clocks, facing and scan tests (claims 21, 26).**
 - *Setup:* common skirmish setup, speed 2, 800 × 600, director and mods off. Named map
@@ -1954,15 +1985,23 @@ is wrong). *Runs:* 3.
   ready states, emergence offers, facings, payments and draws at each update. Arrange
   an earlier-place slave to deliver while a later-place replacement is due. Repeat with
   reload delay 0. Observe seeking, loading and return over 1000 ticks. Rotate the vehicle
-  master before emergence. Repeat with slave capacity 0 as named test data.
+  master before emergence. Repeat with slave capacities 0, −1 and −7 as named test
+  data, starting each slave empty. Disable resource growth for these capacity runs,
+  record resource stages as well as loads, and later exhaust the cell with an
+  ordinary harvester to test subsequent searching and empty return.
 - *Expected:* every expired place is attempted in increasing place order; replacement
   creation draws are in that order. An earlier-place delivery precedes a later-place
   replacement. Ready replacements and completed reloads may emerge in the same update,
   in reverse place order, facing map north. Newly accepted deliveries cannot finish even
   zero reload until the next update. Loading uses 37-tick intervals in slave turns,
   search, fullness and delivery effects use group updates in master turns. Capacity 0
-  never loads and returns empty after a fullness check; its harvest queues guard with
-  a 1-tick delay, rather than staying in harvest for 37 ticks.
+  never loads and is not full; its harvest queues guard with a 1-tick delay and the
+  group subsequently re-enters searching rather than sending it back for fullness.
+  Negative capacity never loads or changes the resource stage, remains harvesting
+  with 37-tick processings and is not full. It does not return while that cell remains
+  resource land. After externally exhausting the field, ordinary searching and
+  empty return apply. Repeat negative runs with the quirk off on our engine: they
+  use the zero-capacity guard and rescan treatment.
 - *Scan variants:* surround slaves with resource cells occupied once by one friendly
   infantry, once by a full infantry record, once by a vehicle, and once disconnected
   by impassable terrain. Predict candidate choice from clear infantry entry and region
@@ -1974,7 +2013,8 @@ is wrong). *Runs:* 3.
   area; slave scans retain their candidate tests. Neither field scan takes a draw.
 - *Falsified if:* one expired place per update, fresh creation order replaces place order,
   all replacements precede all deliveries, replacement emergence waits another update,
-  facing follows the master, zero capacity loads, a clock differs, or a scan differs
+  facing follows the master, non-positive capacity loads or consumes resources,
+  either capacity treatment returns solely for fullness, a clock differs, or a scan differs
   from its specified centre and qualification.
 - *Runs/tool:* 3 per timing and capacity variant, 3 per scan layout; scripted input and
   read-only tick/event, facing, ownership, occupancy and random-state recorder. A run
@@ -2026,16 +2066,16 @@ is wrong). *Runs:* 3.
 
 ## Open questions
 
-- Q-0412 question 4: negative slave capacity remains open. The loading rule attempts a
-  negative take rather than the zero-capacity guard path; its effect on resources and
-  future loads is not established. Do not generalise the zero-capacity result to negatives.
-- Q-0412 question 1: exact placement of the group update relative to all building power,
-  repair and vehicle movement work is S-0203's remaining integration part. Claim 26 fixes
-  within-group observable order and moves delivery to the master's turn, not the slave's.
+- Q-0412 is answered for this spec's scope: claims 21 and 26 already cover replacement
+  count and order, emergence facing, the two clocks, slave field qualification and
+  deployed scan centre and qualification (questions 2, 3 and 5–7). Claim 26 now
+  completes question 4's non-positive capacities, correcting the earlier zero-capacity
+  fullness statement. Question 1's master-turn integration is S-0203 claim 12.
+  claims 21 and 26 own the within-group order.
 - Q-0411 is answered by claim 25 and F7; Q-0413's busy-state part by claim 27, with
   removal and failed-conversion parts owned by S-0312, S-0408 and S-0415. Q-0414's
   harvesting, manual packing and arrival parts are claims 22 and 28; applied-order
-  recall is S-0213 claim 8 and claim 5. Q-0412 is not listed as fully answered.
+  recall is S-0213 claim 8 and claim 5.
 - Whether *return* is ever given to a harvester in a skirmish (claim 2); scenario H9 logs it.
 - Q-0270 is listed as answered for this spec's scope: claims 19 to 24 cover initial creation,
   counting, emergence, ownership retention, directed harvesting, sites and successful relocation,
@@ -2048,9 +2088,10 @@ is wrong). *Runs:* 3.
   preservation already belong to S-0415 claims 6 and 10.
 - Q-0371 is answered here for harvest and docking rules by claims 3a and 10a.
   Claims 3, 9, 10 and 13 already supplied phase intervals, queueing and rest.
-  Whether a non-contact harvester can reach and persist on the docking cell,
-  general step-aside requests and their destinations, and movement route-failure
-  outcomes and retry timing remain with the movement specs. S-0417 claim 13's
+  Non-contact docking-cell entry, persistence and departure are S-0212 claim 27a/P27.
+  route-failure classification and retry delay are its claim 23, and later behaviour
+  starts and processing are S-0215 claim 11a. General step-aside requests and their
+  destinations remain with the movement specs. S-0417 claim 13's
   factory-apron clearing must not be assumed to apply to every refinery.
 - The exact tick of the first bale (19 ticks) and the "+ 1" of the load period depend on the order of
   the counter increase and the processing within a turn (claim 5); scenario H1 settles both.
@@ -2069,9 +2110,10 @@ is wrong). *Runs:* 3.
 
 ## Questions for the project lead
 
-None. The six quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
+None. The seven quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
 `quirks.refinery_distance_wraps`,
 `quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
-`quirks.unload_without_contact_stalls` and `quirks.slave_relocation_failed_search_origin`,
+`quirks.unload_without_contact_stalls`, `quirks.slave_relocation_failed_search_origin`
+and `quirks.slave_negative_capacity_stalls`,
 each default original) follow the project's quirk
 convention.
