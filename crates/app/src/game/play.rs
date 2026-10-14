@@ -221,10 +221,10 @@ impl Play {
     /// its own lifetime and counting against the capacity, never
     /// refreshing an older copy; a line added at capacity removes the
     /// oldest. Widths are our own font's until the game font can be read
-    /// (interim, Q-0451).
+    /// (interim, Q-0501).
     pub fn say(&mut self, text: impl Into<String>) {
         let text = text.into();
-        // spec: S-0213 claim 25 (Line splitting and font; interim glyph widths, Q-0451)
+        // spec: S-0213 claim 25 (Line splitting and font; interim glyph widths, Q-0501)
         let split = status::split(&text, self.status_width, status::our_glyph_width);
         if split.unfittable {
             // spec: S-0213 Edge cases (Unfittable status text: the remainder is omitted with a warning)

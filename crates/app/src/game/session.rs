@@ -932,7 +932,7 @@ impl Session {
             );
         }
         // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
-        // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0451)
+        // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0501)
         let mut y = m.y;
         for msg in &self.play.messages {
             let wdt = msg
