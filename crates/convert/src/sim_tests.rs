@@ -866,6 +866,52 @@ AIAutoDeployFrameDelay=70
     ));
 }
 
+/// spec: S-0003 claim 22, row C20 and scenario V17 (the auto-deploy delays: decimal-prefix items, an unreadable non-empty item 0 in its place, empty items none, 511-byte limit; a missing or empty key keeps the held list) (Q-0171)
+#[test]
+fn auto_deploy_delay_items() {
+    let read = |text: &str| {
+        let (s, _) = sim(
+            &format!("[General]\nAIAutoDeployFrameDelay={text}\n"),
+            "",
+            "",
+        );
+        s.general.ai_auto_deploy_frame_delay
+    };
+    assert_eq!(read("5,abc,90"), Some(vec![5, 0, 90]));
+    assert_eq!(read("5,$10,90"), Some(vec![5, 0, 90]));
+    assert_eq!(read("5,10h,90"), Some(vec![5, 10, 90]));
+    assert_eq!(read("5,0x10,90"), Some(vec![5, 0, 90]));
+    assert_eq!(read("5,,40"), Some(vec![5, 40]));
+    assert_eq!(read("5, ,40"), Some(vec![5, 0, 40]));
+    assert_eq!(read("5,4294967336,90"), Some(vec![5, 40, 90]));
+    // The text-limit control: the second item lies beyond byte 127.
+    assert_eq!(
+        read(&format!("5{}40", ",".repeat(130))),
+        Some(vec![5, 40])
+    );
+    // Layer retention: absent and empty keep the held list; a readable list replaces it.
+    let layered = |map: &str| {
+        let (s, w) = sim("[General]\nAIAutoDeployFrameDelay=5,40,90\n", map, "");
+        (s.general.ai_auto_deploy_frame_delay, w)
+    };
+    assert_eq!(layered("").0, Some(vec![5, 40, 90]));
+    assert_eq!(
+        layered("[General]\nAIAutoDeployFrameDelay=\n").0,
+        Some(vec![5, 40, 90])
+    );
+    assert_eq!(
+        layered("[General]\nAIAutoDeployFrameDelay=5,abc,90\n").0,
+        Some(vec![5, 0, 90])
+    );
+    // The entry-count warning counts the same items.
+    let (_, w) = sim(
+        &format!("[General]\nAIAutoDeployFrameDelay=5{}40,7\n", ",".repeat(130)),
+        "",
+        "",
+    );
+    assert!(!warned(&w, "AIAutoDeployFrameDelay has fewer"));
+}
+
 /// spec: S-0214 Import mapping (VoiceSelect: the selection responses, a list of sound names kept in the listed order, no entry dropped or reordered; absent: empty)
 #[test]
 fn voice_select_keeps_every_entry() {

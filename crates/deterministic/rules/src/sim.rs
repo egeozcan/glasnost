@@ -435,7 +435,8 @@ pub struct General {
     #[serde(default)]
     pub iq_max: Option<i32>,
     /// `[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list
-    /// of S-0215 claim 31, entries for difficulty indexes 0, 1 and 2.
+    /// of S-0215 claim 31, entries for difficulty indexes 0, 1 and 2,
+    /// read as S-0003 claim 22's decimal-prefix items.
     #[serde(default)]
     pub ai_auto_deploy_frame_delay: Option<Vec<i32>>,
     /// `[MultiplayerDialogSettings] GameSpeed` (S-0201 claim 7).

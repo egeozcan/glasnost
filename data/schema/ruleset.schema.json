@@ -3534,7 +3534,7 @@
       "type": "object",
       "properties": {
         "ai_auto_deploy_frame_delay": {
-          "description": "`[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list\nof S-0215 claim 31, entries for difficulty indexes 0, 1 and 2.",
+          "description": "`[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list\nof S-0215 claim 31, entries for difficulty indexes 0, 1 and 2,\nread as S-0003 claim 22's decimal-prefix items.",
           "type": [
             "array",
             "null"
