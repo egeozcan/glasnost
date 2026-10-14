@@ -1,9 +1,9 @@
 ---
 id: Q-0180
 title: A pre-placed building with the switched-on flag 0 whose type a power-off order would not switch off
-status: open
+status: answered
 related: [S-0009, S-0405]
-answered-by: []
+answered-by: [S-0405]
 ---
 
 ## Need
