@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -470,11 +470,12 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       independent-instance variant for enabling all instances)
     - Confidence: high
 
-26. **Reveal around a waypoint.** The action's number slot is a waypoint number. If the local player has
-    not already had the whole map revealed, the original reveals, for the local player only, the
-    area of radius *R* cells around the point of Formulas F6, where *R* is the reveal-trigger radius
-    of the rules (Import mapping). How an area is revealed belongs to the visibility specs (a pointer
-    only). In a skirmish the local player is the single human-controlled house, so
+26. **Reveal around a waypoint.** The action's number slot is a waypoint number. If the local player has not already had the whole map revealed, the original reveals, for the
+    local player only, the area around the point of Formulas F6 using the area-reveal radius rule of
+    S-0409 claim 17: a positive radius *R* is capped at 10 cells, and a radius of 0 reveals no cells.
+    Here *R* is the reveal-trigger radius of the rules (Import mapping). Negative *R* is not specified
+    here; its area-reveal result remains open rather than being inferred from this claim. How an area
+    is revealed belongs to the visibility specs (a pointer only). In a skirmish the local player is the single human-controlled house, so
     that house has the area revealed and no computer-controlled house has. In a network game each
     machine reveals the area for its own local player, which is outside this spec (Terms). Our
     engine applies the reveal to every player house (human or AI) that has not had the whole map
@@ -664,12 +665,16 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       start event has the usual start sound and resource chain reaction when enabled, as in
       S-0109 claim 13. Later start events have no start sound or resource chain reaction.
       Middle events, including the immediate one when due at creation, remain governed by
-      S-0109 claims 13 and 14.
-    - **Drop-zone reveal.** Creating an animation of the drop-zone type, by this action or
-      otherwise, reveals the area of radius *r* quo 256 cells (truncated toward zero) around the
-      animation's position for the local player, where *r* is the rules' drop-zone radius in leptons
-      (Import mapping). Unlike claim 26, the reveal takes place whether or not the local player has
-      already had the whole map revealed. How an area is revealed
+      S-0109 claims 13 and 14. Their downstream particle-creation and smudge-selection and
+      placement draw counts remain unresolved in S-0109's Open questions, not zero.
+      T21 disables those effects and does not establish their draw counts.
+    - **Drop-zone reveal.** Creating an animation of the drop-zone type, by this action or otherwise, reveals the area around
+      the animation's position for the local player, using the area-reveal radius rule of S-0409 claim
+      17. The radius before that rule is *r* quo 256 cells (truncated toward zero), where *r* is the
+      rules' drop-zone radius in leptons (Import mapping); a positive result is capped at 10 cells, and
+      a result of 0 reveals no cells. A negative result is not specified here; its area-reveal result
+      remains open rather than being guessed. Unlike claim 26, the reveal takes place whether or not
+      the local player has already had the whole map revealed. How an area is revealed
       belongs to the visibility specs (a pointer only). As in claim 26, the original reveals for each machine's
       local player, which is outside this spec for network games (Terms), and our engine applies the
       reveal to every player house (human or AI), observers included, so the result does not depend on
