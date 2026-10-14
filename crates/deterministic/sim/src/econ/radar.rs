@@ -2,11 +2,11 @@
 //! when that is worked out again. What the radar map shows is the pure
 //! functions of [`super::minimap`], which the interface calls.
 
-use glasnost_num::Rounding;
+use glasnost_num::{F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use serde::{Deserialize, Serialize};
 
-use crate::rules::{Behaviour, Kind};
+use crate::rules::{Behaviour, Kind, nearest_double};
 use crate::world::{HouseId, ObjectId, World};
 
 /// The radar rules (S-0410 Import mapping).
@@ -14,14 +14,41 @@ use crate::world::{HouseId, ObjectId, World};
 pub struct Rules {
     /// Radar flag of each building type (claim 1).
     pub radar: Vec<bool>,
+    /// The radar-event zoom settings (F9).
+    pub zoom: super::minimap::ZoomRules,
+}
+
+impl Default for super::minimap::ZoomRules {
+    fn default() -> Self {
+        Self {
+            // spec: S-0410 Import mapping (RadarEventSpeed absent: 1 pixel per drawn frame)
+            speed: F64::from_i64(1, Rounding::TowardZero).to_f32(Rounding::TowardZero),
+            // spec: S-0410 Import mapping (RadarEventMinRadius absent: 5 pixels)
+            min_radius: 5,
+            // spec: S-0410 Import mapping (RadarEventRotationSpeed absent: 0.10000000149011612 radians per drawn frame)
+            rotation: nearest_double("0.10000000149011612").to_f32(Rounding::TowardZero),
+        }
+    }
 }
 
 impl Rules {
     /// The radar rules of a resolved ruleset.
     pub fn new(r: &Ruleset, mode: Rounding) -> Self {
-        let _ = mode;
         let reg = r.registries.get("buildings").cloned().unwrap_or_default();
+        let g = &r.sim.general.economy;
+        let base = super::minimap::ZoomRules::default();
+        // spec: S-0410 Import mapping (floating number or percent, stored single precision; narrowing under S-0205)
+        let single = |v: &Option<glasnost_rules::sim::Decimal>, absent| {
+            v.as_ref()
+                .map_or(absent, |d| d.single_value(mode).to_f32(mode))
+        };
+        let zoom = super::minimap::ZoomRules {
+            speed: single(&g.radar_event_speed, base.speed),
+            min_radius: g.radar_event_min_radius.unwrap_or(base.min_radius),
+            rotation: single(&g.radar_event_rotation_speed, base.rotation),
+        };
         Self {
+            zoom,
             radar: reg
                 .iter()
                 // spec: S-0410 Import mapping (Radar absent: no)

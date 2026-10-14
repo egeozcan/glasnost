@@ -977,7 +977,7 @@ fn claim_19a_successful_pack_up_discards_temporary_slaves() {
     for s in temporary_ids(&p) {
         assert!(w.obj(s).is_none(), "temporary slave {s:?} removed");
     }
-    assert!(p.draws >= 1 + SLAVES as u64, "the creation draws are taken");
+    assert!(p.draws > SLAVES as u64, "the creation draws are taken");
     assert_eq!(p.losses, SLAVES, "the discarded slaves count as losses");
 }
 
@@ -992,7 +992,7 @@ fn claim_19a_refused_pack_up_keeps_new_group() {
     for s in &p.old {
         assert!(!slaves::is_slave(&w, *s) || w.obj(*s).is_none());
     }
-    assert!(p.draws >= 1 + SLAVES as u64);
+    assert!(p.draws > SLAVES as u64);
 }
 
 // spec: S-0402 claim 19a (quirks.failed_packup_keeps_vehicle off: the already-created vehicle and its new group are removed on refusal; their creation draws still occur)
@@ -1005,7 +1005,7 @@ fn claim_19a_refused_pack_up_quirk_off_draws_still_taken() {
     for s in temporary_ids(&p) {
         assert!(w.obj(s).is_none());
     }
-    assert!(p.draws >= 1 + SLAVES as u64);
+    assert!(p.draws > SLAVES as u64);
     assert!(w.objects.values().all(|o| o.econ.group.is_none()));
 }
 

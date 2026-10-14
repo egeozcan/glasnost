@@ -527,6 +527,27 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0410",
     ),
     (
+        "radar_event_speed",
+        GENERAL,
+        "RadarEventSpeed",
+        Dec,
+        "S-0410",
+    ),
+    (
+        "radar_event_min_radius",
+        GENERAL,
+        "RadarEventMinRadius",
+        Int,
+        "S-0410",
+    ),
+    (
+        "radar_event_rotation_speed",
+        GENERAL,
+        "RadarEventRotationSpeed",
+        Dec,
+        "S-0410",
+    ),
+    (
         "multiplayer_aicm",
         GENERAL,
         "MultiplayerAICM",

@@ -514,3 +514,136 @@ fn claim_1_no_alive_test() {
     w.obj_mut(d).unwrap().health = 0;
     assert!(radar::claim_1(&w, A));
 }
+
+const RZ: Rounding = Rounding::TowardZero;
+
+fn single(text: &str) -> glasnost_num::F32 {
+    glasnost_num::decimal::nearest_double(text).to_f32(RZ)
+}
+
+fn zoom_rules(speed: &str, min_radius: i32, rotation: &str) -> minimap::ZoomRules {
+    minimap::ZoomRules {
+        speed: single(speed),
+        min_radius,
+        rotation: single(rotation),
+    }
+}
+
+// spec: S-0410 Import mapping (RadarEventSpeed 1, RadarEventMinRadius 5, RadarEventRotationSpeed 0.10000000149011612 when absent; floating number or percent, stored single)
+#[test]
+fn f9_zoom_import() {
+    let z = radar::Rules::new(&rules(), RZ).zoom;
+    assert_eq!(z, zoom_rules("1", 5, "0.10000000149011612"));
+    let mut r = rules();
+    let g = &mut r.sim.general.economy;
+    g.radar_event_speed = Some(glasnost_rules::sim::Decimal("250%".into()));
+    g.radar_event_min_radius = Some(7);
+    g.radar_event_rotation_speed = Some(glasnost_rules::sim::Decimal("0.3".into()));
+    let z = radar::Rules::new(&r, RZ).zoom;
+    assert_eq!(z.speed, single("2.5"));
+    assert_eq!(z.min_radius, 7);
+    assert_eq!(
+        z.rotation,
+        glasnost_num::decimal::parse("0.3", glasnost_num::decimal::Field::Single, RZ)
+            .unwrap()
+            .to_f32(RZ)
+    );
+}
+
+// spec: S-0410 F9 (the event centre: trunc((x − y + a) × s + Oₓ) − Oₓ and trunc((x + y − b) × s + Oᵧ) − Oᵧ; a column −1 becomes 0)
+#[test]
+fn f9_event_centre() {
+    let g = Grid {
+        a: 3,
+        b: 4,
+        w: 40,
+        n: 40,
+        lw: 20,
+    };
+    let one = image_at_scale_one();
+    assert_eq!(minimap::event_centre(&g, &one, (10, 20), 5, 6), (2, 7));
+    assert_eq!(minimap::event_centre(&g, &one, (10, 20), 2, 6), (0, 4));
+    let half = minimap::Image {
+        s: single("0.5"),
+        ..one
+    };
+    // 3 × 0.5 = 1.5: truncated after adding the screen origin.
+    assert_eq!(minimap::event_centre(&g, &half, (10, 0), 4, 4).0, 1);
+    assert_eq!(minimap::event_centre(&g, &half, (-10, 0), 4, 4).0, 2);
+}
+
+// spec: S-0410 claim 14 and F9 (R₀ = max(p, q, w − p, h − q); θ₀ = 0.7853981852531433; ω₀ = Ω)
+#[test]
+fn f9_initial_square() {
+    let r = zoom_rules("1", 5, "0.25");
+    let z = minimap::Zoom::new(&r, (10, 20), 140, 108);
+    assert_eq!(z.radius, single("130"));
+    assert_eq!(z.angle, single("0.7853981852531433"));
+    assert_eq!(z.step, r.rotation);
+    assert_eq!(
+        minimap::Zoom::new(&r, (70, 100), 140, 108).radius,
+        single("100")
+    );
+}
+
+// spec: S-0410 claim 14 and F9 (reaching the minimum radius alone does not complete: rotation slows until d < ω)
+#[test]
+fn f9_zoom_progression() {
+    let r = zoom_rules("1", 5, "0.5");
+    let mut z = minimap::Zoom::new(&r, (8, 8), 16, 16);
+    assert_eq!(z.radius, single("8"));
+    // Frames 1 and 2 contract by S at the full angular speed.
+    assert!(!z.advance(&r));
+    assert_eq!(z.radius, single("7"));
+    assert!(!z.advance(&r));
+    assert_eq!(z.radius, single("6"));
+    assert_eq!(z.step, r.rotation);
+    // Frame 3 reaches the minimum, but d ≈ 1.0 is not below ω = 0.5:
+    // ω becomes RZ₃₂(max(Ω × 0.3333333432674408, RZ₃₂(ω − Ω × 0.019999999552965164))).
+    assert!(!z.advance(&r));
+    assert_eq!(z.radius, single("5"));
+    assert_eq!(z.step, single("0.4899999797344207763671875"));
+    // Frame 4: d ≈ 1.5, not below ω ≈ 0.49.
+    assert!(!z.advance(&r));
+    let before = z.angle;
+    // Frame 5: d ≈ 0.42 < ω ≈ 0.48 completes; the angle takes d, not ω.
+    assert!(z.advance(&r));
+    assert_eq!(z.radius, single("5"));
+    let turned = z.angle.to_f64().sub(before.to_f64(), RZ);
+    assert!(turned.lt(single("0.45").to_f64()) && turned.gt(single("0.4").to_f64()));
+}
+
+// spec: S-0410 claim 14 and F9 (a zoom already at the minimum completes on the first drawn frame when d < ω)
+#[test]
+fn f9_first_frame_completion() {
+    let r = zoom_rules("1", 5, "0.10000000149011612");
+    let mut z = minimap::Zoom::new(&r, (6, 6), 12, 12);
+    assert!(z.advance(&r));
+    assert_eq!(z.radius, single("5"));
+}
+
+// spec: S-0410 F9 (a zero angular speed keeps the initial angle and never completes zoom; the radius stays at the minimum)
+#[test]
+fn f9_zero_rotation_never_completes() {
+    let r = zoom_rules("1", 5, "0");
+    let mut z = minimap::Zoom::new(&r, (10, 10), 20, 20);
+    for _ in 0..10_000 {
+        assert!(!z.advance(&r));
+    }
+    assert_eq!(z.angle, single("0.7853981852531433"));
+    assert_eq!(z.radius, single("5"));
+}
+
+// spec: S-0410 F9 (an angle above 6.283185307179586 has that value subtracted once, not an unrestricted modulo)
+#[test]
+fn f9_angle_wraps_once() {
+    let six = zoom_rules("1", 5, "6");
+    let mut z = minimap::Zoom::new(&six, (50, 50), 100, 100);
+    assert!(!z.advance(&six));
+    assert!(z.angle.to_f64().lt(single("0.6").to_f64()));
+    assert!(z.angle.to_f64().gt(single("0.4").to_f64()));
+    let big = zoom_rules("1", 5, "13");
+    let mut z = minimap::Zoom::new(&big, (50, 50), 100, 100);
+    assert!(!z.advance(&big));
+    assert!(z.angle.to_f64().gt(single("7.4").to_f64()));
+}

@@ -706,3 +706,125 @@ pub fn compose(
     }
     out
 }
+
+/// The imported radar-event zoom settings (S-0410 F9, Import mapping).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ZoomRules {
+    /// The contraction speed *S*, pixels per drawn frame, single.
+    pub speed: F32,
+    /// The minimum radius *M*, pixels.
+    pub min_radius: i32,
+    /// The initial angular speed *Ω*, radians per drawn frame, single.
+    pub rotation: F32,
+}
+
+/// A radar event's zoom square (claims 14 and 15, F9): radius *R*, angle
+/// *θ* and angular increment *ω*, all single precision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Zoom {
+    /// The radius *R* in pixels.
+    pub radius: F32,
+    /// The angle *θ* in radians.
+    pub angle: F32,
+    /// The angular increment *ω* in radians per drawn frame.
+    pub step: F32,
+}
+
+/// The centre (*p*, *q*) of an event at usable cell (*x*, *y*) relative to
+/// the radar image, whose top-left pixel is `origin` on the screen (F9).
+pub fn event_centre(g: &Grid, img: &Image, origin: (i32, i32), x: i32, y: i32) -> (i32, i32) {
+    let s = img.s.to_f64();
+    // spec: S-0410 F9 (p = trunc((x − y + a) × s + Oₓ) − Oₓ, q = trunc((x + y − b) × s + Oᵧ) − Oᵧ, in double precision)
+    let p = d(i64::from(x) - i64::from(y) + i64::from(g.a))
+        .mul(s, RZ)
+        .add(d(i64::from(origin.0)), RZ)
+        .to_i32_common()
+        - origin.0;
+    let q = d(i64::from(x) + i64::from(y) - i64::from(g.b))
+        .mul(s, RZ)
+        .add(d(i64::from(origin.1)), RZ)
+        .to_i32_common()
+        - origin.1;
+    // spec: S-0410 F9 (a resulting column −1 is replaced by 0)
+    (if p == -1 { 0 } else { p }, q)
+}
+
+/// *RZ₃₂* of F9: rounding toward zero to single precision.
+fn rz32(v: F64) -> F32 {
+    v.to_f32(RZ)
+}
+
+/// F9's angle wrap: above 6.283185307179586, that value subtracted once.
+fn wrap_angle(t: F32) -> F32 {
+    let full = nearest_double("6.283185307179586"); // spec: S-0410 F9 (strictly greater than 6.283185307179586 radians)
+    if t.to_f64().gt(full) {
+        // spec: S-0410 F9 (replaced by RZ₃₂ of that value minus 6.283185307179586, once)
+        rz32(t.to_f64().sub(full, RZ))
+    } else {
+        t
+    }
+}
+
+impl Zoom {
+    /// The initial square of an event centred at (*p*, *q*) of an image of
+    /// `w` × `h` pixels (F9).
+    pub fn new(r: &ZoomRules, centre: (i32, i32), w: i32, h: i32) -> Self {
+        let (p, q) = centre;
+        // spec: S-0410 F9 (R₀ = max(p, q, w − p, h − q) pixels)
+        let r0 = p.max(q).max(w - p).max(h - q);
+        Zoom {
+            radius: rz32(d(i64::from(r0))),
+            // spec: S-0410 F9 (θ₀ = 0.7853981852531433 radians)
+            angle: rz32(nearest_double("0.7853981852531433")),
+            step: r.rotation, // spec: S-0410 F9 (ω₀ = Ω)
+        }
+    }
+
+    /// One drawn frame's advance (claim 14, F9); true when zoom completes
+    /// on this frame.
+    pub fn advance(&mut self, r: &ZoomRules) -> bool {
+        let m = d(i64::from(r.min_radius));
+        // spec: S-0410 F9 (ρ = max(Rₙ − S, RZ₃₂(M)), Rₙ₊₁ = RZ₃₂(ρ))
+        let rho = self
+            .radius
+            .to_f64()
+            .sub(r.speed.to_f64(), RZ)
+            .max(rz32(m).to_f64());
+        self.radius = rz32(rho);
+        // spec: S-0410 F9 (a = θₙ + 0.7853981633974483; k = trunc(a × 0.6366197723675814); d = RZ₃₂(a − k × 1.5707963267948966))
+        let a = self
+            .angle
+            .to_f64()
+            .add(nearest_double("0.7853981633974483"), RZ);
+        let k = a
+            .mul(nearest_double("0.6366197723675814"), RZ)
+            .trunc_i128()
+            .unwrap_or(0);
+        let k = F64::from_i64(i64::try_from(k).unwrap_or(0), RZ);
+        let rem = rz32(a.sub(k.mul(nearest_double("1.5707963267948966"), RZ), RZ));
+        // spec: S-0410 F9 (|ρ − M| < 0.01 pixels; equality does not complete)
+        let near = rho.sub(m, RZ).abs().lt(nearest_double("0.01"));
+        let omega = self.step;
+        // spec: S-0410 F9 (completes when |ρ − M| < 0.01 and d < ωₙ, strictly)
+        if near && rem.to_f64().lt(omega.to_f64()) {
+            // spec: S-0410 F9 (the angle on completion becomes RZ₃₂(θₙ + d))
+            self.angle = wrap_angle(rz32(self.angle.to_f64().add(rem.to_f64(), RZ)));
+            return true;
+        }
+        // spec: S-0410 F9 (otherwise the next angle is RZ₃₂(θₙ + ωₙ))
+        self.angle = wrap_angle(rz32(self.angle.to_f64().add(omega.to_f64(), RZ)));
+        if near {
+            // spec: S-0410 F9 (ωₙ₊₁ = RZ₃₂(max(Ω × 0.3333333432674408, RZ₃₂(ωₙ − Ω × 0.019999999552965164))))
+            let big = r.rotation.to_f64();
+            let floor = big.mul(nearest_double("0.3333333432674408"), RZ);
+            let slowed = rz32(
+                omega
+                    .to_f64()
+                    .sub(big.mul(nearest_double("0.019999999552965164"), RZ), RZ),
+            );
+            self.step = rz32(floor.max(slowed.to_f64()));
+        }
+        // spec: S-0410 F9 (|ρ − M| ≥ 0.01: ωₙ₊₁ = ωₙ)
+        false
+    }
+}

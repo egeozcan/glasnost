@@ -596,6 +596,19 @@ pub struct EconGeneral {
     /// `[General] RadarCombatFlashTime`, ticks (S-0410 claim 10); absent: 21.
     #[serde(default)]
     pub radar_combat_flash_time: Option<i32>,
+    /// `[General] RadarEventSpeed`, the radar-event zoom contraction speed
+    /// *S* in pixels per drawn frame, a single (S-0410 F9); absent: 1.
+    #[serde(default)]
+    pub radar_event_speed: Option<Decimal>,
+    /// `[General] RadarEventMinRadius`, the minimum zoom radius *M* in
+    /// pixels (S-0410 F9); absent: 5.
+    #[serde(default)]
+    pub radar_event_min_radius: Option<i32>,
+    /// `[General] RadarEventRotationSpeed`, the initial angular speed *Ω*
+    /// in radians per drawn frame, a single (S-0410 F9); absent:
+    /// 0.10000000149011612.
+    #[serde(default)]
+    pub radar_event_rotation_speed: Option<Decimal>,
     /// `[General] MultiplayerAICM`, the original's extra-credit percentages
     /// by difficulty index (S-0412 claim 3; decimal-prefix items, S-0003
     /// claim 23); absent: no entries.

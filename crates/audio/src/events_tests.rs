@@ -1230,10 +1230,73 @@ fn base_under_attack() {
     a.tick(&w, &[hit_by(20, None)], &mut u);
     assert!(!announced(&mut a, 4000));
     assert_eq!(u.taken(), 0);
-    // After 600 ticks the first place is free again.
+    // spec: S-0410 claims 14 and 15 (without drawn frames the zoom never completes: the event stays)
     w.tick += 600;
     a.tick(&w, &[at(0)], &mut u);
+    assert!(!announced(&mut a, 4500));
+    // Drawn frames finish the zoom; 600 ticks from that frame's tick, the place is free again.
+    zoom_out(&mut a, &w);
+    w.tick += 599;
+    a.tick(&w, &[at(0)], &mut u);
+    assert!(!announced(&mut a, 4800));
+    w.tick += 1;
+    a.tick(&w, &[at(0)], &mut u);
     assert!(announced(&mut a, 5000));
+}
+
+/// Enough drawn frames at one tick (as in a freeze) to finish every zoom.
+fn zoom_out(a: &mut Audio, w: &World) {
+    for _ in 0..1000 {
+        a.radar_frame(w, (0, 0));
+    }
+}
+
+/// The drawn frames an event at `cell` takes to finish its zoom under the
+/// world's rules (S-0410 F9), with the radar map at the screen origin.
+fn zoom_frames(w: &World, cell: (i32, i32)) -> i32 {
+    let g = minimap::grid(w).expect("grid");
+    let img = minimap::image(&g);
+    let r = w.rules().econ.radar.zoom;
+    let c = minimap::event_centre(&g, &img, (img.left, img.top), cell.0, cell.1);
+    let mut z = Zoom::new(&r, c, img.width, img.height);
+    let mut n = 1;
+    while !z.advance(&r) {
+        n += 1;
+    }
+    n
+}
+
+// spec: S-0410 claims 14 and 15, S-0314 claim 6, S-0701 F7 (the post-zoom lifetime starts at the tick of the zoom-completion frame; frames advance zoom without ticks)
+#[test]
+fn radar_event_lifetime_follows_zoom() {
+    let mut w = world();
+    let tank = tref(&w, Kind::Vehicle, "CRUSHER");
+    let mut a = base_audio(&w);
+    let mut u = Rng::new(1);
+    let lost = |w: &World| hit(w, tank, 0, HitResult::NowDead, None);
+    a.tick(&w, &[lost(&w)], &mut u);
+    assert!(announced(&mut a, 1000));
+    let c = testkit::mid(SIZE, 0, 0);
+    let d = zoom_frames(&w, (c.x, c.y));
+    assert!(d > 1, "the zoom takes several drawn frames");
+    // One drawn frame per tick until the frame before completion.
+    for _ in 0..d - 1 {
+        a.radar_frame(&w, (0, 0));
+        w.tick += 1;
+    }
+    // Still zooming: no expiry however many ticks pass without a frame.
+    w.tick += 10_000;
+    a.tick(&w, &[lost(&w)], &mut u);
+    assert!(!announced(&mut a, 2000));
+    // The completion frame: the 200-tick tail starts at this tick.
+    a.radar_frame(&w, (0, 0));
+    let t0 = w.tick;
+    w.tick = t0 + 199;
+    a.tick(&w, &[lost(&w)], &mut u);
+    assert!(!announced(&mut a, 3000));
+    w.tick = t0 + 200;
+    a.tick(&w, &[lost(&w)], &mut u);
+    assert!(announced(&mut a, 4000));
 }
 
 // spec: S-0701 claim 28 (unit lost and harvester under attack, F7)

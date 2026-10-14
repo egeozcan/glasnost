@@ -410,7 +410,6 @@ Provisional rules of the audio, each tied to a request:
 | `bank::SoundBank::add_idx` | when the index lists a name twice, the first copy wins | Q-0263 |
 | `Audio::tick` | a weapon report plays entry 0 of the weapon's list, with no draw | Q-0327 |
 | `mixer` | a delayed instance plays the immediate mode's partition, keeps one body sample across loops, takes no startup draw and has no waits | Q-0329 |
-| `Audio::tick` (F7) | the radar event's zoom-in phase lasts 0 ticks. The events are kept for announcements only | Q-0331 |
 | `mixer` | the crowded master level reaches its target at once | Q-0333 |
 
 ## Game client (M5b)

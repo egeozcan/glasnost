@@ -309,6 +309,13 @@ impl Session {
         }
     }
 
+    /// The radar map's top-left pixel on the screen (S-0410 F9's origin
+    /// before the image's own offset).
+    pub fn radar_origin(&self) -> (i32, i32) {
+        let r = Layout::new(self.screen).radar;
+        (r.x, r.y)
+    }
+
     /// The battlefield's rectangle on the screen.
     pub fn map_rect(&self) -> Rect {
         Layout::new(self.screen).map
