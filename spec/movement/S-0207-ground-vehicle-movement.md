@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356]
 supersedes: []
 ---
 
@@ -217,8 +217,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
    into finishing exactly one track per tick (claim 12).
    - Backing: `measurable` (scenario D1 for straight and diagonal costs; D7's track-table sweep
      for the other tracks; scenario D8, parts b to e, for the leftover
-     kept at rest and for the budget emptied by a turn in place and by a wait, part e for a wait
-     on a tick in which the vehicle has just finished a track)
+     kept at rest after an ordinary move and for the budget emptied by a turn in place and by a wait,
+     part e for a wait on a tick in which the vehicle has just finished a track).
+     Retention at rest reached by other arrival effects is `unmeasured`: D8 isolates only an
+     ordinary move ending, and no scenario here distinguishes every other way of coming to rest
    - Confidence: high for the costs; low for the leftover kept at rest (the ways of arriving were
      read but not exercised)
 
@@ -665,7 +667,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     by T4 or after the search of T4's *cloaked blocker* row, and after the search of T5's obstacle
     row a check of the same kind as the T5 check that discarded the path (T5 below). So on a tick of a repeated check
     against stationary friends the vehicle can send the request twice, once here and once by T4,
-    when the cell still gives *stationary friendly* at the repeated check.
+    when the cell still gives *stationary friendly* at the repeated check. This is the default
+    of the proposed `quirks.drive_duplicate_scatter_request` below. With it off, claim 15
+    sends at most one request from this vehicle to the same cell layer in a tick; the
+    repeated check still decides giving up, waiting and any other non-request effect.
 
     *The second cell of a two-cell curve* (claim 7) is checked only after its first cell gave
     *clear*, and only for a curve. Its outcome has the result of table T5.
@@ -1172,6 +1177,29 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - (j) **Other queries.** A request to turn the body turns it at the turn rate of S-0206, as for
       other locomotors. Crushing, damage and visibility rules are not changed by the jump or by
       phasing in, except for the target loss in part e.
+    - (k) **Removal with a remembered or pending landing point (Q-0356).** For a
+      teleporting vehicle or aircraft, removal from the map clears its actual cell's
+      occupancy mark at its actual height, not a separate mark at its remembered
+      landing point. Removal does not sweep all of its reservations. This holds both
+      after a jump and between destination fixation and the jump. With the respective
+      ground-reservation quirks on, and with distinct departure and replacement cells,
+      the results below follow. No other object may mark or clear the tested flags in
+      the meantime. A vehicle uses the vehicle-present flag, an aircraft the
+      object-present flag.
+
+      | Situation at removal | Actual cell after removal | Remembered or pending landing cell after removal |
+      |---|---|---|
+      | standing on a deck after landing, no replacement destination | deck flag clear, ground flag retained | same cell: retained ground reservation |
+      | standing on that deck, replacement destination accepted but not jumped to | old deck flag clear, old ground flag already clear from replacement | new ground flag retained |
+      | standing off a high bridge after landing, no replacement destination | ground flag clear | same cell: no flag remains, since actual occupancy and reservation coincide |
+      | landing point fixed elsewhere, not yet jumped to | actual layer's flag clear; any separate stale ground flag under a deck is unaffected | pending ground flag retained |
+
+      Thus the deck-removal case with a replacement destination leaves the new ground
+      reservation behind, for an aircraft as well as for a vehicle. The retained flag
+      is not a listed object and is not reference-counted (S-0209 claim 1). The
+      consequences for entry and standing-position choice belong to S-0209 claims 5
+      and 6. This is part of the respective ground-reservation quirks, not an
+      additional removal switch.
     - Backing: `measurable` (scenario D22: runs 1 and 2 for parts a, b, d, e and f with the
       harvester exception, run 2 also for part g, run 3 for the occupied destination, run 4 for
       cliffs and islands, run 5 for D against distance and each rules field, run 6 for an order
@@ -1181,7 +1209,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       and revert; runs 10 to 12 for the entry-test level, absent reach restriction, aircraft
       mark and landing, and animation creation draws; run 13 for Q-0240's vehicle
       reservation layers, replacement clearing and post-jump marks; run 14 for Q-0310's
-      aircraft two-record landing, next destination and destruction cleanup). `unmeasured`:
+      aircraft two-record landing, next destination and destruction cleanup; run 15
+      for part k's actual-cell-only removal and retained pending reservations). `unmeasured`:
       the live erasing-lock exception, because no stock setup establishes a retained lock at a
       locomotor jump (S-0215 claim 10). Also `unmeasured` are part a's disabling states other
       than phasing in, part b's superweapon hold, part e's parasite expulsion, and part j's
@@ -1192,7 +1221,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
       (including the entry-test level and the search without a reach restriction), for the
       aircraft reservation and landing rules, including Q-0310's clearing and retained
-      ground flag after removal, and for Q-0240's vehicle ground reservation,
+      ground flag after removal, for part k's vehicle and aircraft removal rules,
+      and for Q-0240's vehicle ground reservation,
       retained-point clearing and two-record post-jump result; for part a's list of disabling states, for part d's same-tick consequence and
       for part h's consequences; part c inherits S-0208 claims 19–20's confidence, high for
       position choice and draws and medium for search choices, bridge consequences and placement
@@ -1217,13 +1247,29 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     created vehicle with no pending teleport before its factory exit acquires no teleport
     reservation from its exit or rally destination while driving. Its first destination
     taken after restoration fixes a landing point by claim 20 a.
+
+    **A previous deck landing (Q-0356).** Merely installing temporary driving clears
+    neither the remembered ground reservation nor the actual deck mark. If a vehicle
+    starts temporary driving while both records of its previous landing cell remain
+    marked, ordinary driving departure clears its actual deck mark but not the separate
+    remembered ground reservation. After it has left that cell, and at restoration,
+    the former landing cell therefore keeps ground marked and has deck clear, provided
+    no accepted teleport destination or other flag writer intervened. Driving marks
+    its current cell by the ordinary actual-height rule: ground off a deck, deck on
+    a deck. Restoration does not move that current-cell mark to the remembered landing
+    cell, or recreate the old deck mark. A destination accepted before driving was
+    installed can already have replaced the old ground reservation (claim 20 a).
+    This conditional case does not undo that replacement.
     - Backing: `measurable` (D23 for the ordinary factory exit, destination routing and first
-      post-restoration jump). `unmeasured` for a pre-existing pending jump or phasing-in
-      state: no established stock setup starts temporary driving in the interval before a
-      pending jump or during phasing in. These are conditional retention rules, not an
-      assertion that a factory-produced vehicle starts in either state.
+      post-restoration jump). `unmeasured` for a pre-existing pending jump, phasing-in
+      state or two-record deck landing at temporary-drive installation: no established
+      stock setup starts a factory exit in those states. D23 gives a conditional
+      observation protocol, not permission to manufacture one through state writes.
+      These are conditional retention rules, not an assertion that a factory-produced
+      vehicle starts in any of those states.
     - Confidence: high for retention at restoration and no teleport destination handling
-      during driving; medium for the ordinary factory consequence
+      during driving; medium for the ordinary factory consequence and the conditional
+      previous-deck-landing occupancy result
 
 22. **Cell-tag arrival timing (Q-0268 part 1).** A driving vehicle's cell-arrival
     update (claim 12) raises the current cell's entered-by tag as S-0011 claim 18
@@ -1252,7 +1298,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Backing: `measurable` (D24 for straight and curved driving, teleport, bridge
       and passive chain-point cases). Exact ordering against building reports and
       crushing uses D24 with S-0402 H14 and S-0210's crushing fixtures. Record their
-      effects and the tag's variable action in the same arrival tick
+      effects and the tag's variable action in the same arrival tick, using D24's ordering
+      controls rather than end-of-tick coincidence alone. Ordering before jump-time crate
+      collection, destination removal and the landing animation is `unmeasured`: D24
+      establishes the arrival tick but isolates none of those comparisons
     - Confidence: medium
 
 ## Formulas
@@ -1834,20 +1883,26 @@ its new destination from that tick.
 - **`quirks.teleport_aircraft_ground_reservation`** (claim 20 a, e; proposed).
   Default original: reserve ground at terrain height, retain that mark through deck
   placement, clear the remembered ground mark on the next accepted destination, and
-  clear only actual deck occupancy on removal without a replacement destination.
-  Thus destruction on deck can leave a ground object-present flag. Off: reserve only
+  clear only actual occupancy on removal, not a separate remembered or pending
+  reservation (claim 20 k). Destruction on deck can therefore leave the old ground
+  object-present flag, or a replacement landing cell's ground flag. Off: reserve only
   the eventual landing layer, clear that reservation when replacing it, and clear
-  the aircraft's landing-layer mark on removal, leaving no separate ground mark.
-  Shared with S-0209; D22 run 14 tests the default.
+  both the pending reservation and actual occupancy on removal, leaving no orphan
+  reservation. Shared with S-0209; D22 runs 14 and 15 test the default.
 
 - **`quirks.teleport_vehicle_ground_reservation`** (claim 20 a, e; proposed).
   Default (original): a teleporting vehicle reserves the ground record even for a high-bridge
   landing, remembers that terrain-height point for later reservation clearing, and keeps the
-  ground reservation through deck placement; placement also marks the deck record. Off:
+  ground reservation through deck placement; placement also marks the deck record.
+  Removal clears actual occupancy only, leaving any separate remembered or pending
+  ground reservation (claim 20 k). Temporary driving leaves a previous deck landing's
+  ground reservation behind when driving departure clears the actual deck mark
+  (claim 21). Off:
   reserve the eventual landing layer from fixation onwards (deck on a high bridge, ground
   elsewhere), clear the earlier reservation from that same layer when replacing it, and keep
   no separate ground reservation beneath a deck landing. Placement still has claim 20 e's
-  deck height and listing. S-0209's ordinary entry rules apply to the selected record in
+  deck height and listing. Removal clears both a pending reservation and actual
+  occupancy, leaving no orphan reservation. S-0209's ordinary entry rules apply to the selected record in
   either setting. The switch changes no landing search, delay or random draw by itself.
 - **Orders given while phasing in are lost** (claim 20 f), not deferred to its end. Original
   behaviour, no switch.
@@ -1857,12 +1912,21 @@ its new destination from that tick.
   and only the look at the first cell of a new path asks. Off: every give-up test of claim 15 also
   requires the vehicle to be in contact with nothing, as a walker's does (S-0209 claim 8). No
   measurement setup is known that tells the two apart (scenario D17, switch note).
-- **A blocked vehicle can send its request twice in one tick** (claim 15): once when it looks at the
-  first cell of the path it has just found and once at the repeated check, when the cell still
-  gives *stationary friendly* then. Each request reaches every listed object, and each infantry unit
-  that accepts takes its own draw (S-0208 claim 13), so a second request could change the number of
-  draws. This is original behaviour and has no switch: no setup is known in which the second
-  request is observable (claim 15, backing), and no mod is known to need one.
+- **`quirks.drive_duplicate_scatter_request`** (claim 15; proposed).
+  Default (original): a blocked vehicle can send its request twice in one tick, once when it
+  looks at the first cell of the path it has just found and once at the repeated check, when
+  the cell still gives *stationary friendly* then. Each request reaches the objects eligible
+  under S-0209 claim 11, and each infantry unit that accepts takes its own draw (S-0208
+  claim 13), so the second request can change the draw count.
+  Off (design alternative): among claim 15's requests from one vehicle to the same cell and
+  cell layer in one tick, only the earliest is sent. A later otherwise-required request to
+  that same layer is omitted entirely, including recipients' draws; requests to a different
+  cell or layer, requests from another sender, and requests on later ticks are unaffected.
+  Entry checks, path searches, give-up tests and their non-request effects are unchanged:
+  suppressing a duplicate request does not suppress the repeated check or its wait.
+  The default's double-request result remains `unmeasured`, with low confidence, for claim
+  15's stated reason: no established setup keeps an accepting infantry receiver stationary
+  after its first draw while also preserving the vehicle's path through that cell.
 - **`quirks.drive_nearest_from_top_corner`** (claim 15, F8). Default (original): the nearest object
   in the look at the first cell of a new path is the one whose position lies nearest to the top
   corner of the cell holding it, along the map, so an infantry unit at the top position wins over
@@ -1915,6 +1979,8 @@ superweapon specs, not claim 20.
 | No data key | aircraft ground reservation, deck placement and removal clearing (claim 20 e; Q-0310) | runtime occupancy behaviour, no imported value | original by default under `quirks.teleport_aircraft_ground_reservation` |
 | Map cell tags and entered-by events | arrival-trigger eligibility and actions (claim 22) | import forms and absent defaults belong to S-0011; movement adds no field | no arrival raise without a cell tag |
 | No data key | retained teleporting state and no teleport destination handling during temporary driving (claim 21) | runtime state, not imported fields | a newly created teleporting object has no pending jump and no phasing in |
+| No data key | vehicle and aircraft removal with a remembered or pending reservation (claim 20 k; Q-0356) | runtime occupancy clearing, no imported value | actual-cell-only clearing under the respective ground-reservation quirk, default original |
+| No data key | previous deck landing during temporary driving and restoration (claim 21; Q-0356) | runtime occupancy behaviour, no imported value | ordinary driving clears actual deck occupancy on departure; restoration relocates no mark |
 
 Animation type fields governing creation draws are imported by S-0109 and S-0202,
 there is no jump-specific key that suppresses those draws. Temporary factory driving and
@@ -2788,6 +2854,27 @@ cell before *X*.
     Probe the ground below with an ordinary non-crushing drive vehicle and, separately,
     an infantry unit. Record entry outcomes separately from standing-position choice.
     compare against S-0209's tables, not against a fictitious ground-listed aircraft.
+  - Run 15 (removal with remembered and pending reservations, Q-0356). Use run 13's
+    vehicle and run 14's aircraft on the same isolated bridge over traversable ground,
+    game speed index 2, director and mods off. In separate trials destroy each object
+    after an uninterrupted deck landing, after a landing on clear ground off the
+    bridge, and after a replacement destination has been accepted but before its jump.
+    Add a first-jump trial removed after fixation but before any landing. Use weapons
+    without occupant-producing effects, and discard trials where damage or another
+    object changes the tested flags before removal. Record both layers' flags and
+    listings, actual height, remembered landing point, destination and tick with the
+    read-only recorder. Qualify a pending trial only when fixation and removal before
+    the jump are both captured; ordinary input must not be assumed to supply that
+    interval. Repeat each qualified branch three times. Expect claim 20 k's table:
+    actual occupancy clears, a separate ground reservation remains. In the deck
+    replacement branch old ground is already clear and new ground remains marked.
+    In the off-bridge completed-landing branch ground clears because both marks
+    coincide. Probe retained flags separately with a drive vehicle and a walker,
+    recording entry outcome separately from standing-position choice as in run 14.
+    Any separate pending reservation clearing solely on removal, actual deck flag
+    surviving removal, or ground surviving off-bridge removal in the coincident-mark
+    control falsifies the corresponding row. A missing pre-jump interval is
+    inconclusive, not evidence that removal cleans reservations.
 - *Runs:* 3 each, run 3's main case at three different tick numbers; run 7 until each class has at
   least 3 runs.
 - *Falsified if:* a turn or a wait precedes the jump, the jump comes a tick later than stated, the
@@ -2818,8 +2905,16 @@ cell before *X*.
   causes a jump before restoration, or moves a teleport mark; or restoration alone resets
   or moves the recorded teleport state. A post-restoration move that drives rather than
   jumps also falsifies the restoration hypothesis shared with S-0215 B15 e.
-- A retained pending jump or phasing-in control needs a stock event that starts temporary
-  driving in that state. No such event is established. Do not fabricate one through memory
+- A retained pending jump, phasing-in or previous two-record deck-landing control needs
+  a stock event that starts temporary driving in that state. No such event is established.
+  If one is found, record both records of the old landing cell before installation,
+  at installation, after driving has left it, and at restoration, together with both
+  records and actual height of the current cell. Qualify the two-record control only
+  if no earlier destination replacement has already cleared old ground. Expect no
+  clearing just from installation, old deck clear and old ground retained after
+  departure, and the current actual-layer mark unchanged solely by restoration.
+  Old ground clearing on departure or restoration, or old deck being recreated on
+  restoration, falsifies claim 21. Do not fabricate these controls through memory
   writes; these conditional rules remain unmeasured.
 
 **D24: cell-tag arrival timing (claim 22; Q-0268 part 1).**
@@ -2837,6 +2932,15 @@ cell before *X*.
   separately from the unreached target. Record position, track completion, arrival
   reports, variable changes and
   phasing-in state by tick. Run each case three times.
+- *Ordering controls:* combine the tagged arrival cell with S-0402 H14's tethered
+  harvester/refinery arrival fixture, then separately with S-0210's cell-centre
+  crushing fixture. Record the arrival report's resulting contact/destination state,
+  the crushed object's removal, and the tag's variable change. Qualify an ordering
+  observation only when read-only recordings distinguish these events within the arrival
+  tick; end-of-tick coexistence alone establishes no within-tick order. Expect the report
+  and crushing effects already completed when the variable changes. A variable change
+  before either corresponding effect falsifies claim 22's ordering; a run without that
+  temporal resolution is inconclusive for ordering.
 - *Expected:* a straight target raises on its completion tick despite continued travel,
   not on earlier boundary crossing or reservation. An ordinary two-cell curve raises
   at its final target only, not merely for crossing its first cell. A teleport raises
@@ -2846,9 +2950,22 @@ cell before *X*.
   for the unreached target merely because it is the track target.
   A raise on reservation, mid-track boundary crossing, stopping only, an intermediate
   teleport cell, or phasing-in completion instead of landing falsifies the claim.
+  A ground-under-bridge raise, a missing eligible deck raise, or a chained-curve raise
+  assigned to the unreached target rather than the occupied chain-point cell also falsifies
+  the corresponding rule. The ordering against jump-time crate collection, destination
+  removal and landing animation is `unmeasured`: this scenario does not supply a
+  discriminating fixture or sufficiently resolved recording for those three comparisons.
 
 ## Cross-spec changes to confirm
 
+- Q-0356: S-0209 claim 1 must extend its vehicle and aircraft lifecycle pointers to
+  claim 20 k here: removal clears actual occupancy, not a separate remembered or
+  pending ground reservation. After a replacement destination, old ground is already
+  clear and the new ground reservation survives removal. Its temporary-driving pointer
+  should cite claim 21: installation clears neither mark, driving departure clears
+  actual deck only, and restoration relocates no mark. Complete both shared
+  ground-reservation quirk alternatives to clear pending reservation and actual
+  occupancy on removal. Entry and standing-position effects remain S-0209's.
 - Q-0310: S-0209 must add claim 20 e's aircraft reservation lifecycle, share
   `quirks.teleport_aircraft_ground_reservation`, and distinguish entry outcomes from
   infantry standing-position refusal for the isolated object-present flag below the
