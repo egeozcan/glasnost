@@ -27,7 +27,7 @@ const NEGATIVE_ENTRY_LEVEL: i32 = -6;
 const DECK_MODE_ABOVE: i32 = 312;
 /// Height added on landing on a high-bridge cell, leptons.
 // spec: S-0207 Constants (416 leptons, 4 height levels of 104)
-const DECK_HEIGHT: i32 = 416;
+pub(crate) const DECK_HEIGHT: i32 = 416;
 /// Levels a deck counts above its cell.
 // spec: S-0209 Terms (a deck is 4 levels above its cell)
 const DECK_LEVELS: i32 = 4;
@@ -367,7 +367,7 @@ fn take_infantry_destination(w: &mut World, id: ObjectId, dest: Target, mut st: 
 /// claim 19): the deck's when its cell carries a high bridge and `p` is at
 /// least 416 leptons above the terrain surface there, the ground's
 /// otherwise.
-fn reservation_layer(w: &World, p: Pos) -> Layer {
+pub(crate) fn reservation_layer(w: &World, p: Pos) -> Layer {
     let high = w.cells.idx(p.cell()).is_some_and(|i| w.cells.deck[i]);
     // spec: S-0208 claim 19 and Constants (a high-bridge cell and a height at least 416 above the terrain surface at the point)
     if high && p.z >= w.surface_at(p.x, p.y).wrapping_add(DECK_HEIGHT) {

@@ -1362,7 +1362,7 @@ fn high_bridge() -> (World, ObjectId) {
 }
 
 // spec: S-0208 claim 1 (scenario W2 e: a walking target on a bridge deck lies 416 leptons above H, and the arriving walker stands at that height)
-// spec: S-0209 Terms (cell layer: an object on a bridge deck belongs to the deck layer; a walker's ask reads the deck record of a cell exactly 4 levels below its reference level) and claim 13 (it enters the layer when its position moves into the cell)
+// spec: S-0209 Terms (cell layer: an object on a bridge deck belongs to the deck layer) and claim 15 (deck on crossing from a bank onto a high bridge 4 levels down, kept along the deck, ground on crossing onto a bank)
 // spec: S-0212 claim 10 (Δ = −4 onto a marked deck enters T's deck; Δ = 0 along the deck stays on it; Δ = +4 off the deck enters T's ground)
 #[test]
 fn a_walker_crosses_a_high_bridge_on_its_deck() {
@@ -1398,7 +1398,7 @@ fn a_walker_crosses_a_high_bridge_on_its_deck() {
     assert_eq!(o.pos.z, w.surface_at(o.pos.x, o.pos.y));
 }
 
-// spec: S-0208 claim 3 (the position is chosen and reserved in the record for the deck) and S-0209 claim 1 (the reservation marks the deck record, not the ground's under it)
+// spec: S-0208 claim 3 and S-0209 claim 15 (a walker at z = F + 416 over flat ground under a deck chooses and reserves its position in the deck record, not the ground's under it)
 #[test]
 fn a_walker_reserves_its_deck_position_in_the_deck_record() {
     use glasnost_sim::world::Layer;
@@ -1446,4 +1446,126 @@ fn a_walker_on_a_deck_survives_save_and_load() {
         glasnost_sim::save::state_hash(&back),
         glasnost_sim::save::state_hash(&w)
     );
+}
+
+// spec: S-0209 claim 15 (scenario C22 e: the asking tick changes the reservation but not the walker's layer or listing) and claim 1 (the walker is listed in the next cell only once its position moves into it)
+#[test]
+fn choosing_a_deck_target_does_not_change_the_walkers_layer() {
+    use glasnost_sim::world::Layer;
+    let (mut w, id) = high_bridge();
+    open_orders(&mut w);
+    order_move(&mut w, id, cell(7, 0));
+    let bridge = cell(3, 0);
+    common::run_until(&mut w, 2000, |w| {
+        walk_target(w, id).is_some_and(|t| t.cell() == bridge)
+    });
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.pos.cell(), cell(2, 0), "still on the bank");
+    assert_eq!(o.layer, Layer::Ground, "the target choice keeps its layer");
+    assert!(w.cells.list(cell(2, 0), Layer::Ground).contains(&id));
+    assert!(!w.cells.list(bridge, Layer::Deck).contains(&id));
+    let t = walk_target(&w, id).unwrap();
+    let class = walk::position_class(
+        t.x.rem_euclid(256),
+        t.y.rem_euclid(256),
+        w.rules().quirks.top_position_counts_as_centre,
+    );
+    assert!(
+        w.cells
+            .occ(bridge, Layer::Deck)
+            .is_some_and(|r| r.taken(class))
+    );
+}
+
+// spec: S-0209 claim 15 (scenario C22 e: the first tick the position lies in the bridge cell makes the walker a deck object, the first tick it lies in the bank cell a ground object; neither waits for arrival)
+#[test]
+fn the_layer_changes_on_the_first_crossing_before_arrival() {
+    use glasnost_sim::world::Layer;
+    let (mut w, id) = high_bridge();
+    open_orders(&mut w);
+    order_move(&mut w, id, cell(7, 0));
+    for (into, layer) in [(cell(3, 0), Layer::Deck), (cell(6, 0), Layer::Ground)] {
+        let n = common::run_until(&mut w, 2000, |w| w.obj(id).unwrap().pos.cell() == into);
+        assert!(n < 2000, "the walker reached {into:?}");
+        let o = w.obj(id).unwrap();
+        assert_eq!(o.layer, layer, "layer on entering {into:?}");
+        assert!(w.cells.list(into, layer).contains(&id));
+        let t = walk_target(&w, id).expect("still walking");
+        assert_ne!(
+            (t.x, t.y),
+            (o.pos.x, o.pos.y),
+            "not yet arrived in {into:?}"
+        );
+    }
+}
+
+// spec: S-0209 claim 15 (the crossing table, including third cells on the way to a diagonal target: into a high-bridge cell 4 levels down, deck; into one at any other relation, unchanged; from a high-bridge cell into one without, ground; neither, unchanged)
+#[test]
+fn crossing_a_cell_follows_the_layer_table() {
+    use glasnost_sim::world::Layer::{Deck, Ground};
+    let (w, _) = high_bridge();
+    let t = |cur, a: (i32, i32), b: (i32, i32)| {
+        walk::entered_layer(&w, cur, cell(a.0, a.1), cell(b.0, b.1))
+    };
+    // Bank (level 4) onto the bridge (ground level 0), straight or diagonal.
+    assert_eq!(t(Ground, (2, 0), (3, 0)), Deck);
+    assert_eq!(t(Ground, (2, 1), (3, 0)), Deck);
+    // Along the deck, and under it from the pit: the layer it had.
+    assert_eq!(t(Deck, (3, 0), (4, 0)), Deck);
+    assert_eq!(t(Ground, (4, 1), (4, 0)), Ground);
+    // A deck walker crossing a third cell without a bridge: ground.
+    assert_eq!(t(Deck, (4, 0), (4, 1)), Ground);
+    assert_eq!(t(Deck, (5, 0), (6, 0)), Ground);
+    // Neither cell carries a bridge: unchanged.
+    assert_eq!(t(Ground, (1, 0), (2, 0)), Ground);
+    assert_eq!(t(Deck, (1, 0), (2, 0)), Deck);
+}
+
+// spec: S-0208 claim 3 and S-0209 claim 15 (deck mode exactly when z > F + 312 leptons: equality chooses and reserves ground at H, one lepton more the deck at H + 416)
+#[test]
+fn the_target_surface_threshold_is_strict() {
+    use glasnost_sim::world::Layer;
+    for (above, deck) in [(312, false), (313, true)] {
+        let (mut w, id) = high_bridge();
+        open_orders(&mut w);
+        // Once it stands on the deck in cell(4, 0), still holding its path,
+        // the walker is lowered to `above` leptons over the pit's ground
+        // before its next ask.
+        order_move(&mut w, id, cell(7, 0));
+        let n = common::run_until(&mut w, 2000, |w| {
+            let o = w.obj(id).unwrap();
+            o.pos.cell() == cell(4, 0) && o.walk.as_ref().is_some_and(|s| s.target.is_none())
+        });
+        assert!(n < 2000, "the walker stood on the deck");
+        let p = w.obj(id).unwrap().pos;
+        let f = w.surface_at(p.x, p.y);
+        assert_eq!(p.z, f + 416);
+        w.obj_mut(id).unwrap().pos.z = f + above;
+        let next = cell(5, 0);
+        common::run_until(&mut w, 2000, |w| {
+            walk_target(w, id).is_some_and(|t| t.cell() == next)
+        });
+        let t = walk_target(&w, id).expect("a target in the next cell");
+        let h = w.surface_at(t.x, t.y);
+        assert_eq!(t.z, h + if deck { 416 } else { 0 }, "z = F + {above}");
+        let class = walk::position_class(
+            t.x.rem_euclid(256),
+            t.y.rem_euclid(256),
+            w.rules().quirks.top_position_counts_as_centre,
+        );
+        let (on, off) = if deck {
+            (Layer::Deck, Layer::Ground)
+        } else {
+            (Layer::Ground, Layer::Deck)
+        };
+        assert!(
+            w.cells.occ(next, on).is_some_and(|r| r.taken(class)),
+            "z = F + {above}"
+        );
+        assert!(
+            !w.cells.occ(next, off).is_some_and(|r| r.taken(class)),
+            "z = F + {above}"
+        );
+        assert_eq!(w.obj(id).unwrap().layer, Layer::Deck, "listing unchanged");
+    }
 }

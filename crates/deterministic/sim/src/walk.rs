@@ -14,6 +14,7 @@ use crate::path::{self, Mode, Search};
 use crate::regions::STEPS;
 use crate::rules::{Behaviour, Kind};
 use crate::scatter;
+use crate::teleport::{DECK_HEIGHT, reservation_layer};
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// A walking unit's locomotor state.
@@ -163,6 +164,16 @@ fn dist2(a: (i32, i32), b: (i32, i32)) -> u64 {
 // spec: S-0208 F2 (arrival when D < 17)
 const ARRIVAL: u64 = 17;
 
+/// A walker more than this many leptons above the terrain surface at its
+/// desired point chooses its next standing position on a high bridge's deck.
+// spec: S-0208 claim 3 and S-0209 claim 15 (deck mode exactly when z > F + 312 leptons; equality selects ground)
+const DECK_CHOICE: i32 = 312;
+
+/// Height levels from a bank down to the ground of the high-bridge cell
+/// whose deck a walker steps onto.
+// spec: S-0209 claim 15 (deck after crossing into a high-bridge cell when b = a − 4 height levels)
+const DECK_DROP: i32 = 4;
+
 /// One tick of a walker (S-0208 claim 6). Returns whether it moved.
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
@@ -230,7 +241,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             }
         }
         if new_pos.cell() != old_cell {
-            let layer = entered_layer(w, &o, new_pos.cell());
+            let layer = entered_layer(w, o.layer, old_cell, new_pos.cell());
             changed_cell(w, id, old_cell, new_pos.cell(), layer);
         }
         // spec: S-0209 claim 10 (the blockage delay starts afresh only after a walking step)
@@ -643,28 +654,37 @@ fn choose_target(w: &mut World, id: ObjectId, d: u8, next: CellXY) -> bool {
     let mission = mission_target_in(w, id, next);
     // spec: S-0209 Terms (cell layer that counts for a walker's ask: its own height level, plus 4 while on a bridge deck; deck objects past a difference of 1, the deck record at exactly 4 above)
     let reference = occupancy::reference_level(w, id);
-    let (objects, record) = occupancy::layers_for(w, next, reference);
+    let (objects, _) = occupancy::layers_for(w, next, reference);
     // spec: S-0208 claim 4 (an enslaved unit in its master's unloading cell while the master is there)
     let at_master = crate::econ::slaves::master_of(w, id).is_some_and(|m| {
         crate::econ::slaves::unloading_cell(w, m) == Some(next)
             && w.cells.list(next, objects).contains(&m)
     });
-    // spec: S-0208 claim 3 (the occupancy record for the surface the walker is on: the record that counts, S-0209 Terms) and claim 4 (the mission target's cell, or the master's unloading cell: occupants ignored, no draw)
-    let pos = choose_position(w, next, record, class, mission || at_master);
+    // spec: S-0208 claim 3 and S-0209 claim 15 (the selected surface: deck exactly when the asked cell carries a high bridge and z > F + 312, F the terrain surface at the desired point; independent of the entry check's record and the walker's layer)
+    let high = w.cells.idx(next).is_some_and(|i| w.cells.deck[i]);
+    let surface = if high && o.pos.z > w.surface_at(desired.0, desired.1) + DECK_CHOICE {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    // spec: S-0208 claim 3 (the occupancy record of the selected surface) and claim 4 (the mission target's cell, or the master's unloading cell: occupants ignored, no draw)
+    let pos = choose_position(w, next, surface, class, mission || at_master);
     let Some(p) = pos else { return false };
     let (u, v) = standing_point(p);
     let (x, y) = (256 * next.x + u, 256 * next.y + v); // spec: S-0208 table P (a standing position within the cell)
-    // spec: S-0208 claim 1 (the walking target lies at the surface height there, 416 above on a deck)
-    let deck = record == Layer::Deck;
-    let z = w.surface_at(x, y) + if deck { 416 } else { 0 };
+    // spec: S-0208 claim 1 and S-0209 claim 15 (the walking target lies at H, H + 416 in deck mode)
+    let deck = surface == Layer::Deck;
+    let z = w.surface_at(x, y) + if deck { DECK_HEIGHT } else { 0 };
     let target = Pos::new(x, y, z);
-    // spec: S-0209 claim 1 (reservation: the old mark is cleared and the new target marked at once)
+    // spec: S-0208 claim 3 and S-0209 claim 15 (the old mark is cleared by the former walking target's position and height, or the walker's actual ones without a target; not by the new surface or layer)
     let oq = crate::objects::occ_quirks(w);
-    w.cells.clear_infantry(o.pos.cell(), o.layer, id, oq);
+    let old = o.walk.as_ref().and_then(|s| s.target).unwrap_or(o.pos);
+    w.cells
+        .clear_infantry(old.cell(), reservation_layer(w, old), id, oq);
     let mark = position_class(u, v, q.top_position_counts_as_centre);
     if let Some(h) = o.owner {
-        // spec: S-0209 claim 1 (the reservation in the record that counts for the next cell)
-        w.cells.mark_infantry(next, record, mark, id, h);
+        // spec: S-0209 claims 1 and 15 (the reservation and infantry house marked on the selected surface at once)
+        w.cells.mark_infantry(next, surface, mark, id, h);
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.remove(0);
@@ -681,7 +701,7 @@ fn arrive(w: &mut World, id: ObjectId, target: Pos) {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else { return };
     let old = o.pos.cell();
-    let layer = entered_layer(w, &o, target.cell());
+    let layer = entered_layer(w, o.layer, old, target.cell());
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0208 claim 6 (placed exactly on the walking target, which it reaches with its height)
         ob.pos = target;
@@ -696,24 +716,25 @@ fn arrive(w: &mut World, id: ObjectId, target: Pos) {
     }
 }
 
-/// The cell layer a walker's position enters in cell `to`: in its walking
-/// target's cell, the target's layer (S-0209 Terms, *cell layer*: an object
-/// on a bridge deck belongs to the deck layer; S-0208 claim 1: the target
-/// lies on the deck). Passing through another cell, it stays on a deck only
-/// while that cell carries one (interim, Q-0560).
-fn entered_layer(w: &World, o: &crate::world::Object, to: CellXY) -> Layer {
-    let deck_cell = w.cells.idx(to).is_some_and(|i| w.cells.deck[i]);
-    match o.walk.as_ref().and_then(|s| s.target) {
-        Some(t) if t.cell() == to => {
-            // spec: S-0208 claim 1 (a walking target lies at H, or 416 leptons above it on a bridge deck)
-            if deck_cell && t.z - w.surface_at(t.x, t.y) >= 416 {
-                Layer::Deck
-            } else {
-                Layer::Ground
-            }
+/// The cell layer a walker of layer `current` has after its position
+/// crosses from cell `from` into cell `to` (S-0209 claim 15's table; the
+/// walking target's cell and surface do not override it).
+pub fn entered_layer(w: &World, current: Layer, from: CellXY, to: CellXY) -> Layer {
+    let high = |c: CellXY| w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    let level = |c: CellXY| w.cells.cell(c).map_or(0, |c| i32::from(c.level));
+    if high(to) {
+        // spec: S-0209 claim 15 (into a high-bridge cell: deck when b = a − 4 height levels, otherwise the layer it had)
+        if level(to) == level(from) - DECK_DROP {
+            Layer::Deck
+        } else {
+            current
         }
-        _ if o.layer == Layer::Deck && deck_cell => Layer::Deck,
-        _ => Layer::Ground,
+    } else if high(from) {
+        // spec: S-0209 claim 15 (from a high-bridge cell into one without: ground)
+        Layer::Ground
+    } else {
+        // spec: S-0209 claim 15 (neither cell carries a high bridge: unchanged)
+        current
     }
 }
 
