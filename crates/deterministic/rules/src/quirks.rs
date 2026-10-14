@@ -1167,10 +1167,6 @@ pub struct Quirks {
     // spec: S-0701 claim 6, Edge cases
     #[serde(default = "on")]
     pub shroud_sound_corner_cell: bool,
-    /// An object's damage sound starts twice per unchanged hit; off: once.
-    // spec: S-0701 claim 20, Edge cases
-    #[serde(default = "on")]
-    pub damage_sound_doubled: bool,
     /// The deploy command's game-wide sound is never read, so the command is silent; off: it is read and played.
     // spec: S-0701 claim 19, Edge cases
     #[serde(default = "on")]
@@ -1466,7 +1462,6 @@ impl Default for Quirks {
             full_volume_16383: true,
             attack_decay_without_body: true,
             shroud_sound_corner_cell: true,
-            damage_sound_doubled: true,
             deploy_command_silent: true,
             announcement_volume_ignored: true,
         }
@@ -2152,7 +2147,6 @@ impl Quirks {
             ("full_volume_16383", self.full_volume_16383),
             ("attack_decay_without_body", self.attack_decay_without_body),
             ("shroud_sound_corner_cell", self.shroud_sound_corner_cell),
-            ("damage_sound_doubled", self.damage_sound_doubled),
             ("deploy_command_silent", self.deploy_command_silent),
             (
                 "announcement_volume_ignored",

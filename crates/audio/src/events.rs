@@ -646,11 +646,8 @@ impl Audio {
             HitResult::Unchanged | HitResult::PostMortem => {
                 if let Some(e) = self.single(ts.damage_sound.as_ref()) {
                     // spec: S-0701 claim 7 (the damage sound keeps its map position and is placed again at passes)
+                    // spec: S-0701 claim 20 and Edge cases (exactly one instance per damage-sound event: the original's second instance is a departure without a switch)
                     self.request(Some(w), e, Where::Follow(pos), FULL);
-                    // spec: S-0701 claim 20 and Edge cases (quirks.damage_sound_doubled: started twice)
-                    if self.quirks.damage_sound_doubled {
-                        self.request(Some(w), e, Where::Follow(pos), FULL);
-                    }
                 }
             }
             HitResult::NowYellow => {
@@ -1190,7 +1187,7 @@ impl Audio {
                 });
                 screen(self, self.names.gui_build.clone())
             }
-            // spec: S-0701 claim 28 and S-0411 claim 12 (a queued copy on an already active line: the build click, no new announcement)
+            // spec: S-0701 claim 24 (all five production clicks: the build click; adding a queued copy to an active line requests no new start announcement), claim 28 and S-0411 claim 12
             UiCue::BuildQueued => screen(self, self.names.gui_build.clone()),
             UiCue::BuildHeld => {
                 self.announce(Announcement::OnHold);

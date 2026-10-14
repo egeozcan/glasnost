@@ -6018,11 +6018,6 @@
           "type": "boolean",
           "default": true
         },
-        "damage_sound_doubled": {
-          "description": "An object's damage sound starts twice per unchanged hit; off: once.",
-          "type": "boolean",
-          "default": true
-        },
         "damaging_entry_cursor_retained": {
           "description": "Hovering an engineer over a building above its capture threshold retains the preceding cursor; off: it uses the capture cursor of table C.",
           "type": "boolean",

@@ -551,23 +551,19 @@ fn damage_names(w: &World) -> SoundNames {
     n
 }
 
-// spec: S-0701 claim 20 (unchanged or beyond now dead: the damage sound, positional, any owner; quirks.damage_sound_doubled)
+// spec: S-0701 claim 20 (unchanged or beyond now dead: the damage sound, positional, any owner; exactly one instance per damage-sound event) and Edge cases (damage-sound departure, no switch)
 #[test]
 fn damage_sound() {
     let w = world();
     let t = tref(&w, Kind::Vehicle, "CRUSHER");
-    for quirk in [true, false] {
-        let q = Quirks {
-            damage_sound_doubled: quirk,
-            ..Quirks::default()
-        };
-        let mut a = audio_with(&w, &["Ouch"], q);
+    {
+        let mut a = audio_with(&w, &["Ouch"], Quirks::default());
         a.set_names(damage_names(&w));
         let mut u = Rng::new(1);
         for r in [HitResult::Unchanged, HitResult::PostMortem] {
             a.mixer_mut().clear();
             a.tick(&w, &[hit(&w, t, 1, r, None)], &mut u);
-            assert_eq!(a.mixer().alive(), if quirk { 2 } else { 1 });
+            assert_eq!(a.mixer().alive(), 1);
         }
         // Unaffected and now red: nothing, no draws.
         a.mixer_mut().clear();
@@ -1090,7 +1086,7 @@ fn announcing(w: &World, roles: &[(Announcement, &str)]) -> Audio {
     a
 }
 
-// spec: S-0701 claim 28 and scenario F11; S-0411 claim 12 (start and resume request training for infantry, building for every other kind; a queued copy on an active line requests neither)
+// spec: S-0701 claim 24 and claim 28 and scenario F11; S-0411 claim 12 (start and resume request training for infantry, building for every other kind; a queued copy on an active line requests neither)
 #[test]
 fn production_announcement_kinds() {
     let w = world();
