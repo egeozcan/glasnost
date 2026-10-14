@@ -1205,48 +1205,88 @@ fn slot_animation_detail_level() {
     assert_eq!((n(&high), n(&low)), (6, 5));
 }
 
-/// Interim (Q-0416): the map's own houses take lobby colour slots 0 … 7 in turn, in the order
-/// they first own an object; the neutral and special houses and the player placeholders keep
-/// the rules of S-0103 claim 10 and S-0009 Import mapping.
+/// spec: S-0103 claim 14 (a map-defined owner's imported colour: the country's selector through
+/// the rules layers, a later valid name replacing an earlier one, an unknown or absent one keeping
+/// the choice in force, position 0 without any; a listed house's own valid selector replacing the
+/// inherited choice, compared without regard to case on its first 31 characters, a number being a
+/// name). Interim (Q-0419): an owner's country is the country of its own name.
 #[test]
-fn map_owner_slots_in_first_owning_order() {
-    let ctx = context();
-    let (_, map) = build_in(
-        ctx,
-        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
-          [Structures]\n0=Neutral,HUTX,256,6,10,0\n1=Soviets,HUTX,256,2,2,0\n\
-          [Units]\n0=Americans,CARX,256,6,9,64\n1=Special,CARX,256,6,8,64\n\
-          2=<human player>,CARX,256,6,7,64\n3=Computer,CARX,256,6,6,64\n\
-          [Infantry]\n0=Americans,MANX,256,9,11,0,Guard,64\n1=Yuri,MANX,256,9,13,0,Guard,0\n",
-        &Options::default(),
+fn map_owner_colours_by_claim_14() {
+    const LONG: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ01234"; // 31 characters
+    let rules = RULES.replace(
+        "LightGrey=0,0,150\n",
+        &format!(
+            "LightGrey=0,0,150\n{LONG}=7,7,7\n[Countries]\n1=Americans\n2=Soviets\n3=Yuri\n\
+             4=Neutral\n[Americans]\nColor=c3\n[Soviets]\nColor=Nope\n[Neutral]\nColor=LightGrey\n"
+        ),
     );
+    let map_text = format!(
+        "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+         [Houses]\n0=Yuri\n1=Rebels\n2=Guards\n3=Americans\n\
+         [Yuri]\nColor=c5\n[Rebels]\nColor={LONG}EXTRA\n[Guards]\nColor=12\n[Americans]\nColor=\n\
+         [Soviets]\nColor=C2\n\
+         [Units]\n0=Americans,CARX,256,6,9,64\n1=Soviets,CARX,256,6,8,64\n2=<human player>,CARX,256,6,7,64\n\
+         [Infantry]\n0=Yuri,MANX,256,9,11,0,Guard,64\n1=Rebels,MANX,256,9,13,0,Guard,0\n\
+         2=Guards,MANX,256,9,12,0,Guard,0\n3=Neutral,MANX,256,8,12,0,Guard,0\n"
+    );
+    let import = convert(
+        &Inputs {
+            base: input("rules.ini", &rules),
+            map: input("test.map", &map_text),
+            art: input("art.ini", ART),
+            ..Default::default()
+        },
+        &ImportOptions::default(),
+    );
+    let doc = Document::parse(map_text.as_bytes(), Quirks::default(), &mut Vec::new());
+    let map = decode(&doc, &DecodeContext::default()).map;
+    let got = super::build::map_owner_colours(&map, &import, &doc);
     assert_eq!(
-        super::build::map_owner_slots(&map),
+        got,
         [
-            (b"Americans".to_vec(), 0),
-            (b"Yuri".to_vec(), 1),
-            (b"Soviets".to_vec(), 2)
+            // Base layer's mixed-case selector; the house's empty selector keeps it.
+            (b"Americans".to_vec(), [30, 200, 200]),
+            // Base layer's unknown name keeps position 0; the map layer's valid name replaces it.
+            (b"Soviets".to_vec(), [20, 200, 200]),
+            // No country selector: position 0; the house's own selector replaces it.
+            (b"Yuri".to_vec(), [50, 200, 200]),
+            // Not a country: the house's own selector, cut to 31 characters.
+            (b"Rebels".to_vec(), [7, 7, 7]),
+            (b"Neutral".to_vec(), [0, 0, 150]),
         ]
     );
+    // "Guards" is no country and its numeric selector names no definition: no entry, so the
+    // viewer's provisional colour applies; the placeholder owner has none either.
+    let options = Options {
+        skirmish: false,
+        map_colours: got,
+        ..Options::default()
+    };
+    let def = |o: &[u8]| super::build::owner_definition(&import, &options, o);
+    assert_eq!(def(b"Yuri"), ([50, 200, 200], false));
+    assert!(def(b"Guards").1);
 }
 
 /// spec: S-0103 claim 10 (a slot picks the definition at position P(s): slot 0 → position 1,
-/// slot 1 → position 5); the neutral house shows light grey. Interim radar colour (Q-0417):
-/// the brightest ramp entry of that definition (S-0103 claim 6).
+/// slot 1 → position 5); the neutral house shows light grey. spec: S-0103 claim 15 and Formulas,
+/// S-0410 claim 8 (the radar colour is ramp index 16 at row 26: max(0, u − 1) kept to the display's
+/// 5-6-5 bits and widened with zeros; scenario PN's (0, 255, 255) → (248, 56, 56) and
+/// (170, 128, 200) → (112, 116, 192)).
 #[test]
 fn owner_definition_and_radar_colour() {
-    let (import, _, _) = context();
+    let rules = RULES
+        .replace("C1=10,200,200", "C1=0,255,255")
+        .replace("C5=50,200,200", "C5=170,128,200");
+    let (import, _, _) = context_with(&rules);
     let options = Options {
         slots: vec![(b"Americans".to_vec(), 0), (b"Yuri".to_vec(), 1)],
         ..Options::default()
     };
     let def = |o: &[u8]| super::build::owner_definition(&import, &options, o).0;
-    assert_eq!(def(b"Americans"), [10, 200, 200]);
-    assert_eq!(def(b"Yuri"), [50, 200, 200]);
+    assert_eq!(def(b"Americans"), [0, 255, 255]);
+    assert_eq!(def(b"Yuri"), [170, 128, 200]);
     assert_eq!(def(b"Neutral"), [0, 0, 150]);
-    let c = glasnost_render::palette::ramp([10, 200, 200])[0];
-    assert_eq!(
-        super::build::owner_radar_colour(&import, &options, b"Americans"),
-        [c.r, c.g, c.b]
-    );
+    let radar = |o: &[u8]| super::build::owner_radar_colour(&import, &options, o, [5, 6, 5]);
+    assert_eq!(radar(b"Americans"), [248, 56, 56]);
+    assert_eq!(radar(b"Yuri"), [112, 116, 192]);
 }

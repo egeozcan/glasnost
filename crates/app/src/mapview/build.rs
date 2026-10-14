@@ -94,6 +94,9 @@ pub struct Options {
     /// Lobby colour slots by house name, ahead of the placeholder slots
     /// (a skirmish of the game client: S-0103 claim 10, S-0412 claim 7).
     pub slots: Vec<(Vec<u8>, u8)>,
+    /// Colour definitions (H, S, V) of the map's own owners outside a
+    /// skirmish, by house name ([`map_owner_colours`], S-0103 claim 14).
+    pub map_colours: Vec<(Vec<u8>, [u8; 3])>,
     /// The game a loaded map starts.
     pub game: GameMode,
 }
@@ -119,6 +122,7 @@ impl Default for Options {
             human_slot: 0,
             computer_slot: 1,
             slots: Vec::new(),
+            map_colours: Vec::new(),
             game: GameMode::Sandbox,
         }
     }
@@ -195,9 +199,6 @@ pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
-/// The scene note for [`map_owner_slots`]' interim colours.
-pub const MAP_HOUSE_COLOURS_NOTE: &str = notes::MAP_HOUSE_COLOURS;
-
 mod notes {
     pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
@@ -206,7 +207,6 @@ mod notes {
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
-    pub const MAP_HOUSE_COLOURS: &str = "the map's own houses take lobby colour slots 0 to 7 in turn, in the order they first own an object (no spec gives their colour outside a skirmish; Q-0416)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
     pub const SLOT_ANIM_DRAW_POINT: &str = "a slot animation's draw point is taken as the screen pixel of its position moved down by its type's vertical draw shift (no spec gives an animation's draw point, S-0102 claim 19)";
     pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20) has no spec";
@@ -297,9 +297,17 @@ pub fn owner_definition(import: &Import, options: &Options, owner: &[u8]) -> ([u
         .iter()
         .find(|(n, _)| n.as_slice() == owner)
         .map(|(_, s)| *s);
+    let imported = options
+        .map_colours
+        .iter()
+        .find(|(n, _)| n.as_slice() == owner)
+        .map(|(_, hsv)| *hsv);
     if let Some(s) = named {
         // spec: S-0103 claim 10 (a house's lobby colour slot picks its colour definition)
         (by_slot(s).unwrap_or(grey), false)
+    } else if let Some(hsv) = imported {
+        // spec: S-0103 claim 14 (a map-defined owner shows its imported colour definition)
+        (hsv, false)
     } else if owner == NEUTRAL || owner == SPECIAL {
         (grey, false)
     } else if owner == HUMAN {
@@ -311,21 +319,90 @@ pub fn owner_definition(import: &Import, options: &Options, owner: &[u8]) -> ([u
     }
 }
 
-/// An owner's radar colour: the brightest entry of its colour
-/// definition's ramp (S-0103 claim 6), our reading of S-0410 claim 8's
-/// "8-bit triple of the house's colour definition" (Q-0417).
-pub fn owner_radar_colour(import: &Import, options: &Options, owner: &[u8]) -> [u8; 3] {
+/// An owner's display RGB for the radar (S-0103 claim 15, S-0410 claim 8):
+/// palette index 16, the brightest ramp entry of its colour definition,
+/// at shade row 26 under ordinary white tint, each component *u* reduced
+/// to ⌊max(0, *u* − 1) / 2^(8 − *k*)⌋ for a display channel of `bits[c]`
+/// = *k* bits and widened again with zero low bits (S-0103 Formulas).
+pub fn owner_radar_colour(
+    import: &Import,
+    options: &Options,
+    owner: &[u8],
+    bits: [u8; 3],
+) -> [u8; 3] {
     let (hsv, _) = owner_definition(import, options, owner);
+    // spec: S-0103 claim 15 (ramp index 16, the brightest entry, is ramp entry 0 of claim 6)
     let c = glasnost_render::palette::ramp(hsv)[0];
-    [c.r, c.g, c.b]
+    let mut out = [c.r, c.g, c.b];
+    for (u, k) in out.iter_mut().zip(bits) {
+        // spec: S-0103 Formulas (house display RGB: subtract 1, keep k bits, widen with zeros)
+        let shift = 8 - k;
+        *u = (u.saturating_sub(1) >> shift) << shift;
+    }
+    out
 }
 
-/// Interim lobby colour slots for the owners of `map`'s objects that no
-/// rule of S-0103 claim 10 colours outside a skirmish: every owner but the
-/// neutral and special houses and the two player placeholders, in the order
-/// it first owns an object (vehicles, infantry, aircraft, buildings), takes
-/// slot 0, 1, … 7, 0, … (our convention, Q-0416).
-pub fn map_owner_slots(map: &Map) -> Vec<(Vec<u8>, u8)> {
+/// The colour definition a colour selector names (S-0103 claim 14): only
+/// its first 31 characters count, names compare without regard to letter
+/// case, and a number is a name, not a position.
+fn colour_by_selector(import: &Import, selector: &[u8]) -> Option<[u8; 3]> {
+    const SELECTOR_LEN: usize = 31; // spec: S-0103 claim 14 (only the first 31 characters of a selector are used)
+    let sel = &selector[..selector.len().min(SELECTOR_LEN)];
+    if sel.is_empty() {
+        return None;
+    }
+    // spec: S-0103 claim 5 (the first definition of a name is the one kept)
+    import
+        .outcome
+        .colours
+        .iter()
+        .find(|c| c.name.eq_ignore_ascii_case(sel))
+        .map(|c| c.hsv)
+}
+
+/// A country's imported colour definition (S-0103 claim 14): each rules
+/// layer's selector that names a definition replaces the choice; an absent
+/// or unknown selector keeps the earlier one; with none, the first
+/// definition (position 0).
+fn country_colour(import: &Import, country: &[u8]) -> Option<[u8; 3]> {
+    use glasnost_convert::layers::What;
+    let rec = import
+        .outcome
+        .registries
+        .get(&Kind::Countries)?
+        .iter()
+        .find(|t| t.name == country)?;
+    // spec: S-0103 claim 14 (with no earlier value, the first definition, position 0)
+    let mut hsv = import.outcome.colours.first()?.hsv;
+    if let Some(k) = rec.keys.get(COLOR_KEY) {
+        for e in &k.history {
+            if let What::Set(v) = &e.what
+                && let Some(c) = colour_by_selector(import, v)
+            {
+                hsv = c;
+            }
+        }
+    }
+    Some(hsv)
+}
+
+/// The colour key of a country's or a map house's section (S-0103 Import mapping).
+const COLOR_KEY: &[u8] = b"Color"; // spec: S-0103 Import mapping (rules country section and map house section: Color)
+/// The map's house list section.
+const HOUSES_SECTION: &[u8] = b"Houses"; // spec: S-0103 Import mapping (map, house's section named by [Houses])
+
+/// The colour definitions of the owners of `map`'s objects outside a
+/// skirmish (S-0103 claim 14), from the map file read as `map_ini`: a
+/// house's inherited colour is that of the country of its name (S-0009
+/// Import mapping, as the sandbox game makes its houses; which country a
+/// house the map's house list names belongs to has no spec, Q-0419), and
+/// a house the list names can replace it by its own section's selector.
+/// The two player placeholders, and an owner with neither, get no entry.
+pub fn map_owner_colours(
+    map: &Map,
+    import: &Import,
+    map_ini: &Document,
+) -> Vec<(Vec<u8>, [u8; 3])> {
     let o = &map.objects;
     let owners = o
         .units
@@ -335,16 +412,27 @@ pub fn map_owner_slots(map: &Map) -> Vec<(Vec<u8>, u8)> {
         .chain(o.aircraft.iter().map(|x| &x.placed))
         .chain(o.structures.iter().map(|x| &x.placed))
         .map(|p| p.owner.as_slice());
-    let mut out: Vec<(Vec<u8>, u8)> = Vec::new();
+    let listed = |owner: &[u8]| {
+        map_ini.section(HOUSES_SECTION).is_some_and(|s| {
+            s.entries()
+                .iter()
+                .any(|e| e.value.eq_ignore_ascii_case(owner))
+        })
+    };
+    let mut out: Vec<(Vec<u8>, [u8; 3])> = Vec::new();
     for owner in owners {
-        if [NEUTRAL, SPECIAL, HUMAN, COMPUTER].contains(&owner)
-            || out.iter().any(|(n, _)| n.as_slice() == owner)
-        {
+        if [HUMAN, COMPUTER].contains(&owner) || out.iter().any(|(n, _)| n.as_slice() == owner) {
             continue;
         }
-        // nocite: our convention (Q-0416): the eight lobby colour slots of S-0103 claim 10 in turn
-        let slot = (out.len() % 8) as u8;
-        out.push((owner.to_vec(), slot));
+        let inherited = country_colour(import, owner);
+        // spec: S-0103 claim 14 (a valid selector in the house's own section replaces the inherited colour)
+        let own = listed(owner)
+            .then(|| map_ini.value(owner, COLOR_KEY))
+            .flatten()
+            .and_then(|v| colour_by_selector(import, v));
+        if let Some(hsv) = own.or(inherited) {
+            out.push((owner.to_vec(), hsv));
+        }
     }
     out
 }

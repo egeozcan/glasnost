@@ -18,7 +18,7 @@ pub const SIZE: (i32, i32) = (140, 108); // spec: S-0410 Constants (radar map 14
 
 /// Bits per channel of our display surface after S-0103's 16-bit step:
 /// 5, 6 and 5 (S-0410 Terms).
-const DISPLAY_BITS: Bits = Bits([5, 6, 5]); // spec: S-0410 Terms (5 bits red, 6 green, 5 blue)
+pub(crate) const DISPLAY_BITS: Bits = Bits([5, 6, 5]); // spec: S-0410 Terms (5 bits red, 6 green, 5 blue)
 
 /// The fixed colour of an object without an owner (our placeholder: the
 /// neutral grey of the viewer's house colours).

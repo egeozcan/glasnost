@@ -93,12 +93,19 @@ impl Loaded {
         )
     }
 
-    /// Each house's radar colour by house index (S-0410 claim 8, with
-    /// [`build::owner_radar_colour`]'s interim reading, Q-0417).
+    /// Each house's radar colour by house index: its house display RGB
+    /// for the radar's 5-6-5 display (S-0410 claim 8, S-0103 claim 15).
     pub fn house_radar_colours(&self, w: &glasnost_sim::world::World) -> Vec<[u8; 3]> {
         w.houses
             .iter()
-            .map(|h| build::owner_radar_colour(&self.import, &self.options, h.name.as_bytes()))
+            .map(|h| {
+                build::owner_radar_colour(
+                    &self.import,
+                    &self.options,
+                    h.name.as_bytes(),
+                    super::radar::DISPLAY_BITS.0,
+                )
+            })
             .collect()
     }
 
@@ -150,6 +157,7 @@ pub async fn load_with(
     canvas: VoxelCanvas,
     make: Option<live::MakeSetup<'_>>,
 ) -> Loaded {
+    let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
     let GameInputs {
         map,
         map_warnings,
@@ -247,10 +255,9 @@ pub async fn load_with(
             .filter_map(|(h, v)| Some((live::name_bytes(&h.name), v.colour?)))
             .collect();
     }
-    let map_houses = make.is_none() && !options.skirmish && options.slots.is_empty();
-    if map_houses {
-        // Outside a skirmish the map's own houses get interim colour slots (Q-0416).
-        options.slots = build::map_owner_slots(&map);
+    if make.is_none() && !options.skirmish && options.slots.is_empty() {
+        // spec: S-0103 claim 14 (outside a skirmish the map's own owners show their imported colours)
+        options.map_colours = build::map_owner_colours(&map, &import, &map_ini);
     }
     let inputs = Inputs {
         map: &map,
@@ -263,9 +270,6 @@ pub async fn load_with(
         cells: cells.as_ref(),
     };
     let (mut built, painter) = build::build_parts_with(&inputs, started.is_ok(), canvas);
-    if map_houses && !options.slots.is_empty() {
-        built.notes.insert(build::MAP_HOUSE_COLOURS_NOTE.into());
-    }
     let mut canvas = VoxelCanvas::new();
     let live = match started {
         Ok(s) => Some(Live::new(&inputs, &mut built, painter, s)),
