@@ -1,9 +1,9 @@
 ---
 id: Q-0540
 title: Which art keys give a building's door-stage count and its damaged-door flag?
-status: open
+status: answered
 related: [S-0108, S-0417, S-0102]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need

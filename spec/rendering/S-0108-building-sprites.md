@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0540]
 supersedes: []
 ---
 
@@ -539,6 +539,18 @@ are out of scope.
     - Confidence: high (drawn only while unloading, in every door state), medium (the door-frame rule,
       the anchor)
 
+24. **Door-art inputs.** The door-stage count and damaged-door flag are independent settings
+    in the building's art section named by its image name, not its rules section or, when the
+    names differ, the art section named by its type name. The count is a signed 32-bit integer
+    read with S-0003 claims 3 to 5; the flag is a boolean read with S-0003 claim 2. Their initial
+    defaults are 0 image frames and false. A missing or empty key keeps the value already in force.
+    Neither setting is inferred from the door sprite's image-frame count or its existence.
+    Changing the count changes claim 23's requested frames, not the door movement duration of
+    S-0417 claim 2 and Formulas F2. S-0102 claim 13 owns the door image's depth bias, not these
+    inputs. The exact key names are in Import mapping.
+    - Backing: `measurable` (B10, B20 and B21)
+    - Confidence: high
+
 ## Formulas
 
 Where a formula below says that a floating-point result is rounded toward zero, that is the
@@ -756,8 +768,8 @@ reads and defaults. Key names use the exact spelling and case shown (S-0001 clai
 | `Foundation` | named value, text cut to 31 bytes (vocabulary below) | `1x1` | the foundation's W × H (claim 8) |
 | `GateStages` | integer | 9 | *G* (claims 2, 4, 5) |
 | `DoorAnim` | text, cut to 63 bytes (S-0007 claim 11) | none (no door sprite) | door sprite (claim 23) |
-| Door-stage count | integer | 0 | *D* (claim 23) |
-| Whether the type uses a separate door image range when damaged | boolean | false | damaged-door type (claim 23) |
+| `DoorStages` | integer, signed 32-bit (S-0003 claims 3 to 5); read from the image name's art section, not derived from the sprite | 0 | *D* (claims 23, 24) |
+| `DamagedDoor` | boolean (S-0003 claim 2); read from the image name's art section, independent of the sprite's frame count | false | damaged-door type (claims 23, 24) |
 | `SiloDamage` | boolean | false | silo fill (claim 16) |
 | `IsAnimDelayedFire` | boolean | false | delayed-fire type (claims 13, 20) |
 | `ExtraDamageStage` | boolean | true | no effect (claim 21) |
@@ -1186,6 +1198,30 @@ expected numbers are computed from the type's own fields at measurement time.
   - Falsified if: a negative or high out-of-range request draws any door pixels, a non-positive
     count produces a request other than the stated 0 or −2, the unmarked damaged copy gains a
     damage term, or the count-10 frames differ from F8.
+
+- **B21 (claim 24, door-art input independence).**
+  - Setup: common setup with named test rules and art. Give copies of a stock vehicle factory
+    distinct image names that differ from their type names. Every copy uses the same door sprite
+    with 12 visibly distinct frames, invented test art. In their image-name art sections, give
+    counts 3 and 4, each with the damaged-door flag false and true. Give another copy neither
+    setting. In the type-name art sections and building rules sections, give conflicting counts
+    and flags, using the exact keys in Import mapping. Keep all door movement times identical.
+    Additional copies use the integer spelling `4abc` and boolean spelling `Yes please` in
+    the image-name art section to discriminate the general value forms.
+  - Procedure: unload a vehicle from each copy undamaged, then damage it past the yellow ratio
+    and unload another. Repeat the absent-setting copy with a door sprite of 8 frames, keeping
+    the settings absent. Remove all named test files afterwards.
+  - Observable: visible door frame per tick, door state, movement start and finish ticks, and
+    health condition, from tick-labelled screen capture and read-only recording.
+  - Runs: one undamaged and one damaged unload per copy and sprite variant.
+  - Expected: F8 uses the image-section counts and flags only. The open frame is 2 or 3
+    undamaged, and 5 or 7 for the corresponding damaged marked copy. Unmarked copies retain
+    their undamaged frames. The absent-setting copy shows frame 0 in every door state and
+    health condition with either sprite. The partial integer and boolean spellings act as 4
+    and true, respectively. All copies have the same movement duration under S-0417 Formulas F2.
+  - Falsified if: a conflicting type-name or rules section determines the frames, either absent
+    setting is derived from the sprite, the partial spellings give a different result, any frame
+    differs from F8, or changing only the count changes door movement duration.
 
 Construction timing in claim 5 uses S-0406 scenario PL11 a to f, including its setup,
 read-only per-tick observables and falsification criteria: placed buildings show two runs,
