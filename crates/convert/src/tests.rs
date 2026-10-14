@@ -827,3 +827,13 @@ fn import_reports_errors_and_departures() {
             .any(|w| w.message.contains("digest is missing"))
     );
 }
+
+/// spec: S-0104 claim 12 (r18: v is the single-precision decimal, so
+/// 16777.1 is read as 16777.099609375 and stores 16777099, where a
+/// double read would store 16777100; trunc toward zero for negatives)
+#[test]
+fn building_light_reads_single_precision() {
+    assert_eq!(layers::building_light_thousandths(b"16777.1"), Some(16_777_099));
+    assert_eq!(layers::building_light_thousandths(b"-16777.1"), Some(-16_777_099));
+    assert_eq!(layers::building_light_thousandths(b"0.75"), Some(750));
+}
