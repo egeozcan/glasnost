@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371]
 supersedes: []
 ---
 
@@ -1737,6 +1737,46 @@ Terms specific to this spec:
       row-specific low or medium confidence; medium for the wood-wall case. Low for
       the remaining crusher and weapon distinctions not isolated by this spec's scenarios
 
+27a. **A harvester without contact on a docking cell (Q-0371).** For an ordinary
+    driving harvester, a refinery's docking cell (S-0402 claim 10) is not a reserved
+    movement cell merely because another harvester holds contact with that refinery.
+    Entry still uses S-0209 claim 5 and claim 27 here. In particular, the bib-edge
+    exception of S-0209 claim 5 does not require contact; the non-blocking-building
+    exception for a contacted building does. An empty docking cell outside the
+    foundation has no building blocker. A docking cell within the foundation can
+    therefore be enterable without contact through the bib-edge exception, but an
+    ordinary blocking foundation cell is not made enterable by its docking role.
+    Other occupants and terrain can still refuse entry. Merely reaching the cell
+    establishes neither contact nor unloading (S-0402 claims 10 and 10a).
+
+    Once there without contact, the harvester may remain at rest until an order,
+    its standing behaviour or a general scatter rule moves it. Pathfinding does not
+    evict it just because another harvester reserves the dock. A field destination
+    supplied by S-0402 claim 3a uses the ordinary route rules: the departure cell's
+    docking role adds no forbidden exit direction and does not require dock ownership.
+    Destination changes and movement start use claims 20 and 21, including any
+    running retry delay. The harvester need not be able to re-enter its departure
+    cell for a route out of it to be found.
+
+    | Departure-route result | Driving harvester's result |
+    |---|---|
+    | Route found | Follows the stored route under S-0207 claim 15; later blocked steps use that claim and claim 22 here, not a harvest-specific timeout. |
+    | Reachability gate fails | Destination cleared; no behaviour queued by pathfinding; fresh-search retry delay as in claims 21 and 23. |
+    | Search fails, destination more than 1 cell away in Chebyshev distance, or the bridge condition of claim 23 holds | Destination cleared and *guard* queued for every player-house harvester in our engine; retry delay starts. Claim 23 owns the original's non-human-owner exception. |
+    | Search fails otherwise | Destination cleared and retry delay starts, but pathfinding queues no behaviour (claim 23). |
+
+    Expiry of the retry delay, or a blocker leaving, does not itself restore a cleared
+    field destination or resume *harvest*. Another movement attempt requires a
+    destination supplied by an order or by behaviour processing. If *harvest*
+    remains current, its next seeking processing may supply one under S-0402
+    claim 3a; if it has ended, that seeking rule does not restart it. Reoffering a
+    destination still obeys claim 21's retry delay and its stated exceptions. A
+    contacting harvester's repeated docking offers are a separate case, owned by
+    S-0402 claim 10a, not evidence of automatic retries by this non-contact occupant.
+    - Backing: `measurable` (P27; S-0402 H20 for the harvest and docking exchange)
+    - Confidence: high for no docking-specific route restriction and the failure
+      reactions; medium for entry and resting persistence pending P27
+
 ## Formulas
 
 All floating-point results below are formed with a 53-bit significand under the round-toward-zero
@@ -3191,6 +3231,41 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   distinguishes it from the final give-up search. A different result from the T5
   prediction or an isolated refresh draw falsifies the rule. Obtain one qualifying
   event of each kind; unrelated draws or missing contrasts leave that branch untested.
+
+### P27: Non-contact docking-cell entry and departure (claim 27a)
+
+- Setup: a tiny revealed skirmish map with a stock refinery, two ordinary driving
+  harvesters A and B of the human player, a nearby resource field and one bystander
+  computer player kept away. Use speed 2, stock data, director and mods off.
+  Record tick, position, destination, current and queued behaviour, contact, tether,
+  stored route and retry timer with a read-only recorder and scripted input.
+- Entry and rest: while B holds the refinery contact, order A to its docking cell
+  after B has left that cell. Qualify only runs where the cell is empty, entry is
+  permitted by S-0209 claim 5 and A holds neither contact nor tether. Stop A there
+  and observe for 300 ticks without another order. Record every scatter request
+  and exclude runs in which one moves A. Expected: A reaches and remains on the
+  cell without unloading or acquiring B's contact. A departure with no order,
+  behaviour destination or general scatter cause falsifies the persistence rule.
+  Refused entry when the ordinary entry table permits it falsifies the absence
+  of an additional docking restriction. If no qualifying entry exists, the test
+  is inconclusive, not evidence that every docking cell is enterable.
+- Departure: in three qualifying runs, issue harvest with a clear route to the
+  resource field. Expected: A gets a field destination and leaves without taking
+  B's contact. Its first route attempt obeys any running retry timer. A refused
+  departure solely because B holds the dock falsifies the claim.
+- Failure: repeat with a purpose-made map placing the resource field more than
+  1 cell away in the same reach region but behind an unbroken building barrier.
+  Qualify only runs in which A receives that field destination, no nearby
+  substitution changes it and the search actually fails. Expected on the failure
+  tick: destination cleared, retry delay R of F3 started and *guard* queued.
+  Remove the barrier after *guard* becomes current, then observe for R + 300 ticks
+  without an order. Timer expiry alone does not restart the route or harvest.
+  Give a fresh harvest order; a new destination can now produce a route.
+  Retaining the failed destination, omitting queued *guard*, or restoring that
+  destination solely on timer expiry falsifies the stated failure reaction.
+  Record three qualifying runs; inability to obtain the failed-search fixture
+  leaves this part inconclusive. Gate failure and failures within 1 cell retain
+  the discriminating tests of P4 and P19, not this distant-search expectation.
 
 ## Open questions
 
