@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0133, Q-0130]
+requests: [Q-0133, Q-0130, Q-0220]
 supersedes: []
 ---
 
@@ -105,7 +105,7 @@ names the top-left cell of the foundation. In addition:
    (S-0404, Terms): its build limit (S-0407, claim 9) is not asked again here. Without
    such a factory building the order does nothing: the item stays done and no sound plays (until
    the last factory building of the kind is removed for good, when S-0404, claim 8 cancels and
-   refunds the item; a building being sold already counts as unable to make). Otherwise
+   refunds the item; a building being sold or queued to be sold already counts as unable to make). Otherwise
    the building is put on the map at the centre of the named cell, (256*x* + 128, 256*y* + 128)
    leptons (F4), by the rules of this spec:
    - if the placement succeeds, the building enters play in that tick, its construction state begins
@@ -461,10 +461,11 @@ names the top-left cell of the foundation. In addition:
     cases and quirks), whose importer warning covers it.
     A place order of an upgrade type that names such a building passes claim 4 whatever its ring
     holds, for human input and for an AI house alike; claim 5's shroud condition is still asked of
-    the upgrade type's foundation rectangle at the named cell. This differs from the general place-
-    order legality rule in S-0404 claim 10; that claim must be revised in the same sign-off batch to
-    exempt upgrade orders from its adjacency requirement while retaining the shroud requirement
-    stated here. S-0408 (claim 5) owns which upgrade a sale removes.
+    the upgrade type's foundation rectangle at the named cell. This differs from S-0404 claim 10's
+    current general place-order legality rule. The paired revision of S-0404 claim 10 must state
+    that an upgrade place order is exempt from adjacency but remains subject to the shroud condition
+    stated here; ordinary building place orders retain claim 10's adjacency and explored-ground
+    conditions. S-0408 (claim 5) owns which upgrade a sale removes.
     - Backing: `measurable` (scenario PL10: parts a and b for the room rule, part c for a type
       without room, part d for the position, the full repair and the power and prerequisite
       effects, part e for the adjacency replacement, part f for the shroud condition, part g for
@@ -534,14 +535,26 @@ names the top-left cell of the foundation. In addition:
     - Confidence: high (same-tick report handover, queued guard, target retained and opening
       effects); medium (F6 and the no-sprite case)
 
-16. **Facing of a placed building.** A place order puts an ordinary building on the map with
+16. **Initial building facing.** A place order puts an ordinary building on the map with
     facing 0 facing units, map north. This is the facing used by S-0408 claim 8 for passenger
-    release; for a turreted building its turret facing also starts at 0. The click names a
-    cell, not a direction, and the facing of the factory building does not change this result.
-    Later aiming follows S-0215 and S-0310. There is no imported placement-facing field.
-    The facing of a building made by a vehicle deploy is owned by S-0415, not inferred from
-    the vehicle's turn to its deploy facing.
-    - Backing: `measurable` (PL12)
+    release; for a turreted building its turret facing also starts at 0. A building has no
+    independently turning body: this same facing is its turret facing when it has a turret
+    (S-0206, Terms). It is not the barrel elevation used by rendering.
+    The click names a cell, not a direction, and the facing of the factory building does not
+    change this result. Later aiming follows S-0215 and S-0310. There is no imported
+    placement-facing field.
+
+    A successful vehicle deploy gives the building the same initial facing 0, including its
+    turret, rather than the vehicle's final body facing or the building type's deploy facing.
+    S-0415 claim 6 already supplies the insertion-facing result requested by Q-0220 question 1
+    and owns deploy completion; this claim makes the turret consequence explicit for question 2.
+    It describes entry, not a guarantee against later aiming at an inherited target.
+    For question 3, a deploy facing outside 0 … 255 never permits deploy completion:
+    S-0415 F1's rounded vehicle facing always lies in 0 … 255 and cannot equal that imported
+    integer. No building appears and there is therefore no deployed-building facing to reduce
+    modulo 65536. A place order still gives facing 0 regardless of that field.
+    - Backing: `measurable` (PL12 for placement; PL13 for deployment, turret facing and the
+      out-of-range case; S-0415 D15 already proposes the ordinary deploy-facing observation)
     - Confidence: high
 
 ### When construction begins and whether it ends
@@ -799,6 +812,9 @@ Observable consequences:
 | `BuildupTime` (rules, `General`; S-0108 owns it) | build-up stage delay used by claim 15 | decimal, game minutes, converted and rounded by S-0108 F1 | S-0108 Import mapping |
 | `Gate` (rules, building type), `GateStages` (art, building's art section; S-0108 owns the stage count) | gate construction range used by claim 15 | boolean and integer stage count | no and 9 stages respectively |
 | `Rate` (rules, `Construction`; S-0215 owns its parsing) | ignored by the construction processing delay of claim 14 | decimal, game minutes | held value as in S-0215; no effect on this 1-tick delay |
+| `DeploysInto` (rules, vehicle type; S-0415 owns it) | building type created by a successful deploy (claim 16) | building type name | none, not a deploying vehicle |
+| `DeployFacing` (rules, building type; S-0415 owns it) | integer deploy facing in 1/256-turn steps, used for vehicle alignment, not initial building facing (claim 16); outside 0 … 255 prevents deployment and gets an importer warning | integer | 128 |
+| `Turret` (rules, building type; S-0310 owns it) | building's facing is its turret's facing when this flag is set (claim 16) | boolean | no |
 
 The build-up sprite resolves by S-0007's build-up file role. No build-up sprite gives
 S-0108's default zero-delay construction range, not a placement-facing default. The importer warns about a building
@@ -1239,6 +1255,29 @@ Each scenario names its observed area, the cells in which the void rule applies.
   factory facing or clicked cell. Unchanged facing gives passengers facing 0 at release.
 - Falsified by a different initial facing or a dependence on factory facing or click position.
   A later aiming turn alone does not falsify the initial-facing claim. Repeat the scripted placements and document the observed facings as described above.
+
+**PL13. Deployed-building facing and invalid deploy directions (Q-0220).**
+- Setup: the common skirmish measurement setup, game speed index 2, 800 × 600 pixels,
+  director and mods off except named test map overrides. Observed area: a clear foundation
+  and the deploying vehicle's cell, with no enemy in range and no inherited target. A test
+  vehicle deploys into an ordinary building, then in separate runs into a turreted copy.
+  Map overrides set deploy facing to 64, 192, −1 and 256, each in a separate variant.
+- Procedure: give the vehicle a deploy order with scripted input. For the valid values,
+  start already aligned, then repeat starting opposite the required direction. For the invalid
+  values, record at least 20 deploy processings, identified by the processing timer as in
+  S-0415 D1. Repeat 3 valid runs per variant. A run losing deploy readiness or gaining a
+  destination during the observation is void.
+- Observable: vehicle body facing, building appearance tick, and building facing and turret
+  facing at entry, using the permitted read-only recorder. For invalid values also record
+  continued deploy attempts without building appearance. Do not infer an initial facing
+  from a turret's later turn or a fixed body sprite.
+- Expected: both valid values give building facing 0 facing units and turret facing 0,
+  whether the vehicle was initially aligned or turned. Both invalid values produce no
+  building despite clear ground and repeated ready attempts. As a control, placing the same
+  building types through place orders gives facing 0 for all four field values.
+- Falsified by: inheritance of the vehicle's facing, any other initial turret facing, a valid
+  value changing the building's entry facing, or an invalid value producing a building.
+  Later aiming alone is not a falsifier.
 
 ## Open questions
 
