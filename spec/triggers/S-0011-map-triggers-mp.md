@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,13 +20,18 @@ How the triggers that a map defines are set up while a game loads, when they are
 and what the actions of this revision's subset do (the event and action codes of Import mapping,
 tables I3 and I4), including the order in which the scenario random stream is drawn while a map loads.
 This revision covers skirmish only; network games and campaigns are out of scope. Codes outside
-the subset are parsed, and their meaning is left to a later revision.
+the subset are parsed; their meaning is deferred except for the companion-spec pointers after
+table I4, which do not extend this spec's supported subset.
 
 **Hand-off checks.** S-0003 claim 14's exceptions, S-0202's loading-draw table,
 S-0302's survivor rules and S-0409's all-player-house scope agree in their current texts.
 At sign-off, check claim 36 and scenario T21 against S-0109 claim 13, and hand the two
 revisions off together: creation-time sound and resource chain reaction are enabled,
-and only later start events suppress them. Check the other companion revisions together too.
+and only later start events suppress them. S-0401 claim 20 must limit its trigger-played
+suppression to later start events in the same hand-off. Check claim 36's map-load composition
+boundary against S-0202 claims 10 and 15 and scenario R14, together with S-0109 claims 14
+and 25. Confirm the S-0201 pointers after I4, including its win-action fixture assumption.
+Those pointers add no campaign rules. Check the other companion revisions together too.
 
 ## Terms
 
@@ -665,9 +670,13 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       start event has the usual start sound and resource chain reaction when enabled, as in
       S-0109 claim 13. Later start events have no start sound or resource chain reaction.
       Middle events, including the immediate one when due at creation, remain governed by
-      S-0109 claims 13 and 14. Their downstream particle-creation and smudge-selection and
-      placement draw counts remain unresolved in S-0109's Open questions, not zero.
-      T21 disables those effects and does not establish their draw counts.
+      S-0109 claims 13, 14 and 25. S-0202 claims 10 and 15 specify the immediate
+      middle-event draw composition for tile and cell animations created during map loading,
+      including particle creation and smudge selection and placement (scenario R14).
+      That loading result does not resolve subsequent particle updates or the full draw
+      composition of later playback effects. Those remain outside the established scope,
+      not draw-free. T21 disables particles and smudge effects and does not establish
+      their draw counts.
     - **Drop-zone reveal.** Creating an animation of the drop-zone type, by this action or otherwise, reveals the area around
       the animation's position for the local player, using the area-reveal radius rule of S-0409 claim
       17. The radius before that rule is *r* quo 256 cells (truncated toward zero), where *r* is the
@@ -1051,6 +1060,17 @@ but not specified in this revision.
 | 108 | create crate at a waypoint | number slot (crate kind), waypoint slot | 30 |
 | 113 | make a house cheer | number slot as house value | 29 |
 | 135 | preferred target at a waypoint | waypoint slot | 30 |
+
+**Companion-spec pointers outside this subset.** The following codes still use I2's parameter
+parsing. These rows only identify the owning spec; they add no behavioural claims here and
+are not part of I4's supported subset.
+
+| Code | Our name | Parameter and owning spec |
+|---|---|---|
+| 1 | win action | number slot; S-0201 scenario T1 part C's fixture assumption only, not a general victory rule specified here |
+| 100, 117 | plain and freezing radar-movie actions | number slot, ignored in skirmish; S-0201 claim 11 and its Import mapping. Campaign behaviour is out of scope |
+| 110 | pause action | number slot; S-0201 claim 10, including its departures, warnings and Import mapping |
+| 127 | chrono flash | number slot; S-0201 claim 11, including its quirk rules, warnings and Import mapping |
 
 **Import evidence coverage.** The effects and action slots in I3/I4 inherit the backings of their
 named claims. Splitting, missing trigger-field defaults, ID-only links and short action-reference
