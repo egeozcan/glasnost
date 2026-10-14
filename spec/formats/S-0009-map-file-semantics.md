@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -41,17 +41,24 @@ and M4 already agree. The historical revision-12 conflict is resolved: the corre
 already present in approved S-0009 revision 14 and retained in approved revision 15.
 
 **Joint hand-off checks.** Claim 29 and the header-pair Import mapping agree with S-0003
-claim 9: unread components are unspecified in the original, with deterministic completion
-only in our engine. S-0412 claim 14 and its ordering table already allow the game-start
+claim 9: unread components are unspecified in the original; only our engine completes them
+from the corresponding values in force, with an importer warning. Missing or empty pairs
+retain the whole value in force. S-0412 claim 14 and its ordering table already allow the game-start
 tile-animation draws of S-0202 claim 14 after secret-lab choices; those choices are not
 necessarily the last draws before tick 0. S-0407 claim 14 already agrees with this order and
 no longer requests a correction to S-0412. Joint sign-off confirms these current passages,
 S-0414's end-test and end-delay rules used by S-0412 claim 11, and the standard versus
-all-base-units scope and shared placement-search reuse described above. No further
-S-0009 scope change is required. S-0202 revision 11 left downstream particle and smudge
-creation-draw counts unresolved; current revision 12 claim 15 supplies their rules for
-joint review, with R14 proposed rather than measured. Joint sign-off checks that extension.
-Neither these checks nor the loading-order table treats those effects as taking zero draws.
+all-base-units scope and shared placement-search reuse described above. Claims 28 and 45
+also agree with S-0414 claim 1: cleanup removes the house itself, not merely its objects,
+so it receives no starting units and takes no defeat test. No further S-0009 scope change
+is required. The loading-order table agrees with S-0202 claim 14, including cleanup after
+the second pass and before the late phase, and game-start recalculation after crates,
+secret labs and end-of-loading tags even with no starting units or an early stop.
+Recalculation is not a final-draw boundary: resource-glint setup can draw afterwards
+(S-0202 claim 14). S-0202 claim 15 supplies downstream particle and smudge creation-draw
+rules, with R14 proposed rather than measured; joint sign-off checks their composition.
+Neither these checks nor the loading-order table treats those effects as taking zero draws
+or resolves open simultaneous production-start draw assignment.
 Claim 40 already follows S-0405 claim 18's conditional initial power-switch rule; the map
 flag's encoding remains here, and S-0108 claim 13 owns the slot-animation consequences.
 
@@ -1969,6 +1976,7 @@ reproduce the draw order and the consequences that claims 20, 28, 29 and 33 stat
 | Late phase (claim 20) | the terrain, the overlay and every surviving pre-placed object; this game's full rules layering with the map's overrides (claim 33); the unused-house cleanup of claim 28, already applied when its condition holds | the marks of the applied header pairs, applied again (claim 29); every player keeps its position index, and its base cell is that index's entry in list 3, which is built on the real terrain; a non-passive house without a position (its position was overwritten by a mark, or it was passive in the early phase, claim 28) is assigned anew by claim 19 against list 3; a house that the cleanup removed takes no part (claim 28) | list 3's random entries; the re-assignment draws of claims 28 and 29 |
 | Starting units | every base cell | each house's base unit and budget units, placed around its base cell (claims 45 and 46) | house by house, in house order (claim 19), the draws of claim 46: the base unit's creation draw, the draws of its placement search (only when its direct placement fails) and any visceroid draw, then for each unit bought its type draw, creation draw, placement search draws and any visceroid draw; then, after the last house, one ranged draw over 0 … 65535 (one raw value) whose value has no effect (not taken when the step stops early, claim 45). Later loading steps draw after these: initial crates, conditional secret-lab choices, end-of-loading tags, then the game-start tile animations (S-0202 claim 14). This order holds when the starting-unit step stops early or places no units |
 | Game-start terrain recalculation | initial crates, secret-lab choices and end-of-loading tags are complete | every legal cell is recalculated before tick 0, even when no starting units were placed | in visiting order, the applicable creation and immediate start-event draws of missing tile animations (S-0010 claims 12 and 19; S-0202 claims 10 and 14). A cell whose start was recorded since the second pass takes no new creation draws |
+| Later resource-glint setup | game-start terrain recalculation is complete | resource-glint setup as specified by S-0202 claim 14 | its conditional choices and applicable immediate animation draws, before tick 0 (S-0202 claim 14 and R13). The recalculation row is not an exhaustive final-draw boundary |
 
 ## Edge cases and quirks
 
