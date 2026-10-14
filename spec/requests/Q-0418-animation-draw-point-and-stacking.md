@@ -1,9 +1,9 @@
 ---
 id: Q-0418
 title: Where an animation is drawn: draw point, vertical draw shift, shadow order, stacked copies and translucent blending
-status: open
+status: answered
 related: [S-0102, S-0109, S-0108]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need
