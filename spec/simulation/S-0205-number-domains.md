@@ -2,7 +2,7 @@
 id: S-0205
 title: Number domains (integers, floating point, the round-toward-zero mode, conversions)
 topic: simulation
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -354,6 +354,7 @@ Observable ordering: none; the mode applies to every calculation alike.
   | S-0202 (random streams, the companion draft of this spec), claim 6 (unit-interval value) | Yes | The largest unit-interval value is exactly 1 instead of 1 − 2⁻⁵³ |
   | S-0204, claim 5, F1 (table square root) | Only for *n* ≥ 2²⁴ square leptons (distances of 4096 leptons or more) | *n* is rounded to the nearest single instead of toward zero; about 1 in 2000 squared distances between 16 and 512 cells moves by one bucket of the table (as S-0204 states). Every spec that uses the table square root (S-0207 F5, S-0208 F1, S-0209 F1, S-0210 F2, S-0212 F6, S-0213 claim 7, S-0215 F4) inherits this |
   | S-0204, claim 8, F3 (direction) | No (stated there) | — |
+  | S-0302, Formulas F1, F2, F3, F5, F6 and F7 | Yes | Each RZ₅₃ is RN₅₃ and each RZ₂₄ is RN₂₄; exact operations and results may coincide in both modes |
   | S-0207, F2 (progress per tick), F3 (track cost), F4 (interpolation factor), F6 (target fraction) | Yes | Every floating-point step rounds to nearest; in F4 *A* = 7 gives *t* = 1 exactly, so the seventh displacement of scenario D8 is 22 instead of 21 (as S-0207 states) |
   | S-0208, F3 (step), F5 (walking speed) | Yes | Every floating-point step rounds to nearest; the sideways drift on the map axes (claim 14) disappears (as S-0208 states) |
   | S-0209, F2 (close-enough distance) | Only for a value with a percent sign | The fraction of S-0003 claim 7 rounds to nearest |
@@ -363,7 +364,6 @@ Observable ordering: none; the mode applies to every calculation alike.
   | S-0212, F3 (retry delay), F5 (threat term), F7 (threat tests) | Only for a field with a percent sign, or (F5, F7) a threat value of 2²⁹ or more; otherwise each product is exact, or (the absent-key default of F3) far from a whole number | Each product rounds to nearest |
   | S-0213, claim 7 (group destinations: the points along a placement line) | Yes | The floating-point steps along the line round to nearest; the conversion of each point to a cell still truncates |
   | S-0215, F1 (rate delay) | Only for a rate with a percent sign | The product rounds to nearest: `6%` gives 54 ticks instead of 53. A rate without a percent sign gives the same ticks in both settings (a rate written as 0.06 gives 53, from its single-precision reading) |
-  | S-0302, F1 (shot damage), F2 (defences), F3 (modification), F5 (damage-state thresholds), F6 (readiness loss), F7 (delayed-kill countdown) | Yes | Every RZ₅₃ and RZ₂₄ in these formulas is replaced by RN₅₃ and RN₂₄ respectively; integer conversions still truncate toward zero |
 
 - **Integer division by zero, and −2147483648 ÷ −1** (departure, claim 3).
 - **Squares from the library power function** (claim 5). Our engine uses the exact square rounded
