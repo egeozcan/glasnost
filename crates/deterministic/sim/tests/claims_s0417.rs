@@ -634,6 +634,38 @@ fn claim_13_no_clearing() {
     }
 }
 
+// spec: S-0417 claim 13, Refinery boundary (Q-0371) (apron clearing is the vehicle factory's: an idle refinery without the vehicle factory flag requests nothing of a unit resting on its docking cell; a refinery that is also a vehicle factory tests E only, not its docking cell as such)
+#[test]
+fn claim_13_refinery_boundary() {
+    for vehicle_factory in [false, true] {
+        let mut r = ruleset_with([3, 2]);
+        let mut b = r.sim.buildings["VF"].clone();
+        b.weapons_factory = Some(vehicle_factory);
+        b.econ.refinery = Some(true);
+        b.econ.dock_unload = Some(true);
+        r.registries.get_mut("buildings").unwrap().push("RF".into());
+        r.sim.buildings.insert("RF".into(), b);
+        let mut w = game(&r);
+        let k = building(&mut w, "RF", 0, 0, 0);
+        let tl = top_left(&w, k);
+        let dock = CellXY::new(tl.x + 3, tl.y + 1);
+        let t = w.tick;
+        w.obj_mut(k).unwrap().beh.force(Behaviour::Guard, t, true);
+        let resting = spawn_at(&mut w, Kind::Vehicle, "JEEP", dock);
+        let on_e = release::apron(&w, k)
+            .filter(|&e| e != dock)
+            .map(|e| spawn_at(&mut w, Kind::Vehicle, "JEEP", e));
+        let dr = w.rules().behaviour(Behaviour::Guard).rate_delay;
+        testkit_run(&mut w, 6 * dr + 20);
+        assert!(
+            w.obj(resting).unwrap().dest.is_none(),
+            "no request to the unit on the docking cell (vehicle factory {vehicle_factory})"
+        );
+        let j = on_e.expect("E is not the docking cell");
+        assert_eq!(w.obj(j).unwrap().dest.is_some(), vehicle_factory);
+    }
+}
+
 fn testkit_run(w: &mut World, n: i32) {
     for _ in 0..n {
         step(w);

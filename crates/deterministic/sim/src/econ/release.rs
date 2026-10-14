@@ -1163,7 +1163,7 @@ fn occupied(w: &World, c: CellXY, k: ObjectId) -> bool {
 /// *area guard*, before its delay draw; `first`: the first processing
 /// after the behaviour started.
 pub fn idle_apron(w: &mut World, k: ObjectId, first: bool) {
-    // spec: S-0417 claim 13 (a building whose type has the vehicle factory flag, naval or not)
+    // spec: S-0417 claim 13 (a building whose type has the vehicle factory flag, naval or not; Refinery boundary: a refinery clears only if it is also a vehicle factory, and only E, never its docking cell as such)
     if !vehicle_factory(w, k) {
         return;
     }
