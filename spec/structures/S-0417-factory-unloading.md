@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,14 +27,14 @@ and the draws of putting a released unit on the map (Open question 8). Claim 14 
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
 the search's no-draw rule; their untested cases remain qualified there.
 
-**Paired hand-off confirmations.** S-0404 revision 11 claim 13 retains the fulfilled release
+**Paired hand-off confirmations.** S-0404 claim 13 retains the fulfilled release
 hand-off: release queues *unload*, and contact-place count, infantry candidate acceptance and
 edge-entry nearby destination refer to claim 14 here. Nearby-search draws are resolved as none.
-Initial-placement draws remain open. S-0212 revision 27 table T5 includes the aircraft factory
+Initial-placement draws remain open. S-0212 claim 25 table T5 includes the aircraft factory
 edge-entry-without-rally row with claim 14's parameters, and claim 25 uses the release tick to
-select its destination. S-0215 revision 23 claim 11 records that factory release and unloading
+select its destination. S-0215 claim 11 records that factory release and unloading
 neither set nor clear the ready mark, with start consequences owned by claim 2 here. Its claim 13
-and S-0207 revision 16 claim 21 jointly own restoration and retained teleporting state after
+and S-0207 claim 21 jointly own restoration and retained teleporting state after
 claim 5's temporary drive. The decided apron off-state rules remain in Edge cases. Confirm
 these companion passages at sign-off. No further change to them is requested by this revision.
 
@@ -377,7 +377,14 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     about every 3 × *D*r ticks. A refusing occupant changes nothing, because the factory is idle.
     No apron test happens while K is armed, has the stupid-guard-mode flag, or is in any
     behaviour other than these three or *unload*.
-    - Backing: `measurable` (U11 for unarmed guard clearing and delay). The armed and
+
+    **Refinery boundary (Q-0371).** This is vehicle-factory apron clearing, not general
+    eviction from a refinery's docking cell. A refinery uses this rule only if it also
+    satisfies the vehicle-factory conditions above, and the tested cell is E, not its
+    docking cell as such. S-0402 claim 10a owns the blocked docking exchange: it does not
+    request an unrelated resting harvester on the docking cell to scatter.
+    - Backing: `measurable` (U11 for unarmed guard clearing and delay; S-0402 H20 for
+      the blocked docking exchange, with confidence inherited from S-0402 claim 10a). The armed and
       stupid-guard-mode exclusions, sticky and area-guard equivalence, and repair-bay early end
       are `unmeasured` here: U11 supplies no stock setup exercising those branches.
     - Confidence: high (tests, assignments, delay); medium (naval case)
