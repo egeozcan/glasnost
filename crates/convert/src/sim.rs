@@ -674,6 +674,13 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         "EngineerCaptureLevel",
         Dec,
     ),
+    // spec: S-0101 Import mapping (ScrollMultiplier, a decimal or percent as S-0003; later layers retain the value in force)
+    (
+        "scroll_multiplier",
+        b"AudioVisual",
+        "ScrollMultiplier",
+        Dec,
+    ),
 ];
 
 /// Percentage fields among the game-wide fields (S-0003 Import mapping row

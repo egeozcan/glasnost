@@ -36,6 +36,7 @@ use glasnost_vfs::{FileRef, Vfs};
 
 use super::paint::Painter;
 use super::play::{Button, Play, Tool, local_house};
+use super::scroll::{self, EdgeScroll};
 use crate::mapview::build::{self, GameMode, Inputs, Options};
 use crate::mapview::cover;
 use crate::mapview::live::{self, Live};
@@ -51,11 +52,6 @@ const ICON_SPRITES: u32 = 1000;
 /// A left-button drag longer than this (in either direction) is a box
 /// selection. Interim (Q-0278).
 pub const DRAG_START: i32 = 4;
-/// Pixels the view scrolls per drawn frame at an edge or with an arrow
-/// key. Interim (Q-0279).
-pub const SCROLL_STEP: i32 = 16;
-/// How close to a window edge the pointer scrolls. Interim (Q-0279).
-pub const EDGE: i32 = 4;
 
 /// The 64-bit FNV-1a hash of a map file: the map's name in replays, so
 /// that no map is named by its title (our own identifier).
@@ -97,6 +93,8 @@ pub struct Session {
     /// The icon palette's RGBA (interim, Q-0275).
     icon_palette: Option<[u8; 1024]>,
     pointer: Option<Point>,
+    /// Edge momentum and its retained direction (S-0101 F9).
+    edge: EdgeScroll,
     press: Option<(Point, Button)>,
     /// The last drawn sidebar's targets.
     targets: Targets<HudHit>,
@@ -205,6 +203,7 @@ impl Session {
             icon_ids: BTreeMap::new(),
             icon_palette,
             pointer: None,
+            edge: EdgeScroll::default(),
             press: None,
             targets: Targets::new(),
             pause_targets: Targets::new(),
@@ -293,27 +292,36 @@ impl Session {
         }
     }
 
-    /// The edge scroll for the pointer's position (interim, Q-0279).
-    pub fn edge_scroll(&self) -> (i32, i32) {
-        let Some(p) = self.pointer else {
-            return (0, 0);
+    /// One unfrozen cycle's scrolling (S-0101 claims 12 to 14): the edge
+    /// request of F9 plus the held arrows' (left, right, up, down), added
+    /// before F5 limits the centre. `edge` is false while edge scrolling is
+    /// suppressed (no focus).
+    pub fn scroll_cycle(&mut self, now_ms: u64, held: [bool; 4], edge: bool) {
+        let pointer = self.pointer.filter(|_| edge).map(|p| (p.x, p.y));
+        let f = self.loaded.map.footprint;
+        let size = self.view_size();
+        let centre = self.centre;
+        // spec: S-0101 F9 (a one-pixel request in the direction blocked by F5)
+        let blocked = |d: (i32, i32)| {
+            limit_centre(
+                (centre.0 + d.0, centre.1 + d.1),
+                size,
+                f.width,
+                f.local,
+                &ProjectionQuirks::default(),
+            ) == centre
         };
-        let (w, h) = self.screen;
-        let sx = if p.x < EDGE {
-            -SCROLL_STEP
-        } else if p.x >= w - EDGE {
-            SCROLL_STEP
-        } else {
-            0
-        };
-        let sy = if p.y < EDGE {
-            -SCROLL_STEP
-        } else if p.y >= h - EDGE {
-            SCROLL_STEP
-        } else {
-            0
-        };
-        (sx, sy)
+        let e = self.edge.cycle(
+            pointer,
+            self.screen,
+            scroll::DEFAULT_SCROLL_INDEX,
+            self.loaded.scroll_multiplier,
+            now_ms,
+            blocked,
+        );
+        let a = scroll::arrows(held);
+        // spec: S-0101 claim 14 (mouse and arrow requests add before the next view position, subject to F5)
+        self.scroll((e.0 + a.0, e.1 + a.1));
     }
 
     /// The map view.

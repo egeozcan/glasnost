@@ -30,7 +30,7 @@ use glasnost_vfs::{FileRef, PickedFile, Vfs};
 use super::install::{self, Install};
 use super::paint::Painter;
 use super::play::Button;
-use super::session::{MAP_IMAGE, RADAR_IMAGE, SCROLL_STEP, Session, SessionEvent};
+use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
 use crate::mapview::live::{Pacer, period_ms};
 
 /// Asynchronous work the client asks for.
@@ -479,7 +479,8 @@ impl Client {
 
     /// Advances the game for a drawn frame at host time `now_ms`: at most
     /// one tick (S-0201 claims 2 to 4), none while paused or without focus
-    /// (claims 8 and 9); then scrolling, sound and the end of the game.
+    /// (claims 8 and 9), with that cycle's scrolling (S-0101 claims 12 to
+    /// 15); then sound and the end of the game.
     pub fn update(&mut self, now_ms: i64) {
         if self.shell.screen != Screen::Game {
             return;
@@ -492,6 +493,8 @@ impl Client {
             self.pacer.reset();
         } else if self.pacer.due(now_ms, s.speed) {
             s.step();
+            // spec: S-0101 claims 13 to 15 (scrolling is requested once per unfrozen cycle, not per drawn frame; none while the game stands still)
+            s.scroll_cycle(now_ms.max(0) as u64, self.held, self.focused);
             if let Some(a) = self.audio.as_mut() {
                 a.tick(&s.play.game.world, &s.play.effects, &mut self.unsync);
             }
@@ -515,11 +518,6 @@ impl Client {
                 a.key(k);
             }
         }
-        let mut d = if self.focused { s.edge_scroll() } else { (0, 0) };
-        let [l, r, u, dn] = self.held;
-        d.0 += SCROLL_STEP * (i32::from(r) - i32::from(l));
-        d.1 += SCROLL_STEP * (i32::from(dn) - i32::from(u));
-        s.scroll(d);
         if let Some(a) = self.audio.as_mut() {
             let v = s.view();
             a.set_view(SoundView {
