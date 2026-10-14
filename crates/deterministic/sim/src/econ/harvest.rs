@@ -501,6 +501,71 @@ pub fn phase(w: &World, id: ObjectId) -> Phase {
     st(w, id).phase
 }
 
+/// Whether a vehicle harvester's harvesting display is eligible (S-0402
+/// claim 5a, start and stop): it is in *harvest* and its harvest is in
+/// *loading*. Loading starts in the processing that starts it, before the
+/// first bale; it lasts while the harvester is full until the failing load
+/// step, and while it drives on to another cell after an exhausted one. A
+/// slave miner on claim 22's group route never loads itself. Read-only:
+/// presentation asks, the simulation never does.
+pub fn display_eligible(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else {
+        return false;
+    };
+    // spec: S-0402 claim 5a and Import mapping (a vehicle harvester: the vehicle type's `Harvester` flag)
+    if !is_harvester(w, id) {
+        return false;
+    }
+    // spec: S-0402 claim 5a (leaving harvest ends it by the vehicle's next turn; a queued replacement behaviour does not end loading)
+    if o.beh.current != Some(Behaviour::Harvest) {
+        return false;
+    }
+    // spec: S-0402 Terms (a harvester enters harvest in the seeking phase: the phase of an earlier harvest does not count)
+    // and claim 5a (eligible from the processing that starts loading until the phase changes)
+    o.econ
+        .harvest
+        .as_ref()
+        .is_some_and(|s| s.harvest_start == Some(o.beh.start_tick) && s.phase == Phase::Loading)
+}
+
+/// Whether an eligible harvesting display is suppressed now (S-0402 claim
+/// 5a, visibility conditions): while the body turns; for a ground driver
+/// while it is on a track with a positive speed fraction (a destination
+/// alone does not suppress it); for a teleporting harvester while a
+/// journey is in progress (a landing point fixed and not yet jumped to);
+/// and while phasing in. Being removed by an erasing weapon also
+/// suppresses it, but our engine models no erasing weapon yet.
+pub fn display_suppressed(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else {
+        return true;
+    };
+    // spec: S-0402 claim 5a (suppressed during body turning)
+    if o.body.turning(w.tick) {
+        return true;
+    }
+    // spec: S-0402 claim 5a (suppressed during its teleport disappearance or reappearance state; S-0207 claim 20 f, phasing in)
+    if crate::teleport::phasing_in(w, id) {
+        return true;
+    }
+    if crate::teleport::is_teleporter(w, id) {
+        // spec: S-0402 claim 5a (a teleporting harvester: a teleport journey still in progress, S-0207 claim 20 a)
+        return o.teleport.as_ref().is_some_and(|t| t.landing.is_some());
+    }
+    // spec: S-0402 claim 5a (a ground driver: an active track with positive current speed; a destination
+    // alone does not suppress it). AMBIGUOUS, pending a spec request: "current speed" is read as the speed
+    // fraction ρ of S-0207 Terms above 0. Erasing (also suppressing) is not modelled: no erasing weapon yet.
+    o.drive
+        .as_ref()
+        .is_some_and(|d| d.track.is_some() && d.rho.gt(F64::ZERO))
+}
+
+/// Whether a vehicle harvester shows its harvesting sprite now (S-0402
+/// claim 5a): eligible and not suppressed. Ordinary object visibility is
+/// the drawing's own.
+pub fn display_shown(w: &World, id: ObjectId) -> bool {
+    display_eligible(w, id) && !display_suppressed(w, id)
+}
+
 fn set_phase(w: &mut World, id: ObjectId, p: Phase) {
     if let Some(s) = state(w, id) {
         s.phase = p;

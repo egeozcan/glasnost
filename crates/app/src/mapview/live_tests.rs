@@ -198,6 +198,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
             stage: 0,
         }),
         object,
+        harvesting: None,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -223,6 +224,99 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
     let (px, py) = project_lifted(moved.0, moved.1, moved.2);
     assert_eq!((body.x, body.y), (px - 1, py - 1));
     assert_eq!(scene.images.len(), images);
+}
+
+/// spec: S-0402 claim 5a and F8 (the fixed harvesting sprite: its F8 image
+/// frame centred on the projected anchor, composited before (under) the
+/// vehicle's body, with the anim palette and no house-colour remap; a
+/// missing file draws nothing)
+#[test]
+fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
+    use super::harvesting::{Harvesting, SPRITE_FILE};
+    let (import, catalogue, mut assets) = context();
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let pos = (2 * 256 + 128, 3 * 256 + 128, 0);
+    let anchor = (pos.0 + 21, pos.1 - 22, pos.2);
+    let car = |harvesting| Mobile {
+        kind: Kind::Vehicles,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos,
+        body: 8192,
+        turret: 8192,
+        elevation: 0,
+        infantry: None,
+        object: sim_code(ObjectId(9)),
+        harvesting,
+    };
+    let h = Some(Harvesting { frame: 97, anchor });
+    // Without the file: no image, no failure.
+    {
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene = built.scene;
+        let (plain, _) = painter.mobiles(&inputs, &mut scene, &[car(None)]);
+        let (missing, _) = painter.mobiles(&inputs, &mut scene, &[car(h)]);
+        assert_eq!(missing[0].items.len(), plain[0].items.len());
+    }
+    // A synthetic harvesting sprite of 120 image frames (8 groups of 15),
+    // canvas 30 × 20, frame i of pixel value i + 1.
+    assets.insert(SPRITE_FILE, shp((30, 20), 120, (2, 2), (14, 9)));
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    let (plain, _) = painter.mobiles(&inputs, &mut scene, &[car(None)]);
+    let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car(h)]);
+    let items = &entries[0].items;
+    assert_eq!(items.len(), plain[0].items.len() + 1);
+    // First: the harvesting image, before every item of the body.
+    let harv = &items[0];
+    assert_eq!(&items[1..], &plain[0].items[..]);
+    assert_eq!(harv.object, Some(sim_code(ObjectId(9))));
+    assert_eq!(scene.images[harv.image as usize].pixels()[0], 98);
+    // Centred on the projected anchor (S-0101 claim 1; S-0102 F6).
+    let (px, py) = project_lifted(anchor.0, anchor.1, anchor.2);
+    assert_eq!((harv.x, harv.y), (px - 15 + 14, py - 10 + 9));
+    assert_eq!(harv.test, DepthTest::Reader);
+    // The anim palette's table, not the owner's house table.
+    let lit = |i: &glasnost_render::scene::Item| match i.paint {
+        Paint::Lit(s) => s,
+        p => panic!("not lit: {p:?}"),
+    };
+    let body = items[1..]
+        .iter()
+        .find(|i| i.paint != Paint::Shadow)
+        .unwrap();
+    assert_ne!(lit(harv).base, lit(body).base);
+    assert!(harv.provisional);
 }
 
 /// A live game on the simulation's synthetic scenario (its map has no art,

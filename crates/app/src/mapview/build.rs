@@ -679,6 +679,8 @@ pub fn wanted_files(
     ] {
         out.insert(upper(f));
     }
+    // spec: S-0402 Import mapping (the fixed harvesting sprite of claim 5a)
+    out.insert(upper(super::harvesting::SPRITE_FILE));
     // spec: S-0103 claim 13 (the sidebar icon palette)
     out.insert(upper(glasnost_render::palette::ICON_PALETTE_FILE));
     out
@@ -2607,6 +2609,14 @@ impl Builder<'_> {
             };
             return Shade::new(base, n, NEUTRAL_BRIGHTNESS);
         }
+        // spec: S-0103 claim 8 row 5, and its tiled copies (the anim palette whatever row the type
+        // would select, at that row's brightness)
+        self.anim_palette_row(b)
+    }
+
+    /// The anim palette's untinted shade table at brightness `b` (S-0103
+    /// claim 8 row 5, S-0104 claim 6), added to the scene once.
+    fn anim_palette_row(&mut self, b: i32) -> Shade {
         let (base, n) = match self.p.rows.anim {
             Some(r) => r,
             None => {
@@ -2620,8 +2630,6 @@ impl Builder<'_> {
                 (base, t.len())
             }
         };
-        // spec: S-0103 claim 8 row 5, and its tiled copies (the anim palette whatever row the type
-        // would select, at that row's brightness)
         Shade::new(base, n, b)
     }
 
@@ -2874,6 +2882,8 @@ impl Builder<'_> {
             elevation: voxel::barrel_elevation_after(fire_angle, 0),
             infantry,
             object,
+            // spec: S-0402 claim 5a (shown only while a harvest is loading; no tick has run)
+            harvesting: None,
         };
         Some(self.mobile(&m))
     }
@@ -2958,7 +2968,17 @@ impl Builder<'_> {
                 self.extra_light(b"ExtraUnitLight")
             };
             let row = self.house_row(hsv, ground + extra);
-            self.vehicle_items(m, point, u, row)
+            let body = self.vehicle_items(m, point, u, row);
+            // spec: S-0402 claim 5a (the harvesting image is drawn under the body). AMBIGUOUS, pending a
+            // spec request: its place relative to the voxel shadow; we composite it before all of the
+            // vehicle's items, shadow included.
+            let mut items: Vec<Item> = m
+                .harvesting
+                .and_then(|h| self.harvesting_item(m, h, u, ground))
+                .into_iter()
+                .collect();
+            items.extend(body);
+            items
         };
         GroundEntry {
             // spec: S-0102 claim 5 (sort key X + Y of the position; height plays no part)
@@ -2966,6 +2986,50 @@ impl Builder<'_> {
             items,
             object: Some(m.object),
         }
+    }
+
+    /// A loading vehicle harvester's harvesting image (S-0402 claim 5a,
+    /// F8): the fixed harvesting sprite's frame centred on the projected
+    /// anchor, drawn with the anim palette and no house-colour remap. A
+    /// missing file or image frame draws nothing.
+    ///
+    /// Neither the depth row (S-0102 claim 13) nor the brightness of this
+    /// image is specified: our engine gives it the depth row of a vehicle
+    /// drawn as a sprite (*U* − 2, upright, a reader) and the anim palette's
+    /// row-5 brightness, its cell's unscaled ground level (S-0103 claim 8),
+    /// and marks it provisional.
+    fn harvesting_item(
+        &mut self,
+        m: &Mobile,
+        h: super::harvesting::Harvesting,
+        u: i32,
+        ground: i32,
+    ) -> Option<Item> {
+        // spec: S-0402 claim 5a, Import mapping (the fixed game asset OREGATH.SHP, by its file name)
+        self.assets.get(super::harvesting::SPRITE_FILE)?;
+        // spec: S-0402 F8 (project the anchor by S-0101 claim 1 and centre the image there)
+        let at = project_lifted(h.anchor.0, h.anchor.1, h.anchor.2);
+        // spec: S-0402 claim 5a (the animation palette, no house-colour remap); S-0103 claim 8 row 5
+        // (its brightness, the cell's unscaled ground level). AMBIGUOUS, pending a spec request: the
+        // brightness of this image is not specified; our choice.
+        let row = self.anim_palette_row(ground);
+        self.place_sprite(
+            super::harvesting::SPRITE_FILE,
+            h.frame,
+            at,
+            DepthTest::Reader,
+            // AMBIGUOUS, pending a spec request (no S-0102 claim 13 row): our choice is the row of a
+            // vehicle drawn as a sprite, U − 2, upright, a reader, marked provisional.
+            ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias: u - 2,
+                companion: None,
+            },
+            Paint::Lit(row),
+            Group::Vehicles,
+            true,
+            Some(m.object),
+        )
     }
 
     /// An infantry unit's body and own shadow (S-0107 claims 2, 3, 19;
@@ -3632,6 +3696,9 @@ pub struct Mobile {
     pub infantry: Option<InfantryFrame>,
     /// The object code its items carry ([`Item::object`]).
     pub object: u32,
+    /// For a loading vehicle harvester: its harvesting image (S-0402
+    /// claim 5a, F8).
+    pub harvesting: Option<super::harvesting::Harvesting>,
 }
 
 /// The inputs a scene is drawn from.
