@@ -1240,34 +1240,19 @@ fn slot_animation_detail_level() {
     assert_eq!((n(&high), n(&low)), (6, 5));
 }
 
-/// spec: S-0103 claim 14 (a map-defined owner's imported colour: the country's selector through
-/// the rules layers, a later valid name replacing an earlier one, an unknown or absent one keeping
-/// the choice in force, position 0 without any; a listed house's own valid selector replacing the
-/// inherited choice, compared without regard to case on its first 31 characters, a number being a
-/// name). Interim (Q-0419): an owner's country is the country of its own name.
-#[test]
-fn map_owner_colours_by_claim_14() {
-    const LONG: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ01234"; // 31 characters
+/// The map owners of `map_text` over the synthetic rules with `countries` added.
+fn map_owners(
+    countries: &str,
+    map_text: &str,
+) -> (super::build::MapOwners, glasnost_convert::Import) {
     let rules = RULES.replace(
         "LightGrey=0,0,150\n",
-        &format!(
-            "LightGrey=0,0,150\n{LONG}=7,7,7\n[Countries]\n1=Americans\n2=Soviets\n3=Yuri\n\
-             4=Neutral\n[Americans]\nColor=c3\n[Soviets]\nColor=Nope\n[Neutral]\nColor=LightGrey\n"
-        ),
-    );
-    let map_text = format!(
-        "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
-         [Houses]\n0=Yuri\n1=Rebels\n2=Guards\n3=Americans\n\
-         [Yuri]\nColor=c5\n[Rebels]\nColor={LONG}EXTRA\n[Guards]\nColor=12\n[Americans]\nColor=\n\
-         [Soviets]\nColor=C2\n\
-         [Units]\n0=Americans,CARX,256,6,9,64\n1=Soviets,CARX,256,6,8,64\n2=<human player>,CARX,256,6,7,64\n\
-         [Infantry]\n0=Yuri,MANX,256,9,11,0,Guard,64\n1=Rebels,MANX,256,9,13,0,Guard,0\n\
-         2=Guards,MANX,256,9,12,0,Guard,0\n3=Neutral,MANX,256,8,12,0,Guard,0\n"
+        &format!("LightGrey=0,0,150\n{countries}"),
     );
     let import = convert(
         &Inputs {
             base: input("rules.ini", &rules),
-            map: input("test.map", &map_text),
+            map: input("test.map", map_text),
             art: input("art.ini", ART),
             ..Default::default()
         },
@@ -1275,31 +1260,127 @@ fn map_owner_colours_by_claim_14() {
     );
     let doc = Document::parse(map_text.as_bytes(), Quirks::default(), &mut Vec::new());
     let map = decode(&doc, &DecodeContext::default()).map;
-    let got = super::build::map_owner_colours(&map, &import, &doc);
+    (super::build::map_owner_colours(&map, &import, &doc), import)
+}
+
+/// The map text of a 10 × 10 map with `sections` and one vehicle per owner.
+fn owners_map(sections: &str, owners: &[&str]) -> String {
+    let units: String = owners
+        .iter()
+        .enumerate()
+        .map(|(i, o)| format!("{i}={o},CARX,256,6,{},64\n", i + 1))
+        .collect();
+    format!(
+        "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n{sections}[Units]\n{units}"
+    )
+}
+
+/// spec: S-0009 claim 47 (a listed house's country is its own section's selector, not its name:
+/// the first 19 bytes of the list value, trimmed; an absent or empty selector uses registration
+/// index 0; type name or name field, case ignored, earliest wins; an unknown name creates a
+/// default country; reserved selectors are treated as absent, with a warning). spec: S-0009
+/// claim 48 (an owner must equal a created house's name exactly; a country-only or unknown owner
+/// is unresolved). spec: S-0103 claim 14 (the country's selector through the rules layers, an
+/// unknown one keeping position 0; a created country's colour is position 0; a house's own valid
+/// selector, case ignored, cut to 31 characters, replaces the inherited colour).
+#[test]
+fn map_owner_colours_by_s0009_claims_47_48() {
+    const LONG: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ01234"; // 31 characters
+    let countries = format!(
+        "{LONG}=7,7,7\n[Countries]\n1=Americans\n2=Soviets\n3=Yuri\n\
+         [Americans]\nColor=c3\n[Soviets]\nName=Reds\nColor=C2\n[Yuri]\nColor=Nope\n"
+    );
+    let sections = format!(
+        "[Houses]\n0=Alpha\n1=Bravo\n2=Charlie\n3=Delta\n4=Americans\n5=Echo\n6=  Foxtrot\n\
+         7=ABCDEFGHIJKLMNOPQRSXYZ\n8=Golf\n9=Hotel\n\
+         [Alpha]\nCountry=reds\n[Charlie]\nCountry=\n[Delta]\nCountry=Atlantis\n\
+         [Americans]\nCountry=YURI\n[Echo]\nCountry=Atlantis\nColor={LONG}EXTRA\n\
+         [Foxtrot]\nCountry=<RANDOM>\n[ABCDEFGHIJKLMNOPQRS]\nCountry=Soviets\nColor=12\n\
+         [Golf]\nCountry=<Player @ B>\n[Hotel]\nCountry=Yuri\nColor=c6\n"
+    );
+    let owners = [
+        "Alpha",
+        "Bravo",
+        "Charlie",
+        "Delta",
+        "Americans",
+        "Echo",
+        "Foxtrot",
+        "ABCDEFGHIJKLMNOPQRS",
+        "Golf",
+        "Hotel",
+        "Soviets",
+        "alpha",
+        "Nobody",
+        "<human player>",
+    ];
+    let (got, import) = map_owners(&countries, &owners_map(&sections, &owners));
+    let c = |n: &str, hsv: [u8; 3]| (n.as_bytes().to_vec(), hsv);
     assert_eq!(
-        got,
+        got.colours,
         [
-            // Base layer's mixed-case selector; the house's empty selector keeps it.
-            (b"Americans".to_vec(), [30, 200, 200]),
-            // Base layer's unknown name keeps position 0; the map layer's valid name replaces it.
-            (b"Soviets".to_vec(), [20, 200, 200]),
-            // No country selector: position 0; the house's own selector replaces it.
-            (b"Yuri".to_vec(), [50, 200, 200]),
-            // Not a country: the house's own selector, cut to 31 characters.
-            (b"Rebels".to_vec(), [7, 7, 7]),
-            (b"Neutral".to_vec(), [0, 0, 150]),
+            // The name field, case ignored.
+            c("Alpha", [20, 200, 200]),
+            // Absent and empty selectors: country index 0, whose mixed-case selector names C3.
+            c("Bravo", [30, 200, 200]),
+            c("Charlie", [30, 200, 200]),
+            // An unknown name: a created default country, position 0.
+            c("Delta", [1, 2, 3]),
+            // Named like one country, selecting another, whose unknown selector keeps position 0.
+            c("Americans", [1, 2, 3]),
+            // The house's own selector, cut to 31 characters, replaces the inheritance.
+            c("Echo", [7, 7, 7]),
+            // Reserved selectors: as absent.
+            c("Foxtrot", [30, 200, 200]),
+            // The list value cut to 19 bytes; a numeric own selector names nothing and keeps it.
+            c("ABCDEFGHIJKLMNOPQRS", [20, 200, 200]),
+            c("Golf", [30, 200, 200]),
+            c("Hotel", [60, 200, 200]),
         ]
     );
-    // "Guards" is no country and its numeric selector names no definition: no entry, so the
-    // viewer's provisional colour applies; the placeholder owner has none either.
+    // A country-only owner, a case variant of a house and an unknown owner are unresolved; the
+    // placeholder is the viewer's.
+    let u: Vec<&[u8]> = got.unresolved.iter().map(Vec::as_slice).collect();
+    assert_eq!(u, [&b"Soviets"[..], b"alpha", b"Nobody"]);
+    assert_eq!(got.warnings.len(), 2);
     let options = Options {
         skirmish: false,
-        map_colours: got,
+        map_colours: got.colours,
+        unresolved_owners: got.unresolved,
         ..Options::default()
     };
     let def = |o: &[u8]| super::build::owner_definition(&import, &options, o);
-    assert_eq!(def(b"Yuri"), ([50, 200, 200], false));
-    assert!(def(b"Guards").1);
+    assert_eq!(def(b"Hotel"), ([60, 200, 200], false));
+    assert_eq!(def(b"Soviets"), ([0, 0, 150], true));
+}
+
+/// spec: S-0009 claim 48 (with no house-list entries, an empty-valued line being none, one house
+/// per country named by the first 20 bytes of its type name, inheriting its colour subject to its
+/// own section's override; owners match those houses exactly). spec: S-0103 claim 14.
+#[test]
+fn map_owner_colours_without_a_house_list() {
+    let countries = "[Countries]\n1=Americans\n2=Soviets\n3=LongCountryNameXYZ0123\n\
+                     [Americans]\nColor=C3\n[LongCountryNameXYZ0123]\nColor=C4\n";
+    let sections = "[Houses]\n0=\n[LongCountryNameXYZ01]\nColor=C9\n";
+    let owners = [
+        "Americans",
+        "Soviets",
+        "LongCountryNameXYZ01",
+        "LongCountryNameXYZ0123",
+        "americans",
+    ];
+    let (got, _) = map_owners(countries, &owners_map(sections, &owners));
+    let c = |n: &str, hsv: [u8; 3]| (n.as_bytes().to_vec(), hsv);
+    assert_eq!(
+        got.colours,
+        [
+            c("Americans", [30, 200, 200]),
+            c("Soviets", [1, 2, 3]),
+            c("LongCountryNameXYZ01", [90, 200, 200]),
+        ]
+    );
+    let u: Vec<&[u8]> = got.unresolved.iter().map(Vec::as_slice).collect();
+    assert_eq!(u, [&b"LongCountryNameXYZ0123"[..], b"americans"]);
 }
 
 /// spec: S-0103 claim 10 (a slot picks the definition at position P(s): slot 0 → position 1,
