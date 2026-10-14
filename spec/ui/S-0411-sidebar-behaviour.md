@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,9 +27,11 @@ Network games and campaigns are out of scope.
 
 **Out of scope — lead decision of 2026-10-14, Interface looks.** Sidebar and shell
 positions, sizes, side-dependent layout, clock artwork, label and count fonts and positions,
-and the lit tab's artwork are the implementer's design (Q-0276 and Q-0283). Message
-positions and fonts are also design choices (Q-0282). This spec fixes their values,
-states and timing, not a reproduction of the original shell. Power values and meaningful
+and the lit tab's artwork are the implementer's design (Q-0276 and Q-0283).
+Shared battlefield status messages instead follow S-0213 claim 25 for wrapping,
+explicit line breaks and imported-font metrics (Q-0282 and Q-0393); that contract
+is separate from sidebar labels. This spec fixes sidebar values, states and timing,
+not a reproduction of the original shell. Power values and meaningful
 meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
 
@@ -538,6 +540,10 @@ last recheck). In addition:
     labels use the two string-table entries in Import mapping and stay only as long
     as claim 8's states hold: no separate expiry duration or message-list place is
     consumed. Queue counts are decimal integers, not string-table messages.
+    S-0213 claim 25 owns the shared battlefield status display's wrapping, explicit
+    line breaks and imported-font metrics, as well as its capacity and lifetime.
+    Those rules do not apply to sidebar labels or queue counts; their font and
+    layout remain design choices, with their values and state-bound presence fixed here.
 
     Placement failure, sell/repair refusal and route-mode notices are respectively
     S-0406's, S-0408's and S-0213's ownership. This claim does not remove a message
@@ -1181,7 +1187,7 @@ the time the script sent a button event, dates a click.
 
 ## Changes for other specs
 
-- S-0404: refresh its paired Summary reference from S-0411 revision 15 to revision 16
+- S-0404: refresh its paired Summary reference to S-0411 claims 9, 14 and 15
   at joint hand-off. Its application-boundary release/refund, sale and capacity contracts
   already agree; no behavioural replacement is required.
 - S-0701: Q-0339's dispatch is now claim 18 and S13 here. Replace its remaining
@@ -1191,8 +1197,9 @@ the time the script sent a button event, dates a click.
   retain that ownership. No behavioural change required.
 - S-0408: Q-0282 sell/repair text/no-text is already answered by claim 18 and S12.
   retain that ownership. No behavioural change required.
-- S-0213: Q-0282 route notices and the shared message lifetime/capacity are already
-  answered by claim 25 and O21; retain that ownership. No behavioural change required.
+- S-0213: claim 25 owns route notices and the shared status display's lifetime,
+  capacity, wrapping, explicit line breaks and font metrics; retain that ownership
+  separately from sidebar labels. No behavioural change required.
 - S-0007: Q-0275 main/alternate icon selection is already claims 22 and 25.
   retain the pointer to claim 16 here. No behavioural change required.
 - S-0103: Q-0275 palette conversion, lifetime and missing-file behaviour are already
