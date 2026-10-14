@@ -194,7 +194,12 @@ fn claim_6_completion() {
     assert_eq!(o.pos.cell(), c(-1, -1));
     assert_eq!(o.pos.x, 256 * c(-1, -1).x + 128);
     assert_eq!(o.owner, Some(A));
-    assert_eq!(o.beh.current, Some(Behaviour::Construction));
+    // spec: S-0406 claim 17 (construction queued at entry, current from the building's first turn)
+    assert_eq!(
+        glasnost_sim::econ::placement::seen_behaviour(o),
+        Some(Behaviour::Construction)
+    );
+    assert!(o.econ.construction.building_up);
     // r = 50 / 200, S = 1000.
     assert_eq!(o.health, 250);
     assert_eq!(o.combat.experience, glasnost_num::soft::F32(0x3f80_0000));
@@ -531,4 +536,68 @@ fn claim_6_insertion_facing() {
     assert_ne!(facing_d(), 0);
     assert_eq!(b.body.value(w.tick), 0);
     assert_eq!(b.turret.value(w.tick), 0);
+}
+
+/// Steps until the vehicle `v` is gone; returns the building it deployed
+/// into.
+fn deployed_building(w: &mut World, v: ObjectId) -> ObjectId {
+    until(w, 30, |w| w.obj(v).is_none()).expect("deployed");
+    buildings(w)[0]
+}
+
+/// Steps a deployed building `b` to its handover; returns (U, C, H): its
+/// first turn, its first construction processing and its handover.
+fn deployed_ticks(w: &mut World, b: ObjectId, limit: i32) -> (i32, Option<i32>, Option<i32>) {
+    let mut u = None;
+    let mut c = None;
+    // The turn pass that deployed it may already have given it its turn.
+    let o = w.obj(b).unwrap();
+    if o.last_turn == w.tick - 1 {
+        u = Some(o.last_turn);
+        assert_eq!(o.beh.current, Some(Behaviour::Construction));
+    }
+    for _ in 0..limit {
+        let t = w.tick;
+        step(w);
+        let o = w.obj(b).unwrap();
+        if u.is_none() && o.last_turn == t {
+            u = Some(t);
+            // spec: S-0406 claim 17 (construction current at the second per-tick start of the first turn U)
+            assert_eq!(o.beh.current, Some(Behaviour::Construction));
+        }
+        if c.is_none() {
+            c = o.econ.construction.first;
+        }
+        if !o.econ.construction.building_up {
+            return (u.unwrap(), c, Some(t));
+        }
+    }
+    (u.unwrap(), c, None)
+}
+
+// spec: S-0406 claim 17 and F7 (deployed: the ready mark at entry, construction current at the building's first turn U, C = U + 1, H = C + (n − 1) × d_b, one build-up run)
+#[test]
+fn claim_6_deployed_construction_times() {
+    let mut w = game(&rules());
+    let v = spawn_v(&mut w, "KIT", c(0, 0), facing_d());
+    order(&mut w, Order::Deploy { actor: v });
+    let b = deployed_building(&mut w, v);
+    let (u, cc, h) = deployed_ticks(&mut w, b, 100);
+    assert_eq!(cc, Some(u + 1));
+    assert_eq!(h, Some(u + 1 + 36));
+}
+
+// spec: S-0406 claim 18 (a deployed building with a positive-delay one-stage range makes construction current but never hands over)
+#[test]
+fn claim_6_deployed_single_stage_never_completes() {
+    let mut r = rules();
+    r.sim.buildings.get_mut("SHOP").unwrap().econ.buildup_frames = Some(2);
+    let mut w = game(&r);
+    let v = spawn_v(&mut w, "KIT", c(0, 0), facing_d());
+    order(&mut w, Order::Deploy { actor: v });
+    let b = deployed_building(&mut w, v);
+    let (u, cc, h) = deployed_ticks(&mut w, b, 300);
+    assert_eq!(cc, Some(u + 1));
+    assert_eq!(h, None);
+    assert_eq!(w.obj(b).unwrap().beh.current, Some(Behaviour::Construction));
 }

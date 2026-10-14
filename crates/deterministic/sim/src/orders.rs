@@ -250,7 +250,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             }
             if let Some(ob) = w.obj_mut(actor) {
                 if matches!(
-                    ob.beh.current,
+                    crate::econ::placement::seen_behaviour(ob),
                     Some(Behaviour::Construction | Behaviour::Selling)
                 ) {
                     // spec: S-0215 claim 12 (the stop order does nothing in construction or selling)

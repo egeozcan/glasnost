@@ -530,9 +530,9 @@ pub fn in_operation(w: &World, id: ObjectId) -> bool {
     if t.needs_engineer && !engineer_inside(w, id) {
         return false;
     }
-    // spec: S-0405 claim 8 (not building or selling: the current behaviour only)
+    // spec: S-0405 claim 8 (not building or selling: the current behaviour only) and S-0406 claim 17 (the queued construction is seen while none is current)
     !matches!(
-        o.beh.current,
+        super::placement::seen_behaviour(o),
         Some(Behaviour::Construction | Behaviour::Selling)
     )
 }
@@ -545,8 +545,9 @@ pub fn firing_answer(w: &World, id: ObjectId) -> Option<Answer> {
         return None;
     }
     let t = bp(w, o.type_index)?;
+    // spec: S-0406 claim 17 (the queued construction is seen while none is current)
     let building_or_selling = matches!(
-        o.beh.current,
+        super::placement::seen_behaviour(o),
         Some(Behaviour::Construction | Behaviour::Selling)
     );
     // spec: S-0405 T1 (illegal: occupiable without firing occupants; being drained; building or selling and not a pulse cannon)

@@ -204,6 +204,7 @@ fn claim_1_factory_being_sold_cannot_make() {
 
 // spec: S-0406 claim 1 and F4 (placed at the centre of the named cell, (256x + 128, 256y + 128), at the surface height; construction begins)
 // spec: S-0108 claim 5 (the construction state begins)
+// spec: S-0406 claim 17 (at entry: no current behaviour and construction queued, which a rule asking for the behaviour sees)
 #[test]
 fn claim_1_placement_point_and_construction() {
     let r = rules();
@@ -215,7 +216,10 @@ fn claim_1_placement_point_and_construction() {
     assert_eq!(o.pos.x, 256 * at.x + 128);
     assert_eq!(o.pos.y, 256 * at.y + 128);
     assert_eq!(o.pos.z, w.surface_at(o.pos.x, o.pos.y));
-    assert_eq!(o.beh.current, Some(Behaviour::Construction));
+    assert_eq!(o.beh.current, None);
+    assert_eq!(o.beh.queued, Some(Behaviour::Construction));
+    assert!(!o.beh.ready_mark);
+    assert_eq!(placement::seen_behaviour(o), Some(Behaviour::Construction));
     assert!(o.econ.construction.building_up);
     assert!(o.on_map);
     // Every cell of the 2 × 2 rectangle holds it.
@@ -228,26 +232,45 @@ fn claim_1_placement_point_and_construction() {
 }
 
 /// A building of type `name` put on the map at the middle in its
-/// construction state, with no other object in play (no other draws).
-fn lone_placed(w: &mut World, name: &str) -> ObjectId {
+/// construction state, with no other object in play (no other draws), as a
+/// place order would put it; returns it and the entry tick *T*. It enters
+/// before the turn pass of tick *T* rather than after it, so its first turn
+/// is on *T*, not *T* + 1; the ready-mark rule of S-0406 claim 17 counts
+/// ticks from entry, so the ticks of F7 are unchanged.
+fn lone_placed(w: &mut World, name: &str) -> (ObjectId, i32) {
     let t = ty(w, name);
     let id = glasnost_sim::objects::create(w, Kind::Building, t, Some(A));
+    let entry = w.tick;
     placement::put_on_map(w, id, c(0, 0), true);
-    id
+    (id, entry)
 }
 
-/// Runs `id` through its construction; returns (C, H): the tick of the
-/// first construction processing and the handover tick, checking claim 14's
-/// cadence (one processing a tick, no draw of the scenario stream) on the
-/// way and that guard is current by the end of the handover tick.
-fn construction_ticks(w: &mut World, id: ObjectId) -> (i32, i32) {
+/// The ticks of a building's construction (S-0406 F6 and F7).
+#[derive(Debug, PartialEq, Eq)]
+struct Ticks {
+    /// *construction* current by the end of this tick.
+    r: i32,
+    /// The first construction processing.
+    c: i32,
+    /// The handover.
+    h: i32,
+}
+
+/// Runs `id` through its construction, checking on the way that nothing is
+/// current and construction queued until *R* (S-0406 claim 17), claim 14's
+/// cadence (one processing a tick, no draw of the scenario stream) from *C*,
+/// and that guard is current by the end of the handover tick.
+fn construction_ticks(w: &mut World, id: ObjectId) -> Ticks {
+    let mut r = None;
     let mut first = None;
     let mut last = w.obj(id).unwrap().beh.last;
-    for _ in 0..200 {
+    for _ in 0..300 {
         let rng = w.rng.clone();
         let t = w.tick;
         glasnost_sim::tick::step(w);
         let o = w.obj(id).unwrap();
+        // spec: S-0406 claim 17 (no step before C takes a draw)
+        assert_eq!(w.rng, rng, "no draw at {t}");
         if first.is_none() {
             first = o.econ.construction.first;
             if let Some(c) = first {
@@ -256,13 +279,25 @@ fn construction_ticks(w: &mut World, id: ObjectId) -> (i32, i32) {
         }
         if !o.econ.construction.building_up {
             assert_eq!(o.beh.current, Some(Behaviour::Guard));
-            return (first.expect("a first processing"), t);
+            return Ticks {
+                r: r.expect("construction current"),
+                c: first.expect("a first processing"),
+                h: t,
+            };
         }
-        assert_eq!(o.beh.current, Some(Behaviour::Construction));
+        if r.is_none() {
+            if o.beh.current == Some(Behaviour::Construction) {
+                r = Some(t);
+            } else {
+                // spec: S-0406 claim 17 (no current behaviour and construction queued until it starts)
+                assert_eq!(o.beh.current, None, "at {t}");
+                assert_eq!(o.beh.queued, Some(Behaviour::Construction), "at {t}");
+            }
+        }
         if first.is_some() {
-            // spec: S-0406 claim 14 (consecutive processings, no timing draw)
+            assert_eq!(o.beh.current, Some(Behaviour::Construction));
+            // spec: S-0406 claim 14 (consecutive processings)
             assert_ne!(o.beh.last, last, "processed at {t}");
-            assert_eq!(w.rng, rng, "no draw at {t}");
         }
         last = o.beh.last;
     }
@@ -271,6 +306,7 @@ fn construction_ticks(w: &mut World, id: ObjectId) -> (i32, i32) {
 
 // spec: S-0108 claim 5 (d_b = trunc(B × 900 / n): n = 5, B = 0.05 give 9, finished 36 ticks after)
 // spec: S-0406 claims 14 and 15 and F6 (delay 1 and no draw whatever the rate; H = C + (n − 1) × d_b; guard current by the end of the handover tick)
+// spec: S-0406 claim 17 and F7 (placed: R = T + (n − 1) × d_b, C = R + 1, H = T + 2(n − 1) × d_b + 1; the build-up runs twice)
 #[test]
 fn claims_14_15_construction_handover() {
     for rate in ["0.016", "2"] {
@@ -287,21 +323,100 @@ fn claims_14_15_construction_handover() {
             glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "HUT")),
             36
         );
-        let id = lone_placed(&mut w, "HUT");
-        let (cc, h) = construction_ticks(&mut w, id);
-        assert_eq!(h, cc + 36, "rate {rate}");
+        let (id, t) = lone_placed(&mut w, "HUT");
+        let k = construction_ticks(&mut w, id);
+        assert_eq!(
+            k,
+            Ticks {
+                r: t + 36,
+                c: t + 37,
+                h: t + 73
+            },
+            "rate {rate}"
+        );
     }
 }
 
 // spec: S-0406 claim 15 and F6 (a type with no build-up sprite: a zero-delay range, H = C + 1)
+// spec: S-0406 claim 17 and F7 (placed, zero-delay range: the mark at the first turn after entry, C = T + 2, H = T + 3)
 #[test]
 fn claim_15_no_buildup_sprite() {
     let mut r = rules();
     r.sim.buildings.get_mut("HUT").unwrap().econ.buildup = None;
     let mut w = game(&r);
-    let id = lone_placed(&mut w, "HUT");
-    let (cc, h) = construction_ticks(&mut w, id);
-    assert_eq!(h, cc + 1);
+    let (id, t) = lone_placed(&mut w, "HUT");
+    let k = construction_ticks(&mut w, id);
+    assert_eq!(
+        k,
+        Ticks {
+            r: t + 1,
+            c: t + 2,
+            h: t + 3
+        }
+    );
+}
+
+// spec: S-0406 Edge cases (quirks.placed_buildup_twice off: the place order sets the ready mark at entry; construction current at the first turn, the build-up seen once, H by F6)
+#[test]
+fn claim_17_placed_buildup_twice_off() {
+    let mut r = rules();
+    r.globals.quirks.placed_buildup_twice = false;
+    let mut w = game(&r);
+    let (id, t) = lone_placed(&mut w, "HUT");
+    assert!(w.obj(id).unwrap().beh.ready_mark);
+    let k = construction_ticks(&mut w, id);
+    // The first turn is on T here (see lone_placed): C = T + 1, H = C + 36.
+    assert_eq!(
+        k,
+        Ticks {
+            r: t,
+            c: t + 1,
+            h: t + 37
+        }
+    );
+}
+
+/// HUT with a build-up sprite of 3 image frames: n = 1, d_b = trunc(0.05
+/// × 900 / 1) = 45 (S-0108 claim 5).
+fn single_stage() -> Ruleset {
+    let mut r = rules();
+    r.sim.buildings.get_mut("HUT").unwrap().econ.buildup_frames = Some(3);
+    r
+}
+
+// spec: S-0406 claim 18 (quirks.single_stage_buildup_never_completes: a placed building with a positive-delay one-stage range keeps construction queued for good; never constructed, never guard, no sell)
+#[test]
+fn claim_18_single_stage_never_completes() {
+    for frames in [3, 1, 0] {
+        let mut r = single_stage();
+        r.sim.buildings.get_mut("HUT").unwrap().econ.buildup_frames = Some(frames);
+        let mut w = game(&r);
+        let (id, _) = lone_placed(&mut w, "HUT");
+        testkit::run(&mut w, 400);
+        let o = w.obj(id).unwrap();
+        assert_eq!(o.beh.current, None, "frames {frames}");
+        assert_eq!(o.beh.queued, Some(Behaviour::Construction));
+        assert!(o.econ.construction.building_up);
+        assert!(!glasnost_sim::econ::sell::sellable(&w, id));
+    }
+}
+
+// spec: S-0406 Edge cases (quirks.single_stage_buildup_never_completes off: the report d_b ticks after the range starts; a placed building reaches construction at T + d_b and hands over d_b ticks after C)
+#[test]
+fn claim_18_switch_off() {
+    let mut r = single_stage();
+    r.globals.quirks.single_stage_buildup_never_completes = false;
+    let mut w = game(&r);
+    let (id, t) = lone_placed(&mut w, "HUT");
+    let k = construction_ticks(&mut w, id);
+    assert_eq!(
+        k,
+        Ticks {
+            r: t + 45,
+            c: t + 46,
+            h: t + 91
+        }
+    );
 }
 
 // spec: S-0406 claim 15 (a gate uses its gate range: n = G + 1, GateStages absent 9; S-0108 claim 5)
@@ -328,7 +443,7 @@ fn claim_15_gate_range() {
 fn claim_15_target_kept() {
     let r = rules();
     let mut w = game(&r);
-    let id = lone_placed(&mut w, "HUT");
+    let (id, _) = lone_placed(&mut w, "HUT");
     let aim = glasnost_sim::world::Target::Cell(c(4, 4));
     w.obj_mut(id).unwrap().target = Some(aim);
     construction_ticks(&mut w, id);
@@ -740,6 +855,8 @@ fn claim_1_place_order_through_production() {
     let o = w.obj(obj).unwrap();
     assert!(o.on_map);
     assert_eq!(o.pos.cell(), at);
-    assert_eq!(o.beh.current, Some(Behaviour::Construction));
+    // spec: S-0406 claim 17 (at entry: construction queued, none current)
+    assert_eq!(o.beh.current, None);
+    assert_eq!(placement::seen_behaviour(o), Some(Behaviour::Construction));
     assert!(e::line(&w, 0, plant).is_none());
 }

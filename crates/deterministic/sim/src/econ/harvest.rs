@@ -604,8 +604,9 @@ fn accepts(w: &World, refinery: ObjectId, harvester: ObjectId, waiting: bool) ->
         return false;
     };
     // spec: S-0402 claim 10 (not in its construction state, not being sold, not switched off)
+    // spec: S-0406 claim 17 (the queued construction is seen while none is current)
     if matches!(
-        b.beh.current,
+        super::placement::seen_behaviour(b),
         Some(Behaviour::Construction | Behaviour::Selling)
     ) || b.econ.sale.is_some()
         || b.econ.building.switched_off
@@ -1505,7 +1506,8 @@ pub fn purifier_count(w: &World, house: HouseId) -> i64 {
                 && b.owner == Some(house)
                 && b.on_map
                 && b.health > 0
-                && b.beh.current != Some(Behaviour::Construction)
+                // spec: S-0406 claim 17 (the queued construction is seen while none is current)
+                && super::placement::seen_behaviour(b) != Some(Behaviour::Construction)
                 && r.econ
                     .harvest
                     .buildings

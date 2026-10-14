@@ -485,13 +485,18 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
         }
         return CONSTRUCTION_DELAY;
     };
-    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); a one-stage positive-delay range is open (S-0406 open question 6, request Q-0130): C + 1 as well
-    if tick.wrapping_sub(c) < crate::econ::sell::buildup_ticks(w, o.type_index).max(1) {
+    let never = w.rules().quirks.single_stage_buildup_never_completes;
+    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); claim 18 (a positive-delay range of one stage or fewer never hands over)
+    let Some(after) = crate::econ::sell::buildup_range(w, o.type_index).report_after(never) else {
+        return CONSTRUCTION_DELAY;
+    };
+    if tick.wrapping_sub(c) < after {
         return CONSTRUCTION_DELAY;
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.econ.construction.building_up = false;
         ob.econ.construction.first = None;
+        ob.econ.construction.entry = None;
         // spec: S-0406 claim 15 (guard queued, current at the second per-tick start of this tick, S-0215 claim 11; the target is kept)
         ob.beh.queue(Some(Behaviour::Guard));
         ob.beh.ready_mark = true;
