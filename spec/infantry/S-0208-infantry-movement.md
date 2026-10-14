@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -34,7 +34,9 @@ infantry landing point open. Claims 19 and 20 answer that part. They do not cove
 teleport. S-0417 claim 10 supplies a concrete infantry factory-release tether situation.
 For an infantry unit that approaches its target, S-0215 claim 37 owns when the approach step runs
 and whether it keeps, renews or takes a destination, S-0307 owns the approach position and the
-outcomes of a failed search, and S-0310 claim 8 owns the firing check's *moving* answer. This spec
+outcomes of a failed search, including claim 22's close-range searches. This spec owns the
+ordinary walking outcome of its near-target shortcut (claim 21 below), and S-0310 claim 8 owns
+the firing check's *moving* answer. This spec
 answers Q-0072 question 3 for ordinary walking infantry: when the walker stops and what happens
 to its destination (claims 16 and 17, scenario W10). The approach step keeping a destination
 does not exempt it from these arrival rules. Infantry of a
@@ -94,7 +96,8 @@ used by this spec:
 - **Occupancy record.** The per-cell record of which standing positions are taken, owned by S-0209.
   A cell has one record for the ground and one for its bridge deck.
 - **Walking target.** The point a walking infantry unit is currently heading for: a standing
-  position in the cell it is entering (claims 3 and 4).
+  position in the cell it is entering (claims 3 and 4), or a position in its own cell selected
+  by claim 21.
 - **Step vector.** For a step direction (glossary *step direction*: 0 map north, 2 map east, 4 map
   south, 6 map west), the one-cell step in direction *d* moves a point by 256 leptons along each map
   axis that the direction uses, for example (+256, −256) for direction 1.
@@ -279,6 +282,13 @@ used by this spec:
    rows R0 and R1 both lead with the right position, a walker whose desired point has class centre
    and that enters an empty cell stands at the right position with probability 1/2, and at the left
    and bottom positions with probability 1/4 each.
+
+   **Other uses of the position choice.** S-0307 claim 22(b) and (c) use this table with
+   the target's reference point as the desired point, not the walker's shifted position. Both
+   read the chosen cell's ground occupancy record on any surface. For the shortcut in (b),
+   that cell is the attacker's own cell and its own entry still counts as taken. These choices
+   supply approach points, not reservations by themselves. Claim 21 below owns the walking
+   consequence of a successful shortcut.
 
    The chosen position is reserved at once: from the tick on which the walker chooses it, the
    occupancy record of the cell being entered shows that position as taken, and the walker's
@@ -501,7 +511,7 @@ used by this spec:
     the eight neighbours of its scatter centre cell, in the step directions *d*, *d* + 1, …, *d* + 7
     (mod 8), in that order of preference. A candidate *qualifies* when it lies inside the usable area
     by the height-aware test of S-0009 claim 4 (Terms) and is enterable for the unit. The unit's destination is the first qualifying candidate that also
-    passes the screen-cover check at its own height level and is not a high-bridge cell. When no qualifying candidate is both,
+    passes the screen-cover check at its own height level and is not a high-bridge cell. The high-bridge raise within that check is our engine's provisional choice; the corresponding condition in the original remains unidentified (Terms, *screen-cover check*). When no qualifying candidate is both,
     its destination is the first qualifying candidate, whatever the check gives and whether or not it
     is a high-bridge cell. The unit then moves there as under a move order. When no candidate
     qualifies, it does not move.
@@ -841,6 +851,43 @@ used by this spec:
       destination followed by a discriminating comparison)
     - Confidence: medium for the placement condition; high that there is no owner test
 
+### Close-range movement inside the current cell
+
+21. **Walking outcome of the near-target shortcut.** When S-0307 claim 22(b)'s shortcut
+    succeeds and the search may change the actor, an ordinary walking infantry attacker is
+    given an immediate walking target in its own cell. Let *P* be the shortcut's selected
+    point. The walking target is chosen again by claims 3 and 4, now with *P* as the desired
+    point. For this second choice the attacker's old reservation is released, so its own entry
+    does not count as taken. The choice uses ground occupancy unless the cell carries a high
+    bridge and the attacker's current height exceeds the terrain surface height at *P* by more
+    than 312 leptons, a strict integer comparison. In that case it uses deck occupancy and the
+    deck standing-position height. The chosen walking target is reserved as in claim 3.
+
+    On ground in the ordinary occupant-respecting case, *P* is a side position and this
+    second choice keeps it: the shortcut found it free, and releasing the attacker's own entry
+    cannot make it taken. No second position-choice draw occurs. On a deck the second choice
+    can instead select another side position, or find none, because the shortcut read ground
+    occupancy while this choice can read deck occupancy. No position means no immediate
+    walking target, not a transfer to the ground.
+
+    The target object is kept and the destination becomes the cell of the target's reference
+    point, not the attacker's own cell or *P*. Its locomotor destination is therefore the cell
+    centre and height of claim 18. The immediate walking target is not replaced merely by
+    assigning that destination. The infantry walks towards it by claims 6 to 10, without an
+    intervening path step into a neighbouring cell. Reaching it is a cell-arrival update even
+    though the infantry has not changed cell. Claims 16 and 17 then decide whether the walk
+    ends: a different destination cell alone does not complete on that arrival, but claim 17
+    can clear the destination when its mobile-target range and behaviour conditions hold.
+    Otherwise the destination remains, and further walking and path computation use the
+    ordinary rules. A later order or approach processing can change it normally. When the
+    search may not change the actor, neither the walking target nor the destination changes.
+
+    This claim covers ordinary walking infantry only. The shortcut's selection and initial
+    draw are S-0307's; it does not prescribe another locomotor's response to the point.
+    - Backing: `measurable` (scenario W13; S-0307 scenario RG23 backs the shortcut selection)
+    - Confidence: high for the two distinct points and the second position choice; medium
+      for the combined arrival and subsequent destination outcome
+
 ## Formulas
 
 **F1. Distance from the centre.** *r* = trunc(√̃((*u* − 128)² + (*v* − 128)²)), where √̃ is the
@@ -961,7 +1008,7 @@ positions are never taken, as claim 3 says).
 | Screen-cover threshold for the cell *i* cells away | 2*i* − 1 | height levels above *C* | Terms, *screen-cover check* |
 | Screen-cover high-bridge raise | 4 | height levels | Terms, *screen-cover check* (applied whenever *C*ᵢ is a high-bridge cell) |
 | Level of a cell outside the map, for the screen-cover check | 0 | height level | Terms, *screen-cover check* |
-| Height tolerance for the end of a walk | 2 height levels (208 leptons, strict) | leptons | claim 16 |
+| Walk-end height threshold | 208 | leptons; the absolute height difference must be strictly less than this value (two height levels) | claim 16 |
 | High-bridge addition to a cell locomotor destination | 414 | leptons | claim 18; independent of the walker's layer |
 | Height above destination terrain surface needed for teleport standing-position deck mode | more than 312 | leptons | claim 19; strict integer comparison |
 
@@ -1986,6 +2033,31 @@ cases).**
 - *Falsifiers:* a successful clearance exchange without a tether falsifies the setup's
   premise; a general scatter while the tether is the only failed condition falsifies claim
   15. Failure to find the required interval leaves that condition unmeasured.
+
+**Scenario W13: close-range movement within the current cell (claim 21).**
+
+- *Setup:* a tiny flat clear skirmish map, one human-controlled house and one bystander
+  computer player, game speed index 2, stock data, director and mods off. Use ordinary walking
+  infantry with the close-range property described by S-0307. Pre-place the attacker at the
+  top position and a legal enemy target in a neighbouring cell. Keep the observed area free
+  of other actors. Use S-0307 RG23(b)'s successful-shortcut geometry and repeat with each side
+  position occupied in turn. Repeat on a high bridge with different ground and deck occupants.
+- *Procedure:* give an attack order with scripted input. In three runs per arrangement,
+  record ticks, positions, walking target, destination, target and occupancy reservations
+  through the first arrival and the next approach processing. A read-only recorder is
+  proposed for points and destinations not distinguishable in a screen capture. Apply the
+  glossary's bystander void rule.
+- *Observable:* whether the first movement stays in the attacker's cell, its reserved side
+  position, whether its destination names the target-reference cell, and the destination on
+  arrival. Separate these events from later approach processing.
+- *Expected:* on ground a successful shortcut walks to its selected side position while the
+  destination is the target-reference cell. On arrival the destination is cleared exactly
+  when claim 16 or 17 applies, not merely because the immediate point was reached. On a deck,
+  the final walking target respects deck occupancy even though the shortcut read ground
+  occupancy. A refused second choice gives no immediate walking target.
+- *Falsifiers:* movement directly to the target-cell centre instead of the in-cell position,
+  replacing the destination with the attacker's cell, ignoring deck occupants in the second
+  choice, or completion on that arrival despite neither claim 16 nor claim 17 holding.
 
 ## Open questions
 
