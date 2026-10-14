@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -186,9 +186,10 @@ addition:
    many foundation cells inside the spread takes several hits from one detonation, and a large
    building takes more damage from a wide spread than a small one with the same armour
    (`quirks.area_damage_per_foundation_cell`). Once a hit has destroyed it, its remaining hits from
-   the same detonation do nothing (claim 9), except that a building kept alive and in play with
-   positive health by S-0302's delayed-kill rule remains eligible for its later entries in that
-   detonation; those hits follow S-0302 claim 16. With S-0302's minimum for undemolishable buildings
+   the same detonation do nothing (claim 9), except that a building kept alive at 1 health by a
+   delayed kill remains eligible for later hits of the same detonation, as S-0302 claim 16
+   specifies. Claim 9's alive, positive-health, on-map and in-play tests still apply.
+   With S-0302's minimum for undemolishable buildings
    (claim 7), even hits that the falloff or the versus value bring to 0 cost such a building 1
    health point each.
    - Backing: `measurable` (scenario A3; S-0302 scenario D13 part d for the delayed-kill exception)
@@ -555,14 +556,7 @@ lies outside the list (Edge cases).
 
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). All debris is created at the projectile position *Q* (claim 22).
 
-For a nonempty retained type list, number the *m* types from 0 to *m* − 1 and pair each type with its corresponding maximum. Begin with remainder ℓ₀ = *N*. For each assignment state *j* with ℓⱼ > 0, the next scenario-random-stream value is read as a signed integer, raw*ⱼ*. Let *i*ⱼ be the remainder of *j* divided by *m*. The assigned count and next remainder are given by the following state table:
-
-| Condition | Assigned pieces | Next remainder | Stream value consumed |
-|---|---|---|---|
-| ℓⱼ > 0 | *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢⱼ + 1), ℓⱼ), of type *t*ᵢⱼ | ℓⱼ₊₁ = ℓⱼ − *g*ⱼ | one signed raw value |
-| ℓⱼ = 0 | none | unchanged | none |
-
-The remainder operation is the magnitude-first remainder of S-0202 claim 6. Assignment ends when the remainder first becomes 0; the raw value that produces 0 is included. If the remainder never becomes 0, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
+For a nonempty retained type list, number the *m* types from 0 to *m* − 1 and pair each type with its corresponding maximum. Begin with remainder ℓ₀ = *N*. For each assignment while ℓⱼ > 0, consume the next scenario-random-stream value as a signed integer, raw*ⱼ*. Let *i*ⱼ be the remainder of *j* divided by *m*. The assignment is *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢⱼ + 1), ℓⱼ) pieces of type *t*ᵢⱼ, leaving ℓⱼ₊₁ = ℓⱼ − *g*ⱼ pieces. The remainder operation is the magnitude-first remainder of S-0202 claim 6. Stop once the remaining count is 0; the raw value that reduces it to 0 is included. If the remainder never becomes 0, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
 
 **F7. Flying-object search** (claims 6 and 11). Let *W* and *H* be the map's width and height
 (S-0009) and *B* = *W* + *H* − 1, the largest cell coordinate of the map along either axis. Sector
@@ -597,7 +591,7 @@ sectors *C* + *k*(*d*ₓ, *d*ᵧ) for *k* = 1, 2, …, each clamped as above, an
 order: north and west with (−1, −1), south and west with (−1, +1), north and east with (+1, −1),
 and south and east with (+1, +1).
 
-The ordered sector set consists of *C*, followed by the nonempty east, north, south and west runs, then the four diagonal groups, in the orders defined above. Within each diagonal group, sectors follow the stated outward-diagonal order and then the stated order of its two extra sectors. The candidate sequence contains the tracked flying objects registered in those sectors: sector order determines the order between sectors, and registration order determines the order within each sector. Each candidate occurs once. Sectors outside this set, including (−3, −1) from *C* when every run is at least 3 long, are not searched. Units: cells, sectors.
+The ordered sector set consists of *C*, followed by the nonempty east, north, south and west runs, then the four diagonal groups, in the orders defined above. Within each diagonal group, sectors follow the stated outward-diagonal order and then the stated order of its two extra sectors. Every tracked flying object registered in one of these sectors is a candidate exactly once. Candidates in different sectors follow the sector order; candidates within one sector follow registration order. No tracked flying object registered in a sector outside this set is a candidate under this search. For example, (−3, −1) from *C* is not searched when every run is at least 3 long. Units: cells, sectors.
 
 With `quirks.flying_search_sectors` off, the candidates are every tracked flying object, in the
 order of registration, each once.
