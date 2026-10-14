@@ -384,6 +384,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 F2 (the standard delay D_r + U(0, 2))
         dr.wrapping_add(w.rng.ranged(0, 2, half))
     } else {
+        // spec: S-0417 claims 12 and 13 (idle apron clearing of a vehicle factory, its scatter draws before the delay draw)
+        crate::econ::release::idle_apron(w, id, o.beh.expired);
         // spec: S-0215 claim 32 (3 × D_r + U(0, 2))
         dr.wrapping_mul(3).wrapping_add(w.rng.ranged(0, 2, half))
     }

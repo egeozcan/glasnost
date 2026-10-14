@@ -408,3 +408,152 @@ fn save_round_trip_mid_unloading() {
         glasnost_sim::save::state_hash(&w)
     );
 }
+
+/// An infantry factory with a rally point six cells off; returns the
+/// factory and the rally point.
+fn barracks_with_rally(w: &mut World) -> (ObjectId, Target) {
+    let k = building(w, "BARRACKS", 0, 0, 0);
+    let tl = top_left(w, k);
+    let rally = Target::Cell(CellXY::new(tl.x + 6, tl.y + 6));
+    w.obj_mut(k).unwrap().guard_spot = Some(rally);
+    (k, rally)
+}
+
+// spec: S-0417 claim 10 (U10 a: with a rally point off its cell, the placement fall-back makes the rally the destination; then the guard spot becomes the rally, move is queued and the destination is the exit cell; contact and tether; the second leg to the rally after the first falls back at the exit cell)
+// spec: S-0215 claim 13 (the guard-spot row)
+#[test]
+fn claim_10_infantry_two_legs() {
+    let mut w = game(&ruleset());
+    let (k, rally) = barracks_with_rally(&mut w);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    let rng = w.rng.clone();
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    // spec: S-0417 claim 12 (turning the guard spot into a destination and the contact exchange take no draw)
+    assert_eq!(w.rng, rng);
+    let o = w.obj(grunt).unwrap();
+    assert_eq!(o.guard_spot, Some(rally));
+    let Some(Target::Cell(exit)) = o.dest else {
+        panic!("a cell destination: {:?}", o.dest)
+    };
+    assert_ne!(Target::Cell(exit), rally);
+    assert_eq!(o.beh.current, None);
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    assert!(release::tethered(&w, grunt));
+    let mut second = false;
+    for _ in 0..400 {
+        step(&mut w);
+        let o = w.obj(grunt).unwrap();
+        if o.dest == Some(rally) && o.guard_spot.is_none() {
+            second = true;
+            assert_eq!(
+                o.contact, None,
+                "the clear report came at the exit cell first"
+            );
+            break;
+        }
+    }
+    assert!(second, "the second leg to the rally point");
+}
+
+// spec: S-0417 claim 10 (U10 c: a jumpjet or teleporting infantry type heads straight for the rally point with an empty guard spot)
+#[test]
+fn claim_10_teleporting_infantry_goes_straight() {
+    let mut r = ruleset();
+    r.sim.infantry.get_mut("GRUNT").unwrap().teleporter = Some(true);
+    let mut w = game(&r);
+    let (k, rally) = barracks_with_rally(&mut w);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    let o = w.obj(grunt).unwrap();
+    assert_eq!(o.dest, Some(rally));
+    assert_eq!(o.guard_spot, None);
+    assert!(release::tethered(&w, grunt));
+}
+
+// spec: S-0417 claim 10 (no rally point: the release gives no destination of its own) and Q-0120 (interim: the unit walks to its exit cell)
+#[test]
+fn claim_10_no_rally_interim_walk_out() {
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    let o = w.obj(grunt).unwrap();
+    assert_eq!(o.guard_spot, None);
+    assert!(matches!(o.dest, Some(Target::Cell(_))));
+    assert_eq!(o.beh.current, Some(Behaviour::Move));
+}
+
+// spec: S-0417 claim 11 (U12: docked at K, contact and a tether request on the same tick; a type that need not return to a dock is tethered, one that must return refuses; contact in both cases)
+#[test]
+fn claim_11_aircraft_tether() {
+    for bound in [false, true] {
+        let mut r = ruleset();
+        r.sim.aircraft.get_mut("PLANE").unwrap().econ.airport_bound = Some(bound);
+        let mut w = game(&r);
+        let k = building(&mut w, "AIRPAD", 0, 0, 0);
+        let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
+        assert_eq!(release::release(&mut w, k, plane), Outcome::Released);
+        let o = w.obj(plane).unwrap();
+        assert_eq!(o.contact, Some(k), "bound {bound}");
+        assert_eq!(release::tethered(&w, plane), !bound, "bound {bound}");
+    }
+}
+
+/// Calls `each` with the tick of every processing of K over `ticks` ticks.
+fn processings(w: &mut World, k: ObjectId, ticks: i32, mut each: impl FnMut(&World, i32)) {
+    let mut last = w.obj(k).unwrap().beh.last;
+    for _ in 0..ticks {
+        let t = w.tick;
+        step(w);
+        let l = w.obj(k).unwrap().beh.last;
+        if l != last {
+            each(w, t);
+            last = l;
+        }
+    }
+}
+
+// spec: S-0417 claim 13 (U11 a: an idle vehicle factory in guard makes no apron test at the first processing after guard starts, and sends claim 4's request at each later one while E is occupied; delay 3 × D_r + U(0, 2))
+#[test]
+fn claim_13_idle_apron_clearing() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let e = release::apron(&w, k).unwrap();
+    let t = w.tick;
+    w.obj_mut(k).unwrap().beh.force(Behaviour::Guard, t, true);
+    let jeep = spawn_at(&mut w, Kind::Vehicle, "JEEP", e);
+    let dr = w.rules().behaviour(Behaviour::Guard).rate_delay;
+    let mut seen = Vec::new();
+    processings(&mut w, k, 6 * dr + 20, |w, t| {
+        seen.push((t, w.obj(jeep).unwrap().dest.is_some()));
+    });
+    assert!(seen.len() >= 2, "{seen:?}");
+    assert!(!seen[0].1, "no request at the first processing");
+    assert!(seen[1].1, "a request at the second");
+    let gap = seen[1].0 - seen[0].0;
+    assert!((3 * dr..=3 * dr + 2).contains(&gap), "{gap} for D_r {dr}");
+}
+
+// spec: S-0417 claim 13 (no apron test while the factory is armed or has the stupid-guard-mode flag, nor for a building without the vehicle factory flag)
+#[test]
+fn claim_13_no_clearing() {
+    for stupid in [false, true] {
+        let mut r = ruleset_with([3, 2]);
+        r.sim.buildings.get_mut("VF").unwrap().stupid_guard_mode = Some(stupid);
+        let mut w = game(&r);
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let e = release::apron(&w, k).unwrap();
+        let t = w.tick;
+        w.obj_mut(k).unwrap().beh.force(Behaviour::Guard, t, true);
+        let jeep = spawn_at(&mut w, Kind::Vehicle, "JEEP", e);
+        let dr = w.rules().behaviour(Behaviour::Guard).rate_delay;
+        testkit_run(&mut w, 6 * dr + 20);
+        assert_eq!(w.obj(jeep).unwrap().dest.is_some(), !stupid);
+    }
+}
+
+fn testkit_run(w: &mut World, n: i32) {
+    for _ in 0..n {
+        step(w);
+    }
+}
