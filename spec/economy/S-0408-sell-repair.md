@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -202,6 +202,14 @@ its *master*, and slaves *inside* rather than on the map. In addition:
    | Build-down | Its range and stage delay are S-0108's (claim 5); its completion and removal tick are claim 17 below. |
    | Processing that finds build-down complete | In that same tick the house receives the building's refund (claim 1), then the value of its stored resources (claim 10), and the building is removed. There is no extra tick after the completion report. |
 
+   For a slave-master building, the first processing also follows S-0402 claim 28's
+   conditional resource-directed site rule. It recalls slaves and puts their group into
+   packing only when a qualifying remembered resource destination yields a site; a failed
+   search or a destination that does not qualify leaves the group unchanged by that rule.
+   Starting selling or packing therefore does not by itself recall every slave. S-0402
+   claim 27 owns the group updates that can continue while the building is selling,
+   and claim 28's scenario H23 tests this conditional recall.
+
    For a refinery, being told to leave has the effects of S-0402 claim 11: an unloading
    harvester leaves its unloading state, scatters, starts *harvest* with its unpaid load,
    and loses contact; a harvester still in *enter* queues *guard* and scatters instead.
@@ -225,7 +233,7 @@ its *master*, and slaves *inside* rather than on the map. In addition:
    - Backing: `measurable` (scenario S5, parts a to f; S-0312 scenario D14, variant g)
    - Confidence: high (refund at the end, no refund when destroyed, the stopped sale, the next
      eligible own-turn removal and second destruction round, the releases before the
-     build-down), medium (the step timing of the releases), low (which links count as docked and
+     build-down, the conditional slave recall), medium (the step timing of the releases), low (which links count as docked and
      hold the sale; the bunker release, measured by S5 part d; the place of the garrison in the
      order, measured by S5 part a)
 
@@ -331,13 +339,19 @@ its *master*, and slaves *inside* rather than on the map. In addition:
     garrison and survivor release of claim 6. Selling only an upgrade (claim 5) does not remove
     the master and therefore does not free its slaves. Successful packing-up instead preserves
     the working group and makes the resulting vehicle its master (S-0415 claim 10); the
-    vehicle and hidden-unit outcome of a failed conversion remains S-0415 claim 11's, not a
-    true sale of the master. Destruction during a sale remains a destruction case (S-0312),
+    retained off-map vehicle after failed placement is S-0415 claim 11's outcome, not a
+    successful transfer of the working group. That vehicle does not inherit the old group's
+    slaves. Removal of the old building ends that group with the hidden-slave removal and
+    on-map recipient or no-recipient hit described above; the retained vehicle is not their
+    new master. This shared slave-cleanup result does not make a failed pack-up a true sale:
+    its vehicle, refund and quirk remain governed by S-0415 claim 11.
+    Destruction during a sale remains a destruction case (S-0312),
     not this attacker-less sale case. The exact tick of slave cleanup relative to refund and
     foundation removal remains open.
-    - Backing: `measurable` (scenario S13)
-    - Confidence: high for hidden removal, recipient selection and no replacement,
-      medium for the sale integration, guard reset and no-recipient hit
+    - Backing: `measurable` (scenario S13, including its failed-placement control)
+    - Confidence: high for hidden removal, recipient selection, no replacement and no
+      old-group transfer on failed placement; medium for the sale integration, guard reset
+      and no-recipient hit
 
 ### Selling other things
 
@@ -1017,6 +1031,13 @@ tick number. Any game speed.
   setup, with target and destination cleared and *guard* given. No replacements or slave
   refunds occur. The control preserves the existing group under the resulting vehicle.
   Record cleanup ticks rather than assuming they equal the foundation-removal tick.
+- *Failed-placement control:* use S-0415 claim 11's scenario D8 setup with a slave-master
+  building, some hidden and some emerged slaves, and the ordinary civilian-side recipient.
+  Repeat three times, recording the same slave identities and group links through building
+  removal. Expect the old hidden slaves to be removed and the old on-map slaves to become
+  the recipient's, not the retained off-map vehicle's slaves. That vehicle's existence and
+  refund remain S-0415 claim 11's; do not confuse any new group it has with the old group.
+  Inheritance of any old slave by that vehicle falsifies this control.
 - *Recipient variants:* in named map data, give the human player's country the civilian side
   while retaining the normal neutral house. The earlier-created player is then the recipient.
   In a separate variant ensure no existing country's house belongs to that side; the on-map
