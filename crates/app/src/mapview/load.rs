@@ -214,6 +214,18 @@ pub async fn load_with(
         // the viewer's sandbox, glasnost_sim::load::sandbox_setup).
         options.skirmish = false;
     }
+    if make.is_some()
+        && options.slots.is_empty()
+        && let Ok((_, _, setup, _)) = &started
+    {
+        // spec: S-0103 claim 10, S-0412 claim 7 (each player house's colour slot as the lobby resolved it)
+        options.slots = setup
+            .houses
+            .iter()
+            .zip(&setup.skirmish.houses)
+            .filter_map(|(h, v)| Some((live::name_bytes(&h.name), v.colour?)))
+            .collect();
+    }
     let inputs = Inputs {
         map: &map,
         import: &import,
