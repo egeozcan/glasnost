@@ -61,6 +61,10 @@ pub struct Quirks {
     // spec: S-0011 claim 21 and Edge cases
     #[serde(default = "on")]
     pub exact_trigger_type_names: bool,
+    /// A vehicle's killing hit makes the extra destruction-raise group before the common group; off: only the common group, for every vehicle.
+    // spec: S-0312 claim 29, S-0011 claim 19
+    #[serde(default = "on")]
+    pub vehicle_destruction_extra_raises: bool,
     /// The 'magnitude first' remainder keeps the negative sign of −2147483648.
     // spec: S-0202 Edge cases
     #[serde(default = "on")]
@@ -1122,6 +1126,7 @@ impl Default for Quirks {
             entered_by_country_only: true,
             none_owner_is_first_country: true,
             exact_trigger_type_names: true,
+            vehicle_destruction_extra_raises: true,
             random_magnitude_overflow: true,
             update_order_removal_skip: true,
             table_root_distance: true,
@@ -1410,6 +1415,10 @@ impl Quirks {
                 self.none_owner_is_first_country,
             ),
             ("exact_trigger_type_names", self.exact_trigger_type_names),
+            (
+                "vehicle_destruction_extra_raises",
+                self.vehicle_destruction_extra_raises,
+            ),
             ("random_magnitude_overflow", self.random_magnitude_overflow),
             ("update_order_removal_skip", self.update_order_removal_skip),
             ("table_root_distance", self.table_root_distance),

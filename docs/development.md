@@ -328,10 +328,10 @@ mission timer (`TriggerState::mission`), reveal around a waypoint, and the prese
 actions as `Effect::Trigger` (the audio crate plays sound and sound-at-waypoint by name).
 Interim rules and gaps:
 
-- The owner-house raise comes last in the house's own update (Q-0267).
-- No carrier raises yet: entered-by, destroyed-by-anything and bridge destroyed wait for their
-  moments (Q-0268). `triggers::raise` takes them once specified.
-- A satisfied instance is re-armed before its actions fire (Q-0269).
+- Carrier raises: `triggers::cell_entered` (S-0011 claim 18; called at the arrival of S-0207 and
+  S-0208 claim 22) and `triggers::destruction_raises` (S-0011 claim 19 with S-0312 claim 29's
+  groups; called in the killing hit before death debris). The bridge-destroyed raise waits for
+  bridge destruction.
 - Sound at a waypoint plays the sound once at the cell's centre; giving a building or terrain object
   on the cell the sound as its ambient sound (claim 32) waits for ambient sounds in the audio crate.
   Text messages, speech and radar events reach the presentation as effects but are not shown yet.

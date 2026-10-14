@@ -7035,6 +7035,11 @@
           "type": "boolean",
           "default": true
         },
+        "vehicle_destruction_extra_raises": {
+          "description": "A vehicle's killing hit makes the extra destruction-raise group before the common group; off: only the common group, for every vehicle.",
+          "type": "boolean",
+          "default": true
+        },
         "vertical_speed_uncapped": {
           "description": "A vertical projectile's speed grows by its acceleration without a cap.",
           "type": "boolean",
