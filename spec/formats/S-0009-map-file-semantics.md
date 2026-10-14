@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1344,16 +1344,19 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       searchlight's behaviour. What the values mean belongs to the lighting topic (no spec covers
       searchlights yet, a pointer only).
 
-    The computer-repair flag is read by the original's automatic building repair (S-0314, claim
-    8): a building with the flag set may have its repair switched on by that rule, and the rule is
-    gated by the house skill level. The computer-sell and computer-rebuild flags steer the original's
-    computer players, whose base logic is outside the specs. The *neutral* and *special* houses
+    The computer-repair flag is read by automatic building repair (S-0314 claim 13), subject
+    to the house skill-level gate of S-0314 claim 8 and the further conditions of its claims
+    12 and 15. Human-controlled houses, and AI houses in our engine, need no repair flag.
+    An uncaptured building of the neutral or special house needs it. The computer-sell and
+    computer-rebuild flags steer the original's computer players, whose base logic is outside
+    the specs. Automatic skirmish sales ignore the computer-sell flag (S-0314 claim 14):
+    clearing it does not prevent a sale under that rule. The *neutral* and *special* houses
     (glossary, *AI house*, *Player houses only*) keep the original's rules for owners that are not
     human-controlled. Their house skill level is 0, as for a human-controlled house, because the
     program's setup gives a level above 0 only to houses of players, so S-0314's gate treats
     their buildings as it treats a human-controlled house's: with the repair-and-sell threshold
     above 0, the repair flag has no effect on a building of either house, whatever its value; with
-    a threshold of 0 or below, S-0314 (claim 8) owns the outcome for every house. Of the two
+    a threshold of 0 or below, S-0314 claims 12 to 15 own the outcome for every house. Of the two
     other flags, no rule of play is known that acts on a building of the neutral or special house
     (a passive house also runs no computer logic); whether a non-passive neutral or special house
     (claim 28) runs the computer players' base logic on its buildings is not established
@@ -1368,17 +1371,18 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       and the damaged variant, variant B for the sprite turret slot, variant C for an eligible
       switched-off start, variant D for upgrades and the carried-over field; S-0405 W13 for
       the startup power-state conditions and firestorm-wall cases; S-0215 B36 for the
-      queued/current distinction). The effects of the three
-      computer flags are `unmeasured` here: the repair flag's effect is S-0314's (its scenario
-      H9 measures the gate), and the sell and rebuild flags act only through the computer
-      players' base logic, which no scenario of this spec observes. The first automatic
+      queued/current distinction; S-0314 H13 and H15 for the repair flag's effect and
+      automatic-start pacing; S-0314 H14 for automatic sales ignoring the sell flag).
+      The sell and rebuild flags' effects through the original's computer players' base
+      logic are `unmeasured`: no scenario of this spec observes that out-of-scope logic. The first automatic
       start of queued *guard* remains unresolved (Q-0241). S-0215 B36 is the proposed
       investigation, not evidence for a bootstrap tick or perpetual inactivity. Firing alone
       does not separate *guard* from other firing behaviours; the recorder must distinguish
       current from queued behaviour.
     - Confidence: high for the complete start in the idle state; medium for the slots not started,
-      the switched-on flag and the upgrades; low for the carried-over upgrade field; medium for the account of the three computer flags (the repair
-      flag read by S-0314's rule, no known effect of the others on the two non-player houses)
+      the switched-on flag and the upgrades; low for the carried-over upgrade field.
+      High for the repair-flag condition and automatic sales ignoring the sell flag
+      (S-0314 claims 13 to 15); medium for the other computer-flag effects.
 
 41. **Other object fields.**
     - *Behaviour name* (vehicles, aircraft, infantry): the behaviour the object starts with, by
