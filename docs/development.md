@@ -202,11 +202,13 @@ Q-0470 is answered by S-0105 revision 13, claim 22 and F6: a part or shadow imag
 
 Q-0460 is answered by S-0409 revision 10 (claim 5, F2) and S-0101 revision 10 (claim 3, F2: the exact lift is the drawing lift only; `mapview::tests::drawing_lift_is_not_the_sight_lift`): the sight centre keeps its own floating-point simulation lift (`glasnost_sim::econ::shroud::height_lift`, unchanged, now cited to S-0409 F2 and tested on its check values: level 20 moves the centre 9 cells, not the 10 of the exact drawing lift), while the renderer draws with S-0101 claim 3's exact lift; S-0102 revision 13 retires `quirks.overlay_lift_exact_levels`, so overlays lift exactly 15 per level (`mapview::quirks::overlay_depth_lift`).
 
+Q-0490 is answered by S-0102 revision 14, claim 33: when `BUILDNGZ.SHA` is missing, cannot be read as a shape file, has no image frames (whatever its canvas) or has an image frame 0 that cannot be decoded, the map view and the live game warn once with a scene note naming the file and the failure (`mapview::build::read_companion`, `notes::no_companion`) and draw every eligible body with no companion: the same draw point and claim 13 bias, the plain upright profile of F2, writing depth, and no longer provisional. A valid image frame 0 with an empty rectangle keeps its empty coverage (the body draws nothing and writes no depth, on the CPU and the GPU) with no warning. Foundations 8 or more cells wide use no companion either way. Remembered bodies are not drawn yet, so their recovery waits with them. A frame with a rectangle but no pixel data is Q-0520.
+
 **Open requests and their placeholders.**
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `app::mapview::build` (`body_companion`) | without `BUILDNGZ.SHA`, or with an unreadable image frame 0, a building body on a foundation under 8 cells wide is drawn with the plain upright profile (S-0102 F2), marked provisional and noted; S-0102 leaves missing-file recovery unspecified | Q-0490 |
+| `app::mapview::build` (`read_companion`) | an image frame 0 of `BUILDNGZ.SHA` with a non-empty rectangle and pixel-data position 0 is treated as undecodable (S-0102 claim 33): an eligible body is drawn with the plain upright profile (S-0102 F2), marked provisional and noted; claim 33 does not say whether such a frame is undecodable or a valid frame with empty coverage | Q-0520 |
 | `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
 
 ## Map viewer (M2)

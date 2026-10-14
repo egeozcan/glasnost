@@ -1150,23 +1150,159 @@ fn building_body_companion() {
     }
 }
 
-/// spec: S-0102 F2, F5 (without the shared file the body is drawn with plain F2; recovery from a
-/// missing file is not specified, so the body is provisional and noted, Q-0490)
-#[test]
-fn building_body_without_companion_file() {
-    let (b, items) = hut_items("Foundation=2x2\n", false);
-    let body = items.iter().find(|i| i.group == Group::Buildings).unwrap();
-    assert!(matches!(
+/// The building items of one neutral HUTX on (6, 10) whose art section
+/// holds `hut_art`, with `file` as the shared depth image file (none when
+/// `None`), and its body.
+fn hut_body_with(hut_art: &str, file: Option<Vec<u8>>) -> (Built, Item) {
+    let art = format!("[HUTX]\nAnimIdle=1,1,0\n{hut_art}");
+    let mut ctx = context_full(RULES, &art);
+    if let Some(f) = file {
+        ctx.2.insert(b"buildngz.sha", f);
+    }
+    let (b, _) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+        &Options::default(),
+    );
+    let body = items_of(&b, "building")
+        .into_iter()
+        .find(|i| i.group == Group::Buildings)
+        .expect("the body");
+    (b, body)
+}
+
+/// A hand-written shape file: canvas `canvas`, one image frame per entry of
+/// `frames` (rectangle width and height, pixel-data position), then `tail`.
+fn raw_shape(canvas: (u16, u16), frames: &[((u16, u16), u32)], tail: &[u8]) -> Vec<u8> {
+    let mut v = Vec::new();
+    for x in [0, canvas.0, canvas.1, frames.len() as u16] {
+        v.extend_from_slice(&x.to_le_bytes());
+    }
+    for &((w, h), offset) in frames {
+        for x in [0u16, 0, w, h] {
+            v.extend_from_slice(&x.to_le_bytes());
+        }
+        // Compression 0 (uncompressed), three raw bytes, colour, reserved.
+        v.extend_from_slice(&[0; 12]);
+        v.extend_from_slice(&offset.to_le_bytes());
+    }
+    v.extend_from_slice(tail);
+    v
+}
+
+/// Whether `body` is drawn with the plain upright profile of S-0102 F2: no
+/// companion, an upright writer.
+fn plain_upright(body: &Item) -> bool {
+    matches!(
         body.depth,
         ItemDepth::Profile {
             profile: Profile::Upright,
             companion: None,
             ..
         }
-    ));
+    ) && body.test == DepthTest::Writer
+}
+
+/// spec: S-0102 claim 33 and D42 (our engine's departure: a missing file, zero image frames at any
+/// canvas, a truncated or non-shape file, or an undecodable image frame 0 warn naming the shared
+/// file and the failure; loading continues and an eligible body uses no companion, keeping its
+/// draw point and bias, with the plain upright profile of F2, writing depth; not provisional)
+#[test]
+fn building_body_unavailable_companion_uses_plain_upright() {
+    let header_only = raw_shape((16, 16), &[((16, 16), 32)], &[]);
+    let cases: [(&str, Option<Vec<u8>>, &str); 7] = [
+        ("missing", None, "is missing"),
+        (
+            "zero frames, 16 × 16",
+            Some(raw_shape((16, 16), &[], &[])),
+            "has no image frames",
+        ),
+        (
+            "zero frames, 0 × 16",
+            Some(raw_shape((0, 16), &[], &[])),
+            "has no image frames",
+        ),
+        (
+            "zero frames, 16 × 0",
+            Some(raw_shape((16, 0), &[], &[])),
+            "has no image frames",
+        ),
+        // One frame header, no pixel data after it.
+        (
+            "header-only",
+            Some(header_only[..8 + 24].to_vec()),
+            "image frame 0 that cannot be decoded",
+        ),
+        // A truncated frame table.
+        (
+            "truncated",
+            Some(header_only[..20].to_vec()),
+            "cannot be read as a shape file",
+        ),
+        (
+            "non-shape",
+            Some(b"NOT A SHAPE FILE".to_vec()),
+            "cannot be read as a shape file",
+        ),
+    ];
+    let (_, reference) = hut_body_with("Foundation=2x2\n", Some(companion_file()));
+    for (name, file, failure) in cases {
+        let (b, body) = hut_body_with("Foundation=2x2\n", file);
+        assert!(plain_upright(&body), "{name}");
+        assert!(!body.provisional, "{name}");
+        assert!(b.scene.signed.is_empty(), "{name}");
+        // The draw point and the claim 13 bias are those of a body with a readable companion.
+        assert_eq!((body.x, body.y), (reference.x, reference.y), "{name}");
+        let bias = |i: &Item| match i.depth {
+            ItemDepth::Profile { bias, .. } => bias,
+            _ => panic!("a profile"),
+        };
+        assert_eq!(bias(&body), bias(&reference), "{name}");
+        let warning: Vec<&String> = b
+            .notes
+            .iter()
+            .filter(|n| n.contains("BUILDNGZ.SHA"))
+            .collect();
+        assert_eq!(warning.len(), 1, "{name}: {:?}", b.notes);
+        assert!(warning[0].contains(failure), "{name}: {}", warning[0]);
+        assert!(warning[0].contains("claim 33"), "{name}");
+    }
+}
+
+/// spec: S-0102 claim 33 and D42 (a valid, decodable image frame 0 with an empty stored rectangle,
+/// 0 × 16 or 16 × 0 on a 16 × 16 canvas with 256 readable zero bytes, keeps its empty coverage:
+/// the body samples a companion that covers none of its pixels, so it draws nothing and writes no
+/// depth; no warning solely for being empty)
+#[test]
+fn building_body_empty_companion_rectangle_covers_nothing() {
+    for size in [(0, 16), (16, 0)] {
+        let file = raw_shape((16, 16), &[(size, 32)], &[0; 256]);
+        let (b, body) = hut_body_with("Foundation=2x2\n", Some(file));
+        let ItemDepth::Profile {
+            companion: Some((id, ..)),
+            ..
+        } = body.depth
+        else {
+            panic!("{size:?}: the body keeps its empty companion");
+        };
+        let img = &b.scene.signed[id as usize];
+        assert_eq!(img.width * img.height, 0, "{size:?}");
+        assert!(!body.provisional, "{size:?}");
+        assert!(!b.notes.iter().any(|n| n.contains("BUILDNGZ")), "{size:?}");
+    }
+}
+
+/// Q-0520 (interim): an image frame 0 with a non-empty rectangle and no pixel data (data position
+/// 0) is treated as undecodable: the eligible body is drawn with the plain upright profile of
+/// S-0102 F2, marked provisional and noted
+#[test]
+fn building_body_companion_without_pixel_data_is_provisional() {
+    let file = raw_shape((16, 16), &[((16, 16), 0)], &[]);
+    let (b, body) = hut_body_with("Foundation=2x2\n", Some(file));
+    assert!(plain_upright(&body));
     assert!(body.provisional);
-    assert!(b.scene.signed.is_empty());
-    assert!(b.notes.iter().any(|n| n.contains("Q-0490")));
+    assert!(b.notes.iter().any(|n| n.contains("Q-0520")));
 }
 
 /// The slot-animation test context: HUTX's art starts five slot animations
