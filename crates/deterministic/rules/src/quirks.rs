@@ -447,6 +447,10 @@ pub struct Quirks {
     // spec: S-0207 claim 15, Edge cases
     #[serde(default = "on")]
     pub drive_giveup_ignores_contact: bool,
+    /// A blocked driving vehicle can send its scatter request to the same cell layer twice in one tick; off: only the earliest.
+    // spec: S-0207 claim 15, Edge cases
+    #[serde(default = "on")]
+    pub drive_duplicate_scatter_request: bool,
     /// The nearest object of the look at a new path's first cell is measured from the cell's top corner; off: from its centre.
     // spec: S-0207 claim 15, F8, Edge cases
     #[serde(default = "on")]
@@ -1268,6 +1272,7 @@ impl Default for Quirks {
             observer_position_handoff: true,
             cleanup_skips_next_house: true,
             drive_giveup_ignores_contact: true,
+            drive_duplicate_scatter_request: true,
             drive_nearest_from_top_corner: true,
             deck_side_step_ground_level: true,
             gate_reverse_snaps: true,
@@ -1696,6 +1701,10 @@ impl Quirks {
             (
                 "drive_giveup_ignores_contact",
                 self.drive_giveup_ignores_contact,
+            ),
+            (
+                "drive_duplicate_scatter_request",
+                self.drive_duplicate_scatter_request,
             ),
             (
                 "drive_nearest_from_top_corner",

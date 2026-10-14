@@ -99,6 +99,41 @@ fn s0405_claim_18_map_switched_off() {
     }
 }
 
+/// spec: S-0314 claim 13 and Import mapping, S-0009 claim 40 (a map building's computer-repair field, nonzero, sets its computer-repair flag; zero or absent leaves it clear)
+#[test]
+fn s0314_claim_13_map_computer_repair_flag() {
+    let mut s = scene();
+    s.register("buildings", "RR");
+    s.ruleset.sim.buildings.insert(
+        "RR".into(),
+        BuildingType {
+            strength: Some(100),
+            foundation: Some([1, 1]),
+            ..Default::default()
+        },
+    );
+    let fields = [Some(true), Some(false), None];
+    for (i, f) in fields.iter().enumerate() {
+        s.map.objects.structures.push(Structure {
+            placed: placed("Alpha", "RR", cell(2 * i as i32, 0), 256, 0),
+        });
+        s.map.objects.structure_fields.push(EntryFields {
+            ai_repair: *f,
+            ..Default::default()
+        });
+    }
+    let w = s.build();
+    let mut flags: Vec<(i32, bool)> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Building)
+        .map(|o| (o.pos.cell().x, o.combat.computer_repair))
+        .collect();
+    flags.sort();
+    let got: Vec<bool> = flags.iter().map(|f| f.1).collect();
+    assert_eq!(got, [true, false, false]);
+}
+
 fn only(w: &World, kind: Kind) -> &glasnost_sim::world::Object {
     let v: Vec<_> = w.objects.values().filter(|o| o.kind == kind).collect();
     assert_eq!(v.len(), 1, "{kind:?}");

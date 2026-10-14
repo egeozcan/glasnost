@@ -1178,6 +1178,32 @@ fn claim_11_draws() {
     assert_eq!(tick_draws(&mut w), 0);
 }
 
+// spec: S-0213 claim 3 (production-start draws across houses: an earlier house's order-caused starts take their values before a later house's, whatever the issue order)
+#[test]
+fn s0213_claim_3_cross_house_start_draws() {
+    let mut w = game(&ruleset());
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    building(&mut w, "BARRACKS", 1, 0, 8);
+    ready(&mut w);
+    set_credits(&mut w, 0, 1_000_000);
+    set_credits(&mut w, 1, 1_000_000);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    // The later house issues first.
+    assert!(issue(&mut w, 1, Order::Build { what: grunt }));
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    step(&mut w);
+    let object = |w: &World, h: u8| {
+        w.econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == HouseId(h))
+            .find_map(|l| l.item.as_ref().filter(|i| i.t == grunt).map(|i| i.object))
+            .unwrap()
+    };
+    assert!(object(&w, 0) < object(&w, 1), "house 0's start drew first");
+}
+
 // spec: S-0404 claim 11 (starts take their creation draws at their causing action: several production orders in one tick give successive values in order of application, S-0213 claim 3, not in line order)
 #[test]
 fn claim_11_creation_draws_in_application_order() {

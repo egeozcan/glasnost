@@ -64,6 +64,10 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
         let f = spin_target(ob.turret.value(t));
         ob.turret.turn_to(f, t, omega);
     }
+    if u.turret {
+        // spec: S-0206 claim 17 (the rotation sample after all rows, the spin row included, by the current-tick turning definition)
+        ob.rotation_sample = ob.turret.turning(t);
+    }
 }
 
 #[cfg(test)]

@@ -1335,6 +1335,32 @@ fn damage_effect_draw_and_removal() {
     assert!(!w.obj(t).unwrap().combat.damage_effect);
 }
 
+// spec: S-0302 claim 13 (the −10-lepton test is on the height above the surface: a bridge deck is the surface of an object on it)
+#[test]
+fn damage_effect_height_above_the_deck() {
+    for (deck, draws) in [(true, false), (false, true)] {
+        let mut r = testkit::combat_ruleset();
+        vehicle(&mut r, "SMOKER", |t| {
+            t.combat.damage_smoke_systems = Some(vec!["PuffA".into(), "PuffB".into()]);
+        });
+        warhead(&mut r, "PLAIN", |h| h.verses = every("1"));
+        r.sim.general.condition_red = Some(dec("0.25"));
+        let mut w = testkit::game_with(&r, SIZE, 1);
+        let h = wh(&w, "PLAIN");
+        let t = put(&mut w, Kind::Vehicle, "SMOKER", BETA, 0);
+        let o = w.obj_mut(t).unwrap();
+        // 400 leptons above the terrain: 16 below a deck's 416.
+        o.pos.z += 400;
+        if deck {
+            o.layer = glasnost_sim::world::Layer::Deck;
+        }
+        let before = w.rng.taken();
+        assert_eq!(apply!(w, t, hit(600, h)), HitResult::NowYellow);
+        assert_eq!(w.rng.taken() != before, draws, "deck {deck}");
+        assert_eq!(w.obj(t).unwrap().combat.damage_effect, draws);
+    }
+}
+
 // spec: S-0302 claim 13 (no draw when the list is empty, or when the ratio is above the yellow ratio after the hit)
 #[test]
 fn damage_effect_needs_a_list_and_a_low_ratio() {
@@ -1648,6 +1674,30 @@ fn airborne_mutation_hit_raised_on() {
     // On the ground the warhead deals its damage.
     w.obj_mut(t).unwrap().pos.z -= 100;
     assert_eq!(loss!(w, t, hit(500, full)).0, 500);
+}
+
+// spec: S-0302 claim 17 (the height above the surface: an infantry unit standing on a bridge deck is not in the air and takes full damage; one lepton above its surface is)
+#[test]
+fn airborne_mutation_uses_height_above_surface() {
+    let (mut w, t, full, _) = airborne_world(true);
+    let o = w.obj_mut(t).unwrap();
+    o.pos.z += 316; // 100 + 316 = the 416-lepton deck height above the terrain
+    o.layer = glasnost_sim::world::Layer::Deck;
+    assert_eq!(loss!(w, t, hit(500, full)).0, 500, "on the deck");
+    w.obj_mut(t).unwrap().pos.z += 1;
+    assert_eq!(
+        loss!(w, t, hit(500, full)).0,
+        1,
+        "one lepton above the deck"
+    );
+    let o = w.obj_mut(t).unwrap();
+    o.layer = glasnost_sim::world::Layer::Ground;
+    o.pos.z -= 416;
+    assert_eq!(
+        loss!(w, t, hit(500, full)).0,
+        1,
+        "one lepton above the ground"
+    );
 }
 
 // spec: S-0302 Edge cases (quirks.airborne_mutation_hit_raised off: an airborne infantry unit takes no damage from such a warhead)

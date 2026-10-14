@@ -113,6 +113,12 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     if kind != Kind::Building {
         return;
     }
+    if old != new
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0314 Terms (captured mark: set by a successful ownership change, never cleared)
+        ob.combat.captured = true;
+    }
     crate::econ::power::owner_changed(w, id, old);
     for h in [old, new].into_iter().flatten() {
         // spec: S-0410 claim 2 (a house that gains or loses a building is rechecked)

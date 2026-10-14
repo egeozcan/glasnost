@@ -81,6 +81,8 @@ pub fn house_combat(
         kills: 0,
         losses: 0,
         self_heal: [0, 0],
+        // spec: S-0314 Terms (the automatic-repair hold is initially clear)
+        repair_hold: false,
     }
 }
 

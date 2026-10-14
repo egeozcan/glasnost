@@ -176,6 +176,43 @@ pub fn hot_spot(frames: Frames, w: i32, h: i32) -> (i32, i32) {
     }
 }
 
+/// One row of table E: direction, allowed frame, blocked frame, hot-spot
+/// places.
+type EdgeRow = ((i32, i32), u16, u16, (u8, u8));
+
+/// The edge-scroll cursor's screen directions in table E's order (screen x
+/// right, y down) with the allowed frame, the blocked frame and the hot
+/// spot's horizontal and vertical place: 0 left or top, 1 centre, 2 right
+/// or bottom.
+// spec: S-0213 table E (Up 2/10 centre-top, UR 3/11, R 4/12, LR 5/13, Down 6/14, LL 7/15, L 8/16, UL 9/17)
+const EDGE: [EdgeRow; 8] = [
+    ((0, -1), 2, 10, (1, 0)),
+    ((1, -1), 3, 11, (2, 0)),
+    ((1, 0), 4, 12, (2, 1)),
+    ((1, 1), 5, 13, (2, 2)),
+    ((0, 1), 6, 14, (1, 2)),
+    ((-1, 1), 7, 15, (0, 2)),
+    ((-1, 0), 8, 16, (0, 1)),
+    ((-1, -1), 9, 17, (0, 0)),
+];
+
+/// The edge-scroll cursor (S-0213 claim 24, table E) for a requested
+/// screen direction: its static frame, the allowed or the blocked variant,
+/// and its hot spot in a full canvas of `w` × `h` pixels. `None` for a
+/// direction that is not one of the eight.
+pub fn edge(dir: (i32, i32), blocked: bool, w: i32, h: i32) -> Option<(Frames, (i32, i32))> {
+    let &(_, allowed, refused, (hx, hy)) = EDGE.iter().find(|e| e.0 == dir)?;
+    // spec: S-0213 claim 24 (the blocked variant when a one-pixel trial scroll cannot move the view)
+    let f = if blocked { refused } else { allowed };
+    // spec: S-0213 table E (centre ⌊w/2⌋ and ⌊h/2⌋; right and bottom use w and h, not the last pixel)
+    let place = |k: u8, size: i32| match k {
+        0 => 0,
+        1 => size.div_euclid(2),
+        _ => size,
+    };
+    Some((Frames::one(f), (place(hx, w), place(hy, h))))
+}
+
 /// Milliseconds per unit of the presentation clock.
 // spec: S-0214 claim 22 (the 16-millisecond presentation clock)
 const CLOCK_MS: i64 = 16;
@@ -274,6 +311,27 @@ mod tests {
         let mut a = Animator::default();
         let (f, _) = a.frame(table_c(act(Action::Move), false, true), 0);
         assert_eq!(a.frame(table_c(de, false, true), 16), (f, f.first));
+    }
+
+    // spec: S-0213 claim 24 and table E (allowed and blocked frames per screen direction; hot spots at 0, the floor half or the full canvas size)
+    #[test]
+    fn s0213_claim_24_edge_cursor() {
+        let (w, h) = (55, 44);
+        let rows = [
+            ((0, -1), 2, 10, (27, 0)),
+            ((1, -1), 3, 11, (55, 0)),
+            ((1, 0), 4, 12, (55, 22)),
+            ((1, 1), 5, 13, (55, 44)),
+            ((0, 1), 6, 14, (27, 44)),
+            ((-1, 1), 7, 15, (0, 44)),
+            ((-1, 0), 8, 16, (0, 22)),
+            ((-1, -1), 9, 17, (0, 0)),
+        ];
+        for (d, a, b, hot) in rows {
+            assert_eq!(edge(d, false, w, h), Some((Frames::one(a), hot)), "{d:?}");
+            assert_eq!(edge(d, true, w, h), Some((Frames::one(b), hot)), "{d:?}");
+        }
+        assert_eq!(edge((0, 0), false, w, h), None);
     }
 
     // spec: S-0214 claim 22 (centre hot spot of the full canvas, floor halves; the arrow at (0, 0))

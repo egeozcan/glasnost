@@ -10,9 +10,8 @@
 //! What stays open (S-0417 Open questions): the later walk-out of an
 //! infantry unit released without a rally destination (none is given),
 //! and the draws of putting a released unit on the map (none are taken).
-//! The interim rule of request Q-0295 (an infantry unit's cell-arrival
-//! update) is in `walk` and listed in the interim table of
-//! `docs/development.md`.
+//! An infantry unit's cell-arrival update is its walking arrival tick
+//! (S-0208 claim 23), called from `walk`.
 //! The production and idle animations of a factory are not modelled
 //! (building animations are a seam), so they take no draws.
 
@@ -1369,21 +1368,7 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         L::Drive => crate::drive::begin_exit_track(w, u, e),
         // spec: S-0417 claim 5 (tunnelling and teleporting vehicles temporarily receive driving locomotion and use the same track)
         L::Tunnel | L::Teleport => {
-            if w.obj(u).is_some_and(|o| o.drive.is_none()) {
-                // Its own cell claim is handed to the driving state's claims.
-                // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
-                let pending = w
-                    .obj(u)
-                    .and_then(|o| o.teleport.as_ref())
-                    .is_some_and(|t| t.mark.is_some());
-                if !pending {
-                    crate::drive::release_claims(w, u);
-                }
-                if let Some(ob) = w.obj_mut(u) {
-                    ob.drive = Some(crate::drive::DriveState::new());
-                    ob.econ.temporary_drive = true;
-                }
-            }
+            install_temporary_drive(w, u);
             crate::drive::begin_exit_track(w, u, e);
         }
         _ => {
@@ -1404,6 +1389,57 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
     if let Some(d) = w.obj_mut(u).and_then(|o| o.drive.as_mut()) {
         // spec: S-0417 claims 5 and 6 and Constants (after the exit instruction K sets the speed fraction to 0.5)
         d.rho = crate::consts::HALF;
+    }
+}
+
+/// Gives a tunnelling or teleporting vehicle driving locomotion for its
+/// factory exit (S-0417 claim 5, S-0207 claim 21); nothing when it already
+/// drives. The mark of its actual cell passes to the driving state, which
+/// clears it on departure; a pending reservation and, under the ground
+/// reservation quirk, a separate remembered reservation stay marked.
+pub fn install_temporary_drive(w: &mut World, u: ObjectId) {
+    if w.obj(u).is_none_or(|o| o.drive.is_some()) {
+        return;
+    }
+    if !crate::teleport::is_teleporter(w, u) {
+        // A tunnelling vehicle: S-0207 claim 21 covers teleporting
+        // locomotion only, so its cell claim is released as before.
+        crate::drive::release_claims(w, u);
+        if let Some(ob) = w.obj_mut(u) {
+            ob.drive = Some(crate::drive::DriveState::new());
+            ob.econ.temporary_drive = true;
+        }
+        return;
+    }
+    // Its own cell claim is handed to the driving state's claims.
+    // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
+    let pending = w
+        .obj(u)
+        .and_then(|o| o.teleport.as_ref())
+        .is_some_and(|t| t.mark.is_some());
+    let mut handed = Vec::new();
+    if !pending && let Some(o) = w.obj(u) {
+        let actual = (o.pos.cell(), o.layer);
+        // spec: S-0207 claim 21 (installing temporary driving clears neither the remembered ground reservation nor the actual mark: the actual cell's mark passes to driving, which clears it on departure)
+        for m in crate::teleport::removal_marks(w, u) {
+            if m == actual {
+                handed.push(m.0);
+            } else {
+                // spec: S-0207 Edge cases (a ground-reservation quirk off keeps no separate reservation)
+                w.cells.claim_vehicle(m.0, m.1, false);
+            }
+        }
+        if let Some(t) = w.obj_mut(u).and_then(|o| o.teleport.as_mut()) {
+            // A separate remembered reservation is left behind, no longer held (claim 21).
+            t.held = None;
+            t.deck_mark = None;
+        }
+    }
+    if let Some(ob) = w.obj_mut(u) {
+        let mut d = crate::drive::DriveState::new();
+        d.claims = handed;
+        ob.drive = Some(d);
+        ob.econ.temporary_drive = true;
     }
 }
 
@@ -1462,7 +1498,7 @@ fn building_cell(w: &World, c: CellXY) -> bool {
 /// target, also when a further track follows in the same tick (S-0417
 /// claim 7, Q-0223; the chain-point update of a chaining vehicle never
 /// occurs, as curve chaining, S-0207 claim 8, is not modelled); a walking
-/// unit's is its arrival tick (interim, request Q-0295).
+/// unit's is its arrival tick at each walking target (S-0208 claim 23).
 pub fn arrival(w: &mut World, id: ObjectId) {
     if !tethered(w, id) {
         return;

@@ -321,6 +321,7 @@ const WALL_MODEL: &[u8] = b"WallModel"; // spec: S-0306 Import mapping (`[WallMo
 const ELEVATION_MODEL: &[u8] = b"ElevationModel"; // spec: S-0307 Import mapping (`[ElevationModel]`)
 /// The AI intelligence levels section.
 const IQ: &[u8] = b"IQ"; // spec: S-0314 Import mapping (`[IQ]`)
+const AI: &[u8] = b"AI"; // spec: S-0314 Import mapping (`[AI]`)
 
 /// Game-wide combat fields: our name, section, key, form, spec.
 const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
@@ -622,6 +623,8 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0307",
     ),
     ("iq_repair_sell", IQ, "RepairSell", Int, "S-0314"),
+    ("credit_reserve", AI, "CreditReserve", Int, "S-0314"),
+    ("iq_sell_back", IQ, "SellBack", Int, "S-0314"),
 ];
 
 /// The crew types of `[General]` and our field names (S-0312 Import
@@ -1957,9 +1960,11 @@ impl Builder<'_> {
     /// the section but not the key resets it (S-0006 claim 5).
     fn verses(&mut self, t: &TypeRec) -> Option<Node> {
         let integer_prefix = self.i.ini_quirks.percent_list_integer_prefix;
+        // spec: S-0003 Formulas (Q₅₃ follows quirks.chop_rounding)
+        let chop = self.i.sim_quirks.chop_rounding;
         let mut notes = Vec::new();
         let list = fold(key(t, "Verses"), None, |v, e| {
-            let (vals, n) = value::percent_list(v, VERSES, integer_prefix);
+            let (vals, n) = value::percent_list(v, VERSES, integer_prefix, chop);
             notes.push((e.layer, e.line, show(v), n));
             Some(vals)
         })?;

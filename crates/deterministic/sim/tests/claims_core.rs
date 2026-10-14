@@ -223,6 +223,29 @@ fn s0202_saves_keep_the_stream() {
     }
 }
 
+// spec: S-0202 claim 10 (Q-0327: the report value r = x mod 65536 of the creation draw, no other draw; saved, restored and hashed)
+#[test]
+fn s0202_creation_report_value() {
+    let mut w = testkit::new_game(13);
+    to_tick(&mut w, 2);
+    let mut probe = w.rng.clone();
+    let x = probe.raw();
+    let ti = w.rules().index_of(Kind::Vehicle, "CART").unwrap();
+    let id = glasnost_sim::objects::create(&mut w, Kind::Vehicle, ti, Some(HouseId(0)));
+    assert_eq!(u32::from(w.obj(id).unwrap().report_value), x % 65536);
+    assert_eq!(w.rng, probe, "exactly the one creation draw");
+    let l = save::load(&save::save(&w), testkit::rules(), testkit::catalogue()).unwrap();
+    assert_eq!(
+        l.obj(id).unwrap().report_value,
+        w.obj(id).unwrap().report_value
+    );
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
+    let mut other = w.clone();
+    let o = other.obj_mut(id).unwrap();
+    o.report_value = o.report_value.wrapping_add(1);
+    assert_ne!(save::state_hash(&other), save::state_hash(&w), "hashed");
+}
+
 // ---------------------------------------------------------------------------
 // S-0203
 
