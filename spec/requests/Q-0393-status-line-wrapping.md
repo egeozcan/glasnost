@@ -1,9 +1,9 @@
 ---
 id: Q-0393
 title: Where does a long status message wrap, and in which font is it drawn?
-status: open
+status: answered
 related: [S-0213, S-0411]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need

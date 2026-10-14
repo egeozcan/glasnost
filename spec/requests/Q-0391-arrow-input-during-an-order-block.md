@@ -1,9 +1,9 @@
 ---
 id: Q-0391
 title: Does an arrow key pressed during an order block scroll the view?
-status: open
+status: answered
 related: [S-0201, S-0101, S-0213]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need

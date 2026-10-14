@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393]
 supersedes: []
 ---
 
@@ -765,10 +765,29 @@ Terms).
     that arrow's contribution when the release input is accepted. These four keys are the
     original's fallback view controls, rather than four entries in table T2. S-0101 claims
     14 and 15 own displacement, simultaneous directions, scrolling limits and freeze behaviour.
+    **Arrows during an order block (Q-0391).** A new arrow press or release made
+    while orders are blocked is discarded, not saved for the end of the block. This
+    applies to the initial block and to a chrono flash's block, including its unfrozen
+    cycles. An arrow whose press was already accepted keeps its scrolling contribution
+    even if physically released during the block. Releasing and pressing it again
+    during the block changes nothing. Conversely, an arrow first pressed during the
+    block contributes nothing, even if still physically held in the first unblocked
+    cycle. Holding it does not generate a newly accepted press: a release and fresh
+    press after the block are needed. An already accepted contribution ends when a
+    release is accepted after the block. S-0101 claim 15 still suppresses displacement
+    during frozen cycles and stand-stills, without clearing the contribution.
+    These rules concern events made during the block, with no older waiting input.
+    They do not cancel events already accepted into the waiting inputs before it.
+    - Quirk: `quirks.blocked_arrow_events` (default: YR behaviour). With it off,
+      ordinary view-arrow presses and releases remain accepted during an order block,
+      although unit orders remain blocked and frozen cycles still do not scroll.
+      Thus a release stops a retained direction and a new press can scroll during
+      unfrozen blocked cycles. This changes presentation only.
     This claim does not specify options-dialog closing keys or modifier-assisted scrolling.
     S-0214 claims 5 and 23 and Scenario T17 answer the physical force-gesture and
     attack-move-entry part of Q-0286.
-    - Backing: `measurable` (Scenario O19, parts b and c; S-0101 Scenario M7 for scrolling)
+    - Backing: `measurable` (Scenario O19, parts b and c; Scenario O22 for blocked
+      arrow events; S-0101 Scenario M7 for displacement)
     - Confidence: high
 
 24. **Edge-scroll cursor (Q-0277).** During ordinary edge scrolling, the cursor
@@ -817,8 +836,45 @@ Terms).
     display, not a simulation-state rule. This claim specifies the shared display
     contract used by route refusals, not new events for sidebar, placement or sell/repair
     feedback; those remain with S-0411, S-0406 and S-0408 respectively.
-    - Backing: `measurable` (Scenario O21)
-    - Confidence: high for lifetime and capacity; medium for pause and wrapping observations
+    **Line splitting and font (Q-0393).** For an unprefixed notice, the width limit
+    is the battlefield view's width minus 22 pixels after game start. After an
+    in-game change of the battlefield view's dimensions, it is the new width minus
+    16 pixels, until the next game start. The sidebar's width is not included.
+    A video-mode change clears the existing status lines rather than re-splitting
+    them. These are original
+    presentation dimensions, not simulation quantities.
+
+    Measurement and drawing use the imported game bitmap font, with its individual
+    glyph widths and one extra pixel of advance per character, including the last.
+    There is no kerning or extra proportional scaling. A tab advances to the next
+    multiple of 64 pixels from the line origin. A missing glyph uses the font's
+    fallback, an inverted capital X, and that glyph's width. All width arithmetic
+    is integer pixels, with no rounding. File identity is in Import mapping.
+
+    A line contains at most 111 text characters. The width limit is inclusive:
+    a character whose advance brings the accumulated width exactly to the limit
+    fits. At a width overflow inside a word, the break is after the last preceding
+    character whose value is at most 32, if one exists in the fitting prefix.
+    This includes an ordinary space or a tab, not punctuation. Without such a
+    separator, the fitting prefix of the word is used, so an overlong word can be
+    split inside it. If the overflowing character is itself a separator, the line
+    ends just before it. Reaching 111 characters makes a break there without
+    searching back for a word boundary. Character counts refer to the string
+    table's 16-bit text units, not encoded byte counts.
+
+    An explicit carriage return or line feed ends a line after that character,
+    before any width overflow would be needed. At the start of a continuation,
+    characters with values 1 to 31 are skipped, but ordinary spaces are kept.
+    Thus a paired carriage return and line feed makes one break, and consecutive
+    break characters do not create additional empty stored lines. Leading spaces
+    of continuations are not generally trimmed. Every resulting stored line uses
+    the capacity and lifetime above, including lines made by explicit breaks.
+    An empty imported message adds one blank stored line with the same capacity
+    and lifetime. Bad data that leaves no character fitting is covered
+    in Edge cases and quirks.
+    - Backing: `measurable` (Scenario O21, including part b for splitting and font)
+    - Confidence: high for lifetime, capacity, splitting and font metrics; medium for
+      pause observations and the two width regimes pending their resize test
 
 ## Formulas
 
@@ -848,8 +904,13 @@ Terms).
 > original the first index *j*₀ and the limit are not settled (Open questions); our engine's
 > interim rule is *j* = 1 to 6 (claim 7). Confidence: low, as for the other placement details.
 
-No other formula: apart from claim 7, the orders change references and behaviours, not
-quantities.
+For claim 25, an ordinary character's text advance is its imported glyph width
+plus 1 pixel, including a trailing character. A tab at advance *a* gives
+64 × (⌊*a*/64⌋ + 1) pixels. These are non-negative integer pixels with exact sums
+and floor division; carriage return and line feed consume no horizontal advance.
+The unprefixed status-text budget is *W* − 22 pixels at game start and *W* − 16
+pixels after a view-dimension change, where *W* is the battlefield width in integer
+pixels. No floating-point arithmetic is used.
 
 ## Constants
 
@@ -978,6 +1039,15 @@ only when they actually assign a destination.
   `quirks.prone_get_up_repeated_destination`, default YR behaviour. With it off, every non-empty
   destination assignment requests get-up for an otherwise eligible prone unit, not only a
   reassignment of the same destination. This applies across order families, not just move.
+- **Blocked arrow events** (claim 23): `quirks.blocked_arrow_events`, default YR
+  behaviour. Discarded releases can leave scrolling active after the key is let go.
+  The alternative accepts view-arrow events during the block; it grants no unit orders.
+- **Unfittable status text** (claim 25). A non-empty remainder whose first character
+  cannot fit the width budget makes the original repeatedly add empty lines without
+  consuming that character, and can stop the game with a program failure. Our engine
+  omits that remainder and reports an importer warning for the offending imported
+  text or font. This is a safe departure with no switch, not an inside-word break
+  that silently loses its first character.
 - **Partial group orders** (claim 2): `quirks.pending_order_limit`.
 - **Detonation in the planter's name** (claim 11): `quirks.detonate_in_planter_name`.
 - **Detonating a bomb that an AI house planted** (claim 11). The original drops the order, because
@@ -1020,6 +1090,9 @@ only when they actually assign a destination.
 | String-table entry `MSG:PlannerMaximum` | route-holder-limit text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic, not substitute stock English |
 | String-table entry `MSG:PlanningModeHeteroSel` | incompatible-selection text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic |
 | No rules, art or map key | route refusal duration and shared status display (claim 25) | fixed presentation rules | 480 clock units of 16 milliseconds; six lines |
+| Game font file `GAME.FNT` | status-text glyph shapes, widths and fallback (claim 25) | imported bitmap font, resolved through S-0005 claims 1 to 4; no host-font substitution | no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text |
+| No rules, art or map key | status-text splitting (claim 25) | fixed integer-pixel budgets, 111-character limit, one-pixel character spacing and 64-pixel tab stops | claim 25's initial and resized budgets and separator rules |
+| No rules, art or map key | acceptance of arrow events during an order block (claim 23) | fixed input rule, subject to the presentation quirk | presses and releases made during the block discarded |
 | Cursor image and palette of S-0214 Import mapping | edge-scroll images of table E | same imported image and palette, full-size frames | same missing-file handling as S-0214 |
 | Player's keyboard preferences, set through the key-binding screen | command keys of table T2 (claim 22) | assigned keyboard key or key combination; preferences, not rules-layer fields | no user override: stop S, scatter X, guard G, deploy D, cheer C, route mode Z; a removed entry in a successfully loaded preferences file: unbound |
 | No rules, art or map key | reserved options-menu key (claim 23) | fixed Escape binding | Escape remains available regardless of saved command preferences |
@@ -1645,6 +1718,65 @@ applied: a cue is not proof that an order passed its application checks.
   old copies falsifies the corresponding claim. An update not sampled at exact equality
   cannot test that equality boundary.
 
+**Scenario O21 b: status line breaks and font (claim 25, Q-0393).**
+- *Setup:* O21's skirmish fixture, speed 6, separately at 640 × 480 and 800 × 600.
+  Use a named test string table for the two refusal messages, with invented text
+  only. Include different narrow and wide glyphs, spaces, punctuation, tabs,
+  carriage returns, line feeds, paired breaks and an empty message. Use a named
+  test font copy with
+  changed glyph widths for a separate font-dependency control. Restore both assets
+  afterwards. Director and mods remain off except these named test assets.
+- *Procedure:* show each message from fresh starts. Construct text whose advance
+  is exactly the initial budget, then exceeds it by one character. Include a word
+  longer than that budget, several spaces at the break, a 112-character narrow
+  string, and repeated explicit breaks. In separate runs change the video
+  resolution through the normal options controls, then show fresh messages again.
+  Repeat three times per resolution and asset variant.
+- *Observable:* screen-captured glyphs and their origins, battlefield width,
+  text of each stored line, line count, continuation indentation and expiry.
+  A read-only recorder may log the presented lines, distinguishing stored lines
+  from a trailing break's blank drawing area.
+- *Expected:* claim 25's integer advances select the fitting prefixes at *W* − 22
+  pixels initially and *W* − 16 after the dimension change. Equality fits. Spaces
+  or tabs permit a word-boundary break, punctuation does not, and a word alone
+  splits inside itself. The character cap breaks after character 111 even when
+  more width remains. Continuation spaces remain, while consecutive control
+  breaks are skipped. A video-mode change clears old notices. Each explicit break
+  produces the same capacity/lifetime
+  treatment as wrapping, and empty text adds one blank stored line. The imported
+  font, not a host font, supplies glyphs and
+  metrics. Changed glyph widths change the breaks accordingly.
+- *Falsified if:* any stable mismatch in break position, width regime, font,
+  advance, retained spaces, explicit-break treatment or character cap. Keep
+  individual tests to six lines or fewer so eviction does not hide a break.
+  Do not run unfittable-font failure data against the original.
+
+**Scenario O22: arrows during order blocks (claim 23, Q-0391).**
+- *Setup:* a large flat skirmish map, no scroll limits near the observed view,
+  speed 6, 800 × 600, fresh unconflicted arrow bindings, pointer in the interior.
+  Director and mods off. Use S-0201 claim 11's map-triggered chrono flash late
+  enough to hold an arrow beforehand. Its early unfrozen blocked interval must
+  contain the input tests. Use scripted normal key events and a read-only
+  cycle/tick/view recorder, with video of pointer hiding and the flash.
+- *Procedure:* separate fresh runs (a) press a previously unheld arrow during
+  the unfrozen block and hold through its end, then release and press after it.
+  (b) press before the block, release during it and leave released through its
+  end, then press and release after it; (c) as b, but re-press during the block.
+  Include the initial ticks 0 to 3 block for part a. Three runs of each case.
+  Ensure no prior waiting input and identify events that fall wholly within the
+  block; boundary-ambiguous attempts are void.
+- *Observable:* directional displacement per unfrozen cycle, no displacement
+  during frozen cycles, physical event times and first unblocked cycle.
+- *Expected:* a has no arrow contribution during the block or at its end despite
+  the held physical key; only the later accepted fresh press starts it. In b and
+  c the pre-block contribution continues in every unfrozen cycle, even after
+  physical release; frozen cycles stop displacement but retain the contribution.
+  A release accepted after the block ends it. Distances and limits are S-0101
+  claims 14 and 15, not new formulas here.
+- *Falsified if:* a starts scrolling from the blocked press, including automatic
+  start at unblock, or b stops from the blocked release. An unblocked press/release
+  control must work; otherwise that run is inconclusive.
+
 **Production-start ordering (claim 3).** S-0404 P11 B/C supplies the setup, procedure,
 observables, expected assignment and falsifiers for same-boundary cancellation starts and
 turn-pass starts before order-boundary starts. S-0411 S9 tests cancellation-order consequences
@@ -1653,6 +1785,14 @@ it starts. These are proposed tests, not recorded results. The between-house ord
 extension is a design rule and has no oracle measurement.
 
 ## Open questions
+
+- Q-0391's three input-acceptance questions are answered by claim 23 and O22.
+  S-0101 claims 14 and 15 already own displacement and retained scrolling.
+  S-0201 claim 14 owns the initial block and claim 11 the chrono-flash block.
+  Their pointers need the cross-spec updates listed for sign-off below.
+- Q-0393's four shared-status-display questions are answered by claim 25 and O21 b.
+  S-0411 claim 17 already excludes sidebar production labels from this display.
+  Their font and layout are not changed by the status-text contract here.
 
 - Q-0286 is answered jointly: claims 22 and 23 here answer default command bindings and
   options/view-key identities (questions 1 and 3); S-0101 claims 14 and 15 and Scenario M7
@@ -1715,6 +1855,16 @@ table T1 defer to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end d
 2026-10-11 (play to the last side) is S-0414's. Items to confirm against the versions handed
 off together at sign-off:
 
+- **Q-0391 companions:** S-0201 claim 14 and its open question must replace
+  the unresolved new-arrow-input qualification with claim 23 here: blocked presses
+  and releases are discarded, retained contributions are unchanged, and unblock
+  does not synthesize a press. S-0101 claims 14 and 15 should cite that input rule
+  alongside their unchanged displacement and pause rules. Their scenarios should
+  point to O22, rather than treating newly pressed arrows as expectation-free probes.
+- **Q-0393 companion:** S-0411 claim 17 should explicitly point to claim 25 here
+  for shared status wrapping, explicit breaks and font metrics, while retaining
+  sidebar labels as a separate presentation contract. It already supplies the
+  no-production-status-message part; no new sidebar message event is needed.
 - **Selection order already agrees:** current S-0214 claim 12 and claim 1's representative
   tie-break use the order here and in S-0701 claim 18: positive-primary-damage types first,
   most recently selected first, then other types, earliest selected first. Confirm these
