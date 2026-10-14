@@ -10,9 +10,8 @@
 //! What stays open (S-0417 Open questions): the later walk-out of an
 //! infantry unit released without a rally destination (none is given),
 //! and the draws of putting a released unit on the map (none are taken).
-//! The interim rule of request Q-0295 (an infantry unit's cell-arrival
-//! update) is in `walk` and listed in the interim table of
-//! `docs/development.md`.
+//! An infantry unit's cell-arrival update is its walking arrival tick
+//! (S-0208 claim 23), called from `walk`.
 //! The production and idle animations of a factory are not modelled
 //! (building animations are a seam), so they take no draws.
 
@@ -1462,7 +1461,7 @@ fn building_cell(w: &World, c: CellXY) -> bool {
 /// target, also when a further track follows in the same tick (S-0417
 /// claim 7, Q-0223; the chain-point update of a chaining vehicle never
 /// occurs, as curve chaining, S-0207 claim 8, is not modelled); a walking
-/// unit's is its arrival tick (interim, request Q-0295).
+/// unit's is its arrival tick at each walking target (S-0208 claim 23).
 pub fn arrival(w: &mut World, id: ObjectId) {
     if !tethered(w, id) {
         return;

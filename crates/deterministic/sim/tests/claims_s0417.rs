@@ -349,6 +349,31 @@ fn claim_10_infantry() {
     assert_eq!(w.obj(k).unwrap().beh.gate.door, Door::Closed);
 }
 
+// spec: S-0208 claim 23 (a tethered infantry unit reports clear on a walking arrival tick: snapped to a standing position, not at a cell crossing)
+#[test]
+fn s0208_claim_23_report_at_first_arrival() {
+    let mut w = game(&ruleset());
+    let (k, _) = barracks_with_rally(&mut w);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    let standing: Vec<(i32, i32)> = (0..5).map(glasnost_sim::walk::standing_point).collect();
+    let mut reported = false;
+    for _ in 0..100 {
+        step(&mut w);
+        let o = w.obj(grunt).unwrap();
+        if o.contact.is_none() {
+            let off = (o.pos.x.rem_euclid(256), o.pos.y.rem_euclid(256));
+            assert!(
+                standing.contains(&off),
+                "the report tick is an arrival tick"
+            );
+            reported = true;
+            break;
+        }
+    }
+    assert!(reported);
+}
+
 // spec: S-0215 claim 11 (vehicles: in contact with a vehicle-factory building and the queued behaviour neither move nor enter; in contact with nothing on cell (x, y + 1) of one)
 #[test]
 fn s0215_claim_11_vehicle_factory_readiness() {

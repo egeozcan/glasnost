@@ -186,7 +186,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0208 claim 22 (the snap to the walking target raises the current cell's entered-by tag, after claim 17's destination clear; every intermediate standing-position arrival raises it)
             crate::objects::arrival_raise(w, id);
             end_of_walk(w, id);
-            // spec: S-0417 claim 10 (a tethered infantry unit reports clear on its next cell-arrival update; request Q-0295, interim: the arrival tick)
+            // spec: S-0208 claim 23 and S-0417 claim 10 (the arrival tick at each walking target is the cell-arrival update; a tethered infantry unit reports clear on it)
             crate::econ::release::arrival(w, id);
             return true;
         }

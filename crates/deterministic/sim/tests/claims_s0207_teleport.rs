@@ -163,6 +163,30 @@ fn claim_20_occupied_destination() {
     assert!((c.x - dc.x).abs() <= 1 && (c.y - dc.y).abs() <= 1);
 }
 
+// spec: S-0207 claim 20 (b) (the nearby-cell pick uses the landing-point fixation tick: the point fixed when the order applies is where the jump lands, a tick later)
+#[test]
+fn claim_20_landing_pick_at_fixation() {
+    let mut s = scene(false);
+    s.vehicle("BLOCK", unit_type(WHEEL, 6, 5));
+    let dc = cell(0, -8);
+    s.place_unit(0, "BLOCK", dc, 0);
+    let (mut w, id) = start(&s);
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    let fixed = w
+        .obj(id)
+        .unwrap()
+        .teleport
+        .as_ref()
+        .unwrap()
+        .landing
+        .expect("fixed when the order applies");
+    let fixation = w.tick;
+    run(&mut w, 1);
+    assert!(w.tick > fixation);
+    assert_eq!(w.obj(id).unwrap().pos, fixed);
+}
+
 // spec: S-0207 claim 20 (d) (L equal to its own position: no jump, the destination removed, no phasing in)
 #[test]
 fn claim_20_own_cell_destination() {
@@ -522,11 +546,23 @@ fn claim_20_vehicle_landing_on_a_high_bridge() {
     let next = cell(6, 0);
     order_move(&mut w, id, next);
     run(&mut w, 1);
-    assert_eq!(vehicle_flags(&w, dc), (false, true), "remembered ground cleared");
+    assert_eq!(
+        vehicle_flags(&w, dc),
+        (false, true),
+        "remembered ground cleared"
+    );
     assert_eq!(vehicle_flags(&w, next), (true, false));
     run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == next);
-    assert_eq!(vehicle_flags(&w, dc), (false, false), "deck cleared at departure");
-    assert_eq!(vehicle_flags(&w, next), (true, false), "one record off a bridge");
+    assert_eq!(
+        vehicle_flags(&w, dc),
+        (false, false),
+        "deck cleared at departure"
+    );
+    assert_eq!(
+        vehicle_flags(&w, next),
+        (true, false),
+        "one record off a bridge"
+    );
 }
 
 // spec: S-0207 Edge cases (quirks.teleport_vehicle_ground_reservation off: the reservation is in the eventual landing layer, deck on a high bridge, with no separate ground reservation, and is cleared from that layer)
@@ -562,7 +598,10 @@ fn flash(on: bool) -> (World, ObjectId) {
     t.locomotor = Some(Locomotor::Teleport);
     s.aircraft("FLASH", t);
     s.place_aircraft(0, "FLASH", cell(0, 0), 64);
-    s.ruleset.globals.quirks.teleport_aircraft_ground_reservation = on;
+    s.ruleset
+        .globals
+        .quirks
+        .teleport_aircraft_ground_reservation = on;
     let mut w = s.build();
     open_orders(&mut w);
     let id = objects_of(&w, Kind::Aircraft)[0];

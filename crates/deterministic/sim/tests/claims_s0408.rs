@@ -674,3 +674,19 @@ fn claim_17_early_report_at_stage_23() {
     let (d, e) = build_down_ticks(&mut w, b);
     assert_eq!(e, d + 29, "a guard spot suppresses the early report");
 }
+
+// spec: S-0213 claim 15 (only the sell order checks the owner: an actor whose owner changes before the application is not sold, but still takes a repair order)
+#[test]
+fn s0213_claim_15_only_sell_checks_owner() {
+    let mut w = game(&rules());
+    let hut = put(&mut w, "HUT", 0, c(0, 0));
+    w.obj_mut(hut).unwrap().health = 200;
+    order(&mut w, A, Order::Sell { actor: hut });
+    order(&mut w, A, Order::Repair { actor: hut });
+    // The owner changes between the issue and the application.
+    w.obj_mut(hut).unwrap().owner = Some(B);
+    step(&mut w);
+    let o = w.obj(hut).unwrap();
+    assert_ne!(o.beh.seen(), Some(Behaviour::Selling), "not sold");
+    assert!(o.econ.building.repairing, "the repair order still applies");
+}
