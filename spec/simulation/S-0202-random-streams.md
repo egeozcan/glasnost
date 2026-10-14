@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,6 +23,18 @@ random stream and which from the unsynchronised random stream. It also states th
 no feature spec lists yet: the creation draw of an object, the draws of overlay placement (with the
 low-bridge and vein placement rules they depend on) and the creation draws of an animation
 (claim 10).
+
+**Joint hand-off checks.** Claim 14 agrees with S-0009's loading-order table and
+S-0412 claim 14: game-start tile-animation draws follow starting units, crates,
+secret-lab choices and end-of-loading tags. The cleanup and low-bridge refinements
+remain in force. S-0109 claims 14 and 25 own the middle-event gates and sprite-derived μ.
+Claim 15 here now supplies the downstream map-load particle and smudge creation draws.
+Coordination text that still calls those creation counts unresolved must be updated,
+not replaced with zero-draw assumptions. S-0404 claim 11 agrees with claim 10's
+production-start creation timing, but leaves simultaneous production-start draw order open.
+S-0401 claim 20 must align its trigger-played suppression wording with S-0109 claim 13:
+the creation start event can react, while later start events are suppressed. S-0011 claim 36
+must distinguish the now-specified map-load composition from still-unresolved later particle effects.
 
 ## Terms
 
@@ -176,12 +188,19 @@ original's recording modes are retained as deferred context, not implementation 
    - *d* ≥ 2147483648: the original never finishes the draw. It takes raw values forever and the
      program stops responding. Departure: our engine applies claim 4's rule with *m* = 32: the result is
      *lo* + *x*, wrapped into the signed range, for the first raw value *x* with *x* ≤ *d*, and the
-     draw consumes every raw value from the stream's next one up to that one.
+     draw consumes every raw value from the stream's next one up to that one. This finishes
+     after 1 … 251 raw values for every stream state obeying claim 2. If the first 250 values
+     all fail, each has its highest bit set. The next value combines the first and the 104th
+     of those values by exclusive-or, so its highest bit is clear and it is at most 2147483647,
+     which passes. This bound is a mathematical consequence of the generator, not a new
+     fallback, draw cap or change to its output. The suspended stream's zero also passes.
    - A spec whose imported fields can make a span of 2147483647 or more says so, and the importer
      warns for such data, naming the field and the span; the game still runs, with the result
      above for each span.
-   - Backing: `unmeasured` (no stock data reaches either span; a test would need a data path to a
-     range bound that the topic specs have not yet named)
+   - Backing: `unmeasured` for the original's exceptional results and hang (no scenario part
+     exercises either span). The departure and its finite-consumption bound are design and
+     a mathematical consequence of claim 2, respectively, not results measurable in the original.
+     Claim 14's glint frequency can reach these spans, but R13 deliberately does not run them
    - Confidence: high
 
 6. **Derived forms.** Other specs use these forms of the scenario random stream; each spec names
@@ -308,7 +327,9 @@ original's recording modes are retained as deferred context, not implementation 
         the building that produced it. Its creation draw therefore falls in whatever part of the
         tick starts that production (in S-0203's tick table, a house update, the production
         lines or the processing of orders), not at its entering play. The production specs fix that timing,
-        including when the next item of a queue begins.
+        including when the next item of a queue begins. S-0404 claim 11 does not yet
+        establish which successive stream values simultaneous item starts receive.
+        Its payment-priority order is not a resolved creation-draw order.
       - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
         happens at a time the spec of that feature fixes, and the creation draw comes with it.
     - **Overlay placement.** Creating an overlay object takes no draw by itself. Some effects of
@@ -680,8 +701,12 @@ original's recording modes are retained as deferred context, not implementation 
     theater, overlays, buildings and other map state do not alter these groups or their bounds.
     They can affect the particle's position and later life, not its creation draw count.
     The lifetime field is a signed integer; its zero-divisor case follows S-0205 claim 3:
-    the original fails after taking the raw value, while our engine substitutes a zero remainder
-    with an importer warning, retaining that draw. Railgun behaviour has no zero-divisor case.
+    the original fails after taking the raw value, while our engine uses a remainder equal to
+    that raw value's signed reading, with an importer warning, retaining that draw. The
+    subsequent magnitude uses signed 32-bit wrapping, so only −2147483648 stays negative.
+    Negative lifetime divisors also follow S-0205's signed division rules, including its
+    overflowing-quotient departure for −2147483648 divided by −1. Railgun behaviour has
+    neither exceptional divisor case.
 
     **Smudges.** After the particle groups and S-0109's conditional scorch-or-crater choice,
     the chosen kind uses the fit test and selection rule of S-0312 claim 26, with these forms:
@@ -713,12 +738,20 @@ original's recording modes are retained as deferred context, not implementation 
 
     Resource removal that empties a cell can itself recalculate that cell. Any missing tile
     animation started there immediately takes claim 10's creation and start-event draws before
-    smudge selection. This is conditional, not an extra fixed draw per crater. The draw order
-    is therefore particle groups, optional kind-choice draw, any resource-removal recalculation
-    effects for a crater, then the smudge-type draw. The subsequent start-event chain reaction
+    smudge selection. Emptying also makes the conditional neighbour spread offers of S-0401
+    claims 5 and 8, after that recalculation and before smudge selection; their draws must not
+    be omitted. These effects are conditional, not an extra fixed draw per crater. The draw
+    order is therefore particle groups, optional kind-choice draw, resource-removal effects
+    for a crater (including any recalculation effects and neighbour-offer draws), then the
+    smudge-type draw. The subsequent start-event chain reaction
     remains S-0401 claim 20's rule, after the whole immediate middle event.
     - Backing: `measurable` (R14 A for particles, B for smudge forms and dimensions, C for
-      data-stream ordering and conditional recalculation)
+      data-stream ordering and conditional recalculation). The zero-divisor failure and
+      retaining its raw value are `unmeasured` here: R14 excludes that crash case; the
+      deterministic replacement is S-0205's design departure. Negative lifetime divisors
+      are also `unmeasured`: R14 A uses positive divisors only. The exhaustive assertion that
+      no map state can change a particle creation group is `unmeasured`: R14 tests named
+      terrain, overlay, occupation and theater variants, not every possible map state
     - Confidence: high for particle draw forms, gates and order, smudge candidate preferences
       and data-stream ordering; medium for absence of further placement draws and conditional
       resource-removal recalculation composition
@@ -793,9 +826,10 @@ For seed 0, x₉₉₉ = 2255550017.
 > `quirks.ranged_draw_half_span`; with the switch off, the 1 ≤ *d* ≤ 2147483646 rule applies with
 > *m* = 31).
 >
-> *d* ≥ 2147483648: departure: *w* is the smallest integer *w* ≥ 0 with x<sub>*q*+*w*</sub> ≤ *d*.
-> Result *σ*((*lo* + x<sub>*q*+*w*</sub>) mod 2³²). The draw consumes x<sub>*q*</sub> …
-> x<sub>*q*+*w*</sub>.
+> *d* ≥ 2147483648: departure: *w* is the smallest integer in 0 … 250 with
+> x<sub>*q*+*w*</sub> ≤ *d*. Such a *w* always exists by claim 5's recurrence argument.
+> Result *σ*((*lo* + x<sub>*q*+*w*</sub>) mod 2³²). The draw consumes exactly the *w* + 1
+> raw values x<sub>*q*</sub> … x<sub>*q*+*w*</sub>, hence at most 251 raw values.
 
 Expected number of raw values consumed, *w* + 1, for 1 ≤ *d* ≤ 2147483646: 2<sup>*m*</sup> / (*d* + 1),
 an exact rational (a statistical statement about the draw, not a value the engine computes).
@@ -811,7 +845,7 @@ nearest would give exactly 1. So with the switch `quirks.chop_rounding` of S-020
 
 **List pick:** index = *x* mod *n* for one raw value *x* and list length *n* ≥ 1.
 
-**Signed remainder:** *σ*(*x*) rem *n* (sign of *σ*(*x*)); "magnitude first": |*σ*(*x*)| rem *n*,
+**Signed remainder** (positive modulus *n* ≥ 1): *σ*(*x*) rem *n* (sign of *σ*(*x*)); "magnitude first": |*σ*(*x*)| rem *n*,
 where |−2147483648| is taken as −2147483648 (Edge cases); "magnitude after": |*σ*(*x*) rem *n*|,
 always 0 … *n* − 1. For *n* = 3, "magnitude first" gives −2 for *x* = 2147483648 (signed reading
 −2147483648 = −715827882 × 3 − 2).
@@ -964,8 +998,9 @@ overlay type stream and the starting units are not yet predicted draw by draw on
   span (claim 5): the switch keeps the original's result for faithful replays, while the warning
   tells the author that the data reaches a case the original handles wrongly.
 - **Spans of 2147483648 or more** (departure, no switch). The original hangs (claim 5). Our engine
-  draws with all 32 bits kept and rejection; the importer warns where data can produce such a
-  span.
+  draws with all 32 bits kept and rejection, consuming 1 … 251 raw values. Claim 5 proves
+  acceptance within that bound for every stream state; no fallback or cap is added. The importer
+  warns where data can produce such a span.
 - **`quirks.random_magnitude_overflow`** (default: on, the original). In the "magnitude first"
   signed remainder (claim 6), the raw value whose signed reading is −2147483648 keeps its negative
   sign, so the remainder lies in −(*n* − 1) … 0 instead of 0 … *n* − 1, for that one raw value in
@@ -1410,19 +1445,26 @@ The recorder is part of the measurement setup (the project lead has approved it)
   map overrides, a test art file, one-frame test sprites (μ = 0), and a test smudge list.
   Use the random-state recorder to compare incoming and outgoing load-time states with the
   predicted sequence from each recorded seed, and a read-only cell/particle recorder for the
-  resulting types, colours and resource levels. Five fresh launches per variant; the recorder
+  resulting types, starting velocities, lifetime variations, colours and resource levels.
+  Five fresh launches per variant; the recorder
   does not set the seed. Account separately for stage delay and bouncing draws, or disable
   them in the named animation test data. No chain reaction in these test animations.
   - **A, particles.** Repeat both a tile animation and an overlay cell animation with counts
-    0, 1 and 2. Use each of the five particle behaviours and an unrecognised behaviour.
+    −1, 0, 1 and 2, plus a positive-count variant with no particle type. Use each of the five
+    particle behaviours and an unrecognised behaviour.
     Set the lifetime field to test values 1 and 7. For each, try an empty colour list, a
     nonempty list with two black starting colours, and a nonempty list with one nonblack
     component. Include a normalised-timing variant. Repeat selected variants on raised
-    ground, on an occupied cell, and in a second theater using the same named sprite.
-    Expected: each smoke particle takes two raw values before any colour draw, all other
+    ground, on an occupied cell, on an overlay cell, and in a second theater using the same
+    named sprite. Expected: absent particle type or nonpositive count takes no particle draws.
+    Each smoke particle takes two raw values before any colour draw, all other
     behaviours one; the optional colour draw is exactly R(0, 2147483646), with rejections
     counted. Count 2 gives two complete groups, not grouped speed draws followed by grouped
-    lifetime draws. Terrain, theater and timing variants add no scenario draws. Enable both
+    lifetime draws. The smoke speed variation equals the signed first-value remainder modulo 2.
+    Lifetime variation equals the magnitude of the next signed-value remainder, modulo 10 for
+    railgun and modulo the test lifetime field otherwise. A different recorded variation
+    falsifies its form even if the consumption matches. Terrain, overlays, theater and timing
+    variants add no scenario draws. Enable both
     smudge flags in one variant and predict the kind choice from the state after those groups.
     Any extra/missing raw value, different ordering, or choice from the pre-particle state
     falsifies the rule. The field-1 case still consumes its raw lifetime value despite a
@@ -1431,7 +1473,12 @@ The recorder is part of the measurement setup (the project lead has approved it)
     known registration order. Place on flat morphable ground with no overlay or smudge at
     the animation position. Use test middle-frame visible bounds 60 × 51, 61 × 50 and
     61 × 51 pixels; change the full canvas without changing those bounds in one variant.
-    Try scorch only, crater only, both, and large-crater enabled. Add variants with a building,
+    Try scorch only, crater only, both, and large-crater enabled. Add a missing-sprite variant:
+    expected visible bounds are 30 × 30 pixels and non-large selection prefers fitting 1 × 1
+    types. Add a list with no fitting 1 × 1 type to test fallback to all fitting types for a
+    small non-large request, and a list with no fitting wide-and-tall type to test the large
+    form's fallback. A different candidate list or selected type falsifies either fallback.
+    Add variants with a building,
     a slope, an existing smudge and a nonmorphable tile in a candidate footprint, plus
     candidate lists with only one fitting type and none. Expected: non-large requests prefer
     the two 1 × 1 types in the first two size cases and use all four in the third; large
@@ -1449,6 +1496,11 @@ The recorder is part of the measurement setup (the project lead has approved it)
     that first event. A named test-data variant makes resource exhaustion expose a missing
     tile animation with a known random-rate range: its applicable creation draws must fall
     before smudge selection, and a cell with an already-recorded tile animation adds none.
+    Add a qualifying resource neighbour under S-0401 claim 8 with its spread entry not yet
+    marked, and record the spread-list state at exhaustion. Expected: its offer takes that
+    claim's raw value after any recalculation-created animation draws and before the smudge
+    draw. Repeat with the neighbour already marked: no offer draw. Omission of a qualifying
+    offer, a draw for the marked control, or a different stream order falsifies this variant.
     An overlay type restored by data alone, reduction on the wrong side of the data-stream
     milestone, or a smudge choice made before the conditional tile-animation draws falsifies
     the claim. Void a fixture in which its intended creation checkpoint is not reached.
