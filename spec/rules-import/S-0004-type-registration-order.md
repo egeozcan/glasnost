@@ -2,7 +2,7 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -240,7 +240,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
     - Backing: `measurable` (scenario F): F1 for the ordering cases present in stock data; F2 for the newest-first tie; F3 for the recharge-time key and S-0205 N5 for a positive wrapped key; F4 for the 76-item cap; F5 for the both-flags rank and `quirks.sidebar_both_flags_rank`; F6 for the base-planning-side rule (rule 2) ahead of tech level. F1 samples tab assignment, category, tech level, price and display-name ordering only where stock items differ in those keys. Category parsing is `measurable` by S-0302 D21 part b, recording the building's sidebar tab as well as its damage response. `unmeasured` for negative or extreme recharge-time keys beyond the positive wrapped example (no scenario here isolates them), remaining combinations, non-ASCII display-name comparisons and the same-name/different-type sidebar distinction beyond C2: no scenario isolates those cases. `unmeasured` for "items are not re-sorted later": a re-sort could show only if a sort key of an item already shown changed during a game. The other keys are fields of the type or the local player's side, which this spec treats as fixed for a game. Only the cost depends on the player's state, and whether and when it changes belongs to the production topic, so this spec has no scenario that changes a key in play.
     - Confidence: medium
 
-    These sidebar rules are user-interface behaviour. They stay in this spec for now; a future UI spec may take them over, and this claim will then point there.
+    These sidebar rules are user-interface behaviour. This claim owns tab capacity, tab assignment and icon sorting and placement. S-0407 claim 17 owns simultaneous admission order; S-0411 owns icon states, clicks, removal and automatic production orders. Those rules do not resolve the full-tab outcomes left open above.
 
 12. **"The first type that…" means the lowest registration index.** Wherever another spec says that the game picks "the first type of a kind that satisfies a condition", first means the lowest registration index under claims 2 to 4. With unchanged data, that is the order of the base rules' type lists, followed by types created by reference. Between types created by different keys of one section, the order is unspecified (claim 4, "within one section"), so a spec that needs a particular one must state it.
     - Backing: `unmeasured`. This is a definition. Each spec that uses it states its own observable.
@@ -323,7 +323,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
 
 > *k* = wrap₃₂(σ × *d*), with *d* = Σ<sub>*i*=1…ℓ</sub> *d*<sub>*i*</sub> × 10<sup>ℓ−*i*</sup> (so *d* = 0 when ℓ = 0), σ = −1 if *p* is `-` and σ = +1 otherwise.
 > - wrap₃₂(*x*) is the integer in [−2³¹, 2³¹ − 1] that is congruent to *x* modulo 2³², so a key too large for 32 bits gives the wrapped value.
-> - Exact integer arithmetic, then the wrap; no rounding applies. Number domain: signed 32-bit integers. Unit: none (a registration index).
+> - Exact integer arithmetic, then the wrap; no rounding applies. Number domain: signed 32-bit integers. Unit: none (the parsed tiberium-list key number, which is used as an index only when it falls within the existing registry).
 > - No other form is recognised: `12abc` gives 12, `+7` gives 7, `-1` gives −1, and a key written in hexadecimal gives only its leading decimal digits (so a leading `0` followed by a letter gives 0).
 
 This differs from the integer value forms of S-0003. Keys are never read in those forms.
@@ -339,7 +339,7 @@ This differs from the integer value forms of S-0003. Keys are never read in thos
 
 The original's arithmetic runs in that mode (S-0003, claim 17). Its switch, `quirks.chop_rounding`, belongs to S-0205 (number domains). Whether it changes *t* depends on the form of the value:
 
-- **Without a `%`,** *m* is a single (24 significant bits) and 900 needs 8, so the exact product has at most 32 significant bits and is itself a double. RZ changes nothing, in either rounding mode; only the single precision of *m* shows. For example, a field of 0.3 is stored as 0.300000011920928955078125, the product is 270.0000107…, and *t* = 270. A field of 0.30001 also gives 270, so the two tie. A field of 0.7 is stored slightly below 0.7 (0.699999988079…), the product is 629.99998927…, and *t* = 629 in both rounding modes.
+- **Without a `%`,** *m* is a single (24 significant bits) and 900 needs 10, so the exact product has at most 34 significant bits and is exactly representable as a double, which has a 53-bit significand. RZ changes nothing, in either rounding mode; only the single precision of *m* shows. For example, a field of 0.3 is stored as 0.300000011920928955078125, the product is 270.0000107…, and *t* = 270. A field of 0.30001 also gives 270, so the two tie. A field of 0.7 is stored slightly below 0.7 (0.699999988079…), the product is 629.99998927…, and *t* = 629 in both rounding modes.
 - **With a `%`,** *m* is a double that can use all 53 bits, and the rounding mode shows. For example, `30%` gives *m* = 0.299999999999999988897…, the double nearest to 0.3 (both modes agree on this step). The exact product 269.99999999999999000… rounds toward zero to 269.99999999999994316, so *t* = 269, where round-to-nearest gives exactly 270 and *t* = 270. Likewise `10%` gives 89 against 90, and `15%` gives 134 against 135; `50%` gives 450 in both modes.
 
 Two superweapons are compared by *t*, an integer, so two fields that truncate to the same tick count tie and fall through to the display name.
