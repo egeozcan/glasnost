@@ -2,8 +2,8 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 22
-sources-class: [decomp]
+revision: 23
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
@@ -28,7 +28,29 @@ of them describe the original only.
 **Cross-spec confirmation at hand-off.** Retain the coordinated immediate fresh search of
 claim 22 and S-0207 claim 15, its state table and D17 part d3. S-0207's current draft
 has removed the former delayed-search Open question; hand off these revisions together.
-At hand-off, update S-0212's index entry from approved revision 21 to this revision 22.
+Claim 25's infantry teleport fallback parameters agree with S-0208 claim 19, and its
+failed-approach row includes close-range searches covered by S-0307 claim 17. Retain the
+other parameters and exclusions of that row. Hand off these coordinated texts together.
+At hand-off, update S-0212's index entry from approved revision 22 to this revision 23.
+
+### Evidence scope
+
+The detailed route rules below are a behavioural hypothesis, not a record of measured paths:
+there are no M-records for this revision. In particular, a matching whole route does not establish
+all of the search decisions that could have produced it. The remaining unsupported detail is
+consolidated into three **unmeasured rule families**, with the individual reasons retained at the
+claims so that no aggregate check is mistaken for independent evidence:
+
+| Family | Detail still unmeasured | Why it is retained |
+|---|---|---|
+| Search selection | first-recorded route retention and its margin (11), original tie differences (12a), corridor progress, free-part and closure predicates, individual sector and connection choices (13 to 13b), flattening precedence and straight-run V's (17), threat and post-tunnel transformations (18) | These jointly predict a stored path, but no proposed scenario separates each remaining predicate from the others. They are unmeasured route hypotheses, not settled observations of intermediate work. Their exact definitions keep the reference predictions falsifiable as a family. |
+| Unreachable or oversized cases | shared comparisons of unusable cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
+| Remaining caller/state distinctions | hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations must not be used to confirm them. |
+
+Scenarios P20 to P25 add separate probes of reachable height, nearby-search, blocker-chain,
+cost and timing rules. Their qualification conditions are checked against observable state.
+A missing qualifying run is inconclusive, never a confirmation. The unmeasured families above
+are not promoted by a reference implementation agreeing with itself.
 
 ## Terms
 
@@ -357,10 +379,11 @@ Terms specific to this spec:
      the change". `unmeasured` for the other entries: a damaged wall stays a wall, a destroyed
      building changes no category, stock data has no vein holes, and whether a player can sell a
      wall section at all belongs to the order specs (S-0213), so none of them is known to change a
-     path in stock play. `unmeasured` for "later in the same tick": a human order cannot be
-     placed in the same tick as a destruction, and an order given by a trigger action in that tick
-     would rest on trigger actions whose meaning no spec of this batch gives, so the difference
-     between "in the same tick" and "before the next path computation" cannot be made visible
+     path in stock play. `unmeasured` for "later in the same tick": the proposed runs do not
+     qualify a destruction followed by a path computation on that same tick. Scripted input can
+     time an order, but does not itself establish that the resulting computation follows the
+     destruction rather than precedes it. No qualifying fixture is supplied here, so the
+     same-tick guarantee is not independently backed by the later-order observations
    - Confidence: medium for the list (high for walls built and destroyed, bridges and the local
      area). Low for whether the result always equals a full recomputation for the new map content
      (Open questions)
@@ -485,16 +508,13 @@ Terms specific to this spec:
    impassable for that unit, but that comes from the entry outcome (*blocked*), not from the cost.
    - Backing: `measurable` (scenario P13 for the values of T2, for the chain ending on an empty cell
      and for the chain ending on a parked unit, P2 for the absence of terrain costs, P1 for the
-     whole). `unmeasured` for the cap of 10 objects: it needs a column of ten units all heading on
-     at the moment of the search, which cannot be set up reliably. `unmeasured` for a chain ending
-     on an object that is not a unit: a unit heads into a building's or a terrain object's cell
-     only for moments (for example while it slows down in front of one), which cannot be timed
-     against another unit's search
-     `unmeasured` for the closed-friendly-gate base cost and trains' uniform base cost: P13
-     has neither a gate nor a train cost comparison, and P9's train routes use clear or blocked
-     cells only. `unmeasured` for the blocker's bridge-layer selection: no P13 run places its
-     chain on a bridge. The search-mode costs are tested in aggregate by P6 and P14, not by
-     independent cost-threshold tests.
+     whole). P23 tests the ten-cell cap, non-unit chain termination and bridge-layer
+     selection using scripted input and qualifying snapshots. P24 tests the closed-friendly-gate
+     low base cost and trains' uniform treatment of stationary-friendly and enemy-obstacle
+     outcomes. Exact gate cost and the other train outcome costs remain `unmeasured` individually:
+     P24 separates the stated low-cost choices from the ordinary larger penalties but does not
+     determine every table entry or distinguish 1 from every nearby cost. The search-mode costs
+     are tested in aggregate by P6 and P14, not by independent cost-threshold tests.
    - Confidence: high for the table. Medium for the blocker chain
 
 9. **Congestion marks and tunnel steps.** A step onto a cell that carries the congestion mark costs four
@@ -549,9 +569,8 @@ Terms specific to this spec:
     levels (Δ = +1) or 5 levels (Δ = −1) in one step (`quirks.deck_side_step_ground_level`, Edge
     cases).
     - Backing: `measurable` (P4 maps A, C, C2, C3, I, F3 and K; K2 for level-ground deck rows).
-      `unmeasured` for deck-side steps with ground-level difference ±1 and deck-to-deck steps
-      over sloping ground: K2 has no such slope beside or under the deck, and no scenario here
-      distinguishes these rows from ordinary deck-height steps
+      P20 separately tests deck-side steps with ground-level difference ±1 and deck-to-deck
+      steps over sloping ground, including the marked/unmarked distinction
     - Confidence: high for the table and for the cells that carry the deck-entry mark. Medium that
       no other condition of the original enters a step's height test in the search
 
@@ -566,7 +585,8 @@ Terms specific to this spec:
     recorded cost is at least that neighbour's cost plus 1.009 (F1).
     - Backing: `unmeasured`. The recorded costs are internal. The rule changes path shape only where
       a cheaper second route to an already recorded cell exists, and the estimate's own bias
-      (claim 7) changes path shape in the same places, so no practical map separates the two. The
+      (claim 7) changes path shape in the same places, and no practical map separating the two
+      has been established here. The
       secondary check of scenario P1 compares whole paths with claims 7 to 18 taken together, this
       claim included, but it is not a test of this claim alone.
     - Confidence: high
@@ -614,8 +634,8 @@ Terms specific to this spec:
     which its labelling of the map found each sector's connections. So at exact ties our engine's route can differ from the original's. In the cell search such ties
     are rare (T4). In the coarse search they are common on open ground, where many corridors cost
     the same (claim 13).
-    - Backing: `unmeasured`. The order above is our engine's own: a reference implementation
-      checks it, not the original. That the original's order differs from it shows only through
+    - Backing: `unmeasured` for the original's differing tie order. The order specified for our
+      engine is a design rule, checked by a reference implementation, not an oracle hypothesis. That the original's order differs from it shows only through
       whole routes at exact ties, and which pending entries tie depends on the whole search, so no
       practical map isolates it. The secondary checks of scenarios P1 and P12 report the runs whose
       reference computation meets an exact tie
@@ -690,13 +710,12 @@ Terms specific to this spec:
       cost of diagonal connections (claim 13b) and by the order in which the coarse search takes
       routes of equal cost (claim 12a).
     - **Progress.** Number the sectors of the level-0 corridor *s*₀ (the sector of the start's coarse
-      end cell) to *s*ₙ (that of the destination's coarse end cell). For one cell search with a corridor, define cells *e*₀, *e*₁, … in turn. *e*₀
-      is the start cell, and each *e*ᵢ is the first candidate in sector *s*ᵢ that the search records
-      (claim 11) after *e*ᵢ₋₁. A candidate refused as outcome *blocked*, or one whose pair was already
-      recorded, is not recorded and does not count. The chain stops where no such candidate exists.
-      Its last cell *e*ₚ is the search's **progress cell**, and *p* is its **progress**. So the
-      progress cell is the first cell the search recorded in the furthest corridor sector it reached
-      by entering the sectors in corridor order.
+      end cell) to *s*ₙ (that of the destination's coarse end cell). Let *p* be the greatest index for which there is a sequence of recorded cells
+      *e*₀, …, *e*ₚ such that *e*₀ is the start cell and, for each *i* from 1 through *p*, *e*ᵢ is
+      the first candidate in sector *s*ᵢ recorded after *e*ᵢ₋₁ (claim 11). A candidate refused as
+      outcome *blocked*, or one whose pair was already recorded, cannot be an *e*ᵢ. The
+      **progress** is *p* and the **progress cell** is *e*ₚ: the first recorded cell in the furthest
+      corridor sector reached by such a sequence.
     - **Retry.** A failed cell search inside a corridor has, at each level *L*, the effect given by
       this table, where *S* is the level-*L* sector that holds the progress cell and *whole* and
       *split* are defined in claim 13a:
@@ -727,8 +746,8 @@ Terms specific to this spec:
       single search without a corridor is the only cell search made, so the limit plays no part.
     - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12). `unmeasured`
       for the internal ordering of the coarse search, its end rule and for the limit of 9999 pending routes, which
-      needs thousands of sectors reached at once, more than the maps of the measurement setup
-      produce, and whose effect could not be told from a route choice. `unmeasured` for the corridor
+      needs thousands of sector routes pending at once. No proposed fixture reaches that
+      threshold with a route result separated from the other search failures. `unmeasured` for the corridor
       exemption: whether a found path needs an exempt cell off the chain depends on which chain the
       coarse search picks, and on open ground that comes down to the order of equal routes (claim
       12a), which a test map cannot set apart from the rest of the search, so no practical map makes the exemption decide a route by itself. P1 (a) allows for it,
@@ -1210,8 +1229,9 @@ Terms specific to this spec:
     therefore ends up *not* made costly, unless the stored path of a qualifying unit counts it a
     third time.
     - Backing: `measurable` (P14 for mode-1 stored-path marks and parity, P6 for timing).
-      `unmeasured` for mode-2 qualification and the exact path-length cutoffs: P14 keeps mode 1,
-      and no run varies path length at those boundaries. `unmeasured` for restoration of an
+      P25(c) tests mode-2 qualification independently of type and speed. The exact path-length
+      cutoffs remain `unmeasured`: no run holds otherwise identical blockage state while varying
+      remaining path length across the two-step and three-step boundaries. `unmeasured` for restoration of an
       independently pre-existing mark: no scenario establishes one before the search
     - Confidence: medium for the rule. Low for the exact unit test of mode 1 and the path-length
       conditions
@@ -1287,11 +1307,9 @@ Terms specific to this spec:
     - Backing: `measurable` (S-0207 scenario D21 run 4 for the retained-destination hovering
       retry wait after success; scenario P19 for its failed-search and failed-gate cases; scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
       exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
-      re-paths and C19 for the immediate new path). `unmeasured` for a walker's delay after a failed
-      search or a failed gate: what a walker does after such a failure belongs to S-0209 and S-0215,
-      and the delay would show only as the timing of a later search that those reactions also
-      decide. `unmeasured` for the delay after a follower car's computation, for the reason claim 26
-      gives
+      re-paths and C19 for the immediate new path). P25(a, b) additionally reads the retry
+      timer immediately after a walker's failed search/gate and a follower car's computation.
+      It does not infer that timer from a later search decided by another reaction
     - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated,
       low for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4)
 
@@ -1316,10 +1334,10 @@ Terms specific to this spec:
     Its re-paths for a moving blocker (S-0209 claim 10) use search modes 1 and 2 as above, and the
     immediate new path it makes after an obstacle (S-0209 claim 7) is a search in mode 0.
     - Backing: `measurable` (scenarios P6, P14; S-0207 scenario D17 part d3 for the immediate
-      fresh search on outcome *blocked*, also specified here as P18). `unmeasured` for what ends a blockage with this
-      locomotor: P6's shuttling blocker does not isolate a step taken between two waits from a
-      replaced destination, and S-0209's scenario C5 measures the step for the walk locomotor only
-    - Confidence: medium (the other locomotors are not established). Low for what ends a blockage
+      fresh search on outcome *blocked*, also specified here as P18; P25(d) for separate
+      step-taken and destination-replaced endings of a blockage)
+    - Confidence: medium (the other locomotors are not established). Low for what ends a blockage,
+      pending the discriminating timer observations of P25(d)
 
 23. **When no path is found.** What happens depends on why no path was found:
 
@@ -1424,8 +1442,9 @@ Terms specific to this spec:
     | User | Centre | Locomotion class | Movement zone | Reach region | In deck mode when | Height condition | Further test | Reference cell |
     |---|---|---|---|---|---|---|---|---|
     | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
-    | Failed ordinary non-close-range approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
+    | Failed ordinary approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
     | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4) | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
+    | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
@@ -1438,7 +1457,7 @@ Terms specific to this spec:
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
     The failed-approach row and both free-unit searches exclude bridge cells. The teleporting
-    landing row allows them and asks for no no-overlay condition. Only the first free-unit search requires
+    landing row and the infantry teleport fallback row allow them and ask for no no-overlay condition. Only the first free-unit search requires
     the **no-overlay condition**: the cell must hold no overlay of any kind, resources included.
     No other row of T5 asks for that condition.
 
@@ -1509,7 +1528,8 @@ Terms specific to this spec:
     *N* is the tick number (S-0201) applicable to that search: the scatter-request tick for
     scatter, click-handling tick for move orders and rally points (S-0213 claim 20 and S-0214
     claim 11), failure tick for ordinary approach failure, landing-point fixation tick for
-    teleporting landing (S-0207 claim 20 b), and processing tick for idle harvester step-off
+    teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
+    and processing tick for idle harvester step-off
     (S-0402 claim 13).
 
     S-0307 claim 16 owns qualification of obstructed approach positions before failure, including
@@ -1521,15 +1541,15 @@ Terms specific to this spec:
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
       parameters (S-0402 scenario H11), and for both free-unit searches and the no-overlay
       condition (S-0402 scenario H13 parts b and c), for the ordinary approach-failure parameters
-      and centre after candidate trials (S-0307 scenarios RG12 and RG17), for the teleporting
+      and centre after candidate trials, including close-range failure (S-0307 scenarios RG12,
+      RG17 and RG23 f), for the infantry teleport fallback parameters (S-0208 scenario W11), for the teleporting
       landing parameters on flat ground (S-0207 scenario D22 run 3), and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
       cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the other
       parameters of the no-move rows and for the rows of orders onto an object: they differ from the
       move-order row only in parameters that need a flying or jumpjet unit next to occupied cells.
-      `unmeasured` for the teleporting landing's deck-mode threshold in isolation: D22 run 3
-      uses flat ground and does not distinguish the threshold at a high bridge.
+      P22(a) tests the teleporting landing's strict deck-mode threshold on a high bridge.
       `unmeasured` for the 24-cell limit and the stop rule in deck mode. Both differ from the plain
       ring rule only when every qualifying cell of the inner rings fails the visibility test, which
       needs terrain built to hide whole rings (S-0208's scenario W7, part f, tests the check itself
@@ -1539,16 +1559,17 @@ Terms specific to this spec:
       only while the unit's locomotor is not moving (S-0208 claim 11), so that case cannot be set up
       at will. In the uses of table T5 for orders, a qualifying centre on flat ground ends the
       collection with ring 0, so the result is the centre at either position.
-      `unmeasured` for the failure row's bridge exclusion in isolation: RG12 has no bridges,
-      and on its flat ground the height condition already rejects a neighbouring deck 4 levels
-      higher. The exclusion is independent of that height condition, but no scenario here
-      isolates it on raised terrain. The free-unit searches' bridge exclusion is also
-      `unmeasured` in isolation: S-0402 H13 uses level ground, where the height condition
-      already rejects neighbouring decks 4 levels higher.
-      `unmeasured` for the winged class's omitted checks, which no discriminating scenario here
-      isolates (S-0213 O14 step 5 covers an aircraft-factory rally point only). `unmeasured` for
-      the largest-radius boundary, the visibility preference across rings and the no-result
-      case: no scenario here places enough hidden or refused cells to isolate those outcomes.
+      P22(b, c) tests the failure row's and second free-unit search's bridge exclusions on
+      raised terrain, where the height condition alone allows the candidate. The first free-unit
+      search's independent bridge exclusion remains `unmeasured`: a bridge overlay already
+      fails its no-overlay condition, so these two refusals cannot be distinguished in that caller.
+      P21(b) tests the winged class's omitted occupancy and reach-region checks. Its omitted class check stays `unmeasured`:
+      the winged class's fixed land multipliers give no independent zero-multiplier control.
+      P21(a) tests the 31/32-cell radius boundary and the no-result case. The smaller-map
+      radius bound stays `unmeasured`: no fixture here distinguishes it from usable-area refusal.
+      Visibility preference
+      across rings remains `unmeasured`: no proposed fixture hides whole qualifying inner rings
+      while controlling the visibility of outer-ring cells.
       The no-random-draw rule is `measurable` through P16 run (u)'s random-state check
     - Confidence: high for the occupancy condition and the class rule. Medium for the ring rule, the
       scan order, the 24-cell limit, the distance choice, the choice without a reference cell and
@@ -1574,9 +1595,8 @@ Terms specific to this spec:
     when exactly a drive-locomotor car's destination is cleared after such a failure is not
     established (Open questions).
     - Backing: `measurable` only with test data (scenario P9, follower runs 1 to 3). Stock data is
-      not known to link cars. `unmeasured` for the car's retry delay after a failed search or gate:
-      it would show only as the timing of the car's next search, which the car's failure handling
-      (not established) also decides
+      not known to link cars. P25(b) tests the car's retry delay immediately after success,
+      failed search and failed gate, without relying on its still-uncertain later failure handling
     - Confidence: medium (low for the car's retry delay afterwards)
 
 ### Entry outcomes for a vehicle mover
@@ -2847,11 +2867,185 @@ expired. Expected: no step, a gate failure, destination cleared, and *R* startin
 Any step towards the island, a retained destination, or a different timer value falsifies
 this expected gate-failure result. The failed-gate timer specifically tests claim 21.
 
+**P20. Deck steps over sloping ground (claim 10).** Use P4 K2's high bridge over dry
+clear ground, with the same unit and recorder. Named test maps change only the height and tile
+of one side cell *T* next to a marked south deck cell *F*. The unit starts on *F*'s deck.
+Provide a distant ramp route joining the bank to *T*, so the gate passes independently of the
+side step. In separate maps, *T* is not a bridge cell and its ground is one level above the
+ground under *F*, with *F*'s ground a slope; or one level below it, with *T* a slope. Controls
+make the lower ground cell flat. Order onto *T* once in each map. Record the first stored step
+on the computation tick, before movement reactions, and the cells entered afterwards.
+Expected: the slope variants store the direct side step, onto *T*'s ground, a drop of 3 or 5
+height levels respectively; the flat controls do not store that step. A direct step in a flat
+control, or no direct step in a slope variant with a passed gate and clear occupants, falsifies
+the corresponding row. Repeat with *T* a bridge cell, its ground one level higher or lower,
+and with its deck-entry mark separately present and absent. Expected: the slope condition
+allows the direct step onto *T*'s deck with either mark value; the flat controls refuse it.
+Any mark-dependent refusal of an otherwise qualifying slope step falsifies the mark exemption.
+One qualifying run per variant. A failed gate or unexpected occupant voids a run; do not infer
+the search's rule from a later refused locomotor step.
+
+**P21. Nearby radius, no result, and winged checks (claim 25).**
+- (a) Use a flat map large enough for a square of radius 34 cells centred on *C*, entirely
+  inside the usable area. An ordinary unarmed wheeled unit stands on clear ground outside that
+  square. Water occupies the square, except one clear candidate *Q* at (*c*ₓ + 31, *c*ᵧ),
+  connected to the mover's ground by a clear lane running east from *Q*. No other clear cell
+  lies within radius 31. Reveal the area. Click a move onto water cell *C* as in P16(u),
+  once on this map and once on a variant with *Q* and its lane beginning at radius 32.
+  Record the order's destination on the click-handling tick. Expected: the first map gives
+  *Q*; the second finds no nearby cell and produces no move order (S-0214 claim 11).
+  A missing *Q* in the first map, or a new move destination in the second, falsifies the
+  radius/no-result rule. Verify the click reaches the search rather than being refused by
+  shroud or targeting. A different targeting action voids the run. This tests the 31/32-cell
+  boundary, not the smaller-map-width boundary or hidden-ring limit.
+- (b) Place an aircraft factory on one flat plateau and a parked human-owned vehicle on *C*
+  on another plateau, separated by impassable cells and height differences greater than 3
+  levels, with no bridge or tunnel. The two cells must be in different reach regions of zone
+  *fly* under claim 4; verify this from the test geometry. Set the factory's rally point to
+  *C* once, with *C* revealed and usable. Record its resulting guard spot. Expected: it is
+  *C*, despite the occupied cell and different reach region, because the winged search omits
+  both checks and has no height condition. A different guard spot falsifies that combined
+  omission. Controls replace the factory by an infantry-producing building, first with *C*
+  occupied on the building's own plateau and then with *C* empty on the separated plateau.
+  Neither control may choose *C*. A control choosing it voids the contrast pending review of
+  the caller. These observations do not isolate the winged class-rule omission.
+
+**P22. Bridge conditions of nearby-search callers (claim 25).**
+- (a) Named test map: a high bridge over an isolated dry-ground pocket, with raised banks
+  joined by its enabled link. The ground pocket and banks have different normal-zone reach
+  regions. A blocked landing centre *C* on the deck has two free ring-1 candidates: ground
+  cell *A* in the pocket and non-bridge bank cell *B* at deck height. All other ring-1 cells
+  have nonempty occupancy records. Bridge cells other than *C* in that ring are occupied on
+  their decks. Both *A* and *B* pass visibility and class tests. Use a non-infantry teleporting
+  type with zone normal and wheel class. Choose a departure point on level ground at world
+  height exactly 312 leptons above *C*'s terrain surface, and a second point at 364 leptons
+  above it (for example a slope on a higher departure plateau). Give an ordinary teleport
+  order to occupied *C*, one run from each departure. Record departure height at landing-point
+  selection and the chosen landing cell. Expected: at 312, deck mode is off, *C*'s ground
+  reach region allows only *A*; at 364, it is on, the enabled link's deck region allows only
+  *B*. A choice of *B* at exactly 312, or *A* above 312, falsifies the strict threshold.
+  A run qualifies only if the original landing is refused and the recorder confirms the two
+  candidate regions and empty records; otherwise it is inconclusive. The observation concerns
+  landing-point selection, not the later jump height.
+- (b) Use S-0307 RG12's empty-radius attack failure on a revealed ground cell *C* at level *h*.
+  A free neighbouring bridge cell *B* has underlying clear ground at *h* − 4 and deck at *h*.
+  Distant ramps join its ground to the attacker's ground reach region. Arrange every other
+  ring-1 cell to fail occupancy or class qualification, and one free non-bridge cell *Q* on
+  ring 2 at level *h*. Keep *C* occupied by the target. Record the destination on the failure
+  tick. Expected: *Q*, never *B*, although *B* passes the height and reach-region conditions.
+  A destination *B* falsifies the separate bridge exclusion. A different failure centre,
+  occupied *B*, or a failed reach comparison voids the run. One qualifying run.
+- (c) Repeat the height/region contrast for S-0402 H13's free-unit creation, using the building's
+  top-left cell as centre. Make the only otherwise qualifying ring-1 cell a free bridge deck
+  at the centre's level, with its ground connected to the building's ground reach region by
+  distant ramps. Put one free non-bridge cell on ring 2; neither candidate has an overlay
+  other than the bridge's own overlay. Observe the created unit's cell. Expected: the
+  non-bridge cell, through either the first or second search, never the bridge. A bridge
+  placement falsifies exclusion in at least the search that selected it. To test the second
+  search alone, add a resource overlay to the non-bridge candidate: it then fails the first
+  search's no-overlay condition but passes the second. Obtain one qualifying run of each
+  variant. This does not separately identify whether the first search also rejected a bridge
+  by its no-overlay condition; it establishes that the second excludes it independently.
+
+**P23. Blocker-chain termination and layer (claim 8).** Use P13's two narrow corridors,
+but a driving mover placed outside the usable area, with the first search made before it enters,
+so no corridor is used. Script move inputs for blockers; take a read-only snapshot of positions,
+speeds, facings and stored paths on the mover's search tick. Record the mover's new stored path
+before it encounters any blocker. One qualifying run per contrast below. The two corridors
+have the same merge/goal geometry as P13 and their length difference is 2 steps. Before the
+oracle run, compute their stored-path predictions under claims 7 to 18, once with base cost 1
+and once with base cost 4 for the first blocker. Use a fixture only if these predictions choose
+different initial corridors, neither prediction meets an exact tie, and straightening preserves
+the distinction. Expected: the recorded path chooses the cost-1 corridor prediction when the
+chain ends empty, and the cost-4 prediction in the capped/non-unit cases. A choice matching the
+opposite prediction falsifies the indicated chain rule; a path matching neither rejects the
+combined search hypothesis and cannot be attributed to the chain alone.
+- Cap contrast: ten units in consecutive cells, all heading onward, with the next cell empty,
+  versus nine such units followed by an empty cell. Expected base costs: 4 and 1 respectively.
+  Slow named type-speed overrides widen the snapshot window. A snapshot with any zero-speed,
+  empty-path unit before the cap, or any different first-listed object, is void. Scripted input
+  need not hit a predetermined tick: repeat up to 100 attempts to obtain one snapshot of each
+  case, or report inconclusive. This replaces the assumption that the ten-unit state must be
+  produced reliably on every attempt.
+- Non-unit contrast: the first moving blocker heads into an allied building cell versus an
+  empty cell, with the same positions and first blocker speed/path. Expected base costs: 4
+  and 1. Qualify while the blocker still heads into that cell, before its own refusal changes
+  the state. Up to 100 attempts per contrast, otherwise inconclusive.
+- Layer contrast: the blocker heads onto a bridge cell whose ground holds a parked unit and
+  whose deck holds a moving unit that heads into an allied building's cell on the bank.
+  Provide the first blocker first on the deck or at least 3 height levels above that bridge
+  cell's ground, and then on ground less than 3 levels above it. Expected: the deck-selected
+  chain continues through the deck unit and terminates at the bank building, cost 4; the
+  ground-selected chain terminates at the parked unit, cost 1. The snapshot must establish
+  each layer's first-listed object, both units' headings and the height condition. If legal
+  placement cannot produce such distinct lists, that contrast is inconclusive and supplies
+  no evidence for the rule.
+
+**P24. Gate cost and train uniform costs (claim 8).** Use the no-corridor two-route geometry
+of P23, clear except one test object in corridor A. Record the first stored path immediately
+after computation, not the later collision or gate-opening reaction. One run per variant.
+An ordinary outside-area mover crosses a closed allied gate in A, while B is 2 steps longer.
+Expected: its stored path uses A, as for an empty gate cell, at base cost 1. A B-choice when
+the exact no-tie reference prediction selects A falsifies that prediction; it does not by
+itself estimate the gate's cost to unit precision. For the train cost contrast, use P9's test
+train type, facing down A so its three excluded cells lie behind both choices. Put a parked
+allied vehicle in A. B is 4 steps longer. Expected: the train stores A at base cost 1, while
+an otherwise identical non-train outside-area control stores B at base cost 8. Repeat with an
+unarmed enemy object giving enemy-obstacle outcome and B 16 steps longer: train A, control B.
+Check both predictions before the run using claims 7 to 18, with no exact tie. A train choosing
+B, or a control choosing A, falsifies the corresponding uniform-cost contrast. Different
+outcomes, a corridor in the control, or train exclusions intersecting either planned route
+void the contrast. These variants test the gate's low cost and uniform treatment of two
+non-clear outcomes, not every possible train outcome independently; the untested train rows
+retain aggregate backing only.
+
+**P25. Timers and qualification read directly (claims 19, 21, 22, 26).** Common setup and
+recorder as P6, including scripted input and tick-by-tick retry/blockage timer readings.
+The timer's remaining ticks are the observable: a later movement reaction is not its proxy.
+- (a) Place a walker next to a tile with zero foot multiplier but a passable category and no
+  building, so a passed-gate search has no positive-length path under claim 15. Give the move
+  through a team script if targeting substitutes the destination. Control: a destination on
+  an isolated island, for a failed gate. Set retry delay to 0.1 game minutes, giving 90 ticks.
+  One qualifying search of each kind. Expected: on each computation tick the walker's timer
+  is restarted to 90 ticks, even if its destination is cleared afterwards. A different
+  duration/start tick falsifies claim 21's walker-failure rule. A targeting substitution or
+  no computation voids the run.
+- (b) P9's leader and follower, with retry delay 90 ticks. Choose the leader's last-step
+  direction and destination so the first follower's derived destination is separately:
+  a free reachable cell, a blocked cell beside the car that passes the gate but yields no
+  positive-length path, or an isolated reachable-by-leader cell in a different reach region
+  from the car. In the last case ensure the car already has a nonzero running retry delay,
+  by its own earlier failed order. Record its timer immediately before and after the
+  computation triggered by the leader; one qualifying run per case. Expected: success leaves
+  no delay, search failure starts 90 ticks on that tick, gate failure keeps the existing
+  countdown (apart from its ordinary tick decrement). Any other timer transition falsifies
+  claim 26's rule. A leader with no found path, an unchanged follower destination, or no
+  follower computation voids the run. No assumption about when its destination later clears
+  is made. Named type overrides may give the leader an amphibious zone while its car has
+  a normal zone for the failed-gate fixture, or different locomotion classes for the
+  passed-gate blocked-tile fixture. Qualify the derived destination and actual gate result
+  from the recorded state, not from these type differences alone.
+- (c) Repeat P14's lane fixture with blockage delay shortened enough to expire while the
+  blocker still has at least four stored steps. Use a same-type blocker in one run and a
+  faster different-type blocker in another, neither qualifying in mode 1. Record a search
+  after the blockage timer expires, its mode, the blocker path and the mover's new path.
+  Expected: mode 2 counts both blockers' remaining paths regardless of type/speed. Use only
+  positions for which the marked/unmarked reference predictions choose different lanes with
+  no exact tie. The mode-2 path follows the marked prediction. An unmarked-prediction path
+  falsifies the type/speed independence; no distinguishing prediction is inconclusive.
+- (d) Separate blockage endings. On P6's map record a first wait until its blockage timer is
+  close to expiring. In one run move the blocker aside long enough for the mover to take one
+  step, then introduce another moving blocker; in another replace the mover's destination
+  while it has taken no step, and let that move meet a moving blocker. Observe the blockage
+  timer at the next wait. Expected: both start a new full blockage delay from that wait,
+  rather than inheriting the previous remainder. A carried-over remainder falsifies the
+  corresponding ending condition of claim 22. One qualifying run each. A successful intervening
+  step in the replacement-only run, or no such step in the step-only run, voids the contrast.
+
 ## Open questions
 
-- Measurement coverage remains incomplete for the deck-side slope rows of claim 10, mode-2
-  qualification and path-length cutoffs of claim 19, the closing stretch and threat limits of
-  claim 18, and hidden-ring selection boundaries of claim 25. Their backings explicitly remain
+- Measurement coverage remains incomplete for the path-length cutoffs of claim 19, the closing
+  stretch and threat limits of claim 18, and hidden-ring selection boundaries of claim 25. Their backings explicitly remain
   unmeasured; existing aggregate route checks do not establish them independently.
 - Sectors and connections (claim 13b): which further cells a tunnel's link joins, and how often the
   labelling-order cases of claim 13b occur on stock maps, are not established. The secondary checks
@@ -2907,4 +3101,4 @@ this expected gate-failure result. The failed-gate timer specifically tests clai
 - Decided (delegated sign-off, 2026-10-10): S-0209 owns the entry outcomes. Claim 27 now agrees
   with S-0209 claim 5 for allied units that count as moving, and points to it for the full table.
 
-No question remains open.
+No question for the project lead remains open.
