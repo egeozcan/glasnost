@@ -272,7 +272,7 @@ impl Session {
         problems.append(&mut s.loaded.problems);
         match status_font {
             Ok(f) => s.play.status_font = Some(f),
-            // spec: S-0213 Import mapping (a missing font: our engine reports a missing-asset diagnostic and omits the text)
+            // spec: S-0213 Import mapping, S-0014 claim 6 (a missing or rejected font: our engine reports a missing-asset diagnostic naming the file and reason and omits the text)
             Err(e) => problems.push(e),
         }
         s.problems = problems;

@@ -14,10 +14,13 @@
 //! unit is generated from the mapped capital X (claim 4): [`Font::fallback`].
 //! How status text uses these is S-0213 claim 25's.
 //!
-//! Inputs outside S-0014's valid scope (another identifying sequence, a
-//! truncated file, a selector beyond the record count, a record span or row
-//! span too small for its masks) are rejected; what our engine does then is
-//! Q-0530's interim rule, the caller's concern.
+//! A font outside S-0014's valid scope is rejected as a whole (claim 6):
+//! another identifying sequence, an incomplete header, mapping or record
+//! payload, any selector beyond the record count, a record span below
+//! 1 + *HB*, any stored width beyond 8*B*, or no mapping for capital X. The
+//! checks cover every selector and every record, used or not; nothing of a
+//! rejected file is kept. The caller treats a rejected font as missing
+//! (S-0213 claim 25).
 
 use crate::bytes::{PutLe, Reader};
 use crate::error::{Error, Result};
@@ -67,8 +70,9 @@ pub struct Font {
     pub row_span: usize,
     /// The common bitmap height *H*, pixels.
     pub height: usize,
-    /// The line pitch, pixels (S-0014 claim 1); not used by status text
-    /// (Q-0530).
+    /// The line pitch, pixels (S-0014 claim 1): an imported text-layout
+    /// metric, distinct from the bitmap height; status text clips each line
+    /// to it (S-0213 claim 25).
     pub line_pitch: u32,
     /// Bytes per glyph record, *S*.
     pub record_span: usize,
@@ -103,7 +107,8 @@ impl Font {
         }
     }
 
-    /// Parses a font file (S-0014 claims 1 to 3).
+    /// Parses a font file (S-0014 claims 1 to 3), rejecting the whole file
+    /// when it is outside the valid scope (claim 6).
     pub fn parse(data: &[u8]) -> Result<Self> {
         let mut r = Reader::new(data);
         // spec: S-0014 claim 1 (the first four bytes spell fonT)
@@ -139,6 +144,10 @@ impl Font {
         // spec: S-0014 Edge cases (selectors are zero or within 1 to N)
         if map.iter().any(|&v| usize::from(v) > count) {
             return Err(Error::Invalid("font selector beyond the record count"));
+        }
+        // spec: S-0014 claim 6 (an absent mapping for capital X rejects the entire font; a zero-width mapped X is present)
+        if map[usize::from(FALLBACK_SOURCE)] == 0 {
+            return Err(Error::Invalid("font maps no capital X (text unit 88)"));
         }
         let font = Self {
             metadata,
@@ -225,8 +234,8 @@ impl Font {
 
     /// The generated fallback image: the complement of the mapped capital
     /// X's mask, with that glyph's stored width and the common height
-    /// (S-0014 claim 4). `None` when X is not mapped (outside the valid
-    /// status-font scope).
+    /// (S-0014 claim 4). `None` when X is not mapped, which a parsed font
+    /// never is (claim 6).
     pub fn fallback(&self) -> Option<Mask> {
         // spec: S-0014 claim 4 (complement of the mapped capital X, text unit 88, within its stored width and the common height)
         let mut m = self.mask(self.glyph_number(FALLBACK_SOURCE)?)?;
@@ -498,10 +507,68 @@ mod tests {
         let g = Font::parse(&g.write()).unwrap();
         let fb = g.fallback().unwrap();
         assert_eq!(rows(&fb), [".##", "###", "###", "###", "##."]);
-        // No mapped X: no fallback (outside the valid status-font scope).
+        // No mapped X: no fallback; such a file is rejected (claim 6).
         let mut h = synthetic_font();
         h.map_unit(88, None);
-        assert_eq!(Font::parse(&h.write()).unwrap().fallback(), None);
+        assert_eq!(h.fallback(), None);
+        assert_eq!(
+            Font::parse(&h.write()),
+            Err(Error::Invalid("font maps no capital X (text unit 88)"))
+        );
+    }
+
+    /// spec: S-0014 claims 4 and 6 (a zero-width mapped X is present and does not itself fail validation; its fallback has width 0)
+    #[test]
+    fn claim_6_zero_width_x_is_accepted() {
+        let mut f = synthetic_font();
+        let zero = f.glyph_number(1).unwrap();
+        f.map_unit(88, Some(zero));
+        let g = Font::parse(&f.write()).expect("a zero-width X is mapped");
+        let fb = g.fallback().unwrap();
+        assert_eq!((fb.width, fb.height), (0, 5));
+        assert!(fb.bits.is_empty());
+    }
+
+    /// spec: S-0014 claim 6 and Scenario F5 (each single invalid change rejects the whole font,
+    /// even where the change is in a selector or record no notice uses; the unchanged copy is the
+    /// control)
+    #[test]
+    fn claim_6_whole_font_rejection() {
+        let valid = synthetic_font().write();
+        assert!(Font::parse(&valid).is_ok(), "the control parses");
+        let n = synthetic_font().count();
+        let mut cases: Vec<(&str, Vec<u8>)> = Vec::new();
+        let mut b = valid.clone();
+        b[0] = b'F';
+        cases.push(("identifying bytes", b));
+        cases.push(("header truncation", valid[..HEADER_LEN - 1].to_vec()));
+        cases.push(("mapping truncation", valid[..RECORDS_START - 2].to_vec()));
+        cases.push(("payload truncation", valid[..valid.len() - 1].to_vec()));
+        // Unit 1000 is used by no notice; its selector names record N + 1.
+        let mut b = valid.clone();
+        b[28 + 2 * 1000..28 + 2 * 1000 + 2].copy_from_slice(&((n + 1) as u16).to_le_bytes());
+        cases.push(("out-of-range unused selector", b));
+        // A record span one byte below 1 + HB = 11.
+        let mut b = valid.clone();
+        put_u32(&mut b, 24, 10);
+        cases.push(("too-small record span", b));
+        // A record no selector references, wider than 8B = 16.
+        let mut f = synthetic_font();
+        f.push_glyph(5, &[]);
+        let mut b = f.write();
+        let last = RECORDS_START + n * f.record_span;
+        b[last] = 17;
+        assert!(
+            f.map.iter().all(|&v| usize::from(v) != n + 1),
+            "unreferenced"
+        );
+        cases.push(("over-wide unused record", b));
+        let mut b = valid.clone();
+        b[28 + 2 * 88..28 + 2 * 88 + 2].copy_from_slice(&[0, 0]);
+        cases.push(("zero X selector", b));
+        for (name, bytes) in cases {
+            assert!(Font::parse(&bytes).is_err(), "{name}");
+        }
     }
 
     /// spec: S-0014 Edge cases (truncated files, out-of-range selectors and dimensions that cannot hold the mask are outside the valid scope)

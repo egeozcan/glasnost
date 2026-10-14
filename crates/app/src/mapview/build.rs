@@ -28,8 +28,8 @@ use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
 use glasnost_num::F64;
 use glasnost_num::geom::n_step;
 use glasnost_render::compose::{
-    COMPANION_WIDTH_LIMIT, CompanionBody, DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade,
-    SignedImage, Translucency, companion_origin, row565,
+    CompanionBody, DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, SignedImage, Translucency,
+    companion_origin, row565,
 };
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
@@ -237,7 +237,6 @@ mod notes {
             "the building depth image file BUILDNGZ.SHA {failure}: building bodies on foundations under 8 cells wide use no companion and are drawn with the plain upright profile (S-0102 claim 33, F2)"
         )
     }
-    pub const COMPANION_NO_PIXELS: &str = "image frame 0 of the building depth image file BUILDNGZ.SHA has a non-empty rectangle but no pixel data: building bodies on foundations under 8 cells wide are drawn with the plain upright profile (S-0102 F2); whether this is undecodable input (S-0102 claim 33) is not specified (Q-0520)";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
     pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
@@ -794,18 +793,17 @@ enum Companion {
     /// column and row. A valid empty rectangle is read too: it covers no
     /// body pixel.
     Image(u32, (i32, i32)),
-    /// Unavailable: eligible bodies use no companion. `provisional` when
-    /// whether the input failed is not specified (Q-0520).
-    Unavailable { provisional: bool },
+    /// Unavailable: eligible bodies use no companion.
+    Unavailable,
 }
 
 /// Reads image frame 0 of the shared building companion depth image file
 /// `bytes` (S-0102 claims 31 and 33): its signed adjustments and its stored
 /// rectangle's canvas column and row, or the warning saying why it is
-/// unavailable and whether that outcome is provisional.
-fn read_companion(bytes: Option<&[u8]>) -> Result<(SignedImage, (i32, i32)), (String, bool)> {
+/// unavailable.
+fn read_companion(bytes: Option<&[u8]>) -> Result<(SignedImage, (i32, i32)), String> {
     // spec: S-0102 claim 33 (a missing or unreadable file, zero image frames or an undecodable image frame 0: warn, no companion)
-    let fail = |why: &str| Err((notes::no_companion(why), false));
+    let fail = |why: &str| Err(notes::no_companion(why));
     let Some(bytes) = bytes else {
         return fail("is missing");
     };
@@ -817,8 +815,8 @@ fn read_companion(bytes: Option<&[u8]>) -> Result<(SignedImage, (i32, i32)), (St
         return fail("has no image frames");
     };
     if f.offset == 0 && f.width > 0 && f.height > 0 {
-        // interim: Q-0520 (a non-empty rectangle with no pixel data is treated as undecodable input: plain upright profile, provisional)
-        return Err((notes::COMPANION_NO_PIXELS.to_owned(), true));
+        // spec: S-0102 claim 33 and Import mapping (for this shared companion only, a non-empty image frame 0 with pixel-data position 0 is failed input, whatever bytes follow: warn and use no companion, not empty coverage; Q-0520)
+        return fail("has an image frame 0 with a non-empty rectangle and pixel-data position 0");
     }
     // spec: S-0102 claim 33 (a valid, decodable empty rectangle retains its empty coverage, with no warning)
     let img = match shp.decode_frame(0) {
@@ -2001,10 +1999,10 @@ impl Builder<'_> {
                 self.built.scene.signed.push(image);
                 Companion::Image((self.built.scene.signed.len() - 1) as u32, stored)
             }
-            Err((warning, provisional)) => {
+            Err(warning) => {
                 // spec: S-0102 claim 33 (an importer warning naming the shared file and the failure; loading continues)
                 self.note(&warning);
-                Companion::Unavailable { provisional }
+                Companion::Unavailable
             }
         };
         self.p.companion = Some(c);
@@ -2013,8 +2011,8 @@ impl Builder<'_> {
 
     /// The companion of the body of building type `i` drawn at draw point
     /// `p` (S-0102 claim 31, F5: live constants, the art displacement
-    /// applied), and whether the body is provisional (Q-0520 only).
-    fn body_companion(&mut self, i: usize, p: (i32, i32)) -> (Option<(u32, i32, i32)>, bool) {
+    /// applied).
+    fn body_companion(&mut self, i: usize, p: (i32, i32)) -> Option<(u32, i32, i32)> {
         let foundation = self.foundation(i);
         // spec: S-0102 Import mapping (ZShapePointMove: two integers, default 0, 0)
         let m = self
@@ -2025,12 +2023,10 @@ impl Builder<'_> {
             Companion::Image(id, stored) => {
                 let origin =
                     companion_origin(p, foundation, (m[0], m[1]), CompanionBody::Live, stored);
-                (origin.map(|(x, y)| (id, x, y)), false)
+                origin.map(|(x, y)| (id, x, y))
             }
             // spec: S-0102 claim 33 (an unavailable companion: the body keeps its draw point and bias, uses the plain upright profile of F2 and writes depth); F5 (widths of 8 cells or more use no companion anyway)
-            Companion::Unavailable { provisional } => {
-                (None, provisional && foundation.0 < COMPANION_WIDTH_LIMIT)
-            }
+            Companion::Unavailable => None,
         }
     }
 
@@ -2188,7 +2184,7 @@ impl Builder<'_> {
         // spec: S-0102 claim 31, F5 (the body's companion depth image, placed from its draw point;
         // a stationary body of a building that is neither under construction nor being sold, so
         // the art displacement applies)
-        let (companion, body_provisional) = self.body_companion(i, anchor);
+        let companion = self.body_companion(i, anchor);
         // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib)
         // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes)
         if let Some(frame) = frame_of(body_frame)
@@ -2204,7 +2200,7 @@ impl Builder<'_> {
                 },
                 Paint::Lit(row),
                 Group::Buildings,
-                body_provisional,
+                false,
                 Some(object),
             )
         {

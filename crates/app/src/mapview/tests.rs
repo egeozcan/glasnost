@@ -1293,16 +1293,36 @@ fn building_body_empty_companion_rectangle_covers_nothing() {
     }
 }
 
-/// Q-0520 (interim): an image frame 0 with a non-empty rectangle and no pixel data (data position
-/// 0) is treated as undecodable: the eligible body is drawn with the plain upright profile of
-/// S-0102 F2, marked provisional and noted
+/// spec: S-0102 claim 33, Import mapping and D42 (Q-0520: for the shared companion, image frame 0
+/// on a 16 × 16 canvas with a 16 × 16 rectangle and pixel-data position 0 is failed input, with no
+/// payload and with 256 unused bytes after it, not empty coverage: one warning naming the file and
+/// the failure, and the eligible body keeps its draw point and bias and uses no companion, the
+/// plain upright profile of F2, writing depth, not provisional)
 #[test]
-fn building_body_companion_without_pixel_data_is_provisional() {
-    let file = raw_shape((16, 16), &[((16, 16), 0)], &[]);
-    let (b, body) = hut_body_with("Foundation=2x2\n", Some(file));
-    assert!(plain_upright(&body));
-    assert!(body.provisional);
-    assert!(b.notes.iter().any(|n| n.contains("Q-0520")));
+fn building_body_companion_without_pixel_data_uses_plain_upright() {
+    let (_, reference) = hut_body_with("Foundation=2x2\n", Some(companion_file()));
+    let bias = |i: &Item| match i.depth {
+        ItemDepth::Profile { bias, .. } => bias,
+        _ => panic!("a profile"),
+    };
+    for payload in [&[][..], &[0u8; 256][..]] {
+        let n = payload.len();
+        let file = raw_shape((16, 16), &[((16, 16), 0)], payload);
+        let (b, body) = hut_body_with("Foundation=2x2\n", Some(file));
+        assert!(plain_upright(&body), "{n}");
+        assert!(!body.provisional, "{n}");
+        assert!(b.scene.signed.is_empty(), "{n}: not empty coverage");
+        assert_eq!((body.x, body.y), (reference.x, reference.y), "{n}");
+        assert_eq!(bias(&body), bias(&reference), "{n}");
+        let warning: Vec<&String> = b
+            .notes
+            .iter()
+            .filter(|n| n.contains("BUILDNGZ.SHA"))
+            .collect();
+        assert_eq!(warning.len(), 1, "{n}: {:?}", b.notes);
+        assert!(warning[0].contains("pixel-data position 0"), "{n}");
+        assert!(warning[0].contains("claim 33"), "{n}");
+    }
 }
 
 /// The slot-animation test context: HUTX's art starts five slot animations
