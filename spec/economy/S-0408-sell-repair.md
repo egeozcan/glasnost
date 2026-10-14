@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -110,8 +110,8 @@ house state, on or off). In addition:
      every player house, AI houses included, receives the refund given above (glossary *AI house*); the
      original's full refund is recorded for the designers of our AI only. The neutral and
      special houses keep the original's rule (full *P*). Whether they sell automatically is
-     governed by S-0314 claim 8: a passing skill-level gate is necessary but does not by itself
-     establish that a sale occurs.
+     governed by S-0314 claims 8 and 12 to 15: a passing skill-level gate is necessary,
+     and claims 12 to 15 specify the further conditions and automatic-start outcomes.
    - Backing: `measurable` (scenario S1, parts a to e)
    - Confidence: high (the formula, no health dependence, the percentage only for human-controlled
      houses), medium (the refund override)
@@ -365,8 +365,11 @@ house state, on or off). In addition:
     on and off; while it is on, the timing, the step and when repair switches off are S-0314's
     (claim 8) and the step cost is S-0314's (claim 5, with the adjusted cost of claim 2 of this spec
     for a building type). S-0314 claim 8 specifies the skill-level gate for automatic building
-    repair and sale; it does not specify the complete automatic-start outcomes when the gate passes.
-    - Backing: `measurable` (S-0314 scenario H5)
+    repair and sale; S-0314 claims 12 to 15 specify the eligibility, credit split, automatic
+    repair starts, sale attempts, random choices and house-wide pacing when that gate passes,
+    including the distinctions between player and non-player houses.
+    - Backing: `measurable` (S-0314 scenarios H5 and H13 to H15, with the unmeasured
+      limitations stated in S-0314 claims 12 to 15 retained)
     - Confidence: high
 
 14. **Which buildings can be repaired.** A building is repairable when its health is above 0 and
