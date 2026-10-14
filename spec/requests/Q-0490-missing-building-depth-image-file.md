@@ -1,9 +1,9 @@
 ---
 id: Q-0490
 title: Building bodies when the shared depth image file is missing or unreadable
-status: open
+status: answered
 related: [S-0102]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need

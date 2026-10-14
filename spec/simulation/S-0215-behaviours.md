@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -496,11 +496,17 @@ Terms used by this spec:
 4. **Behaviours without a processing rule.** For the behaviour and actor-kind pairs marked "—" in
    table T1, a processing does nothing and chooses a delay of exactly 450 ticks, with no draw. This
    holds for *sleep*, *harmless*, *ambush*, *return*, *stop* and *wait* for every actor kind. An
-   actor whose current behaviour is *none* processes in the same way.
+   actor whose current behaviour is *none* processes in the same way. This also covers a
+   building's *move*: it does not move the building, request packing or clear its guard spot.
+   S-0402 claim 27a gives a reachable case: a field-seeking slave-master building requests
+   *move* without an immediate start, and readiness can permit it to become current under
+   claim 11. The group's subsequent return to rest does not cancel that *move* or restore
+   *guard*; while *move* remains current, the previous behaviour's processing no longer runs.
    - Backing: `measurable` (scenario B1, for the six behaviours and the infantry, vehicle and
-     aircraft kinds). The building cases are `unmeasured`: a map's building entries carry no
-     behaviour, and no order, trigger or other input is known that puts a building into one of
-     these behaviours. The *none* case is `unmeasured`: a mobile actor gets a resting behaviour
+     aircraft kinds; S-0402 claim 27a and scenario H25's site-offer variants for building
+     *move*). The six listed behaviours for buildings remain `unmeasured`: a map's building
+     entries carry no behaviour, and no order, trigger or other input is known that puts a
+     building into one of those six behaviours. The *none* case is `unmeasured`: a mobile actor gets a resting behaviour
      through its placement fall-back (Terms), an infantry unit with neither a current nor a queued
      behaviour falls back to rest before its processing (claim 11), and no setup is known that
      leaves *none* current at any actor's processing.
@@ -3021,6 +3027,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   slot before anything sets them. A run in which another rule (for example an aircraft rule) changes the
   behaviour before 20 intervals have been recorded keeps the intervals recorded until then. Runs:
   one per kind and behaviour.
+  Building *move* is tested by S-0402 claim 27a and scenario H25's site-offer variants:
+  record processing ticks and random-stream state while the field-seeking building's
+  accepted *move* is current. Expected: no movement, packing or guard-spot clearing,
+  450 ticks between processings, no processing draw, and no cancellation of *move* when
+  the group returns to rest. H25 specifies the setup, repeats and falsifying results,
+  and separates group-update draws from behaviour-processing draws.
 - **B2 (claim 6, F1, F2).** Named test file: rules that set the rate of *move* to 0.06 for one run,
   0.05 for another and `6%` (written with a percent sign) for a third. Order a vehicle back and forth between two cells 40 cells apart and
   record its processing intervals while it moves, counting only intervals between two *move*
@@ -4076,7 +4088,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   in-range case, repeat (d) with the unreachable target stationary in range across a known
   attack processing tick: expected target kept and no destination, but these end states
   alone cannot count the two unchanged-state steps (claim 37 a2, backing).
-  Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. Run without a director or mods, apart from the named test data. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle, infantry; only infantry for e).
+  Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. `[OWNER: Define “director” and restate the required setup condition; its meaning is unclear.]` Run without mods, apart from the named test data. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle, infantry; only infantry for e).
 
 - **B33 (claim 13, Q-0202).** Common setup and fixed game speed 2. First repeat B15 b/c on a
   tiny open map with three ordinary move route points, no held attack-move input modifiers and
@@ -4107,7 +4119,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   These collision cases remain `unmeasured` until a legal input sequence establishes the
   prerequisites; this scenario proposes recording them, not a state-writing harness.
 
-- **B35 (claims 1 and 11).** Use the common skirmish setup, speed 2, director and mods off,
+- **B35 (claims 1 and 11).** Use the common skirmish setup, speed 2, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and mods off,
   a tiny open-ground map and one unarmed map-placed building with no turret. Record its body
   state and current and queued behaviours at entry and each turn. Expected at game set-up:
   idle body and *guard* queued, not a construction body or *construction* queued. One run.
@@ -4122,7 +4134,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Runs: one per case. The observation area is the test building and its surrounding cells.
   the common bystander void rule applies. Remove the named test data afterwards.
 
-- **B34 (claim 26, Q-0231).** Tiny flat skirmish test map, game speed index 2, director and
+- **B34 (claim 26, Q-0231).** Tiny flat skirmish test map, game speed index 2, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and
   mods off, one human-controlled house and one bystander computer player kept away from the
   observed area. Place a stock armed vehicle, then in a separate run a stock armed infantry
   unit that is not a deployer, in *area guard* with no guard spot. Use the read-only recorder
@@ -4149,7 +4161,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   run. Per-tick searches or actions of other objects must be separated by the recorder; if
   they cannot be separated, that run cannot establish the draw assignment.
 
-- **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed 2, 800 × 600, director
+- **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed 2, 800 × 600, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]`
   and mods off. Place a stock turreted defence for a non-player owner and a named enemy
   unit in its range; keep the bystander away. Record current, queued and suspended
   behaviours, ready mark, body state, target, processing timer and first shot from
@@ -4171,7 +4183,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Enemy action before the first recorded turn invalidates the placement observation.
 
 - **B37 (claim 38, Q-0238 and Q-0312).** Reuse S-0212 P26's unreachable-destination
-  skirmish setup for the neutral and special houses, speed 2, 800 × 600, director and
+  skirmish setup for the neutral and special houses, speed 2, 800 × 600, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and
   mods off. Use the read-only recorder, not writes, to record the house's base centre,
   base-start cell, radius, selected centre, final destination and scenario random-stream
   state at give-up. Separate unrelated draws from other objects. Three valid runs per
@@ -4203,7 +4215,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - **B38 (claim 11a).** Extend S-0402 H20's human-owned, non-contact ordinary
   harvester on a docking cell, with the same stock types, speed 2, remote bystander,
-  director and mods off. Use three runs per case. Give a harvest order and record
+  `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and mods off. Use three runs per case. Give a harvest order and record
   the selected field cell, failed route category, destination, current and queued
   behaviours, readiness, processing timer and each processing tick with a read-only
   recorder and scripted input. Use S-0212 claim 23's fixtures to distinguish a

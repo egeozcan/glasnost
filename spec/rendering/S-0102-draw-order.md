@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490]
 supersedes: []
 ---
 
@@ -910,8 +910,10 @@ screen rows.
     signed depth adjustments, not colours and not transparency. A zero value means no
     per-pixel adjustment to the constant companion anchor, not the ordinary upright profile.
     Where the companion's stored rectangle does not cover a body pixel, that body pixel is
-    not drawn and writes no depth: there is no upright-profile fallback. This is distinct
-    from a drawing with no companion at all, which uses the ordinary profile of F2.
+    not drawn and writes no depth: there is no upright-profile fallback for pixels outside
+    a readable companion. This is distinct from a drawing with no companion at all, which
+    uses the ordinary profile of F2. Claim 33 defines recovery when the shared file or its
+    image frame 0 is unavailable.
     Positive art displacement moves the companion coverage left and up relative to the
     body draw point, so the body samples farther right and down in the companion.
     Companion sampling applies regardless of the body's frame compression. The original
@@ -934,6 +936,50 @@ screen rows.
       `unmeasured`: no supported oracle path exposing that surface layout is established
       (S-0103 claim 9); D41 checks its definition with an engine fixture.
     - Confidence: high
+
+33. **Unavailable or empty shared building depth image (Q-0490).** The shared file is
+    required during the original's skirmish loading, even when no eligible building will
+    be drawn. When it is absent from every file-search location, loading fails: the
+    skirmish never reaches play, rather than starting with upright or invisible bodies.
+    File-search precedence remains S-0005 claims 3 and 4.
+
+    A file with zero image frames and positive canvas width and height also makes the
+    original fail during loading. A zero-frame file whose canvas width or height is 0
+    can avoid that failure; if play is reached, eligible body drawings have empty
+    companion coverage and are omitted, not given upright depth.
+
+    A readable image frame 0 whose stored rectangle has width or height 0 likewise
+    covers no body pixels: eligible bodies draw no pixels and write no depth. This
+    does not suppress their separate shadows, bibs, animations or other parts. In the
+    original an empty rectangle alone does not guarantee successful loading: with a
+    positive canvas, missing pixel data can still make loading fail. A test file must
+    supply enough readable pixel data for the whole canvas to isolate the empty
+    rectangle's drawing result.
+
+    A truncated or non-shape file has no uniform original outcome. The original does
+    not reliably reject such input before using its contents; it can fail during
+    loading or produce an unspecified result. Neither a plain-profile fallback nor
+    omission of every eligible body is a general recovery rule of the original.
+
+    **Our engine's safe departure.** A missing or unreadable shared file, zero image
+    frames, or an image frame 0 that cannot be decoded produces an importer warning
+    naming the shared file and the failure. Loading continues. Every otherwise eligible
+    body uses no companion: it keeps its draw point and claim 13 bias, uses the plain
+    upright profile of F2, and remains a depth writer. Do not replace failed input with
+    an empty companion or with a full-coverage zero-valued companion; those produce
+    different pictures. A valid, decodable empty frame rectangle is not failed input:
+    retain its empty coverage, with no body pixels or body depth writes and no warning
+    solely for being empty. Widths of 8 cells or more and opening/closing gates already
+    use no companion under F5 and are unchanged. Remembered bodies use the same recovery
+    as live bodies; separate building parts retain their own rules. There is no quirk
+    switch for this bad-data departure.
+    - Backing: `measurable` (D42 for missing-file and specified zero-frame/empty-frame
+      cases; engine fixtures for safe recovery). The absence of a uniform outcome over
+      all malformed files is `unmeasured`: arbitrary invalid bytes and unrelated runtime
+      state cannot be exhaustively observed; D42 records selected examples only.
+    - Confidence: high for missing-file failure, positive-canvas zero-frame failure,
+      empty coverage and the defined departure; medium for degenerate-canvas loading
+      and the unspecified malformed-input outcomes
 
 ## Formulas
 
@@ -1034,8 +1080,9 @@ key = 256·*c<sub>x</sub>* + 256·*c<sub>y</sub>* + *t* − *g*, where *t* = 32 
 model and 0 otherwise, and *g* = 16 if it is a gate and 0 otherwise.
 
 **F5. Building companion depth image** (exact integer arithmetic, pixels and depth units).
-For a foundation less than 8 cells wide, the body uses image frame 0 of the shared file
-in Import mapping; widths of 8 cells or more use no companion. Gate opening/closing
+For a foundation less than 8 cells wide, the body uses readable image frame 0 of the shared
+file in Import mapping, subject to claim 33's unavailable-image recovery; widths of 8 cells
+or more use no companion. Gate opening/closing
 uses no companion (claim 13). No building art chooses another depth image.
 Let *P* = (*pₓ*, *pᵧ*) be the body sprite's actual centred draw point, including the
 image anchor of S-0108 claim 8 and any image placement adjustments. Define
@@ -1242,6 +1289,8 @@ For every switch below, the stated default is the original YR behaviour; an alte
 identified as our engine's alternative is not behaviour of the original. Claims 6 and 16 and
 formulas F1 and F2, claim 13's corrected tiled-copy reduction and claim 18's current-image
 masking instead define unconditional drawing-only departures, with no switches.
+Claim 33 defines bad-data recovery with an importer warning and no switch: unavailable
+companions use plain upright depth, while a valid empty rectangle retains empty coverage.
 
 - **`quirks.unsorted_upper_layers`** (default: on). Underground, surface, air and top layers keep
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
@@ -1304,7 +1353,7 @@ masking instead define unconditional drawing-only departures, with no switches.
 | rules, building type | the key for the searchlight flag; no stock type sets it | the building has a building light effect, created when the building is placed (claim 3); used by D19 (e) | boolean | no |
 | art, building image | `NormalZAdjust` | building's normal depth adjustment (body in the cell pass) | integer, depth units | 0 |
 | art, building image | `ZShapePointMove` | sampling displacement (*mₓ*, *mᵧ*) in F5; positive values move coverage left/up; omitted for live construction/selling | two integers, pixels | 0, 0 |
-| game data file | `BUILDNGZ.SHA`, image frame 0 | shared companion for eligible building bodies (claim 31, F5); neither a per-building image selector nor a palette | shape file; frame rectangle and byte samples, decoded by F5 | fixed file selection; missing-file recovery is not specified here |
+| game data file | `BUILDNGZ.SHA`, image frame 0 | shared companion for eligible building bodies (claims 31 and 33, F5); neither a per-building image selector nor a palette | shape file; frame rectangle and byte samples, decoded by F5; a valid empty rectangle retains empty coverage | missing/unreadable file, zero frames or undecodable frame 0: warn and use no companion, plain upright F2 with the existing bias and depth writes (claim 33) |
 | art, building image | `Foundation` | width/height and last-cell displacement in F5 | foundation form of S-0108 claim 8 | S-0108 claim 8 |
 | art, building image | `SpecialZOverlay`, `SpecialZOverlayZAdjust` | an image and an adjustment that are read but have no known effect on drawing: no drawing of this image was found | image name; integer (no unit stated, since no effect is known) | none; 0 |
 | art, building image | `BibShape` | the building's bib | image name | none (no bib) |
@@ -2168,7 +2217,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     not the live constants. Also give the companion a nonzero stored-rectangle origin
     and check F5's source coordinates. These are rendering-definition tests, not
     original skirmish fog measurements. Each variant needs one deterministic run.
-    Remove named files afterwards. Missing or malformed shared files are not tested.
+    Remove named files afterwards. D42 separately tests missing, empty and malformed
+    shared files.
 
 - **D40, corrected tiled-copy depth (claim 13; Q-0418).** Common setup and the named
   marker animation of S-0109 AN24, with first rectangle height *h* = 12 pixels,
@@ -2206,7 +2256,48 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   engine fixture. Remove named files after testing. A shadow-type variant checks
   unblended halving after the image at the unshifted point (S-0109 claim 10).
 
+- **D42, shared depth-image failure and empty coverage (claim 33; Q-0490).** Use the
+  common skirmish setup at game speed 2 and 800 × 600, with a narrow building and an
+  infantry probe on bare ground as in D39. Use a separate test install, preserving
+  the executable and restoring all named test data afterwards. Start a fresh session
+  for each variant so no earlier loaded image can survive. Record whether loading
+  reaches the battlefield; if it does, capture one front/behind probe crossing,
+  body pixels and the separate building parts. One run per variant plus a restored
+  stock-file control. The control must reach play and draw the building normally.
+  - Remove the shared file from every loose and archive location the original searches,
+    using named test copies of the containing archives with just that member removed.
+    Expected: loading fails before play. Reaching play falsifies that claim.
+  - Supply a valid zero-frame shape file, first with canvas 16 × 16 pixels, then with
+    canvas 0 × 16 and 16 × 0 pixels. Expected: the positive-canvas case fails while
+    loading; degenerate-canvas cases can reach play and show no eligible body pixels.
+    A successfully drawn body in a degenerate case, or play reached in the positive
+    case, falsifies the corresponding prediction.
+  - Supply image frame 0 with rectangle 0 × 16, then 16 × 0 pixels, using an
+    uncompressed test file with canvas 16 × 16 and a nonzero pixel-data position
+    followed by 256 readable zero bytes. Expected: play is reached, body pixels and
+    body depth writes are absent, while separately enabled parts retain their rules.
+    A visible body or body-induced probe occlusion falsifies empty coverage. Separately
+    omit the pixel payload: loading failure does not falsify the drawing-only result.
+  - Try a header-only truncated one-frame file and a non-shape file of named fixed
+    bytes. Record each outcome, without generalising it to all malformed input.
+    No uniform crash, omission or upright-fallback outcome is predicted for this pair.
+  - Replay all variants on our engine and in its map-view scene fixture. Missing,
+    zero-frame, truncated and non-shape inputs must warn and draw the narrow body
+    with its unchanged bias and plain upright F2, writing depth. Valid empty frame
+    rectangles must draw no body and write no body depth, with no empty-only warning.
+    Include foundations of widths 7 and 8 cells and an opening gate: width 8 and the
+    gate retain their ordinary no-companion drawing. Test a remembered-body fixture
+    with the same inputs. Any different recovery, warning or depth effect falsifies
+    the departure, not an original-game prediction. Use lossless screen capture and
+    computed F2 probe acceptance to distinguish plain upright depth from a constant
+    zero-valued companion anchor. Director and mods remain off except the named files.
+
 ## Open questions
+
+Q-0490's three questions are answered by claim 33 and D42. Missing-file recovery
+was not previously specified; claim 31 and F5 already gave empty coverage once a
+readable companion was available, but did not specify loading failures. Malformed
+original outcomes are explicitly unspecified, not a uniform drawing fallback.
 
 Q-0415's three questions are answered by claim 31, F5 and the shared-file Import
 mapping. S-0108 claim 8 already supplies the body draw point, but did not resolve
