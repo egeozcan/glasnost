@@ -345,9 +345,16 @@ fn switch_off_creating_layer_holds_engine_defaults() {
     assert!(names(&o, Kind::Particles).is_empty());
     let normal = &o.globals[&b"Normal"[..]];
     assert!(normal.get(&b"FirePower"[..]).is_none_or(|k| !k.reset));
+    // An empty written emitted particle is an absent key (S-0006 claim 5,
+    // S-0001 claim 11): with the switch off it creates no type either.
+    let empty = base.replace("Lifetime=9\n", "Lifetime=9\nHoldsWhat=\n");
+    let o = apply_with(&[layer(Role::Base, &empty)], "", GameKind::Skirmish, q);
+    assert!(names(&o, Kind::Particles).is_empty());
     // Switch on: the same layer resets them.
     let o = apply(&[layer(Role::Base, base)], "");
     assert!(ty(&o, Kind::Warheads, "Boom").keys[&b"Verses"[..]].reset);
+    assert_eq!(names(&o, Kind::Particles), [""]);
+    let o = apply(&[layer(Role::Base, &empty)], "");
     assert_eq!(names(&o, Kind::Particles), [""]);
 }
 
