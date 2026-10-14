@@ -563,10 +563,9 @@ impl Session {
             && self.targets.hit(p) == Some(HudHit::Map))
         .then(|| band::Drag::armed(p));
         // spec: S-0214 claim 27 (an accepted right-button press in the battlefield anchors a possible scroll drag at that pixel)
-        self.right = (b == Button::Right
-            && !self.paused
-            && self.targets.hit(p) == Some(HudHit::Map))
-        .then(|| band::RightDrag::armed(p));
+        self.right =
+            (b == Button::Right && !self.paused && self.targets.hit(p) == Some(HudHit::Map))
+                .then(|| band::RightDrag::armed(p));
     }
 
     /// A button went up: a click or the end of a drag.
@@ -917,9 +916,11 @@ impl Session {
         // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0451)
         let mut y = m.y;
         for msg in &self.play.messages {
-            let wdt = msg.text.encode_utf16().fold(0, |x, c| {
-                status::advance(x, c, &status::our_glyph_width)
-            }) + 4;
+            let wdt = msg
+                .text
+                .encode_utf16()
+                .fold(0, |x, c| status::advance(x, c, &status::our_glyph_width))
+                + 4;
             d.fill(Rect::new(m.x + 1, y, wdt, 13), [0, 0, 0, 150]);
             for (dx, run) in status::runs(&msg.text, status::our_glyph_width) {
                 d.text(m.x + 3 + dx, y + 2, run, colour::TEXT, m);

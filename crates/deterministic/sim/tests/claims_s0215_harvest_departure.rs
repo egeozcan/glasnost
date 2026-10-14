@@ -59,7 +59,11 @@ fn claim_11a_give_up_queues_guard_and_starts_it_next_turn() {
     assert_eq!(b.current, Some(Behaviour::Guard));
     assert_eq!(b.queued, None);
     let (at_tick, _) = b.last.expect("processed");
-    assert_eq!(at_tick, w.tick - 1, "guard processed in the turn it started");
+    assert_eq!(
+        at_tick,
+        w.tick - 1,
+        "guard processed in the turn it started"
+    );
 }
 
 // spec: S-0215 claim 11a (a gate refusal, or a failed search within one cell that does not give up, queues nothing; harvest remains current)

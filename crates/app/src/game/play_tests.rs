@@ -124,7 +124,12 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     let orders = p.game.replay().orders.len();
     let selection = p.selection.clone();
     let credits = p.world().houses[usize::from(p.local.0)].credits;
-    let yard_cell = p.world().obj(own(&p, Kind::Building)[0]).unwrap().pos.cell();
+    let yard_cell = p
+        .world()
+        .obj(own(&p, Kind::Building)[0])
+        .unwrap()
+        .pos
+        .cell();
     p.click_map(Button::Right, None, yard_cell, Modifiers::default());
     assert_eq!(p.tool, Tool::Select);
     assert_eq!(p.game.replay().orders.len(), orders);
@@ -276,7 +281,11 @@ fn right_click_cancels_a_mode_before_deselecting() {
         let orders = p.game.replay().orders.len();
         p.click_map(Button::Right, Some(yard), at, Modifiers::default());
         assert_eq!(p.tool, Tool::Select, "the mode ends");
-        assert_eq!(p.game.replay().orders.len(), orders, "no sell or repair order");
+        assert_eq!(
+            p.game.replay().orders.len(),
+            orders,
+            "no sell or repair order"
+        );
         assert_eq!(p.selection, [yard], "no ordinary deselection on mode exit");
     }
     let orders = p.game.replay().orders.len();
@@ -483,7 +492,10 @@ fn s0213_claim_25_split_lines_share_capacity_and_lifetime() {
     p.update_messages(16 * 101);
     p.say("four\nfive\nsix\nseven");
     let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
-    assert_eq!(texts, ["two\r", "three", "four\n", "five\n", "six\n", "seven"]);
+    assert_eq!(
+        texts,
+        ["two\r", "three", "four\n", "five\n", "six\n", "seven"]
+    );
     p.update_messages(16 * 581);
     let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
     assert_eq!(texts, ["four\n", "five\n", "six\n", "seven"]);
