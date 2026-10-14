@@ -1,9 +1,9 @@
 ---
 id: Q-0414
 title: Orders to slave miners: harvest without a destination, stop and moves of a deployed one, and repeated harvest orders
-status: open
+status: answered
 related: [S-0402, S-0213, S-0415]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

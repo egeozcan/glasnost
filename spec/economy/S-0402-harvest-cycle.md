@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0413, Q-0414]
 supersedes: []
 ---
 
@@ -22,7 +22,8 @@ This spec covers the harvester's capacity, the timing of a load step, how it cho
 refinery, when it waits or queues, docking and unloading, the credits a house gets and when, what
 happens when fields are exhausted or no refinery is left, and the variants: the slave miner, whose
 infantry slaves gather for it, and the chrono miner, which teleports; resource cells themselves
-(stages, bales, growth) are S-0401's.
+(stages, bales, growth) are S-0401's. This revision covers skirmish only; network
+games and campaigns are out of scope.
 
 ## Terms
 
@@ -120,7 +121,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 - **Group update.** The slave group's periodic opportunity to regenerate, restore or release
   slaves and to reconsider the master's movement (claim 21). Its group states are *at rest*,
   *field seeking*, *travelling*, *retrying deployment* and *working* (claim 22). *Working*
-  permits ready slaves to emerge; it is not the master's current behaviour.
+  permits ready slaves to emerge; it is not the master's current behaviour. A deployed group
+  also has *checking the field* and *packing* states (claims 22 and 27).
+- **Slave place.** A persistent place in the group, numbered by initial creation order.
+  Replacing a slave keeps its place; replacement creation order does not reorder the group.
 
 ## Behaviour
 
@@ -605,13 +609,15 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       S-0215 claim 26 owns which outcomes receive that effect; it does not occur at every
       processing of *area guard*. Its scenario B31 distinguishes it from the wake-up rule above.
     - **Slaves.** A woken slave searches (ring search with the slave scan range, from itself),
-      walks to the cell found, and loads one bale (S-0401, claim 3) at each processing of its
-      *harvest*, which comes every *h* ticks, *h* being its type's harvest-rate field; its capacity
+      walks to the cell found, and loads one bale (S-0401, claim 3) at each successful processing of its
+      *harvest*, whose loading interval is *h* ticks, *h* being its type's harvest-rate field.
+      Claim 26 distinguishes this from group updates while seeking and returning. Its capacity
       is its type's storage field. When full, it remembers its cell and walks back to the miner
       (for a deployed miner, to the foundation cell (*W* − 1, ⌊*H*/2⌋) of it, counted from its
       top-left cell). When its cell is exhausted it searches again; when a search finds nothing it
       walks back with what it has.
-    - **Delivery.** A slave that reaches the miner is paid as in claim 12, to the miner's owner, for
+    - **Delivery.** At a group update, a returning slave in the unloading cell with no destination
+      is paid as in claim 12, to the miner's owner, for
       each tiberium it carries in turn (lowest index first, main payment then bonus), goes inside
       the miner, and starts the slave reload field's delay in ticks. At the first group update
       after that delay has elapsed, its health is restored to its strength and it is ready to
@@ -621,7 +627,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       that delay has elapsed (claims 19 and 21).
     - The miner's initial slaves and their emergence are claims 19 to 21. Claim 22 gives the
       supported harvest-order and automatic-deploy outcomes. Claim 24 fixes site selection, and
-      claim 25 records the remaining unmeasured relocation-failure cases.
+      claim 25 gives relocation-failure inputs and the immediate post-pack-up destination.
     - Backing: `measurable` (scenario H7; its variant b for the kick wrap and its switch, variant e
       for the group's rest tick, variant f for the deployed miner and the slaves' health, and
       S-0215 scenario B31 for the separate area-guard effect)
@@ -778,8 +784,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     It seeks a free infantry standing position there. If none exists, or placement fails, the
     slave stays ready inside until a later update, not on a neighbouring cell. On successful
     emergence its target is the master and it starts the resource-search part of claim 14.
-    Ready slaves are offered places in reverse initial creation order: when only one fits,
-    the last-created ready slave emerges first. Emergence takes no new object-creation draw.
+    Ready slaves are offered places in reverse slave-place order: when only one fits,
+    the ready slave in the latest initial place emerges first. Replacements keep their places. Emergence takes no new object-creation draw.
     The desired emergence point is the offered cell's centre, at its terrain surface height.
     The standing-position choice is S-0208 claim 3's centre-class row, not its
     occupant-ignoring slave-return rule in claim 4. Thus, unless the vehicle-present or
@@ -787,12 +793,17 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     over 0 to 3, even when all side positions are taken and no position is found. The draw
     selects the corresponding row of S-0208 table O; the first free side position in that
     row wins. The centre and top positions are never selected. Offers and their draws follow
-    reverse initial creation order. A vehicle master that still occupies the offered cell
+    reverse slave-place order. Every successful emergence starts with facing 0 (map north),
+    independent of the master's facing; subsequent walking can turn the slave. A vehicle master that still occupies the offered cell
     can therefore block emergence. There is no draw when the initial occupancy refusal
     applies, and no second draw merely because the subsequent placement fails.
-    - Backing: `measurable` (scenarios H15 and H16)
-    - Confidence: high for initial rest tick, periods, emergence cell and reverse slave order,
-      medium for placement refusal and timer boundaries
+    A replacement created, or a hidden slave made ready by reload completion, can emerge
+    in that very update if the master's state permits emergence and a position accepts it.
+    A slave taken inside in that update cannot finish reload until a later update, even
+    with reload delay 0. Slave-place order fixes delivery and replacement ordering (claim 26).
+    - Backing: `measurable` (scenarios H15, H16 and H21)
+    - Confidence: high for initial rest tick, periods, emergence cell, facing and slave-place
+      order; medium for placement refusal and timer boundaries
 
 22. **Harvest directs the miner (Q-0270 parts 4 and 5).** A miner with both resource-gatherer
     and resource-destination fields and a slave group processes *harvest* through its group rule,
@@ -800,9 +811,17 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     destination and queues *harvest*, recalling the slaves to guard it as already specified by
     S-0213 claim 5 and table T3 part (h). The miner does not itself load a bale there.
 
-    An explicitly directed vehicle searches for a deployment site near the destination, moves
-    to a found site with *move* queued, and puts the group into travelling. If the site search
-    fails, it queues *guard*, puts the group at rest and records the current tick as last-rest.
+    At each processing of *harvest*, a vehicle with a destination searches for a deployment
+    site near that destination, moves to a found site with *move* queued, and puts the group
+    into travelling. If the site search fails, it queues *guard*, puts the group at rest and
+    records the current tick as last-rest. A vehicle without a destination instead queues
+    *guard* and records rest in the same way, without a field or site search. In every case
+    the next processing delay is the standard delay of *harvest* (S-0215 claim 6), including
+    its one ranged draw, not 1 tick. The queued behaviour follows the usual start rules.
+    A new harvest order that becomes current therefore searches using its new destination,
+    even during an older journey. Ordinary travelling group updates do not search again
+    near that destination. If *harvest* processes again before the queued *move* starts,
+    however, it searches again: this is not a once-per-order restriction.
     A travelling vehicle with no destination attempts deployment at its next group update,
     under S-0415 claims 2 to 6. Success puts the group into working. Failure enters a retry state and
     starts the 30-tick wait of claim 21. The next update retries deployment; another failure
@@ -816,8 +835,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     With a site, it moves there and enters travelling. A working vehicle that is no longer
     deploying and is in *guard* re-enters travelling, permitting another deployment attempt.
 
-    A deployed master becomes eligible for relocation checks after construction, excluding
-    current *construction* and *selling*. A short-scan field keeps it where it is and permits
+    An at-rest deployed group enters checking the field at an update that sees neither
+    *construction* nor *selling* current; its first field check is at a later update.
+    A working group whose master has become a building enters checking the field once the
+    building is outside its construction state, without checking or emergence in that
+    transition update. Claim 27 gives the busy-state boundaries. A short-scan field keeps it where it is and permits
     release of ready slaves. With no short-scan field, the long scan seeks another field.
     The scan correction is an improvement margin in whole cells: a prospective site must
     improve the truncated cell-distance to the selected field by more than that margin before
@@ -828,10 +850,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     Site selection is claim 24. When both the long scan and site search succeed, the relocation
     comparison is F7: equality does not request packing-up. The remembered cell for this
     automatic pack-up is the building's own top-left cell, not the selected field or site.
-    After conversion, the group recalls its slaves and enters field seeking at the first
-    group update that sees the vehicle. Claim 25 records the remaining unmeasured failure
-    cases and conversion-to-movement timing; no arbitrary fallback is authorised.
-    - Backing: `measurable` (scenario H16; S-0213 scenario O4 for recalling the slaves)
+    A packing group recalls its slaves and enters field seeking at the first group update
+    that sees the vehicle. That update does not also seek a field: the next update does.
+    Claim 25 gives the vehicle's earlier destination. Manual packing is not an unconditional
+    entry to this packing group state (claim 28).
+    - Backing: `measurable` (scenarios H16 and H23; S-0213 claim 5, scenario O4 for recalling the slaves)
     - Confidence: high for the harvest override and deployment retry,
       medium for field-seeking and relocation gates
 
@@ -883,20 +906,118 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Confidence: high for dimensions, axis shifts and absence of draws; medium for
       footprint qualification and the shared search tie rule
 
-25. **Unmeasured relocation failure boundary (Q-0270 part 4).** Claim 22 and F7 fix the
-    successful-field, successful-site case only. With no long-scan field, or a found field
-    but no qualifying site, the original does not make a separately validated success
-    decision before its distance comparison. It is therefore not justified to infer that
-    either failure simply leaves the deployed miner working, nor that it necessarily
-    packs up. The observable decision and subsequent vehicle destination remain unsettled.
-    The immediate vehicle destination after a successful automatic pack-up, before its
-    first field-seeking update, is also unsettled; the remembered top-left cell and later
-    field seeking are claim 22's supported results.
-    - Backing: `unmeasured`: no oracle record distinguishes these cases, and the no-result
-      distance inputs and conversion-to-movement handover have not been established
-      sufficiently to state an outcome. Scenario H19 settles each independently.
-    - Confidence: low for any failure outcome; high that no unconditional stay or
-      invented destination is established here
+25. **Relocation failures still compare distances (Q-0411).** A deployed group checking
+    the field uses F7 even when the long scan finds no field or the site search finds no
+    site. A missing field supplies cell (0, 0) as *F*, and the site search of claim 24
+    is still made around it. A missing site supplies cell (0, 0) as *S*, without the
+    foundation-size shifts. These are comparison points, not usable destinations.
+    With neither result, packing is requested when *c* < *d*(*A*, (0, 0)); with a field
+    but no site it is requested when *c* + *d*((0, 0), *F*) < *d*(*A*, *F*).
+    Equality does not request packing. There is no unconditional stay or unconditional
+    packing on failure. `quirks.slave_relocation_failed_search_origin` defaults to
+    this original rule; off, either failure leaves the miner deployed without requesting
+    packing. No importer warning: a field can run out or a valid site become occupied.
+
+    Without a packing request, ready slaves are still offered emergence in that update.
+    The field check repeats at the next ordinary group update, normally 10 ticks later.
+    Slaves' independent field searches can send them back empty. With a packing request,
+    no emergence is offered in that update.
+
+    Automatic packing remembers *A*, the old top-left cell. Successful conversion gives
+    the vehicle that cell as its immediate destination and queues *move* under S-0415
+    claim 10, even before the next group update. It is not sent to the distant field or
+    tested site. A large foundation's return cell can differ from *A*, allowing movement
+    towards *A* before field seeking. The first vehicle group update only recalls slaves
+    and enters field seeking (claim 22). At the following update, an existing destination
+    is kept and makes the group travelling; otherwise the long scan and site search apply.
+    Later arrival and deployment use claim 22.
+    - Backing: `measurable` (H19)
+    - Confidence: high for zero-cell comparison inputs and strict comparison; medium for
+      conversion-to-movement timing and later group-update interaction
+
+26. **Slave work is paced by two clocks (Q-0412).** At each group update, slaves receive
+    their group-state effects in slave-place order, earliest first. Every place with an
+    expired loss timer gets a replacement attempt, not just one place per update. Reload
+    completions, returning deliveries, and outside slaves' searches and transitions use
+    this same order; they are not separate whole-group passes. A delivery in an earlier
+    place therefore precedes replacement creation in a later place. These effects precede
+    the master's field, travel, deployment or relocation decision. Replacement creation
+    draws follow place order; later emergence offers follow reverse place order (claim 21).
+
+    Seeking, checking resource-cell arrival, detecting a full or exhausted load, and
+    accepting delivery are group-update effects. A slave actually loading in *harvest*
+    takes load steps in its own turn, at its type's interval *h*. A processing on a
+    non-resource cell or while full queues *guard* and has a 1-tick next-processing delay.
+    Seeking and walking back do not run a separate *harvest* processing every *h* ticks.
+    A zero-capacity slave loads nothing: its *harvest* processing queues *guard* with a
+    1-tick delay, and a group update checking fullness treats its non-number fill ratio
+    as full, remembers the current cell and sends it back empty. Negative capacity
+    remains unsettled (Open questions).
+
+    A slave's field search uses claim 4's rings, worth and ties, but requires its own
+    infantry entry outcome (S-0209 claim 4) to be *clear* and its own movement-zone
+    connection from its heading-point cell. A partly occupied infantry cell qualifies
+    when that outcome is clear; another slave or unit is not a blanket refusal. As in
+    claim 4, tiberium land at its own cell selects that cell without the candidate tests.
+    The search takes no draws.
+
+    A deployed master's short and long scans centre on the cell of its reference point,
+    not its top-left or unloading cell. They use the same rings, worth and ties, and
+    immediately accept tiberium land at the centre. Other candidates need only tiberium
+    land: no infantry-entry, occupancy, reach-region, shroud or usable-area test applies.
+    Resources in legal cells outside the usable area can therefore be selected. This
+    promises neither a deployable site nor a reachable slave destination. Site tests
+    remain claim 24's separate rule.
+    - Backing: `measurable` (H21)
+    - Confidence: high for place ordering, clocks, zero capacity and deployed-scan
+      qualification; medium for slave connectivity and scan-centre boundaries
+
+27. **Busy masters do not suspend all slave work (Q-0413).** Loss replacement, reload,
+    outside-slave searches and delivery continue at due group updates during a building's
+    construction, selling or packing. Returning slaves in the unloading cell without a
+    destination still pay and go inside. The table fixes master decisions and emergence.
+    there is no separate all-group busy-state pause.
+
+    | Group state and master | Due update result |
+    |---|---|
+    | At rest, building currently in *construction* or *selling* | Remains at rest; no field check or emergence. |
+    | At rest, building in neither behaviour | Enters checking the field; no check or emergence in this update. |
+    | Working, building still in its construction state | Remains working; no check or emergence. |
+    | Working, building outside its construction state | Enters checking the field; no check or emergence in this update. |
+    | Checking the field, building | Field and relocation rule; emergence unless packing is requested. This state has no further construction or selling exclusion. |
+    | Packing, still a building | Waits for conversion; no field check or emergence. |
+    | Packing, now a vehicle | Recalls slaves and enters field seeking; no check or emergence in this update. |
+
+    Ending a master without an ordinary killing hit, true sale, or successful conversion
+    belongs to S-0312 and S-0415. Those owners must distinguish the retained hidden vehicle
+    after failed placement from successful group transfer; this claim does not apply the
+    true-sale result to every failed pack-up.
+    - Backing: `measurable` (H22)
+    - Confidence: high for absence of a group-wide pause and the state gates; medium for
+      busy-state delivery and reachable selling-state variants
+
+28. **Manual packing and order boundaries (Q-0414).** Stop and ordinary behaviour-order
+    recall belong to S-0213 claim 8 and claim 5. They do not supply a building with the
+    vehicle-only recall effect. *Attack* is already excluded from behaviour-order recall.
+    do not extend recall to all move and attack orders alike.
+
+    At the first processing of selling or packing, a slave-master building invokes the
+    directed site rule only when its remembered destination is a resource-land cell other
+    than its own top-left cell. A found site replaces that remembered destination, recalls
+    its slaves and puts the group into packing. A failed site search leaves the previous
+    remembered destination and group state unchanged. Without that qualifying destination,
+    this rule does nothing to the group. Automatic relocation remembers the building's
+    own cell and therefore skips this additional site search.
+
+    Manual packing does not always recall and enter field seeking: it does so when the
+    group is packing. A group still checking the field instead becomes at rest when its
+    update sees a vehicle, records that update as last-rest and does not recall by that
+    transition. An at-rest group stays at rest. Subsequent wake-up is claim 14's; inherited
+    destination and *move* are S-0415 claim 10's. Travelling arrival does not deploy at
+    once: the attempt is at a due group update seeing no destination (claim 22).
+    - Backing: `measurable` (H23)
+    - Confidence: high for site-rule gates, group transitions and group-update deployment,
+      medium for manual packing scenarios and remembered-destination handover
 
 ## Formulas
 
@@ -973,7 +1094,7 @@ load step in tick *s* (*p* = *L* > 0, *r* = *a* = *s*), it is ⌊(*t* − 1 − 
 reaches 9 in tick *s* + 9*L* + 1 (F1). For *L* < 0 it is *t* − *s*, which reaches 9 in tick *s* + 9.
 For unloading, see F2.
 
-**F7. Successful slave-miner relocation** (claims 22 and 24). Let *F* be the selected
+**F7. Slave-miner relocation comparison** (claims 22, 24 and 25). Let *F* be the selected
 resource cell, *S* the shifted vehicle destination from claim 24, *A* the deployed
 master's top-left cell, and *c* = trunc(scan correction in leptons / 256), integer cells.
 For cell points *P*, *Q*, define
@@ -990,7 +1111,7 @@ under S-0205's round-toward-zero mode. The table root *r* is S-0204's
 
 The final addition is signed 32-bit wrapping arithmetic as in F5, with no further
 rounding. On normal-sized maps no narrowing or addition wrap occurs. This formula
-makes no assertion about no-field or no-site inputs (claim 25).
+uses claim 25's cell (0, 0) substitution for missing results under the default quirk.
 
 ## Constants
 
@@ -1059,8 +1180,9 @@ the counter allows → *finishing* (unloading animation); *finishing* and the bu
 animation ended → queue *harvest*, break off contact, start it, then a standard delay. An order
 breaks off contact at once (S-0213); the next processing takes the first row and starts the order.
 
-**Ordering.** Load steps, unloading payments and slave deliveries all happen in the harvester's
-(or slave's) turn, in the turn pass (S-0203, row 5); a payment in tick *n* is seen by production in
+**Ordering.** Harvester load steps and payments happen in the harvester's turn; slave load
+steps happen in the slave's turn, but slave deliveries happen at group updates in the master's
+turn (claim 26), in the turn pass (S-0203 claim 1, row 5); a payment in tick *n* is seen by production in
 tick *n* (S-0203, claim 8). The idle step-off and the second-route arrival report take no draws of their own. Their
 standard-delay processings, when due, still draw normally. Scatters use the vehicle rules of
 S-0207 claim 16, never the infantry direction draw of S-0208. A bale taken from a cell changes the cell at once (S-0401).
@@ -1128,7 +1250,8 @@ select which harvester takes the earlier turn.
   `quirks.table_root_distance` also covers F7's cell distances.
 - `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8),
   `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
-  together with `quirks.harvester_failed_step_off_origin` (claim 13), are this spec's own switches.
+  together with `quirks.harvester_failed_step_off_origin` (claim 13) and
+  `quirks.slave_relocation_failed_search_origin` (claim 25), are this spec's own switches.
 
 ## Import mapping
 
@@ -1136,7 +1259,7 @@ select which harvester takes the earlier turn.
 |---|---|---|---|
 | Rules, vehicle type section, `Harvester` | harvester (Terms) | boolean | no |
 | Rules, vehicle type section, `Weeder` | weeder (Edge cases) | boolean | no |
-| Rules, type section, `Storage` | capacity *C* (claim 1) | integer | 0 |
+| Rules, type section, `Storage` | harvester capacity *C* (claim 1), slave capacity and zero-capacity treatment (claim 26) | signed integer, bales | 0 |
 | Rules, type section, `Dock` | dock types (Terms, claim 8) | list of building type names | empty |
 | Rules, type section, `Teleporter` | chrono miner (claim 17) | boolean | no |
 | Rules, type section, `ResourceGatherer`, `ResourceDestination` | together with an enslaves field, a slave miner (claim 14) | boolean | no |
@@ -1144,14 +1267,14 @@ select which harvester takes the earlier turn.
 | Rules, vehicle type section, `DeploysInto`; building type section, `UndeploysInto` | conversion types for claim 22's deploy and packing-up attempts | type names, S-0415 | none, S-0415 |
 | No data key | initial last-rest tick 0, hidden initial state, 10-tick group period and 30-tick failed-deploy wait (claims 19, 21, 22); emergence position draw (claim 21), existing-slave ownership retention (claim 23), footprint search and axis shifts (claim 24) | engine constants and behaviour | fixed |
 | Art, building type section, `Foundation` | site-search rectangle width and height (claim 24), from the deployed or deploys-into type | foundation form owned by S-0406 | S-0406 |
-| No data key | relocation failure and immediate post-pack-up destination | not imported settings | unsettled under claim 25; H19 is the settling scenario |
-| Rules, infantry type section, `HarvestRate` | a slave's interval between bales *h* (claim 14) | integer, ticks | 1 |
+| No data key | missing relocation comparison points, emergence and retry after failed improvement, immediate automatic-pack-up destination (claim 25); slave-place ordering, map-north emergence, two-clock work and busy-state gates (claims 21, 26, 27); directed harvest processing and manual packing gates (claims 22, 28) | engine behaviour, not imported settings | fixed, with claim 25's quirk alternative |
+| Rules, infantry type section, `HarvestRate` | loading-processing interval *h*, not the seeking or delivery group-update interval (claims 14, 26) | integer, ticks | 1 |
 | Rules, `[General]`, `HarvesterLoadRate` | load step period *L* (claim 5) | integer, ticks | 2 |
 | Rules, `[General]`, `HarvesterDumpRate` | dump rate *D* (claim 11) | decimal (S-0003), game minutes | the double nearest 0.016 |
 | Rules, `[General]`, `TiberiumLongScan`, `TiberiumShortScan` | long and short scan ranges (Terms, claims 3 to 7) | lepton form: decimal cells × 256 | 8192 and 1536 leptons (32 and 6 cells) |
 | Rules, `[General]`, `HarvesterTooFarDistance` | too-far distance of ordinary harvesters (claim 9) | integer, cells | 5 |
 | Rules, `[General]`, `ChronoHarvTooFarDistance` | too-far distance of chrono miners (claims 9, 17) | integer, cells | 50 |
-| Rules, `[General]`, `SlaveMinerShortScan`, `SlaveMinerSlaveScan` | slave-miner short scan and slave scan ranges (claim 14) | lepton form | 1280 and 4096 leptons (5 and 16 cells) |
+| Rules, `[General]`, `SlaveMinerShortScan`, `SlaveMinerSlaveScan` | slave-miner short scan and slave scan ranges (claims 14, 26), with the distinct vehicle, deployed-master and infantry scan tests | lepton form | 1280 and 4096 leptons (5 and 16 cells) |
 | Rules, `[General]`, `SlaveMinerLongScan`, `SlaveMinerScanCorrection` | field seeking and relocation improvement margin (claim 22); divide by 256 and truncate toward zero to whole cells | lepton form | 20480 and 768 leptons |
 | Rules, `[General]`, `SlaveMinerKickFrameDelay` | kick delay *k* of the wake-up rule (claim 14) | integer, ticks | 2147483647, which wraps (claim 14, F5) |
 | Rules, `[General]`, `PurifierBonus` | purifier bonus *b* (claim 12) | decimal, single | the single nearest 0.25 |
@@ -1159,7 +1282,7 @@ select which harvester takes the earlier turn.
 | Rules, building type section, `OrePurifier` | ore-purifier flag (Terms) | boolean | no |
 | Rules, building type section, `Refinery` | refinery flag: the refinery-flag building rules of claims 3, 11, 13 and 17 (the idle step-off, the unloading animation and the harvester's wait for it, the chrono miner's guard rule) | boolean | no |
 | Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): directs a harvester to its docking cell, and queues unloading on an accepted track-completion report | boolean | no |
-| Rules, mobile type section, `SpeedType`, `MovementZone` | locomotion class and movement zone used by the idle step-off (claim 13); scatter uses the vehicle search settings of S-0207 claim 16 | vocabulary forms owned by S-0211 | S-0211 |
+| Rules, mobile type section, `SpeedType`, `MovementZone` | locomotion class and movement zone used by the idle step-off (claim 13) and slave field-search connectivity and entry (claim 26); scatter uses the vehicle search settings of S-0207 claim 16 | vocabulary forms owned by S-0211 | S-0211 |
 | No data key | no docking-cell exception to harvest seeking, no docking-exchange eviction of an unrelated occupant and no docking-reservation timeout (claims 3a, 10a) | engine behaviour, not imported settings | fixed; processing rates are those of claims 3 and 10 |
 | No data key | failed step-off destination (0, 0), track-completion report timing, facing-independent arrival acceptance and forced, no-threat-point, not-move-anywhere scatter options (claims 10, 13) | engine behaviour, not imported fields | fixed rules of claims 10 and 13 |
 | Rules, building type section, `Weeder` | weed-flag building: the idle step-off of claim 13 (and the weeders' docking, Edge cases) | boolean | no |
@@ -1713,7 +1836,7 @@ is wrong). *Runs:* 3.
   attempt postpones the next group update by 30 ticks; a second failure resumes field seeking.
   Regular updates are 10 ticks apart, first due 10 ticks after group creation. A ready slave
   emerges only at an update, in the offered cell of claim 21; blocked slaves remain inside.
-  With room for one, the last-created ready slave emerges first. Reload and regeneration
+  With room for one, the ready slave in the latest initial place emerges first. Reload and regeneration
   effects occur at the first later group update at which their timers have expired, not
   necessarily exactly 13 or 17 ticks after their start. A found short-scan field prevents
   automatic relocation. Without one, the master can seek a long-scan field and request
@@ -1769,7 +1892,7 @@ is wrong). *Runs:* 3.
 - *Runs and tool:* 3 per footprint/obstruction variant and 100 emergence offers, scripted
   input and read-only position, occupancy and random-state recorder, at 800 × 600.
 
-**H19. Settling relocation failures and pack-up destination (claim 25).**
+**H19. Relocation failures and pack-up destination (claim 25).**
 - *Setup:* speed index 2, common remote bystander, a human deployed stock slave miner
   outside construction and selling. Named map overrides suppress resource growth and
   set known short scan, long scan and correction fields. Provide three separate layouts:
@@ -1781,12 +1904,20 @@ is wrong). *Runs:* 3.
   For the clear-site control vary the correction across the F7 equality boundary.
 - *Expected:* the clear-site control packs up only for strict F7 improvement and records
   the master's old top-left cell, not the tested candidate site. After conversion the
-  first vehicle group update enters field seeking. There is deliberately no predicted
-  stay/pack-up decision or immediate destination for the two failure layouts.
-- *Settling result:* for each failed-search layout, a repeatable stay, pack-up or other
-  outcome, with its destination and timing, supplies the missing claim. A difference
-  from either supported control result falsifies claim 22 or F7. Do not label an
-  arbitrary no-site fallback confirmed merely because the master eventually moves.
+  first vehicle group update enters field seeking without also searching. Its immediate
+  destination is the old top-left cell and *move* is queued. For each failure layout,
+  substitute (0, 0) for the missing result and predict packing from F7. With no field
+  and no site, use corrections just below, equal to and above the distance to (0, 0):
+  only the below case packs. With a field but no site, put the field once nearer (0, 0)
+  and once nearer the master and compute both strict comparisons. When the test fails,
+  emergence offers continue and field checks repeat every 10 ticks. When packing is
+  requested, no emergence occurs in that update. Use a foundation larger than 2 × 2
+  for the immediate movement control: return cell and old top-left cell differ.
+- *Falsified if:* a failure automatically means stay or packing regardless of F7,
+  equality packs, checks cease after failed improvement, emergence stops solely because
+  no field/site was found, the first vehicle update also searches, or the immediate
+  vehicle destination is the distant field, prospective site or absent. On our engine
+  only, the new quirk off expects both failure layouts to stay deployed.
 - *Runs and tool:* 5 per layout and 3 per correction boundary, scripted input and a
   read-only tick-labelled recorder. This scenario proposes observation only, not a
   change to the harness or the original.
@@ -1814,13 +1945,102 @@ is wrong). *Runs:* 3.
   owners must determine whether A can stay there and the route-failure retry timing.
   this scenario does not assume that every movement failure leaves *harvest* current.
 
+**H21. Slave-place ordering, two clocks, facing and scan tests (claims 21, 26).**
+- *Setup:* common skirmish setup, speed 2, 800 × 600, director and mods off. Named map
+  overrides give a stock miner three slaves, harvest interval 37 ticks and regeneration
+  and reload delays 13 ticks. Use a rectangular deployed foundation whose reference,
+  top-left and unloading cells differ. Mark slaves by identity and initial creation order.
+- *Procedure:* kill two slaves before the same group update; record all replacements,
+  ready states, emergence offers, facings, payments and draws at each update. Arrange
+  an earlier-place slave to deliver while a later-place replacement is due. Repeat with
+  reload delay 0. Observe seeking, loading and return over 1000 ticks. Rotate the vehicle
+  master before emergence. Repeat with slave capacity 0 as named test data.
+- *Expected:* every expired place is attempted in increasing place order; replacement
+  creation draws are in that order. An earlier-place delivery precedes a later-place
+  replacement. Ready replacements and completed reloads may emerge in the same update,
+  in reverse place order, facing map north. Newly accepted deliveries cannot finish even
+  zero reload until the next update. Loading uses 37-tick intervals in slave turns,
+  search, fullness and delivery effects use group updates in master turns. Capacity 0
+  never loads and returns empty after a fullness check; its harvest queues guard with
+  a 1-tick delay, rather than staying in harvest for 37 ticks.
+- *Scan variants:* surround slaves with resource cells occupied once by one friendly
+  infantry, once by a full infantry record, once by a vehicle, and once disconnected
+  by impassable terrain. Predict candidate choice from clear infantry entry and region
+  connection, with the own-cell tiberium shortcut recorded separately. For a deployed
+  master, use a short range that distinguishes the three scan centres; put the only
+  resource inside it relative to the reference cell, then block or disconnect that cell.
+  Separately place it in a legal cell outside the usable area but within the scan rings.
+  Expected: deployed scans select it irrespective of occupancy, connectivity or usable
+  area; slave scans retain their candidate tests. Neither field scan takes a draw.
+- *Falsified if:* one expired place per update, fresh creation order replaces place order,
+  all replacements precede all deliveries, replacement emergence waits another update,
+  facing follows the master, zero capacity loads, a clock differs, or a scan differs
+  from its specified centre and qualification.
+- *Runs/tool:* 3 per timing and capacity variant, 3 per scan layout; scripted input and
+  read-only tick/event, facing, ownership, occupancy and random-state recorder. A run
+  lacking the arranged overlap is inconclusive for ordering.
+
+**H22. Busy slave masters (claim 27).**
+- *Setup:* common setup, speed 2, stock slave miner near a field, director and mods off.
+  Named map overrides lengthen build-up/build-down enough to contain several group
+  updates, and set known reload and regeneration delays. Observe all its slaves.
+- *Procedure:* deploy with slaves outside and returning, create a building master with
+  initial hidden slaves, and sell or manually pack a working master. Record current
+  behaviour, construction state, group state, group updates, payments and emergence.
+  Keep a short-scan field in one run; exhaust it in another.
+- *Expected:* returning slaves still enter and pay, and expired reload or loss timers
+  still have their effects during busy states. Newly created at-rest groups and working
+  groups in construction do not emerge or check the field. Record the transition-only
+  update into checking the field and the later first check. A group already checking
+  the field continues checks and emergence even while selling, unless another rule puts
+  it into packing; packing buildings release no ready slaves. Compare claim 28's
+  directed packing case separately instead of treating every sale as that case.
+- *Falsified if:* a blanket busy-state pause suppresses delivery or timers, the transition
+  update itself checks or emerges, or emergence disregards the recorded group state.
+- *Runs/tool:* 3 per reachable state, scripted input and read-only recorder. Report an
+  unreachable checking-during-selling variant as inconclusive, not as a universal gate.
+
+**H23. Harvest processing and manual packing (claims 22, 28).**
+- *Setup:* common setup, speed 2, two isolated fields and a human slave miner. Named map
+  data lengthens the harvest behaviour's standard delay; no engine add-ons, director or
+  other mods. Observe its destinations, current/queued behaviours, group state and slaves.
+- *Procedure:* release a miner whose initial harvest has no destination, then give two
+  successive harvest orders on different fields during travel. Record every processing,
+  search and random draw. Manually pack a deployed miner by a move click once to clear
+  ground and once to a resource cell other than its top-left cell. Repeat the resource
+  click with no qualifying site. Record site selection at first selling processing,
+  remembered destination at conversion and the first two vehicle group updates.
+- *Expected:* destination-free harvest queues guard, records rest and uses the standard
+  harvest delay with its one ranged draw. Each processing with a destination searches
+  near the destination then current; ordinary travelling updates do not search again.
+  Deployment waits for a due group update seeing no destination, not the arrival event.
+  Clear-ground manual packing does not force packing group state; a group checking the
+  field becomes at rest on its vehicle update. Resource-directed packing with a found
+  site records that site, recalls and enters packing, then its first vehicle update
+  enters field seeking. Failed site search preserves the old destination and group state.
+- *Falsified if:* the no-destination interval is always 1 tick, a newly current harvest
+  retains an earlier order's site without searching, every travelling update searches,
+  deployment is immediate on arrival, or every manual pack-up unconditionally seeks.
+- *Runs/tool:* 3 per order/packing variant, scripted input and read-only tick and stream
+  recorder. Factory release supplies destination-free harvest without an injected order.
+
 ## Open questions
 
+- Q-0412 question 4: negative slave capacity remains open. The loading rule attempts a
+  negative take rather than the zero-capacity guard path; its effect on resources and
+  future loads is not established. Do not generalise the zero-capacity result to negatives.
+- Q-0412 question 1: exact placement of the group update relative to all building power,
+  repair and vehicle movement work is S-0203's remaining integration part. Claim 26 fixes
+  within-group observable order and moves delivery to the master's turn, not the slave's.
+- Q-0411 is answered by claim 25 and F7; Q-0413's busy-state part by claim 27, with
+  removal and failed-conversion parts owned by S-0312, S-0408 and S-0415. Q-0414's
+  harvesting, manual packing and arrival parts are claims 22 and 28; applied-order
+  recall is S-0213 claim 8 and claim 5. Q-0412 is not listed as fully answered.
 - Whether *return* is ever given to a harvester in a skirmish (claim 2); scenario H9 logs it.
 - Q-0270 is listed as answered for this spec's scope: claims 19 to 24 cover initial creation,
   counting, emergence, ownership retention, directed harvesting, sites and successful relocation,
-  claim 25 explicitly records the remaining unmeasured failure outcomes and immediate vehicle
-  destination, with H19 to settle them. These are unresolved, not assumed to be stay-in-place.
+  claim 25 now supplies failure comparison inputs and the immediate vehicle destination,
+  with H19 to confirm them. No failure is assumed to mean stay-in-place.
   Ordinary killing-hit integration is S-0312 claim 30; true-sale slave fate is S-0408
   claim 10a, whose exact cleanup tick remains open. Erasure, environmental sinking
   and other destruction paths remain unresolved. Surviving-master capture and
@@ -1849,8 +2069,9 @@ is wrong). *Runs:* 3.
 
 ## Questions for the project lead
 
-None. The five quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
+None. The six quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
 `quirks.refinery_distance_wraps`,
 `quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
-`quirks.unload_without_contact_stalls`, each default original) follow the project's quirk
+`quirks.unload_without_contact_stalls` and `quirks.slave_relocation_failed_search_origin`,
+each default original) follow the project's quirk
 convention.

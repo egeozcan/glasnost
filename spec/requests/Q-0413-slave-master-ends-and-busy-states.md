@@ -1,9 +1,9 @@
 ---
 id: Q-0413
 title: Slaves of a master that ends other than by destruction or sale, and slaves while the master builds up or sells
-status: open
+status: answered
 related: [S-0402, S-0312, S-0408, S-0415]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

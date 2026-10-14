@@ -1,9 +1,9 @@
 ---
 id: Q-0411
 title: A deployed slave miner whose field runs out with no other field or site, and the vehicle's destination after a pack-up
-status: open
+status: answered
 related: [S-0402, S-0415]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
