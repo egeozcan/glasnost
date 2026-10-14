@@ -175,7 +175,7 @@ pub fn anim_creation_draws(w: &mut World, name: &str) {
     let middle =
         a.mu == Some(0) && (a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater);
     if middle || a.chain_reaction {
-        w.note("S-0109 claim 13: the start-event draws of an animation created in play (its immediate middle event's particles and smudges, S-0202 claim 15 covering loading only; a chain reaction on a resource cell, S-0401 claim 20) are not taken");
+        w.note("S-0109 claim 13 (interim, request Q-0217): the start-event draws of an animation created in play (its immediate middle event's particles and smudges, S-0202 claim 15 covering loading only; a chain reaction on a resource cell, S-0401 claim 20) are not taken");
     }
 }
 
