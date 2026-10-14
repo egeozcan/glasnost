@@ -2,7 +2,7 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,8 +27,9 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
 ## Terms
 
 - **Tick number.** As in the glossary: the number of ticks a game has completed. It is 0 while the
-  first tick of a game runs and grows by 1 at the end of every tick that does not end the game
-  (claim 1). Timings of game state counted in ticks are measured against it (S-0203, claim 9).
+  first tick of a game runs and grows by 1 at the end of every tick except the final tick
+  (claim 1). A victory or defeat decision can precede that final tick by an end delay (S-0414,
+  claim 8). Timings of game state counted in ticks are measured against it (S-0203, claim 9).
 - **Pacing unit.** 16 milliseconds of host time. The original paces against a clock whose reading
   is *u*(*t*) = ⌊*t* / 16⌋ pacing units at host time *t*, where *t* is the reading of the host's
   millisecond clock, a non-negative integer. The reading advances by 1 on every 16 ms boundary.
@@ -80,20 +81,24 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
 ## Behaviour
 
 1. **Tick number.** At game start the tick number is 0. It grows by exactly 1 at the end of every
-   tick that runs and does not end the game, and nothing else changes it during a game. How a game
-   ends decides what it holds afterwards:
-   - **Ended by a rule of game state.** When victory or defeat is decided during a tick, that tick
-     runs in full but does not add 1, so afterwards the tick number is the number of the last tick
-     that ran. A resignation counts here: it makes the player's house lose in a later tick.
+   tick that runs except the final tick, and nothing else changes it during a game. How a game
+   becomes over decides what it holds afterwards:
+   - **Ended by a rule of game state.** A victory or defeat decision does not itself make its
+     tick the final tick. Play continues through the end delay (S-0414, claim 8), and the tick
+     number advances after each tick before the final one. The final tick runs in full but does
+     not add 1, so afterwards the tick number is the number of the last tick that ran (S-0203,
+     State and ordering). A resignation counts here: it makes the player's house lose in a later
+     tick, followed by the end delay, rather than ending play immediately.
    - **Left from the options menu.** When the player leaves the game through an options-menu choice
      that ends it at once, the game ends between two cycles and no further tick runs. The tick
      number stays at the count of ticks run, one more than the number of the last tick.
    - Which of the menu's choices ends the game at once and which one resigns is not traced (Open
      questions). Our engine reproduces both rules.
    - Backing: `measurable` (scenario T1, part A) for the start at 0 and the step of 1; `measurable`
-     (scenario T1, parts C and D) for the two ways a game ends; `unmeasured` for the exact
+     (scenario T1, parts C and D) for the two ways play becomes over; S-0414 claim 8 owns the
+     end delay's length and backing; `unmeasured` for the exact
      menu-choice mapping, since no button-to-result mapping has been established
-   - Confidence: high for the start and the step; medium for the two ways a game ends; low for
+   - Confidence: high for the start and the step; medium for the two ways play becomes over; low for
      which menu choice is which
 
 2. **Pacing at game speeds 1 to 6.** In a single-player game at game-speed index *s* from 1 to 6,
@@ -581,7 +586,7 @@ whether the vehicle's destination changes.
   falsification of claim 2.
 - *Setup of parts C and D:* a purpose-made skirmish map, index 6, with the human player's vehicle
   ordered, as soon as orders are accepted (claim 14), to a destination at least 40 cells away along
-  open ground, so that it is still moving when the game ends. The recorder reads the tick number and
+  open ground, so that it is still moving in the final tick after the end delay. The recorder reads the tick number and
   the vehicle's position at least once every 4 ms, until the vehicle can no longer be read. A run in
   which the vehicle stopped before the game ended is void and repeated. A run counts only if the
   vehicle's position is still read at least 100 ms (more than one cycle of index 6) after the tick
@@ -592,20 +597,26 @@ whether the vehicle's destination changes.
   parameter value equal to the registration index of the human player's country. The part assumes
   that this action makes the local player win when its value is the registration index of the local
   player's country, and lose otherwise; a run in which the human player does not win is void and
-  the map is checked. *Observable:* the final tick number *v*; the first position read while
-  the tick number stood at *v*, and the last position read. *Runs:* 3. *Expected:* in every run the
-  last position read differs from the first position read at *v*: the last tick ran while the tick
-  number stood at *v* and added nothing. *Falsified if:* in every run the last position read equals
-  the first position read at *v*, while the readings at *v* − 1 show the vehicle moving (the last
-  tick added 1, so no tick ran at *v*).
+  the map is checked. *Observable:* the tick-number sequence from tick 300 through the end delay,
+  the final tick number *v*; the first position read while the tick number stood at *v*, and the
+  last position read. *Runs:* 3. *Expected:* the tick number advances beyond 300, continuing in
+  steps of 1 through the end delay, whose length is S-0414 claim 8's. In every run the last
+  position read differs from the first position read at *v*: the final tick ran while the tick
+  number stood at *v* and added nothing. *Falsified if:* the tick number stops at 300 despite
+  the win fixture succeeding, or a resolved tick-number transition during the end delay differs
+  from 1; or, in every run, the last position read equals the first position read at *v*, while
+  the readings at *v* − 1 show the vehicle moving (the final tick added 1, so no tick ran at *v*).
+  A run that does not resolve the first position at *v* before that tick's movement is inconclusive
+  for the final increment and is repeated; the recorder must resolve that boundary, not merely
+  sample the settled final value.
 - *Part D (claim 1, leaving from the menu):* no trigger. After at least 30 s, open the options menu
   and leave the game, trying each menu choice that leaves the game in its own runs. *Observable:*
   the tick number
   and the position read while the menu is open; then whether either changes after the menu closes,
   and the final values. *Runs:* 2 per choice. *Expected:* at least one choice ends the game with
   neither value changing after the menu closes (no further tick; the final tick number is the one
-  read while the menu was open). A choice that resigns lets ticks run on until the defeat, and its
-  end then behaves as in part C. *Falsified if:* every choice that leaves the game lets at least
+  read while the menu was open). A choice that resigns lets ticks run on through the defeat and
+  its end delay, and its final tick then behaves as in part C. *Falsified if:* every choice that leaves the game lets at least
   one more tick run after the menu closes and ends as in part C.
 
 **Scenario T2: source of the game speed (claims 7, 12).**
@@ -698,8 +709,8 @@ whether the vehicle's destination changes.
   ± 0.1 s; orders are accepted after the hold. *Falsified if:* the tick number stands at a
   value other than 374 (375 alone is consistent with the step counts if the action's own tick takes
   no step, against the order of claim 11; any other value falsifies the step counts), the gap lies
-  outside 2.97 to 3.17 s, ticks run during the hold, or an order is accepted before the hold
-  ends. *Also recorded, not judged (claim 14, Open questions):* whether the keyboard's scroll keys
+  outside 2.97 to 3.17 s, ticks run during the hold, an order is accepted before the hold
+  ends, or orders remain refused after it. *Also recorded, not judged (claim 14, Open questions):* whether the keyboard's scroll keys
   and the pointer at the screen edge move the view during the ticks before the hold, while orders
   are blocked.
 - *Part C (claim 10, several actions):* elapsed time 20, one trigger with two pause actions, *N* = 10 then *N* = 2, index 1. *Expected:* the tick number stands at 301 with a gap of
@@ -721,12 +732,16 @@ whether the vehicle's destination changes.
   - *G1:* *N* = 1, index 6 (9 frozen cycles at a host that keeps up). *Expected:* the tick number
     first stands at 301 for about 0.96 s, then runs and stands at 365 ± 1 (steps 1 to 74 fall in
     tick 300, 9 frozen cycles and ticks 301 to 364), with a gap of 3.072 s ± 0.1 s. *Falsified
-    if:* the second hold begins at 374 ± 1, as it would if frozen cycles took no step.
+    if:* either hold starts outside its expected tick-number range, either gap differs by more
+    than 0.1 s from its expected value, or a further hold appears within the following 60 s.
+    In particular, a second hold at 374 ± 1 would mean frozen cycles took no step.
   - *G2:* *N* = 1, index 1 (59 frozen cycles). *Expected:* the tick number first stands at 301 for
     about 0.96 s, then runs and stands at 315 ± 1 (steps 2 to 60 in the frozen cycles, 61 to 74 in
     ticks 301 to 314), with a gap of 32 cycles of index 1, 0.512 s ± 0.1 s. *Falsified if:* the
-    second hold begins at 365 ± 1 (the count of frozen cycles does not depend on the game speed)
-    or at 374 ± 1 (frozen cycles take no step).
+    either hold starts outside its expected tick-number range, either gap differs by more than
+    0.1 s from its expected value, or a further hold appears within the following 60 s.
+    In particular, a second hold at 365 ± 1 would mean the frozen-cycle count does not depend on
+    game speed, and one at 374 ± 1 would mean frozen cycles take no step.
   - *G3:* *N* = 2, index 1 (119 frozen cycles, more than the 73 steps, 2 to 74, left up to and
     including step 74).
     *Expected:* one hold at 301 with a gap of 1.92 s ± 0.1 s, and no second hold in the 60 s that
@@ -831,10 +846,12 @@ whether the vehicle's destination changes.
   including its citation to this spec's Terms rather than to claim 2 for input timing. Check the
   compatible definitions and claims in the latest same-batch revisions at sign-off, not against
   an earlier batch's revision list.
-- **Paired change for S-0011, for sign-off.** Its action-code table should point here for the
-  pause and chrono-flash actions, the no-effect skirmish radar-movie actions, and T1 part C's
-  win-action fixture assumption. This spec owns those statements; it does not extend S-0011's
-  supported action subset or specify campaign movies.
+- **Companion pointers in S-0011, for sign-off.** The current S-0011 companion table after I4
+  points here for the pause and chrono-flash actions, the no-effect skirmish radar-movie actions,
+  and T1 part C's win-action fixture assumption. These pointers agree with this revision's
+  claims 10 and 11, Import mapping and scenario T1 part C. The win-action row is a fixture
+  assumption only, not a general victory rule. Confirm the actual revisions handed off together:
+  the pointers neither extend S-0011's supported action subset nor specify campaign movies.
 - **Citations, for sign-off.** The current glossary's claim G3 holds exception 2 and gives
   `quirks.speed_normalised_delays` the scope used here. S-0011, S-0202, S-0203 and S-0205 are
   approved specs cited by number and claim. The glossary's *departure* entry lists the pause
