@@ -17,7 +17,7 @@ Rust stable (pinned in `rust-toolchain.toml`), one Cargo workspace. Package name
 | `sim` | `crates/deterministic/sim` | M3–M7 | The deterministic simulation |
 | `ai` | `crates/deterministic/ai` | M5+ | Our own opponent; produces Orders only |
 | `render` | `crates/render` | M0 quad, M1+ | wgpu renderer: WebGL2 core path, WebGPU where available |
-| `audio` | `crates/audio` | M1 preview, M5 | Sound playback (M1: viewer previews) |
+| `audio` | `crates/audio` | M1 preview, M5b | Sample bank (IDX/BAG, AUD, WAVE), integer software mixer, WebAudio and native outputs, sound events for the game client; the viewer's previews |
 | `ui` | `crates/ui` | M5 | Game UI |
 | `net` | `crates/net` | M9 | Lockstep networking (the relay server gets its own crate in M9) |
 | `app` | `crates/app` | M0 demo, M1 viewer | winit shell shared by native and web; the asset viewer |
@@ -309,6 +309,59 @@ Provisional rules of M5a, each tied to a request:
 | `econ::harvest` (the idle step-off) | when the step-off search of S-0402 claim 13 gives no cell, the harvester stays where it is, with no destination, and still queues *guard* (no draw) | Q-0194 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 | `econ::production`, `econ::release::clone_copies` | objects created on the same tick take their creation draws in application order: orders in arrival order, line starts in S-0404 claim 1's line order; cloning copies in acquisition order, each created and released before the next | Q-0226 |
+
+## Audio (M5b)
+
+`glasnost-audio` turns what the game reports into sound. It never feeds back into the simulation, and nothing in it is simulation state.
+
+- **Samples (`bank`).** `SoundBank` maps names (case-insensitive) to samples and decodes each one on first use (`clip`), caching the result. A name that does not decode is remembered as a failure. Sources: IDX/BAG banks (`add_idx`), AUD and plain PCM WAVE files (`add_file`, with WAVE read by `glasnost_fmt::pcm::Pcm::from_wav`), and decoded PCM (`add_pcm`). `bank::discover(&Vfs)` builds a bank from the mounted archives and returns a `DiscoverReport` (banks found, IDX files without a BAG, sample count).
+- **What a name plays (`catalog`).** `SoundCatalog` resolves a sound name to a `SoundDef` (samples, gain, priority, limit). Until a sound spec lands it is `SoundCatalog::interim()`; see the table below.
+- **Names by role (`names`).** `SoundNames::from_ruleset` reads the sound keys the specs name from the imported rules:
+  - per type (`TypeSounds`): DeploySound, UndeploySound, PackupSound (S-0415, S-0107), CrushSound (S-0210), EnterWaterSound, LeaveWaterSound and VoiceComment (S-0107), the select voices (S-0214 claim 14), and the chrono sounds (S-0207, with the game-wide value as a fallback for unit kinds)
+  - an animation's Report from its art section, its start sound (S-0109 claim 13)
+  - the game-wide keys: SellSound (S-0408), RadarOn and RadarOff (S-0410 claim 3), and the credit ticks (S-0416 claim 4)
+
+  Lists follow S-0003 claim 12 and `quirks.list_items_untrimmed`.
+- **Mixer (`mixer`).** `Mixer` is integer only: Q16 gains, a 32.32 resampling phase with linear interpolation, and i64 accumulation clamped to 16 bits. It mixes interleaved stereo at the output rate and provides:
+  - a listener (the view centre, in leptons)
+  - placements: `Everywhere`, or `At` a map point for distance attenuation and pan
+  - per-voice gain and a master gain
+  - priority and a per-key limit, with voice stealing
+  - `render`, which tests call offline with no device
+- **Outputs (`output`, `web`, `pipe`).** `Output::pump` is called once per frame and pushes enough mixed audio to stay about 0.1 s ahead.
+  - **wasm32:** `web::WebOutput` schedules 1024-frame AudioBuffers on an AudioContext. The context starts suspended and is resumed by the first pointer, key or touch gesture. `Audio::resume` can also be called from an input handler.
+  - **Native:** the `native-output` feature (off by default) pipes 16-bit stereo to `pw-cat`, `pacat` or `aplay`. This is a stopgap: an in-process device crate (cpal) could not be fetched offline when M5b was written, and the default build needs no system audio headers.
+  - **Otherwise:** `NullOutput`, which discards voices, is used and its state names the reason.
+- **Events (`Audio`).** The game client owns one `Audio` (`Audio::platform()` picks the output) and calls it every frame:
+  - `set_listener` and `frame`.
+  - `play_effects(&effects, local_house)`, for the tick's `glasnost_sim::combat::effects::Effect`s:
+    - a house-tagged sound plays only for the local house
+    - `Effect::Sound` plays the type's or the game-wide sound
+    - `Effect::Anim` plays the animation's Report at its position
+  - `acknowledge(&world, &click, by_local_player, &mut rng)` after a click. It plays a select voice for S-0214 claim 14's acknowledgement, i = raw mod n, with one raw draw from the caller's unsynchronised stream (S-0202 claim 11). There is no draw when n = 0, and none for the AI.
+  - `cue(UiCue)` for interface cues. The credit tick plays at half gain, the first entry when credits rise and the second when they fall, and nothing with fewer than two entries (S-0416 claim 4). RadarOn and RadarOff are S-0410 claim 3.
+  - `announce(Announcement)`.
+  - `play_sound(name, placement, gain)` as the general entry point.
+- **Sounds the simulation does not report yet.** The specs name more sounds than `Effect` carries today. The client has to report those itself, or they wait for new effect events:
+  - crushing (S-0210)
+  - chrono departure and arrival (S-0207)
+  - entering and leaving water, and idle comments (S-0107)
+  - undeploying (S-0107)
+  - animation starts other than the effects' `Anim`
+  - radar on and off, and credit changes
+- **Viewer.** The asset viewer's `Player` (`preview.rs`) is unchanged and still plays previews natively through a command-line player.
+
+Provisional rules of M5b, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `catalog::SoundCatalog::interim` | a sound name plays the sample of the same name, at full gain, priority 0 and no limit | Q-0260 |
+| `names::SoundNames::announcement` | only the cannot-deploy announcement (`EVA_CannotDeployHere`, S-0415) resolves; unit sold, construction complete, repair complete, low funds and defeat are silent | Q-0261 |
+| `mixer::MixParams::default` | 16 voices. Full gain within 10 cells of the listener and silent at 30 cells or more; a sound that far away does not start. Gain falls linearly in between, by map distance. Pan follows x − y and is fully to one side at 20 cells (balance law). Gain and pan follow the view while a sound plays. When no voice is free, the new sound steals the lowest-priority voice (the oldest first) if its priority is at least as high; otherwise it is refused. Gains are linear amplitude, so "half volume" is × 1/2 | Q-0262 |
+| `bank::discover` | samples are found by content: an IDX-shaped entry is paired with a BAG in the same archive by size, archives are taken in mount order, and the first copy of a name wins. Loose files are not read | Q-0263 |
+| `Audio::play_effects` | `Shot`, `Killed` and `Detonation` play nothing (no weapon report, death or damage sounds) | Q-0264 |
+| `Audio::acknowledge` | orders with their own kind of acknowledgement (harvest, attack, move, attack move, enter, capture, unload) play nothing and take no draw; selecting an object plays nothing | Q-0265 |
+| `Audio::cue` | sidebar cues (build started, resumed, held, cancelled, refused, placement refused, construction complete) are silent | Q-0266 |
 
 ## Tests
 
