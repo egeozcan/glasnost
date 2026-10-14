@@ -226,14 +226,32 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     let Some(o) = w.obj(id).cloned() else { return };
     let tick = w.tick;
     let r = w.rules_arc();
-    // spec: S-0207 claim 20 (e) (every object that has it as its target drops it; no revert, S-0215 claim 10)
+    // spec: S-0207 claim 20 (e) (every object that has it as its target drops it)
+    // spec: S-0215 claim 10 (the target's own jump: an overridden attacker reverts first, then drops the jumper if it is still its target; a restored other target is kept)
+    // The erasing-weapon exception is a seam: no erasing weapon is modelled.
     let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
     for x in ids {
-        if let Some(ob) = w.obj_mut(x)
-            && ob.target == Some(Target::Object(id))
+        let Some(ob) = w.obj_mut(x) else { continue };
+        if ob.target != Some(Target::Object(id)) {
+            continue;
+        }
+        let mut restored = None;
+        if ob.beh.suspended.is_some()
+            && let Some((t, d)) = ob.beh.revert()
         {
+            ob.target = t;
+            if ob.kind.is_mobile() {
+                restored = Some(ob.dest);
+                ob.dest = d;
+            }
+        }
+        if ob.target == Some(Target::Object(id)) {
             ob.target = None;
-            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, x, before);
         }
     }
     // spec: S-0306 claim 17 (a projectile whose target becomes untargetable by teleporting: the cell the target stood in when not airborne, else nothing)

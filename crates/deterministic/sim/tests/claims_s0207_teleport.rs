@@ -193,6 +193,36 @@ fn claim_20_targets_drop_the_jumper() {
     assert_eq!(w.obj(watcher).unwrap().target, None);
 }
 
+// spec: S-0215 claim 10 (the target's own jump: an overridden attacker reverts, keeps a restored other target, and drops the jumper when the revert brings it back)
+#[test]
+fn claim_20_jump_reverts_overridden_attackers() {
+    use glasnost_sim::rules::Behaviour;
+    let mut s = scene(false);
+    s.vehicle("WATCHER", unit_type(WHEEL, 6, 5));
+    s.place_unit(1, "WATCHER", cell(5, 5), 0);
+    s.place_unit(1, "WATCHER", cell(6, 5), 0);
+    s.place_unit(1, "WATCHER", cell(7, 5), 0);
+    let (mut w, id) = start(&s);
+    let v = objects_of(&w, Kind::Vehicle);
+    let (keeps, loses, other) = (v[1], v[2], v[3]);
+    for (x, aside) in [(keeps, other), (loses, id)] {
+        let o = w.obj_mut(x).unwrap();
+        o.target = Some(Target::Object(id));
+        o.beh.current = Some(Behaviour::Attack);
+        o.beh.suspended = Some(Behaviour::Guard);
+        o.beh.aside = Some((Some(Target::Object(aside)), None));
+    }
+    order_move(&mut w, id, cell(0, -10));
+    run(&mut w, 2);
+    let k = w.obj(keeps).unwrap();
+    assert_eq!(k.beh.current, Some(Behaviour::Guard));
+    assert_eq!(k.beh.suspended, None);
+    assert_eq!(k.target, Some(Target::Object(other)));
+    let l = w.obj(loses).unwrap();
+    assert_eq!(l.beh.suspended, None);
+    assert_eq!(l.target, None, "the restored jumper is dropped");
+}
+
 // spec: S-0207 claim 20 (f) and (i) (at the end of phasing in, with no target and more than 10 ticks on the targeting timer, one ranged draw over 4 to 8 ticks; the jump itself takes none)
 #[test]
 fn claim_20_draw_at_the_end_of_phasing_in() {
