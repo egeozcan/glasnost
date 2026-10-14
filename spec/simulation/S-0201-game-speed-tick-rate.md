@@ -2,7 +2,7 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -17,12 +17,12 @@ supersedes: []
 ## Summary
 
 How many ticks the original runs per second of real time at each game speed, how it paces ticks
-against the host clock, where a skirmish's and a campaign mission's game speed comes from, and when
+against the host clock, where a skirmish's game speed comes from, and when
 no tick runs (lost focus, the options menu, a freeze) or the player cannot give orders although
 ticks run (the first ticks of a game, a chrono flash). It owns exception 2 of glossary claim G3,
 the game-speed dependence of a chrono flash that overlaps a freeze, and that exception's part of the
 shared switch `quirks.speed_normalised_delays`; what happens inside one tick is S-0203.
-This revision covers skirmishes only. Network games and campaigns are out of scope. Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this revision, and is not a requirement or measurement for this revision.
+This revision covers skirmishes only. Network games and campaigns are out of scope. Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this revision, and is not a requirement or measurement for this revision. Both radar-movie actions do nothing in skirmish. This revision defines no movie timeline for our engine: the earlier cycle-counted movie proposal is deferred, not an additional path from game speed to skirmish game state.
 
 ## Terms
 
@@ -75,9 +75,7 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
   (scenario T1, part C).
 - **Radar movie.** A movie that a trigger action gives to the sidebar's radar panel to play. A
   *freezing* movie is one given by the freezing radar-movie action: while it is the earliest-given
-  movie not yet ended, the game is under an untimed freeze (claim 11).
-- **Movie length *M*.** In our engine, the number of cycles a radar movie occupies, fixed when the
-  movie starts (claim 11, Formulas F5).
+  movie not yet ended, the game is under an untimed freeze in the historical campaign finding only (claim 11). Neither action plays a movie or freezes a skirmish.
 
 ## Behaviour
 
@@ -93,7 +91,8 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    - Which of the menu's choices ends the game at once and which one resigns is not traced (Open
      questions). Our engine reproduces both rules.
    - Backing: `measurable` (scenario T1, part A) for the start at 0 and the step of 1; `measurable`
-     (scenario T1, parts C and D) for the two ways a game ends
+     (scenario T1, parts C and D) for the two ways a game ends; `unmeasured` for the exact
+     menu-choice mapping, since no button-to-result mapping has been established
    - Confidence: high for the start and the step; medium for the two ways a game ends; low for
      which menu choice is which
 
@@ -130,13 +129,13 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    is set in claim 5. This is a *departure* with no switch.
    - **What reaches game state.** No rule of game state in our engine reads real time, so neither
      the host nor a slow cycle changes a result of game state. The paced period itself does: it
-     sets the number of frozen cycles of a timed freeze (claim 10) and of a freezing radar movie
-     (claim 11), and through a chrono flash in force that number changes how many ticks run before
+     sets the number of frozen cycles of a timed freeze (claim 10), and through a chrono flash
+     in force that number changes how many ticks run before
      the chrono flash's own freeze (claim 11). So the game speed, and the choice of the paced period
      of index 0 (claim 5), reach game state there, as the game speed does in the original. In the
      original the host reaches game state on that path as well (claims 10 and 11); our engine
-     removes only that. These two freezes are the only paths from real time or from the paced
-     period to game state; the rest of the spec is counted in ticks. The one switch
+     removes only that. Within this spec's skirmish scope, that timed-freeze interaction is the
+     only path from real time or from the paced period to game state; the rest is counted in ticks. The one switch
      `quirks.speed_normalised_delays` (glossary claim G3) also removes the game-speed dependence
      of this path (claim 11, Edge cases and quirks).
    - Backing: `unmeasured` (a decision of our engine, not a statement about the original)
@@ -152,8 +151,10 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    - Confidence: high
 
 6. **One drawn frame per tick.** In a single-player game every cycle makes exactly one drawn frame.
-   That drawn frame shows the state at the end of the previous tick, including the orders that took
-   effect at its end (S-0203, claim 7). The tick of its own cycle does not show in it yet. This holds
+   In an unfrozen cycle after a completed tick, that drawn frame shows the state at the end of
+   the previous tick, including the orders that took effect at its end (S-0203, claim 7).
+   The tick of its own cycle does not show in it yet. During a freeze no new tick state appears,
+   although the chrono flash can advance. This holds
    at every game speed, so at index *s* ≥ 1 the original draws at most 62.5 / *s* drawn frames per
    second. During a stand-still, no drawn frame of the game is made either (claims 8 and 9). This is
    the rule the glossary's *drawn frame* entry points to for single-player games: rendering rules that say "per drawn frame" and "per tick" coincide there, except during a
@@ -178,9 +179,9 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    mission sets it aside (claim 12). It shows only in the speed control of an options menu that is
    offered outside a mission, after a campaign mission or at the start of a session.
    - Backing: `measurable` (scenario T2, parts A, B and E) for the lobby's starting position and the
-     replacement; historical finding only for the absent-key value 3, not measured or measurable
-     as a claim of this revision (the earlier proposed measurement is retained in T2, part D,
-     as historical context only); this value stays untested
+     replacement; `unmeasured` for the absent-key general value 3: skirmish start replaces it,
+     and no reachable outside-game speed control has been established for T2 part E or the
+     historical T2 part D. That value remains a low-confidence import default, not a skirmish speed.
    - Confidence: medium for the lobby's initial value (it is traced; whether the original keeps the
      index in range when the saved value lies outside 0 to 6 is not); low for the absent-key
      value 3, which no game in the scope of this spec uses
@@ -192,7 +193,9 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    number of frozen cycles of a timed freeze that starts from then on (claim 10). While the options
    menu is open, no cycle runs: no tick, no drawn frame of the game. Closing it resumes the cycles
    without catching up (claim 3).
-   - Backing: `measurable` (scenario T5; scenario T3, part B, for the drawn frames)
+   - Backing: `measurable` (scenario T5; scenario T3, part B, for the drawn frames), with
+     `unmeasured` for the exact first cycle affected and for delays started after the change:
+     T5 measures a sustained rate, not the transition cycle, and does not start a speed-normalised delay
    - Confidence: medium
 
 9. **No ticks while the window lacks focus.** In a single-player game, while the game window does
@@ -200,8 +203,7 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    up (claim 3), when the window regains focus. Our engine also runs no cycle while its window
    lacks focus, and a stand-still uses up no freeze (claim 10). Window focus is not part of game
    state: no rule of game state in our engine reads real time (claim 4), so the stand-still changes
-   no result, and it is a rule of presentation. In our engine a radar movie's length is counted in
-   cycles too, so a stand-still does not use it up either (claim 11).
+   no result, and it is a rule of presentation.
    - Backing: `measurable` (scenario T4) for single-player games; network games are out of
      scope (claim 13)
    - Confidence: high
@@ -281,29 +283,18 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
       over from its first step with the new *D*. With *D* of 0 or below the action does nothing,
       not even to a chrono flash already running.
     - **Radar movies in the original.** *Skirmish rule:* in a skirmish both actions do nothing. *Historical campaign finding (out of scope; retained for a future campaign spec only, not a claim or measurement of this revision):* in a campaign mission, the plain radar-movie action and the freezing radar-movie action (Import mapping) each give the sidebar's radar panel a movie to play. The panel plays these movies one at a time, in the order in which their actions ran, so a movie starts only once every movie given before it has ended. While the earliest-given movie that has not yet ended is one given by the freezing action, the game is under an untimed freeze, which ends when that movie ends, and a chrono flash in force takes one step in each of its frozen cycles as well. A movie given by the plain action freezes nothing. A parameter value outside the game's movie list gives no movie. A movie ends when its playback ends, in real time, so in the original the freeze's length depends on the host (compare claim 10, at a host that does not keep up). Which movie a value names and how it is drawn are presentation, not covered by this revision.
-    - **Radar movies in our engine (departure).** The number of frozen cycles of a freezing movie
-      must not depend on real time, so our engine counts a movie's length in cycles. Each movie has
-      a playing time *T*, an integer number of milliseconds, a property of the movie's own data (the
-      movie's format spec owns where it comes from; Open questions). A movie given in the tick of
-      cycle *c* starts at cycle *c* + 1 if no earlier-given movie is still playing, and otherwise in
-      the cycle after the last cycle of the one before it. It occupies *M* = max(1, ⌈*T* / *P*⌉)
-      consecutive cycles (Formulas F5), *P* being the paced period at the game speed in force when
-      it starts. Frozen and unfrozen cycles count alike, and a stand-still counts for none. If it
-      is a freezing movie, each of its *M* cycles is a frozen cycle, so *F* = *M* in F4. The drawn
-      movie follows this timeline, not the other way round. This is a *departure* with no switch,
-      as claim 4: it replaces a count that depends on the host with a count fixed when the movie
-      starts, and the game speed still reaches game state through it, exactly as through a timed
-      freeze (claim 4, Edge cases and quirks).
+    - **Radar movies in our engine.** Both actions do nothing in skirmish, as in the original.
+      Movie timing, queueing and any movie-related freeze in our engine are deferred to a future
+      campaign spec. They impose no requirement here and are not an exception to glossary G3.
     - **Our engine** counts the chrono flash's steps per cycle as the original does by default
       (`quirks.speed_normalised_delays` on, the original), with cycles paced as in claim 4 and
       timed freezes counted in cycles as in claim 10. With the switch off, a chrono flash steps in
       a frozen cycle only while its own freeze is in force (Edge cases and quirks; F4).
     - Backing: `measurable` (scenario T6, parts B, G, H and I) for the chrono flash, including the
-      game-speed dependence (part G); `measurable` (scenario T6, part L) for the radar movies'
+      game-speed dependence (part G) and non-positive parameters (part N); `measurable` (scenario T6, part L) for the radar movies'
       skirmish behaviour (both actions do nothing); historical finding only for the campaign
       radar-movie observations, not measured or measurable as claims of this revision (the earlier
-      proposed measurements are retained in T6, parts J and M, as historical context only); `unmeasured`
-      for our engine's movie timeline, a decision of our engine as in claim 4
+      proposed measurements are retained in T6, parts J and M, as historical context only)
     - Confidence: medium for the chrono flash's step counts and the game-speed dependence; low for
       the radar movies
 
@@ -311,8 +302,7 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
     - Backing: historical finding only; not measured or measurable as a claim of this revision (the earlier proposed measurement is retained in T2, parts C and D, as historical context only)
     - Confidence: high for the recorded finding; it is outside this revision's scope
 
-13. **Network games (out of scope).** This spec covers single-player games only: a skirmish or a
-    campaign mission. Network games are out of scope; a future multiplayer spec owns them,
+13. **Network games (out of scope).** This revision covers skirmishes only. Network games are out of scope; a future multiplayer spec owns them,
     including the agreed tick rate, the way a speed change is sent, how losing focus and the pause action behave, and the draws that network games take for the synchronisation
     checksum (S-0202, claim 12, states the draws that those games take from the scenario random
     stream). Nothing else in this spec holds for network games,
@@ -333,6 +323,35 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
     - Confidence: medium for the count of ticks and the chrono-flash case; low for which inputs are
       blocked: orders and the pointer are, and whether the player can still scroll the view during
       an order block is not traced (Open questions; scenario T6, part B, records it)
+
+### Evidence boundaries
+
+These qualifications apply to the claims above and their restatements in Formulas, Constants,
+State and ordering, Edge cases and quirks, and Import mapping.
+
+- Claims 2 and 10: the exact within-cycle clock boundary, and a freeze's count on an arbitrarily
+  slow host, are `unmeasured` (confidence: high for pacing, medium for the freeze). T1 and T6
+  test sustained keep-up rates and selected holds, not each clock phase or host workload.
+- Claim 3: no catch-up after the menu or a freeze is `unmeasured` (confidence: high). T4 isolates
+  lost focus only; T5 and T6 do not bound the rate immediately after resumption.
+- Claim 11: stepping after a late-in-tick action is `measurable` by S-0203 scenario O6 part B,
+  with that spec's confidence. Stepping across a stand-still is `unmeasured` (confidence: medium):
+  T4 and T6 part F do not include a chrono flash across focus loss.
+- Claim 14's interaction with a separate map-created order block, and claim 11's eventual release
+  by a map action, are `unmeasured` (confidence: medium). T6 tests repeated flashes and the
+  initial block, not a separately created and lifted map block.
+- The non-positive pause cases are `measurable` by T6 parts D and E for cancelling a timed
+  freeze and for a standalone permanent freeze (confidence: medium). The additional cases with
+  an untimed freeze, with no earlier freeze for a negative parameter, or with a timed freeze
+  followed by a zero parameter are `unmeasured` (confidence: medium): those combinations have
+  no separate scenario here. Their stated rules are not confirmed by D or E.
+- Both switches' off states, importer warnings and our engine's cycle-counted departures are
+  `unmeasured` design rules (confidence: high): the original cannot exercise our alternatives.
+  F4's original equality boundary and a pause begun in the tick of the flash's own freeze are
+  `unmeasured` (confidence: medium): G1–G3 do not isolate those boundary cases.
+- Import mapping's nonzero parameter kinds and the empty number-slot default for these actions
+  are `unmeasured` (confidence: medium): T6 uses kind 0 with explicit values and supplies no
+  cross-kind fixtures. Parameter-kind parsing otherwise belongs to S-0011.
 
 ## Formulas
 
@@ -384,8 +403,7 @@ gives *F* = 120 × *N* − 1.
 
 Integer counts, exact.
 
-**F4 Chrono flash with a timed freeze.** (A freezing radar movie is a freeze like a timed one,
-with *F* = *M* in our engine, F5. Several freezes that overlap or follow one another make one stretch of frozen cycles, and *F* is the length of the stretch that begins in the cycle after tick *n*; see the rule after the table.) A timed freeze with *F* frozen cycles starts in tick *n*,
+**F4 Chrono flash with a timed freeze.** A timed freeze with *F* frozen cycles starts in tick *n*,
 in which a chrono flash with parameter *D* has taken *k* steps by the end of the tick
 (0 ≤ *k* ≤ *D* + 44). *k* is 0 when the chrono flash's action is set off in tick *n* after the
 chrono flash's step (S-0203, row 4), so its first step falls in the next cycle. After
@@ -404,28 +422,9 @@ Integer counts, exact. *F* is 60 × *N* / *s* − 1 for the original at a host t
 second hold at 365 at index 6 (*F* = 9) and at 315 at index 1 (*F* = 59); with *N* = 2 at index 1
 (*F* = 119) there is one hold of 119 frozen cycles at 301.
 
-*Where the table does not apply: a freeze that begins after the stretch has begun.* A freezing movie
-can start in a cycle that is already frozen (it was given behind another movie, and the earlier
-movie ends during a freeze or while the chrono flash's own freeze is in force). Then the frozen
-cycles are the union of the freezes' cycles, and the tick number stands still through all of them
-as one hold. The chrono flash's own freeze lies at fixed cycles in either case. With the switch on
-it is the *D* + 1 cycles after the chrono flash's cycle of step *D* + 44, whatever else freezes,
-because the chrono flash steps in every cycle. With the switch off it begins in the cycle after the
-tick that took step *D* + 44, and no freeze that begins later moves it. A movie that begins inside
-the chrono flash's own freeze adds only the cycles that extend beyond that freeze's last cycle. This
-follows from claim 11's per-cycle rule and is `unmeasured` as a separate case.
-
-**F5 Radar movie length (our engine).** For a movie of playing time *T* ms (integer, *T* ≥ 0) that
-starts when the paced period is *P* ms:
-
-> *M* = max(1, ⌈*T* / *P*⌉) cycles
->
-> *M* = 1 for a movie with no stated *T*, as for *T* = 0 (the importer warns)
-
-A movie of the list for which no playing time is known thus holds the game for one frozen cycle in
-our engine, a deterministic stand-in until the movie's format spec owns *T*. Integer arithmetic: the ceiling of an exact quotient of integers, so no floating point and no
-rounding other than the stated ceiling. At index 0, *P* = 8 ms (claim 5). A freezing movie has
-*F* = *M* frozen cycles.
+Movie freezes and movie lengths are outside this table and this revision's implementation scope.
+Both radar-movie actions do nothing in skirmish (claim 11). The former F5 movie proposal is
+withdrawn pending a campaign spec, including its fallback length and warning.
 
 ## Constants
 
@@ -436,20 +435,19 @@ rounding other than the stated ceiling. At index 0, *P* = 8 ms (claim 5). A free
 | Paced period | 16 × *s* | ms | Index *s* from 1 to 6 (claim 2, F1) |
 | Paced period at index 0 (original) | none (no wait) | ms | No wait (claim 5) |
 | Paced period at index 0 (our engine) | 8 | ms | Departure, claim 5 |
-| Campaign game speed | 2 | game-speed index | Claim 12 |
+| Campaign game speed (historical context only) | 2 | game-speed index | Claim 12, out of scope |
 | Speed-control positions | 7 | positions | Index = 6 − position (claims 7 and 8) |
 | Freeze length per second of parameter | 60 | pacing units | 960 ms (claim 10, F2) |
 | Tick number at game start | 0 | ticks | Claim 1 |
 | Chrono flash, steps before its freeze | *D* + 44 | steps (one per cycle) | Claim 11, F3; *D* is the action's parameter |
 | Chrono flash, frozen part | *D* + 1 | cycles | Claim 11, F3 |
-| Radar movie length (our engine) | max(1, ⌈*T* / *P*⌉) | cycles | Claim 11, F5; *T* is the movie's playing time in ms, owned by the movie's format |
 | Ticks without orders at game start | 4 | ticks | Ticks 0 to 3 (claim 14) |
-| Absent-key default, settings file general game speed | 3 | game-speed index | Import mapping |
+| Absent-key default, settings file general game speed | 3 | game-speed index | Import mapping; unmeasured, claim 7 |
 | Absent-key default, rules lobby game speed | 6 | game-speed index | Import mapping |
 
 ## State and ordering
 
-**Whether a cycle runs a tick** (single-player games):
+**Whether a cycle runs a tick** (skirmish; campaign findings above impose no requirements):
 
 | State | Event | Result |
 |---|---|---|
@@ -458,16 +456,17 @@ rounding other than the stated ceiling. At index 0, *P* = 8 ms (claim 5). A free
 | Running | Options menu opened | Stand-still (menu open): no cycles (claim 8) |
 | Stand-still (menu open) | Options menu closed | Running from the next cycle, at the index then set, with no catch-up (claims 3 and 8) |
 | Running | Pause action runs with *N* ≥ 1 | Frozen from the next cycle (claim 10) |
-| Running | A freezing radar movie becomes the earliest-given movie not yet ended (campaign only) | Frozen from that movie's first cycle, untimed (claim 11) |
 | Running | Chrono flash takes its step *D* + 44 | Frozen from the next cycle, untimed (claim 11) |
-| Frozen | Cycle begins | One drawn frame, no tick, no input; the tick number stays; a chrono flash in force takes one step |
-| Frozen | Window loses focus | Stand-still (focus lost) with the freeze in force. Original: a timed freeze's real time keeps running and can end meanwhile; a chrono flash takes no step. Our engine: the frozen cycles left do not change, nor do the cycles a radar movie has left (claims 10 and 11) |
+| Frozen | Cycle begins | One drawn frame, no tick, no input; the tick number stays; a chrono flash in force steps as claim 11 specifies, subject to the shared switch |
+| Frozen | Window loses focus | Stand-still (focus lost) with the freeze in force. Original: a timed freeze's real time keeps running and can end meanwhile; a chrono flash takes no step. Our engine: the frozen cycles left do not change (claim 10) |
 | Stand-still (focus lost) | Window regains focus | Frozen if a freeze is still in force, otherwise Running; no catch-up |
 | Frozen | Every freeze has ended | Running from the next cycle |
 | Game starts | Cycles of ticks 0 to 3 | Running, but orders blocked (claim 14) |
 
-**Ordering consequences.** A drawn frame of cycle *k* shows the state left by the tick of cycle
-*k* − 1. The game speed set during cycle *k* governs the paced period from cycle *k* + 1 on. A
+**Ordering consequences.** In consecutive unfrozen cycles, the drawn frame of cycle *k* shows
+what the tick of cycle *k* − 1 left, including its orders, before tick *k* runs. During frozen
+cycles no new tick state appears, although the chrono flash can advance. The game speed set
+during cycle *k* governs the paced period from cycle *k* + 1 on. A
 trigger action that starts a freeze does not stop the rest of its own tick, so the tick number
 during a freeze is one more than the number of the tick in which the action ran.
 
@@ -477,7 +476,7 @@ during a freeze is one more than the number of the tick in which the action ran.
   is 16 × *s* ms, a whole number of 16 ms pacing units, not a multiple of 1/60 s. Our engine
   reproduces the 16 ms unit exactly (claim 4). No switch: how ticks are spread over real time is
   real-time behaviour, which under glossary *quirk switch* takes no switch. The pacing reaches game
-  state only through the frozen cycles of a timed freeze and of a freezing radar movie, and that path
+  state only through a chrono flash's steps during a timed freeze, and that path
   is covered by the shared switch below.
 - **Freezes are 4 % short.** A freeze of *N* "seconds" lasts 0.96 × *N* s (claim 10). Our engine
   keeps the original's length at a host that keeps up, as the count *F* of frozen cycles. The real
@@ -488,13 +487,12 @@ during a freeze is one more than the number of the tick in which the action ran.
 - **Host-dependent rate.** Departure of claim 4, and the fixed index-0 period of claim 5.
 - **A freeze runs on during a stand-still (departure).** In the original a timed freeze is measured
   in real time, so a stand-still for lost focus uses it up, and the number of its frozen cycles
-  depends on the host; a freezing radar movie ends when its playback ends, also in real time. Our
-  engine counts frozen cycles (claim 10, F2), fixed when the action runs, and a movie's cycles
-  (claim 11, F5), fixed when it starts. No switch: real-time behaviour.
+  depends on the host. Our engine counts frozen cycles (claim 10, F2), fixed when the action
+  runs. No switch: real-time behaviour. Campaign movie timing is deferred.
 - **The game speed decides a chrono flash's ticks during a timed freeze.** In the original a chrono
-  flash takes one step in every frozen cycle of a timed freeze (and of a radar-movie freeze), so the
+  flash takes one step in every frozen cycle of a timed freeze, so the
   game speed changes how many ticks run before its own freeze, and whether there are two holds or
-  one (claim 11, F4); in our engine through *F* of claim 10 and *M* of claim 11. This is exception 2 of glossary claim G3. Switch
+  one (claim 11, F4); in our engine through *F* of claim 10. This is exception 2 of glossary claim G3. Switch
   `quirks.speed_normalised_delays`, the single switch through which game speed reaches game state
   in our engine, default on (the original behaviour); this spec has no switch of its own for the
   path. With it off, a chrono flash takes a step in a frozen cycle only while its own freeze is in
@@ -546,7 +544,7 @@ during a freeze is one more than the number of the tick in which the action ran.
 | Settings file, section `[Options]`, key `GameSpeed` | the general game-speed value of the session; replaced at skirmish start by the lobby's index (claim 7), set aside during a campaign mission (claim 12) | integer; 0 to 6 covered | 3 (engine constant) |
 | Map, trigger action of type 110 (the pause action) | starts a timed freeze; *N* in seconds is the action's number slot (claim 10) | integer, from the number slot as S-0011 (Import mapping, table I2) fills it for the action's parameter kind (for kind 0, the integer value); *N* < 0 reproduced as in the original, *N* = 0 gives no action (departure); both give an importer warning (Edge cases and quirks) | a parameter kind that fills no number slot leaves it at 0 (engine constant), so the action gives no action and an importer warning |
 | Map, trigger action of type 127 (chrono flash) | starts the chrono flash of claim 11; *D* is the action's number slot | integer, from the number slot as for type 110; *D* ≤ 0 does nothing and gives an importer warning (Edge cases and quirks) | 0, as for type 110, so the action does nothing |
-| Map, trigger actions of types 100 (the plain radar-movie action) and 117 (the freezing radar-movie action) | a movie for the radar panel to play (claim 11); a movie given by type 117 freezes the game while it plays, one given by type 100 does not; the number slot is the movie's position in the game's movie list | integer, from the number slot as for type 110; a value outside the list gives no movie | 0, as for type 110 |
+| Map, trigger actions of types 100 (the plain radar-movie action) and 117 (the freezing radar-movie action) | neither action has any effect in skirmish (claim 11); campaign semantics are historical context only | integer number slot, ignored in skirmish | no effect |
 | Map, trigger action of type 1 (the win action) | used by scenario T1, part C, only, which states the assumption it relies on; its parameter is the action's number slot | integer, from the number slot as for type 110 | 0, as for type 110 |
 | Rules, section `[General]`, key `GameSpeedBias` | not a game-speed input: a movement multiplier that the movement specs own | decimal | — |
 
@@ -680,7 +678,7 @@ whether the vehicle's destination changes.
   whose only event is an elapsed time; by S-0011 (claim 13) an elapsed-time value of 20 makes the
   action run in tick 300 and a value of 0 in tick 0. A trigger's actions take effect in the order of
   its action list (S-0011, claim 11). The recorder reads the tick number as in T1 part A and
-  captures the screen.
+  captures the screen and counts drawn frames handed to the display path, as T3 does.
 - *Observable (every part):* the value at which the tick number stands still; the real time from
   the moment the tick number reaches that value to the moment it reaches the next value (the
   *gap*); whether the mouse pointer is visible during the *hold*, the stretch in which the tick
@@ -689,9 +687,11 @@ whether the vehicle's destination changes.
 - *Part A (claim 10):* elapsed time 20, the pause action with *N* = 10, index 1. *Expected:* the tick
   number stands at 301; the gap is 9.6 s within ± 0.1 s (one cycle of index 1 is 16 ms; screen
   capture adds its own resolution); the pointer is hidden and no order is accepted during the
-  hold; orders are accepted after it. *Falsified if:* the gap lies outside 9.5 to 9.7 s (in
-  particular, 10.0 s), the tick number changes during the hold, or an order is accepted
-  during it.
+  hold; orders are accepted after it. There are 599 frozen cycles, each with one drawn frame.
+  *Falsified if:* the gap lies outside 9.5 to 9.7 s (in particular, 10.0 s), the tick number
+  changes during the hold, the pointer is visible, or an order is accepted during it or refused
+  afterwards. A frozen-frame count other than 599 falsifies the keep-up cycle count only when
+  the recorder resolves both boundaries and the host sustains index 1; otherwise that count is inconclusive.
 - *Part B (claim 11):* elapsed time 20, the chrono-flash action with *D* = 30, index 6. *Expected:*
   orders are blocked and the pointer hidden from tick 300 on; the tick number stands at 374 (steps 1
   to 74 fall in ticks 300 to 373); the gap is 32 cycles of index 6, that is 3.072 s within
@@ -742,7 +742,7 @@ whether the vehicle's destination changes.
   53), and no order is accepted at any time, during the 60 s observed after the hold as well.
   *Falsified if:* an order is accepted at any time, in particular from tick 4.
 - *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this revision).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this revision. *Part J (claim 11, radar movies):* a named test copy of a campaign mission map with two added one-time triggers whose only event is an elapsed time: elapsed time 20 with the plain radar-movie action and elapsed time 40 (tick 600) with the freezing radar-movie action (Import mapping), both with parameter value 0, the first entry of the movie list. A second test copy adds the chrono-flash action (*D* = 30) to the trigger of the freezing radar-movie action.
-  *Observable:* in addition to the common ones, whether the radar panel shows a movie, and from when to when. *Expected:* while the first movie plays the tick number goes on growing. Once the second movie starts, the tick number stands still for as long as it plays and runs again once it ends; how soon after tick 600 the movie starts, and how long it plays, are the original's and are not what our engine's timeline of claim 11 reproduces (it fixes them by *T*), so only the hold's coincidence with the movie is judged. With the chrono flash, its own freeze begins earlier than tick 674 by the number of frozen cycles of the movie's hold that fell before its step 74, or merges with the movie's hold when that hold lasts long enough (F4, with *F* the frozen cycles of the movie's hold). *Falsified if:* the tick number stands still during the first movie, or runs on during the second; or, with the chrono flash, its own freeze begins at 674 although the movie's hold had frozen cycles before it.
+  *Observable:* in addition to the common ones, whether the radar panel shows a movie, and from when to when. *Expected:* while the first movie plays the tick number goes on growing. Once the second movie starts, the tick number stands still for as long as it plays and runs again once it ends; how soon after tick 600 the movie starts, and how long it plays, remain questions for the future campaign spec, so only the hold's coincidence with the movie would be judged. With the chrono flash, its own freeze begins earlier than tick 674 by the number of frozen cycles of the movie's hold that fell before its step 74, or merges with the movie's hold when that hold lasts long enough (a possible campaign extension of F4, not a requirement here). *Falsified if:* the tick number stands still during the first movie, or runs on during the second; or, with the chrono flash, its own freeze begins at 674 although the movie's hold had frozen cycles before it.
 
 - *Part K (claim 10, orders already blocked):* two one-time triggers: elapsed time 20 with the
   chrono-flash action (*D* = 30) and elapsed time 21 (tick 315) with the pause action, *N* = 1,
@@ -752,11 +752,20 @@ whether the vehicle's destination changes.
   ticks between the two holds, not only during them. *Falsified if:* an order is accepted or the
   pointer is visible between the holds (the pause's end unblocked orders although the chrono
   flash's block was in force).
+- *Part N (claim 11, non-positive chrono parameter):* as part B, first with *D* = 0, then
+  *D* = −1, with no preceding flash in each case. Also repeat part H with its second action's
+  parameter replaced by each value. For the standalone cases, select the vehicle before tick 300.
+  *Observable:* holds and order acceptance. *Expected:* the standalone actions cause no hold or
+  order block; with a flash already running, its sole hold still begins at 374 and orders are
+  accepted afterwards. *Falsified if:* a standalone action blocks orders or freezes, or the
+  second action changes the hold or leaves orders blocked. Three runs per case.
 - *Part L (claim 11, radar movies in a skirmish):* a purpose-made skirmish map with one one-time
   trigger, elapsed time 20, with the freezing radar-movie action, parameter value 0; index 6.
   *Expected:* the radar panel shows no movie and the tick number stands still at no value for
   longer than one cycle in the 60 s after tick 300. *Falsified if:* the tick number stands still
-  for more than 0.5 s, or a movie plays. The same with the plain action must show no movie.
+  for longer than one cycle, or a movie plays. A host stall makes the run inconclusive and it
+  is repeated. Repeat with the plain action: no movie and no hold are expected, and either
+  falsifies the claim.
 - *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this revision).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this revision. *Part M (claim 11, a value outside the movie list):* the named test copy of a campaign mission map of part J, with the freezing radar-movie action given the parameter value −1 in one run and 99999 in a second. *Expected:* no movie plays and the tick number stands still at no value for longer than one cycle. *Falsified if:* a movie plays, or the game holds for more than 0.5 s.
 
 **Scenario T7: no orders in the first ticks (claim 14).**
@@ -788,10 +797,8 @@ whether the vehicle's destination changes.
   0 to 6 is not traced (claim 7).
 - Which of the options menu's choices ends a game at once and which one resigns is not traced
   (claim 1); scenario T1, part D, tries each.
-- The playing time *T* of each radar-panel movie (claim 11, F5) is not given here. Which spec of the
-  movie data owns it, and whether it should come from the movie's frame count and playback rate, is
-  open; until then a movie with no stated *T* is given *M* = 1 cycle (F5) and an importer warning, so the
-  chrono flash's steps never depend on an undefined length.
+- Radar-movie timing and its source in movie data are deferred to the future campaign spec.
+  No fallback length or importer warning for a missing movie duration is required by this revision.
 - When a timed freeze and a chrono flash overlap, each, when it ends, leaves orders blocked or
   accepted as they were when it started, so whether orders are accepted in the ticks between the two holds can depend on which
   started first (scenario T6, part G, judges tick numbers only). The full rule for overlapping
@@ -824,10 +831,10 @@ whether the vehicle's destination changes.
   including its citation to this spec's Terms rather than to claim 2 for input timing. Check the
   compatible definitions and claims in the latest same-batch revisions at sign-off, not against
   an earlier batch's revision list.
-- **Trigger actions outside S-0011's subset, for sign-off.** This spec states the parameter
-  reading of the win action, the two radar-movie actions, the pause action and the chrono-flash
-  action (Import mapping, with their type codes), which S-0011 parses but leaves outside its subset.
-  S-0011's table of action codes should point here for them, or take them over in a later revision.
+- **Paired change for S-0011, for sign-off.** Its action-code table should point here for the
+  pause and chrono-flash actions, the no-effect skirmish radar-movie actions, and T1 part C's
+  win-action fixture assumption. This spec owns those statements; it does not extend S-0011's
+  supported action subset or specify campaign movies.
 - **Citations, for sign-off.** The current glossary's claim G3 holds exception 2 and gives
   `quirks.speed_normalised_delays` the scope used here. S-0011, S-0202, S-0203 and S-0205 are
   approved specs cited by number and claim. The glossary's *departure* entry lists the pause
