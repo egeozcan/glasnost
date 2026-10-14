@@ -3,7 +3,7 @@ id: Q-0480
 title: The radar's shroud and friendly-gap tests at cell-centre heights below 0, after S-0110 revision 9
 status: answered
 related: [S-0410, S-0110]
-answered-by: [S-0110]
+answered-by: [S-0110, S-0410]
 ---
 
 ## Need
