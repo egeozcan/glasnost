@@ -1082,7 +1082,10 @@ impl Builder<'_> {
             {
                 continue;
             }
-            // spec: S-0112 claim 1 (a deck cell: one whose overlay is at a bridge position)
+            // spec: S-0112 claim 1 (a deck cell: one where an overlay at a bridge position was
+            // placed). The viewer draws the cells after loading, where such a cell holds its
+            // bridge type or a veinhole marker that replaced it; row 1 wins for the marker either
+            // way, so testing the overlay held gives the same rows.
             let deck = DECK_BRIDGES.contains(&o);
             let table_row = overlay_table_row(o, flags, deck);
             let d = cell.overlay_data;
