@@ -72,7 +72,7 @@ fn compute_offset(q: u32, table: bool) -> (F64, F64) {
         // spec: S-0402 F8 (`quirks.table_direction` off: 16384 and the binary64 value nearest −2π / 65536)
         F64::from_i64(fh - 16384, rz).mul(glasnost_sim::consts::WALK_C, rz)
     };
-    // spec: S-0402 F8 (sin and cos rounded toward zero). AMBIGUOUS, pending a spec request: F8 writes
+    // spec: S-0402 F8 (sin and cos rounded toward zero). Open in Q-0580 question 1: F8 writes
     // plain sin and cos, but S-0205 claim 6 and the sibling formulas use table sines; we follow F8's
     // literal text. The readings differ by one lepton at some facings (e.g. switch on q = 2, off q = 0).
     let (s, c) = bigmath::sin_cos(theta, rz).unwrap_or((F64::ZERO, F64::ZERO));
@@ -105,8 +105,8 @@ pub fn of(w: &World, id: ObjectId, nu: i32) -> Option<Harvesting> {
     let o = w.obj(id)?;
     // spec: S-0402 F8 (q: the body's 8-step facing, S-0204 claim 10 and F4)
     let q = n_step(o.body.value(w.tick), FACING_GROUPS);
-    // spec: S-0402 F8 (t: the current tick number). AMBIGUOUS, pending a spec request: which tick a
-    // drawn frame reads; we use the simulation's current tick, the same one the body facing is read at.
+    // spec: S-0402 F8 (t: the current tick number). A drawn frame reads
+    // the simulation's current tick, the same one the body facing is read at.
     let frame = usize::try_from(frame(q, w.tick, nu)).ok()?;
     let table = w.rules().quirks.table_direction;
     Some(Harvesting {

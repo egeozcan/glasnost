@@ -2974,8 +2974,8 @@ impl Builder<'_> {
             };
             let row = self.house_row(hsv, ground + extra);
             let body = self.vehicle_items(m, point, u, row);
-            // spec: S-0402 claim 5a (the harvesting image is drawn under the body). AMBIGUOUS, pending a
-            // spec request: its place relative to the voxel shadow; we composite it before all of the
+            // spec: S-0402 claim 5a (the harvesting image is drawn under the body). Open in Q-0580
+            // question 4: its place relative to the voxel shadow; we composite it before all of the
             // vehicle's items, shadow included.
             let mut items: Vec<Item> = m
                 .harvesting
@@ -3015,7 +3015,7 @@ impl Builder<'_> {
         // spec: S-0402 F8 (project the anchor by S-0101 claim 1 and centre the image there)
         let at = project_lifted(h.anchor.0, h.anchor.1, h.anchor.2);
         // spec: S-0402 claim 5a (the animation palette, no house-colour remap); S-0103 claim 8 row 5
-        // (its brightness, the cell's unscaled ground level). AMBIGUOUS, pending a spec request: the
+        // (its brightness, the cell's unscaled ground level). Open in Q-0580 question 2: the
         // brightness of this image is not specified; our choice.
         let row = self.anim_palette_row(ground);
         self.place_sprite(
@@ -3023,7 +3023,7 @@ impl Builder<'_> {
             h.frame,
             at,
             DepthTest::Reader,
-            // AMBIGUOUS, pending a spec request (no S-0102 claim 13 row): our choice is the row of a
+            // Open in Q-0580 question 3 (no S-0102 claim 13 row): our choice is the row of a
             // vehicle drawn as a sprite, U − 2, upright, a reader, marked provisional.
             ItemDepth::Profile {
                 profile: Profile::Upright,

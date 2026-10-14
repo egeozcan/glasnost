@@ -175,7 +175,7 @@ fn sin_reduced(r: &BigUint, p: &BigUint) -> BigInt {
 /// The harvesting-sprite anchor of S-0402 F8 uses them, on the literal
 /// reading of F8 (plain sin and cos, rounded toward zero). Whether F8
 /// means table sines instead, as S-0205 claim 6 and sibling formulas do,
-/// is ambiguous and pending a spec request. `None` for infinities
+/// is open in Q-0580. `None` for infinities
 /// and NaN. The sine of a zero keeps the zero's sign.
 ///
 /// The working precision ([`FRAC`] bits) is far beyond a double's, so the

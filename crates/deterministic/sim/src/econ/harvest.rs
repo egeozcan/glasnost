@@ -552,8 +552,7 @@ pub fn display_suppressed(w: &World, id: ObjectId) -> bool {
         return o.teleport.as_ref().is_some_and(|t| t.landing.is_some());
     }
     // spec: S-0402 claim 5a (a ground driver: an active track with positive current speed; a destination
-    // alone does not suppress it). AMBIGUOUS, pending a spec request: "current speed" is read as the speed
-    // fraction ρ of S-0207 Terms above 0. Erasing (also suppressing) is not modelled: no erasing weapon yet.
+    // alone does not suppress it); "current speed" is the speed fraction ρ of S-0207 Terms, above 0. Erasing (also suppressing) is not modelled: no erasing weapon yet.
     o.drive
         .as_ref()
         .is_some_and(|d| d.track.is_some() && d.rho.gt(F64::ZERO))
