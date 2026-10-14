@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -40,7 +40,8 @@ not rules for implementing them.
   confidence and measurement scenario.
 - A planned spec is a spec that is neither approved nor a draft of this glossary's batch. It may
   not be written yet, or it may exist as a draft of a later batch; either way it is not signed off
-  with this batch. This revision of the glossary cites none. A spec cites a planned spec as
+  with this batch. The pointer to planned S-0516 below names the owner of future cloak rules
+  only. A spec cites a planned spec as
   "planned S-xxxx" or as "S-xxxx (its subject, planned)". A planned spec owns no claim, so a
   pointer to one is a pointer only: in an entry with such a pointer, every statement about the original is a
   claim G1 to G3 or a claim of a written spec that the entry names, and the rest is vocabulary. At
@@ -60,8 +61,9 @@ not rules for implementing them.
 - This revision cites approved specs at their indexed revisions and the latest revisions of
   them in its current correction batch. S-0401 to S-0416 are now approved; their revised drafts
   in this batch are plain spec pointers, not planned specs. S-0417 is also approved; its revised
-  draft in this batch is likewise a plain pointer. Sign-off checks every cross-spec change against
-  the versions handed off together.
+  draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are drafts
+  in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
   just the Q-IDs it answers. Specs therefore don't say that no request tracks a question.
@@ -973,7 +975,8 @@ battlefield view shows a window of it. See S-0101.
 **aircraft.** A type kind and its objects: units that fly. Aircraft bodies are drawn only as voxel
 models; an aircraft type without voxel art draws no body (S-0102 claim 21; S-0105). Infantry of a
 jumpjet type and hovering vehicles are not aircraft: an object's kind is the kind of its type.
-Which kinds can take off and land, and where, belongs to the aircraft specs.
+S-0501 claims 1 to 10 own ordinary flying-locomotor flight, take-off and landing.
+Rocket missiles instead use S-0506 claims 14 to 21.
 
 **bridge, high bridge, bridge deck.** A *bridge* is a crossing of water or a gap built from bridge
 overlays. A *high bridge* is a bridge with a raised *bridge deck* that units can drive on and pass
@@ -993,6 +996,11 @@ An actor "in contact with nothing" holds none. See S-0215 (Terms); the specs of 
 when contact starts and ends. A *tether link* is a firmer state that some exchanges add to a
 contact.
 
+**cruise height.** An aircraft type's flight-level field, in leptons, or the game-wide flight
+level when the type's field is absent. S-0501 claim 2 owns climbing toward it; its Terms
+distinguish cruise height from the height held during landing or destination guidance.
+Not the *jumpjet cruise height*.
+
 **entry outcome.** The answer a moving unit gets for a neighbouring cell: one of eight values, in
 order of increasing severity, *clear*, *cloaked blocker*, *moving blocker*, *closed friendly gate*,
 *friendly obstacle*, *enemy obstacle*, *stationary friendly* and *blocked*. See S-0209 (Terms,
@@ -1004,6 +1012,11 @@ not itself a follower car forms a *car chain* together with the follower cars be
 (claim 26) gives how the cars are sent after their leader, and S-0207 (claim 10) how they copy its
 speed fraction. Specs write "follower car", not "following car", and "car chain", not "train", for
 the linked group (see *train*).
+
+**in-the-air answer.** An aircraft's test for being in the air: the height-above-the-surface
+test used by S-0307 (at least 208 leptons above the surface), except for two game-wide
+rocket types that use their locomotor's answer. S-0501 claim 18 uses this test for pad search; its Terms distinguish it from that
+spec's on-the-ground and in-flight tests. See also *airborne*.
 
 **jumpjet cruise height.** A jumpjet type's imported height field: the height above the terrain
 at which its jumpjets fly, in leptons. It is also the hover height that S-0101 uses. S-0102 gives its minimum, its
@@ -1030,8 +1043,10 @@ has all three, chosen by three separate fields. See S-0211 (Terms, claim 3).
 **locomotor.** The movement method of a mobile type, chosen by an imported field: for example driving,
 walking, hovering, flying or jumping. It decides how the object moves between cells and what
 movement states it reports. The movement specs own its details: S-0207 the driving locomotor's
-movement, S-0208 infantry walking, S-0206 turning under each locomotor, and S-0106 (claim 5) which
-locomotors tilt a body on slopes. The other locomotors are left to later movement specs.
+movement, S-0208 infantry walking, S-0504 claim 1 the ship locomotor, S-0501 claims 1 to 10
+ordinary flying locomotion, S-0506 claims 14 to 21 rocket flight, S-0206 turning under each
+locomotor, and S-0106 (claim 5) which locomotors tilt a body on slopes. The other locomotors
+are left to later movement specs.
 
 **mission target.** The object or cell that a unit's current behaviour aims to enter, capture,
 sabotage or otherwise reach, while the unit is in a behaviour that has one. S-0209 (Terms) defines
@@ -1051,9 +1066,35 @@ use their water sequences. It is not the *locomotion class* or the *locomotor*.
 whether a vehicle, a building or another object is present, and the house of the last infantry unit
 to mark a position there. See S-0209 (Terms, claim 1).
 
+**pad, pad reservation.** A *pad* is a building whose type is one of an aircraft type's dock
+types. A *pad reservation* is the aircraft's contact with that building. S-0501 claims 21
+to 24 own choosing, accepting, reserving and docking at pads. See *refinery, dock types* for
+the other senses of dock types.
+
+**pad-bound.** An aircraft type that may rest only on a pad. S-0501 claim 18 owns its rest
+rules, including crashing when no pad can be obtained.
+
+**pad total.** The sum of the docking-place counts of a house's placed helipad buildings.
+S-0501 claim 30 owns its accounting and the aircraft-capacity test that uses it.
+
 **passability category.** A number from 0 to 7 that each cell carries, computed from its land type,
 overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *partial obstacle*,
 *blocked* and *off-map*. See S-0211 (Terms, claim 11).
+
+**service step.** One round added or one repair step made by a pad for one aircraft settled
+on it. S-0501 claims 26 and 27 own servicing and repair.
+
+**sinking descent.** The lowering of a sinking vessel by 5 leptons per tick until its height
+above the terrain is strictly below −400 leptons and it leaves play. S-0504 claim 4 owns it.
+
+**speed fraction.** A movement speed multiplier. For aircraft, a floating-point value from
+0 to 1, with a current and a target value (S-0501 claim 5). Ground vehicles also have a
+current and a target speed fraction; S-0207 claims 9 and 10 own their rules, and S-0504
+claim 1 applies those rules to ships. A spec uses the sense for its movement kind.
+
+**submerged.** An underwater-type vehicle in the cloaking, cloaked or uncloaking state.
+S-0504 claim 6 and its Terms own this naval vocabulary; planned S-0516 owns the cloak
+transitions. An underwater type without the ability to cloak is never submerged.
 
 **tether link, tethered.** A link that two objects in *contact* both hold during some exchanges.
 An object that holds one is *tethered*. Contact alone does not imply a tether. The spec that owns
@@ -1085,6 +1126,14 @@ and 11).
 
 **vehicle.** A type kind and its objects: wheeled, tracked, hovering and naval units, drawn as voxel
 models or sprites (see S-0007, claim 4).
+
+**visiting aircraft.** An aircraft marked as not meant to stay on the map. Placement sets
+the mark unless its type is both selectable and landable and its primary weapon is not
+a camera weapon; placement never clears an existing mark, and dispatch can set it earlier.
+S-0501 claims 1 and 10 own placement and leaving the map; its Terms define the mark.
+
+**wake.** An instance of the game-wide wake animation created by a vessel on the water.
+S-0504 claims 2 and 4 own moving-ship and sinking-vessel wakes.
 
 ### infantry
 
@@ -1118,14 +1167,18 @@ specs that send each kind of request.
 
 ### combat
 
+**aim point.** The fixed world point a rocket missile flies to, set when it first carries
+out its move behaviour. S-0506 claim 14 owns its selection and fixing; later move orders
+do not change it.
+
 **aiming facing.** The facing of a firer that the firing check compares with the direction of its
 target: its turret facing or its body facing. S-0310 owns which facing aims and the aiming
 tolerance (claims 1 to 5); S-0306 and S-0313 use it.
 
 **airborne.** Ambiguous on its own in a rule, because the combat specs use two different tests:
 S-0307 (Terms) gives a test by height above the surface, which S-0306 uses, and S-0308 (Terms)
-means the state in which the original counts an object as in the air, whose exact test it leaves
-to the aircraft and movement specs, and which S-0309 uses. A spec that uses "airborne" in a rule
+means the state in which the original counts an object as in the air, which S-0309 uses.
+For aircraft, S-0501 claim 18 supplies that second test as the *in-the-air answer*. A spec that uses "airborne" in a rule
 says in its Terms which test it means. In a measurement setup the word keeps its everyday sense:
 the object is in the air.
 
@@ -1145,6 +1198,10 @@ keeps its everyday sense: the object has a weapon.
 armour field. A warhead scales its damage by its *versus value* for the target's armour class.
 S-0305 owns the list of classes, their order and how a type's class is read (claims 1 to 5).
 S-0302 (claim 6) applies the class to damage, and S-0304 gives what small versus values mean.
+
+**attack run, firing pass.** An aircraft's *attack run* is one approach to a target ending
+in one or more *firing passes*, each a processing in which the run fires. A run that fires
+spends one round of ammunition. S-0501 claims 12 to 15 own the runs, passes and spending.
 
 **automatic search, automatic target scan.** A search in which an object picks a target by itself,
 without an order naming that target. S-0309 owns the searches, their kinds (*range search*, *area
@@ -1199,6 +1256,11 @@ point*, with a damage amount, a warhead, and optionally the object and the house
 S-0303 owns what a detonation does (Terms, claims 1 to 23). Projectiles (S-0306), damaging
 animations (S-0109), deaths (S-0312) and other specs produce detonations, and each says what it
 passes. S-0302 turns each resulting *hit* into a health change.
+
+**drone parasite, grappling parasite.** A parasite whose type is both naval and organic is
+a *grappling parasite*; every other parasite is a *drone parasite*. S-0614 claims 6 and 10
+own their deliveries: drones use their weapon's rate of fire, grapplers a fixed strike
+cycle. S-0614 claim 11 owns a grappler's cull.
 
 **elevation level.** Of a cell: its height level, plus 4 height levels when it has the
 *elevation-deck mark*, whether an object stands on the deck or under it. S-0307 owns it
@@ -1262,16 +1324,34 @@ narrower sense, the hit of one detonation on one object at one distance (Terms, 
 A *healing hit* is a hit whose delivered amount is negative (S-0302, claim 6); S-0309, S-0314 and
 S-0315 use it.
 
+**hold, held.** A mobile unit's hold is a countdown in ticks; it is *held* while that timer
+runs. A parasite starts it on its host and is itself held after leaving a living host.
+S-0614 claims 7, 8 and 13 own renewal, effects and post-exit hold, including exceptions.
+Being held stops most locomotors and makes the unit not movable for orders; it is distinct
+from the electromagnetic-pulse disable called *paralysed* by S-0214.
+
 **known attacker.** Damage has a known attacker when it comes with the object that caused it.
 See S-0107 (Terms); S-0208 (claim 15) uses it for the scatter requests that damage sends. S-0302
 (Terms, claim 1) calls that object the *attacker*, adds the *attacking house* that a hit credits,
 and says which sources give which.
 
-**parasite, victim.** A *parasite* is a unit that attaches itself to another unit, its *victim*,
-and damages it while attached. How it attaches and where it rides are given by the specs that use
-the term: S-0209 (Terms) and S-0214 (Terms). S-0315
-(claims 6 and 7) owns how damage to the victim, which it calls the *host*, suppresses a
-parasite; the rest is left to the special-abilities specs.
+**latching weapon.** A weapon whose warhead has the parasite flag and whose launch puts
+the firer inside its own projectile. S-0614 claim 1 owns this launch and the attempt to
+latch when the projectile detonates.
+
+**launch pass.** One run of a spawn controller: the first comes 20 ticks after its creation,
+then one every 10 ticks. S-0506 claim 2 owns this cadence and its exceptions.
+
+**launching count.** The number of a spawner's slots on the rail plus its preparing slots
+whose object is of a missile type (with the missile-spawn flag) and on the map.
+The spawner is *launching* while this
+count is above 0. S-0506 claim 10 owns the resulting lockouts; its Terms define the count.
+
+**parasite, victim, host.** A *parasite* is a unit that attaches itself to another unit,
+its *victim*, and damages it while attached. The victim is its *host* while it is attached.
+S-0614 claims 1 to 5 own latching, claims 6 to 11 deliveries and hold, claims 12 to 14
+leaving a living host, and claim 15 losing the host. S-0315 claims 6 and 7 own suppression
+by damage and healing. S-0209 and S-0214 use these terms for entry and order targeting.
 
 **projectile.** The object that carries a shot from where it is launched (normally its fire point,
 S-0306 claim 5) to where it detonates. S-0203
@@ -1287,14 +1367,53 @@ runs, the firer may fire none of its weapons; one countdown serves all of them. 
 (Terms, claims 1 and 2); S-0215's *rearm time remaining* is the number of ticks it still has to
 run. S-0308 and S-0310 use it.
 
+**release, flight start, detachment (spawned objects).** Three different events, not
+synonyms. *Release* sends preparing objects against the controller target; a released
+missile is enrolled for repeated attack orders (S-0506 claims 8 and 12). A rocket's
+*flight start* is its first carrying-out of move behaviour after placement, fixing its
+aim point independently of release (S-0506 claims 8 and 14). *Detachment* ends its
+membership in a spawn slot; for an ordinary released rocket this happens when rail time
+ends, and the slot starts regeneration (S-0506 claim 9). A released rocket can therefore
+still occupy an on-the-rail slot. Release in production has its own meaning (S-0404
+claim 13), not this one.
+
 **retaliation.** An actor's automatic attack on the object that has just damaged it, as opposed
 to an ordered attack or a target picked in an automatic search. S-0309 owns when an object
 retaliates (claim 18), S-0304 (claim 3) its versus-value condition and S-0215 (claims 18 and 19)
 what retaliation does; S-0308 uses it.
 
+**rocket missile.** An aircraft-kind object of one of the three rocket types flying under
+rocket-flight movement to a fixed aim point, not an ordinary projectile. S-0506 claims
+14 to 21 own its flight, detonation and interception.
+
+**run lock.** A mark held during the later passes of an aircraft's strafing run, a fighter's
+firing pass and a spy plane's overfly. It makes the aircraft not ready to change, subject
+to the spy-plane approach exception of S-0501 claim 31.
+
+**silent removal.** For a parasite, immediate removal without death effects, wreck,
+survivor, experience or death sound. S-0614 claims 4, 13 and 15 use this outcome; its
+Terms take the definition from S-0315 claim 7. It is removal, not a killing hit.
+
+**spawn controller, spawner.** A *spawn controller* belongs to an object, the *spawner*,
+whose type names a spawned type and a positive spawn count. It holds the slots and
+launches, regenerates and reloads their objects. S-0506 claims 1 to 9 own this shared
+controller for missiles and carrier aircraft; S-0501 claim 35 owns carrier-aircraft flight.
+
+**spawn slot, slot object, slot state.** One place in a spawn controller, holding at most
+one *slot object* of the spawned type, in one of these *slot states*: docked, on the rail,
+preparing, attacking, returning, reloading or empty. S-0506 claim 4 owns the states and
+transitions; S-0501 claim 35 supplies the non-missile flight rules.
+
+**spawned type, spawn count.** The aircraft type a spawner's type names as the type it
+spawns, and its number of spawn slots. S-0506 claim 1 owns creation and initial fill.
+
 **spread, spread radius.** A warhead's *spread* is its spread field, a decimal number of cells; the
 *spread radius* is the distance in leptons, derived from it, within which a detonation hits
 objects. S-0303 owns both (Terms, claim 3, Formulas F1); S-0302 and S-0312 use them.
+
+**strafing weapon.** A weapon whose projectile has a signed turn rate at most 1 and is not
+invisible. S-0501 claim 11 uses this test to identify a strafer; claims 13 and 15 own its
+run and ammunition spending.
 
 **versus value.** The factor, a double-precision number, that a warhead gives one armour class,
 read from the warhead's versus list (S-0003, claim 13, which with Import mapping row C5 gives the
