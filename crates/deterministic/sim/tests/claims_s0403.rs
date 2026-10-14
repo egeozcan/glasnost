@@ -365,6 +365,28 @@ fn claim_6_quirk_off() {
     assert_eq!(production::factory_count(&w, HouseId(0), tank), 1);
 }
 
+// spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off, revision 3: S-0404's could make, so a missing prerequisite does not stop a factory counting, the full tech-tree test is not asked, while the build-limit answer with the production allowance is)
+#[test]
+fn claim_6_quirk_off_limit_not_tech_tree() {
+    for (prereq, limit, count) in [(true, None, 1), (false, Some(0), 0), (false, Some(1), 1)] {
+        let mut r = ruleset();
+        r.globals.quirks.multiple_factory_counts_all = false;
+        let tank = r.sim.vehicles.get_mut("TANK").unwrap();
+        if prereq {
+            tank.econ.prerequisite = Some(vec!["NAVYARD".into()]);
+        }
+        tank.econ.build_limit = limit;
+        let mut w = game(&r);
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        building(&mut w, "WARFACT", 0, -6, 0);
+        assert_eq!(
+            production::factory_count(&w, HouseId(0), tank),
+            count,
+            "prerequisite {prereq}, limit {limit:?}"
+        );
+    }
+}
+
 // spec: S-0403 claim 7 (a wall: × w after every other factor; B6)
 #[test]
 fn claim_7_walls() {

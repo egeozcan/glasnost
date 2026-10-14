@@ -732,10 +732,9 @@ fn answer_with(w: &World, house: HouseId, t: TypeRef, production_exception: bool
 
 /// Whether a building is a factory building that could make type `t` for
 /// its owner *without the tech-tree rule* (S-0404 Terms), ignoring the power
-/// switch and docks; with `tech`, the full tech-tree answer must not refuse
-/// the type as well (only S-0403's `quirks.multiple_factory_counts_all` off
-/// asks that). S-0404's own *could make* is `could_make_limit_only`.
-pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
+/// switch and docks. S-0404's own *could make*, with the build-limit answer,
+/// is `could_make_limit_only`.
+pub fn could_make(w: &World, b: &Object, t: TypeRef) -> bool {
     let r = w.rules();
     // spec: S-0404 Terms (a factory building on the map, neither being sold nor queued to be sold, S-0407 Terms)
     if b.kind != Kind::Building || !b.on_map || being_sold(b) || queued_to_be_sold(b) {
@@ -769,8 +768,7 @@ pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
     if !bt.owners.iter().any(|c| it.owners.contains(c)) {
         return false;
     }
-    let Some(owner) = b.owner else { return false };
-    !tech || answer(w, owner, t) != Answer::Refused
+    b.owner.is_some()
 }
 
 /// Whether the house has a factory building that could make `t` (claim 1
@@ -780,7 +778,7 @@ fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
     // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold: S-0404's could make)
     w.objects
         .values()
-        .any(|b| b.owner == Some(house) && could_make(w, b, t, false))
+        .any(|b| b.owner == Some(house) && could_make(w, b, t))
 }
 
 /// A qualifying factory for a type (S-0407 Terms): a factory building of
@@ -1051,7 +1049,7 @@ pub fn at_limit(w: &World, house: HouseId, t: TypeRef) -> bool {
 /// start of S-0404 claims 3 and 10 use it.
 pub fn could_make_limit_only(w: &World, b: &Object, t: TypeRef) -> bool {
     // spec: S-0404 Terms (could make: the factory conditions and the build-limit answer with the production allowance, no full tech-tree test) and S-0407 claim 13
-    could_make(w, b, t, false)
+    could_make(w, b, t)
         && b.owner
             .is_some_and(|h| limit_answer(w, h, t, true) == Answer::Allowed)
 }

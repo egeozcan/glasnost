@@ -62,7 +62,7 @@ fn any_factory(w: &World, house: HouseId, t: TypeRef) -> bool {
     let docks = t.kind == Kind::Aircraft && w.rules().quirks.done_aircraft_click_cancels;
     w.objects.values().any(|b| {
         b.owner == Some(house)
-            && tech::could_make(w, b, t, false)
+            && tech::could_make(w, b, t)
             // spec: S-0411 Edge cases (quirks.done_aircraft_click_cancels: an aircraft counts only buildings with a free dock)
             && (!docks || production::dock_free(w, b.id))
     })

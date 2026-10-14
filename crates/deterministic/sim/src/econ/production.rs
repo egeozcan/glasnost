@@ -521,8 +521,8 @@ pub fn factory_count(w: &World, house: HouseId, t: TypeRef) -> i32 {
                 // spec: S-0403 claim 6 (naval and ground vehicle factories counted apart; every other kind counts all its factories)
                 t.kind != Kind::Vehicle || br.naval == naval_item
             } else {
-                // spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off: only factories that could make the item with the tech-tree rules allowing it, power and docks ignored)
-                tech::could_make(w, b, t, true)
+                // spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off: only factories that could make the item in S-0404's sense, power and docks ignored: not sold or queued to be sold, owner-country overlap, naval or ground kind and the build-limit answer with its production allowance, not the full tech-tree test)
+                tech::could_make_limit_only(w, b, t)
             }
         })
         .count() as i32
@@ -1140,7 +1140,7 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
 /// marked primary, else the last the house acquired.
 pub fn releasing_building(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
     // spec: S-0404 Terms (could release: switched on, could make without the tech-tree rule) and S-0411 claim 14 (not a factory queued to be sold)
-    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t, false);
+    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t);
     let mut cands = factories(w, house, |b| {
         base(b) && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     });
@@ -1297,7 +1297,7 @@ pub fn factory_removed(w: &mut World, house: HouseId, b: ObjectId) {
             && l.kind.factory_kind() == kind
             && let Some(t) = l.item.as_ref().map(|i| i.t)
             // spec: S-0404 claim 8 and Terms (a factory building being sold or queued to be sold counts in no test)
-            && factories(w, house, |x| x.id != b && tech::could_make(w, x, t, false)).is_empty()
+            && factories(w, house, |x| x.id != b && tech::could_make(w, x, t)).is_empty()
         {
             // spec: S-0404 claim 8 (removed for good: no other factory could make the item: cancelled as after a cancel)
             cancel_item(w, li);
