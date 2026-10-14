@@ -1531,6 +1531,72 @@ fn claim_27a_pack_up_heads_to_the_offered_site() {
     assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(s)));
 }
 
+/// The note `sell::release_occupants` leaves when a sale's releases run
+/// (S-0408 claims 7 to 9; survivors are C = 0 without sides).
+const RELEASE_NOTE: &str = "S-0408 claims 7 to 9";
+
+/// SMQYARD given a guard spot by a field-seeking site offer (S-0402 claim
+/// 27a), then sold, with the redeploy setting `redeploy` and
+/// `quirks.packup_release_by_guard_spot` set to `quirk`. Returns the
+/// world, the credits gained, whether the sale's releases ran, and the
+/// vehicles of the yard's undeploys-into type after removal.
+fn offered_yard_sold(redeploy: bool, quirk: bool) -> (World, i64, bool, usize) {
+    let (mut r, _) = offer_rules();
+    r.sim.general.economy.mcv_redeploys = Some(redeploy);
+    r.globals.quirks.packup_release_by_guard_spot = quirk;
+    // A cost, so that the sale refund (S-0408 claim 1) is seen.
+    r.sim.buildings.get_mut("SMQYARD").unwrap().cost = Some(1000);
+    let (mut w, b, s) = offer_at(&r, "SMQYARD", None, false);
+    assert_eq!(glasnost_sim::econ::deploy::redeploys(&w), redeploy);
+    // spec: S-0402 claim 27a (the successful offer establishes the guard spot)
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(s)));
+    assert_eq!(glasnost_sim::econ::deploy::packs_up(&w, b), redeploy);
+    unblock(&mut w);
+    assert!(!w.notes.iter().any(|n| n.starts_with(RELEASE_NOTE)));
+    let credits = i64::from(w.houses[0].credits);
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    until(&mut w, 300, |w| {
+        w.obj(b).is_none_or(|o| {
+            matches!(
+                o.econ.sale.as_ref().map(|x| &x.stage),
+                Some(glasnost_sim::econ::sell::Stage::BuildDown(_))
+            )
+        })
+    })
+    .expect("build-down");
+    // The guard spot is kept through the build-down.
+    assert!(w.obj(b).is_some_and(|o| o.guard_spot.is_some()));
+    until(&mut w, 300, |w| w.obj(b).is_none()).expect("removed");
+    let gained = i64::from(w.houses[0].credits) - credits;
+    let released = w.notes.iter().any(|n| n.starts_with(RELEASE_NOTE));
+    let smv = w.rules().index_of(Kind::Vehicle, "SMV").unwrap();
+    let vehicles = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Vehicle && o.type_index == smv)
+        .count();
+    (w, gained, released, vehicles)
+}
+
+// spec: S-0415 claim 9 and scenario D7's construction-yard variant (a yard whose guard spot comes from S-0402 claim 27a's site offer, with the redeploy setting off: sold rather than packed, the ordinary refund, no returned vehicle, and no release under quirks.packup_release_by_guard_spot)
+// spec: S-0415 Edge cases (quirks.packup_release_by_guard_spot off: the release is skipped exactly when the building packs up, so this sale releases)
+#[test]
+fn s0415_claim_9_offered_yard_without_redeploy_is_sold_without_release() {
+    let (_, gained, released, vehicles) = offered_yard_sold(false, true);
+    assert!(gained > 0, "the ordinary sale refund");
+    assert_eq!(vehicles, 0, "no returned vehicle");
+    assert!(!released, "no release with a guard spot under the default quirk");
+    let (_, gained_off, released_off, vehicles_off) = offered_yard_sold(false, false);
+    assert_eq!(gained_off, gained);
+    assert_eq!(vehicles_off, 0);
+    assert!(released_off, "quirk off: a sale that does not pack up releases");
+    // Control: with the redeploy setting on, the same yard packs up and pays nothing.
+    let (_, gained_on, released_on, vehicles_on) = offered_yard_sold(true, true);
+    assert_eq!(gained_on, 0);
+    assert_eq!(vehicles_on, 1);
+    assert!(!released_on);
+}
+
 // spec: S-0402 claim 28 (one remembered destination: automatic relocation replaces an earlier guard spot with the old top-left cell; a later order that changes the guard spot replaces that cell, and the pack-up heads there)
 #[test]
 fn claim_28_one_remembered_destination() {
