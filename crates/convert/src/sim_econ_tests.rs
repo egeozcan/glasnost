@@ -179,8 +179,8 @@ fn unit_econ_fields_are_converted() {
 }
 
 // spec: S-0413 claim 4 (a two-character prefix and a four-character suffix keep one and three
-// characters, trimmed, with a warning each; values within their limits give none; an empty suffix
-// keeps the value in force. The empty-prefix rule conflicts with S-0001 claim 11: Q-0478)
+// characters, trimmed, with a warning each; values within their limits give none; an empty prefix
+// or suffix value keeps the value in force, S-0001 claim 11; Q-0478)
 #[test]
 fn country_prefix_and_suffix_cut() {
     let base = "[Countries]\n0=Ruritania\n1=Freedonia\n2=Sylvania\n\
@@ -204,6 +204,52 @@ fn country_prefix_and_suffix_cut() {
     );
     let cut: Vec<_> = w.iter().filter(|m| m.contains("S-0413 claim 4")).collect();
     assert_eq!(cut.len(), 2, "{cut:?}");
+}
+
+// spec: S-0413 claims 1 and 4, Import mapping and scenario C4 (r4, Q-0478: an empty, all-space or
+// comment-only prefix value is no entry and keeps the held prefix and suffix, in a nonempty section
+// and alone; with no earlier affix the fields stay absent, so the defaults A and empty apply)
+// spec: S-0001 claims 11 and 12 and Import mapping row I5 (r4: no key-specific exception; a section
+// holding only such a line is absent, so it triggers no parent-country reset, S-0006 claims 2, 3 and 5)
+#[test]
+fn country_empty_prefix_keeps_the_held_affixes() {
+    let variants = [
+        ("[Zedland]\nSide=Blue\n", true),
+        ("[Zedland]\nSide=Blue\nPrefix=\n", true),
+        ("[Zedland]\nSide=Blue\nPrefix=   \n", true),
+        ("[Zedland]\nSide=Blue\nPrefix= ; note\n", true),
+        ("[Zedland]\nPrefix=\n", false),
+        ("[Zedland]\nPrefix=   \n", false),
+        ("[Zedland]\nPrefix= ; note\n", false),
+    ];
+    for earlier in [true, false] {
+        let affixes = if earlier {
+            "Prefix=Z\nSuffix=XYZ\n"
+        } else {
+            ""
+        };
+        let base = format!(
+            "[Countries]\n0=Zedland\n1=Ruritania\n[Zedland]\nParentCountry=Ruritania\n{affixes}"
+        );
+        for (map, section) in variants {
+            let (s, _) = import_full(&base, map, ART);
+            let z = &s.countries["Zedland"].econ;
+            let want = if earlier {
+                (Some("Z"), Some("XYZ"))
+            } else {
+                (None, None)
+            };
+            assert_eq!(
+                (z.prefix.as_deref(), z.suffix.as_deref()),
+                want,
+                "{map:?}, earlier affixes {earlier}"
+            );
+            // A section present omits the parent country and resets it; an
+            // absent one leaves it alone.
+            let kept = z.parent_country.as_deref() == Some("Ruritania");
+            assert_eq!(kept, !section, "{map:?}: {:?}", z.parent_country);
+        }
+    }
 }
 
 // spec: S-0402 Import mapping, S-0404 Import mapping, S-0413 claims 2 and 4 and Import mapping

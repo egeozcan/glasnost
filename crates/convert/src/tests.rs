@@ -501,6 +501,22 @@ fn light_values_truncate_on_re_read() {
     assert_eq!(layers::building_light_thousandths(b"-3.0"), Some(-2999));
 }
 
+/// spec: S-0006 claim 5 and scenario X (r16: a negative building tint, −2999 thousandths, becomes
+/// −1999 after a section-present omission, as intensity does; a negative extra-light value, −3000,
+/// stays −3000: the glossary's *rules layer* gives the added thousandth to building light only)
+/// spec: S-0104 claim 12
+#[test]
+fn negative_tint_and_extra_light_on_re_read() {
+    let base = "[BuildingTypes]\n1=Lamp\n[Lamp]\nLightIntensity=0.5\nLightRedTint=-3.0\n\
+                [AudioVisual]\nExtraUnitLight=-3.0\n";
+    let map = "[Lamp]\nStrength=2\n[AudioVisual]\nX=1\n";
+    let o = apply(&[layer(Role::Base, base), layer(Role::Map, map)], "");
+    let red = &ty(&o, Kind::Buildings, "Lamp").keys[&b"LightRedTint"[..]];
+    assert_eq!(red.derived, Some(-1999));
+    let extra = &o.globals[&b"AudioVisual"[..]][&b"ExtraUnitLight"[..]];
+    assert_eq!(extra.derived, Some(-3000));
+}
+
 /// spec: S-0104 claim 13, Edge cases (quirks.extra_light_truncation: 0.57
 /// becomes 569; off, round to nearest)
 #[test]

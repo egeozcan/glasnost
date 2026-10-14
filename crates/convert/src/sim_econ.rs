@@ -1136,9 +1136,10 @@ impl Builder<'_> {
 
     /// A country's name prefix and suffix (S-0413 claim 4): a longer value
     /// keeps its first one or three characters, trimmed at the ends, with
-    /// an importer warning. An empty value creates no entry (S-0001 claim
-    /// 11), so it keeps the value in force; claim 1's empty-prefix rule
-    /// conflicts with that (Q-0478).
+    /// an importer warning. An empty value for either affix creates no
+    /// entry and keeps the value in force, exactly as omission (S-0413
+    /// claims 1 and 4, S-0001 claim 11 and Import mapping row I5; Q-0478):
+    /// the lexer never hands an empty value to this reader.
     fn name_affixes(&mut self, econ: &mut Rec, t: &TypeRec) {
         const PREFIX_LEN: usize = 1; // spec: S-0413 Constants (prefix characters kept: 1)
         const SUFFIX_LEN: usize = 3; // spec: S-0413 Constants (suffix characters kept: 3)

@@ -289,7 +289,6 @@ Provisional rules of M5a, each tied to a request:
 |---|---|---|
 | `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
-| `convert::sim_econ` (`name_affixes`) | an empty country `Prefix=` line creates no entry (S-0001 claim 11) and keeps the prefix in force; S-0413 claims 1 and 4 say it gives an empty prefix | Q-0478 |
 | `econ::slaves::building_update` | a building whose group is in field seeking and finds a site (S-0402 claim 27) is given the site as its object destination with *move* queued, as a vehicle master is (`slaves::move_to`), not as its guard spot; selling refuses only the queued *move* (S-0215 claim 7), never the destination | Q-0500 |
 
 ## Own AI (M5b)
