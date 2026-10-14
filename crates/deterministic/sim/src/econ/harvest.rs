@@ -43,6 +43,32 @@ pub struct UnitHarvest {
     pub teleporter: bool,
     /// A slave miner (claim 14): gatherer, destination and an enslaves field.
     pub slave_miner: bool,
+    /// The slave group its objects create (claim 19), if its type names a
+    /// slave type.
+    pub group: Option<GroupType>,
+}
+
+/// A type's slave-group fields (S-0402 claims 14, 19 and 21; Import
+/// mapping).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GroupType {
+    /// The slave infantry type, by registration index.
+    pub slave: u32,
+    /// The slave count *N*.
+    pub count: i32,
+    /// The regeneration delay, ticks.
+    pub regen: i32,
+    /// The reload delay, ticks.
+    pub reload: i32,
+}
+
+/// An infantry type's slave fields (S-0402 claim 14; Import mapping).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InfantryHarvest {
+    /// The interval between bales *h*, ticks (`HarvestRate`).
+    pub harvest_rate: i32,
+    /// The capacity (`Storage`), bales.
+    pub capacity: i32,
 }
 
 /// A building type's fields (S-0402 Import mapping).
@@ -60,6 +86,9 @@ pub struct BuildingHarvest {
     pub dock_unload: bool,
     /// The weed flag (claim 13's idle step-off).
     pub weeder: bool,
+    /// The slave group its objects create (claim 19), if its type names a
+    /// slave type.
+    pub group: Option<GroupType>,
 }
 
 /// The harvest rules.
@@ -81,6 +110,14 @@ pub struct Rules {
     pub slave_short_scan: i32,
     /// The slave-miner kick delay *k*, ticks (claim 14).
     pub kick_delay: i32,
+    /// The slave scan range, cells (claim 14).
+    pub slave_scan: i32,
+    /// The slave-miner long scan range, cells (claim 22).
+    pub slave_long_scan: i32,
+    /// The scan correction *c*, whole cells (claim 22, F7).
+    pub scan_correction: i32,
+    /// Infantry types by index.
+    pub infantry: Vec<InfantryHarvest>,
     /// Purifier bonus *b*, a single widened to double.
     pub purifier_bonus: F64,
     /// Virtual purifiers per difficulty row (the original's computer player).
@@ -123,12 +160,41 @@ impl Rules {
                 .position(|x| x.eq_ignore_ascii_case(n))
                 .map(|i| i as u32)
         };
+        let infantry_reg = reg("infantry");
+        // spec: S-0402 Import mapping (Enslaves: an infantry type name; SlavesNumber, SlaveRegenRate and SlaveReloadRate absent: 0)
+        let group = |e: &glasnost_rules::sim_econ::EconFields| {
+            let slave = e.enslaves.as_deref().and_then(|n| {
+                // spec: S-0003 claim 14 (names compared with ASCII case folding)
+                infantry_reg
+                    .iter()
+                    .position(|x| x.eq_ignore_ascii_case(n))
+                    .map(|i| i as u32)
+            })?;
+            Some(GroupType {
+                slave,
+                count: e.slaves_number.unwrap_or(0),
+                regen: e.slave_regen_rate.unwrap_or(0),
+                reload: e.slave_reload_rate.unwrap_or(0),
+            })
+        };
+        let infantry = infantry_reg
+            .iter()
+            .map(|n| {
+                let u = r.sim.infantry.get(n).cloned().unwrap_or_default();
+                InfantryHarvest {
+                    // spec: S-0402 Import mapping (HarvestRate absent: 1; Storage absent: 0)
+                    harvest_rate: u.econ.harvest_rate.unwrap_or(1),
+                    capacity: u.storage.unwrap_or(0),
+                }
+            })
+            .collect();
         let vehicles = reg("vehicles")
             .iter()
             .map(|n| {
                 let u = r.sim.vehicles.get(n).cloned().unwrap_or_default();
                 let e = &u.econ;
                 UnitHarvest {
+                    group: group(e),
                     // spec: S-0402 Import mapping (Harvester, Teleporter absent: no; Storage absent: 0; Dock absent: empty)
                     harvester: u.harvester.unwrap_or(false),
                     capacity: u.storage.unwrap_or(0),
@@ -152,6 +218,7 @@ impl Rules {
                 let b = r.sim.buildings.get(n).cloned().unwrap_or_default();
                 let e = &b.econ;
                 BuildingHarvest {
+                    group: group(e),
                     // spec: S-0402 Import mapping (Refinery, OrePurifier absent: no)
                     refinery: e.refinery.unwrap_or(false),
                     purifier: e.ore_purifier.unwrap_or(false),
@@ -197,6 +264,13 @@ impl Rules {
             slave_short_scan: scan_cells(&g.slave_miner_short_scan, 1280, mode),
             // spec: S-0402 Import mapping (SlaveMinerKickFrameDelay absent: 2147483647)
             kick_delay: g.slave_miner_kick_frame_delay.unwrap_or(i32::MAX),
+            // spec: S-0402 Import mapping (SlaveMinerSlaveScan absent: 4096 leptons)
+            slave_scan: scan_cells(&g.slave_miner_slave_scan, 4096, mode),
+            // spec: S-0402 Import mapping (SlaveMinerLongScan absent: 20480 leptons)
+            slave_long_scan: scan_cells(&g.slave_miner_long_scan, 20480, mode),
+            // spec: S-0402 Import mapping and F7 (SlaveMinerScanCorrection absent: 768 leptons; c = trunc(leptons / 256))
+            scan_correction: scan_cells(&g.slave_miner_scan_correction, 768, mode),
+            infantry,
             // spec: S-0402 Import mapping (PurifierBonus, a single; absent: the single nearest 0.25)
             purifier_bonus: g.purifier_bonus.as_ref().map_or_else(
                 || {

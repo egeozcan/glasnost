@@ -83,16 +83,17 @@ pub struct EconFields {
     /// table P row 6); absent: no.
     #[serde(default)]
     pub resource_destination: Option<bool>,
-    /// Units: `Enslaves`, the slave type (S-0402 claim 14); absent: none.
+    /// Units and buildings: `Enslaves`, the slave type (S-0402 claims 14
+    /// and 19); absent: none.
     #[serde(default)]
     pub enslaves: Option<String>,
-    /// Units: `SlavesNumber` (S-0402 claim 14); absent: 0.
+    /// Units and buildings: `SlavesNumber` (S-0402 claims 14 and 19); absent: 0.
     #[serde(default)]
     pub slaves_number: Option<i32>,
-    /// Units: `SlaveRegenRate`, ticks (S-0402 claim 14); absent: 0.
+    /// Units and buildings: `SlaveRegenRate`, ticks (S-0402 claim 14); absent: 0.
     #[serde(default)]
     pub slave_regen_rate: Option<i32>,
-    /// Units: `SlaveReloadRate`, ticks (S-0402 claim 14); absent: 0.
+    /// Units and buildings: `SlaveReloadRate`, ticks (S-0402 claim 14); absent: 0.
     #[serde(default)]
     pub slave_reload_rate: Option<i32>,
     /// Infantry: `HarvestRate`, a slave's interval between bales *h*, ticks
