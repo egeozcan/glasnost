@@ -2,7 +2,7 @@
 id: S-0014
 title: Game bitmap font file layout
 topic: formats
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -282,7 +282,8 @@ S-0213 claim 25's contract.
 
 ## Open questions
 
-- Q-0530 questions 2 and 3 belong to S-0213 claim 25: status-line spacing,
-  the pitch's display role and glyph top-row placement. Claim 1 defines the
-  pitch's file field only and prescribes none of those display rules.
+- Q-0530 questions 2 and 3 are answered by S-0213 claim 25 and Scenario O21 d:
+  fixed status-line spacing, pitch-based clipping, glyph top-row placement and
+  the cosmetic extra-bottom-row correction. Claim 1 defines the pitch's file
+  field only and prescribes none of those display rules.
 - Q-0501 question 5 belongs to S-0213 claim 25, not this layout contract.
