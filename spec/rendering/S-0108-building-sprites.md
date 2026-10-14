@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -299,10 +299,15 @@ are out of scope.
       those started at grand opening, as if repaired (claim 12,
       `quirks.turret_start_clears_damaged`).
 
+    Grand opening also creates the building's free unit when eligible under S-0402 claim 18.
+    That claim owns the eligibility, placement, failed-placement refund and initial behaviour.
+    This is not an unconditional unit grant.
+
     A building placed during the game's set-up at game start starts the *idle* and *active-1* …
     *active-4* slots each time its body state is set during the set-up, all with occupied variants
     allowed.
-    - Backing: `measurable` (B6 for unoccupied completion starts and the turret case).
+    - Backing: `measurable` (B6 for unoccupied completion starts and the turret case,
+      S-0402 scenario H13 for the free unit).
       `unmeasured` for occupied grand-opening variants (normally no occupants at completion),
       below-15-tick charge at completion (B6 establishes no such setup), and repeated setup starts
       (no input path selecting each setup state is established). Unknown-name starts and empty
@@ -1148,6 +1153,10 @@ expected numbers are computed from the type's own fields at measurement time.
   - Falsified if: a negative or high out-of-range request draws any door pixels, a non-positive
     count produces a request other than the stated 0 or −2, the unmarked damaged copy gains a
     damage term, or the count-10 frames differ from F8.
+
+The free-unit effect of claim 11 is measured by S-0402 scenario H13, parts a to f, with that
+scenario's setup, observables and falsification criteria; no separate unit-placement rule is
+specified here.
 
 ## Cross-spec changes required at joint hand-off
 
