@@ -12,6 +12,7 @@
 
 pub mod band;
 pub mod client;
+pub mod cursor;
 pub mod install;
 pub mod paint;
 pub mod play;

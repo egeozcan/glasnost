@@ -187,6 +187,36 @@ fn claim_19_box_eligibility() {
     assert!(!targeting::box_eligible(&w, ALPHA, &[], tower));
 }
 
+// spec: S-0214 table C (attack: the in-range frames only with one selected unit or building whose weapon is in range of the target)
+#[test]
+fn claim_21_attack_cursor_context() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    let b = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 1), 0);
+    let near = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 1, 0), 0);
+    let far = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 14, 0), 0);
+    assert!(targeting::attack_cursor_in_range(&w, &[a], ClickOn::Object(near)));
+    assert!(!targeting::attack_cursor_in_range(&w, &[a], ClickOn::Object(far)));
+    assert!(!targeting::attack_cursor_in_range(&w, &[a, b], ClickOn::Object(near)));
+}
+
+// spec: S-0214 table C and claim 5 (the attack-move frames when the gesture turns the representative's move or attack into an attack-move; not without the gesture)
+#[test]
+fn claim_21_attack_move_cursor() {
+    let r = testkit::combat_ruleset();
+    let mut w = game(&r);
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    let empty = ClickOn::Cell(glasnost_map::CellXY::new(SIZE / 2 + 4, SIZE / 2 + 4));
+    let gesture = Modifiers {
+        force_fire: true,
+        force_select: true,
+        ..Modifiers::default()
+    };
+    assert!(targeting::shows_attack_move(&w, ALPHA, &[a], empty, gesture));
+    assert!(!targeting::shows_attack_move(&w, ALPHA, &[a], empty, Modifiers::default()));
+}
+
 // spec: S-0214 F5 (i = x mod n, unsigned remainder; none for n = 0, no value taken)
 #[test]
 fn f5_order_response_choice() {

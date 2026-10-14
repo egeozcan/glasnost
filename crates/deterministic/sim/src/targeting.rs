@@ -365,6 +365,28 @@ fn in_range_of(w: &World, actor: ObjectId, t: Target) -> bool {
     range::in_range(w, actor, x, Some(t), None)
 }
 
+/// Whether the attack cursor is the in-range one (S-0214 table C): the
+/// selection is one unit or building, whose weapon is in range of the
+/// target.
+pub fn attack_cursor_in_range(w: &World, selection: &[ObjectId], on: ClickOn) -> bool {
+    let t = match on {
+        ClickOn::Object(t) => Target::Object(t),
+        ClickOn::Cell(c) => Target::Cell(c),
+    };
+    // spec: S-0214 table C (attack: 53–57 only with one selected unit or building whose weapon is in range of the target)
+    matches!(selection, [id] if unit_or_building(w, *id) && in_range_of(w, *id, t))
+}
+
+/// Whether the first selected object's type may move into shroud (S-0214
+/// Import mapping, `MoveToShroud`), for table C's shrouded *no-move* row.
+pub fn first_may_move_into_shroud(w: &World, selection: &[ObjectId]) -> bool {
+    // spec: S-0214 table C (no-move on a shrouded target: the move frames if the first selected object's type permits shroud moves)
+    selection
+        .first()
+        .and_then(|&id| unit(w, id))
+        .is_some_and(|u| u.move_to_shroud)
+}
+
 /// Able to fire (S-0214 Terms): own, armed, not disabled, not falling
 /// (nothing falls before the aircraft topic).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
@@ -1460,6 +1482,34 @@ fn eligible(w: &World, id: ObjectId) -> bool {
     matches!(kind(w, id), Some(Kind::Infantry | Kind::Vehicle))
         && armed(w, id)
         && !uflag(w, id, |u| u.raw.prevent_attack_move.unwrap_or(false))
+}
+
+/// Whether the cursor shows an attack-move (S-0214 table C, claim 5): the
+/// gesture is on for the selection and the representative's order would
+/// be *move* or *attack*, so the click gives an attack-move order.
+pub fn shows_attack_move(
+    w: &World,
+    house: HouseId,
+    selection: &[ObjectId],
+    on: ClickOn,
+    mods: Modifiers,
+) -> bool {
+    // spec: S-0214 claim 5 (the gesture only when every selected unit or building is eligible; it changes a move or attack order, not the action)
+    let am = mods.attack_move()
+        && selection
+            .iter()
+            .all(|&id| !unit_or_building(w, id) || eligible(w, id));
+    let Some(id) = am.then(|| representative(w, selection, on)).flatten() else {
+        return false;
+    };
+    let a = action_in(w, house, selection, id, on, mods);
+    matches!(
+        order(w, house, id, a, on, mods, true),
+        Some(Order::Behaviour {
+            attack_move: true,
+            ..
+        })
+    )
 }
 
 /// A click: each selected object resolves it itself (S-0214 claims 2, 3,

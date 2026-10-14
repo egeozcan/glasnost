@@ -353,6 +353,19 @@ impl Client {
         }
     }
 
+    /// The modifiers held changed.
+    pub fn modifiers(&mut self, m: Modifiers) {
+        if let Some(s) = self.session.as_mut() {
+            s.mods = m;
+        }
+    }
+
+    /// Whether the game draws its own battlefield cursor this frame, so the
+    /// window hides the system pointer (S-0214 claims 21 and 22).
+    pub fn draws_cursor(&self) -> bool {
+        self.shell.screen == Screen::Game && self.session.as_ref().is_some_and(|s| s.draws_cursor())
+    }
+
     /// The pointer moved.
     pub fn pointer_moved(&mut self, p: Point) {
         self.pointer = Some(p);
@@ -484,6 +497,7 @@ impl Client {
         let Some(s) = self.session.as_mut() else {
             return;
         };
+        s.clock_ms = now_ms;
         // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
         if !s.ticking() || !self.focused {
             self.pacer.reset();
@@ -564,6 +578,7 @@ impl Client {
             Screen::Game => match self.session.as_mut() {
                 Some(s) => {
                     s.update_marks();
+                    s.update_cursor(&mut self.painter);
                     if self.cpu_map {
                         let v = s.view();
                         changed.push((MAP_IMAGE, v.size.0, v.size.1, s.map_rgba()));
