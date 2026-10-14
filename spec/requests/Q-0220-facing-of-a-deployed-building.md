@@ -3,7 +3,7 @@ id: Q-0220
 title: The facing a building gets when a vehicle deploys into it
 status: answered
 related: [S-0406, S-0415, S-0108]
-answered-by: [S-0406]
+answered-by: [S-0406, S-0415]
 ---
 
 ## Need
