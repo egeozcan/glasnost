@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,6 +22,22 @@ conditions, the superweapon setting, build limits, how capturing buildings (fact
 prerequisite buildings) grants tech, and when the answer is worked out again. Skirmish only.
 Campaign behaviour and network games are out of scope. Production itself (queues, payment, holds,
 the cancel of items that stop being buildable) is S-0404's; build icons are S-0411's.
+
+**Paired revisions.** S-0404 claims 3, 6, 7, 9 and 10 own order application,
+cancellation and refunds. Claims 12 and 13 here distinguish cancellation orders issued
+at a recheck from their application at that tick's end; claims 13 and 16 retain
+held-item resume's issue-time limit exemption and queued starts' application-time
+factory and build-limit tests. S-0411 claims 13 and 15 own shown-type cancellation
+order, full-tab offer membership and delayed admission. Capacity is judged before
+removals: a vacancy created at a recheck is not refilled at that recheck or an ordinary
+sidebar update. Claim 17 here owns simultaneous admission order; S-0004 claim 11
+retains tab capacity, assignment and sorting ownership. Claim 10 here retains
+S-0404's refund at the place order's application boundary for a busy or failed unit
+release, without retry; no eligible releasing factory instead leaves the item done.
+Refusal cues remain S-0411 claim 12's and S-0701 claim 24's: the busy-building-line
+refusal and refused placement request distinct announcements, neither the game-wide
+refusal sound. These pointers do not add cues to actions whose feedback those specs
+leave unresolved.
 
 ## Terms
 

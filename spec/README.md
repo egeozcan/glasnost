@@ -62,7 +62,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 11 | approved | — |
 | [S-0402](economy/S-0402-harvest-cycle.md) | Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners) | economy | 9 | approved | — |
 | [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 7 | approved | — |
-| [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 11 | approved | — |
 | [S-0411](ui/S-0411-sidebar-behaviour.md) | Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement) | ui | 12 | approved | — |
 | [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 2 | approved | — |
 | [S-0004](rules-import/S-0004-type-registration-order.md) | Type registration order | rules-import | 16 | approved | — |
@@ -98,3 +97,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0414](simulation/S-0414-victory-and-defeat.md) | Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders) | simulation | 8 | approved | — |
 | [S-0209](movement/S-0209-occupancy-crowding.md) | Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests) | movement | 21 | approved | — |
 | [S-0417](structures/S-0417-factory-unloading.md) | Factory unloading (doors, exit movement and rally destinations) | structures | 6 | approved | — |
+| [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 12 | approved | — |
