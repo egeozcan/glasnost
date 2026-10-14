@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 21
+revision: 22
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0240, Q-0310]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311]
 supersedes: []
 ---
 
@@ -31,9 +31,10 @@ facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infa
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0213 (human
 orders), S-0214 (order targeting rules) and S-0215 (behaviours) are approved specs of the index in
 `spec/README.md`. Claim, formula, table and row labels cited from them are those of the revisions
-that index lists, except S-0207 claim 20, cited at revision 15 in this correction batch.
-Hand off that revision and this one together for the teleporting-vehicle and aircraft
-reservation lifecycles and shared quirks. S-0212 claim 22's immediate fresh search and
+that index lists, except for the latest drafts in this correction batch: S-0207 revision 16,
+S-0208 revision 21 and S-0212 revision 27. Hand off their coordinated texts and this one
+together for the teleporting-vehicle, aircraft and infantry reservation lifecycles,
+shared quirks and vehicle entry-outcome summary. S-0212 claim 22's immediate fresh search and
 same-tick follow-up remain coordinated with S-0207 claim 15 and scenario D17(d3). S-0208 and S-0212 use their current correction-batch texts where revised.
 
 The glossary cited is the current approved glossary. Its terms are used as defined
@@ -370,8 +371,9 @@ rank* and *elite weapon*), *n*
 ### The occupancy record and capacity
 
 1. **What an infantry unit and a vehicle record.**
-   - *Infantry.* An infantry unit marks one standing position in the occupancy record of a cell
-     layer, and sets that cell's infantry house to its own house. When several units mark, the most
+   - *Infantry.* An infantry unit ordinarily marks one standing position in the occupancy record of a cell
+     layer, and sets that cell's infantry house to its own house. Own-locomotor teleporting
+     movement has the separate lifecycle below. When several units mark, the most
      recent one's house wins. The position marked is the position class (S-0208 claim 2) of one
      point: its walking target while it has one, otherwise its own position.
    - *Reservation.* When a walker chooses its walking target in the next cell (S-0208 claim 3), its
@@ -380,6 +382,24 @@ rank* and *elite weapon*), *n*
      position is free from that tick. The walker is listed in the next cell only from the tick on
      which its position moves into it (claim 13), so for a few ticks the next cell shows the taken
      position and the walker's house while the walker is still listed in the cell it is leaving.
+   - *Teleporting infantry.* S-0208 claim 19 owns the chosen-point reservation and
+     its post-jump lifecycle (Q-0311). The chosen point's height determines whether
+     its standing position and infantry house are marked in ground or deck. Landing
+     itself neither transfers that reservation nor adds a mark at the actual position.
+     A ground-height choice followed by a high-bridge landing therefore retains its
+     ground mark and house, lists the infantry only on deck, and adds no deck
+     standing-position mark. A choice made at deck height keeps its earlier deck
+     reservation instead.
+     After a completed jump, a later destination choice clears by actual position
+     and height, not by the former chosen ground point. On deck this clears the
+     corresponding deck position, even if another infantry marked it, while leaving
+     ground taken. Success marks the next landing point; refusal marks the current
+     deck position. After a successful next jump, the old ground mark can remain
+     without infantry listed on either surface. Ground position choice still counts
+     it as taken. This differs from the vehicle and aircraft placement marks below
+     and shares `quirks.teleport_infantry_ground_reservation` (Edge cases).
+     This pointer has S-0208 claim 19's medium confidence and `measurable` backing
+     (its scenario W11, part i).
    - *Clearing the house after an infantry mark.* When an infantry unit clears its mark, the
      infantry house goes back to none only when none of the three side positions is taken
      afterwards, by an infantry unit or by a terrain object's mark. Otherwise it stays as it was.
@@ -701,9 +721,9 @@ rank* and *elite weapon*), *n*
    cell, the outcome follows from the cell's terrain and contents as set out in parts 5a to 5f. The
    tables have the same shape as those of claim 4 for walkers, but their rows differ (labels VO, VP
    and VR). S-0212 claim 27 summarises the rows its path costs rely on; this claim owns the full
-   table, as decided on 2026-10-10. Its moving-unit summary already agrees with rows VP21 to VP23.
-   Its unconditional blocker summary and its building and wall summaries still need the concrete
-   corrections listed under Cross-spec coordination below; these are not undecided policy.
+   table, as decided on 2026-10-10. S-0212's current correction-batch claim 27 agrees with
+   rows VP21 to VP23, the first-override precedence, the building exceptions and the wood-wall
+   case. Confirm those coordinated texts at hand-off as listed below.
 
    *5a. Terrain checks.* Terrain checks that give *blocked* belong to S-0211 and S-0212 (claim 10)
    and are not repeated here, among them a land type on which the vehicle's speed percentage is
@@ -1257,6 +1277,16 @@ Ordering stated as consequences:
   landing layer (deck on a high bridge, ground elsewhere), with no separate ground reservation
   beneath a deck landing. S-0207 owns the lifecycle and the alternative; claims 1 and 5 here
   own their occupancy and entry-outcome consequences.
+- **`quirks.teleport_infantry_ground_reservation`** (shared with S-0208 claim 19).
+  Default original: a ground standing-position reservation survives deck landing,
+  which adds no deck standing-position mark. A later destination choice clears the
+  actual deck position, potentially clearing another infantry's mark while leaving
+  ground taken. Off: at the jump transfer the reservation to the actual landing
+  surface at the same standing position, releasing ground and marking deck for a
+  bridge landing; later clearing uses that deck entry. S-0208 owns the lifecycle
+  and alternative, with `measurable` backing through its W11 part i and medium
+  confidence. This is separate from the vehicle and aircraft switches because
+  infantry placement does not add their placement-time marks.
 - **`quirks.teleport_aircraft_ground_reservation`** (shared with S-0207 claim 20 a and e).
   Default original: reserve ground at terrain height, retain it through deck placement,
   clear the remembered ground reservation on the next accepted destination, and clear
@@ -2343,6 +2373,23 @@ and next-jump deck clearing. Its pre-jump probes qualify only when the recorder 
 interval; ordinary input alone does not establish a delay before the jump. No measurement has
 been run for these claims.
 
+**Teleporting-infantry companion measurement (claim 1; Q-0311).** S-0208 scenario
+W11 part i supplies the named test map, teleporting infantry, speed, houses, recorder,
+procedure, repeats and falsifiers. Record ground and deck standing-position entries,
+infantry houses and listings before and after deck landing, then after a successful
+next destination and jump. The expected distinction is retained ground reservation,
+no landing-time deck mark, and later clearing by actual deck position. Its ground
+walking probe tests the residual taken position. For a supplementary shared-deck-mark
+probe, use the same setup and repeat three times: after the ground-height landing,
+walk an ordinary allied infantry onto the same deck standing position, qualifying
+only runs where the recorder confirms that position is marked by the walker. Give
+the teleporting infantry its next successful destination after phasing in. Record
+both records, positions and listings through destination choice. Expect the deck
+entry to clear although the ordinary walker remains there, while ground stays taken.
+A deck entry that remains marked falsifies that clearing consequence. Void any run
+where another mark writer acts there or the walker leaves before the check. Use
+read-only recording and scripted normal input only. No measurement has been run here.
+
 **Scenario C22: cell layers at a high bridge (Terms *cell layer*, claims 4 and 5 parts 4a and 5a,
 Edge cases).**
 - *Setup:* a purpose-made map with a high bridge, at least 6 cells long, over flat clear ground of
@@ -2856,18 +2903,30 @@ That moment is called the *window*. Common setup:
 S-0209 owns occupancy outcomes by the decision of 2026-10-10. No new policy decision is needed.
 S-0208's current correction-batch text agrees with claim 5 for a still allied infantry occupant,
 and S-0212's current claim 27 agrees with rows VP21 to VP23 for moving allied units.
-The following remaining corrections to S-0212 claim 27 must be checked at paired hand-off:
+The current S-0212 revision 27 draft contains the corrections below; confirm their final
+approved text at paired hand-off, rather than treating the earlier approved summary as authority:
 
-- Replace the unconditional statement that any *blocked* occupant defeats all other occupants
-  with claim 5's override rule: a *blocked* value before the first override defeats it, while
+- Retain claim 5's override rule: a *blocked* value before the first override defeats it, while
   occupants after that override do not decide the outcome under the default
   `quirks.occupancy_override_hides_later_blockers`. Without an override, use the most severe
   contents value and then the record table. Claim 5 carries the backing and confidence.
-- Qualify the allied-building summary by rows VP3 and VP5 to VP18, or cite those rows instead of
+- Retain the allied-building summary's pointer to rows VP3 and VP5 to VP18 instead of
   equating all building exceptions with mission targets. Invisible buildings, non-blocking repair
   or bunker cells, the bib edge and inactive firestorm walls are among its exceptions.
-- Qualify the non-crushable-wall summary by rows VO4 to VO6: a primary warhead able to damage wood
-  also suffices when the overlay armour is wood, even when it cannot damage walls.
+- Retain the non-crushable-wall summary's qualification by rows VO4 to VO6: a primary warhead
+  able to damage wood also suffices when the overlay armour is wood, even when it cannot
+  damage walls.
+- Confirm claim 1 and claim 5 with S-0207 claim 20 a/e: ground reservation,
+  remembered-point clearing, placement-time deck marks and the shared vehicle quirk.
+  Confirm the aircraft lifecycle and its separate shared quirk with that same claim,
+  including *clear* ground entry versus infantry standing-position refusal (C30).
+- Confirm claim 1 with S-0208 claim 19: retained infantry ground mark, no new deck
+  mark at landing, later actual-deck clearing and the shared infantry quirk (W11 i).
+  Keep position-choice deck mode, landing entry layer and fallback search deck mode
+  distinct. S-0212 claim 25 retains those fallback choices and fixation-tick selection.
+- Retain S-0207 claim 15 and S-0212 claim 22's immediate fresh search and same-tick
+  repeated check. Jump-time target loss and reversion stay owned by S-0207 claim 20 e
+  and S-0215 claim 10; reservation layers do not change that contract.
 
 ## Questions for the project lead
 
