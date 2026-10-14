@@ -1,9 +1,9 @@
 ---
 id: Q-0281
 title: Which countries, how many player slots and which team numbers does the setup screen offer?
-status: open
+status: answered
 related: [S-0412, S-0103]
-answered-by: []
+answered-by: [S-0412]
 ---
 
 ## Need
