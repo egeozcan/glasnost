@@ -11,6 +11,7 @@ mod harvest_common;
 use std::sync::Arc;
 
 use glasnost_map::CellXY;
+use glasnost_map::triggers::{Event, TagDef, TriggerDef, Triggers};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Country, Decimal, LocomotionClass, Locomotor, UnitType, WarheadType};
 use glasnost_sim::combat::damage::{self, Hit};
@@ -124,7 +125,13 @@ fn field(x: i32, y: i32, d: u8) -> Vec<(CellXY, u8, u8)> {
 /// A game on `r` with `ore`; with `civilian`, a third house of the
 /// civilian side (house 2).
 fn game_on(r: &Ruleset, ore: &[(CellXY, u8, u8)], civilian: bool) -> World {
+    game_with_triggers(r, ore, civilian, Triggers::default())
+}
+
+/// As [`game_on`], with the map's trigger data `t`.
+fn game_with_triggers(r: &Ruleset, ore: &[(CellXY, u8, u8)], civilian: bool, t: Triggers) -> World {
     let mut map = testkit::empty_map(SIZE);
+    map.triggers = t;
     for &(c, o, d) in ore {
         let cell = map.cells.get_mut(c).unwrap();
         cell.overlay = o;
@@ -574,8 +581,12 @@ fn claim_30_destroyed_masters() {
 
 /// A working SMH with its slaves out, and the slaves.
 fn sold(civilian: bool) -> (World, Vec<ObjectId>) {
-    let r = rules();
-    let mut w = game_on(&r, &field(5, -1, 5), civilian);
+    sold_on(&rules(), civilian)
+}
+
+/// As [`sold`], on the ruleset `r`.
+fn sold_on(r: &Ruleset, civilian: bool) -> (World, Vec<ObjectId>) {
+    let mut w = game_on(r, &field(5, -1, 5), civilian);
     let b = place_building(&mut w, "SMH", 0, at(0, -1));
     until(&mut w, 40, |w| on_map(w, b).len() == SLAVES as usize).expect("emerged");
     let out = on_map(&w, b);
@@ -599,6 +610,271 @@ fn claim_10a_sold_master() {
     for &s in &out {
         assert!(w.obj(s).is_none_or(|o| o.health == 0 || o.combat.killed));
     }
+}
+
+// spec: S-0408 claim 10a (r15, Q-0440: a sold master's on-map slaves given to the civilian-side house have target and destination cleared, guard queued and then a cheer request; the no-recipient hit requests no cheer and does not itself reset target or destination or queue guard)
+#[test]
+fn claim_10a_sold_master_cheer_and_no_recipient() {
+    let (w, out) = sold(true);
+    assert!(!out.is_empty());
+    for &s in &out {
+        let o = w.obj(s).unwrap();
+        assert_eq!(o.target, None);
+        assert_eq!(o.dest, None);
+        assert_eq!(
+            o.infantry.as_ref().unwrap().seq,
+            Some(glasnost_sim::infantry::Seq::Cheer)
+        );
+    }
+    // No recipient, with a demolition warhead that does no damage: the
+    // slaves survive the bare hit, keep their owner and get no cheer.
+    let mut r = rules();
+    r.sim.warheads.get_mut("DEMO").unwrap().verses =
+        Some((0..11).map(|_| Decimal("0".into())).collect());
+    let (w, out) = sold_on(&r, false);
+    assert!(!out.is_empty());
+    for &s in &out {
+        let o = w.obj(s).unwrap();
+        assert!(o.health > 0);
+        assert_eq!(o.owner, Some(HouseId(0)));
+        assert!(!slaves::is_slave(&w, s));
+        assert_ne!(
+            o.infantry.as_ref().unwrap().seq,
+            Some(glasnost_sim::infantry::Seq::Cheer)
+        );
+    }
+    // The no-recipient path at the master's sale itself: the slave's
+    // destination stays and no guard is queued.
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    until(&mut w, 40, |w| !on_map(w, b).is_empty()).expect("emerged");
+    let s = on_map(&w, b)[0];
+    let spot = Some(Target::Cell(at(-3, -3)));
+    if let Some(o) = w.obj_mut(s) {
+        o.dest = spot;
+        o.beh.queued = None;
+    }
+    let target = w.obj(s).unwrap().target;
+    slaves::master_sold(&mut w, b);
+    let o = w.obj(s).unwrap();
+    assert!(!slaves::is_slave(&w, s));
+    assert_eq!(o.dest, spot);
+    assert_eq!(o.target, target);
+    assert_eq!(o.beh.queued, None);
+}
+
+/// One repeating tag `TAG` over one trigger whose only event is
+/// destroyed-by-anything (S-0011 claim 19), with no actions.
+fn destroyed_tag() -> Triggers {
+    Triggers {
+        triggers: vec![TriggerDef {
+            events: vec![Event {
+                code: 48, // spec: S-0312 Import mapping (event code 48, destroyed by anything)
+                kind: 0,
+                value: 0,
+                type_name: None,
+            }],
+            ..TriggerDef::created(b"T".to_vec())
+        }],
+        tags: vec![TagDef {
+            id: b"TAG".to_vec(),
+            repeat: 2,
+            name: Vec::new(),
+            first: Some(0),
+            chain: vec![0],
+        }],
+        ..Default::default()
+    }
+}
+
+/// An SMH placed with its slaves still inside, one of them carrying the
+/// tag of [`destroyed_tag`]; then `end` ends the master. Returns the world,
+/// the hidden slaves, the owner's added losses and the tag's added firings.
+fn hidden_group_ends(
+    r: &Ruleset,
+    end: impl FnOnce(&mut World, ObjectId),
+) -> (World, Vec<ObjectId>, i32, u64) {
+    let mut w = game_with_triggers(r, &field(5, -1, 5), true, destroyed_tag());
+    unblock(&mut w);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    let hidden = slaves::slaves_of(&w, b);
+    assert_eq!(hidden.len(), SLAVES as usize);
+    assert!(on_map(&w, b).is_empty());
+    glasnost_sim::triggers::object_tag(&mut w, hidden[0], Some(b"TAG"));
+    let losses = stats::of(&w, HouseId(0)).losses;
+    let fired = w.triggers.fired;
+    end(&mut w, b);
+    let l = stats::of(&w, HouseId(0)).losses - losses;
+    let f = w.triggers.fired - fired;
+    (w, hidden, l, f)
+}
+
+// spec: S-0408 claim 10a (r15, Q-0440: a true sale destroys every hidden slave without placing it, a loss each for its house without attacker credit, with S-0312 claim 29's common destruction notifications without an attacker, as for S-0312 claim 31's removal without a killing hit)
+// spec: S-0312 claim 31 (r16: a tagged hidden slave raises destroyed-by-anything without receiving any damage)
+#[test]
+fn claim_10a_sold_master_hidden_slaves_destroyed() {
+    let r = rules();
+    let (w, hidden, losses, fired) = hidden_group_ends(&r, |w, b| {
+        assert!(orders::issue(w, HouseId(0), Order::Sell { actor: b }));
+        until(w, 300, |w| w.obj(b).is_none()).expect("sold");
+    });
+    for &s in &hidden {
+        assert!(w.obj(s).is_none(), "hidden slave {s:?} destroyed");
+    }
+    assert_eq!(losses, SLAVES, "one loss per hidden slave");
+    let (_, _, removed_losses, removed_fired) =
+        hidden_group_ends(&r, |w, b| glasnost_sim::objects::remove(w, b));
+    assert_eq!(removed_losses, SLAVES);
+    assert!(removed_fired > 0, "the tagged hidden slave raises its tag");
+    assert_eq!(fired, removed_fired, "the same notifications as a removal");
+}
+
+// spec: S-0312 claim 30 (r16: a tagged hidden slave of a master with a killing hit takes claim 29's common group with the slave as causing object, the master's known attacker enabling the preliminary raises; destroyed-by-anything is raised with or without an attacker)
+#[test]
+fn s0312_claim_30_tagged_hidden_slave_raises() {
+    let r = rules();
+    for with_attacker in [true, false] {
+        let (w, hidden, losses, fired) = hidden_group_ends(&r, |w, b| {
+            let attacker = with_attacker.then(|| place_vehicle(w, "HARV", 1, at(-8, -8), 0));
+            damage::apply(
+                w,
+                b,
+                Hit {
+                    amount: 100_000,
+                    warhead: None,
+                    distance: 0,
+                    attacker,
+                    house: None,
+                    ignore_defences: true,
+                    no_escape: false,
+                },
+            );
+        });
+        for &s in &hidden {
+            assert!(w.obj(s).is_none());
+        }
+        // The building itself is one more loss.
+        assert_eq!(losses, SLAVES + 1, "attacker {with_attacker}");
+        assert!(fired > 0, "attacker {with_attacker}");
+    }
+}
+
+// spec: S-0312 claim 30 and scenario D21 variant b (r16: the initial lethal hit of a delay-kill warhead on an eligible building master is a reprieve that neither frees nor removes its group; the actual death at expiry ends it under claim 30)
+// spec: S-0302 claim 16 (the expiry hit: whole health, the demolition warhead, no attacker)
+#[test]
+fn s0312_claim_30_delayed_death_master() {
+    let mut r = rules();
+    r.sim
+        .buildings
+        .get_mut("SMH")
+        .unwrap()
+        .eligible_for_delay_kill = Some(true);
+    r.sim.warheads.insert(
+        "DK".into(),
+        WarheadType {
+            verses: Some((0..11).map(|_| Decimal("1".into())).collect()),
+            cell_spread: dec("2"),
+            causes_delay_kill: Some(true),
+            delay_kill_frames: Some(5),
+            delay_kill_at_max: dec("7"),
+            ..Default::default()
+        },
+    );
+    let dk = r.sim.warheads.keys().position(|k| k == "DK").unwrap() as u32;
+    let mut w = game_on(&r, &field(5, -1, 5), true);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    until(&mut w, 40, |w| on_map(w, b).len() == SLAVES as usize).expect("emerged");
+    let ids = slaves::slaves_of(&w, b);
+    let out = on_map(&w, b);
+    damage::apply(
+        &mut w,
+        b,
+        Hit {
+            amount: 100_000,
+            warhead: Some(dk),
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+    assert!(w.obj(b).unwrap().combat.delay_kill_until.is_some());
+    assert_eq!(
+        slaves::slaves_of(&w, b),
+        ids,
+        "the reprieve keeps the group"
+    );
+    for &s in &out {
+        assert_eq!(w.obj(s).unwrap().owner, Some(HouseId(0)));
+    }
+    until(&mut w, 40, |w| w.obj(b).is_none()).expect("dies at expiry");
+    for &s in &out {
+        let o = w.obj(s).unwrap();
+        assert!(!slaves::is_slave(&w, s));
+        assert_eq!(o.owner, Some(HouseId(2)), "no attacker: the civilian side");
+    }
+}
+
+/// The ticks from the start of `b`'s build-down to its removal.
+fn build_down_span(w: &mut World, b: ObjectId) -> i32 {
+    let mut down = None;
+    for _ in 0..400 {
+        let t = w.tick;
+        testkit::run(w, 1);
+        match w.obj(b) {
+            Some(o) => {
+                if let Some(glasnost_sim::econ::sell::Stage::BuildDown(x)) =
+                    o.econ.sale.clone().map(|s| s.stage)
+                {
+                    down = Some(x);
+                }
+            }
+            None => return t - down.expect("build-down"),
+        }
+    }
+    panic!("not removed");
+}
+
+// spec: S-0408 claim 17 (r15: the guard spot that suppresses the stage-23 early report includes automatic relocation's remembered old top-left cell, S-0402 claim 28; the build-down then completes at its last stage)
+// spec: S-0415 claim 10 (r9: automatic packing stores the old top-left cell in the guard spot, which the sale does not clear)
+// spec: S-0108 claim 5 (60 image frames: a 30-stage range)
+#[test]
+fn s0408_claim_17_automatic_guard_spot_suppresses_early_report() {
+    let mut r = rules();
+    r.sim.buildings.get_mut("SMB").unwrap().econ.buildup_frames = Some(60);
+    // Control: a manual sale without a guard spot reports at stage 23.
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    unblock(&mut w);
+    assert_eq!(w.obj(b).unwrap().guard_spot, None);
+    assert!(orders::issue(&mut w, HouseId(0), Order::Sell { actor: b }));
+    let early = build_down_span(&mut w, b);
+    // Automatic relocation: the remembered cell is the guard spot.
+    let (mut w, b, a) = no_field_building(&r);
+    until(&mut w, 15, |w| {
+        w.obj(b).is_none() || group(w, b).state == GroupState::Packing
+    })
+    .expect("packing");
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)));
+    let full = build_down_span(&mut w, b);
+    assert!(early > 0);
+    assert_eq!(early * 29, full * 23, "stage 23 against stage 29");
+}
+
+// spec: S-0202 claim 10 (r19, packing up a slave miner: the return vehicle's and its temporary hidden slaves' creation draws come before placement, and with quirks.failed_packup_keeps_vehicle off refusal still takes them)
+// spec: S-0415 claim 11 (r9: switching the quirk off removes the refused vehicle and its new group without suppressing their creation or its draws)
+#[test]
+fn s0202_claim_10_refused_pack_up_draws_match_with_quirk_off() {
+    let r = rules();
+    let (_, on) = pack_up_now(&r, true);
+    let mut off = rules();
+    off.globals.quirks.failed_packup_keeps_vehicle = false;
+    let (_, off) = pack_up_now(&off, true);
+    assert_eq!(on.draws, off.draws);
+    // The successful pack-up takes the same creation draws as well.
+    let (_, ok) = pack_up_now(&r, false);
+    assert!(ok.draws >= SLAVES as u64);
 }
 
 /// The vehicle master of the game (after a pack-up).
@@ -966,6 +1242,8 @@ fn temporary_ids(p: &PackUp) -> Vec<ObjectId> {
 }
 
 // spec: S-0402 claim 19a (a successful pack-up creates the return vehicle and its own initial hidden slaves, each with its creation draw, before placement; they are destroyed and removed with S-0312 claim 31's notifications, counted as losses, before the old working group is transferred; their draws are not undone)
+// spec: S-0415 claim 10 (r9: the return vehicle and its initial hidden slaves are created before placement; on success those slaves are destroyed and removed, with losses and no undone draws, before the old working group transfers; no old slave is recreated)
+// spec: S-0312 claim 31 (r16, temporary hidden slaves during successful pack-up: losses without attacker credit, the old group survives the transfer)
 #[test]
 fn claim_19a_successful_pack_up_discards_temporary_slaves() {
     let r = rules();

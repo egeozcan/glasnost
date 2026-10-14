@@ -375,15 +375,14 @@ fn end_group(w: &mut World, g: SlaveGroup, how: End<'_>) {
                     crate::combat::death::destruction_raises(w, s, h);
                     super::stats::destruction(w, s, attacker);
                 }
-                End::Removed => {
-                    // spec: S-0312 claim 31 (destroyed without attacker credit, with claim 30's common destruction notifications; no death effects of its own)
+                // spec: S-0312 claim 31 (destroyed without attacker credit, with claim 30's common destruction notifications; no death effects of its own)
+                // spec: S-0408 claim 10a (a sold master's slave inside is destroyed without being placed: a loss for its current house without attacker credit, S-0414 claim 21, and claim 29's common group without an attacker; no death effects of its own; Q-0440)
+                End::Removed | End::Sold => {
                     crate::combat::death::destruction_raises(w, s, &no_attacker_hit(w, 0));
                     super::stats::destruction(w, s, None);
                 }
-                // spec: S-0408 claim 10a (a sold master's slave inside is removed without being placed; Q-0440)
-                End::Sold => {}
             }
-            // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (a slave inside is removed without being placed)
+            // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (a slave inside is destroyed and removed without being placed; the notifications' actions finish first)
             crate::objects::remove(w, s);
             continue;
         }
@@ -402,10 +401,8 @@ fn end_group(w: &mut World, g: SlaveGroup, how: End<'_>) {
                     }
                     super::events::owner_changed(w, s, so.owner);
                 }
-                if !matches!(how, End::Sold) {
-                    // spec: S-0312 claims 30 and 31 (a successful transfer requests cheer, S-0107 claim 21, after the target and destination reset; not forced)
-                    crate::infantry::request(w, s, crate::infantry::Seq::Cheer, false);
-                }
+                // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (a successful transfer requests cheer, S-0107 claim 21, after the target and destination reset; not forced, S-0107 claim 6)
+                crate::infantry::request(w, s, crate::infantry::Seq::Cheer, false);
             }
             None => {
                 let health = w.obj(s).map_or(0, |o| o.health);
