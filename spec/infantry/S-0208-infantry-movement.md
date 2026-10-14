@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 23
+revision: 24
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -345,6 +345,12 @@ used by this spec:
    The walker then heads for the standing position of its desired point's class, which is the
    centre position when that class is the centre, whatever the occupancy record shows. No random
    draw happens.
+
+   This enslaved-unit exception is for walking back to the master, not emergence from inside it.
+   S-0402 claim 21 owns emergence: it uses claim 3's occupant-aware centre-class choice and
+   starts each successfully placed slave facing map north, independently of the master's facing.
+   Its placement and draw rules remain separate from this claim's occupant-ignoring return.
+   The emergence statement carries S-0402 claim 21's backing and confidence (scenario H21).
    - Backing: `measurable` (scenario W1: part c for a vehicle to be entered, part d for the centre
      class and no draw, part e for a building, part f for an aircraft; S-0209 scenario C13 for
      the enslaved unit, which walks into its master's unloading cell). `unmeasured` for the
@@ -2322,7 +2328,7 @@ cases).**
   the exit despite an earlier ordinary arrival, a foundation-arrival suppression,
   or premature completion of the exit walk caused solely by this report. Failure
   to obtain a foundation arrival leaves that subcase untested, not disproved.
-- *Tool:* scripted input and a read-only recorder; S-0417 U10(a) can incorporate
+- *Measurement method:* scripted input and a read-only recorder; S-0417 U10(a) can incorporate
   these recordings without changing the oracle.
 
 ## Open questions
