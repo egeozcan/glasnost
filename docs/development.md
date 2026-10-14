@@ -196,11 +196,13 @@ Q-0234 is answered by S-0003 claim 23: the virtual-purifier, extra-credit and co
 
 Q-0216 is answered by S-0105 revision 10, claim 35: top-down, a span's empty count follows its colours for every span, with no first-span exception, which is what `render::voxel::column_steps` already did; the tests check MS-26's two-span and three-span rows.
 
+Q-0415 is answered by S-0102 revision 13, claim 31 and F5: the body of a building on a foundation under 8 cells wide samples image frame 0 of `BUILDNGZ.SHA` (`render::compose::companion_origin`: live constants (198, 446) with the art displacement `ZShapePointMove`; the remembered constants (144, 172) wait for the fog memory, which is not drawn yet). Its bytes are signed adjustments (`companion_adjustment`), every row takes the unrounded upright anchor minus the sample, and body pixels outside the stored rectangle are clipped, with no depth written, on the CPU and on the GPU (the signed images share the atlas). The building shadow and bib are no longer provisional.
+
 **Open requests and their placeholders.**
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `app::mapview::build` (`building_items`) | no companion depth image: a building body uses the upright profile alone (S-0102 F2), so a tall part (a water tower's tank) can be drawn behind a building that stands behind it | Q-0415 |
+| `app::mapview::build` (`body_companion`) | without `BUILDNGZ.SHA`, or with an unreadable image frame 0, a building body on a foundation under 8 cells wide is drawn with the plain upright profile (S-0102 F2), marked provisional and noted; S-0102 leaves missing-file recovery unspecified | Q-0490 |
 | `glasnost_sim::econ::shroud::height_lift` (S-0409 F2's sight centre) | the floating-point lift S-0101 F2 gave before its revision 8, unchanged, because the sight centre is game state; the renderer draws with the exact lift of S-0101 revision 8 (question 3, the overlay lift switch, is settled: S-0102 revision 13 retires `quirks.overlay_lift_exact_levels`, and overlays lift exactly 15 per level, `mapview::quirks::overlay_depth_lift`) | Q-0460 |
 | `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
 | `render::voxel` (`IMAGE_LIMIT`) | a part or shadow image whose F6 copy rectangle is larger than 4096 pixels on a side keeps only a 4096 × 4096 window of it, centred on the voxel-image origin shift (128, 128); pixels outside the window are not drawn (S-0105 claim 22 enlarges images with no limit) | Q-0470 |

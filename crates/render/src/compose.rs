@@ -82,6 +82,88 @@ pub struct SignedImage {
     pub values: Vec<i8>,
 }
 
+impl SignedImage {
+    /// The value at column `u`, row `v`, or `None` outside the image.
+    pub fn get(&self, u: i32, v: i32) -> Option<i8> {
+        let (u, v) = (u32::try_from(u).ok()?, u32::try_from(v).ok()?);
+        if u >= self.width || v >= self.height {
+            return None;
+        }
+        self.values.get((v * self.width + u) as usize).copied()
+    }
+
+    /// A building companion depth image from the bytes of a shape frame's
+    /// stored rectangle, `width` × `height`, row by row (S-0102 F5).
+    pub fn from_companion_bytes(width: u32, height: u32, bytes: &[u8]) -> Self {
+        Self {
+            width,
+            height,
+            values: bytes.iter().map(|&b| companion_adjustment(b)).collect(),
+        }
+    }
+}
+
+/// The signed depth adjustment *a* of a companion depth image byte *b*
+/// (S-0102 F5): 0 for *b* = 0, otherwise ((*b* − 65 + 128) mod 256) − 128.
+pub fn companion_adjustment(b: u8) -> i8 {
+    if b == 0 {
+        return 0;
+    }
+    // spec: S-0102 F5 (a = ((b − 65 + 128) mod 256) − 128, the remainder non-negative)
+    ((i32::from(b) - 65 + 128).rem_euclid(256) - 128) as i8
+}
+
+/// Which building body a companion depth image is placed for (S-0102 F5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompanionBody {
+    /// A body drawn from the building itself.
+    Live,
+    /// A body drawn from the remembered image under fog (S-0102 claim 16).
+    Remembered,
+}
+
+impl CompanionBody {
+    /// The sampling constants (*Kₓ*, *Kᵧ*), pixels from the body's draw point.
+    pub fn constants(self) -> (i32, i32) {
+        match self {
+            // spec: S-0102 F5 (K = (198, 446) for live bodies)
+            Self::Live => (198, 446),
+            // spec: S-0102 F5 (K = (144, 172) for remembered bodies)
+            Self::Remembered => (144, 172),
+        }
+    }
+}
+
+/// Foundations this many cells wide or wider use no companion depth image
+/// (S-0102 F5).
+pub const COMPANION_WIDTH_LIMIT: i32 = 8; // spec: S-0102 F5
+
+/// The screen pixel where a building companion depth image's stored
+/// rectangle begins (S-0102 F5): (*pₓ* − *Dₓ* − *c_z*, *pᵧ* − *Dᵧ* − *r_z*),
+/// for a body with draw point `p` on a foundation of `foundation` cells,
+/// art displacement `m` ((0, 0) when omitted) and the companion's stored
+/// rectangle at canvas column and row `stored`. `None` when the foundation
+/// is too wide for a companion.
+pub fn companion_origin(
+    p: (i32, i32),
+    foundation: (i32, i32),
+    m: (i32, i32),
+    body: CompanionBody,
+    stored: (i32, i32),
+) -> Option<(i32, i32)> {
+    let (w, h) = foundation;
+    // spec: S-0102 F5 (a foundation less than 8 cells wide uses the companion)
+    if w >= COMPANION_WIDTH_LIMIT {
+        return None;
+    }
+    let (kx, ky) = body.constants();
+    // spec: S-0102 F5 (Dₓ = Kₓ + mₓ − 30(w − h), Dᵧ = Kᵧ + mᵧ − 15(w + h − 2))
+    let dx = kx + m.0 - 30 * (w - h);
+    let dy = ky + m.1 - 15 * (w + h - 2);
+    // spec: S-0102 F5 (the stored rectangle begins at (pₓ − Dₓ − c_z, pᵧ − Dᵧ − r_z))
+    Some((p.0 - dx - stored.0, p.1 - dy - stored.1))
+}
+
 /// Where a drawing's per-pixel depth comes from.
 #[derive(Clone, Debug)]
 pub enum DepthSource<'a> {
@@ -382,14 +464,15 @@ impl Frame {
                     },
                     DepthSource::Profile { companion, .. } => {
                         // spec: S-0102 F2 (pixel depth = row depth − companion value)
-                        let a = companion.map_or(0, |(img, cx, cy)| {
-                            let (u, v) = (x - cx, y - cy);
-                            if u < 0 || v < 0 || u >= img.width as i32 || v >= img.height as i32 {
-                                0
-                            } else {
-                                i32::from(img.values[(v as u32 * img.width + u as u32) as usize])
-                            }
-                        });
+                        let a = match companion {
+                            None => 0,
+                            Some((img, cx, cy)) => match img.get(x - cx, y - cy) {
+                                Some(a) => i32::from(a),
+                                // spec: S-0102 claim 31, F5 (a body pixel the companion's stored
+                                // rectangle does not cover is not drawn and writes no depth)
+                                None => continue,
+                            },
+                        };
                         base - a
                     }
                 };
@@ -742,6 +825,104 @@ mod tests {
         f.draw(&d, &rows(), &q);
         // d(2) + β = 32764, no Q.
         assert_eq!(f.depth, vec![32754, 32769, 32764]);
+    }
+
+    /// spec: S-0102 F5 (a = 0 for b = 0, otherwise ((b − 65 + 128) mod 256) − 128: bytes 0 and 65
+    /// give 0, 64 gives −1, 66 gives +1)
+    #[test]
+    fn f5_companion_bytes() {
+        for (b, a) in [
+            (0u8, 0i8),
+            (64, -1),
+            (65, 0),
+            (66, 1),
+            (1, -64),
+            (192, 127),
+            (193, -128),
+            (255, -66),
+        ] {
+            assert_eq!(companion_adjustment(b), a, "byte {b}");
+        }
+        let img = SignedImage::from_companion_bytes(2, 2, &[0, 64, 65, 66]);
+        assert_eq!(img.values, vec![0, -1, 0, 1]);
+        assert_eq!(
+            (img.get(1, 1), img.get(2, 0), img.get(0, -1)),
+            (Some(1), None, None)
+        );
+    }
+
+    /// spec: S-0102 F5 (Dₓ = Kₓ + mₓ − 30(w − h), Dᵧ = Kᵧ + mᵧ − 15(w + h − 2); K = (198, 446) live,
+    /// (144, 172) remembered; the stored rectangle begins at (pₓ − Dₓ − c_z, pᵧ − Dᵧ − r_z); widths
+    /// of 8 cells or more use none)
+    #[test]
+    fn f5_companion_placement() {
+        let p = (1000, 1000);
+        // Live, 3 × 2: D = (198 − 30, 446 − 45) = (168, 401).
+        assert_eq!(
+            companion_origin(p, (3, 2), (0, 0), CompanionBody::Live, (0, 0)),
+            Some((832, 599))
+        );
+        // Remembered, 3 × 2: D = (144 − 30, 172 − 45) = (114, 127).
+        assert_eq!(
+            companion_origin(p, (3, 2), (0, 0), CompanionBody::Remembered, (0, 0)),
+            Some((886, 873))
+        );
+        // A positive displacement (17, 23) moves coverage left and up; a stored
+        // rectangle origin (5, 7) moves it further.
+        assert_eq!(
+            companion_origin(p, (3, 2), (17, 23), CompanionBody::Live, (5, 7)),
+            Some((1000 - 185 - 5, 1000 - 424 - 7))
+        );
+        assert_eq!(
+            companion_origin(p, (3, 2), (17, 23), CompanionBody::Remembered, (5, 7)),
+            Some((1000 - 131 - 5, 1000 - 150 - 7))
+        );
+        // Width 7 uses the companion, width 8 does not, whatever the height.
+        assert!(companion_origin(p, (7, 1), (0, 0), CompanionBody::Live, (0, 0)).is_some());
+        assert_eq!(
+            companion_origin(p, (8, 1), (0, 0), CompanionBody::Live, (0, 0)),
+            None
+        );
+        assert_eq!(
+            companion_origin(p, (9, 9), (0, 0), CompanionBody::Remembered, (0, 0)),
+            None
+        );
+    }
+
+    /// spec: S-0102 claim 31, F5 (a body pixel outside the companion's stored rectangle is not drawn
+    /// and writes no depth, with no upright fallback; covered pixels take the unrounded upright anchor
+    /// minus a; a zero byte adjusts nothing)
+    #[test]
+    fn companion_clips_uncovered_pixels() {
+        let q = ComposeQuirks::default();
+        let mut f = Frame::new(2, 3, 0, DEPTH_REFERENCE);
+        let before = (f.color.clone(), f.depth.clone());
+        let a = img(2, 3, 1);
+        // Covers column 1, rows 1 and 2 only (the companion's rectangle at view (1, 1)).
+        let comp = SignedImage::from_companion_bytes(1, 2, &[0, 66]);
+        let d = Drawing {
+            image: &a,
+            x: 0,
+            y: 0,
+            test: DepthTest::Writer,
+            depth: DepthSource::Profile {
+                profile: Profile::Upright,
+                bias: -2,
+                companion: Some((&comp, 1, 1)),
+            },
+            paint: Paint::Row(0),
+        };
+        f.draw(&d, &rows(), &q);
+        let anchor = f.row_depth(2) - 2;
+        for (i, (c, dep)) in f.color.iter().zip(&f.depth).enumerate() {
+            let (x, y) = (i % 2, i / 2);
+            match (x, y) {
+                (1, 1) => assert_eq!(i32::from(*dep), anchor),
+                (1, 2) => assert_eq!(i32::from(*dep), anchor - 1),
+                _ => assert_eq!((*c, *dep), (before.0[i], before.1[i]), "pixel {x}, {y}"),
+            }
+        }
+        assert_ne!(f.color[3], before.0[3], "a covered pixel is drawn");
     }
 
     /// spec: S-0102 claim 26, F7 (each hi-colour channel halved, rounded down; twice gives ⌊v/4⌋)

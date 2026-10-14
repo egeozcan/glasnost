@@ -47,6 +47,8 @@ struct Instance {
     place: [i32; 4],
     depth: [u32; 4],
     paint: [u32; 4],
+    /// The companion depth image's world x and y, width and height.
+    companion: [i32; 4],
 }
 
 /// Where an image sits in the atlas.
@@ -197,6 +199,8 @@ pub struct MapRenderer {
     instances: wgpu::Buffer,
     instance_capacity: usize,
     slots: Vec<Slot>,
+    /// Atlas slots of [`Scene::signed`].
+    signed_slots: Vec<Slot>,
     rows_per_column: u32,
     atlas: wgpu::Texture,
     atlas_layers: u32,
@@ -238,13 +242,22 @@ impl MapRenderer {
     ) -> Result<Self, UploadError> {
         let limits = device.limits();
         let side = limits.max_texture_dimension_2d.min(4096);
+        // Indexed images, then the signed companion depth images (their bytes
+        // are the two's complement values).
         let sizes: Vec<(u32, u32)> = scene
             .images
             .iter()
             .map(|i| (i.width().max(1), i.height().max(1)))
+            .chain(
+                scene
+                    .signed
+                    .iter()
+                    .map(|i| (i.width.max(1), i.height.max(1))),
+            )
             .collect();
-        let (slots, packer) =
+        let (mut slots, packer) =
             pack(&sizes, side).ok_or_else(|| UploadError("an image exceeds the atlas".into()))?;
+        let signed_slots = slots.split_off(scene.images.len());
         let layers = packer.layers();
         if layers > limits.max_texture_array_layers {
             return Err(UploadError(format!(
@@ -259,10 +272,19 @@ impl MapRenderer {
             .min(limits.max_texture_array_layers)
             .max(2);
         let mut atlas = vec![0u8; side as usize * side as usize * layers as usize];
-        for (img, slot) in scene.images.iter().zip(&slots) {
+        let images = scene.images.iter().map(|i| (i.width(), i.pixels())).chain(
+            scene
+                .signed
+                .iter()
+                .map(|i| (i.width, bytemuck::cast_slice::<i8, u8>(&i.values))),
+        );
+        for ((width, pixels), slot) in images.zip(slots.iter().chain(&signed_slots)) {
             let base = slot.layer as usize * side as usize * side as usize;
-            for row in 0..img.height() as usize {
-                let src = &img.pixels()[row * img.width() as usize..][..img.width() as usize];
+            let width = width as usize;
+            if width == 0 {
+                continue;
+            }
+            for (row, src) in pixels.chunks_exact(width).enumerate() {
                 let dst = base + (slot.y as usize + row) * side as usize + slot.x as usize;
                 atlas[dst..dst + src.len()].copy_from_slice(src);
             }
@@ -370,7 +392,7 @@ impl MapRenderer {
             immediate_size: 0,
         });
         let attributes = wgpu::vertex_attr_array![
-            0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4, 3 => Uint32x4
+            0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4, 3 => Uint32x4, 4 => Sint32x4
         ];
         let make = |role: Role| {
             let (compare, write) = match role {
@@ -445,6 +467,7 @@ impl MapRenderer {
             instances,
             instance_capacity,
             slots,
+            signed_slots,
             rows_per_column,
             atlas: atlas_texture,
             atlas_layers: layers,
@@ -469,42 +492,17 @@ impl MapRenderer {
         queue: &wgpu::Queue,
         scene: &Scene,
     ) -> Result<(), UploadError> {
-        if scene.images.len() < self.slots.len() {
+        if scene.images.len() < self.slots.len() || scene.signed.len() < self.signed_slots.len() {
             return Err(UploadError("the scene lost images".into()));
         }
         for img in &scene.images[self.slots.len()..] {
-            let (w, h) = (img.width(), img.height());
-            let slot = self
-                .packer
-                .place(w.max(1), h.max(1))
-                .filter(|s| s.layer < self.atlas_layers)
-                .ok_or_else(|| UploadError("the atlas is full".into()))?;
-            if w > 0 && h > 0 {
-                queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &self.atlas,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: slot.x,
-                            y: slot.y,
-                            z: slot.layer,
-                        },
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    img.pixels(),
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(w),
-                        rows_per_image: Some(h),
-                    },
-                    wgpu::Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
-                );
-            }
+            let slot = self.upload(queue, img.width(), img.height(), img.pixels())?;
             self.slots.push(slot);
+        }
+        for img in &scene.signed[self.signed_slots.len()..] {
+            let bytes = bytemuck::cast_slice::<i8, u8>(&img.values);
+            let slot = self.upload(queue, img.width, img.height, bytes)?;
+            self.signed_slots.push(slot);
         }
         if scene.rows.len() != self.row_count {
             let (rows, per_column) =
@@ -523,6 +521,47 @@ impl MapRenderer {
             self.row_count = scene.rows.len();
         }
         Ok(())
+    }
+
+    /// Places a `w` × `h` image of bytes `pixels` in the atlas's free space.
+    fn upload(
+        &mut self,
+        queue: &wgpu::Queue,
+        w: u32,
+        h: u32,
+        pixels: &[u8],
+    ) -> Result<Slot, UploadError> {
+        let slot = self
+            .packer
+            .place(w.max(1), h.max(1))
+            .filter(|s| s.layer < self.atlas_layers)
+            .ok_or_else(|| UploadError("the atlas is full".into()))?;
+        if w > 0 && h > 0 {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &self.atlas,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: slot.x,
+                        y: slot.y,
+                        z: slot.layer,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                pixels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        Ok(slot)
     }
 
     /// Records the scene for `view` into `encoder`, rendering into `target`
@@ -599,6 +638,7 @@ impl MapRenderer {
             }
             let img = &scene.images[item.image as usize];
             let slot = self.slots[item.image as usize];
+            let mut companion_rect = [0; 4];
             let (role, flags, bias, reference_row, depth_slot) = match item.depth {
                 ItemDepth::Tile {
                     depth,
@@ -610,12 +650,24 @@ impl MapRenderer {
                     reference_row,
                     depth.map(|d| self.slots[d as usize]),
                 ),
-                ItemDepth::Profile { profile, bias, .. } => {
-                    let kind = match profile {
+                ItemDepth::Profile {
+                    profile,
+                    bias,
+                    companion,
+                } => {
+                    let mut kind = match profile {
                         Profile::Flat => 1,
                         Profile::Slope => 2,
                         Profile::Upright => 3,
                     };
+                    // spec: S-0102 F2, F5 (a companion depth image: bit 2 of the flags, its atlas
+                    // slot in the depth fields, its world rectangle in `companion`)
+                    let companion_slot = companion.map(|(i, cx, cy)| {
+                        let img = &scene.signed[i as usize];
+                        kind |= 4;
+                        companion_rect = [cx, cy, img.width as i32, img.height as i32];
+                        self.signed_slots[i as usize]
+                    });
                     let role = match (item.paint, item.test) {
                         // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
                         (Paint::Shadow, DepthTest::Writer) if q.cell_pass_shadows_write_depth => {
@@ -631,7 +683,7 @@ impl MapRenderer {
                         (_, DepthTest::Writer) => Role::Writer,
                         (_, DepthTest::Ignore) => Role::Ignore,
                     };
-                    (role, kind, bias, 0, None)
+                    (role, kind, bias, 0, companion_slot)
                 }
             };
             // `diamond` holds the diamond flag in bit 0 and the translucency
@@ -663,6 +715,7 @@ impl MapRenderer {
                 place: [item.x, item.y, bias, reference_row],
                 depth: [ds.x, ds.y, ds.layer, flags],
                 paint: [row, diamond, shade_rows, rho],
+                companion: companion_rect,
             });
             let n = list.len() as u32;
             if role.translucent() {
@@ -1040,7 +1093,7 @@ mod tests {
     }
 
     #[test]
-    fn instance_is_64_bytes() {
-        assert_eq!(std::mem::size_of::<Instance>(), 64);
+    fn instance_is_80_bytes() {
+        assert_eq!(std::mem::size_of::<Instance>(), 80);
     }
 }

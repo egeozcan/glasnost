@@ -29,13 +29,18 @@ struct Instance {
     @location(0) image: vec4<u32>,
     // World x, world y, depth bias, tile reference row (world).
     @location(1) place: vec4<i32>,
-    // Depth image atlas x, y, layer (0xFFFFFFFF: none), flags.
+    // Depth image atlas x, y, layer (0xFFFFFFFF: none), flags: bits 0 and 1
+    // the depth kind (tile, flat, slope, upright), bit 2 set for a profile
+    // drawing with a companion depth image, whose atlas slot x, y and layer
+    // are then x, y and z.
     @location(2) depth: vec4<u32>,
     // Palette row (the table's first row when z > 0); y: bit 0 set for a
     // tile diamond (no transparent index), bits 1 and 2 the translucency
     // code (S-0102 claim 32); z the shade table's row count N for a drawing
     // that reads the light-alpha values, else 0; w its rho.
     @location(3) paint: vec4<u32>,
+    // The companion depth image's world x, y, width and height.
+    @location(4) companion: vec4<i32>,
 };
 
 struct Varyings {
@@ -44,6 +49,7 @@ struct Varyings {
     @location(1) @interpolate(flat) place: vec4<i32>,
     @location(2) @interpolate(flat) depth: vec4<u32>,
     @location(3) @interpolate(flat) paint: vec4<u32>,
+    @location(4) @interpolate(flat) companion: vec4<i32>,
 };
 
 @vertex
@@ -64,6 +70,7 @@ fn vs_main(@builtin(vertex_index) v: u32, inst: Instance) -> Varyings {
     out.place = inst.place;
     out.depth = inst.depth;
     out.paint = inst.paint;
+    out.companion = inst.companion;
     return out;
 }
 
@@ -114,7 +121,30 @@ fn fs_main(in: Varyings) -> Fragment {
     let kind = flags & 3u;
     let height = i32(in.image.w >> 16u);
     var depth: i32;
-    if kind == 0u {
+    if (flags & 4u) != 0u {
+        // S-0102 claim 31, F5: a pixel outside the companion's stored
+        // rectangle is not drawn and writes no depth.
+        let c = px - (in.companion.xy - view.origin);
+        if c.x < 0 || c.y < 0 || c.x >= in.companion.z || c.y >= in.companion.w {
+            discard;
+        }
+        var a = i32(textureLoad(atlas, vec2<i32>(in.depth.xy) + c, i32(in.depth.z), 0).r);
+        if a >= 128 {
+            a = a - 256;
+        }
+        // S-0102 F2: with a companion every row takes the anchor value (flat
+        // d(r₀) + β, slope Q(d(r₀) + β), upright d(r₁) + β), minus a.
+        let r0 = top_left.y;
+        var anchor: i32;
+        if kind == 1u {
+            anchor = row_depth(r0) + in.place.z;
+        } else if kind == 2u {
+            anchor = quantise(row_depth(r0) + in.place.z);
+        } else {
+            anchor = row_depth(r0 + height - 1) + in.place.z;
+        }
+        depth = anchor - a;
+    } else if kind == 0u {
         // Tile (S-0102 F3): e + d(t + 30).
         let t = in.place.w - view.origin.y;
         var e = 0;

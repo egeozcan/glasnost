@@ -1062,6 +1062,113 @@ fn animated_terrain_object_in_the_object_pass() {
     assert!(vehicle.iter().all(|v| at(v) > at(shadow)));
 }
 
+/// A synthetic shared depth image file: canvas 50 × 40, image frame 0 a
+/// 6 × 4 rectangle at (3, 5) with the bytes 0, 64, 65, 66 repeated, image
+/// frame 1 a different constant.
+fn companion_file() -> Vec<u8> {
+    let frame = |values: Vec<u8>| WriteFrame {
+        x: 3,
+        y: 5,
+        image: IndexedImage::new(6, 4, values).unwrap(),
+        compression: 1,
+    };
+    ShpWriter {
+        width: 50,
+        height: 40,
+        frames: vec![
+            frame((0..24).map(|i| [0, 64, 65, 66][i % 4]).collect()),
+            frame(vec![99; 24]),
+        ],
+    }
+    .write()
+}
+
+/// The building items of one neutral HUTX on (6, 10) whose art section
+/// holds `hut_art`, with the shared depth image file when `file`.
+fn hut_items(hut_art: &str, file: bool) -> (Built, Vec<Item>) {
+    let art = format!(
+        "[HUTX]\nAnimIdle=1,1,0\n{hut_art}[MANX]\nSequence=MANSEQ\n[MANSEQ]\nReady=3,1,2\n\
+         [CARX]\nFacings=8\nWalkFrames=2\n"
+    );
+    let mut ctx = context_full(RULES, &art);
+    if file {
+        ctx.2.insert(b"buildngz.sha", companion_file());
+    }
+    let (b, _) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "building");
+    (b, items)
+}
+
+/// spec: S-0102 claim 31, F5 (every eligible body uses image frame 0 of the shared file, its bytes
+/// decoded as signed adjustments; its stored rectangle begins at (pₓ − Dₓ − c_z, pᵧ − Dᵧ − r_z) with
+/// the live constants (198, 446), D = K + m − (30(w − h), 15(w + h − 2)), and the art displacement
+/// ZShapePointMove); S-0102 claim 13 (the shadow and bib take none)
+#[test]
+fn building_body_companion() {
+    // The body's draw point: the top corner of cell (6, 10) at level 0.
+    let p = glasnost_render::projection::project_lifted(256 * 6, 256 * 10, 0);
+    for (hut_art, d) in [
+        // 2 × 2, no displacement: D = (198, 446 − 30).
+        ("Foundation=2x2\n", (198, 416)),
+        // 3 × 2, displacement (17, 23): D = (198 + 17 − 30, 446 + 23 − 45).
+        ("Foundation=3x2\nZShapePointMove=17,23\n", (185, 424)),
+    ] {
+        let (b, items) = hut_items(hut_art, true);
+        let body = items.iter().find(|i| i.group == Group::Buildings).unwrap();
+        let ItemDepth::Profile {
+            profile,
+            companion: Some((id, x, y)),
+            ..
+        } = body.depth
+        else {
+            panic!("{hut_art}: the body has a companion");
+        };
+        assert_eq!(profile, Profile::Upright);
+        // The stored rectangle's canvas origin (3, 5) moves it left and up.
+        assert_eq!((x, y), (p.0 - d.0 - 3, p.1 - d.1 - 5), "{hut_art}");
+        // Image frame 0, decoded by F5 (0 → 0, 64 → −1, 65 → 0, 66 → +1); not frame 1.
+        let img = &b.scene.signed[id as usize];
+        assert_eq!((img.width, img.height), (6, 4));
+        assert_eq!(img.values[..4], [0, -1, 0, 1]);
+        assert!(!body.provisional);
+        for i in items.iter().filter(|i| i.group != Group::Buildings) {
+            assert!(matches!(
+                i.depth,
+                ItemDepth::Profile {
+                    companion: None,
+                    ..
+                }
+            ));
+            assert!(!i.provisional);
+        }
+        assert!(!b.notes.iter().any(|n| n.contains("BUILDNGZ")));
+    }
+}
+
+/// spec: S-0102 F2, F5 (without the shared file the body is drawn with plain F2; recovery from a
+/// missing file is not specified, so the body is provisional and noted, Q-0490)
+#[test]
+fn building_body_without_companion_file() {
+    let (b, items) = hut_items("Foundation=2x2\n", false);
+    let body = items.iter().find(|i| i.group == Group::Buildings).unwrap();
+    assert!(matches!(
+        body.depth,
+        ItemDepth::Profile {
+            profile: Profile::Upright,
+            companion: None,
+            ..
+        }
+    ));
+    assert!(body.provisional);
+    assert!(b.scene.signed.is_empty());
+    assert!(b.notes.iter().any(|n| n.contains("Q-0490")));
+}
+
 /// The slot-animation test context: HUTX's art starts five slot animations
 /// (S-0108 claim 11) and names a special slot that the set-up never starts.
 fn slot_context() -> (glasnost_convert::Import, Catalogue, Assets) {
