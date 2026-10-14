@@ -77,6 +77,49 @@ fn type_lists_register_in_entry_order() {
     assert_eq!(names(&o, Kind::Buildings).len(), 4);
 }
 
+/// spec: S-0004 claim 2 (a repeated key gives the winning occurrence's value
+/// at every one of its positions, S-0002 claim 4)
+#[test]
+fn repeated_list_key_uses_the_winning_value() {
+    let base = "[VehicleTypes]\n1=Ant\n2=Bee\n1=Cat\n";
+    let d = doc(base);
+    let winner = d
+        .value(b"VehicleTypes", b"1")
+        .map(|v| String::from_utf8_lossy(v).into_owned())
+        .expect("key 1");
+    let loser = if winner == "Ant" { "Cat" } else { "Ant" };
+    let o = apply(&[layer(Role::Base, base)], "");
+    // Positions 1 and 3 both take the winner's value; the other line's
+    // value names no type.
+    assert_eq!(names(&o, Kind::Vehicles), [winner.as_str(), "Bee"]);
+    assert!(!names(&o, Kind::Vehicles).iter().any(|n| n == loser));
+}
+
+/// spec: S-0004 claim 7 (a type reads the section that shares its name hash
+/// while `quirks.ini_hash_identity` is on, S-0002 claim 3)
+#[test]
+fn type_section_found_by_shared_name_hash() {
+    // "ZdxeLZgd" and "Cost" share a name hash (S-0002 fixture 3).
+    let text = "[VehicleTypes]\n1=Cost\n[ZdxeLZgd]\nStrength=5\n";
+    let with = |identity: bool| {
+        let q = Quirks {
+            ini_hash_identity: identity,
+            ..Quirks::default()
+        };
+        let l = Layer {
+            role: Role::Base,
+            file: "base.ini".to_owned(),
+            doc: Document::parse(text.as_bytes(), q, &mut Vec::new()),
+        };
+        apply(&[l], "")
+    };
+    assert_eq!(
+        val(&with(true), Kind::Vehicles, "Cost", "Strength").as_deref(),
+        Some("5")
+    );
+    assert_eq!(val(&with(false), Kind::Vehicles, "Cost", "Strength"), None);
+}
+
 /// spec: S-0004 claims 4, 6 and 7; S-0006 claim 7 (scenario B1)
 #[test]
 fn referenced_types_follow_rank_and_layer_rules() {
