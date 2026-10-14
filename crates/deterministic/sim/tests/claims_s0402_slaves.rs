@@ -769,9 +769,8 @@ fn s0203_claim_12_vehicle_arrival_deploys_at_next_update() {
     assert_eq!(o.dest, None, "arrived");
     assert_eq!(group(&w, m).state, GroupState::Travelling);
     assert_eq!(group(&w, m).next_update, t + slaves::PERIOD);
-    let travelling = |w: &World| {
-        slaves::group_of(w, m).map(|g| g.state) == Some(GroupState::Travelling)
-    };
+    let travelling =
+        |w: &World| slaves::group_of(w, m).map(|g| g.state) == Some(GroupState::Travelling);
     while w.tick < t + slaves::PERIOD {
         testkit::run(&mut w, 1);
         assert!(travelling(&w), "no attempt before the next due update");
@@ -866,7 +865,11 @@ fn s0203_claim_12_delivery_removal_counts_before_master() {
         let now = group(&w, v).members.iter().filter(|m| m.inside).count();
         if now > inside {
             assert!(earlier);
-            assert_ne!(w.obj(obs).unwrap().last_turn, t, "the observer lost its turn");
+            assert_ne!(
+                w.obj(obs).unwrap().last_turn,
+                t,
+                "the observer lost its turn"
+            );
             skipped += 1;
         }
         if now == SLAVES as usize {
@@ -928,6 +931,9 @@ fn s0209_claim_4_partly_occupied_field_cell_qualifies() {
                 && slaves::slave_of(w, s).unwrap().phase == SlavePhase::Loading
         })
     });
-    assert!(t.is_some(), "a slave loads in the cell the other unit stands in");
+    assert!(
+        t.is_some(),
+        "a slave loads in the cell the other unit stands in"
+    );
     assert_eq!(w.obj(other).unwrap().pos.cell(), ore);
 }
