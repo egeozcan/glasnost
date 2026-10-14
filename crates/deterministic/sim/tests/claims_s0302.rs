@@ -1059,6 +1059,19 @@ fn readiness_heal_over_max_on() {
     assert!(ammo(&w, t) > 10);
 }
 
+// spec: S-0205 Edge cases (S-0302 F6 with quirks.chop_rounding off: every RZ₅₃ becomes RN₅₃, so −0.4 lies just beyond −0.4 and the ammunition is 12, not 11; the conversion still truncates)
+#[test]
+fn readiness_loss_rounds_to_nearest_with_chop_rounding_off() {
+    let (mut w, t) = readiness_world(|r| r.globals.quirks.chop_rounding = false);
+    set_health(&mut w, t, 500);
+    apply!(w, t, hit(-400, wh(&w, "LOW")));
+    assert_eq!(ammo(&w, t), 12);
+    let (mut w, t) = readiness_world(|_| {});
+    set_health(&mut w, t, 500);
+    apply!(w, t, hit(-400, wh(&w, "LOW")));
+    assert_eq!(ammo(&w, t), 11);
+}
+
 // spec: S-0302 Edge cases (quirks.readiness_heal_over_max off: the ammunition after the hit is at most the type's field)
 #[test]
 fn readiness_heal_over_max_off() {
