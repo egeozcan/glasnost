@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0072, Q-0087, Q-0286]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286]
 supersedes: []
 ---
 
@@ -579,7 +579,8 @@ Terms).
     notices before the next tick completes share one message-and-sound cue, but completing a
     tick permits a new cue: a refused click made seconds later in the same running game is not
     silent because of an earlier refusal. This corrects S-0701 claim 24's once-per-game
-    assertion (joint change listed below).
+    assertion (now corrected in its current claim 24). Claim 25 specifies the message's
+    imported text, lifetime and shared display capacity.
     - Backing: `measurable` (Scenario O8, including its repeated-refusal test)
     The same-tick duplicate-notice limit is `unmeasured`: no setup here creates multiple
     independent route refusals before one tick completes. The reset's observable consequence
@@ -747,6 +748,55 @@ Terms).
     - Backing: `measurable` (Scenario O19, parts b and c; S-0101 Scenario M7 for scrolling)
     - Confidence: high
 
+24. **Edge-scroll cursor (Q-0277).** During ordinary edge scrolling, the cursor
+    points in the requested screen direction, not a map-grid direction. The outer edge
+    of the game view, including its sidebar portion, selects this presentation; the
+    internal battlefield/sidebar boundary alone is not an outer edge. S-0101 claim 12
+    and F9 own edge activation and direction, including the snapped client point,
+    full-client centre, floating-point band comparisons and two-stage integer bearing
+    quantisation. The image uses that requested direction, including the retained
+    direction while edge momentum decays. No independent cursor angle is calculated.
+
+    The cursor is the allowed variant when a trial scroll of one pixel in that direction
+    can move the view under S-0101's limits; otherwise it is the blocked variant. This
+    is not unit passability or order legality. Table E gives its static image and hot spot.
+    The ordinary edge-scroll cursor is full-size, not a radar miniature. This claim
+    does not specify drag-scroll controls or displacement per update.
+    - Backing: `measurable` (Scenario O20)
+    - Confidence: high for images and the one-pixel refusal test; medium for edge direction
+
+25. **Route refusal text and shared status display (Q-0282).** A refused route click
+    caused by too many route holders displays the route-holder-limit text; a selection
+    that fails the route eligibility check displays the incompatible-selection text.
+    These are imported translated messages (Import mapping), not hard-coded English
+    sentences. Claim 16 governs their message-and-sound coalescing. A later refusal
+    after a completed tick appends another message; it does not refresh an older copy.
+
+    Each such message expires after 480 units of the real-time presentation clock,
+    whose unit is 16 milliseconds, independent of game speed. Its deadline is the clock
+    count when added plus 480, using exact integer arithmetic. It is removed at the
+    first status-display update whose count is strictly greater than that deadline,
+    not at equality. The clock continues during a timed freeze, options-menu pause
+    or loss of focus. While the display is not being updated an expired message may
+    remain in the last drawn image, but it is removed at the first subsequent update.
+    resuming does not grant a fresh lifetime.
+
+    The battlefield's shared status display holds at most six text lines, including
+    these notices and other events' status messages, rather than six independent
+    routes or six messages per event kind. Lines are left-aligned near the battlefield's
+    top-left, oldest above newest. A new line at capacity removes the oldest line.
+    expiry closes the gap. Long imported text wraps to further lines and each line
+    counts against the same capacity. Each wrapped line receives its own 480-clock-unit
+    lifetime when added, so lines added across a clock boundary can expire on different
+    updates. In the original the
+    first line begins 3 pixels right of the battlefield's left edge, at its top edge,
+    with 19 pixels between line origins. These pixel positions describe the original
+    display, not a simulation-state rule. This claim specifies the shared display
+    contract used by route refusals, not new events for sidebar, placement or sell/repair
+    feedback; those remain with S-0411, S-0406 and S-0408 respectively.
+    - Backing: `measurable` (Scenario O21)
+    - Confidence: high for lifetime and capacity; medium for pause and wrapping observations
+
 ## Formulas
 
 > cheer passes the rate limit ⇔ *t* > *L* + *R*. *t* is the current tick, *L* the last accepted
@@ -792,6 +842,22 @@ quantities.
 | Steps of a spread look (our engine, interim) | 6 | steps of one cell length | Claim 7, design choice |
 
 ## State and ordering
+
+**Table E: edge-scroll cursor images (claim 24).** Frames are zero-based in the
+cursor image imported by S-0214. With full-canvas width *w* and height *h* in pixels,
+centre means ⌊*w*/2⌋ horizontally and ⌊*h*/2⌋ vertically, exact integer division.
+Right and bottom hot spots use *w* and *h*, not their last pixel indices.
+
+| Screen direction | Allowed frame | Blocked frame | Hot spot (horizontal, vertical) |
+|---|---|---|---|
+| Up | 2 | 10 | centre, top |
+| Upper right | 3 | 11 | right, top |
+| Right | 4 | 12 | right, centre |
+| Lower right | 5 | 13 | right, bottom |
+| Down | 6 | 14 | centre, bottom |
+| Lower left | 7 | 15 | left, bottom |
+| Left | 8 | 16 | left, centre |
+| Upper left | 9 | 17 | left, top |
 
 **Table T1: the order kinds.** The terms *exists*, *live*, *on the map* and *valid* are those of
 Terms. All checks are made when the order is applied; an order that fails one has no effect apart
@@ -923,6 +989,10 @@ only when they actually assign a destination.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| String-table entry `MSG:PlannerMaximum` | route-holder-limit text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic, not substitute stock English |
+| String-table entry `MSG:PlanningModeHeteroSel` | incompatible-selection text (claims 16 and 25) | translated text from the user's string table | missing-entry diagnostic |
+| No rules, art or map key | route refusal duration and shared status display (claim 25) | fixed presentation rules | 480 clock units of 16 milliseconds; six lines |
+| Cursor image and palette of S-0214 Import mapping | edge-scroll images of table E | same imported image and palette, full-size frames | same missing-file handling as S-0214 |
 | Player's keyboard preferences, set through the key-binding screen | command keys of table T2 (claim 22) | assigned keyboard key or key combination; preferences, not rules-layer fields | no user override: stop S, scatter X, guard G, deploy D, cheer C, route mode Z; a removed entry in a successfully loaded preferences file: unbound |
 | No rules, art or map key | reserved options-menu key (claim 23) | fixed Escape binding | Escape remains available regardless of saved command preferences |
 | No rules, art or map key | ordinary view scrolling keys (claim 23) | held Left, Right, Up and Down; fallback when not bound to another command | arrow keys; displacement and scroll preferences are S-0101's |
@@ -1504,6 +1574,44 @@ game's normal input only, as a player would, and never writes into the game.
 - *Runs and tool:* three runs per part and keyboard-preference variant; manual input or
   scripted normal input with a read-only recorder. These are proposals, not recorded measurements.
 
+**Scenario O20: edge-scroll presentation (claim 24, table E).**
+- *Setup:* a large flat stock-data skirmish test map at 800 × 600, speed 6,
+  director and mods off, with no selected units and the view away from all scroll limits.
+- *Procedure:* hold the pointer at the eight outer-edge sectors, then repeat at the
+  corresponding map scroll limits. At the top and bottom edges also test positions just
+  inside, exactly at, and just outside the 16-percent horizontal boundaries. Repeat
+  left/right-edge tests at the 21-percent vertical boundaries. Repeat three times.
+- *Observable:* cursor frame, full-canvas hot spot and view displacement, by screen
+  capture and a read-only view-position recorder; include the outer sidebar edge.
+- *Expected:* table E's allowed frames in the interior and blocked frames for a refused
+  one-pixel trial. Band tests use S-0101 F9's represented constants and rounding,
+  not decimal-percent arithmetic. Internal sidebar-boundary
+  hover does not alone select an edge cursor. Any different frame, hot spot or refusal
+  classification falsifies the corresponding part of claim 24.
+
+**Scenario O21: route status messages (claim 25).**
+- *Setup:* O8 game B, stock data, director and mods off, at speeds 1 and 6.
+  use screen/audio capture with a real-time clock and tick recorder. Repeat three times
+  per speed. A separate named test string table replaces each of the two refusal entries
+  with a distinct short invented text, then with text long enough to wrap; remove it after
+  the test. No shipped wording is copied into the measurement proposal.
+- *Procedure:* make the holder-limit refusal, then seven more refusals separated by
+  completed ticks within less than seven seconds. Repeat with an incompatible selection
+  that the eligibility check refuses. In separate runs pause by opening options, lose
+  focus, or use a test map's timed freeze just after showing a notice, waiting longer
+  than eight seconds before resuming display updates.
+- *Observable:* imported text identity, line count/order, position, oldest-line eviction,
+  wrapping, and clock count at appearance/removal. Record actual display-update times.
+- *Expected:* the corresponding replacement text appears. At most six lines remain.
+  later notices append rather than extend an earlier deadline. Each line remains through
+  deadline equality and disappears on the first update after 480 clock units, about
+  7.68 seconds, irrespective of speed. A pause longer than its lifetime leaves no notice
+  after the first resumed update. Wrapped lines share capacity and duration, with
+  deadlines based on each line's addition clock count.
+  Wrong text, a seventh retained line, tick-based expiry, paused lifetime or refreshed
+  old copies falsifies the corresponding claim. An update not sampled at exact equality
+  cannot test that equality boundary.
+
 ## Open questions
 
 - Q-0286: claims 22 and 23 answer this spec's default command bindings and options/view-key
@@ -1586,10 +1694,15 @@ off together at sign-off:
 - **Tick boundary already agrees:** S-0203 claims 7 and 8 retain orders after the turn pass,
   production lines and house updates. Its preserved row labels remain compatible with S-0201's
   cited timing rules. No change to the order boundary or precedence here is needed.
-- **Route-cue correction needed in S-0701:** claim 24 and Scenario F8 must allow another
-  message-and-sound cue after a completed tick, rather than only after game start. Remove
-  `quirks.route_refusal_notice_once` and its once-per-game description, which are not the
-  original behaviour. Claim 16 and O8 here state the corrected repeated-click consequence.
+- **Route cues already agree:** current S-0701 claim 24 and Scenario F8 allow another
+  message-and-sound cue after a completed tick, matching claim 16 and O8 here. Its older
+  once-per-game assertion is corrected; no further companion edit is required.
+- **Behaviour coordination:** S-0215's cross-spec section lists matching movement,
+  occupancy, search, placement and factory contracts in S-0207, S-0209, S-0307,
+  S-0406, S-0417, S-0212 and S-0208, including the shared
+  `quirks.teleport_vehicle_ground_reservation` and same-tick search/landing consequences.
+  These remain owned by those specs and introduce no new order-application effect here.
+  Confirm that suite together at hand-off; claim 16's route timing already matches.
 - **Q-0286 joint answer:** S-0214 must supply question 2's physical force-gesture keys and
   attack-move entry explanation, with backing, scenarios and import mapping. Existing role
   definitions alone do not answer the physical-key question.
