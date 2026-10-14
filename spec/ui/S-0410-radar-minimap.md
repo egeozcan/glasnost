@@ -2,13 +2,13 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0110, Q-0112]
+requests: [Q-0110, Q-0112, Q-0277]
 supersedes: []
 ---
 
@@ -18,8 +18,9 @@ supersedes: []
 
 When a house has radar, and what the radar map in the sidebar shows while it does: which cells and
 objects appear, in which colours, how cells map to the panel, and which object wins when several
-share a point. Radar reaches no game state: it only reads what other specs own (explored state,
-positions, colours). Skirmish only; network games and campaigns are out of scope.
+share a point, plus the cursor offers over the radar image. The picture only reads what
+other specs own (explored state, positions, colours); cursor offers do not change those rules.
+Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -101,6 +102,14 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
 - **Flash frame time, combat flash time.** Two game-wide rules values in ticks (Import mapping).
 - **Radar flash countdown.** A per-object countdown in ticks, set to the combat flash time when the
   object is hurt (combat specs). Claim 10 says what it changes on the radar map.
+
+- **Radar cursor target.** The listed object picked at the pointer's radar pixel, or the cell
+  obtained from F3 when no object is listed there (claim 12). This is an input target, not
+  necessarily the object whose colour the pixel shows.
+- **Miniature cursor.** A dedicated image-frame range in the same imported cursor sprite as
+  the battlefield cursor (S-0214 claims 21 and 22). It is not a scaled copy of a full-size frame.
+  Frame numbers are counted from 0. *Action*, *representative* and *cursor hot spot* are
+  S-0214's terms. *Route mode* is S-0213's term.
 
 ## Behaviour
 
@@ -375,9 +384,10 @@ The halving belongs to the tile colour only: the other colours are used as given
 
 11. **Radar events and the view outline.** Radar events (S-0011, claim 32), beacons (markers that
     players place on the map) and the outline that marks the battlefield view's part of the map are
-    drawn over the radar map; a click on the radar
-    map moves the battlefield view (S-0102, *view jump*). Their details belong to the interface
-    specs. S-0701 Formulas F7 owns radar-event repeat suppression: the per-kind radii,
+    drawn over the radar map; camera-centering input on the radar
+    map moves the battlefield view (S-0102, *view jump*). Command cursor offers are claims
+    12 and 13, not a rule that every radar click must move the view. Other details belong to
+    the interface specs. S-0701 Formulas F7 owns radar-event repeat suppression: the per-kind radii,
     which kinds suppress nearby repeats, and the lifetime after the zoom-in phase. Its
     scenario G3 covers unit production, base attacks and harvester attacks; the remaining
     kinds and cross-creator suppression remain `unmeasured` there. The zoom-in duration,
@@ -386,6 +396,89 @@ The halving belongs to the tile colour only: the other colours are used as given
     - Backing: `unmeasured` here (pointer only; S-0701 F7 carries the suppression backings
       and scenario G3, including its unmeasured cases)
     - Confidence: high that they exist
+
+12. **Radar cursor selection (Q-0277, radar).** These rules apply while the panel is fully
+    open and showing the radar map, with no camera-drag gesture in progress. Inside the radar
+    image the input target is a listed object at that pixel, if any. Picking uses the reverse
+    of claim 8's listing priority: other houses' objects before own objects, latest arrival
+    first among the others and earliest arrival first among own objects. It does not apply
+    claim 7's draw-time tests. Thus a hidden listed object can be picked, and the picked
+    object need not be the one whose colour is visible. With an object target, its current
+    position supplies the target cell: each horizontal coordinate in leptons is divided by
+    256 and truncated toward zero. With no object target, F3 supplies the target cell.
+    The shroud presentation test uses that cell's centre surface height, as claim 6 does.
+
+    With a nonempty selection and no superweapon targeting mode, the representative and
+    its object or cell action are S-0214's rules. With an empty selection and no such mode,
+    the radar shows the miniature arrow, including over an own selectable object: it does
+    not offer battlefield selection. Repair, sell, power, beacon and placement modes do
+    not substitute their battlefield cursor offers here. With a selection they still use
+    the representative's ordinary action, and without one the miniature arrow.
+
+    The radar accepts only these ordinary actions for cursor presentation: move, no-move,
+    attack, harvest, enter, capture, sabotage and area guard. Every other ordinary action
+    gives the miniature arrow and is not a radar command offer. In particular deploy,
+    select, no-enter, repair, sell, bomb, demolish and airstrike do not get their battlefield
+    images here. Attack-move modifies an accepted move or attack to the attack-move image
+    after this restriction; it does not enable another refused action. While route mode
+    is held, a selection containing an object that cannot participate in a planned route
+    (S-0213 claim 16) also gives the miniature arrow rather than an ordinary command image.
+
+    Superweapon targeting uses table C1. Nuclear strike, weather storm, either paradrop
+    kind, psychic domination, spy plane and psychic reveal have explicit offers independent
+    of selection. Invulnerability and genetic mutation give the miniature arrow even with
+    a selection. Teleport source/destination and force-shield targeting instead fall back
+    to the ordinary selected representative's radar action, or the miniature arrow with
+    an empty selection. These are not inferred from battlefield hovering.
+    A pointer in the panel margin outside the radar image shows the full-size arrow
+    (frame 0), not the miniature arrow. These cursor rules are presentation and input
+    offers only; they do not change weapon legality or unit actions.
+    - Backing: `measurable` (scenario R12). Unreachable action/target combinations and
+      route-ineligible selections remain `unmeasured` until R12 reaches them, rather than
+      assuming that every action can be arranged with stock types
+    - Confidence: high for the ordinary action restriction and frame choices; medium for
+      reverse picking priority, mode bypasses, route eligibility and the shroud test
+
+13. **Miniature frames and playback.** Table C1 lists the actual frames shown. All other
+    accepted ordinary actions use the revealed or shrouded presentation choice of S-0214
+    table C, then the miniature substitution in C1. A kind with no miniature frames uses
+    its full-size frames, never a geometrically reduced image. The animation interval and
+    hot spot are S-0214 claim 22's: 4 units of the 16-millisecond real-time presentation
+    clock for animated ranges, one advance per update with no catch-up, independent of
+    simulation speed. Miniature animation wraps within its own range, not the full-size
+    range. Changing between full-size and miniature presentation of the same kind restarts
+    at that range's first frame and restarts the interval; repeated requests for the same
+    kind and presentation do not restart it. A single-frame miniature remains visually
+    static. The miniature arrow has hot spot (0, 0); every other row has the centre hot
+    spot of the full cursor canvas, (⌊width/2⌋, ⌊height/2⌋) pixels, not the centre of its
+    opaque picture. No separate half-size canvas or palette is used.
+    - Backing: `measurable` (scenario R12)
+    - Confidence: high
+
+**Table C1. Radar cursor frames** (claims 12 and 13). Ranges are inclusive. The ordinary
+rows apply only to actions admitted by claim 12. Shroud affects the presentation choice,
+not permission to issue an order. All static entries remain on the named frame.
+
+| Offer or action | Revealed target | Shrouded target |
+|---|---|---|
+| no radar command offer | 1, static miniature arrow | 1, static miniature arrow |
+| move | 42–51 | 42–51 |
+| no-move | 52, static | 42–51 if the first selected object's type permits shroud moves, otherwise 52 |
+| attack | 63–67, for either in-range or out-of-range battlefield attack kind | 42–51 |
+| harvest | 63–67 | 1, static |
+| enter, capture | 100–109 | 1, static |
+| sabotage | 309–318, full-size fallback | 1, static |
+| area guard | 73–77 | 73–77 |
+| attack-move to a place or on a target, after an accepted move or attack | 63–67 | 63–67 |
+| nuclear strike targeting | 513, static | 513, static |
+| weather storm targeting | 514, static | 514, static |
+| paradrop targeting, either paradrop kind | 516, static | 516, static |
+| psychic domination targeting | 516, static | 516, static |
+| spy-plane targeting | 512, static | 512, static |
+| psychic reveal targeting | 515, static | 515, static |
+| invulnerability or genetic mutation targeting | 1, static | 1, static |
+| teleport source/destination or force-shield targeting, empty selection | 1, static | 1, static |
+| teleport source/destination or force-shield targeting, nonempty selection | ordinary radar offer from the representative | ordinary radar offer from the representative |
 
 ## Formulas
 
@@ -599,6 +692,10 @@ next tick's drawn frames on. The order of objects at one pixel is claim 8's.
 | Rules, `[AudioVisual]`, `RadarOn`, `RadarOff` | radar-on and radar-off sounds (claim 3) | sound name | none |
 | Rules, country section, `MultiplayPassive` | passive country (claim 7) | boolean | no |
 | Art, building image-name section and type-id section, `Foundation` | foundation rectangle dimensions for F8 (claim 8); occupied-cell shape is not used | named value, case-insensitive, text cut to 31 characters; vocabulary and section precedence as S-0108 Import mapping | `1x1`; unrecognised words also give `1x1` |
+
+Radar cursors use the cursor sprite and palette imported by S-0214's Import mapping.
+Their frame assignments, miniature substitutions and timing are engine constants, not
+rules or art settings; no additional cursor data file or key is imported here.
 
 There is no imported radar-discovery flag. Claim 7 reads the per-house discovery mark produced
 by S-0409, separately from the object's owner, position and sight fields.
@@ -920,6 +1017,55 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   on the nearest pixel of the image's edge; the enemy one is not shown outside the usable area.
   Falsified if: the own one vanishes or sits unclamped, or the enemy one is shown.
 
+
+- **R12 (claims 12 and 13; Q-0277).** Common setup, free radar on, a fully opened panel,
+  flat explored test cells and isolated own and enemy objects. Use scripted input and
+  frame captures that include the pointer, with wall-clock timestamps; compare images
+  with the user's imported cursor frames. Record the selection, offered action, target
+  cell and object through a read-only recorder. One valid run per case; test file changes
+  needed for an otherwise unreachable action are explicitly named in the record.
+  Part A: empty selection over own objects and empty ground; a selected tank over open
+  and blocked cells, an enemy in range and out of range, and shrouded ground; a harvester
+  over resources, an engineer over a capturable enemy building, an infantry unit over a
+  transport that admits entry, and sabotage and area-guard offers where reachable.
+  Expected: exactly C1, with select, deploy, refused entry and other rejected actions
+  giving frame 1, not their battlefield cursor. Test both settings of the first selected
+  type's shroud-move permission using named test data. Repeat accepted move and attack
+  with attack-move held, expecting 63–67. A different frame or a refused action gaining
+  its battlefield image falsifies the corresponding rule.
+  Part B: empty and nonempty selections in repair, sell, power, beacon and placement
+  modes over the same cells. Expected: frame 1 without selection and the ordinary
+  representative's radar offer with it, not the mode's battlefield image. Also hold
+  route mode with a route-compatible selection and, if achievable, an incompatible one.
+  Expected ordinary offer for the former, frame 1 for the latter. Unreached incompatible
+  selections are inconclusive. Any differing offer falsifies the mode or route rule.
+  Part C: own and enemy objects share a pixel on a large map whose scale is below 1.
+  Arrange both arrival orders, and pairs of other houses' objects in both orders.
+  Expected picked identity: other over own, and latest-arriving other object. Use two
+  own objects and record earliest-arriving own identity too. A radar-invisible enemy
+  (named type override), still listed in explored ground, is a control for picking
+  without the draw-time tests. Record the target identity as well as the visible colour:
+  a different identity or inability to pick the hidden listed control falsifies claim 12.
+  At empty pixels check F3's cell, and at an object pixel check the cell from its current
+  position, including a moving unit before its listing has caught up. A differing cell
+  falsifies the coordinate rule. Repeat on slopes with the candidate explored states of
+  R4 F to discriminate the centre-height shroud test.
+  Part D: obtain each superweapon targeting mode of C1 in separate skirmishes using
+  named test data that grants it and shortens its charge delay. Hover over revealed and
+  shrouded empty cells, with and without a selection. Expected: the static frames listed
+  in C1 for explicit offers and refusals. Teleport and force-shield targeting instead
+  show the representative's ordinary radar offer with a selection, frame 1 without one.
+  A different image or an animated single-frame miniature falsifies the row. These are cursor observations, not assertions
+  that a click may fire a superweapon in shroud.
+  Part E: capture ten advances of move, attack, enter, area guard and attack-move at
+  speed indices 2 and 5. Expected ranges and wrapping are C1's, with S-0214 claim 22's
+  real-time interval, not a tick-based interval. Move the pointer between battlefield
+  and radar while preserving the same move kind: expected frame 31 on entering the
+  battlefield and frame 42 on entering radar, with a fresh interval each time. Remaining
+  within the radar must not restart the animation. Record the hot spot relative to the
+  input pixel; expected full-canvas centre, or (0, 0) for the arrow. Hover in every panel
+  margin: expected full-size frame 0. Wrong wrap length, phase reset, hot spot, speed
+  dependence or margin frame falsifies claim 13 or claim 12's margin rule.
 
 ## Open questions
 
