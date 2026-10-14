@@ -2,7 +2,7 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -215,7 +215,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
 
     The build category uses S-0302 claim 5's import rule: cut to 31 bytes, then trim surrounding whitespace, then compare the whole text without regard to ASCII letter case. A nonempty unknown word sets the unspecified category, not the earlier category; an absent or empty key keeps the held category, initially unspecified. Only the combat category selects the second tab; an unspecified category selects the first.
 
-    A tab holds at most 76 items. An otherwise eligible item that becomes available while its tab is full is not shown. Eligibility therefore does not guarantee a shown icon. S-0411 claim 15 owns whether a suppressed type is offered for order legality, its later admission, and whether losing availability while suppressed gives cancellation orders. An item already shown (the same type) is not added twice. Two different types are two items even if their names are equal.
+    A tab holds at most 76 items. An otherwise eligible item that becomes available while its tab is full is not shown. Eligibility therefore does not guarantee a shown icon. S-0411 claim 15 owns full-tab offer membership and order legality, capacity judgement before removals, delayed admission, and the absence of sidebar removal orders when a still-suppressed type loses availability. An item already shown (the same type) is not added twice. Two different types are two items even if their names are equal.
 
     Items are kept in sorted order. A newly available item is placed in front of the first item already in the tab that it sorts before. If it sorts before none of them, it is placed after all of them. "Item *a* sorts before item *b*" is decided by the first rule below that tells them apart:
     1. A superweapon sorts before anything that is not a superweapon. Two superweapons sort by recharge time in ticks (Formulas), shortest first, and then by display name as in rule 6, including its tie rule. Rules 2 to 5 do not apply to two superweapons.
@@ -240,7 +240,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
     - Backing: `measurable` (scenario F): F1 for the ordering cases present in stock data; F2 for the newest-first tie; F3 for the recharge-time key and S-0205 N5 for a positive wrapped key; F4 for the 76-item cap; F5 for the both-flags rank and `quirks.sidebar_both_flags_rank`; F6 for the base-planning-side rule (rule 2) ahead of tech level. F1 samples tab assignment, category, tech level, price and display-name ordering only where stock items differ in those keys. Category parsing is `measurable` by S-0302 D21 part b, recording the building's sidebar tab as well as its damage response. `unmeasured` for negative or extreme recharge-time keys beyond the positive wrapped example (no scenario here isolates them), remaining combinations, non-ASCII display-name comparisons and the same-name/different-type sidebar distinction beyond C2: no scenario isolates those cases. `unmeasured` for "items are not re-sorted later": a re-sort could show only if a sort key of an item already shown changed during a game. The other keys are fields of the type or the local player's side, which this spec treats as fixed for a game. Only the cost depends on the player's state, and whether and when it changes belongs to the production topic, so this spec has no scenario that changes a key in play.
     - Confidence: medium
 
-    These sidebar rules are user-interface behaviour. This claim owns tab capacity, tab assignment and icon sorting and placement. S-0407 claim 17 owns simultaneous admission order; S-0411 owns icon states, clicks, removal and automatic production orders. S-0411 claim 15 owns full-tab offer membership, delayed admission and suppression-removal orders.
+    These sidebar rules are user-interface behaviour. This claim owns tab capacity, tab assignment and icon sorting and placement. S-0407 claim 17 owns simultaneous admission order; S-0411 owns icon states, clicks, removal and automatic production orders. S-0411 claim 15 owns full-tab offer membership and legality, suppressed-type removal orders and delayed admission.
 
 12. **"The first type that…" means the lowest registration index.** Wherever another spec says that the game picks "the first type of a kind that satisfies a condition", first means the lowest registration index under claims 2 to 4. With unchanged data, that is the order of the base rules' type lists, followed by types created by reference. Between types created by different keys of one section, the order is unspecified (claim 4, "within one section"), so a spec that needs a particular one must state it.
     - Backing: `unmeasured`. This is a definition. Each spec that uses it states its own observable.
@@ -371,7 +371,7 @@ Two superweapons are compared by *t*, an integer, so two fields that truncate to
 | type list entry names a known type (any case) | layer registration | nothing; index unchanged |
 | a field names an unknown type during the reading passes | reading | new type appended; it reads its section in this layer only if the rank of its kind is at least the rank of the kind whose type was reading its section when the new type was created, or it is a warhead and the layer has the special-weapon settings section (claim 6) |
 | layer has no section for a type | reading | type unchanged |
-| otherwise eligible item becomes available | sidebar update | inserted in sorted position in its tab, unless the tab is full or the item is already there; full-tab offer membership, delayed admission and suppression-removal orders follow S-0411 claim 15 |
+| otherwise eligible item not already shown | admission at an offer recheck (S-0407 claim 17; S-0411 claim 15) | if admitted under those rules, inserted in sorted position in its assigned tab; full-tab offer membership, legality, delayed admission and suppressed-type removal orders follow S-0411 claim 15 |
 
 Observable ordering:
 - Within a layer, every listed type of a kind has a lower index than every type of that kind first created by reference in the same layer, wherever the sections sit in the file. Sides (claim 9) and tiberiums (claim 10) follow their own claims instead.

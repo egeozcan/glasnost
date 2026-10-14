@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -89,8 +89,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    A negative delivered amount bypasses the maximum-damage cap even when the maximum is negative
    (H1 part c; S-0302 F3, cases iii and iv). This differs from a positive delivered amount made
    negative by its versus value: that amount still takes the cap (S-0302 F3, case vi).
-   S-0302 claim 6's sentence about a negative maximum needs this explicit qualification; it must
-   not extend the cap to the negative-delivered-amount cases. A negative result raises health by its magnitude, never above strength. The versus value of
+   S-0302 claim 6 states this distinction. A negative result raises health by its magnitude,
+   never above strength. The versus value of
    the warhead against the target's armour class plays no part in the amount. It decides only
    whether the object is a legal target (a value of exactly 0 makes it an illegal target, S-0304,
    claim 1) and whether an automatic search may pick it (S-0304, claim 4; claim 2 here). There is no separate
@@ -197,10 +197,14 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
        available credits are exactly 0, hears the low-funds announcement. Whether the vehicle then
        stays docked or is sent away is not known (Open questions).
    *The repair-complete announcement.* It belongs to the depot's owner: it is heard only when that
-   house is the local player. It is also a radar event of one kind that depots and hospitals share
-   (claim 7), and it is not shown, and so not announced, when an event of
-   the same kind is already shown close by (S-0011, claim 32; the distance and how long an event
-   counts belong to the interface specs). The low-funds announcement belongs to the depot's owner
+   house is the local player. It tries to create the *unit repaired* radar event, the kind that
+   depots and hospitals share (claim 7). If a nearby event of that kind suppresses creation,
+   neither a new event nor the announcement is raised. S-0701 F7 owns the distance test and
+   lifetime, including the unresolved zoom-in duration; S-0011 claim 32 owns triggered events.
+   The *unit repaired* row and cross-creator suppression retain F7's `unmeasured` backing:
+   its scenarios do not isolate that kind or the full set of creators. H4 part f tests only
+   the depot-completion cases stated there, not an exact total lifetime.
+   The low-funds announcement belongs to the depot's owner
    too: it is heard only when that house is the local player, and it is that house's available
    credits that must be exactly 0. It has no such suppression. The paying house of a step is the vehicle's owner
    (claim 3), and the two houses are the same one for every vehicle that can enter the depot
@@ -218,7 +222,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    only*). It holds for no player house: the vehicles of an *AI house*, like a person's, follow the
    destination rule above, and our AI sends them on by ordinary orders.
    - Backing: `measurable` (scenario H4, parts a to f, for everything above except the next two
-     statements and the non-local-owner announcement conditions). The latter are `unmeasured`:
+     statements, the non-local-owner announcement conditions and F7's stated unmeasured
+     suppression details). The non-local-owner conditions are `unmeasured`:
      the other-owner attempt in H4 part f needs the original's computer player to dock a vehicle,
      which normal player input cannot require; failure to dock is not evidence about sound.
      `unmeasured` for the return to the guard spot of a non-player house: no input of
@@ -243,7 +248,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    later step *K*<sub>i</sub> ticks after the step before it. On *more needed* the unit stays
    inside; on *done* it is put out, and the local player, when the hospital is theirs, hears the
    repair-complete sound and, unless it is suppressed, the repair-complete announcement (claim 6:
-   one radar-event kind shared with the depot, with its suppression); on *not needed* it is put out
+   the *unit repaired* radar-event kind shared with the depot, with suppression owned by
+   S-0701 F7 and the unmeasured details retained as claim 6 explains); on *not needed* it is put out
    without them. *Not needed* is rare here: S-0214 (table I, row e4) refuses the order that sends a
    full-health infantry unit into a hospital, so it arises only when a unit reaches full health
    while inside, which is not known to happen (Open questions). *Cannot pay* cannot happen here at non-negative available credits: the infantry step cost
@@ -251,7 +257,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    no scenario here can arrange hospital entry for an infantry unit at such a balance. The armory of S-0311 (claim 12) uses
    the same infantry repair count, but counts it in processings instead of ticks (S-0311, Formulas
    F6).
-   - Backing: `measurable` (H6 parts a to c for own hospitals). Absence of feedback for another
+   - Backing: `measurable` (H6 parts a to c for own hospitals), apart from F7's unmeasured
+     suppression details retained in claim 6. Absence of feedback for another
      owner's hospital is `unmeasured`: this scenario cannot order that owner's infantry to enter,
      and spontaneous entry is not a reproducible setup. `unmeasured` for *not needed* in a hospital
      (put out without the sound and announcement): no input of the measurement setup is known that
@@ -681,8 +688,10 @@ too.
   *Falsified if:* run 1 is silent or announces at another step, run 2 is silent for the first
   or sounds for the second, run 3 is silent for either, or, if completion is actually observed,
   run 4 is heard (the depot's owner is not the local player). Record the
-  largest distance and the longest gap at which run 2's second announcement stays silent: they are
-  the suppression's distance and duration, for the interface specs.
+  largest distance and the longest gap at which run 2's second announcement stays silent,
+  as observations toward S-0701 F7. The lifetime includes an unresolved radar-event zoom-in
+  phase; do not interpret the post-zoom duration in F7 as the total gap from completion.
+  These runs do not establish all event creators or cross-creator suppression.
 - *Part g (the moving step; the return to the guard spot):* both are `unmeasured` (claim 6). The
   attempt: after the settling step, order the docked vehicle to move on the tick a step falls due,
   and read the tick of its next health rise. *Expected:* a health rise on the first tick it stands
@@ -904,6 +913,8 @@ absent value from Constants; any different gain, payment, period or count falsif
 - The remaining eligibility conditions and outcomes of automatic building repair and sale when
   the skill-level gate passes (claim 8, H9 runs 2 and 4). Their reproduction must follow the
   existing house policy; no departure has been chosen.
-- The distance and duration of the repeat suppression of the repair-complete announcement (claim 6,
-  H4 part f), which the interface specs own.
+- The total repeat-suppression lifetime of the repair-complete announcement remains unresolved
+  because the radar-event zoom-in duration is unresolved (S-0701 F7; claim 6, H4 part f).
+  F7 owns the distance and post-zoom duration; its *unit repaired* row and cross-creator
+  suppression retain their stated unmeasured limitations.
 

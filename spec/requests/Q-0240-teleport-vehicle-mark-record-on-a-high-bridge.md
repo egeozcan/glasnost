@@ -1,9 +1,9 @@
 ---
 id: Q-0240
 title: Which occupancy record holds a teleporting object's vehicle-present mark at a high-bridge landing point
-status: open
+status: answered
 related: [S-0207, S-0209]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

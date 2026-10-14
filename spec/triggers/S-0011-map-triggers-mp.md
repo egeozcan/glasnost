@@ -2,13 +2,13 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0269]
 supersedes: []
 ---
 
@@ -29,8 +29,11 @@ At sign-off, check claim 36 and scenario T21 against S-0109 claim 13, and hand t
 revisions off together: creation-time sound and resource chain reaction are enabled,
 and only later start events suppress them. S-0401 claim 20 must limit its trigger-played
 suppression to later start events in the same hand-off. Check claim 36's map-load composition
-boundary against S-0202 claims 10 and 15 and scenario R14, together with S-0109 claims 14
-and 25. Confirm the S-0201 pointers after I4, including its win-action fixture assumption.
+and during-play composition against S-0202 claims 10 and 15 and scenario R14, together with
+S-0109 claims 14 and 25. Subsequent particle updates remain outside this hand-off.
+Confirm S-0202 claim 15's crater-removal wording with S-0109 claim 14 and S-0401 claim 3:
+the request takes 6 bales, so a stage-6 cell becomes stage 0 rather than empty.
+Confirm the S-0201 pointers after I4, including its win-action fixture assumption.
 Those pointers add no campaign rules. Check the other companion revisions together too.
 
 ## Terms
@@ -342,11 +345,28 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     - a map trigger variable changes value and the trigger has a variable-set or variable-clear
       event for that variable (claim 22).
 
+    **Draw order and a self-enable action (Q-0269).** Satisfaction-caused re-arming takes all
+    its draws before any action of that instance takes effect or draws from the scenario random
+    stream. Thus a repeating random-delay trigger's new delay draws precede its explosion's
+    animation-creation and area-damage draws (claim 28). This is per instance, not a batch
+    before every member's actions: the effects of an earlier-firing chain member, including
+    its action draws, precede the satisfaction-caused re-arming of a later-firing member
+    (claim 11's reverse chain order).
+    If an instance's own action list enables its definition and passes claim 25's difficulty
+    gate, that enable action arms it again even though it was already enabled. Both armings
+    take their full applicable draws. The enable action's length replaces the length from
+    satisfaction; both have the firing tick as their arming tick. Other existing instances of
+    the definition are also armed by that action under claim 25. A difficulty-gated enable
+    action that has no effect does not replace the satisfaction-caused length. Any still later
+    re-arming in the same action list replaces that length in turn.
+
     Nothing else arms it again. In particular disabling does not. The exhaustive assertion
     “nothing else” applies to the events and actions covered here, not to the deferred codes.
     - Backing: `measurable` (scenario T10, variants B to D; scenario T5 (c) for the entered-by
-      case; T10 G for re-enabling an already-enabled instance)
-    - Confidence: medium
+      case; T10 G for re-enabling an already-enabled instance; T11 D for re-arming/action
+      draw order and the self-enable replacement)
+    - Confidence: medium overall; high for satisfaction-before-action draw order and
+      the effective self-enable action replacing the satisfaction-caused length
 
 16. **Game-time event.** A game-time event with value *v* is satisfied in the tick numbered *t*
     exactly when F4 holds. It counts from the start of the game, so it is not affected by arming.
@@ -670,13 +690,14 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       start event has the usual start sound and resource chain reaction when enabled, as in
       S-0109 claim 13. Later start events have no start sound or resource chain reaction.
       Middle events, including the immediate one when due at creation, remain governed by
-      S-0109 claims 13, 14 and 25. S-0202 claims 10 and 15 specify the immediate
-      middle-event draw composition for tile and cell animations created during map loading,
-      including particle creation and smudge selection and placement (scenario R14).
-      That loading result does not resolve subsequent particle updates or the full draw
-      composition of later playback effects. Those remain outside the established scope,
-      not draw-free. T21 disables particles and smudge effects and does not establish
-      their draw counts.
+      S-0109 claims 13, 14 and 25. S-0202 claims 10 and 15 specify creation draws and
+      middle-event draw composition during map loading and during play, including
+      trigger-created animations and middle events later in playback. That composition
+      includes particle creation, smudge choice and placement, and conditional resource-removal
+      effects (scenario R14). Event timing, the sprite-derived middle frame and the height
+      gate remain S-0109's. Subsequent particle updates remain outside that composition,
+      not draw-free. T21 disables particles and smudge effects; their draw counts inherit
+      S-0202 claim 15's backing and confidence rather than being established by T21.
     - **Drop-zone reveal.** Creating an animation of the drop-zone type, by this action or otherwise, reveals the area around
       the animation's position for the local player, using the area-reveal radius rule of S-0409 claim
       17. The radius before that rule is *r* quo 256 cells (truncated toward zero), where *r* is the
@@ -813,7 +834,11 @@ by one each time.
 point in loading, in stream order: every draw of a row comes after the draws of the rows above it,
 and within a row the draws come in the order listed. It merges S-0009's table "Start position
 resolution" with the draws of this spec, of S-0010, S-0109 and S-0202. S-0202 claim 10 owns the
-overlay, vein-pattern and animation-creation draws, including immediate start-event effects.
+overlay, vein-pattern and animation-creation draws. Together with claim 15 it supplies the
+immediate start-event composition, including immediate middle-event particle creation,
+smudge selection and conditional resource-removal effects. These apply within each listed
+animation-creation group, not as a separate loading group. Subsequent particle updates are
+outside this table's established composition, not draw-free.
 A row marked "not established" names a point at which draws may happen that no spec yet lists. Draws at points the table does not
 name are not established either. Nothing else in the table fixes an order of internal work.
 
@@ -1023,7 +1048,7 @@ but not specified in this revision.
 | 37 | variable clear | variable number | yes | no | 22 |
 | 47 | game time | *v* trigger time units | yes | no | 16 |
 | 48 | destroyed by anything | unused | no | yes (latchable) | 19 |
-| 51 | random delay | *v* trigger time units | yes | no | 14 |
+| 51 | random delay | *v* trigger time units; each arming uses F2, with satisfaction-caused draws before actions (claim 15) | yes | no | 14, 15 |
 | 60 | type exists | count, with kind 2 type name | yes | no | 21 |
 | 61 | type does not exist | kind 2 type name | yes | no | 21 |
 
@@ -1048,7 +1073,7 @@ but not specified in this revision.
 | 32 | destroy attached objects | — | 27 |
 | 41 | play an animation at a waypoint | number slot as animation type index, waypoint slot | 36 |
 | 42 | explosion at a waypoint | number slot as weapon index, waypoint slot | 28 |
-| 53 | enable trigger | trigger reference | 25 |
+| 53 | enable trigger | trigger reference; an effective self-enable replaces the satisfaction-caused timer length (claim 15) | 25, 15 |
 | 54 | disable trigger | trigger reference | 25 |
 | 55 | radar event at a waypoint | number slot (event kind), waypoint slot | 32 |
 | 56 | set variable | number slot as variable number | 22 |
@@ -1333,6 +1358,32 @@ created at pre-placed vehicles. Read each trigger timer's initial length with th
 recorder as well as its stream state. *Expected:* −3 uses one ranged draw from −3 … 0 and
 length 15 × (−1 + the drawn value), with lengths −60, −45, −30 or −15 ticks; 0 uses no draw
 and length 0. Both fire at tick 0. *Falsified if:* another draw range/count, length or firing tick.
+
+Variant D (claim 15; Q-0269), with the random-state recorder. *Setup:* a repeating polled
+trigger whose only event is random delay with value 10, with one instance and an unplayed
+owner country. Its actions are an explosion at a waypoint and, in the self-enable case,
+an enable action naming its own definition. All difficulty flags are set. Use the common
+calibrated counter. Select stock weapon/warhead/animation data whose explosion takes at least
+one established scenario draw under claim 28 and its companion specs; verify that in a
+one-time explosion control. Keep unrelated objects out of the explosion's area.
+*Procedure:* record through three firings in each of two cases, without and with self-enable.
+Repeat each case until 10 incoming recorded states distinguish the hypothesised draw order.
+Compare each run against its own seed. Log the firing ticks and stream states finely enough to
+separate each firing's draw groups. Account for ranged-draw rejection under S-0202, rather
+than treating a ranged draw as necessarily one raw value. A coarse log or a control explosion
+with no established draw is inconclusive.
+*Observable:* ordered draw groups and the next firing tick. *Expected:* without self-enable,
+the satisfaction arming group precedes all explosion groups, and the next firing is D ticks
+later, using that arming's F2 length. With self-enable the order is satisfaction arming,
+explosion groups, enable arming; the next firing uses the enable arming's F2 length, not the
+satisfaction length. Both arming groups are present. A further case puts the self-enable
+before the explosion in the action list: satisfaction arming, enable arming, explosion groups,
+with the enable length still determining the next firing. Use recorded states with unequal
+arming lengths to distinguish replacement. *Falsified if:* action draws precede satisfaction
+arming, either applicable arming is omitted, or the next firing uses the superseded length.
+All lengths here are positive multiples of 15 ticks, so no zero-delay same-tick raise obscures
+the deadline. No extra data field is needed: I3's random-delay row and I4's explosion and
+enable rows supply the setup.
 
 **Scenario T12 (claim 22).** *Setup:* map trigger variable 3 starts clear (the map gives it initial
 state 0). Trigger S (one-time, elapsed time 2) sets it, trigger C (one-time, elapsed time 6) clears

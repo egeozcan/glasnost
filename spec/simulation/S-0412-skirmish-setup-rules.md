@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -166,8 +166,9 @@ S-0413 claim 6). In addition:
      number of credits, and the house's balance rises by it. A neutral or special house with no
      left-over budget has *M* = 0 and so receives 0. Its left-over budget is above 0 only when it has had the
      limit of failed placements of starting units that S-0009 claim 45 names.
-   - for every such house, a timer whose duration is taken by the difficulty index from another
-     per-difficulty list (Import mapping), which only the original's computer player uses,
+   - for every such house, a timer whose assigned duration in ticks is the signed 32-bit integer
+     selected by the difficulty index from another per-difficulty list (Import mapping), with no
+     conversion or rounding; only the original's computer player uses this timer,
    - for every computer player house (Terms) and for no other house, the rules' maximum house skill
      level (glossary, *house skill level*); the neutral and special houses keep level 0, even when
      their countries are not passive.
@@ -188,9 +189,10 @@ S-0413 claim 6). In addition:
      for the neutral and special houses keeping level 0 even when their countries are not
      passive (our engine depends on this, since those houses keep the original's rules), and
      S-0209 scenario C7 (parts a, c and c2) for a computer player house at the maximum level and
-     for the two houses at 0 with the stock passive countries. The timer is `unmeasured`: it acts
-     only through the original's computer-player behaviour, which no scenario observes directly
-     and which our engine does not reproduce (it has no effect on any unit rule).
+     for the two houses at 0 with the stock passive countries. The timer's initial assigned
+     duration is `measurable` through S-0003 scenario V18 part c's read-only recorder at game
+     start; no later computer-player decision is used as an observable. Its later use remains
+     outside scope and has no effect on any unit rule in our engine.
    - Confidence: high that the three exist, for whom they apply (the skill level included: in a
      skirmish only the creation of a computer player house sets it), for the form of the formula
      and for the list the percentage comes from; medium that *M* is exactly the balance at that
@@ -652,8 +654,8 @@ bases setting), `TechLevel` (the game's tech level) and `AlliesAllowed` and `All
 | superweapon type section, `DisableableFromShell` | disableable superweapon (claim 9 b; S-0407 claim 7) | boolean | no |
 | building type section, `SuperWeapon`, `SuperWeapon2` | first and second superweapon of the building type (claim 9 b; S-0407 claim 7) | superweapon type name | none |
 | `[AI]` `BuildTech` | tech-lab list (S-0407 claim 7, which owns it; claim 9 only points) | list of building type names | empty |
-| `[General]` `MultiplayerAICM` | the original's extra-credit percentage list (claim 3, original only): entry *i* is for difficulty index *i* | list of integers | no entries |
-| `[General]` `AIHateDelays` | the original's computer-player timer list (claim 3, original only; no effect in our engine): entry *i* is for difficulty index *i* | list of integers | no entries |
+| `[General]` `MultiplayerAICM` | the original's extra-credit percentage list (claim 3, original only): entry *i* is for difficulty index *i* | decimal-prefix signed 32-bit integer percentages, S-0003 claim 23 and row C22; 511-byte text limit, empty comma items skipped, unreadable non-empty items give 0; no scalar hexadecimal or percentage conversion | initially empty; missing or empty keeps the whole list in force, present non-empty replaces it |
+| `[General]` `AIHateDelays` | the original's computer-player timer list (claim 3, original only; no effect in our engine): entry *i* is for difficulty index *i* | decimal-prefix signed 32-bit integer durations in ticks, S-0003 claim 23 and row C23; same text limit and item rules as row C22 | initially empty; missing or empty keeps the whole list in force, present non-empty replaces it |
 | `[AI]` `CompEasyBonus` | computer easy-bonus flag (claim 4, the original only) | boolean | yes |
 | mode list file, section `Unholy` | the all-base-units family (claim 13): every mode listed under this section has the rule; the section name is fixed by the program | mode entries | no family, no mode |
 | `[General]` `BaseUnit` | base-unit list (claim 13; S-0009) | list of vehicle type names | empty |
@@ -982,7 +984,18 @@ current loading-order table, including cleanup before the late phase and the unc
 position of game-start recalculation when starting units are absent or stop early.
 Joint sign-off must recheck the exact versions handed off. This confirmation neither
 resolves simultaneous production-start draw assignment (S-0404 claim 11) nor specifies
-later particle updates; those are separate from creation-draw composition.
+later particle updates; those are separate from creation-draw composition. The named companion
+checks for this composition are S-0009 claim 28 and its loading table, S-0011 claim 36
+and its load-time draw-order table, S-0109 claims 13, 14 and 25, S-0401 claim 20,
+S-0404 claim 11 and claim 14 here. Confirm their exact handed-off versions together:
+creation-time middle-event counts come from S-0202 claim 15, including at map load,
+while subsequent particle updates remain outside its scope.
+
+S-0003 claim 23 and Import mapping rows C22 and C23 own the extra-credit and timer
+lists' item conversion and whole-list retention/replacement rules. Its V18 part c
+observes the original's initial assigned timer duration with a read-only recorder.
+Claim 3 here no longer calls that setup observable unmeasured. This does not bring
+the original's later computer-player behaviour into scope or grant an AI house a timer.
 
 S-0414 claims 1, 2, 6, 9 and 10 own the defeat-test, end-test and end-delay rules used
 by claim 11: observer houses are set aside, insignificant and not-scored base-unit vehicles

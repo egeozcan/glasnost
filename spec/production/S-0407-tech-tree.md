@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -105,8 +105,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
   offer (claim 12, the closed list of events that call for one). Subject to the capacity-aware
   admission rule of S-0411 claim 15, a type is in the set after a recheck exactly when claim 1
   (a) and (b) both hold and, in addition, either the type was already in the set before the recheck
-  or the house has a *qualifying factory* (Terms) at the recheck. Full-tab suppression and
-  later admission are governed by S-0411 claim 15. A type for which (a) or (b)
+  or the house has a *qualifying factory* (Terms) at the recheck. A full-tab-suppressed type
+  is not in this set and is not offered. Full-tab suppression and later admission are
+  governed by S-0411 claim 15. A type for which (a) or (b)
   fails leaves the set (or stays out of it) even when a qualifying factory exists. A type that has left the set is *not* remembered as taken up: when it is allowed again it
   needs a qualifying factory again at the recheck that follows. A type is *taken up* while it is in
   the set. Between two rechecks the set does not change.
@@ -135,8 +136,10 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 
      Full-tab suppression, offer membership, delayed admission and the absence of
      suppression-removal orders are governed by S-0411 claim 15. In particular, capacity is
-     judged before removals at a recheck, and a vacancy created by a removal is not filled until
-     a later recheck. The admission rows above are subject to that capacity-aware rule.
+     judged before removals at a recheck, and a vacancy created by a removal is not filled
+     during that recheck or an ordinary sidebar update. A vacancy alone causes no extra
+     recheck; suppressed types retry at a later recheck in claim 17's admission order.
+     The admission rows above are subject to that capacity-aware rule.
      A candidate with an allowed or at-limit answer and a qualifying factory can occupy a
      place against other candidates even when (b) fails and it is removed in that recheck.
      Its removal does not free that place for another candidate at the same recheck.
@@ -236,8 +239,14 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 7. **Superweapons off.** When the game's superweapon setting is off (S-0412), a building type whose
    first superweapon field names a superweapon that may be disabled from the setup screen (the
    superweapon's disableable flag, Import mapping) is refused, unless the building type is on the
-   tech-lab list. The second superweapon field plays no part.
-   - Backing: `measurable` (scenario T7)
+   tech-lab list. The second superweapon field plays no part
+   (`quirks.superweapon_setting_tests_first_only`, owned here, default on = original).
+   With the switch off, a building type not on the tech-lab list is refused when either
+   its first or its second field names a disableable superweapon. The lifting rules of
+   claims 3 and 4 still bypass this condition. This switch changes only the building's
+   tech-tree answer, not S-0412 claim 9's superweapon-granting rule.
+   - Backing: `measurable` (scenario T7); the switch-off alternative is `unmeasured`, a
+     design rule of our engine rather than an observable rule of the original
    - Confidence: high
 
 8. **Prerequisites.** Every entry of a type's prerequisite list must be met:
@@ -410,8 +419,13 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     last recheck (only through a non-event of claim 12) can therefore be ordered and produced, as
     in the original (`quirks.stale_offer_orderable`). When a recheck removes a type from the
     taken-up set, the cancel and cancel-all orders required by S-0404 claim 9 are issued in that
-    house update and applied at the end of the same tick, for every player house. S-0411 claim 13
-    owns their order when several types are removed. This follows the AI-house ruling (glossary,
+    house update and applied at the end of the same tick, for every player house. A type
+    that remains full-tab-suppressed is not offered, cannot receive a legal build order
+    (including resume), and gives no sidebar cancellation orders when it loses availability
+    (S-0411 claim 15). S-0411 claim 13 owns the cancellation order when several shown types
+    are removed and its intermediate queued-start consequences. Those queued starts are not
+    newly issued build orders: S-0404 claim 10 tests factory eligibility and the application-time
+    build limit, but not offer membership or claim 16's queue-time limit again. This follows the AI-house ruling (glossary,
     *AI house*). These orders are distinct from S-0404 claim 8's permanent-removal cancellation:
     loss of the last eligible factory can cancel and refund an item in the removal tick itself,
     before the later sidebar orders apply. An item already cancelled that way is not refunded
@@ -421,8 +435,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     never cancelled when a prerequisite is lost.
     - Backing: `measurable` (scenario T11, including the order for a type refused since the last
       recheck; S-0411 S4 b2 for held-item resume at and above the infantry limit; S-0404 P9 for
-      cancellation issue and application timing; T14 run 7 and S-0404 P8 for the separate
-      permanent-removal refund) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
+      cancellation issue and application timing; S-0411 S9 for cancellation order and
+      intermediate queued starts, S10 for suppressed-type legality and absence of removal
+      orders; T14 run 7 and S-0404 P8 for the separate permanent-removal refund) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
       of our engine; the sentence on the original's
       computer-controlled houses is `unmeasured` too: a scenario cannot force a bystander computer
       player to try a given type (its choices come from its own build logic, and the glossary
@@ -509,7 +524,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     These results describe icon order and, through S-0411 claim 13, later automatic cancellation
     order and possible intermediate starts. They do not require a particular representation
     of the taken-up set. Full-tab offer legality, cancellation and later admission are governed by
-    S-0411 claim 15, including its delayed-refill rule.
+    S-0411 claim 15, including its delayed-refill rule. At a later recheck, retrying suppressed
+    types compete with newly eligible types in the same admission order stated here,
+    without waiting-list priority.
     - Backing: `measurable` (T15); the every-player extension follows claim 13 and is
       `unmeasured`, a design rule not observable in the original
     - Confidence: high (increasing indices within one kind and unchanged existing icons),
@@ -577,6 +594,11 @@ after the placement order is applied, while the building is still in its constru
 - `quirks.unscored_vehicle_stays_counted` (default original; owned by S-0414, claim 4). It is the
   single switch for the present count of vehicle types as well: claim 8 (b) reads the count it
   keeps. This spec adds no switch of its own.
+- `quirks.superweapon_setting_tests_first_only` (default on = original; owned here): with
+  the superweapon setting off, claim 7 tests only the building type's first superweapon.
+  Off: either the first or the second superweapon being disableable refuses the type.
+  The tech-lab-list exemption and lifting rules remain unchanged, as does S-0412 claim 9's
+  separate rule for granting superweapons.
 - `quirks.upgrade_prerequisite_last_building` (default original): claim 8 (c) examines only the most
   recently acquired eligible building. Off: the entry is met when any building of the house that is
   on the map, switched on, not being sold and not queued to be sold holds the upgrade.
@@ -768,8 +790,17 @@ of the scenarios.
   non-disableable superweapon; one on the tech-lab list with a disableable superweapon; one with the
   disableable superweapon only in its second field.
 - Observable: which icons are present.
-- Expected: only the first is not offered.
-- Falsified if: any of the other three is not offered.
+- Procedure: acquire an eligible construction yard and meet every other condition for
+  the four types; inspect the icons after a recheck, with the tab below capacity. Run at
+  speed index 2 under the common setup, with no override building or secret lab lifting
+  any test type. Use one run with the setting off and one control run with it on.
+- Expected: with the setting off, only the first is not offered; with the setting on,
+  all four are offered. In our engine with `quirks.superweapon_setting_tests_first_only`
+  off, the first and fourth are not offered when the setting is off, and all four remain
+  offered with the setting on. The tech-lab-list type stays offered in either switch state.
+- Falsified if: the original offers the first type with the setting off, refuses any of
+  the other three, or refuses any type in the setting-on control. Replay on our engine
+  checks the stated switch-off alternative; it is not an oracle measurement.
 
 **T8. Prerequisites and groups.**
 - Setup: a test type needing the power group and a named building; another needing the refinery
@@ -1088,5 +1119,7 @@ Backing).
    repeat (e).
 4. Resolved by S-0411 claim 15. A suppressed type is absent from the taken-up set, so orders
    for it are not legal; it gives no suppression-removal orders; and its admission is reconsidered
-   only at a later qualifying recheck. Capacity is judged before removals at each recheck,
-   and admission order follows claim 17.
+   only at a later recheck with a qualifying factory. Vacancies do not refill during the
+   removal recheck or an ordinary sidebar update and schedule no recheck by themselves.
+   Capacity is judged before removals at each recheck, and retrying types compete with
+   newly eligible types in claim 17's admission order, without waiting-list priority.

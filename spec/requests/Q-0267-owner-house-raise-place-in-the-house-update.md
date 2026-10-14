@@ -1,9 +1,9 @@
 ---
 id: Q-0267
 title: Where in a house's own update the every-eighth-tick raise of its tags comes
-status: open
+status: answered
 related: [S-0011, S-0203, S-0405, S-0407, S-0410, S-0411, S-0414]
-answered-by: []
+answered-by: [S-0414]
 ---
 
 ## Need

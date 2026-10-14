@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,10 +22,10 @@ losing power affect the lines. Step length is S-0403, clicks are S-0411 and the 
 S-0416; factory unloading and qualified post-contact destinations are S-0417. Skirmish only,
 network games and campaigns are out of scope.
 
-**Paired revisions.** S-0407 revision 9 separates the issue of claim 9's cancellation orders
+**Paired revisions.** S-0407 revision 10 separates the issue of claim 9's cancellation orders
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test and keeps claim 10's application-time limit test on queued starts
-(S-0407, claims 13 and 16). S-0411 revision 10 specifies cancellation with refund at the
+(S-0407, claims 13 and 16). S-0411 revision 11 specifies cancellation with refund at the
 place-order application boundary for a busy or failed unit release, without retry; no eligible
 factory leaves the item done (claims 7 and 13 below). Its claim 14 states the continued steps
 and payments while a factory is being sold or queued to be sold. The relevant factory-eligibility
@@ -36,11 +36,12 @@ S-0411 claim 15 owns full-tab suppression and later admission. S-0417 claim 14 o
 contact-place count, infantry exit-candidate acceptance and edge-aircraft nearby destinations.
 Release queues unloading rather than starting it synchronously. Claim 10 already distinguishes
 upgrade placement from ordinary placement, as required by S-0406 claim 12.
-S-0202 claim 10 and S-0203 claim 8 and Open questions must replace their simultaneous-start
-allocation gap with claim 11's causing-action rule and P11 B/C. Payment priority alone does
-not determine that assignment. Their statements that claim 11 still leaves assignment open
-are stale: revision 7 already states the rule. Q-0193's killed-item production outcomes remain
-open (Open question 3); ordinary completion and refund rules do not settle that case.
+S-0202 revision 15 claim 10 and S-0203 revision 15 claim 8 now agree with claim 11's
+causing-action rule and P11 B/C. Payment priority alone does not determine that assignment.
+Their proposed assignment measurements are not measured results. S-0202 claim 15's
+middle-event creation draws do not change production-start precedence.
+Q-0193's killed-item production outcomes remain open (Open question 3); ordinary
+completion and refund rules do not settle that case.
 
 ## Terms
 
@@ -364,14 +365,18 @@ addition:
    caused by an order applied at the end of tick *n* causes them in tick *n* + 1. A condition that
    fails without a recheck event causes no automatic orders until a later recheck removes the type:
    for example the start of a sale does not itself trigger a recheck (S-0407, claim 12).
-   For a type suppressed by a full sidebar tab, S-0411 claim 15 governs offer membership and
-   later admission; a suppressed type gives no removal orders under this claim.
+   For a type suppressed by a full sidebar tab, S-0411 claim 15 owns the consequences,
+   including offer membership, order legality, later admission and the absence of sidebar
+   cancel and cancel-all orders when a still-suppressed type loses availability. Independent
+   factory-check cancellation remains claim 8's rule, and cancellation, refund and
+   order-application rules remain claims 3 and 6 here.
    This happens only for the local player in the original; the original's computer-controlled
    houses keep building such items. In our engine it is a rule for every player house: the same
    cancel and cancel-all orders, with the conditions above, are issued automatically for every
    player house, AI houses included (AI-house ruling, glossary *AI house*). The non-player houses
    never build.
-   - Backing: `measurable` (scenario P9) for the local player's behaviour; `unmeasured` for the
+   - Backing: `measurable` (scenario P9) for the local player's behaviour; full-tab consequences
+     inherit S-0411 claim 15's backing (S10). `unmeasured` for the
      original's computer-controlled houses, which the measurement setup keeps out of every observed
      area (glossary, *bystander computer player*) and which are not a rule of our engine
    - Confidence: medium (the conditions and the two orders); high (the house update of the

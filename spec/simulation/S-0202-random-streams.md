@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -30,12 +30,16 @@ secret-lab choices and end-of-loading tags. The cleanup and low-bridge refinemen
 remain in force. S-0109 claims 14 and 25 own the middle-event gates and sprite-derived μ.
 Claim 15 here supplies the downstream particle and smudge creation draws at map load
 and during play, including immediate middle events (Q-0217).
-Coordination text that still calls those creation counts unresolved must be updated,
-not replaced with zero-draw assumptions. S-0404 claim 11 agrees with claim 10's
-production-start creation timing, but leaves simultaneous production-start draw order open.
-S-0401 claim 20 must align its trigger-played suppression wording with S-0109 claim 13:
-the creation start event can react, while later start events are suppressed. S-0011 claim 36
-must distinguish the specified middle-event composition from still-unresolved later particle updates.
+S-0404 claim 11 and P11 B/C supply production-start draw assignment at the causing
+action, distinct from payment priority; the between-house order-boundary extension remains
+an unmeasured design rule. S-0701 claims 13, 14, 20 and 25 supply sound-instance and
+feedback draws on the unsynchronised stream and the lightning-sound exception on the
+scenario stream. S-0401 claim 20 and S-0011 claim 36 agree with S-0109 claim 13:
+the creation start event can react, while later trigger-played start events are suppressed.
+Check these revisions together, including claim 15's 6-bale removal under S-0401 claim 3:
+a stage-6 resource cell becomes stage 0, not empty. S-0011 claim 36 covers the specified
+middle-event composition during loading and play, while subsequent particle updates remain
+outside it. Event timing, sprite-derived μ and the height gate remain S-0109's.
 
 ## Terms
 
@@ -328,11 +332,27 @@ original's recording modes are retained as deferred context, not implementation 
         the building that produced it. Its creation draw therefore falls in whatever part of the
         tick starts that production (in S-0203's tick table, a house update, the production
         lines or the processing of orders), not at its entering play. The production specs fix that timing,
-        including when the next item of a queue begins. S-0404 claim 11 does not yet
-        establish which successive stream values simultaneous item starts receive.
-        Its payment-priority order is not a resolved creation-draw order.
+        including when the next item of a queue begins. S-0404 claim 11 assigns
+        each creation draw at the action that causes the start: production orders receive
+        values in application order, including automatic cancellations in S-0411 claim 13's
+        tab/icon order, not line creation or payment-priority order. A factory event in the
+        turn pass takes its start's draw before order-boundary starts at that tick's end.
+        Intervening actions keep their own draws between starts; no values are reserved
+        ahead of the causing action. Across houses, turn-pass starts inherit turn order.
+        Order-boundary starts in our engine follow S-0213 claim 3's house creation order
+        and each house's production-order issue order; this between-house extension is
+        an unmeasured design rule, not an original computer-production finding.
+        Simultaneous completion does not create a separate batch of replacement starts:
+        the later release or place action causes any queued successor's start.
       - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
         happens at a time the spec of that feature fixes, and the creation draw comes with it.
+    - **Lightning sound choice.** Each lightning strike takes one raw value, read as
+      unsigned and reduced modulo the game-wide lightning sound list's length, after
+      the bolt-animation choice and all that animation's creation draws, but before
+      the explosion-animation and damage draws. It is taken regardless of audibility,
+      sound settings, view or shroud. An empty sound list takes no value. A strike at
+      exactly the previous strike's point ends after its bolt animation and takes no
+      sound-choice value. S-0701 claim 25 owns the sound and these guards.
     - **Overlay placement.** Creating an overlay object takes no draw by itself. Some effects of
       placing it on a cell do:
       - *Bridge-building end markers.* The overlay types at positions 122 … 125 and 233 … 236 of
@@ -502,6 +522,8 @@ original's recording modes are retained as deferred context, not implementation 
       |---|---|
       | The creation draw is taken when an object is created | `measurable` (R5 b; R8 G for its exact count) |
       | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
+      | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
+      | Lightning sound choice: stream, count, guards and position within a strike | `measurable` (S-0701 F6); high confidence for stream/count/order, medium for the same-point guard |
       | Pre-placed objects: an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
       | Pre-placed objects: one that is created but cannot be placed has still taken its creation draw | `unmeasured` (no case is established in which the original creates a pre-placed object and then fails to place it: an entry on a cell that is not legal is unspecified there, and a vehicle is placed whatever occupies its cell, S-0009 claim 38) |
       | Bridges: number, form, order and base types of the piece draws | `measurable` (R8 A) |
@@ -522,7 +544,8 @@ original's recording modes are retained as deferred context, not implementation 
       | Animation creation: the start-event draws come at once, before any later draw | `measurable` for cell-before-tile ordering (R8 I), middle-event gates and choice (S-0109 claims 14 and 25, AN23), and the resource-chain-reaction sequence (S-0401 claim 20, E17); particle and smudge draw counts are completed by claim 15 (R14) |
       | The list of systems that draw from the scenario random stream | `unmeasured` (no finite number of runs can confirm a list of every system that draws; each system's draws are backed by the topic spec that states them) |
     - Confidence: high (the creation draw is taken; a produced object is created when its
-      production begins; the overlay draw counts and forms); medium (the list of kinds; which
+      production begins; the overlay draw counts and forms); medium (production-start
+      assignment at the causing action, S-0404 claim 11; the list of kinds; which
       vein neighbours are set or re-patterned and in which order, the placement test and the connection
       pattern; the end-row cells, the partner search and the *m* = 1 case; the order of the
       bridge pieces and the base types; where each map-loading group sits in the stream; the
@@ -536,7 +559,15 @@ original's recording modes are retained as deferred context, not implementation 
     before play.** No draw from this stream that changes game state has been found. Its uses:
     - *During play:* which variant of a sound or voice response plays (including the idle comment
       of S-0107, claim 14, and the local player's unit responses and the spin-up sound of
-      rapid-fire weapons), the choice of music track, the screen-shake displacement of an
+      rapid-fire weapons), except the lightning sound choice of claim 10. Sound instances
+      also use this stream for pitch, volume shift, conditional pre-delay, sample choices
+      and play-order choices (S-0701 claims 13 and 14). Equal-ended ranged draws take
+      no raw value under claim 4; these are not a fixed raw count per sound. The complete
+      delayed-mode sound sequence remains unestablished in S-0701 claim 14.
+      The damage-feedback chance is R(0, 99) from this stream when a hit turns an object
+      yellow and its type has a feedback list, before checking whether its owner is the
+      local player (S-0701 claim 20). This chance is distinct from any subsequent response
+      choice and sound-instance draws. Other uses are the choice of music track, the screen-shake displacement of an
       explosion, the jitter of electric-bolt and radiation-beam effects and a flicker colour on
       some objects.
     - *At map load:* the 8 × 8 terrain-image pattern of S-0010 (claim 14), built from 64 to 4096
@@ -562,7 +593,11 @@ original's recording modes are retained as deferred context, not implementation 
     none of its draws reach game state. How it runs on the machines of a network game is for the
     future multiplayer spec (network games are out of scope for now).
     - Backing: `measurable` (scenario R6 a) that no draw of this stream reaches the scenario random
-      stream; `measurable` (R6 b) for voice responses and the choice of music track; the map-load use through S-0010's scenario V2: part A for the
+      stream; `measurable` (R6 b) for voice responses and the choice of music track.
+      Sound-instance pitch, volume shift, pre-delay, sample and play-order draws inherit
+      S-0701 claims 13/14's backing (E1) and confidence, including their unmeasured
+      complete delayed-mode sequence; the damage-feedback chance inherits claim 20's
+      high confidence and `measurable` backing (F1). The map-load use through S-0010's scenario V2: part A for the
       pattern's properties, part B for the draws themselves, with the random-state recorder's
       reading of the unsynchronised stream (Measurement scenarios); the random map seed through
       R9 b; the seeding at program start through R9 d; the local-network seed's range through
@@ -679,8 +714,11 @@ original's recording modes are retained as deferred context, not implementation 
 
 15. **Middle-event draw composition at map load and during play (Q-0182, Q-0217).**
     S-0109 claims 13, 14 and 25 already answer the immediate event with no loop delay and
-    μ = 0, event gates, sprite-derived μ, particle-before-choice ordering and removal of
-    up to 6 resource levels for a crater request. S-0312 claim 26 already answers the smudge
+    μ = 0, event gates, sprite-derived μ, particle-before-choice ordering and the
+    crater request's taking 6 bales under S-0401 claim 3. A resource cell at stage
+    *d* ≥ 6 remains at stage *d* − 6; one at stage 0 … 5 is emptied. In particular,
+    stage 6 becomes stage 0, not empty. These are integer stage changes with no rounding,
+    and S-0401 claim 3 owns the last-bale quirk. S-0312 claim 26 already answers the smudge
     footprint fit test, registration-order candidates, ranged selection and draw-free placement.
     The following completes their composition, equally during loading and during play.
 
@@ -751,17 +789,18 @@ original's recording modes are retained as deferred context, not implementation 
 
     **Resource removal relative to map data.** An immediate crater request during overlay-type
     placement, including a tile animation started by that placement's recalculation, acts
-    before the overlay data stream is read. It removes levels from the resource state then
+    before the overlay data stream is read. It takes 6 bales under S-0401 claim 3 from the resource state then
     present. The later data stream overwrites every legal cell's overlay data, even a cell
     whose resource was removed. It does not restore an overlay type removed by that request.
     By contrast the first whole-map recalculation follows the data stream, so a tile animation
-    first created in that pass removes levels from the imported data. The second and game-start
+    first created in that pass takes those bales from the imported resource state. The second and game-start
     passes act later still. Thus there is no single before/after answer for all map-load
     animations: the animation's creation group in the loading table determines it.
 
     Resource removal that empties a cell can itself recalculate that cell. Any missing tile
     animation started there immediately takes claim 10's creation and start-event draws before
-    smudge selection. Emptying also makes the conditional neighbour spread offers of S-0401
+    smudge selection. A partial take, including stage 6 becoming stage 0, does
+    not cause these emptying effects. Emptying also makes the conditional neighbour spread offers of S-0401
     claims 5 and 8, after that recalculation and before smudge selection; their draws must not
     be omitted. These effects are conditional, not an extra fixed draw per crater. The draw
     order is therefore particle groups, optional kind-choice draw, resource-removal effects
@@ -1538,8 +1577,11 @@ The recorder is part of the measurement setup (the project lead has approved it)
     and record resource type and levels at each load milestone, not merely after tick 0.
     Expected: a removal during placement acts on the earlier level, then data becomes 9
     if the data stream supplies it, without restoring a removed resource type. First-pass
-    removal instead acts on data 9, reducing it by 6. Separate second-pass repeats from
-    that first event. A named test-data variant makes resource exhaustion expose a missing
+    removal instead acts on stage 9, leaving stage 3. Add isolated single-event fixtures
+    with incoming resource stages 0, 5, 6 and 7: stages 0 and 5 empty, while stage 6 keeps
+    the resource overlay at stage 0 and stage 7 at stage 1. A stage-6 fixture that empties,
+    or takes emptying-only recalculation or neighbour-offer draws, falsifies the rule.
+    Separate second-pass repeats from that first event. A named test-data variant makes resource exhaustion expose a missing
     tile animation with a known random-rate range: its applicable creation draws must fall
     before smudge selection, and a cell with an already-recorded tile animation adds none.
     Add a qualifying resource neighbour under S-0401 claim 8 with its spread entry not yet
@@ -1585,6 +1627,15 @@ The recorder is part of the measurement setup (the project lead has approved it)
     crater request. A result based on cell-centre, creator-cell or deck height, or a height
     gate that differs between loading and play, falsifies the claim. Smudge placement may
     fail its fit test on slopes or overlays; that does not erase the kind-choice draw.
+
+- **Companion assignment and sound tests (claims 10 and 11).** S-0404 P11 B/C are
+  the proposed tests for production-start value assignment, not merely isolated draw counts:
+  compare reversed line-creation order at one cancellation boundary, then a turn-pass
+  replacement with an order-boundary start. S-0701 E1/F1 test sound-instance draw groups
+  and the feedback chance from recorded unsynchronised states; F6 tests lightning's
+  scenario-stream choice with audible/silent, empty-list and repeated-point controls.
+  Their setups, observations and falsifiers are owned by those scenarios. No results
+  from them are claimed here, and none measures the between-house design extension.
 
 ## Open questions
 

@@ -2,7 +2,7 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,6 +23,14 @@ fills the gap to another wall, how an upgrade is placed onto a building, and whe
 deployed building's construction begins and ends. Skirmish only. Campaign
 behaviour and network games are out of scope. Deploying a vehicle into a building uses the cell test
 of this spec and is S-0415's.
+
+**Paired hand-off confirmations.** S-0404 revision 9 claim 10 already distinguishes upgrade
+orders from ordinary placement: upgrades bypass adjacency but retain explored-ground legality,
+as claim 12 here states. S-0215 revision 21 claim 11 retains claim 17's construction ready-mark
+and second-start contract. Its factory-release rule agrees with S-0417 revision 4 claim 2:
+release and unloading neither set nor clear that mark. Those factory rules do not change the
+construction timings here. Confirm these companion passages at sign-off; no behavioural change
+to either companion is requested.
 
 ## Terms
 
@@ -130,7 +138,8 @@ names the top-left cell of the foundation. In addition:
    has no cell to test, and claim 5's shroud condition has no cell to judge either. Claim 4 treats
    its rectangle as 0 × 0 (F1).
    - Backing: `measurable` (scenario PL9, parts a and b for the missing cell, part c for the
-     zero-size word's cell conditions and its adjacency ring, part d for its shroud condition)
+     zero-size word's cell conditions and its adjacency ring, part d for its shroud condition.
+     PL6 e distinguishes the rectangle's shroud test from the eight-cell occupancy list)
    - Confidence: high (the rectangle and the missing cell); medium (no cell conditions for the
      zero-size word); low (its adjacency ring, and no shroud condition)
 
@@ -261,7 +270,9 @@ names the top-left cell of the foundation. In addition:
    absent-key default of *A* is 3 cells.
    - Backing: `measurable` (scenarios PL2, parts a to e, part e for a negative *A* (F1), and PL5,
      parts a to e; PL5's part e separates the two directions of the one-way relation, because only
-     the placing house allies the owner)
+     the placing house allies the owner). The missing-cell supporter detail is `unmeasured`:
+     every ring containing that cell also contains a covered cell of the same building, so no
+     placement outcome distinguishes the detail.
    - Confidence: high (the ring of *A* + 1 cells, own base-normal buildings); medium (allies, the
      option's default, the states that count, the absent-key defaults, the direction of the
      relation)
@@ -269,7 +280,7 @@ names the top-left cell of the foundation. In addition:
 5. **Explored ground.** Every cell of the foundation rectangle must be free of the placing house's
    shroud (S-0409, claims 1 and 12, owns the shroud: the explored state of the placing house). A
    type with a to-tile field (Import mapping) is exempt, whatever its foundation cells hold.
-   - Backing: `measurable` (scenario PL6, parts a to c for the shroud condition and part d for the
+   - Backing: `measurable` (scenario PL6, parts a to c and e for the shroud condition and part d for the
      exemption, with a test type that has a to-tile field; part d compares two runs, so it does not
      need the to-tile rule of claim 3 to be known)
    - Confidence: high (the shroud condition); low (the to-tile exemption: no stock type with a
@@ -295,7 +306,13 @@ names the top-left cell of the foundation. In addition:
      shroud timing with the switch on are the original's; judging an AI house's order at issue is
      the AI-house ruling, not a departure of this spec.
    - Backing: `measurable` (scenarios PL6 for the shroud timing at the click, PL7 part a for
-     adjacency lost after the click and PL7 part b for a cell shrouded again after the click)
+     adjacency lost after the click and PL7 part b for a cell shrouded again after the click).
+     If PL7 b cannot establish its required event timing, the no-recheck shroud subclaim is
+     `unmeasured`: the stale cursor result would otherwise mask a possible application-time
+     check. The mode-start cursor result is `unmeasured` and not specified here: no scenario
+     establishes it before the first cursor-cell change.
+     The AI issue-time rule is `unmeasured`: it follows the project AI-house ruling and has no
+     counterpart reachable through the original's computer-player input.
    - Confidence: high (adjacency at the click, no check when the order is applied); medium (the
      shroud result held from the last change of cell)
 
@@ -365,20 +382,26 @@ names the top-left cell of the foundation. In addition:
     When claim 9's conditions fail (the builder of the wall type's overlay, Terms, has the
     unsellable flag, the only one of claim 9's conditions that can fail for a player house in our
     engine), the damaged wall is not removed. The placement still passes the cell test, no building
-    of the wall type remains and the item is spent; what the cell then holds, the old damaged wall kept or a
-    new undamaged wall, is not established. The working hypothesis, to be tested, is that the old
-    wall stays.
+    of the wall type remains and the item is spent. The original's final cell contents are not
+    specified here: retaining the old damaged wall is a hypothesis, not a normative original rule.
+    **Pending resolution, our engine retains that wall, its owner and its damage state unchanged.**
+    This is an explicit provisional implementation rule, not a claim of verified equivalence and
+    not a permanent departure. PL8 f tests the hypothesis with an outcome-based falsifier.
     A wall type that has no wall overlay (the to-overlay field absent) has no defined behaviour in
     the original: once its placement passes the cell test, the original fails (a fault, not a
     refusal). This is a departure with no switch: the importer
     warns, and a type with the wall flag and no wall overlay is imported as an ordinary building
     (the wall flag is ignored), so claims 10 and 11 do not apply to it.
-    - Backing: `measurable` (scenario PL8, parts b, f and j for the repair of a damaged wall and the
-      failed removal; every part that places a wall type for the conversion); `unmeasured` for the
+    - Backing: `measurable` (scenario PL8, parts b, f and j for successful repair and acceptance
+      despite failed removal; every part that places a wall type for the conversion).
+      The provisional retention rule is `unmeasured`: it is an interim rule of our engine, not
+      established original behaviour; PL8 f is a discriminating investigation, not backing for a
+      normative original cell-content claim. `unmeasured` for the
       wall type with no wall overlay: the original does not give a result a scenario could record
       (it faults), so the departure has nothing to be compared with
-    - Confidence: high (the conversion); medium (the repair of a damaged wall); low (the cell after a
-      failed removal; the fault of the original for a wall type with no wall overlay)
+    - Confidence: high (the conversion and the explicit interim engine rule); medium (successful
+      repair); low (the original cell-content hypothesis after failed removal; the fault of the
+      original for a wall type with no wall overlay)
 
 11. **Wall fill.** When a building whose wall overlay (Terms) is an overlay type with the wall flag
     of an overlay type (Terms), and whose type is not a firestorm-wall type, is placed through a place order, its gaps are filled in the same tick (the
@@ -530,7 +553,9 @@ names the top-left cell of the foundation. In addition:
     F6 counts from *C*; claim 17 and F7 give *C* and the handover from the placement or deploy
     tick. Positive-delay one-stage ranges and non-positive stage counts never report
     completion (claim 18).
-    - Backing: `measurable` (PL11 a to d and f)
+    - Backing: `measurable` (PL11 a to d and f). Processing gates that interrupt a building turn
+      are `unmeasured` here: PL11 supplies uninterrupted runs only; their legality and timing
+      remain owned by S-0215 claim 2 rather than a new interruption rule in this spec.
     - Confidence: high (same-tick report handover, queued guard, target retained and opening
       effects); medium (F6 and the no-sprite case)
 
@@ -693,8 +718,8 @@ names the top-left cell of the foundation. In addition:
 
 | State | Event | Result |
 |---|---|---|
-| Item done, placement mode on (human input) | click | Adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued; on failure the refusal sound plays and no order is issued. Placement mode is offered only while the item is done (S-0411) |
-| Item done (an AI house) | place order issued | Adjacency and explored ground are judged when the order is issued (claim 6) |
+| Item done, placement mode on (human input) | click | For ordinary placement, adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued. An upgrade uses claim 12's target condition instead of adjacency, retaining the shroud condition; on failure the refusal sound plays and no order is issued. Placement mode is offered only while the item is done (S-0411) |
+| Item done (an AI house) | place order issued | Ordinary placement judges adjacency and explored ground at issue (claim 6). An upgrade uses claim 12's target condition instead of adjacency, retaining explored ground |
 | Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the refusal sound plays |
 | Placed under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
 | Deployed under construction, ready mark set at entry | the building's first turn | *construction* becomes current at its second per-tick start; first processing on the next tick (claim 17) |
@@ -707,12 +732,16 @@ Observable consequences:
 - A building is in play from the tick its place order is applied; the adjacency and prerequisites
   it supports take effect from then on, while it is still in its construction state (S-0407, claim
   8, for prerequisites).
-- Two place orders applied in the same tick for overlapping cells: the first applied succeeds and the
-  second fails the cell test, since the first building already occupies the cells. The order of
+- Two otherwise valid ordinary place orders applied in the same tick for overlapping cells:
+  the first applied succeeds and the second fails the cell test, since the first building
+  already occupies the cells. The order of
   application is S-0213's. Confidence medium. Backing: `unmeasured`: scripted input cannot issue
   two place orders in one tick (a house has one item done per line and placement mode takes one
   click at a time), and the outcome follows from claim 1 (the building is in play at once) and
-  claim 3 (b) (a building in a cell refuses), both observed by scenarios PL1 and PL3.
+  claim 3 (b) (a building in a cell refuses), both testable by scenarios PL1 and PL3.
+  This consequence is limited to ordinary types subject to the all-cells, no-building condition:
+  place-anywhere types, laser-fence replacements, to-tile types and upgrades follow their own
+  rules and are not covered by the two-order refusal statement.
 
 ## Edge cases and quirks
 
@@ -732,8 +761,8 @@ Observable consequences:
   (claim 6), so a foundation cell that is revealed or shrouded again while the cursor stays on
   the same cell does not change the click's outcome until the cursor changes cell.
   `quirks.placement_shroud_at_cursor` (default on). Off: the shroud condition is judged when the
-  order is issued, as for an AI house. The default is the original's behaviour; the choice of the
-  default for our engine is proposed to the project lead (Questions for the project lead).
+  order is issued, as for an AI house. The on default follows the glossary's quirk-switch
+  convention: reproduce the original by default.
 - **Own ally-eligible buildings with the option on** support adjacency without the base-normal flag
   (claim 4). This follows from the house counting as its own ally; no switch.
 - **Water-bound types skip the bridge, slope, buildable-flag and tile-range conditions** (claim 3 d,
@@ -837,7 +866,8 @@ art or map key supplies a direction to a place order (claim 16).
 Measurement setup (glossary): a tiny purpose-made skirmish map, one human house and one allied and
 one enemy bystander computer player (glossary; the allied one is also the owner of the allied test
 buildings of PL5, which also uses a second enemy one), named test rules files in the map's override sections, scripted input for exact
-clicks, a recorder noting each building's type, owner and top-left cell per tick (and, for PL1
+clicks, game speed index 2, 800 × 600 pixels, director and mods off except the named test data,
+a recorder noting each building's type, owner and top-left cell per tick (and, for PL1
 run 4, its position in leptons, world height included). Placement
 legality uses no random draw, so every run is deterministic given the same input; each scenario is
 run **3 times** with identical input and must give the same result each time (a run is repeated,
@@ -1036,16 +1066,20 @@ Each scenario names its observed area, the cells in which the void rule applies.
   shrouded again by test trigger, then click without moving; (d) a test type with a to-tile field and a foundation cell shrouded for the house, compared with the
   same placement when every cell is explored, the cursor moved onto the foundation each time, and
   the same pair of placements with a test type that has both a to-tile field and the place-anywhere
-  flag (claim 3: its to-tile field still exempts it). The original has no off state of the
-  switch of claim 6 to run; a replay on our engine runs both states.
+  flag (claim 3: its to-tile field still exempts it). (e) A test type with the 8-cell 3 × 3
+  foundation word: only its missing cell (2, 1) is shrouded, all covered cells explored, with
+  every other placement condition satisfied. Move the cursor onto the foundation before clicking.
+  The original has no off state of the switch of claim 6 to run; a replay on our engine runs both states.
 - Observable: refusal sound, whether an order is issued and the building placed.
 - Expected: (a) the first click refuses, the second places; (b) the click refuses (the old result); (c) the click places (the old result); after moving the cursor one cell away and back, (b) places
   and (c) refuses. On our engine with the switch off, (b) places and (c) refuses at once.
   (d) for each of the two types, the outcome with the shrouded cell is the same as with every cell
   explored (the shroud is not what decides it); the type with both flags succeeds both times.
+  (e) refuses: the shroud test includes the missing cell of the foundation rectangle.
 - Falsified if: in (a) the first click places or the second refuses; (b) places, or (c) refuses,
   which would put the judgement at the click; after the cursor moves one cell away and back, (b)
-  refuses or (c) places; or (d) the two outcomes of a type differ, or the type with both flags refuses.
+  refuses or (c) places; or (d) the two outcomes of a type differ, or the type with both flags
+  refuses; or (e) places despite the rectangle's shrouded missing cell.
 
 **PL7. Conditions lost between click and application.**
 - Observed area: the foundation and the supporting building's cells; for part b, the foundation
@@ -1076,16 +1110,19 @@ Each scenario names its observed area, the cells in which the void rule applies.
   sell sound and the random-state recorder's draw count are read throughout. Parts:
   - (a) place *W* 3 cells from an own wall in line (gap 2) and, separately, 5 cells away (gap 4).
   - (b) damage an own wall of *O*, then place *W* on it.
-  - (c) place the wall tower type on an own wall of *O*.
+  - (c) place the wall tower type on an own wall of *O*. Repeat on a sloped cell and on a
+    flat cell with test rules making its wall land type unbuildable. The tower is neither naval
+    nor water-bound; all conditions other than the ground condition are satisfied.
   - (d) place the wall tower type on an enemy wall.
   - (e) *G*1, which has the gate flag, with a 2 × 1 foundation, across two own walls of *O*.
   - (f) as (b) with the unsellable flag on *W* (the builder of *O*).
   - (g) place *W* 4 cells from an own wall (gap 3).
   - (h) place *W* 3 cells from an own wall with a tree in the cell between them, and, separately,
     3 cells from an own wall with an enemy wall in the cell next to the placed cell.
-  - (i) own walls 3 cells away in all four directions at once, compared with the draws of a
-    placement that fills nothing (same seed and same input in both runs, so the streams agree
-    until the placement tick).
+  - (i) own walls 3 cells away in all four directions at once, compared with a placement that
+    fills nothing. Use the read-only random-state recorder to count draws in each placement tick
+    separately, excluding unrelated draws. Record each run's seed and prior stream state.
+    Matching seeds across runs are not required and are not forced.
   - (j) *G*2 with a 2 × 1 foundation across two own walls of the index-26 overlay (*j*1); *G*2 on
     an own wall of *O* (*j*2); *G*1 on an own wall of the index-26 overlay (*j*3); *W*26 on an
     own damaged wall of the index-26 overlay (*j*4) and on an own undamaged one (*j*5).
@@ -1115,10 +1152,12 @@ Each scenario names its observed area, the cells in which the void rule applies.
   play afterwards.
 - Expected: (a) gap 2 filled with 2 walls at no extra cost, gap 4 not filled (*L* − 1 = 3); (b)
   accepted, the wall becomes undamaged; (c) accepted, the wall removed without refund and without
-  sound; (d) refused; (e) both walls removed without refund or sound; (f) accepted and the cell
-  holds the old damaged wall (the hypothesis of claim 10; whatever the cell holds is recorded and
-  revises claim 10, so the cell's content has no falsifier: part f is falsified only by a refusal,
-  listed below); (g)
+  sound; (d) refused; (e) both walls removed without refund or sound; (f) accepted, no wall-type
+  building remains, the item is spent, and no refund or sell sound occurs. The cell-content
+  hypothesis is that the original keeps the same wall type, owner and damage state; record each
+  before and after placement. Our engine must retain all three under claim 10's interim rule.
+  A repaired, replaced or missing wall in the original falsifies the retention hypothesis and
+  requires revising that interim rule before claiming equivalence. (g)
   filled with 3 walls; (h) no fill in either case; (i) all four directions filled (8 walls) and 8
   more draws than the placement that fills nothing, whatever order the recorder sees; (*j*1)
   accepted, both walls removed without refund; (*j*2) and (*j*3) refused; (*j*4) accepted and the
@@ -1137,11 +1176,16 @@ Each scenario names its observed area, the cells in which the void rule applies.
   stay empty, and the draws taken equal those of a placement that fills nothing.
 - Falsified if: in (r) the gap cells stay empty or hold walls of *O*; in (s) a gap cell receives a
   wall or a building, or more draws are taken than by a placement that fills nothing; gap 4 fills, gap 3 does not fill, a fill goes past a tree or an enemy wall, fill
-  walls cost credits, (d) succeeds, a refund or a sound appears, or (i) shows a draw count other
+  walls cost credits, (d) succeeds, a refund or a sell sound appears, or (i) shows a draw count other
   than the number of walls added; (a) fills gap 2 with other than 2 walls, (*p*2) adds other than 2
   walls, or (q) adds other than 3 walls in the east line or takes other than 3 more draws; (b),
-  (c), (e) or (f) refuses, the wall in (b) stays damaged, or a wall in (c) or (e) is not removed; (*j*2), (*j*3) or (*j*5) succeeds, or (*j*1) or (*j*4) refuses; in
-  (k) the removal follows the flag of *W*b instead of *W*; in (l) or (m) the wall in the other cell
+  (c), (e) or (f) refuses, (f) leaves a wall-type building or an unspent item, (f) changes the
+  wall's type, owner or damage state or removes it (falsifying the retention hypothesis), the wall
+  in (b) stays damaged, or a wall in (c) or (e) is not removed; (*j*2), (*j*3) or (*j*5)
+  succeeds, (*j*1) or (*j*4) refuses, (*j*1) leaves either underlying wall, or (*j*4) leaves
+  the wall damaged; in
+  (k) the removal follows the flag of *W*b instead of *W*, or the final cell contents differ
+  from the corresponding (b) or (f) control; in (l) or (m) the wall in the other cell
   is removed too (the rules combine), or in (m) no wall is removed; in (n) the laser-fence building
   is still in play; in (o) the fill crosses the tree; in (*p*1) the damaged wall is repaired or
   replaced, or more than one wall is added; in (q) a wall appears between the east neighbour and the
@@ -1202,8 +1246,9 @@ Each scenario names its observed area, the cells in which the void rule applies.
   not recorded, F5); (i) the first placement succeeds, restores full health, raises the output by
   P1 and makes the test building offered (the uncapped count 1 records the upgrade in position 1),
   and the second refuses (the count is no longer 0).
-- Falsified if: the counts differ, the health stays at half, (c) refuses or changes the output, or
-  (d) raises the output by twice P2 or leaves the test building unoffered; (e) the upgrade is
+- Falsified if: the counts differ, the health stays at half, (c) refuses, changes the output or
+  meets the test prerequisite, or (d) raises the output by twice P2, leaves the test building
+  unoffered, accepts the second U3 or fails to add P3 for the first U3; (e) the upgrade is
   refused for adjacency; (f) the click on the shrouded cell places the upgrade, or the explored one
   refuses; (g) any of the three places an upgrade; (h) the fourth placement refuses or raises the
   output; (i) the first placement leaves the output unchanged or the test building not offered
@@ -1218,8 +1263,12 @@ Each scenario names its observed area, the cells in which the void rule applies.
   behaviour rates. Parts: (a) ordinary build-up, placed; (b) a gate with a known gate range,
   placed; (c) a type whose build-up file does not resolve, placed; (d) an armed copy made by a
   vehicle deploy, inheriting a live target; (e) a test type whose build-up sprite has 2 image
-  frames and a positive build-up delay, placed, and a deployable copy of it; (f) the type of (a)
-  made by a vehicle deploy.
+  frames and a positive build-up delay, placed, and a deployable copy of it. Repeat (e) with
+  named test build-up files of 0, 1 and 3 image frames, with a gate whose gate-stage field is 0,
+  and with theater-flag copies whose theater-refreshed files have 0 or 1 image frames
+  (S-0108 claim 5). Verify each resulting range's count and delay before recording its timing.
+  (f) the type of (a) made by a vehicle deploy, and a theater-flag copy whose refreshed range
+  has at least 2 stages and positive delay, both placed and deployed, to test that range under F7.
 - Procedure: place or deploy with scripted input and note the tick *T* of the place order (or
   the deploy tick). Record every tick from *T* through the handover and the first following
   behaviour processing with the permitted read-only recorder; in (e) record for 20 × *d_b*
@@ -1235,8 +1284,10 @@ Each scenario names its observed area, the cells in which the void rule applies.
   *C* = *R* + 1, consecutive construction processings with delay 1 whatever the imported
   behaviour rate and with no timing draw, and handover at *H* = *T* + 2(*n* − 1) × *d_b* + 1, with
   *guard* current and the idle body by the end of that turn, not one tick later (F6, F7). For
-  (c): *C* = *T* + 2 and *H* = *T* + 3. For (d) and (f): *construction* current at the end of
-  the building's first turn *U*, *C* = *U* + 1 with stage 0, *H* = *C* + (*n* − 1) × *d_b*.
+  (c): *C* = *T* + 2 and *H* = *T* + 3. For deployed (d) and (f): *construction* current at
+  the end of the building's first turn *U*, *C* = *U* + 1 with stage 0,
+  *H* = *C* + (*n* − 1) × *d_b*. The placed theater-refreshed copy in (f) follows (a)'s F7
+  timings using its actual refreshed range, not the ordinary sprite-half count or delay.
   In (d) construction completion keeps the inherited target, and the next guard processing may
   start attack by S-0215 claim 32. For (e): the placed building keeps *construction* queued and
   shows stage 0 throughout, and the deployed one has *construction* current but never hands
@@ -1298,19 +1349,13 @@ Each scenario names its observed area, the cells in which the void rule applies.
 3. The cursor shroud result when placement mode begins, before the cursor first changes cell
    (claim 6): the original may hold the value of an earlier placement. No scenario is proposed
    until S-0411 fixes how placement mode starts.
-4. What a cell holds after a failed removal under a damaged wall (claim 10; scenario PL8 f).
+4. What the original's cell holds after a failed removal under a damaged wall (claim 10,
+   scenario PL8 f). The retention hypothesis is non-normative; pending resolution our engine
+   keeps the existing wall, owner and damage state unchanged. A contrary PL8 f result requires
+   revising that interim rule.
 5. Between entry and the tick *construction* becomes current (claim 17), a building has no
    current behaviour and *construction* queued. Under S-0215's queueing rule (claim 7) an order
    or rule that queues another behaviour in that window would replace the queued *construction*,
    and the building might then never complete. Whether any order or rule can reach a building in
    that window was not established. Sale removal and refund timing (Q-0130 question 4) are
    S-0408's.
-
-## Questions for the project lead
-
-- **Claim 6, shroud timing for human input.** The original judges the shroud condition from a
-  result computed when the cursor last changed cell, not at the click. This draft proposes
-  `quirks.placement_shroud_at_cursor`, default on (the original's behaviour) for human input, and
-  judging at issue time for AI houses and for the switch off. The other options: judge at issue time
-  for every player house and call the difference a departure (no switch), or keep the cursor result
-  only in the input layer. Which default should the switch have?

@@ -2,13 +2,13 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0150, Q-0151, Q-0193]
+requests: [Q-0150, Q-0151, Q-0193, Q-0267]
 supersedes: []
 ---
 
@@ -222,12 +222,14 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      house's whole map becomes explored, as a change of its game state and for every defeated
      player house, human or AI (S-0409 claim 15, *Defeat*; the original does it for the local
      player's house only), and its radar comes on at the same moment and stays on (S-0410 claim 1).
-     In our engine a defeated person
-     keeps watching until the game is over (claim 6), so these two effects of the person-played
-     house last for the rest of the game. In the original the game ends at that house's defeat
-     and then runs only for the end delay (claim 8), so there they are observable for that many
-     ticks only; a test rules file may lengthen the delay to see them (S-0409 scenario V9, parts F
-     and F2).
+     The exploration is immediate, not guaranteed permanent: pending re-cover marks survive
+     the defeat reveal and may make their cells unexplored at a later sweep; loss of an active
+     spy satellite can re-cover the map at a later recheck (S-0409 claim 15). Radar stays on
+     despite either loss of exploration. In our engine a defeated person keeps watching until
+     the game is over (claim 6), subject to those exploration changes. In the original the game
+     ends at that house's defeat and then runs only for the end delay (claim 8); a test rules
+     file may lengthen that delay to observe these effects (S-0409 scenario V9, parts F, F2
+     and F3).
    - **Presentation.** A message names the defeated house and an announcement plays. Neither
      happens for an observer's house, which only the original defeats (claim 1; scenario V10).
      After the local player's house is defeated, some later superweapon launch
@@ -522,6 +524,34 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     - Confidence: high for the health-independent count and deletion rule; medium for arranging
       a retained killed item in the proposed setup
 
+18. **Owner-house tag raises within the house update (Q-0267).** In ticks whose integer
+    tick number is a multiple of 8, including tick 0, the assigned-tag raise of S-0011 claim 35
+    sees the effects of that house's surrender destruction and defeat test, including defeat
+    destruction, from the same update. The power and ordinary radar rechecks have already
+    happened. The due tech-tree recheck and its sidebar cancellation orders come afterwards
+    (S-0407 claim 12, S-0411 claim 2). This claim does not relocate the separate automatic
+    unit-release work of S-0411 claim 9.
+
+    Thus a type-count condition in that raise reads the counts remaining after surrender or
+    defeat destruction, not the pre-destruction counts. An action of the raise that removes a
+    prerequisite can affect a due tech-tree recheck and its cancellation orders in that same
+    update, but cannot alter the power totals or ordinary radar result already established
+    there: its newly due power or radar work waits for the next house update. Objects retained
+    after death still follow each topic's own counting rules. No second defeat test occurs in
+    the same update: if the raise removes the last qualifying object of an otherwise surviving
+    house, its next defeat test is in the next tick. A variable changed by an earlier house's
+    raise is already changed when a later house's tags are evaluated in that tick.
+
+    Defeated houses still take their places in house order and keep these raises, including
+    the raise in the update that defeats them and later eligible ticks during the end delay.
+    A cleanup-removed house takes no place and raises nothing: S-0009 claim 28 removes the
+    house itself, and S-0011 claim 35 already excludes it from tag assignment. The final-tick
+    result cutoff of claim 16 is unchanged by a later tag action.
+    - Backing: `measurable` (V15, with V13 for cleanup absence and S-0011 T20 variant C
+      for variable effects in house order)
+    - Confidence: high for the relative places and continued raises after defeat; medium for
+      arranging the same-update tech-tree probe
+
 ## Formulas
 
 **End delay** (claim 8). With *d* the end-delay field in game minutes (a double, Import mapping), let *x* be the product *d* × 900, rounded toward zero to double precision according to S-0205 and `quirks.chop_rounding`. The integer delay *D*, in ticks, is *x* truncated toward zero to a whole number. The factor 900 is the glossary's conversion from game minutes to ticks. The conversion to a whole number follows S-0205, claim 7: a product of 2³¹ or more wraps (from a field of about 2.39 million game minutes up, *D* no longer follows the field, and whenever the wrapped *D* is 0 or negative the delay is the shortest one of the next formula), and a product of 2⁶³ or more gives 0. Example: at the absent-key default *d* = 0.03 the exact product of the stored double and 900 lies just below 27, so *D* = 26 with the switch on (the original) and 27 with it off.
@@ -575,6 +605,9 @@ included), is empty (claim 6, departure); our engine does not.
   an earlier defeat ends the game (claim 10, V7).
 - Power and ordinary radar work do not see the surrender destruction of their own house update,
   but its due tech-tree recheck does see it (claim 16, V12).
+- In each house's update, its every-eighth-tick assigned-tag raise sees its surrender and
+  defeat effects; the due tech-tree work sees that raise's effects, but the already completed
+  power and ordinary radar work do not (claim 18, V15).
 - The final tick runs fully, but its defeat tests are too late to change the committed outcome
   (claims 8 and 16, V12 part c).
 - A surrender order applied in tick *t* destroys objects in tick *t* + 1, since orders take effect
@@ -680,6 +713,7 @@ included), is empty (claim 6, departure); our engine does not.
 | `[MultiplayerDialogSettings]` `AllyChangeAllowed` | ally-change-allowed flag (claim 14) | boolean | yes |
 | building type, `Foundation` | one-cell foundation (Terms; S-0108) | foundation name | as S-0108 |
 | country section, `MultiplayPassive` | passive house (claim 1; S-0009) | boolean | as S-0009 |
+| Map `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` entries | assigned tags, their owner countries, conditions and actions (claim 18) | comma-separated records with integer, ID and type-name items, exactly as S-0011 Import mapping | absent entries create no definitions; omitted record fields and unresolved references follow S-0011 Import mapping |
 
 Claim 17 uses the existing type-exclusion and base-unit-list rows above; zero health and
 object deletion introduce no additional imported field. Its cancellation input is owned by
@@ -688,6 +722,9 @@ S-0404, and any death-effect input by S-0312.
 The creation-order destruction and the house-update cutoff of claims 15 and 16 use no INI
 settings; the cancellation exception is controlled only by its quirk switch. Their warhead and end-delay field use the existing rows above. Cleanup and
 its maximum-player-count input remain owned by S-0009 claim 28 and its Import mapping.
+
+Claim 18 adds no timing input: the 8-tick interval is an engine constant, not a rules setting.
+Tag assignment, type-count tests and variables retain S-0011's import rules.
 
 The civilian side of claim 12 is the side named Civilian; the original finds it by that fixed
 name, so the name is an engine constant, not stock data.
@@ -1001,6 +1038,45 @@ and production specs, not treated as proof of continued production. Repeat each 
 Void an earlier cancellation of P or an unintended bystander intervention. This scenario
 checks counts only; progress, draws, refunds and release results belong to the separate
 Q-0193 questions.
+
+**V15: owner-house raises among house topics (claim 18).** Use the common setup and a
+named test map, with normal game and separate countries for the human and two remote
+bystanders. Use repeating tags with an any-event and the relevant condition together, and
+record every firing with its tick. The ordinary per-tick poll remains enabled: distinguish its
+firings from the additional owner-house firing in multiples of 8, as in S-0011 T20. Tool:
+scripted input, screen capture and a read-only recorder of type counts, trigger variables,
+defeat state, power totals, radar, build offers and issued cancellation/release orders.
+Run each deterministic part once; void unplanned bystander actions.
+- *Part a, surrender and defeat.* Give the human only an on-map infantry unit, with no crew,
+  survivors, production or stale count contributions. Apply surrender in tick 7. A human-owned
+  tag tests absence of that infantry type and sets a variable, which a later house's tag tests.
+  Expected: no such firing before destruction; in tick 8 the owner-house raise fires after
+  destruction and after the recorded defeat, and the later house sees the set variable in
+  its same-tick raise. Use a named test end-delay field long enough to include tick 16.
+  In a separate counter run, a repeating any-event tag owned by the human has its additional
+  owner-house firing in tick 8 and again in tick 16, despite defeat. Missing either additional
+  firing, or seeing the infantry's pre-destruction count at the tick-8 house raise, falsifies
+  the rule. Record phase samples within the update: an end-of-tick variable alone does not
+  locate the defeat test relative to the raise.
+- *Part b, tag-caused loss.* Keep the human alive with a remote ordinary infantry unit.
+  In tick 16, after the ordinary poll, a unit enters a tagged cell during the turn pass and
+  its entered-by trigger sets a gate variable. Script the move and void any run where arrival
+  is not in tick 16. A human-owned tag tests that gate and any-event together and destroys a
+  power-producing prerequisite building and the radar building. Use named test data making
+  those removals immediate and without secondary effects. Before tick 16, have
+  an offer depending on the prerequisite with its ordinary factory still present, and a
+  held production item requiring it. Record the due marks rather than assuming a recheck.
+  Expected: the tick-16 raise removes the buildings; power totals and ordinary radar still
+  reflect them for that update, whereas the now-due tech-tree recheck removes the offer and
+  issues its cancellation in tick 16. Power and radar reflect the losses in tick 17. A tick-16
+  power/radar recheck of those losses or deferral of the due tech-tree work to tick 17 falsifies
+  the ordering.
+- *Part c, no second defeat test.* Give the human only ordinary infantry, and remove it with
+  a human-owned tag in its tick-16 house raise, using part b's turn-pass gate setter on that
+  infantry's cell entry. Expected: removal
+  in tick 16 but defeat in tick 17, unlike surrender in part a. Defeat in tick 16 falsifies this
+  consequence. V13 supplies the cleanup-removed-house control: a removed house has no raise
+  at all, not merely a raise after the remaining houses.
 
 ## Open questions
 

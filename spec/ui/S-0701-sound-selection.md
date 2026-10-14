@@ -2,13 +2,13 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0262, Q-0266]
 supersedes: []
 ---
 
@@ -19,8 +19,10 @@ supersedes: []
 Sound data, selection and order responses, event sounds, announcements, mixing limits,
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
-Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Audio archive and sample
-formats are outside this spec.
+Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
+is claim 34; the byte formats of those files are outside this spec. Revision 2 adds claims 34 to
+37 (sample sources, volume options, announcement entries per event, building fallback sounds)
+and corrects claim 24's refusal cues.
 
 ## Terms
 
@@ -39,7 +41,7 @@ normalisation N of its Formulas F3. In addition:
   a scale from 0 (silent) to 16384 (full). Where a level is a fraction in 0 … 1 it says so.
 - **Pan.** Left-right position on a scale from 0 (full left) to 16384 (full right); 8192 is centre.
 - **Channel.** One of the 16 mixing voices that sound instances play on (claim 9).
-- **Audio clock.** Real time in milliseconds. Every time in claims 9 to 14 and 29 is on the audio
+- **Audio clock.** Real time in milliseconds. Every time in claims 9 to 14, 27 and 29 is on the audio
   clock, not in ticks, so it does not depend on game speed.
 - **Audio pass.** One service of the sound instances. Successive passes are separated by more
   than 33 ms of the audio clock, whatever the tick rate (claim 12).
@@ -49,8 +51,10 @@ normalisation N of its Formulas F3. In addition:
   position appears in the battlefield view (claim 6, Formulas F2).
 - **Attached sound.** A positional sound whose placement is updated while it exists (claim 7).
   Some follow an object or animation; others keep their original map position but follow scrolling.
-- **Repair-response vehicle.** The vehicle type singled out by its imported identifier (F6,
-  Import mapping).
+- **Repair-response vehicle.** The passenger-configurable vehicle whose weapon can become a
+  repair weapon. Only this particular vehicle type receives F6's dedicated repair response.
+  A negative-damage weapon alone does not qualify another type. Its exact type-name binding
+  is withheld in this revision (Open questions).
 - **Response.** A spoken acknowledgement by one of the local player's objects: on selection, on an
   order, on taking damage, on dying. A response kind uses a list or a single sound entry on the object's
   type, with the fallbacks of F6 (Import mapping). S-0214 calls the selection kind *selection responses*.
@@ -71,7 +75,9 @@ normalisation N of its Formulas F3. In addition:
    reads its section again over the same entry, appending its sample names again up to the
    32-sample cap rather than clearing the old list. A listed name with no section is an entry with no
    samples, which is silent. Everywhere a rules file or the game names a sound, the name is matched
-   against the entries without regard to case. An unknown name resolves to no entry.
+   against the entries without regard to case. The whole reference is compared: a reference is not
+   cut to 31 characters, so one longer than 31 characters never matches an entry whose listed
+   name was cut (medium). An unknown name resolves to no entry.
    Whether an existing imported setting is retained is specified in Import mapping.
    - Backing: `measurable` (scenario A1)
    - Confidence: high
@@ -381,8 +387,8 @@ normalisation N of its Formulas F3. In addition:
       build-down-start step of S-0408 claim 6. Packing up omits the sell sound (S-0415).
       An ordinary wall sale by the local player plays the sell sound as a screen sound.
       Only a silent wall sale omits it (S-0408 claim 12).
-    - *Building damage and death:* the game-wide building damage and building death sounds
-      (S-0302 claim 12 and the structures specs own when).
+    - *Building damage and death:* a building's own damage and death sounds (claim 20), or the
+      game-wide fallbacks of claim 37 (S-0302 claim 12 owns when the damage results occur).
     - *Promotion:* the veteran or elite promotion sound, for the local player's objects (S-0311).
     - Crushing (S-0210), jumps (S-0207), radar on and off (S-0410), credit ticks (S-0416), the idle
       comment (S-0107, claim 14) and triggered sounds (S-0011, claim 32) are specified there.
@@ -392,16 +398,37 @@ normalisation N of its Formulas F3. In addition:
       confidence: upstream production and specialised motion paths are not traced here and F4
       tests only ordinary local production and ground movement.
 
-24. **Interface sounds.** Sidebar clicks, the refusal of a click or order, tab and button clicks and
-    the other interface sounds are screen sounds of game-wide entries (Import mapping). The refusal
-    sound of S-0411 (claims 10 and 12), S-0404 and S-0406 is one entry, the game-wide refusal sound,
-    the production-feedback clicks identified by S-0411 claim 12 play the game-wide build
-    click sound, and their announcements come from claim 28. This does not add a cue for an
-    ignored order or for a sidebar action whose feedback S-0411 leaves unresolved.
-    - Backing: `measurable` (F5) for sidebar production and refused placement.
-      Other button, tab and refused-order cues are `unmeasured`: F5 does not enumerate
-      or isolate those interface actions.
-    - Confidence: medium
+24. **Interface sounds and refusal cues.** Sidebar clicks, tab and button clicks and the other
+    interface sounds are screen sounds of game-wide entries (Import mapping). Revision 2 corrects
+    revision 1, which gave every refused click the game-wide refusal sound. The cues are:
+    - *start, queue, resume, hold, cancel* (S-0411 claim 12): the game-wide build click sound, plus
+      the matching announcement of claim 28.
+    - *busy production line* (S-0411 claim 12: a building or defence click while that line already
+      holds an item): only the "unable to comply" announcement, no interface sound.
+    - *refused placement* (S-0411 claim 10, S-0406): only the "cannot deploy here" announcement, no
+      interface sound. It is raised both by the check made at the click and when a place order of
+      the local player's house fails as it is applied.
+    - *production request refused as it is applied* (S-0404): when the house's queue count has
+      reached the imported queue limit, or the type has reached its build limit, the game-wide
+      refusal sound plays, for the local player's house only.
+    - *refused route-mode click* (S-0213 claim 16): the game-wide refusal sound together with the
+      message, but only the first time in a game. All route-mode refusal notices share one "already
+      shown" mark that is set at the first notice and cleared only when a game starts, so every
+      later refusal in the same game is silent and shows no message
+      (quirk `quirks.route_refusal_notice_once`).
+    - *sidebar strip scrolled past its end*: the game-wide refusal sound.
+    None of these depends on the local player's side. Some refused movement orders of vehicles and
+    infantry also play the refusal sound; their conditions belong to the movement specs. Clicking
+    an item already at its build limit gives no order (S-0411 claim 4) and plays no click sound and
+    no announcement. A second "unable to comply"
+    request that can follow a build click has not been tied to an S-0411 row (open). No cue is added
+    for an ignored order or for a sidebar action whose feedback S-0411 leaves unresolved.
+    - Backing: `measurable` (F5 for the sidebar cues, full-queue refusal and refused placement,
+      F8 for the route-mode notice). Build-limit refusal at application, strip scrolling,
+      movement refusals and other button and tab cues are `unmeasured`: F5 does not isolate
+      those actions or a request that passes the click check but fails the application check.
+    - Confidence: high (sidebar click cues, busy line, refused placement, once-per-game notice),
+      medium (refusal as the request is applied); low (movement refusals)
 
 25. **Lightning storm sound.** Each lightning bolt of the weather superweapon's storm (S-0203,
     *storm bolt*) that strikes plays one of the game-wide lightning sounds at the strike point,
@@ -472,7 +499,7 @@ normalisation N of its Formulas F3. In addition:
     | primary building selected, rally point set | the local player's matching action | none |
     | building captured, tech building lost | ownership changes involving the local player | none |
     | structure garrisoned, structure abandoned | the local player's building gets its first occupant or its last leaves | F7 for abandoned |
-    | cannot deploy here | S-0415 and S-0406 | none |
+    | cannot deploy here | S-0415, S-0406 and a refused placement (S-0411 claim 10, claim 24) | none |
     | building online, building offline | S-0405 | none |
     | superweapon ready | the local player's superweapon finishes charging | none |
     | superweapon detected | another, non-allied house places a superweapon building | none |
@@ -537,6 +564,77 @@ normalisation N of its Formulas F3. In addition:
       and the scan does not prove the absence of every indirect sound-related draw)
     - Confidence: high (lightning); medium (random-waypoint range); low (exhaustiveness)
 
+### Sample sources and volume options
+
+34. **Where samples come from.** Every sample a sound entry names is looked up, ignoring case, in
+    one sample bank: an index file and a data file (Import mapping), found through the ordinary
+    file lookup of S-0005, so either may come from a mounted archive or a loose file. Sound entries
+    never play separate sample files. Of the installation's two audio archives the expansion's is
+    mounted when present, else the original's (S-0005 owns the mounting). Announcements work the
+    other way: each is a separate file named by claim 26's eight-character name plus the extension
+    `.wav`, opened through the same file lookup and never taken from the bank. If the bank's index
+    lists one name twice, which copy is used is not defined: the original assumes unique names.
+    The byte layout of the bank belongs to a formats spec.
+    - Backing: `measurable` (scenario A4 for separate files versus bank samples and
+      case-insensitive sample lookup; S-0005 M22 part a for archive fallback).
+      Independent replacement of the two bank files is `unmeasured`: A4 supplies no
+      compatible replacement bank pair. Duplicate names are `unmeasured`: no scenario
+      controls their ordering, and no deterministic duplicate-name outcome is specified.
+    - Confidence: high (one bank, separate announcement files); low (duplicate names)
+
+35. **Volume options.** The player's sound volume option is *o* of F3: it scales every sound
+    instance, including responses, interface and event sounds. It does not scale announcements.
+    Announcements follow the player's separate voice volume option instead, and the master sound
+    level of F3 does not apply to them either. A screen request made with a fraction *v* of full
+    volume has request level ℓ = min(trunc(*v* × 16384), 16384), *v* in floating point. The credit
+    ticks of S-0416 are made at half volume, so ℓ = 8192: one halving of the level, about 10 dB
+    below the same entry requested at full level (F3, F4; the exact *k* also depends on
+    `quirks.full_volume_16383`).
+    - Backing: `measurable` (scenario I1)
+    - Confidence: high (which option scales what); medium (credit tick level)
+
+### Announcement entries and building fallbacks
+
+36. **Which entry each announcement event requests.** The Import mapping's announcement request
+    table identifies the announcement role requested by each event listed there. Literal entry-name
+    bindings are not given in this revision. In addition:
+    - A promotion to veteran and a promotion to elite request the same entry.
+    - When the local player's house is defeated or loses, it hears the defeat entry unless it is an
+      observer; when another non-passive house is defeated, the local player hears the
+      player-defeated entry; a win of the local player's house requests the victory entry.
+    - A request by house A for an alliance with house B that is not yet mutual requests the
+      alliance-requesting entry when A is the local player's house, the alliance-requested entry when
+      B is, and nothing otherwise. When the alliance becomes mutual, the alliance-formed entry plays
+      if each of A and B is the local player's house or a house allied with it, otherwise the
+      enemy-alliance-formed entry. Neither plays once the local player's house has been defeated in
+      that game; that defeat also mutes the superweapon launch and detection announcements of
+      claim 28. When A ends an alliance with B, the alliance-broken entry plays if B was allied
+      with A and A or B is the local player's house.
+    - The play-speech trigger action (S-0011 claim 32) requests the entry it names as kind
+      *interrupt*, whatever kind the entry has.
+    - Entry names are matched ignoring case; an unknown name plays nothing.
+    The corresponding literal names are withheld, not inferred from these behavioural labels
+    (Open questions).
+    These are presentation rules; they do not end a game. Our engine keeps playing to the
+    last alliance under S-0414 claim 6, even after the local player's defeat. The described
+    announcement muting still applies during that continued observation.
+    - Backing: `measurable` (scenario G4) for the events explicitly exercised there.
+      Alliance announcement conditions are `unmeasured`: G4 supplies no isolated alliance
+      sequence distinguishing each branch. Post-defeat muting is `unmeasured`: the original
+      ends at the human participant's defeat and G4 has no request isolated in its end delay.
+      The observer defeat exception is `unmeasured`: G4 does not set up an observer.
+      Muting during our engine's extended observation is a presentation requirement, not
+      a claim that the original provides that observation period.
+    - Confidence: high (entry per event); medium (alliance conditions)
+
+37. **Building damage and death fallbacks.** When a building's damage result (S-0302 claim 12) is
+    *now yellow* or *now red* and its type names no damage sound of its own, the game-wide building
+    damage sound plays at the building's centre in the attached form that follows scrolling
+    (claim 7). When a building is destroyed and its type's death-sound list is empty, the game-wide
+    building death sound plays the same way. A type with its own sound uses claim 20 instead.
+    - Backing: `measurable` (scenario F7)
+    - Confidence: high (damage fallback); medium (death fallback)
+
 ## Formulas
 
 **F1. Entry level** (claim 2). The percentage is read through S-0003's floating-point import,
@@ -578,7 +676,8 @@ A screen sound has *ℓ* = 16384 and pan 8192.
 > heard level *h* = ⌊⌊⌊⌊*e* × *ℓ* / 16384⌋ × *σ* / 16384⌋ × *g* / 16384⌋ × *o* / 16384⌋
 
 where *g* is the game's master sound level and *o*
-the player's sound volume option, stored as trunc(option fraction × 16384). Pans combine as
+the player's sound volume option, stored as trunc(option fraction × 16384). Announcements use
+neither *g* nor *o* (claim 35). Pans combine as
 clamp(*p*₁ + *p*₂ − 8192, 0, 16384), and every stage except the request is centred, so the heard pan
 is the request's pan. Pitches combine as trunc(*p*₁ × *p*₂ / 100), in integer percent. The order of the four truncations is
 medium confidence; the result differs by at most a few units of 16384.
@@ -678,17 +777,17 @@ kinds or creators. The unresolved zoom timing is not a resolved tick duration.
 | Default minimum level | 20 | percent | claim 2 |
 | Default limit | 5 | instances | claim 2 |
 | Default range | 10 | cells | claim 2 |
-| Default sound priority | *normal* | | claims 2, 3 |
-| Default placement | *screen* | | claim 2 |
-| Pixels per cell of range | 60 | pixels | F2 |
-| Vertical distance weight | 2 | | F2 |
+| Default sound priority | *normal* | priority category | claims 2, 3 |
+| Default placement | *screen* | placement category | claim 2 |
+| Pixels per cell of range | 60 | pixels per cell | F2 |
+| Vertical distance weight | 2 | dimensionless multiplier | F2 |
 | Start threshold | 0.05 | level fraction | claim 6 |
 | Equal-loudness band | 1/10 | of the entry's level | claim 8 |
 | Audio pass interval | more than 33 | ms, audio clock | claim 12 |
 | Smallest effective delay | 33 | ms | claims 13, 14 |
 | Ambient pre-delay minimum | 33 | ms | claim 13 |
 | Announcement gap | more than 500 | ms from the start of the previous one, audio clock | claim 27 |
-| Feedback chance | 30 in 100 | | claim 20 |
+| Feedback chance | 30 in 100 | percent probability | claim 20 |
 | Movement sound grace counter | 3 | ticks | end-loop request on the following eligible update, claim 23 |
 | Low funds threshold | 100 | credits | claim 28 |
 | Low funds repeat | N(⌊*k* × 900⌋) | ticks | claim 28 |
@@ -751,6 +850,8 @@ never takes a channel or the draws of claim 13.
 - **`quirks.damage_sound_doubled`** (default: on). The damage sound of an object starts twice per *unchanged* hit (louder, and two instances against its limit). Off: once.
 - **`quirks.deploy_command_silent`** (default: on). The deploy command's game-wide sound is never
   read, so it is silent. Off: it is read under the key the Import mapping gives and played.
+- **`quirks.route_refusal_notice_once`** (default: on). The route-mode refusal message and sound
+  are given at most once per game (claim 24). Off: every refused route-mode click gives them.
 - **`quirks.announcement_volume_ignored`** (default: on). An announcement's volume key has no effect.
   Off: the volume (a fraction, default 1) scales the announcement.
 - **Misspelt stock keys.** Keys are read by exact case (claim 2); stock data contains a few entries
@@ -790,6 +891,11 @@ scaling above: write 100, not 100 %, for the usual full-scale sound volume.
 Stock data spells some keys `volume`, `Vshift`, `Fshift` and `MinVol`; under claim 2 those entries are
 ignored.
 
+Sample bank (claim 34): the index file `AUDIO.IDX` and the data file `AUDIO.BAG`, each found through
+the file lookup of S-0005 and matched ignoring case; their byte layout belongs to a formats spec.
+Announcement samples are separate files, the eight-character voice-set sample name
+specified below plus `.wav`, not the announcement entry's name.
+
 Announcement data file:
 
 | Key (section) | Concept | Parse form | Default when absent |
@@ -800,11 +906,33 @@ Announcement data file:
 | `Allied`, `Russian`, `Yuri` | sample per voice set | file name, first 8 characters, extension added | empty (silent) |
 | `Volume` | ignored (claim 26) | floating point | 1 |
 
+Announcement requests (claim 36), behavioural roles of entries requested from the announcement
+data file; actual name lookup ignores case:
+
+| Event | Announcement entry requested (behavioural role) |
+|---|---|
+| construction complete, unit ready, new construction options | corresponding construction-complete, unit-ready or new-options entry |
+| building, training, on hold, cancelled, unable to comply (claim 24) | corresponding production-feedback entry |
+| cannot deploy here (claim 24) | cannot-deploy-here entry |
+| structure sold, unit sold | structure-sold or unit-sold entry, respectively |
+| unit repaired, unit promoted (either rank) | unit-repaired or unit-promoted entry, respectively |
+| low power | low-power entry |
+| base, ally and harvester under attack | corresponding base, ally or harvester attack entry |
+| defeat, player defeated, victory | corresponding defeat, player-defeated or victory entry |
+| alliance requesting, requested, formed, enemy formed, broken | corresponding alliance-requesting, alliance-requested, alliance-formed, enemy-alliance-formed or alliance-broken entry |
+| play-speech trigger action | entry named by the action |
+| low funds, unit lost | corresponding low-funds or unit-lost entry |
+
+These labels identify announcement roles, not literal data-file strings. Exact role-to-name
+bindings are withheld pending an approved import-mapping convention (Open questions). They
+are not new configurable fields, and this table does not define the announcement sample names.
+
 Rules file, object type sections (infantry, vehicle, aircraft, building), each a sound name or a list of
 sound names (S-0003). Lists are comma-separated, limited to the first 127 value characters, keep
 listed order and drop unknown names. An absent list keeps its earlier value, initially empty.
 A present nonempty list replaces it. A single sound reference that is absent or unknown keeps
-its earlier value, initially no sound. These defaults apply to every row below:
+its earlier value, initially no sound. Every reference is compared in full with the entry names,
+so a reference longer than 31 characters matches no entry (claim 1). These defaults apply to every row below:
 
 | Key | Concept | Form |
 |---|---|---|
@@ -825,11 +953,14 @@ Weapon sections: `Report` (list, claim 21). Animation sections: `StartSound` (or
 `StopSound` (claim 22).
 
 Rules file, `[AudioVisual]`, sound names: `CreateUnitSound`, `CreateInfantrySound`, `CreateAircraftSound`
-(claim 23), `BuildingSlam` (placement), `SellSound`, `BuildingDamageSound`, `BuildingDieSound`,
+(claim 23), `BuildingSlam` (placement), `SellSound`,
 `UpgradeVeteranSound`, `UpgradeEliteSound`, `BaseUnderAttackSound` (claim 28), `GuardSound`, `StopSound`,
-`ScatterSound` (claim 19), `ScoldSound` (refusal, claim 24), `GUIBuildSound` (sidebar click, claim 24),
+`ScatterSound` (claim 19), `ScoldSound` (refusal, claim 24), `GUIBuildSound` (build click, claim 24),
+`BuildingDamageSound` and `BuildingDieSound` (also the fallbacks of claim 37),
 the other `GUI…` keys, `GenericClick`, `RadarOn`, `RadarOff`, `VoiceIFVRepair` (F6), `LightningSounds`
-(list, claim 25). The repair-response vehicle of F6 is the type named `FV`, not its display or image name.
+(list, claim 25). F6's repair-response exception depends on a particular vehicle's type name,
+not its display or image name; it is not selected by an imported repair-vehicle field.
+The literal type-name binding is withheld (Open questions).
 The construction-building list tested for low power is `BuildConst` in `[AI]`; only its first
 three entries are counted for this announcement.
 `DeploySound` in that section is never read (claim 19). `SpeakDelay` (`[AudioVisual]`,
@@ -861,7 +992,8 @@ the doubled sample pair from one entry, (b) silence,
 (c) silence, (d) the sound. Add (e) an unknown sound reference: expect silence, not a fallback.
 Add (f) two listed entry names identical through character 31 but different afterwards.
 Reference their common first 31 characters from the rules: expect one truncated-name entry
-with accumulated samples as in (a). *Falsified if:* any differs.
+with accumulated samples as in (a). Add (g) a rules reference of 32 or more characters whose
+first 31 characters equal a listed name cut to 31: expect silence. *Falsified if:* any differs.
 
 **A2. Fields.** Test entries with: a 33-sample list (the 33rd distinct); `$`-prefixed names; volume 50
 against 100 (heard level ratio about −10 dB); a control word list given with commas. *Expected:* the
@@ -891,6 +1023,15 @@ Repeat with 16 busy *high*-priority channels instead. Set per-entry limits to 0 
 mask channel allocation. *Expected:* the entry without its own priority can replace *normal*
 channels but cannot steal a *high* channel; an otherwise identical explicitly *critical* entry can.
 *Falsified if:* the entry with no explicit priority steals a high-priority channel.
+
+**A4. Sample sources.** (a) Put a loose `.wav` file named like a sample of a test entry next
+to the game: expect the bank's sample, not the loose file, when the entry plays. (b) Put a loose
+`.wav` file with a distinct identifiable sound named after an announcement's eight-character
+name for the local voice set: expect that file when the announcement plays. (c) Name a
+test entry's sample that exists only as a loose file and not in the bank: expect silence
+(claim 4). (d) Repeat a bank sample reference with changed letter case: expect the same sample.
+*Falsified if:* a sound entry plays a loose file, an announcement ignores it, or case alone
+changes bank-sample lookup.
 
 **B1. Screen sounds.** Select a unit at the far corner of the map from the view. *Expected:* the
 response at full level, centred. Repeat a guard interface sound after moving the view without changing the request.
@@ -1066,11 +1207,15 @@ without moving the body, then stop the turn: expect its attached rotation sound 
 Repeat building placement and ordinary wall sale after scrolling: their screen sounds retain
 level and centre pan. Packing a building up omits the sell sound but retains the pack-up sound.
 
-**F5. Interface sounds.** Exercise each production-feedback click listed by S-0411 claim 12
-(start, queue, resume, hold, cancel and busy-building refusal), and a refused placement.
-*Expected:* the build-click entry for those production clicks and the same refusal entry for
-busy-building and placement refusal. *Falsified if:* a listed cue is absent or the refusal
-entries differ. Actions that S-0411 leaves unresolved are recorded, not assigned a prediction.
+**F5. Interface sounds.** Exercise each production-feedback click of S-0411 claim 12 (start,
+queue, resume, hold, cancel) and the busy-line refusal (a building click while a building is in
+production), then a refused placement click, then a production request when the queue is full.
+*Expected:* the build click entry plus the matching announcement for the five production clicks,
+only the "unable to comply" announcement for the busy line; only "cannot deploy here" for the
+refused placement; the refusal entry for the full queue. Repeat as each side.
+*Falsified if:* a listed cue is absent, an interface sound accompanies the busy-line or placement
+refusal, or a cue depends on side. A click on an item at its build limit: expect no click sound
+and no announcement. Actions that S-0411 leaves unresolved are recorded, not assigned a prediction.
 
 **F6. Lightning sound.** Fire the weather superweapon; record the scenario stream per tick.
 *Expected:* for each non-repeated strike point with a nonempty sound list, one raw value after
@@ -1078,6 +1223,22 @@ the bolt animation's creation draws and before explosion creation and damage, wh
 selects the audible entry. A repeated point has no sound draw. Account for animation draws using
 S-0109 and damage effects using S-0302; replay the logged seed's mathematical stream rather than
 setting a seed inside the original. *Falsified if:* the choice or its position differs.
+
+**F7. Building fallbacks.** Damage a local building whose type names no damage sound through the
+yellow and then the red threshold, then destroy one whose type has an empty death list. Then
+repeat with named test rules giving the type its own damage sound and death list.
+*Expected:* without own sounds, the game-wide building damage sound at each threshold crossing
+and the game-wide building death sound at destruction, positional at the building and following
+scrolling when the view moves during the sample. With own sounds, neither fallback plays.
+Claim 20 does not promise the type's own damage sound at a threshold crossing: add a separate
+*unchanged* hit to hear its doubled damage sound. Destruction uses the type's death list.
+*Falsified if:* an expected fallback is absent, a fallback plays with an own sound present,
+the unchanged-hit or death choices differ from claim 20, or a fallback is heard at screen level.
+
+**F8. Route-mode refusal once per game.** Exceed the route-mode limit of S-0213 claim 16 twice,
+some seconds apart, in one game; then start a new game and exceed it again. *Expected:* message
+and refusal sound on the first refusal only, and again on the first of the new game.
+*Falsified if:* the second refusal in a game gives either cue, or the new game gives none.
 
 **G1. Announcement data and voice set.** Play the same short game as each side's country.
 *Expected:* the announcement voice set of the local player's side throughout. Edit an announcement's
@@ -1129,6 +1290,24 @@ If zoom completion cannot be identified, record total duration as inconclusive f
 *Falsified if:* any resolved repeat interval, eligibility condition, distance boundary or low-power
 reset differs. Claims about other F7 kinds are not tested by these parts.
 
+**G4. Announcement roles.** Named announcement test data gives the entries for the table's
+behavioural roles distinct brief samples. Identify their roles from separate baseline event
+captures, without assuming a literal name from the table. Raise start, queue, resume, hold and
+cancel clicks, a busy building-line click, refused placement, construction completion, a new
+sidebar option, unit ready, building and unit sales, completed repair, promotion to each rank,
+low funds, low power, and base, ally and harvester attacks. Space events beyond F7 suppression
+and let each line finish. Use separate runs for local victory, local defeat and another
+non-passive player's defeat, keeping an extra bystander alive for the last test; the intentional
+defeat is exempt from the general bystander void rule. Record stereo sample identity for each
+event. *Expected:* the corresponding role's sample, including one shared promotion entry at
+both ranks. This tests event routing and same-entry relationships, not the withheld literal
+name bindings. Run a small test map whose trigger plays a test entry of kind *queued* by name
+while another announcement plays, and one naming an unknown entry. Expect the named entry
+to cut the current one as an *interrupt*, and silence for the unknown name.
+*Falsified if:* an event produces the wrong baseline role's sample, promotions use different
+entries, the trigger queues rather than interrupts, or an unknown name produces a line.
+Alliance conditions and observer/post-defeat exceptions are not established by this test.
+
 **H1. Sound does not reach the game.** Two continuations of the same saved game, with the same
 orders at the same ticks: one with effects off, one at full with the view moved differently.
 Use scripted input and record the scenario stream and game-state observables; do not set the
@@ -1136,6 +1315,15 @@ original's seed. *Expected:* identical scenario stream,
 identical game state per tick. The unsynchronised stream may differ: placement, failed or repeated playback attempts and
 per-instance draws follow presentation timing. This comparison must not assume that only the
 per-instance draws differ. *Falsified if:* any scenario-stream or state difference.
+
+**I1. Volume options.** Set the sound volume option to zero and the voice option to full: expect
+announcements at full and no sound instances, responses included; then the reverse: expect
+sounds and no announcements. With C3's sixteen loud entries playing, expect an announcement's
+level unchanged while sounds are lowered. Named test sound data gives the credit-tick entry and a
+selection response entry the same sample at volume 100, with no shifts: expect the credit ticks
+10 dB below the response at the same option setting. *Falsified if:* an option scales the other
+group, the crowded level lowers an announcement, or the credit-tick difference is not 10 dB
+within one F4 step.
 
 ## Open questions
 
@@ -1146,7 +1334,17 @@ per-instance draws differ. *Falsified if:* any scenario-stream or state differen
 - How long the zoom-in phase of a radar event lasts, whether it advances with ticks or drawn frames,
   and whether it advances at all while the local player has no radar (F7, scenario G3 d); it adds
   to every suppression window.
-- Whether announcements follow the player's sound volume option, a separate voice option, or neither.
+- Which copy of a sample the bank plays when its index lists the name twice (claim 34).
+- The sidebar event that raises the second "unable to comply" request following a build click
+  (claim 24).
+- The rules key names of the four weapon responses, the undeploy response and the death response
+  remain withheld pending the allowed-key-list update; their response behaviour is specified.
+  Exact announcement role-to-entry-name bindings and the repair-response vehicle's literal
+  type-name binding are also withheld pending an approved clean-room import-mapping convention.
+  Neither is an imported configurable identifier field; the behavioural labels alone do not
+  complete those bindings.
+- The death fallback of claim 37 is traced on one destruction path; other building removal paths
+  (sale, crushing, scenario removal) have not been checked for it.
 - Absent-key defaults of the game-wide rules sound references and the speak-delay field have
   not been traced in this verification. Their listed import forms and uses are established,
   but a missing game-wide key must not be assigned a guessed default. This part is `unmeasured`,
@@ -1174,12 +1372,23 @@ These changes must be checked with the corresponding owners before joint sign-of
   unsynchronised choices. Lightning's raw value follows bolt-animation creation and precedes
   explosion creation, except for an empty sound list or a repeated strike point.
 - S-0411: resolve its refusal-entry question and replace planned sound pointers with claims
-  24/28. S-0701 does not add cues to sidebar actions that S-0411 leaves unresolved.
+  24/28. Revision 2 corrects the earlier hand-off: the busy-line refusal of claim 12 and the
+  refused placement of claim 10 play announcements only ("unable to comply", "cannot deploy
+  here"), not the refusal sound. S-0701 does not add cues to sidebar actions that S-0411 leaves
+  unresolved.
+- S-0213 claim 16: the original gives the route-mode refusal message and sound only once per game
+  (claim 24, `quirks.route_refusal_notice_once`).
+- S-0404: a request refused as it is applied (full queue or build limit) plays the refusal sound
+  for the local player's house (claim 24).
+- S-0414: after the local player's house is defeated, the original mutes the alliance-formed and
+  superweapon announcements; the defeat, player-defeated and victory entries are claim 36's.
+- S-0005 and a future formats spec: the sample bank's index and data files (claim 34), the
+  preference for the expansion's audio archive, and the bank's byte layout.
+- S-0416: half-volume credit ticks are request level 8192 (claim 35).
 - S-0314 and S-0410: point repeat-suppression questions to F7, retaining the stated unmeasured
   kinds and unresolved zoom duration rather than treating all lifetimes as measured.
-- glossary: replace the spoken-warning delay question with claim 28's low-funds countdown.
-  This is presentation timing, not a new game-state timing exception. Audio-only terms stay
-  defined here unless another spec needs them.
+- glossary: revision 20 already records claim 28's low-funds countdown as presentation
+  timing, not a new game-state timing exception. No further glossary change is needed.
 
 ## Questions for the project lead
 
@@ -1188,3 +1397,7 @@ unsynchronised stream at real-time service opportunities. Proposal: retain the g
 choices on that stream and use a separate presentation generator for per-instance choices. This
 is not an established requirement. Sound feedback is filed under the existing *ui* topic.
 No new topic is required for this draft.
+
+Which clean-room import-mapping convention may supply the withheld fixed announcement names
+and repair-response type-name binding? The review rejected their literal strings. Replacing
+them with a purported imported identifier field would change the behaviour and is not proposed.

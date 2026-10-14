@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -31,7 +31,10 @@ has removed the former delayed-search Open question; hand off these revisions to
 Claim 25's infantry teleport fallback parameters agree with S-0208 claim 19, and its
 failed-approach row includes close-range searches covered by S-0307 claim 17. Retain the
 other parameters and exclusions of that row. Hand off these coordinated texts together.
-The approved index already records revision 23; at hand-off update it to this revision 24.
+Claim 25's non-infantry teleport search removes the reach-region restriction when the
+ordered destination lies in no reach region, agreeing with S-0207 claim 20 b and D22 run 10.
+The aircraft-factory edge-entry row and release-tick selection agree with S-0417 claim 14.
+The approved index already records revision 24; at hand-off update it to this revision 25.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
 and whether any scenario randomness occurs. Its upstream house-centre choice and complete draw
 sequence remain open in S-0215; do not mark the request answered until that part is approved.
@@ -1468,7 +1471,7 @@ Terms specific to this spec:
     |---|---|---|---|---|---|---|---|---|
     | Destination substitution (claim 24) | the destination | the unit's | the simplified movement zone | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for the simplified zone | the unit is on a bridge deck | yes | for a unit of movement zone *subterranean*, as below | the unit's cell |
     | Failed ordinary approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
-    | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4) | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
+    | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4); none when that read gives no reach region | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
@@ -1487,6 +1490,13 @@ Terms specific to this spec:
     landing row and the infantry teleport fallback row allow them and ask for no no-overlay condition. Only the first free-unit search requires
     the **no-overlay condition**: the cell must hold no overlay of any kind, resources included.
     No other row of T5 asks for that condition.
+
+    In the non-infantry teleporting landing row, a destination in no reach region removes
+    only the reach-region restriction. It does not fail the search automatically or require
+    candidates to lie in no reach region themselves. Usable-area, class and occupancy
+    tests still apply, and collection order, visibility preference and the landing-point
+    fixation tick select the result as below. Thus an unenterable water destination can
+    yield a free bank cell; no qualifying cell within the radius gives no result.
 
     A cell **qualifies** when all of these hold:
     - it is inside the usable area,
@@ -1573,7 +1583,9 @@ Terms specific to this spec:
       condition (S-0402 scenario H13 parts b and c), for the ordinary approach-failure parameters
       and centre after candidate trials, including close-range failure (S-0307 scenarios RG12,
       RG17 and RG23 f), for the infantry teleport fallback parameters (S-0208 scenario W11), for the teleporting
-      landing parameters on flat ground (S-0207 scenario D22 run 3), and for the choice without a reference cell (P16, runs
+      landing parameters on flat ground (S-0207 scenario D22 run 3), for its omitted
+      reach-region restriction when the destination has no reach region (S-0207 D22 run 10),
+      and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
       cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the other

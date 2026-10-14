@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -26,17 +26,19 @@ Network games and campaigns are out of scope. Claim 24 preserves a deferred fog 
 
 **Joint hand-off.** Check S-0011 claim 36 and scenario T21 against claim 13 of this revision
 at sign-off, and hand the two revisions off together. Creation-time sound and resource chain
-reaction are enabled; their suppression applies only to later start events. Revise S-0401
-claim 20 in the same hand-off so its trigger-played suppression rule is limited to later start
-events and does not suppress the creation-time chain reaction. S-0202 claim 15 must also
-replace its resource-removal description with taking 6 bales under S-0401 claim 3.
-A resource cell at stage 6 becomes stage 0, not empty.
+reaction are enabled; their suppression applies only to later start events. Confirm S-0401
+claim 20 and scenario E17 in the same hand-off: trigger-played suppression is limited to later
+start events and does not suppress the creation-time chain reaction. Confirm S-0202 claim 15
+and scenario R14 against the crater request's taking 6 bales under S-0401 claim 3:
+a resource cell at stage 6 becomes stage 0, not empty.
 Also confirm S-0202 claims 10 and 15 and scenario R14 against claims 13, 14 and 25.
 S-0202 claim 15 completes the downstream particle creation and smudge selection and placement
 draw rules during map loading and play, including trigger-created animations and later playback
 middle events; those effects are not draw-free. This spec retains ownership of event timing,
-sprite-derived μ and the height gate. Confirm S-0011 claim 36's composition pointer covers
-that during-play scope too; subsequent particle updates remain outside this hand-off.
+sprite-derived μ and the height gate. Confirm S-0011 claim 36 and its loading draw-order
+table include the supplied creation-time middle-event composition, and that claim 36's
+composition pointer covers that during-play scope too. Subsequent particle updates remain
+outside this hand-off, not draw-free; T21 does not establish particle or smudge draw counts.
 
 ## Terms
 
@@ -773,7 +775,7 @@ restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*
 | created | no loop delay | start event in the same tick; *playing* |
 | *delayed* | count reaches 0 | start event; no advance on that update; *playing*. The count and the start event go on while the animation is held (claim 23) |
 | *playing* | held (claim 23) | no advance on that update; the clock of claim 5 keeps running |
-| *playing* | *d* ticks have passed since the last advance, the update is not skipped, the animation is not held, and *d* > 0 | The image stage advances. That advance delivers any damage due under claim 17 and produces the middle event when *a* + *k* = μ. The resulting stage then follows the ping-pong turning rule of claim 9; if it does not turn, the pass-end rule F3 determines whether the pass ends. |
+| *playing* | *d* ticks have passed since the last advance, the update is not skipped, the animation is not held, and *d* > 0 | The next image frame is shown if it is in range; damage due on this advance is delivered, and the middle event occurs when the resulting stage satisfies *a* + *k* = μ. A turn or pass end has the consequences specified in claims 6, 8, 9 and 10: in particular, the image frame at an ending limit is not drawn, and any same-update event or follow-up switch remains observable as those claims state. |
 | *playing* | pass ends with *r* ≥ 2 | new pass (F3); if the random loop delay pair is not (0, 0), ranged draw of *D*, and *delayed* when *D* > 0 |
 | *playing* | pass ends with *r* ≤ 1, follow-up type named | follow-up switch of claim 15, start event, *playing* |
 | *playing* | pass ends with *r* ≤ 1, no follow-up type | infantry created if the type makes infantry; removed |

@@ -1,9 +1,9 @@
 ---
 id: Q-0269
 title: Whether a satisfied instance's re-arming draws come before or after its actions
-status: open
+status: answered
 related: [S-0011, S-0202]
-answered-by: []
+answered-by: [S-0011]
 ---
 
 ## Need

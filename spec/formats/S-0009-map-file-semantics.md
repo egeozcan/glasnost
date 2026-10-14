@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -56,9 +56,13 @@ the second pass and before the late phase, and game-start recalculation after cr
 secret labs and end-of-loading tags even with no starting units or an early stop.
 Recalculation is not a final-draw boundary: resource-glint setup can draw afterwards
 (S-0202 claim 14). S-0202 claim 15 supplies downstream particle and smudge creation-draw
-rules, with R14 proposed rather than measured; joint sign-off checks their composition.
-Neither these checks nor the loading-order table treats those effects as taking zero draws
-or resolves open simultaneous production-start draw assignment.
+rules at map load and during play, including immediate middle events, with R14 proposed
+rather than measured. Subsequent particle updates remain outside that claim's scope.
+Joint sign-off checks S-0011 claim 36 and its load-time draw-order table together with
+S-0202 claims 14–15, S-0412 claim 14, S-0109 claims 13–14 and 25, S-0401 claim 20,
+and this spec's claim 28 and loading-order table. Neither these checks nor this table
+treats creation-time particle or smudge effects as taking zero draws. Production-start
+draw assignment belongs to S-0404 claim 11, not this loading-order table.
 Claim 40 already follows S-0405 claim 18's conditional initial power-switch rule; the map
 flag's encoding remains here, and S-0108 claim 13 owns the slot-animation consequences.
 
@@ -1966,6 +1970,9 @@ they occur. For each point the table gives what is already in force there, what 
 stream. Every draw of a row comes after the draws of the rows above it, and within a row the draws
 come in the order listed. Nothing else in the table fixes an order: an implementation must
 reproduce the draw order and the consequences that claims 20, 28, 29 and 33 state.
+Animation creation and immediate start-event draws in these rows include any immediate
+middle-event particle and smudge creation draws under S-0202 claim 15. That claim
+supplies their composition; subsequent particle updates are outside its scope.
 
 | Point in loading | Already in force | What is decided | Draws, in stream order |
 |---|---|---|---|

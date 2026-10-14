@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -90,13 +90,13 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   object's weapon slots is below 0 (S-0308, claim 15, which states the same difference). The two
   can differ, for example for a type that switches to a healing weapon only through its weapon
   number (S-0308's example). Every row below that names a healing actor uses this test.
-- **Selection response.** One of the spoken lines of a type that is played, for an order that
-  has no acknowledgement of its own kind, by the object that gives the acknowledgement (claim 14).
-  Selecting an object plays one too, which this spec does not specify. A type has an ordered list of them, possibly empty (Import mapping); the
-  list's order is the order of the entries in the user's data, and Formulas F5 numbers the
-  responses from 0 in that order.
-  The alternative lists that the original keeps for slaves and deactivated objects are not examined
-  (Open questions).
+- **Selection order.** The order of objects in the current selection, not necessarily the order
+  in which the player selected them. Claim 12 defines it. It decides the representative's
+  tie-break, the order of issued orders and which object can acknowledge a click.
+- **Selection response, special-attack response.** Separate kinds of spoken line. Selection
+  responses accompany selection (S-0701 claim 17); special-attack responses acknowledge order
+  kinds without their own response kind (claim 14; S-0701 claim 18). Each list is ordered as its
+  entries appear in the user's data, possibly empty. Formulas F5 numbers entries from 0.
 - **Clicked object.** The object that the game finds under the cursor at the moment of a click,
   from the cursor's position on the battlefield. It is the *target* of the claims when the target
   is an object. Whether a click finds an invisible building at all is an open question (Open
@@ -240,7 +240,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    target (an object or a cell) is the action of one selected object, the representative. Each
    selected object gets a rank from table R. The representative is the object with the highest
    rank. Among objects of equal rank it is the one nearest to the target (Formulas F1), and among
-   those, the one selected earliest. With an empty selection the cursor shows the actions of the
+   those, the first in selection order (claim 12). With an empty selection the cursor shows the actions of the
    current sidebar mode (claim 13), or *select* over an object that can be selected.
    - Backing: `measurable` (Scenario T1, which also separates the tie-break by selection order)
    - Confidence: high for the rank order, medium for the distance
@@ -445,7 +445,19 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       than this click rule.
     - Confidence: medium
 
-12. **Selection clicks.** *Select* replaces the selection with the clicked object. *Toggle
+12. **Selection clicks.** When an object is added to the selection, it goes at the front if
+    its type's primary weapon exists and does positive damage, and at the end otherwise.
+    This is a type-level test, not the object's current weapon choice, veterancy or ability to
+    fire. Thus positive-primary-damage objects precede the others in reverse order of addition.
+    The others retain their order of addition. Removing an object preserves the relative order
+    of the remaining objects. The first object is the most recently added of the former group,
+    or the earliest added when that group is empty (S-0701 claim 18).
+    Selection uses the type's enslaved selection-response list for a slave unit, otherwise its
+    deactivated list for a deactivated object, otherwise its normal list. A deactivated object
+    is one that has lost what it needs to operate (S-0701 claim 17). An empty applicable list
+    gives silence without fallback to the normal list. Selection responses and their playback
+    are owned by S-0701 claims 16 and 17, not the order-response rule of claim 14.
+    *Select* replaces the selection with the clicked object. *Toggle
     select* adds the clicked object to the selection, or removes it if it is already selected; it
     acts only when the first selected object is the acting house's own, and otherwise acts as
     *select*. While the type-select role is held, both act on every object of the clicked object's
@@ -455,7 +467,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     whole milliseconds, so a gap of 500 counts and a gap of 501 does not (Constants). The
     original reads a real-time clock in whole milliseconds; our engine's interface applies the same
     rule to the whole-millisecond times of its input events (Edge cases, departure).
-    - Backing: `measurable` (Scenario T2), except two parts, which are `unmeasured`. (1) The last
+    - Backing: `measurable` (Scenarios T1 and T2 for selection order; S-0701 scenarios D2 and D3
+      for selection-response lists and silence), except two parts, which are `unmeasured`. (1) The last
       millisecond of the interval (500 against 501): the timing of scripted input is not exact to
       a millisecond, so Scenario T2 only separates 200 ms from 1 s. (2) The fallback of *toggle
       select* to *select* when the first selected object is not the acting house's own while an
@@ -463,7 +476,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       the case needs an object that changes owner while it is selected, and whether such an
       object stays selected is not known (Open questions). Over a first selected object that is
       an enemy, the click gives *select* by row G10 and does not reach the fallback.
-    - Confidence: medium (low for the last millisecond)
+    - Confidence: high for selection order and absence of response-list fallback; medium for
+      selection clicks and which objects use the variant lists; low for the last millisecond
 
 13. **Sidebar modes.** With an empty selection, the sidebar's mode buttons give these actions:
     - *Sell mode:* over an own building that can be sold and is not vehicle-like, *sell*. Over a
@@ -490,17 +504,22 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 14. **Click feedback.** Only the first object of the selection, in selection order, can give the
     spoken acknowledgement, whether or not its own action gives it an order: when that object gets
-    no order from the click, no object gives one (medium). For an order that has no acknowledgement of its own kind (the kinds are
-    harvest, attack, move and attack move, enter, capture and unload), the acknowledgement is one
-    of the type's selection responses, chosen by one raw value taken from the unsynchronised random
-    stream (Formulas F5). It is a plain raw value, not a ranged draw (S-0202, claim 4), and none is
-    taken when the type has no selection response.
+    no order from the click, no object gives one (medium). For ordinary immediate battlefield
+    clicks, the response kind and fallbacks are S-0701 claim 18 and F6's: harvest, attack, move,
+    attack-move, enter, capture and unload have their own response kinds; every other behaviour
+    order kind uses the type's special-attack list, not its selection list. A nonempty applicable
+    list takes one raw value from the unsynchronised random stream (Formulas F5), not a ranged
+    draw (S-0202 claim 4). An empty list takes no choice draw and gives silence; no later selected
+    object responds instead. A single sound entry takes no choice draw. Playback may take
+    additional unsynchronised draws under S-0701; these are separate from choosing the response.
+    Selection's enslaved and deactivated lists (claim 12; S-0701 claim 17) do not replace an
+    order's response list.
     The marker at a move target is likewise created once per click, by the first object of the
     selection, and only for the action *move* (not for *no-move*, which also orders a move, claim
     11; low). The
     original gives both for the local player's own clicks only. In our engine both are drawing and
     sound only: they take no part in game state and make no draw from the scenario random stream
-    (the response choice takes its one raw value from the unsynchronised stream, as above), and an
+    (any response-choice and playback draws use the unsynchronised stream, as above), and an
     AI house's orders give neither (a design rule of ours: the original has no AI input path to
     observe). This is the departure confirmed by the project lead and
     stated in S-0213 (Edge cases, *the click marker*): since the original creates them only on the
@@ -594,12 +613,15 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 > **F5 (acknowledgement choice, claim 14).** *i* = *x* mod *n*, where *x* is the next raw value of
 > the unsynchronised random stream, an unsigned 32-bit integer taken whole (S-0202, claim 1), *n*
-> is the number of selection responses of the type of the object that gives the
-> acknowledgement (the first object of the selection, claim 14), and mod is the remainder
+> is the number of entries in the applicable order-response list of the type of the object that
+> gives the acknowledgement (the first object of the selection, claim 14). For an order kind
+> without its own response kind this is the special-attack list (S-0701 claim 18 and F6), never
+> the selection list. Mod is the remainder
 > of unsigned integer division (never negative). For *n* ≥ 1, exactly one raw value is taken and
 > response *i* is played, the responses being numbered from 0 in the order the type lists them.
-> For *n* = 0, no raw value is taken and no response is played. Integer arithmetic, no rounding,
-> no rejection of values.
+> For *n* = 0, no raw value is taken and no response is played. A single-entry sound response
+> outside a list takes no choice draw. These counts exclude sound playback's own draws
+> (S-0701). Integer arithmetic, no rounding, no rejection of values.
 
 ## Constants
 
@@ -1195,7 +1217,9 @@ Ordering consequences:
 | Rules, combat-damage section, `CanDetonateTimeBomb`, `CanDetonateDeathBomb` | row G3 | boolean (S-0003) | no (both keys) |
 | Rules, combat-damage section, `TreeTargeting` | tree targeting (claim 6) | boolean (S-0003) | no |
 | Rules `[General]` `AllowShroudedSubteranneanMoves` | underground moves into shroud (claim 11) | boolean (S-0003) | no |
-| Infantry, vehicle, aircraft and building types, `VoiceSelect` | the type's selection responses (claim 14; Formulas F5): the number *n* of entries is the count of the list, and F5 numbers them from 0 in the order the list gives them | list of sound names (S-0003), kept in the listed order, with no entry dropped or reordered | empty (no response) |
+| Infantry, vehicle, aircraft and building types, `VoiceSelect`, `VoiceSelectEnslaved`, `VoiceSelectDeactivated` | normal, enslaved and deactivated selection lists (claim 12; S-0701 claim 17), with no fallback between lists | list of sound names (S-0003), kept in the listed order | empty (no response), each list |
+| Infantry, vehicle, aircraft and building types, `VoiceSpecialAttack` | special-attack order-response list (claim 14; F5); *n* counts its entries, numbered from 0 in listed order | list of sound names (S-0003), kept in the listed order | empty (no response) |
+| Object type `Primary`, weapon `Damage` | primary-weapon presence and positive damage for selection order (claim 12); the weapon mapping is S-0308's | weapon type name; integer (S-0003) | no primary weapon; 0 damage |
 | Rules `[General]` `HarvesterUnit` | the harvester list of the row I15 quirk | list of vehicle types | empty |
 
 The defaults in the Absent column are the values the original gives a field when the type (or the
@@ -1219,7 +1243,8 @@ object of the allied bystander uses one of that bystander's objects, which the s
 scenarios do not depend on which physical keys play the modifier roles: the measurer uses the
 original's own binding. Objects are pre-placed by the map. A recorder logs each object's behaviour, target and destination per tick, and each order
 issued. The cursor shape is observed on screen and used only to read the representative's action.
-Each test is done once, because no click draws from the scenario random stream (the one draw a click makes is from the unsynchronised stream, which T2 part B reads). Where a
+Each test is done once, because no click draws from the scenario random stream (response-choice
+and playback draws use the unsynchronised stream, which T2 part B reads). Where a
 scenario says "alone", that object is the only one selected, so that it is the representative.
 
 **Scenario T1: representative (claim 1).** Select an unarmed engineer and an armed tank, with the
@@ -1230,8 +1255,8 @@ expected the ground vehicle's action (no-move), although the amphibious vehicle 
 Move the amphibious vehicle nearer than the ground vehicle and hover again: expected move.
 Last, the tie-break: place the two vehicles so that their distances to the water cell are equal
 (mirror positions, so that F1 gives the same *d*), select the ground vehicle first and then add the
-amphibious one, and hover: expected the ground vehicle's action (no-move). Repeat with the
-selection built in the other order: expected move. Falsified if the engineer's action (capture)
+amphibious one, and hover: expected the amphibious vehicle's action (move), because the later
+addition goes at the front. Repeat with the selection built in the other order: expected no-move. Falsified if the engineer's action (capture)
 shows in the first case, or the farther vehicle's action shows in either of the second and third,
 or the cursor does not follow the selection order in the tie-break.
 
@@ -1278,32 +1303,37 @@ or the cursor does not follow the selection order in the tie-break.
 - With the tank selected, hold route mode and click two cells. Expected: no order is recorded for
   the tank until route mode ends (claim 3). Falsified if a move order is recorded at the first
   click.
-- Select a paralysed own tank first (it cannot move, so its action gives no order; a stock weapon
-  with that effect paralyses it) and a healthy own tank second, and click an empty visible cell.
+- Select a healthy own tank first and add a paralysed own tank second (a stock weapon with
+  that effect paralyses it). Both types have positive primary-weapon damage, so the paralysed
+  tank is first in selection order despite being unable to move. Click an empty visible cell.
   Expected: the healthy tank gets a move order, and no acknowledgement is heard and no marker
-  appears (claim 14, low). Select them in the other order and click again: expected one
-  acknowledgement and one marker. Falsified if the acknowledgement or marker comes in the first
-  case, or does not in the second.
-- *Part B, the acknowledgement draw (claim 14; needs the random-state recorder reading the
-  unsynchronised random stream, with scripted input for the clicks).* *Setup:* own units of a
-  type that has at least two selection responses, a second type with a different number of them, and
-  (for the last case) a third type with none, and a click target for which the tables give
-  those units an order outside the kinds that have their own acknowledgement (harvest, attack,
-  move and attack move, enter, capture, unload). *Procedure:* the script selects one such unit and
-  clicks the target, then selects three (the first of the first type, the others of the second) and clicks it again,
-  then selects one unit of the type with none and clicks it, and then does the same with a move
-  click, while the recorder logs the unsynchronised stream's position each tick. *Observable:*
-  the position's advance across the click's tick, the response heard, and the scenario random
-  stream's position. *Expected:* each click of the first kind advances the unsynchronised
-  stream's position by one raw value however many units are selected, and the response heard is the one
-  that Formulas F5 gives for the raw value taken, for the type of the first selected unit (numbered
-  from 0 in the order the type lists its responses); a click whose first selected unit has a type
-  with no selection response advances it by none; a move click gives
-  its own acknowledgement and advances it by none; the scenario random stream's position does not
-  change for any click. *Falsified by:* one advance per selected unit, an advance for the move
-  click or for a first unit whose type has no response, a response that does not match F5 (for
-  example a signed or ranged derivation of the index, or the count of a later unit's type), or any change of the scenario stream. The
-  marker makes no draw of either stream and is checked by eye only.
+  appears (claim 14, low). Build the selection in the opposite order and click again: expected
+  one acknowledgement and one marker. Falsified if the acknowledgement or marker comes in the
+  first case, or does not in the second.
+- Selection order (claim 12): add an engineer without a primary weapon, a tank with positive
+  primary-weapon damage, a medic with negative primary-weapon damage, and a second such tank,
+  in that sequence by modifier-clicks. Record selected-object order and issued move orders on
+  an empty visible cell. Expected: second tank, first tank, engineer, medic. Remove the second
+  tank and repeat: first tank, engineer, medic. Falsified by any other order. S-0701 D3 separately
+  tests selection responses for enslaved and deactivated objects, including silence without
+  fallback.
+- *Part B, acknowledgement choice (claim 14; F5).* At speed index 6, director and unrelated
+  mods off, use the isolated map above and a named test map override with distinguishable
+  selection and special-attack lists. Give two own unit types nonempty special-attack lists of
+  different lengths and a third an empty one. Use an area-guard cell click (force-move and
+  force-fire together) to produce an order without its own response kind. Script one click
+  with one unit selected, one with three selected, and one with the silent type first in
+  selection order as defined by claim 12. Let all pending speech finish before each click.
+  Record the first selected object's type, order, raw unsynchronised values, response requested
+  and heard, and scenario-stream state. Separate choice draws from sound-instance draws using
+  S-0701's playback rules and scenarios D2 and E1. Repeat with a move click and a nonempty
+  move-response list as control. Expected: area guard chooses from the first object's
+  special-attack list by F5, taking exactly one choice draw when nonempty and none when empty.
+  Later selected objects give no response. The move control chooses from its move list and
+  also takes one choice draw, not zero. No click changes the scenario stream, and the marker
+  itself takes no draw. Falsified by a selection-list response to area guard, a choice draw for
+  an empty applicable list, a choice draw per selected object, or a response inconsistent with
+  F5. Selection-list variants and their no-fallback rule are tested by S-0701 D3.
 
 **Scenario T3: modifiers and attack-move (claims 4, 5).** One tank, one friendly tank, one enemy
 tank out of range, empty cells. With force-move on the enemy: the tank moves to it without
@@ -1793,7 +1823,6 @@ Rows with no step, `unmeasured`, each for a reason.
 - Whether a selected object that changes owner (for example one that an enemy captures) stays
   selected, which decides whether the fallback of *toggle select* (claim 12) can be reached.
 - Whether a click finds a building whose type is invisible in the game as the clicked object (row B1, target half).
-- Whether the original uses other selection response lists for a slave unit or a deactivated object (Terms, *selection response*), and so whether claim 14's draw uses another list then. Until that is checked, claim 14 and F5 state only the plain list (low).
 - Whether a ground object can stand on a destroyable-cliff cell or on a cell with a live veinhole
   monster (row AC5).
 - Whether the recorder can log a vehicle as inside a tunnel for long enough to click (Scenario T9

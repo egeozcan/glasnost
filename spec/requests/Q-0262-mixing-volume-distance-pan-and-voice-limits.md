@@ -1,9 +1,9 @@
 ---
 id: Q-0262
 title: How loud does a sound play at a distance from the view, how is it panned, and how many sounds can play at once?
-status: open
+status: answered
 related: [S-0416, S-0202]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240]
 supersedes: []
 ---
 
@@ -181,8 +181,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
    Here *ρ* is the speed fraction after this tick's update (claim 10). A vehicle that carries a flag in a
    capture-the-flag game earns trunc(*s* / 2) instead. Every product is formed in floating point
    (Formulas), and trunc truncates toward zero.
-   - Backing: `measurable` (scenarios D1, D6 and D12; the capture-the-flag halving by scenario D15,
-     whose precondition, that a flag can be carried at all, is itself open)
+   - Backing: `measurable` (scenarios D1, D6 and D12). The capture-the-flag halving is
+     `unmeasured`: no stock skirmish setup is established that lets a vehicle carry a flag.
+     D15 proposes a test conditional on resolving that precondition
    - Confidence: high; medium for the halving
 
 3. **Spending progress on track points.** In each moving tick the vehicle adds *s* to its budget
@@ -226,12 +227,14 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
    purchases, which may itself be a position this rule gave it in an earlier tick, so the step
    compounds from tick to tick:
 
-   > position = *Q*′ if *Q*′ lies in the cell of *Q* or in the cell of *P*,
-   > position = *P* if *Q*′ lies in neither cell and *A* > 3,
-   > position = *Q* if *Q*′ lies in neither cell and *A* ≤ 3.
-   >
-   > where *Q*′ = *Q* + (trunc((*P*ₓ − *Q*ₓ) × *t*), trunc((*P*ᵧ − *Q*ᵧ) × *t*)) and *t* = *A* × (1/7),
-   > rounded toward zero to single precision (F4).
+   | Where *Q*′ lies | Position at the end of the tick |
+   |---|---|
+   | In the cell of *Q* or the cell of *P* | *Q*′ |
+   | In neither cell, with *A* > 3 | *P* |
+   | In neither cell, with *A* ≤ 3 | *Q* |
+
+   Here *Q*′ = *Q* + (trunc((*P*ₓ − *Q*ₓ) × *t*), trunc((*P*ᵧ − *Q*ᵧ) × *t*)) and
+   *t* = *A* × (1/7), rounded toward zero to single precision (F4).
 
    Because *t* is always a little less than *A*/7 (F4), a displacement whose exact product would be
    a whole number comes out one lepton shorter; in particular *t* < 1 even when *A* = 7, so the
@@ -500,10 +503,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Backing: `measurable` (scenarios D1, D3 and D13; S-0402 H14 for the completion
       report's timing, refusal scatter and ordering, S-0417 U8 for factory arrival reporting,
       D8 part e for the budget emptied by a wait
-      after a track ended in the tick)
+      after a track ended in the tick). The chain-point arrival update is `unmeasured`:
+      D9 records chained geometry but no arrival-report effect, and S-0417 claim 7 has no
+      established setup that produces a chained curve while tethered
     - Confidence: medium (the order of the two updates and the cap were inferred from reading, not
-      observed; the cap was simulated); medium for completion-report ordering, with the
-      factory chain-point report inheriting S-0417 claim 7's unmeasured backing
+      observed; the cap was simulated); medium for completion-report ordering and the
+      chain-point arrival update
 
     **Quirk `quirks.drive_track_end_cap`.** Default (original): as above. Off (a design behaviour,
     since the original has no such mode): the two rows of the table become one rule, for a tick that
@@ -1008,13 +1013,27 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       effect, is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
       **landing point** *L* at once (parts b and c). For a vehicle, the vehicle-present
       mark of the occupancy record (S-0209) moves at once from the cell of the object's old point
-      to the cell of *L*. An aircraft instead moves the object-present mark, not a vehicle-present
+      to the cell of *L*. For a vehicle this reservation is in the **ground record**, even
+      on a high-bridge cell and even when part b's nearby search uses deck mode. The
+      reservation uses *L*'s chosen height *H*, not the object's eventual deck height.
+      Before the jump, a driving vehicle approaching under a level high bridge reads that
+      ground record, while one approaching on the deck reads the deck record (S-0209
+      Terms). With no other occupant or reservation, the former therefore meets a
+      *moving blocker* from S-0209 claim 5 row VR5, while the latter meets no blocker
+      from this reservation. Other terrain, occupants and exceptions still belong to
+      S-0209 and can give a different final outcome.
+      Clearing an earlier reservation likewise uses its remembered point and height:
+      a remembered non-infantry landing point at *H* clears the ground record. Before any
+      landing point has been remembered, the vehicle clears at its own position; a point
+      at least 416 leptons above the terrain surface clears the deck record, otherwise
+      ground. These comparisons are exact integer comparisons in leptons.
+      An aircraft instead moves the object-present mark, not a vehicle-present
       mark. Its reservation at *L*, whose chosen height is *H*, is in the ground layer, even
       when that cell carries a high bridge. Its old-point mark is read in the deck layer only
       on a high-bridge cell when the old point's height is at least *H* + 416 leptons there
       (an exact integer comparison), otherwise in ground. Infantry reserve the chosen standing position (S-0208 claim 19). The old
-      point is the previous *L* when an earlier destination had fixed one that was not yet jumped
-      to, and otherwise the object's own position. The object stays listed in its old cell until the
+      point is the previous remembered *L*, including after a completed jump, and otherwise
+      the object's own position. Finishing a jump does not erase that remembered point. The object stays listed in its old cell until the
       jump. From then until the jump it counts as moving (S-0212 claim 27), and the point it
       reports as its locomotor's goal is *L*.
     - (b) **The landing point of an object that is not infantry.** When the object's entry outcome
@@ -1073,6 +1092,16 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       cell layer is the bridge deck and its height is *H* + 416 leptons; elsewhere its cell layer
       is ground and its height is *H*. This includes an aircraft: it lands at terrain height,
       or on the deck, not at a flight or cruise height, and is listed in that landing layer.
+      For a vehicle landing on a high bridge, the deck record is marked by its placement,
+      but the earlier ground reservation is not transferred or cleared by the jump.
+      Immediately after an otherwise uninterrupted landing, **both records** therefore
+      have the vehicle-present mark. A later accepted destination clears the remembered
+      ground reservation and reserves the new landing cell's ground record. The old deck
+      mark remains while the vehicle is listed there, and is cleared when the next jump
+      removes it from that cell. Off a high bridge, reservation and placement use the same
+      ground record. S-0209 owns the entry outcomes obtained from either record; the
+      ground reservation itself is not a listed ground occupant. This is
+      `quirks.teleport_vehicle_ground_reservation` (below).
       This actual landing height can differ from the infantry
       position-choice height (S-0208 claim 19). Its facing does not change. The arrival sound
       plays at *L*. Entering *L*'s cell has the arrival effects of the object's own kind: for a
@@ -1133,13 +1162,19 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       part i, run 8 for a shot in flight, run 9 for part j; S-0208 W11 for part c and infantry
       reservations, landing draws and placement clearing; S-0215 B18 d for ordinary target-loss
       and revert; runs 10 to 12 for the entry-test level, absent reach restriction, aircraft
-      mark and landing, and animation creation draws). `unmeasured`: the occupancy mark moving before the jump, because the jump
-      follows within the same or the next movement update and no observable falls between them. Also
+      mark and landing, and animation creation draws; run 13 for Q-0240's vehicle
+      reservation layers, replacement clearing and post-jump marks). `unmeasured`:
       the live erasing-lock exception, because no stock setup establishes a retained lock at a
-      locomotor jump (S-0215 claim 10).
+      locomotor jump (S-0215 claim 10). Also `unmeasured` are part a's disabling states other
+      than phasing in, part b's superweapon hold, part e's parasite expulsion, and part j's
+      body-turn and exhaustive unchanged-visibility assertions: D22 isolates none of these,
+      and no qualifying setup for their interaction with an own-locomotor jump is specified.
+      The animation/sound ordering and type-specific sound overrides of part e are
+      `measurable` through D22 run 1's presentation controls
     - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
       (including the entry-test level and the search without a reach restriction), for the
-      aircraft reservation and landing rules, for part a's list of disabling states, for part d's same-tick consequence and
+      aircraft reservation and landing rules, and for Q-0240's vehicle ground reservation,
+      retained-point clearing and two-record post-jump result; for part a's list of disabling states, for part d's same-tick consequence and
       for part h's consequences; part c inherits S-0208 claims 19–20's confidence, high for
       position choice and draws and medium for search choices, bridge consequences and placement
       conditions; low for part j's statement that nothing else changes
@@ -1747,6 +1782,15 @@ its new destination from that tick.
   flag off (*q* = 0) and gives an importer warning. This is a departure (bad data), with no switch.
 - **A teleporting object ignores terrain between its position and its landing point** (claim 20 b).
   It can reach cells that no path reaches. This is original behaviour, not a bug, and has no switch.
+- **`quirks.teleport_vehicle_ground_reservation`** (claim 20 a, e; proposed).
+  Default (original): a teleporting vehicle reserves the ground record even for a high-bridge
+  landing, remembers that terrain-height point for later reservation clearing, and keeps the
+  ground reservation through deck placement; placement also marks the deck record. Off:
+  reserve the eventual landing layer from fixation onwards (deck on a high bridge, ground
+  elsewhere), clear the earlier reservation from that same layer when replacing it, and keep
+  no separate ground reservation beneath a deck landing. Placement still has claim 20 e's
+  deck height and listing. S-0209's ordinary entry rules apply to the selected record in
+  either setting. The switch changes no landing search, delay or random draw by itself.
 - **Orders given while phasing in are lost** (claim 20 f), not deferred to its end. Original
   behaviour, no switch.
 - **`quirks.drive_giveup_ignores_contact`** (claim 15, F7). Default (original): at a step check the
@@ -1809,6 +1853,7 @@ The other chrono keys of `[General]` (the chronosphere's delays and its landing 
 superweapon specs, not claim 20.
 
 | No data key | non-infantry entry-test level, unrestricted reach comparison for a destination in no region, kind-specific reservation and landing (claim 20) | engine behaviour, not imported fields | fixed rules of claim 20 |
+| No data key | vehicle reservation and clearing layer, retained landing point and two-record bridge landing (claim 20 a, e; Q-0240) | runtime occupancy behaviour; deck-mode search does not select the reservation record | fixed engine rules; original behaviour by default under `quirks.teleport_vehicle_ground_reservation` |
 | No data key | retained teleporting state and no teleport destination handling during temporary driving (claim 21) | runtime state, not imported fields | a newly created teleporting object has no pending jump and no phasing in |
 
 Animation type fields governing creation draws are imported by S-0109 and S-0202,
@@ -1953,7 +1998,7 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
   yellow ratio, and a second run clearly above it.
 - *Observable:* as D1, arrival tick at cell 20 minus arrival tick at cell 10.
 - *Expected:* 43 ± 1 ticks for cells 10 to 20 in the first run (*s* = 38), and 32 ± 1 in the second.
-- *Falsified if:* both runs are equal.
+- *Falsified if:* either run lies outside its expected tick range, including if both runs are equal.
 
 **D7: curve against turn in place (claims 5 to 7).**
 - *Setup:* field 20, acceleration off. Map A: a corridor one cell wide that runs 5 cells north and
@@ -2103,16 +2148,17 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
   to 4 no other mobile object is near the crates (claim 13). Run 5: as run 3, with a second vehicle
   *W* of the test type standing idle in a cell next to the crate's cell and a stock aircraft that
   can land on open ground landed in another cell next to it; the test rules file also sets the
-  size of the crate's area (crate specs) large enough to cover the cells next to the crate. The
-  recorder also reads the speed bonus factor of *W* and of the aircraft.
+  size of the crate's area (crate specs) large enough to cover the cells next to the crate.
+  Place an idle infantry unit in a further covered neighbouring cell. The recorder also reads
+  the speed bonus factors of *W*, the infantry unit and the aircraft.
 - *Observable:* as D1, arrival tick at cell 20 minus arrival tick at cell 10; in run 5, the speed
   bonus factors after the pick-up, and the same arrival difference for *W* when it is then
   ordered along the route.
 - *Expected:* run 1 66 ± 1 ticks (*s* = 25). Run 2 22 ± 1 ticks (*s* = 76). Run 3 22 ± 1. Run 4 the
   same as run 3. Run 5: *W*'s factor becomes 1.5 and it takes 22 ± 1 ticks; the aircraft's factor
-  stays 1.0.
-- *Falsified if:* any run is off by more than one tick, run 4 is faster than run 3, *W*'s factor
-  stays 1.0 in run 5, or the aircraft's factor changes. If no stock aircraft can land on open
+  stays 1.0; the infantry unit's factor becomes 1.5.
+- *Falsified if:* any run is off by more than one tick, run 4 is faster than run 3, *W*'s or the
+  infantry unit's factor is not 1.5 in run 5, or the aircraft's factor changes. If no stock aircraft can land on open
   ground, run 5 is run without it and the exclusion of aircraft stays unconfirmed.
 
 **D13: the braking floor raises a slow vehicle (claims 10 and 12, `quirks.drive_brake_floor_raises`).**
@@ -2154,7 +2200,8 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
 - *Expected:* 66 ± 1 ticks (*s* = trunc(51 / 2) = 25), against 32 ± 1 without the flag.
   Precondition: a flag must exist and be carried; if none can be picked up, the scenario is
   inconclusive (Open questions).
-- *Falsified if:* a vehicle carrying a flag crosses cells 10 to 20 in 32 ± 1 ticks.
+- *Falsified if:* in a qualifying run a vehicle carrying a flag crosses cells 10 to 20
+  outside 66 ± 1 ticks, including the unhalved result of 32 ± 1 ticks.
 
 **D16: the locomotor field (claim 14).**
 - *Setup:* a test rules file adds new types to the type lists, each a copy of the fields of an
@@ -2558,7 +2605,14 @@ cell before *X*.
     recorder first shows the destination; on that tick its position becomes the destination cell's
     centre at height *H*, its old cell no longer lists it, the new one does, its facing is unchanged,
     its destination is gone and its behaviour falls back to rest; it is phasing in from that tick
-    until the tick F9 gives with the rules in force.
+    until the tick F9 gives with the rules in force. Record animation appearances and
+    sound requests at both positions, with their tick and within-tick order. In a named
+    test-map control give *T* distinct departure and arrival sound entries; compare a
+    control with those type entries absent and distinct game-wide entries instead.
+    Expect old-point animation creation before its departure sound, arrival sound at
+    *L* before the landing-point animation, and type entries in place of the game-wide
+    ones when supplied. Wrong position, order or sound selection falsifies these parts
+    of claim 20 e; a silent or unidentifiable entry makes that sound control inconclusive.
   - Run 2 (harvester exception). As run 1 with *H*. *Expected:* the same jump, and no phasing in at
     all: a further order on the next tick is obeyed with a jump on that tick.
   - Run 3 (occupied destination). The destination cell holds a stationary friendly vehicle.
@@ -2571,9 +2625,12 @@ cell before *X*.
     order, does not arrive.
   - Run 5 (delay against distance). Orders to cells at several distances from 1 to 30 cells, with
     the stock rules and with test rules files that change, one at a time, the distance factor, the
-    trigger flag (off), the minimum delay and the range minimum. *Expected:* the number of ticks
-    spent phasing in equals F9's *D* in every run; with the trigger off it is the minimum delay; with
-    the distance below the range minimum it is the minimum delay.
+    trigger flag (off), the minimum delay and the range minimum. *Expected:* the phasing-in
+    end tick minus the jump tick is max(*D*, 1), with *D* from F9, for the non-harvester *T*.
+    With the trigger off or distance below the range minimum, it is max(*m*, 1), where *m*
+    is the imported minimum delay. Include named test variants with minimum delay 0 and
+    −1 and the trigger off: both end on the tick after the jump, not on the jump tick.
+    A different end tick falsifies this part.
   - Run 6 (orders while phasing in). Scripted input gives *T* a move order on the second tick of
     its phasing in. *Expected:* the order is lost: no jump during or after phasing in until a new
     order is given after it ends.
@@ -2628,11 +2685,37 @@ cell before *X*.
     creation, old point before landing point, both in the jump tick. The normal variant
     may take none if no creation condition needs a draw; that is not a special exemption.
     Missing either test draw, reversed assignment or delayed creation falsifies the claim.
+  - Run 13 (vehicle bridge reservations, Q-0240). At game speed index 2, use a high bridge
+    over traversable flat ground, a human house and one bystander computer player kept away,
+    director and mods off. Use the stock chrono miner and separately *T*. Observe the bridge,
+    its approaches and the departure cell; void runs with unrelated bystander interference or
+    defeat. Start once below deck height and once on a deck, so the search's deck mode differs.
+    Supply a clear bridge-cell destination by scripted input; record both occupancy records,
+    listings, remembered landing point, destination and position with the read-only recorder.
+    Qualify pre-jump observations only when the recorder catches a fixed landing point before
+    placement; a same-tick jump does not justify inventing a one-tick waiting interval.
+    *Expected before the jump:* the ground vehicle-present mark is set, not the deck mark,
+    and the vehicle is still listed at departure. In a qualified interval, replace the
+    destination with a different free cell and record the earlier ground reservation clearing.
+    *Expected after the jump:* deck position and listing at height *H* + 416, with both
+    ground and deck vehicle-present marks. Wait for phasing in to end where applicable, then
+    give a free-cell destination outside the bridge. Expect the old ground mark to clear
+    at fixation, and the old deck mark to clear when the vehicle leaves by its next jump.
+    Isolate other occupants and reservations so they cannot account for either mark.
+    A second pair of runs sends ordinary non-crushing vehicles under the bridge and along
+    the deck towards the landing cell. Record entry outcomes and waits or re-routing,
+    separating the pre-jump empty-list case from the post-jump deck occupant case.
+    S-0209 claim 5 owns those outcomes; its ground record sees the pending reservation,
+    while the empty deck record does not. Repeat each height and replacement case three
+    times. A deck-only pre-jump reservation, clearing the remembered reservation from deck,
+    or a ground mark disappearing solely on deck placement falsifies claim 20's layer rule.
+    Without a captured pre-jump interval, that part is inconclusive, not a pass.
 - *Runs:* 3 each, run 3's main case at three different tick numbers; run 7 until each class has at
   least 3 runs.
 - *Falsified if:* a turn or a wait precedes the jump, the jump comes a tick later than stated, the
   facing changes, *T* lands on the occupied cell in run 3, *T* or *H* fails to reach the cliff top
-  or island in run 4, any phasing-in length differs from F9, *H* phases in, the order of run 6 is
+  or island in run 4, *T*'s phasing-in end tick differs from jump tick + max(*D*, 1) with
+  *D* from F9, *H* phases in, the order of run 6 is
   carried out, the draw count of run 7 differs, the projectile of run 8 hits *T*, or in run 9 *T*
   cannot be damaged or is treated differently by the crusher.
 
@@ -2660,6 +2743,21 @@ cell before *X*.
 - A retained pending jump or phasing-in control needs a stock event that starts temporary
   driving in that state. No such event is established. Do not fabricate one through memory
   writes; these conditional rules remain unmeasured.
+
+## Cross-spec changes to confirm
+
+- Q-0240: hand off this revision with S-0209's matching claim 1 pointer and claim 5
+  reservation consequences. Claim 20 a/e here owns the teleporting vehicle's ground
+  reservation, remembered-point clearing and two-record bridge placement; S-0209 owns
+  the entry outcomes and must share `quirks.teleport_vehicle_ground_reservation`.
+  A reservation is not necessarily in the cell layer where the vehicle is listed.
+- The coordinated blocked-first-check rule is already stated in claim 15, D17(d3)
+  and S-0212 claim 22: immediate fresh search despite a running retry timer, then
+  same-tick repeated check when a path is found. Confirm those texts together at sign-off.
+- S-0208 claim 19's infantry refused-replacement rule remains different from claim 20 b's
+  retained non-infantry landing point; its actual deck landing follows claim 20 e.
+  S-0215 claim 10's target-loss exception and restored-target distinction likewise remain
+  coordinated with claim 20 e. These checks require no new rule in those companions.
 
 ## Open questions
 
@@ -2732,7 +2830,9 @@ cell before *X*.
 - Whether a vehicle at rest keeps its leftover budget on every way of arriving (claim 3). Scenario
   D8 part b tests the end of an ordinary move only.
 - Whether interpolation (claim 4) can move a vehicle into a cell that it has not yet claimed under
-  the occupancy rules (S-0209). S-0209's next revision should settle this.
+  the occupancy rules (S-0209). This is the shared Open question of S-0209 on
+  between-point movement and reservation timing. Any resolution must reconcile claim 4
+  with S-0209 claim 1's reservation and release rules and be handed off in both specs together.
 - S-0417 table T1 and claims 5 and 6 now specify the vehicle-factory exit track and its initial
   and updated speed fractions. Other building tracks remain separate engine data belonging to
   the structures specs. A reading, not exercised (low confidence), points to two rules

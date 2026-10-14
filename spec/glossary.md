@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1641,8 +1641,9 @@ order, damage or death. Its kind uses a list or a single sound entry on the obje
 the fallbacks owned by S-0701 (Terms, claims 16 to 20, Formulas F6). S-0214's *selection
 responses* are the selection kind.
 
-**screen sound.** A sound request not tied to a map position, at full request level and centre
-left-right placement; the entry's own level still applies. See S-0701 (Terms, claim 5).
+**screen sound.** A sound request not tied to a map position, with centre left-right placement.
+Its request level is full unless the request specifies a volume fraction; the entry's own level
+still applies. See S-0701 (Terms, claims 5 and 35).
 
 **sidebar.** The panel beside the battlefield view during play, with the radar, the local
 player's credits and the build icons. S-0004 (claim 11) owns the order of the build icons, S-0411

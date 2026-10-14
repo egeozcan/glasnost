@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,10 +25,10 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Paired revisions.** S-0404 revision 8 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 9 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary (claims 7 and 13).
-S-0407 revision 10 distinguishes cancellation orders issued
+S-0407 revision 11 distinguishes cancellation orders issued
 at the recheck from their application at the tick's end, exempt held-item resume from the
 issue-time limit test, and retain the application-time limit test on queued starts (claims
 13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
@@ -72,8 +72,8 @@ last recheck). In addition:
 - **Build icon (cameo).** The glossary term, narrowed: a superweapon icon is also an entry of a tab
   (S-0004, claim 11), outside this spec.
 - **Recorder.** The glossary term, narrowed: one that also logs every order given, with the tick in
-  which it was given and the tick in which it was applied, and the sounds played (used where a
-  scenario says so). It still never gives orders.
+  which it was given and the tick in which it was applied, and the sounds played and announcement
+  requests (used where a scenario says so). It still never gives orders.
 - **Unit item.** An item of an infantry, vehicle or aircraft type; the other items are building and
   defence items. "Unit" alone, as the kind of an item, icon, type or line ("a done unit", "a unit
   line"), refers to unit items; "the unit" that a done unit item releases is the object it becomes.
@@ -321,8 +321,8 @@ last recheck). In addition:
     spec owns its use and the unknown value at mode start. A placement refused by its placement
     tests plays a refusal sound and placement mode resumes with the same building. A place order
     ignored because its factory condition fails instead follows S-0406 claim 1: the item stays
-    done and no sound plays. Which sound it is, and whether it is the
-    one of the refusal row of claim 4, belongs to the sound spec (claim 12; planned S-0701). When it succeeds, placement mode ends.
+    done and no sound plays. Refused placement requests the cannot-deploy-here announcement,
+    not the game-wide refusal sound (claim 12; S-0701 claim 28). When it succeeds, placement mode ends.
     A right click on the icon while it is ready gives a cancel order (claim 5), which also ends
     placement mode.
     - Backing: `measurable` (scenario S8, with its third run for the right-click cancel,
@@ -341,23 +341,31 @@ last recheck). In addition:
     - Confidence: medium (done building, the multiples of 10 and the first period); low (ready
       superweapon). The look of each period remains open.
 
-12. **Sounds.** Clicks that start, queue, resume, hold, cancel or refuse play interface sounds; done
-    items play announcements. Which sound plays, and whether the refusals of claims 4 and 10 are one
-    sound or two, belongs to the sound spec (planned S-0701). This spec fixes only that a cue plays
-    for:
+12. **Sounds.** The production clicks identified below that start, queue, resume, hold or cancel
+    use the game-wide build-click sound (S-0701 claim 24). Announcements follow S-0701 claims
+    27 and 28, including nearby-event suppression where applicable: requesting one does not
+    guarantee immediate audible playback.
+    The busy-building-line refusal requests the unable-to-comply announcement, without a
+    build-click or game-wide refusal sound. Refused building placement instead requests the
+    cannot-deploy-here announcement, without the game-wide refusal sound. These two refusal
+    cues are not the same entry. S-0701 claim 24 and F5 must be corrected at joint hand-off:
+    their shared game-wide refusal-entry assertion does not apply to these two actions.
+    This spec fixes a cue only for:
     - a left click whose order starts or queues an item, resumes one or cancels one (claim 4, rows 1,
       3 and 5 and the last row, each only when its order takes effect: not a build order that is
       ignored when it is applied, as in the sale span of claim 2, nor one that is not legal)
     - the refusal row for a busy building line (claim 4)
     - a right click that holds or cancels (claim 5)
-    - the done announcement (claim 9)
+    - construction complete for a done building (claim 9), and unit ready when a produced unit
+      leaves its factory (S-0701 claim 28), not merely when its item becomes done
     - a refused placement (claim 10).
 
     It claims no sound for: the place order on a done unit (row 2); the start of placement mode (row
     4); the build-limit row; and a click whose build order is ignored when it is applied (the
     darkened icon, the lit aircraft icon with every dock taken). Scenarios S3 and S4 record these
     without a prediction.
-    - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8)
+    - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8; S-0701 F5 with the refusal
+      expectations corrected as above)
     - Confidence: medium
 
 13. **Several offers removed at one recheck (Q-0123).** For types with shown icons, the
@@ -539,6 +547,9 @@ The sidebar reads no keys of its own. These delegated inputs matter to claims 13
 | `TechLevel` (rules, type) | whether a candidate passes the tech-tree answer at a retry | signed integer, initially −1; S-0407 Import mapping; capacity does not override this answer |
 
 Build times and step payments retain S-0403's and S-0404's import mappings.
+The game-wide build-click sound uses `GUIBuildSound` (rules, audio-visual section), a sound
+name whose absent-value retention and resolution follow S-0701 Import mapping. Announcement
+entries and voice sets retain S-0701's import mapping.
 
 ## Measurement scenarios
 
@@ -687,8 +698,11 @@ the time the script sent a button event, dates a click.
   icon; nothing starts, queues or resumes in either run. (f) refund (the done aircraft is cancelled); (g) at most one copy started or
   queued. In (j) the click gives a place order without a cell, not a cancel order. Its failed release
   cancels the item with a refund when that place order is applied (S-0404 claims 7 and 13).
-  Each click whose order starts, queues, resumes or cancels, and each busy-building-line
-  refusal in (c), plays an interface sound (claim 12). The sounds of (d), (j) and the ignored
+  Each click whose order starts, queues, resumes or cancels plays the game-wide build-click
+  sound (claim 12). Each busy-building-line refusal in (c) requests the unable-to-comply
+  announcement, without that click sound or the game-wide refusal sound. Record the requested
+  entry as well as audible playback to distinguish announcement suppression from no request.
+  The sounds of (d), (j) and the ignored
   over-limit resume in (b2) are recorded without a prediction.
 - Falsified if: any outcome differs, a left click with a modifier key gives more than one build order, a resume in
   (b2)'s eligible control is refused or queues a copy, the over-limit held infantry icon gives no
@@ -758,12 +772,16 @@ the time the script sent a button event, dates a click.
   start, the refund equals the credits paid. Clearing the exit later releases nothing and
   causes no retry: the item no longer exists. In the fourth
   run the recorder shows a cancel order and the item is refunded (claim 5).
-  The done item plays an announcement (claim 12).
+  With no recent nearby unit-produced event to suppress it, the successful unit release
+  requests the unit-ready announcement (S-0701 claim 28 and F7).
+  Merely becoming done does not request it, including the retained-item second run.
+  Record announcement requests separately from audible playback.
 - Falsified if: in the first run the automatic order or release boundary differs from the
   prediction, the sidebar re-sends the
   order by itself in the second run, or the fourth-run right click gives no cancel order or no refund, or the
-  second-run unit appears after switching on without a click, or no announcement plays when the
-  item is done, or in the third run or its busy variant the done item survives the failed
+  second-run unit appears after switching on without a click, or becoming done without release
+  requests unit ready, or successful release with no suppressing nearby event fails to request
+  it, or in the third run or its busy variant the done item survives the failed
   or busy release, the refund is missing or dated to a later boundary, or clearing the exit
   produces the cancelled unit or a retry order. A ground vehicle that has already appeared
   inside a factory and is waiting to move outside is not a retained production item.
@@ -785,12 +803,15 @@ the time the script sent a button event, dates a click.
   every 10 ticks, 10 drawn frames outside frozen cycles) and a first period of
   10 − (*t* mod 10) ticks, where *t* is the recorded flash-start tick, not an assumed done tick
   (claim 11); which look belongs to which period is recorded; the
-  invalid click plays a refusal sound and placement mode continues; the valid click places the
+  invalid click requests the cannot-deploy-here announcement, without the game-wide refusal
+  sound, and placement mode continues; record the requested entry separately from playback.
+  The valid click places the
   building and ends the mode. Second run: the superweapon's tab button flashes the same way. Third
   run: placement mode ends, the item is cancelled and refunded.
 - Falsified if: the look changes at a tick that is not a multiple of 10, the first period differs
   from 10 − (*t* mod 10) ticks, the announcement is missing, placement mode ends after the
-  invalid click, valid placement fails to place or end the mode, the superweapon tab does not
+  invalid click, that click requests a different announcement or the game-wide refusal sound,
+  valid placement fails to place or end the mode, the superweapon tab does not
   flash, or the right click leaves placement mode on or fails to cancel and refund the item.
 
 **S9. Cancellation order for several types (claim 13).**
@@ -870,8 +891,8 @@ the time the script sent a button event, dates a click.
    is not established.
 2. Early clock stages and smoothing around a new-build click are not established (claim 8).
 3. Whether the last clock stage (55) of a done item still covers part of the icon (claim 8, S6).
-4. Whether the sound of a refused build click (claim 4) and of a refused placement (claim 10) are
-   the same (claim 12; planned S-0701).
+4. Resolved by claim 12: busy-building refusal and refused placement request different
+   announcements, not a shared game-wide refusal sound.
 5. Whether a right click in the same cycle as a queueing or resuming left click gives an extra hold
    order (claim 5). S-0213 claim 1 makes these cases unreachable through permitted skirmish input.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
