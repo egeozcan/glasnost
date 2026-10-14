@@ -1,9 +1,9 @@
 ---
 id: Q-0341
 title: What automatic building repair and sale do when the skill-level gate passes
-status: open
+status: answered
 related: [S-0314, S-0408, S-0412]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
