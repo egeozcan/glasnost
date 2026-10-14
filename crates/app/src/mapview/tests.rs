@@ -125,10 +125,15 @@ fn art_of(image: &str, sprite: &str) -> TypeArt {
 
 /// The test context with the rules text `rules`.
 fn context_with(rules: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
+    context_full(rules, ART)
+}
+
+/// The test context with the rules text `rules` and the art text `art`.
+fn context_full(rules: &str, art: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
     let mut import = convert(
         &Inputs {
             base: input("rules.ini", rules),
-            art: input("art.ini", ART),
+            art: input("art.ini", art),
             ..Default::default()
         },
         &ImportOptions::default(),
@@ -736,8 +741,14 @@ fn sprite_vehicle_frame_and_shadow() {
 
 /// Builds `text` with typed rules in which HUTX has strength 100.
 fn build_with_rules(text: &[u8]) -> Built {
+    build_with_rules_in(context(), text)
+}
+
+/// Builds `text` in the context `ctx` with typed rules in which HUTX has
+/// strength 100.
+fn build_with_rules_in(ctx: (glasnost_convert::Import, Catalogue, Assets), text: &[u8]) -> Built {
     use glasnost_rules::sim::BuildingType;
-    let (import, catalogue, assets) = context();
+    let (import, catalogue, assets) = ctx;
     let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
     let map = decode(&doc, &DecodeContext::default()).map;
     let mut r = glasnost_rules::schema::Ruleset::default();
@@ -785,6 +796,65 @@ fn claim_37_damaged_building_frame() {
     // 130 of 256 gives 50 (truncated), still damaged; 131 gives 51.
     assert_eq!(body(130), 3);
     assert_eq!(body(131), 2);
+}
+
+/// The first pixel of each building item of a one-building map whose HUTX
+/// has health `health` of 256, in the context `ctx`, with its paint.
+fn building_pixels(
+    ctx: (glasnost_convert::Import, Catalogue, Assets),
+    health: i32,
+) -> Vec<(Paint, u8)> {
+    let b = build_with_rules_in(
+        ctx,
+        format!(
+            "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+             [Structures]\n0=Neutral,HUTX,{health},6,10,0\n"
+        )
+        .as_bytes(),
+    );
+    items_of(&b, "building")
+        .iter()
+        .map(|i| (i.paint, b.scene.images[i.image as usize].pixels()[0]))
+        .collect()
+}
+
+/// spec: S-0108 claim 3 and F2 (a negative image-frame index draws nothing: it is not raised to
+/// image frame 0), claim 9 (the shadow is the drawn body frame + ⌊N/2⌋), claim 7 (the bib takes f)
+#[test]
+fn negative_idle_start_draws_no_body() {
+    let art = ART.replace("AnimIdle=1,1,0", "AnimIdle=-1,1,0");
+    let pixels = building_pixels(context_full(RULES, &art), 256);
+    // f = −1: no body and no bib; the shadow index −1 + 2 = 1 is drawn (pixel 2).
+    assert_eq!(pixels, [(Paint::Shadow, 2)]);
+    // Damaged in idle: f = −1 + 1 = 0: body frame 0 (pixel 1), shadow 2 (pixel 3), bib 0.
+    let pixels = building_pixels(context_full(RULES, &art), 128);
+    assert_eq!(pixels.len(), 3);
+    assert_eq!(pixels[0].1, 1);
+    assert_eq!(pixels[1], (Paint::Shadow, 3));
+    assert_eq!(pixels[2].1, 1);
+}
+
+/// spec: S-0108 claim 2 (a stationary gate that is not occupiable: 0, damaged G + 1, then the
+/// clamp of claim 3), Import mapping (GateStages, an art key, absent 9)
+#[test]
+fn damaged_gate_body_frame() {
+    let rules = format!("{RULES}[HUTX]\nGate=yes\n");
+    let art = ART.replace("AnimIdle=1,1,0", "AnimIdle=1,1,0\nGateStages=0");
+    let body = |art: &str, health: i32| building_pixels(context_full(&rules, art), health);
+    // Undamaged: frame 0 (pixel 1), whatever the idle range says.
+    assert_eq!(body(&art, 256)[0].1, 1);
+    // Damaged with G = 0: frame 1 (pixel 2), shadow 1 + 2 = 3 (pixel 4).
+    let damaged = body(&art, 128);
+    assert_eq!(damaged[0].1, 2);
+    assert_eq!(damaged[1], (Paint::Shadow, 4));
+    // Damaged with the absent-key G = 9: frame 10, clamped to ⌊4/2⌋ = 2 (pixel 3); its shadow
+    // index 4 is past the sprite, so no shadow.
+    let pixels = body(ART, 128);
+    assert_eq!(pixels[0].1, 3);
+    assert!(pixels.iter().all(|(p, _)| *p != Paint::Shadow));
+    // An occupiable gate takes the occupiable rule first: hurt at tech level 255 when damaged: 1.
+    let rules = format!("{RULES}[HUTX]\nGate=yes\nCanBeOccupied=yes\n");
+    assert_eq!(building_pixels(context_full(&rules, ART), 128)[0].1, 2);
 }
 
 /// Hostile maps never panic or hang in the scene builder: extreme sizes,

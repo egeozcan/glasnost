@@ -180,7 +180,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `tilt_transition_restart_jump` | S-0106 claim 6 | no tilt state (it may belong to the simulation's locomotors) |
 | `unbuildable_occupied_damaged_frame` | S-0108 claim 2 | no building is occupied in our engine yet |
 | `full_state_unmaxed` | S-0108 claim 2 | buildings are drawn in their idle state only |
-| `gate_double_reverse` | S-0108 claim 4 | buildings are not sold |
+| `gate_double_reverse` | S-0108 claim 4 | a sale's build-down is not drawn (a building being sold is drawn idle) |
 | `building_wrap_normalisation` | S-0108 claim 6 | building body ranges are not played |
 | `turret_building_no_body_wrap` | S-0108 claim 6 | building body ranges are not played |
 | `turret_start_clears_damaged` | S-0108 claims 11 and 12 | building slot animations are not drawn |
