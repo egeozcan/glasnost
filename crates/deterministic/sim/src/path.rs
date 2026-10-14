@@ -1075,6 +1075,18 @@ pub struct NearbySettings {
 /// The nearby-cell search (S-0212 claim 25).
 /// The regions must be up to date ([`regions::ensure`]).
 pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
+    nearby_filtered(w, centre, use_, None)
+}
+
+/// The nearby-cell search (S-0212 claim 25) with a user's own extra test
+/// `extra` that a cell must pass to be collected, besides the search's
+/// own (S-0402 claim 24's footprint test of a slave-miner site).
+pub fn nearby_filtered(
+    w: &World,
+    centre: CellXY,
+    use_: NearbyUse,
+    extra: Option<&dyn Fn(&World, CellXY) -> bool>,
+) -> Option<CellXY> {
     let q = w.rules().quirks;
     let fp = *w.cells.footprint();
     // spec: S-0212 claim 25 (largest radius 31, or w + h − 1 when w + h < 32)
@@ -1202,6 +1214,7 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
                 } else {
                     burrow_ok(w, c)
                 }))
+                && extra.is_none_or(|f| f(w, c))
             {
                 collected.push(c);
                 // spec: S-0212 claim 25 (cut off at the 24th collected cell)
@@ -1255,7 +1268,7 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
 
 /// The further test of S-0402 claim 18's first free-unit search: the
 /// cell holds no overlay of any kind (a cell outside the map holds none).
-fn no_overlay(w: &World, c: CellXY) -> bool {
+pub(crate) fn no_overlay(w: &World, c: CellXY) -> bool {
     w.cells
         .cell(c)
         .is_none_or(|x| x.overlay == glasnost_map::NO_OVERLAY)
@@ -1300,7 +1313,7 @@ pub fn burrow_ok(w: &World, c: CellXY) -> bool {
 
 /// Whether a cell qualifies for the nearby-cell search (S-0212 claim 25).
 #[allow(clippy::too_many_arguments)]
-fn qualifies(
+pub(crate) fn qualifies(
     w: &World,
     c: CellXY,
     class: Option<LocomotionClass>,

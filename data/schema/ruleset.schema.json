@@ -2338,7 +2338,7 @@
           "default": null
         },
         "enslaves": {
-          "description": "Units: `Enslaves`, the slave type (S-0402 claim 14); absent: none.",
+          "description": "Units and buildings: `Enslaves`, the slave type (S-0402 claims 14\nand 19); absent: none.",
           "type": [
             "string",
             "null"
@@ -2752,7 +2752,7 @@
           "default": null
         },
         "slave_regen_rate": {
-          "description": "Units: `SlaveRegenRate`, ticks (S-0402 claim 14); absent: 0.",
+          "description": "Units and buildings: `SlaveRegenRate`, ticks (S-0402 claim 14); absent: 0.",
           "type": [
             "integer",
             "null"
@@ -2761,7 +2761,7 @@
           "default": null
         },
         "slave_reload_rate": {
-          "description": "Units: `SlaveReloadRate`, ticks (S-0402 claim 14); absent: 0.",
+          "description": "Units and buildings: `SlaveReloadRate`, ticks (S-0402 claim 14); absent: 0.",
           "type": [
             "integer",
             "null"
@@ -2770,7 +2770,7 @@
           "default": null
         },
         "slaves_number": {
-          "description": "Units: `SlavesNumber` (S-0402 claim 14); absent: 0.",
+          "description": "Units and buildings: `SlavesNumber` (S-0402 claims 14 and 19); absent: 0.",
           "type": [
             "integer",
             "null"

@@ -12,11 +12,11 @@
 //! Seams: the building animations of claim 11 (no building animation is
 //! modelled, so none is ever playing and none delays the harvester), a
 //! second-route arrival report to a building other than a dock-unload
-//! refinery (claim 10; the entry-exchange specs own it), the
-//! slave cycle of claim 14 (no slave is ever created, so a slave group is
-//! never at rest and the wake-up rule never holds in play; the rule itself
-//! is [`wake_rule`]), and the chrono miner's teleporting and its dropped
-//! destinations of claim 17 (no teleport locomotor exists).
+//! refinery (claim 10; the entry-exchange specs own it), and the chrono
+//! miner's teleporting and its dropped destinations of claim 17 (no teleport
+//! locomotor exists). The slave cycle of claim 14 and the slave groups of
+//! claims 19 to 25 are `crate::econ::slaves`; the wake-up rule is
+//! [`wake_rule`].
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -43,6 +43,32 @@ pub struct UnitHarvest {
     pub teleporter: bool,
     /// A slave miner (claim 14): gatherer, destination and an enslaves field.
     pub slave_miner: bool,
+    /// The slave group its objects create (claim 19), if its type names a
+    /// slave type.
+    pub group: Option<GroupType>,
+}
+
+/// A type's slave-group fields (S-0402 claims 14, 19 and 21; Import
+/// mapping).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GroupType {
+    /// The slave infantry type, by registration index.
+    pub slave: u32,
+    /// The slave count *N*.
+    pub count: i32,
+    /// The regeneration delay, ticks.
+    pub regen: i32,
+    /// The reload delay, ticks.
+    pub reload: i32,
+}
+
+/// An infantry type's slave fields (S-0402 claim 14; Import mapping).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct InfantryHarvest {
+    /// The interval between bales *h*, ticks (`HarvestRate`).
+    pub harvest_rate: i32,
+    /// The capacity (`Storage`), bales.
+    pub capacity: i32,
 }
 
 /// A building type's fields (S-0402 Import mapping).
@@ -60,6 +86,9 @@ pub struct BuildingHarvest {
     pub dock_unload: bool,
     /// The weed flag (claim 13's idle step-off).
     pub weeder: bool,
+    /// The slave group its objects create (claim 19), if its type names a
+    /// slave type.
+    pub group: Option<GroupType>,
 }
 
 /// The harvest rules.
@@ -81,6 +110,14 @@ pub struct Rules {
     pub slave_short_scan: i32,
     /// The slave-miner kick delay *k*, ticks (claim 14).
     pub kick_delay: i32,
+    /// The slave scan range, cells (claim 14).
+    pub slave_scan: i32,
+    /// The slave-miner long scan range, cells (claim 22).
+    pub slave_long_scan: i32,
+    /// The scan correction *c*, whole cells (claim 22, F7).
+    pub scan_correction: i32,
+    /// Infantry types by index.
+    pub infantry: Vec<InfantryHarvest>,
     /// Purifier bonus *b*, a single widened to double.
     pub purifier_bonus: F64,
     /// Virtual purifiers per difficulty row (the original's computer player).
@@ -123,12 +160,41 @@ impl Rules {
                 .position(|x| x.eq_ignore_ascii_case(n))
                 .map(|i| i as u32)
         };
+        let infantry_reg = reg("infantry");
+        // spec: S-0402 Import mapping (Enslaves: an infantry type name; SlavesNumber, SlaveRegenRate and SlaveReloadRate absent: 0)
+        let group = |e: &glasnost_rules::sim_econ::EconFields| {
+            let slave = e.enslaves.as_deref().and_then(|n| {
+                // spec: S-0003 claim 14 (names compared with ASCII case folding)
+                infantry_reg
+                    .iter()
+                    .position(|x| x.eq_ignore_ascii_case(n))
+                    .map(|i| i as u32)
+            })?;
+            Some(GroupType {
+                slave,
+                count: e.slaves_number.unwrap_or(0),
+                regen: e.slave_regen_rate.unwrap_or(0),
+                reload: e.slave_reload_rate.unwrap_or(0),
+            })
+        };
+        let infantry = infantry_reg
+            .iter()
+            .map(|n| {
+                let u = r.sim.infantry.get(n).cloned().unwrap_or_default();
+                InfantryHarvest {
+                    // spec: S-0402 Import mapping (HarvestRate absent: 1; Storage absent: 0)
+                    harvest_rate: u.econ.harvest_rate.unwrap_or(1),
+                    capacity: u.storage.unwrap_or(0),
+                }
+            })
+            .collect();
         let vehicles = reg("vehicles")
             .iter()
             .map(|n| {
                 let u = r.sim.vehicles.get(n).cloned().unwrap_or_default();
                 let e = &u.econ;
                 UnitHarvest {
+                    group: group(e),
                     // spec: S-0402 Import mapping (Harvester, Teleporter absent: no; Storage absent: 0; Dock absent: empty)
                     harvester: u.harvester.unwrap_or(false),
                     capacity: u.storage.unwrap_or(0),
@@ -152,6 +218,7 @@ impl Rules {
                 let b = r.sim.buildings.get(n).cloned().unwrap_or_default();
                 let e = &b.econ;
                 BuildingHarvest {
+                    group: group(e),
                     // spec: S-0402 Import mapping (Refinery, OrePurifier absent: no)
                     refinery: e.refinery.unwrap_or(false),
                     purifier: e.ore_purifier.unwrap_or(false),
@@ -197,6 +264,13 @@ impl Rules {
             slave_short_scan: scan_cells(&g.slave_miner_short_scan, 1280, mode),
             // spec: S-0402 Import mapping (SlaveMinerKickFrameDelay absent: 2147483647)
             kick_delay: g.slave_miner_kick_frame_delay.unwrap_or(i32::MAX),
+            // spec: S-0402 Import mapping (SlaveMinerSlaveScan absent: 4096 leptons)
+            slave_scan: scan_cells(&g.slave_miner_slave_scan, 4096, mode),
+            // spec: S-0402 Import mapping (SlaveMinerLongScan absent: 20480 leptons)
+            slave_long_scan: scan_cells(&g.slave_miner_long_scan, 20480, mode),
+            // spec: S-0402 Import mapping and F7 (SlaveMinerScanCorrection absent: 768 leptons; c = trunc(leptons / 256))
+            scan_correction: scan_cells(&g.slave_miner_scan_correction, 768, mode),
+            infantry,
             // spec: S-0402 Import mapping (PurifierBonus, a single; absent: the single nearest 0.25)
             purifier_bonus: g.purifier_bonus.as_ref().map_or_else(
                 || {
@@ -500,11 +574,25 @@ fn connected(w: &mut World, id: ObjectId, refinery: ObjectId) -> bool {
 
 /// The ring search with range `range` from cell `from` (S-0402 claim 4).
 pub fn ring_search(w: &mut World, id: ObjectId, from: CellXY, range: i32) -> Option<CellXY> {
+    let reference = crate::occupancy::reference_level(w, id);
+    ring_search_with(w, from, range, &mut |w, c| {
+        acceptable(w, id, from, c, reference)
+    })
+}
+
+/// The ring search of S-0402 claim 4 from cell `from` with range `range`,
+/// with the acceptability test `accept` (the searcher's own, claim 4's
+/// for a harvester).
+pub(crate) fn ring_search_with(
+    w: &mut World,
+    from: CellXY,
+    range: i32,
+    accept: &mut dyn FnMut(&mut World, CellXY) -> bool,
+) -> Option<CellXY> {
     // spec: S-0402 claim 4 (the harvester's own cell, when its land type is tiberium, whatever the cell holds)
     if w.cells.cell(from).is_some_and(|c| c.land == land::TIBERIUM) {
         return Some(from);
     }
-    let reference = crate::occupancy::reference_level(w, id);
     // spec: S-0402 claim 4 (rings k = 1 … R − 1; nothing when R ≤ 1)
     for k in 1..range {
         let mut best: Option<(i64, (i32, i32), CellXY)> = None;
@@ -514,7 +602,7 @@ pub fn ring_search(w: &mut World, id: ObjectId, from: CellXY, range: i32) -> Opt
                     continue;
                 }
                 let c = CellXY::new(from.x + a, from.y + b);
-                if !acceptable(w, id, from, c, reference) {
+                if !accept(w, c) {
                     continue;
                 }
                 let worth = resource::worth(w, c);
@@ -795,6 +883,10 @@ pub fn process_harvest(w: &mut World, id: ObjectId) -> i32 {
         s.harvest_start = Some(start);
         s.phase = Phase::Seeking;
         s.pending_load_period = false;
+    }
+    // spec: S-0402 claim 22 (a miner with gatherer and destination fields and a slave group processes harvest through its group rule, not claims 3 to 10)
+    if let Some(d) = super::slaves::process_harvest(w, id) {
+        return d;
     }
     // spec: S-0402 claim 3 and claim 13 (in every phase: no building of a dock type, guard queued, 1 tick)
     if !owns_dock(w, id) {
@@ -1715,22 +1807,26 @@ pub fn wake_rule(
     before(s_m) && at_rest && (computer || on_ore || (before(s_g) && scan()))
 }
 
-/// Whether S-0402 claim 14's wake-up rule holds for a slave miner in play.
-/// No slave is created by our engine yet, so no slave group is ever at rest
-/// (a seam) and the rule never holds; [`wake_rule`] is the rule itself.
-pub fn slave_wake_rule_holds(w: &World, id: ObjectId) -> bool {
-    if !is_slave_miner(w, id) {
+/// Whether S-0402 claim 14's wake-up rule holds for a slave master in play
+/// ([`wake_rule`] is the rule itself).
+pub fn slave_wake_rule_holds(w: &mut World, id: ObjectId) -> bool {
+    let Some(g) = w.obj(id).and_then(|o| o.econ.group.clone()) else {
         return false;
-    }
-    let Some(o) = w.obj(id) else { return false };
-    let r = w.rules();
-    // spec: S-0402 claim 14 (a slave group at rest: no slave exists, a seam)
-    let at_rest = false;
-    let computer = o.owner.is_some_and(|h| !w.houses[usize::from(h.0)].human);
-    let on_ore = w
-        .cells
-        .cell(o.pos.cell())
-        .is_some_and(|c| c.land == land::TIBERIUM);
+    };
+    let Some(o) = w.obj(id).cloned() else {
+        return false;
+    };
+    let r = w.rules_arc();
+    // spec: S-0402 claim 14 (the group at rest: no slave sent out since the group last came together)
+    let at_rest = g.state == super::slaves::GroupState::AtRest;
+    // spec: S-0402 claim 14 (the computer-controlled condition: not for player houses in our engine; the neutral and special houses keep it)
+    let computer = o.owner.is_some_and(|h| {
+        let house = &w.houses[usize::from(h.0)];
+        house.role != HouseRole::Player && !house.human
+    });
+    let here = o.pos.cell();
+    let on_ore = w.cells.cell(here).is_some_and(|c| c.land == land::TIBERIUM);
+    let range = r.econ.harvest.slave_short_scan;
     wake_rule(
         r.econ.harvest.kick_delay,
         o.beh.start_tick,
@@ -1738,9 +1834,11 @@ pub fn slave_wake_rule_holds(w: &World, id: ObjectId) -> bool {
         at_rest,
         computer,
         on_ore,
-        o.beh.start_tick,
+        // spec: S-0402 claim 14 (s_g, the group's last-rest tick; initially 0, claim 21)
+        g.last_rest,
         r.quirks.slave_kick_delay_wraps,
-        || false,
+        // spec: S-0402 claim 14 (the short-scan test: the ring search from the miner with the slave-miner short scan range)
+        || ring_search(w, id, here, range).is_some(),
     )
 }
 

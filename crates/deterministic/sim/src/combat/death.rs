@@ -256,6 +256,10 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     }
     // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris)
     destruction_raises(w, id, hit);
+    // spec: S-0312 claim 30 (a killing hit ends a master's slave group before claims 4 to 7)
+    crate::econ::slaves::master_killed(w, id, hit);
+    // spec: S-0402 claim 14 (a killed slave is lost to its master: the regeneration delay starts)
+    crate::econ::slaves::lost(w, id);
     // spec: S-0312 table, step 1 (debris)
     debris(w, id);
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon)

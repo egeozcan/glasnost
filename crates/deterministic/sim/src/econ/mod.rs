@@ -28,6 +28,7 @@ pub mod sell;
 pub mod setup;
 pub mod shroud;
 pub mod sidebar;
+pub mod slaves;
 pub mod stats;
 pub mod tech;
 pub mod victory;
@@ -130,6 +131,12 @@ pub struct ObjectEcon {
     /// claim 11); none outside the idle state.
     #[serde(default)]
     pub idle_body: Option<body::IdleBody>,
+    /// A slave master's slave group (S-0402 claims 14 and 19 to 22).
+    #[serde(default)]
+    pub group: Option<slaves::SlaveGroup>,
+    /// A slave's own state: its master and its load (S-0402 claim 14).
+    #[serde(default)]
+    pub slave: Option<slaves::SlaveState>,
 }
 
 /// The world's economy state (M5a), one field per topic.

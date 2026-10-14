@@ -49,8 +49,25 @@ pub fn occ_quirks(w: &World) -> OccupancyQuirks {
 
 /// Creates an object (not yet on the map). Every creation of an infantry,
 /// vehicle, aircraft or building object takes one raw value from the
-/// scenario random stream (S-0202 claim 10).
+/// scenario random stream (S-0202 claim 10). A type that names a slave
+/// type creates its slave group as part of the creation (S-0402 claim
+/// 19).
 pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>) -> ObjectId {
+    let id = create_converted(w, kind, type_index, owner);
+    // spec: S-0402 claim 19 (the group is created as part of the object's own creation, after the object's own creation draw)
+    crate::econ::slaves::created(w, id);
+    id
+}
+
+/// [`create`] for the object a conversion makes (S-0415 claims 6 and 10):
+/// it takes the replaced object's slave group instead of creating one
+/// (S-0402 claim 19).
+pub fn create_converted(
+    w: &mut World,
+    kind: Kind,
+    type_index: u32,
+    owner: Option<HouseId>,
+) -> ObjectId {
     let mut report_value = 0;
     if kind != Kind::Terrain {
         // spec: S-0202 claim 10 (the creation draw: one raw value)
@@ -255,6 +272,47 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
     crate::econ::events::entered_map(w, id, by_order);
 }
 
+/// Takes an infantry unit off the map for a while without ending it: a
+/// slave that goes inside its master (S-0402 claim 14). Like [`remove`] it
+/// leaves the update order, a counting removal during the turn pass
+/// (S-0203 claim 10), and its cell list entry and standing marks are
+/// cleared; the object stays in the world, off the map, with no
+/// destination, target or walk.
+pub fn take_inside(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else {
+        return;
+    };
+    if !o.on_map {
+        return;
+    }
+    crate::econ::events::leaving_map(w, id, false);
+    let skip = w.rules().quirks.update_order_removal_skip;
+    // spec: S-0203 claim 10 (going inside: a removal from the update order, counting during the turn pass)
+    w.update.leave(id, skip);
+    let q = occ_quirks(w);
+    let cell = o.pos.cell();
+    w.cells.leave(cell, o.layer, id);
+    if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
+        w.cells.clear_infantry(wt.cell(), o.layer, id, q);
+    }
+    w.cells.clear_infantry(cell, o.layer, id, q);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.on_map = false;
+        ob.dest = None;
+        ob.target = None;
+        ob.queued_dests.clear();
+        ob.path.steps.clear();
+        if let Some(s) = ob.walk.as_mut() {
+            *s = WalkState::default();
+        }
+    }
+    if o.layer == Layer::Ground {
+        // spec: S-0202 claim 14 (taking an object out of its occupied ground cell recalculates it)
+        crate::load::recalc_cells(w, &[cell]);
+    }
+    crate::regions::cell_changed(w, cell);
+}
+
 /// Takes an object off the map and out of play (destroyed, removed or gone
 /// inside): it leaves the update order, a counting removal during the turn
 /// pass (S-0203 claim 10), its marks and claims are cleared and its cells
@@ -263,6 +321,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
+    crate::econ::slaves::removing(w, id);
     crate::econ::events::leaving_map(w, id, true);
     // spec: S-0011 claim 2 (detaching a carrier removes one from its tag's count)
     crate::triggers::detach_object(w, id);

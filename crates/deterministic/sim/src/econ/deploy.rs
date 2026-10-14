@@ -180,15 +180,31 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> Option<()> {
     }
     // spec: S-0415 claim 1 rank 4 (a type that deploys into a building)
     let b = deploys_into(w, o.kind, o.type_index)?;
-    attempt(w, id, b);
+    let _ = attempt(w, id, b);
     Some(())
+}
+
+/// What one deploy attempt came to (S-0415 claims 2 to 6), for the slave
+/// group's deploy attempts (S-0402 claim 22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Attempt {
+    /// The building was put on the map.
+    Deployed(ObjectId),
+    /// A turn to the deploy facing goes on (the vehicle is deploying).
+    Turning,
+    /// The attempt failed: *guard* is queued.
+    Failed,
+    /// No attempt was made (moving, or after an abandoned turn).
+    NoAttempt,
 }
 
 /// One processing of *unload* by a deploying vehicle (S-0415 claims 2 to
 /// 6).
-fn attempt(w: &mut World, id: ObjectId, b: u32) {
+pub(crate) fn attempt(w: &mut World, id: ObjectId, b: u32) -> Attempt {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id).cloned() else {
+        return Attempt::NoAttempt;
+    };
     let st = o.econ.deploy.clone();
     let tick = w.tick;
     if st.abandoned {
@@ -196,7 +212,7 @@ fn attempt(w: &mut World, id: ObjectId, b: u32) {
         if let Some(ob) = w.obj_mut(id) {
             ob.beh.start_next(tick, stale);
         }
-        return;
+        return Attempt::NoAttempt;
     }
     let has_dest = o.dest.is_some();
     if st.turning {
@@ -206,11 +222,11 @@ fn attempt(w: &mut World, id: ObjectId, b: u32) {
                 s.turning = false;
                 s.abandoned = true;
             });
-            return;
+            return Attempt::NoAttempt;
         }
         // spec: S-0415 claim 5 (no deploy readiness: no deploy, nothing else changes)
         if !deploy_ready(w, id) {
-            return;
+            return Attempt::Turning;
         }
     } else {
         // spec: S-0415 claim 2 (a moving vehicle makes no attempt before a turn; a queued behaviour other than unload takes over)
@@ -220,19 +236,21 @@ fn attempt(w: &mut World, id: ObjectId, b: u32) {
             {
                 ob.beh.start_next(tick, stale);
             }
-            return;
+            return Attempt::NoAttempt;
         }
         set(w, id, |s| s.attempted = true);
         // spec: S-0415 claim 2 (without deploy readiness or with a destination the first attempt fails: guard queued)
         if !deploy_ready(w, id) || has_dest {
             queue_guard(w, id);
-            return;
+            return Attempt::Failed;
         }
     }
     let size = crate::econ::placement::place_type(w, b).size;
     let at = anchor(o.pos.cell(), size);
     let owner = o.owner;
-    let Some(house) = owner else { return };
+    let Some(house) = owner else {
+        return Attempt::NoAttempt;
+    };
     // spec: S-0415 claim 3 (the cell test, ignoring the vehicle; the wall exceptions only for unowned walls, quirks.deploy_refuses_own_walls)
     let walls = if w.rules().quirks.deploy_refuses_own_walls {
         WallRule::Unowned
@@ -247,7 +265,7 @@ fn attempt(w: &mut World, id: ObjectId, b: u32) {
     };
     if !crate::econ::placement::cell_test(w, b, at, &test) {
         refuse(w, id);
-        return;
+        return Attempt::Failed;
     }
     let d = deploy_facing(w, b);
     // spec: S-0415 claim 5 (the rounded facing differs from D: turn in place towards D × 256 at the turn rate)
@@ -263,11 +281,16 @@ fn attempt(w: &mut World, id: ObjectId, b: u32) {
             set(w, id, |s| s.turning = true);
         }
         // spec: S-0415 claim 5 (the turn goes on; it is not restarted)
-        return;
+        return Attempt::Turning;
     }
-    if !complete(w, id, b, at) && !st.turning {
-        // spec: S-0415 claims 2 and 6 (a building that cannot be put on the map in a first attempt: guard queued, no announcement)
-        queue_guard(w, id);
+    match complete(w, id, b, at) {
+        Some(bid) => Attempt::Deployed(bid),
+        None if !st.turning => {
+            // spec: S-0415 claims 2 and 6 (a building that cannot be put on the map in a first attempt: guard queued, no announcement)
+            queue_guard(w, id);
+            Attempt::Failed
+        }
+        None => Attempt::Turning,
     }
 }
 
@@ -312,13 +335,11 @@ fn refuse(w: &mut World, id: ObjectId) {
     queue_guard(w, id);
 }
 
-/// The completion of a deploy (S-0415 claim 6). Returns whether the
-/// building was put on the map.
-fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
-    let Some(o) = w.obj(id).cloned() else {
-        return false;
-    };
-    let Some(house) = o.owner else { return false };
+/// The completion of a deploy (S-0415 claim 6). Returns the building put
+/// on the map, if any.
+fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> Option<ObjectId> {
+    let o = w.obj(id).cloned()?;
+    let house = o.owner?;
     // spec: S-0415 claim 6 (put on the map only if the anchor passes the cell test of a placement by the house, ignoring the vehicle)
     let test = Test {
         house,
@@ -327,11 +348,13 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
         ignore: Some(id),
     };
     if !crate::econ::placement::cell_test(w, b, at, &test) {
-        return false;
+        return None;
     }
     let strength = w.rules().buildings[b as usize].strength;
     let health = handed_health(w, id, strength);
-    let bid = crate::objects::create(w, Kind::Building, b, Some(house));
+    // spec: S-0402 claim 19 and S-0415 claim 6 (conversion keeps the working slave group: the building creates no group of its own, it takes the vehicle's slaves)
+    let bid = crate::objects::create_converted(w, Kind::Building, b, Some(house));
+    super::slaves::transfer(w, id, bid);
     if let Some(ob) = w.obj_mut(bid) {
         // spec: S-0415 claim 6 and F2 (health max(1, trunc(r × S)))
         ob.health = health;
@@ -358,8 +381,8 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
         house: None,
         pos: Some(o.pos),
     });
-    w.note("S-0415 claims 6 and 10: control groups, selection and trigger tags are the input's and the triggers'; slaves are S-0215's (seams)");
-    true
+    w.note("S-0415 claims 6 and 10: control groups, selection and trigger tags are the input's and the triggers'");
+    Some(bid)
 }
 
 /// Every object whose target was `old` gets `new` as its target (S-0415
@@ -402,11 +425,13 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     let d = deploy_facing(w, o.type_index);
     let strength = w.rules().unit(Kind::Vehicle, v).map_or(1, |u| u.strength);
     let health = handed_health(w, id, strength);
-    let vid = crate::objects::create(w, Kind::Vehicle, v, Some(house));
+    // spec: S-0402 claim 19 and S-0415 claim 10 (packing up keeps the working slave group: the vehicle creates no group of its own, it takes the building's slaves)
+    let vid = crate::objects::create_converted(w, Kind::Vehicle, v, Some(house));
     if let Some(ob) = w.obj_mut(vid) {
         // spec: S-0415 claim 10 and F2 (health max(1, trunc(r × S)); the building's experience)
         ob.health = health;
     }
+    super::slaves::transfer(w, id, vid);
     crate::objects::remove(w, id);
     // spec: S-0415 claim 12 (the test is made before the vehicle inherits the building's experience or the guard spot)
     let accepted = can_stand(w, vid, c);
@@ -446,6 +471,8 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         }
         // spec: S-0415 claim 11 and Edge cases (quirks.failed_packup_keeps_vehicle: the vehicle goes on existing off the map)
         if !w.rules().quirks.failed_packup_keeps_vehicle {
+            // spec: S-0408 claim 10a (a removal of the master that transfers no group: its slaves are dealt with as after a true sale)
+            super::slaves::master_sold(w, vid);
             w.objects.remove(&vid);
         }
     }

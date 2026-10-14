@@ -37,7 +37,8 @@ use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{
-    Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, dist2, idle, is_yard,
+    Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, deploys_into_yard, dist2, idle,
+    is_yard,
 };
 use crate::skirmish::start_cells;
 
@@ -152,8 +153,7 @@ impl Brain {
         let has_yard_or_unit = own.iter().any(|&id| {
             w.obj(id).is_some_and(|o| {
                 is_yard(w, o)
-                    || (o.kind == Kind::Vehicle
-                        && deploy::deploys_into(w, o.kind, o.type_index).is_some())
+                    || (o.kind == Kind::Vehicle && deploys_into_yard(w, o.kind, o.type_index))
             })
         });
         if has_yard_or_unit || self.script.selling() {
@@ -208,7 +208,9 @@ impl Brain {
             if o.kind != Kind::Vehicle || !idle(w, id) {
                 continue;
             }
-            let Some(b) = deploy::deploys_into(w, o.kind, o.type_index) else {
+            let Some(b) = deploy::deploys_into(w, o.kind, o.type_index)
+                .filter(|_| deploys_into_yard(w, o.kind, o.type_index))
+            else {
                 continue;
             };
             let here = o.pos.cell();
