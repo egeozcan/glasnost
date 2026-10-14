@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -959,11 +959,15 @@ table and K9 part a. This revision records both questions as answered: tile-anim
 of the game-start pass follow secret-lab choices and end-of-loading tag draws, and the table
 lists those later groups. Approved S-0202 revision 10 claim 14 and S-0011 revision 7 claim 34
 already give that order. Their current drafts and S-0009's current loading table agree.
-Joint sign-off confirms S-0407 claim 14 against this order; its statement that S-0412 still
-requires removal of a last-lab assertion is obsolete and needs updating, not a behaviour
-change. There is no assertion that the recalculation is the final loading-draw group:
+Joint sign-off confirms S-0407 claim 14 and S-0009's joint hand-off checks against this
+order; their current texts already agree, so no last-lab correction remains outstanding.
+There is no assertion that the recalculation is the final loading-draw group:
 S-0202 claim 14 also owns subsequent resource-glint draws. Neither question of Q-0192 is
-left open.
+left open. This ordering does not supply downstream particle or smudge draw counts and
+must never be used to treat them as zero. Approved S-0202 revision 11 leaves those counts
+unresolved; its current revision 12 draft claim 15 supplies creation-draw rules for joint
+review, with scenario R14 proposed rather than measured. Sign-off must confirm that
+extension and update any coordination note that still calls those creation counts unresolved.
 
 S-0414 claims 6, 9 and 10 own the end-test and end-delay rules used by claim 11. Claims 3, 4
 and 5 and scenario K10 remain unchanged from approved revision 1: S-0215's current revision
