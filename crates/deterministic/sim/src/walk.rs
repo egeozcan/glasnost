@@ -395,9 +395,7 @@ fn end_of_walk(w: &mut World, id: ObjectId) {
         None => true,
         Some(d) => {
             let (cell, z) = match d {
-                // A cell destination's height is that of the surface the walker
-                // stands on in the cell (interim, request Q-0201).
-                Target::Cell(c) => (c, o.pos.z),
+                Target::Cell(c) => (c, cell_destination_height(w, id, c)),
                 Target::Object(t) => match w.obj(t) {
                     Some(t) => (t.pos.cell(), t.pos.z),
                     None => return,
@@ -414,6 +412,31 @@ fn end_of_walk(w: &mut World, id: ObjectId) {
         if let Some(s) = ob.walk.as_mut() {
             s.fraction = false;
         }
+    } else if let Some(ob) = w.obj_mut(id)
+        && ob.path.steps.is_empty()
+    {
+        // spec: S-0208 claim 18 and its State table (the test fails with no path steps left: the destination is kept, the speed fraction is 0)
+        if let Some(s) = ob.walk.as_mut() {
+            s.fraction = false;
+        }
+    }
+}
+
+/// The height of a walker's cell locomotor destination (S-0208 claim 18,
+/// F9): the terrain height at the cell's centre, plus 414 leptons when the
+/// cell carries a high bridge, whatever the walker's layer. The decks are
+/// fixed at load, so reading the bridge on arrival gives its state at
+/// assignment.
+pub fn cell_destination_height(w: &World, id: ObjectId, c: CellXY) -> i32 {
+    // spec: S-0208 F9 (the cell centre (256cx + 128, 256cy + 128) and its terrain height H)
+    let h = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+    if w.rules().quirks.walker_bridge_destination_deck {
+        // spec: S-0208 claim 18 and F9 (a = 414 leptons on a high-bridge cell, independent of the layer)
+        h + if w.high_bridge(c) { 414 } else { 0 }
+    } else {
+        let deck = w.obj(id).is_some_and(|o| o.layer == Layer::Deck);
+        // spec: S-0208 Edge cases (switch off: the centre's height on the arrival layer, 416 leptons up on the deck)
+        h + if deck { 416 } else { 0 }
     }
 }
 

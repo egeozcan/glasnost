@@ -419,6 +419,42 @@ pub struct General {
     /// `[AudioVisual] IdleActionFrequency`, game minutes (S-0107 F4).
     #[serde(default)]
     pub idle_action_frequency: Option<Decimal>,
+    /// `OreTwinkle`, the resource-glint animation type (S-0202 claim 14).
+    // spec: S-0202 Import mapping (OreTwinkle: an animation-type name in [General])
+    #[serde(default)]
+    pub ore_twinkle: Option<String>,
+    /// `[AudioVisual] OreTwinkleChance`, the resource-glint frequency f
+    /// (S-0202 claim 14).
+    // spec: S-0202 Import mapping (OreTwinkleChance: a signed integer in [AudioVisual])
+    #[serde(default)]
+    pub ore_twinkle_chance: Option<i32>,
+    /// `ChronoDistanceFactor`, the teleport distance factor k, leptons per
+    /// tick (S-0207 F9).
+    #[serde(default)]
+    pub chrono_distance_factor: Option<i32>,
+    /// `ChronoTrigger`, the teleport trigger flag (S-0207 F9).
+    #[serde(default)]
+    pub chrono_trigger: Option<bool>,
+    /// `ChronoMinimumDelay`, the teleport minimum delay m, ticks (S-0207
+    /// F9).
+    #[serde(default)]
+    pub chrono_minimum_delay: Option<i32>,
+    /// `ChronoRangeMinimum`, the teleport range minimum g, leptons (S-0207
+    /// F9).
+    #[serde(default)]
+    pub chrono_range_minimum: Option<i32>,
+    /// `WarpOut`, the warp animation of a teleporting jump (S-0207 claim 20
+    /// e).
+    #[serde(default)]
+    pub warp_out: Option<String>,
+    /// `[AudioVisual] ChronoOutSound`, the game-wide departure sound of a
+    /// teleporting jump (S-0207 claim 20 e).
+    #[serde(default)]
+    pub chrono_out_sound: Option<String>,
+    /// `[AudioVisual] ChronoInSound`, the game-wide arrival sound of a
+    /// teleporting jump (S-0207 claim 20 e).
+    #[serde(default)]
+    pub chrono_in_sound: Option<String>,
     /// `MaximumCheerRate`, ticks (S-0213 claim 19).
     #[serde(default)]
     pub maximum_cheer_rate: Option<i32>,
@@ -435,7 +471,8 @@ pub struct General {
     #[serde(default)]
     pub iq_max: Option<i32>,
     /// `[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list
-    /// of S-0215 claim 31, entries for difficulty indexes 0, 1 and 2.
+    /// of S-0215 claim 31, entries for difficulty indexes 0, 1 and 2,
+    /// read as S-0003 claim 22's decimal-prefix items.
     #[serde(default)]
     pub ai_auto_deploy_frame_delay: Option<Vec<i32>>,
     /// `[MultiplayerDialogSettings] GameSpeed` (S-0201 claim 7).
@@ -1057,6 +1094,14 @@ pub struct UnitType {
     /// `DeploysInto`.
     #[serde(default)]
     pub deploys_into: Option<String>,
+    /// `ChronoOutSound`, the type's departure sound of a teleporting jump
+    /// (S-0207 claim 20 e).
+    #[serde(default)]
+    pub chrono_out_sound: Option<String>,
+    /// `ChronoInSound`, the type's arrival sound of a teleporting jump
+    /// (S-0207 claim 20 e).
+    #[serde(default)]
+    pub chrono_in_sound: Option<String>,
     /// `Primary`.
     #[serde(default)]
     pub primary: Option<String>,

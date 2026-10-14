@@ -213,6 +213,15 @@ impl Cells {
         }
     }
 
+    /// Whether `c` has the elevation-deck mark (S-0307 Terms): it holds a
+    /// high-bridge overlay itself; the neighbours that the overlay's
+    /// bridge marking reaches do not get it.
+    pub fn elevation_deck(&self, c: CellXY) -> bool {
+        // spec: S-0307 Terms (elevation-deck mark: an intact high-bridge overlay sets it on its own cell only)
+        self.cell(c)
+            .is_some_and(|cell| HIGH_BRIDGE_OVERLAYS.iter().any(|h| h.0 == cell.overlay))
+    }
+
     /// An overlay of `overlay` placed in `c` marks its high-bridge cells
     /// (S-0211 claim 15): for a high-bridge overlay index, the cell one step
     /// against its marking direction d, its own cell, and the cells one and

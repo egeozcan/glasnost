@@ -201,6 +201,9 @@ pub struct Object {
     pub walk: Option<WalkState>,
     /// Infantry state (S-0107).
     pub infantry: Option<InfantryState>,
+    /// Teleporting locomotor state (S-0207 claim 20).
+    #[serde(default)]
+    pub teleport: Option<crate::teleport::TeleportState>,
     /// The crush-slowdown state (S-0210 claim 9).
     pub crush_slowdown: bool,
     /// Tick at which the targeting timer has run out (S-0215 claim 33).

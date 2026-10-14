@@ -1669,8 +1669,24 @@ fn estimate_ok(w: &World, u: &crate::rules::UnitRules, found: CellXY, dest: Cell
 /// The regions must be up to date ([`regions::ensure`]).
 pub fn coarse_estimate(w: &World, zone: MovementZone, found: CellXY, dest: CellXY) -> Option<i32> {
     // spec: S-0212 claim 13b (the found cell counts as on a bridge deck when it is a bridge cell)
-    let found_end = coarse_end(w, found, true);
-    let dest_end = coarse_end(w, dest, true);
+    coarse_estimate_layers(w, zone, found, true, dest, true)
+}
+
+/// [`coarse_estimate`] with each end read on its deck (`found_deck`,
+/// `dest_deck`) or on the ground: a bridge cell read on the ground is its
+/// own coarse end cell (S-0212 claim 13b); the legs of F8 follow the bridge
+/// cells as before.
+pub fn coarse_estimate_layers(
+    w: &World,
+    zone: MovementZone,
+    found: CellXY,
+    found_deck: bool,
+    dest: CellXY,
+    dest_deck: bool,
+) -> Option<i32> {
+    // spec: S-0212 claim 13b (a bridge cell read as on its deck has its coarse end cell at a bridge end; any other cell is its own)
+    let found_end = coarse_end(w, found, found_deck);
+    let dest_end = coarse_end(w, dest, dest_deck);
     // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted)
     let chains = corridor::coarse(
         w,

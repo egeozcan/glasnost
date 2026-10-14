@@ -282,7 +282,8 @@ enum Form {
     Refs(Kind),
     /// A list of integers (S-0003 claims 3 and 12).
     Ints,
-    /// A debris maxima list (S-0003 claim 20): decimal integer prefixes.
+    /// A decimal-integer list (S-0003 claims 20 and 22: the debris maxima
+    /// and the auto-deploy delays): decimal integer prefixes, 511 bytes.
     Maxima,
     /// A list of names that are not type names (S-0003 claims 1 and 12),
     /// each item as [`Form::Text`] gives it, kept in order with none left
@@ -382,6 +383,9 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
         Dec,
     ),
     ("deploys_into", "DeploysInto", Text),
+    // spec: S-0207 Import mapping (ChronoOutSound, ChronoInSound of vehicle, infantry and aircraft types: sound names)
+    ("chrono_out_sound", "ChronoOutSound", Text),
+    ("chrono_in_sound", "ChronoInSound", Text),
     // `Primary`, `Secondary` and the elite keys: the weapon slots (S-0308 claim 1).
     ("turret_count", "TurretCount", Int),
     ("weapon_count", "WeaponCount", Int),
@@ -575,6 +579,42 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         "IdleActionFrequency",
         Dec,
     ),
+    // spec: S-0202 Import mapping (OreTwinkle: an animation-type name, case-insensitive; OreTwinkleChance: a signed integer)
+    (
+        "ore_twinkle",
+        b"General",
+        "OreTwinkle",
+        Ref(Kind::Animations),
+    ),
+    (
+        "ore_twinkle_chance",
+        b"AudioVisual",
+        "OreTwinkleChance",
+        Int,
+    ),
+    // spec: S-0207 Import mapping (the teleporting locomotor's [General] keys; ChronoOutSound and ChronoInSound in [AudioVisual])
+    (
+        "chrono_distance_factor",
+        b"General",
+        "ChronoDistanceFactor",
+        Int,
+    ),
+    ("chrono_trigger", b"General", "ChronoTrigger", Bool),
+    (
+        "chrono_minimum_delay",
+        b"General",
+        "ChronoMinimumDelay",
+        Int,
+    ),
+    (
+        "chrono_range_minimum",
+        b"General",
+        "ChronoRangeMinimum",
+        Int,
+    ),
+    ("warp_out", b"General", "WarpOut", Ref(Kind::Animations)),
+    ("chrono_out_sound", b"AudioVisual", "ChronoOutSound", Text),
+    ("chrono_in_sound", b"AudioVisual", "ChronoInSound", Text),
     // spec: S-0213 Import mapping
     ("maximum_cheer_rate", b"General", "MaximumCheerRate", Int),
     // spec: S-0209, S-0215, S-0210 Import mapping ([IQ])
@@ -582,12 +622,12 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
     ("iq_guard_area", b"IQ", "GuardArea", Int),
     ("iq_auto_crush", b"IQ", "AutoCrush", Int),
     ("iq_max", b"IQ", "MaxIQLevels", Int),
-    // spec: S-0215 Import mapping (AIAutoDeployFrameDelay: a list of integers in ticks, for difficulty indexes 0, 1 and 2)
+    // spec: S-0215 Import mapping (AIAutoDeployFrameDelay: a list of integers in ticks, for difficulty indexes 0, 1 and 2); S-0003 claim 22 and row C20 (decimal-prefix items, 511-byte limit)
     (
         "ai_auto_deploy_frame_delay",
         b"General",
         "AIAutoDeployFrameDelay",
-        Ints,
+        Maxima,
     ),
     // spec: S-0201 Import mapping
     (
@@ -869,7 +909,7 @@ impl Builder<'_> {
                 }
                 list.map(jsonc::array)
             }
-            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim, request Q-0171)
+            // spec: S-0003 claims 3 and 12 (a list of integers; an item the integer form cannot read is 0 and keeps its place: interim for the lists S-0003 does not name, as request Q-0171's workaround; Q-0171 itself is answered for the auto-deploy list, claim 22)
             Ints => fold(state, None, |v, _| {
                 Some(
                     value::list(v, value::COMMON_TEXT_LIMIT)
@@ -879,7 +919,7 @@ impl Builder<'_> {
                 )
             })
             .map(jsonc::array),
-            // spec: S-0003 claim 20 (debris maxima: decimal prefixes, 511-byte limit; a given list replaces the held one)
+            // spec: S-0003 claims 20 and 22 (debris maxima and auto-deploy delays: decimal prefixes, 511-byte limit, an unreadable item 0 in its place, empty items none; a given list replaces the held one)
             Maxima => fold(state, None, |v, _| {
                 Some(
                     value::decimal_prefix_list(v)
@@ -1017,7 +1057,7 @@ impl Builder<'_> {
             let Some(state) = state else { continue };
             if key == "AIAutoDeployFrameDelay"
                 && let Some(v) = &state.value
-                && value::list(v, value::COMMON_TEXT_LIMIT).len() < AUTO_DEPLOY_ENTRIES
+                && value::decimal_prefix_list(v).len() < AUTO_DEPLOY_ENTRIES
             {
                 // spec: S-0215 claim 31 and Edge cases (the importer warns when the auto-deploy delay list has fewer than 3 entries)
                 self.warn(0, 0, format!(
@@ -1049,6 +1089,17 @@ impl Builder<'_> {
                     ));
                 }
             }
+        }
+        let general_key = |k: &[u8]| globals.get(&b"General"[..]).and_then(|s| s.get(k));
+        let factor = fold(general_key(b"ChronoDistanceFactor"), None, |v, _| {
+            value::integer(v)
+        });
+        let trigger = fold(general_key(b"ChronoTrigger"), None, |v, _| {
+            value::boolean(v)
+        });
+        // spec: S-0207 Constants and Edge cases (k absent: 32, trigger absent: on; k = 0 with the trigger on: the importer warns, our engine takes the trigger as off)
+        if factor == Some(0) && trigger.unwrap_or(true) {
+            self.warn(0, 0, "[General] ChronoDistanceFactor is 0 with ChronoTrigger on: the original divides by zero at the first teleporting jump; our engine takes the trigger as off (S-0207 F9, a departure)".to_owned());
         }
         // spec: S-0009 Import mapping ([General] BaseUnit: a list of vehicle type names)
         let base_unit = globals

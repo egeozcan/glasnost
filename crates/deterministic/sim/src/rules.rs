@@ -57,6 +57,8 @@ pub enum Locomotor {
     Drive,
     /// The walking locomotor of infantry (S-0208).
     Walk,
+    /// The teleporting locomotor of a vehicle (S-0207 claim 20).
+    Teleport,
     /// Not moved in M3: every other locomotor, and a locomotor on a kind
     /// whose movement with it no spec gives (S-0207 Open questions).
     None,
@@ -478,6 +480,16 @@ pub struct GeneralRules {
     pub condition_red: F64,
     /// Idle-action frequency R, game minutes (double).
     pub idle_frequency: F64,
+    /// The resource-glint frequency f.
+    pub ore_twinkle_chance: i32,
+    /// The teleport distance factor k, leptons per tick (S-0207 F9).
+    pub chrono_distance_factor: i32,
+    /// The teleport trigger flag (S-0207 F9).
+    pub chrono_trigger: bool,
+    /// The teleport minimum delay m, ticks (S-0207 F9).
+    pub chrono_minimum_delay: i32,
+    /// The teleport range minimum g, leptons (S-0207 F9).
+    pub chrono_range_minimum: i32,
     /// Maximum cheer rate, ticks.
     pub cheer_rate: i32,
     /// Area-guard threshold of the house skill level.
@@ -728,6 +740,12 @@ pub struct SimRules {
     pub gates: GateTypes,
     /// Animation types by registration index.
     pub animations: Vec<AnimRules>,
+    /// The resource-glint animation type, if one is configured (S-0202
+    /// claim 14).
+    pub ore_twinkle: Option<String>,
+    /// The warp animation of a teleporting jump, if one is in force
+    /// (S-0207 claim 20 e).
+    pub warp_out: Option<String>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
     /// The combat rules (M4).
@@ -849,6 +867,13 @@ impl SimRules {
             // spec: S-0107 Import mapping (IdleActionFrequency absent: the double nearest 0.083)
             idle_frequency: dec(&g.idle_action_frequency, mode)
                 .unwrap_or_else(|| nearest_double("0.083")),
+            // spec: S-0202 Import mapping (OreTwinkleChance: 50 at database creation)
+            ore_twinkle_chance: g.ore_twinkle_chance.unwrap_or(50),
+            // spec: S-0207 Constants (absent-key defaults: k = 32, trigger on, m = 0, g = 0)
+            chrono_distance_factor: g.chrono_distance_factor.unwrap_or(32),
+            chrono_trigger: g.chrono_trigger.unwrap_or(true),
+            chrono_minimum_delay: g.chrono_minimum_delay.unwrap_or(0),
+            chrono_range_minimum: g.chrono_range_minimum.unwrap_or(0),
             // spec: S-0213 Import mapping (MaximumCheerRate absent: 1 tick)
             cheer_rate: g.maximum_cheer_rate.unwrap_or(1),
             // spec: S-0215 claim 36 (a) and Constants ([IQ] GuardArea absent from every layer: engine default 4)
@@ -1099,6 +1124,10 @@ impl SimRules {
             mode,
             general,
             animations,
+            // spec: S-0202 Import mapping (OreTwinkle: no animation at database creation)
+            ore_twinkle: g.ore_twinkle.clone(),
+            // spec: S-0207 Import mapping (WarpOut: with none in force, no animation is played)
+            warp_out: g.warp_out.clone(),
             base_units,
             // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
             game_tech_level: g.multiplayer_tech_level.unwrap_or(10),
@@ -1197,6 +1226,8 @@ fn unit_rules(
         (Kind::Vehicle, rs::Locomotor::Drive) => Locomotor::Drive,
         // spec: S-0208 (an infantry unit with the walking locomotor)
         (Kind::Infantry, rs::Locomotor::Walk) => Locomotor::Walk,
+        // spec: S-0207 claim 20 (a vehicle with the teleporting locomotor; an infantry unit's landing point is open, request Q-0181, and an aircraft's occupancy mark request Q-0232: neither is moved)
+        (Kind::Vehicle, rs::Locomotor::Teleport) => Locomotor::Teleport,
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {

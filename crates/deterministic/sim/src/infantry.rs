@@ -264,6 +264,8 @@ fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 /// or the same object). A first or different destination and a cleared one
 /// make no request. The request is not saved when refused.
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
+    // spec: S-0207 claim 20 (a) (the teleporting locomotor takes a destination at once)
+    crate::teleport::take_destination(w, id);
     let Some(o) = w.obj(id) else { return };
     // spec: S-0107 claim 15 (clearing a destination makes no request)
     let Some(new) = o.dest else { return };

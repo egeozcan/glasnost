@@ -873,6 +873,7 @@ fn accelerating_vehicle_gains_twice_at_track_boundary() {
 // Which locomotor a type has
 
 // spec: S-0207 claim 14 (absent: the teleporting locomotor whatever the kind; the driving locomotor drives a vehicle)
+// spec: S-0207 claim 20 (a vehicle with the teleporting locomotor jumps; an infantry unit's landing point is open, Q-0181)
 #[test]
 fn locomotor_field_selects_how_a_type_moves() {
     use glasnost_rules::sim::Locomotor as L;
@@ -897,7 +898,7 @@ fn locomotor_field_selects_how_a_type_moves() {
     let unit = |kind: Kind, i: u32| r.unit(kind, i).expect("type").clone();
     assert_eq!(unit(Kind::Vehicle, 0).type_locomotor(), L::Teleport);
     assert_eq!(unit(Kind::Infantry, 0).type_locomotor(), L::Teleport);
-    assert_eq!(unit(Kind::Vehicle, 0).locomotor, Locomotor::None);
+    assert_eq!(unit(Kind::Vehicle, 0).locomotor, Locomotor::Teleport);
     assert_eq!(unit(Kind::Infantry, 0).locomotor, Locomotor::None);
     assert_eq!(unit(Kind::Vehicle, 1).locomotor, Locomotor::Drive);
     // A vehicle type may name the walking locomotor; how it moves has no spec (Open questions).
@@ -914,14 +915,16 @@ fn locomotor_field_selects_how_a_type_moves() {
     open_orders(&mut w);
     order_move(&mut w, teleporter, cell(0, -6));
     order_move(&mut w, driver, cell(4, -6));
-    let p0 = w.obj(teleporter).expect("v").pos;
+    let f0 = w.obj(teleporter).expect("v").body.value(w.tick);
     let d0 = w.obj(driver).expect("v").pos;
     run(&mut w, 40);
+    let t = w.obj(teleporter).expect("v");
     assert_eq!(
-        w.obj(teleporter).expect("v").pos,
-        p0,
-        "a teleporting vehicle does not drive"
+        t.pos.cell(),
+        cell(0, -6),
+        "a teleporting vehicle jumps to its destination"
     );
+    assert_eq!(t.body.value(w.tick), f0, "a jump keeps the facing");
     assert_ne!(
         w.obj(driver).expect("v").pos,
         d0,
@@ -1217,6 +1220,80 @@ fn vehicle_scatter_with_threat_point() {
     let ob = w.obj(id).expect("v");
     assert_eq!(ob.dest, Some(Target::Cell(CellXY::new(40 + dx, 40 + dy))));
     assert_eq!(ob.beh.queued, Some(glasnost_sim::rules::Behaviour::Move));
+}
+
+// spec: S-0207 Terms (vehicle scatter centre cell) and claim 16 (scenario D18 part i: on a track after a stop order the search is centred on the track target's cell; at rest on its own cell; never around the move destination)
+#[test]
+fn vehicle_scatter_centre_cell() {
+    use glasnost_sim::path::{NearbyUse, nearby};
+    use glasnost_sim::scatter::{ScatterRequest, vehicle_request};
+    use glasnost_sim::world::{Layer, Target};
+    let mut w = scene(car(WHEEL, 4, false), 0).build();
+    let id = objects_of(&w, Kind::Vehicle)[0];
+    open_orders(&mut w);
+    let far = cell(0, -12);
+    order_move(&mut w, id, far);
+    let req = ScatterRequest {
+        threat: None,
+        forced: true,
+        anywhere: false,
+    };
+    let around = |w: &World, c: CellXY| {
+        nearby(
+            w,
+            c,
+            NearbyUse::Scatter {
+                class: Some(WHEEL),
+                deck: false,
+            },
+        )
+    };
+    // Run until the vehicle is on a track into a cell other than its own.
+    let mut on_track = false;
+    for _ in 0..40 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("v");
+        if o.drive
+            .as_ref()
+            .and_then(|d| d.track.as_ref())
+            .is_some_and(|t| t.target_cell != o.pos.cell())
+        {
+            on_track = true;
+            break;
+        }
+    }
+    assert!(on_track, "the vehicle starts a track");
+    assert!(orders::issue(&mut w, HouseId(0), Order::Stop { actor: id }));
+    let mut tracked = false;
+    let mut rested = false;
+    for _ in 0..400 {
+        tick::step(&mut w);
+        let o = w.obj(id).expect("v").clone();
+        if o.dest.is_some() {
+            continue;
+        }
+        assert_eq!(o.layer, Layer::Ground);
+        let track = o.drive.as_ref().and_then(|d| d.track.as_ref());
+        let centre = track.map_or(o.pos.cell(), |t| t.target_cell);
+        let mut copy = w.clone();
+        let expect = around(&copy, centre);
+        assert!(vehicle_request(&mut copy, id, req));
+        let got = copy.obj(id).expect("v").dest;
+        assert_eq!(got, expect.map(Target::Cell), "centred on {centre:?}");
+        assert_ne!(got, around(&copy, far).map(Target::Cell));
+        if track.is_some() {
+            // Part i's case: K is a cell ahead of the vehicle's own cell.
+            tracked |= centre != o.pos.cell();
+        } else {
+            rested = true;
+            break;
+        }
+    }
+    assert!(
+        tracked,
+        "the vehicle had no destination while still on its track"
+    );
+    assert!(rested, "the vehicle comes to rest");
 }
 
 // spec: S-0207 claim 15 (the first cell of a new path: stationary friends make the vehicle give up, or get the request, on the search's tick, before any turn)

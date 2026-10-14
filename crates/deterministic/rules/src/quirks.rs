@@ -113,6 +113,10 @@ pub struct Quirks {
     // spec: S-0208 claim 14
     #[serde(default = "on")]
     pub slow_walker_stall: bool,
+    /// A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on; off: the arrival test uses the centre's height on the walker's arrival layer.
+    // spec: S-0208 claim 18 and Edge cases
+    #[serde(default = "on")]
+    pub walker_bridge_destination_deck: bool,
     /// The hard-coded cow type's idle action can scatter it.
     // spec: S-0107 claim 14; S-0208
     #[serde(default = "on")]
@@ -1000,6 +1004,17 @@ pub struct Quirks {
     // spec: S-0307 claim 16, Edge cases
     #[serde(default = "on")]
     pub approach_alternative_walk: bool,
+    /// A vehicle's approach alternatives are measured at world height 0;
+    /// off: at the terrain height of their centre, plus 416 leptons on a
+    /// high bridge, as primaries are.
+    // spec: S-0307 claim 19, Edge cases
+    #[serde(default = "on")]
+    pub approach_alternative_zero_height: bool,
+    /// A vehicle's approach alternatives skip the usable-area test; off:
+    /// they must pass it as primaries do.
+    // spec: S-0307 claim 21, Edge cases
+    #[serde(default = "on")]
+    pub approach_alternative_outside_area: bool,
 }
 
 impl Default for Quirks {
@@ -1029,6 +1044,7 @@ impl Default for Quirks {
             prone_noncrawler_speedup: true,
             walker_overshoot: true,
             slow_walker_stall: true,
+            walker_bridge_destination_deck: true,
             cow_idle: true,
             infantry_facing_sector_skew: true,
             unchecked_substitute: true,
@@ -1248,6 +1264,8 @@ impl Default for Quirks {
             initial_ammo_above_capacity: true,
             building_removal_second_round: true,
             approach_alternative_walk: true,
+            approach_alternative_zero_height: true,
+            approach_alternative_outside_area: true,
         }
     }
 }
@@ -1298,6 +1316,10 @@ impl Quirks {
             ("prone_noncrawler_speedup", self.prone_noncrawler_speedup),
             ("walker_overshoot", self.walker_overshoot),
             ("slow_walker_stall", self.slow_walker_stall),
+            (
+                "walker_bridge_destination_deck",
+                self.walker_bridge_destination_deck,
+            ),
             ("cow_idle", self.cow_idle),
             (
                 "infantry_facing_sector_skew",
@@ -1820,6 +1842,14 @@ impl Quirks {
                 self.building_removal_second_round,
             ),
             ("approach_alternative_walk", self.approach_alternative_walk),
+            (
+                "approach_alternative_zero_height",
+                self.approach_alternative_zero_height,
+            ),
+            (
+                "approach_alternative_outside_area",
+                self.approach_alternative_outside_area,
+            ),
         ]
     }
 

@@ -3543,7 +3543,7 @@
       "type": "object",
       "properties": {
         "ai_auto_deploy_frame_delay": {
-          "description": "`[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list\nof S-0215 claim 31, entries for difficulty indexes 0, 1 and 2.",
+          "description": "`[General] AIAutoDeployFrameDelay`, ticks: the auto-deploy delay list\nof S-0215 claim 31, entries for difficulty indexes 0, 1 and 2,\nread as S-0003 claim 22's decimal-prefix items.",
           "type": [
             "array",
             "null"
@@ -3715,6 +3715,57 @@
           "description": "`C4Warhead`, the demolition warhead (S-0302 claims 1 and 20).",
           "type": [
             "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_distance_factor": {
+          "description": "`ChronoDistanceFactor`, the teleport distance factor k, leptons per\ntick (S-0207 F9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_in_sound": {
+          "description": "`[AudioVisual] ChronoInSound`, the game-wide arrival sound of a\nteleporting jump (S-0207 claim 20 e).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_minimum_delay": {
+          "description": "`ChronoMinimumDelay`, the teleport minimum delay m, ticks (S-0207\nF9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_out_sound": {
+          "description": "`[AudioVisual] ChronoOutSound`, the game-wide departure sound of a\nteleporting jump (S-0207 claim 20 e).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_range_minimum": {
+          "description": "`ChronoRangeMinimum`, the teleport range minimum g, leptons (S-0207\nF9).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_trigger": {
+          "description": "`ChronoTrigger`, the teleport trigger flag (S-0207 F9).",
+          "type": [
+            "boolean",
             "null"
           ],
           "default": null
@@ -4186,6 +4237,23 @@
           "format": "int32",
           "default": null
         },
+        "ore_twinkle": {
+          "description": "`OreTwinkle`, the resource-glint animation type (S-0202 claim 14).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ore_twinkle_chance": {
+          "description": "`[AudioVisual] OreTwinkleChance`, the resource-glint frequency f\n(S-0202 claim 14).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "path_delay": {
           "description": "`[AI] PathDelay`, game minutes (S-0212 F3).",
           "anyOf": [
@@ -4489,6 +4557,14 @@
         },
         "wall_tower": {
           "description": "`WallTower`: the wall tower type (S-0112).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "warp_out": {
+          "description": "`WarpOut`, the warp animation of a teleporting jump (S-0207 claim 20\ne).",
           "type": [
             "string",
             "null"
@@ -5567,8 +5643,18 @@
           "type": "boolean",
           "default": true
         },
+        "approach_alternative_outside_area": {
+          "description": "A vehicle's approach alternatives skip the usable-area test; off:\nthey must pass it as primaries do.",
+          "type": "boolean",
+          "default": true
+        },
         "approach_alternative_walk": {
           "description": "A vehicle's approach search tries the eight alternative cells in\nthe original's order (0, −1), (1, −2), …, (0, 0); off: the eight\nneighbours in direction order 0 to 7.",
+          "type": "boolean",
+          "default": true
+        },
+        "approach_alternative_zero_height": {
+          "description": "A vehicle's approach alternatives are measured at world height 0;\noff: at the terrain height of their centre, plus 416 leptons on a\nhigh bridge, as primaries are.",
           "type": "boolean",
           "default": true
         },
@@ -6702,6 +6788,11 @@
           "type": "boolean",
           "default": true
         },
+        "walker_bridge_destination_deck": {
+          "description": "A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on; off: the arrival test uses the centre's height on the walker's arrival layer.",
+          "type": "boolean",
+          "default": true
+        },
         "walker_overshoot": {
           "description": "A fast walker can step past its walking target and swing back.",
           "type": "boolean",
@@ -7275,6 +7366,22 @@
           "description": "`Carryall`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_in_sound": {
+          "description": "`ChronoInSound`, the type's arrival sound of a teleporting jump\n(S-0207 claim 20 e).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_out_sound": {
+          "description": "`ChronoOutSound`, the type's departure sound of a teleporting jump\n(S-0207 claim 20 e).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

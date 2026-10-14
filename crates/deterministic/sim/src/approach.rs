@@ -2,7 +2,7 @@
 //! vehicle with a target out of range keeps it, keeps or renews its
 //! destination, or looks for an approach position.
 //!
-//! The approach-position search is S-0307's (claims 15 to 17,
+//! The approach-position search is S-0307's (claims 15 to 17 and 19 to 21,
 //! `combat::range::approach_search`, request Q-0172 for the cases its
 //! revision leaves open), and so is part h's balloon-hover approach (claim
 //! 18, `combat::range::balloon_hover_approach`). Part h's crushing

@@ -128,6 +128,13 @@ fn set_deck(w: &mut World, c: CellXY) {
     w.cells.deck[i] = true;
 }
 
+/// Places a high-bridge overlay (index 24) in `c`, which gives the cell the
+/// elevation-deck mark (S-0307 Terms), and marks it as a high-bridge cell.
+fn set_bridge_overlay(w: &mut World, c: CellXY) {
+    set_deck(w, c);
+    w.cells.grid.get_mut(c).unwrap().overlay = 24; // spec: S-0211 claim 15 (high-bridge overlay index 24)
+}
+
 fn set_overlay(w: &mut World, c: CellXY, o: u8) {
     w.cells.grid.get_mut(c).unwrap().overlay = o;
 }
@@ -438,10 +445,11 @@ fn f2_overflow_of_the_bonus_term() {
     assert!(!test(&s));
 }
 
-/// A high bridge along the map y axis through column dx.
+/// A high bridge along the map y axis through column dx, each cell with a
+/// high-bridge overlay of its own.
 fn bridge(w: &mut World, dx: i32) {
     for dy in -6..=6 {
-        set_deck(w, cell_of(dx, dy));
+        set_bridge_overlay(w, cell_of(dx, dy));
     }
 }
 
@@ -455,6 +463,19 @@ fn quirk_elevation_deck_cell_level_on() {
     // Control: the firer on open ground at the same distance.
     let s2 = setup(&r, 5, 0);
     assert!(!test(&s2));
+}
+
+// spec: S-0307 Terms and claim 6 (scenario RG3 run d: the elevation-deck mark is on a high-bridge overlay's own cell only; under a marked bridge cell without an overlay of its own the firer gets no lift)
+#[test]
+fn claim6_elevation_deck_mark_on_the_overlay_cell_only() {
+    let r = elevation_rules(true, false);
+    let mut s = setup(&r, 5, 0);
+    for dy in -6..=6 {
+        set_deck(&mut s.w, cell_of(0, dy));
+    }
+    assert!(!test(&s), "a high-bridge cell without the overlay");
+    set_bridge_overlay(&mut s.w, cell_of(0, 0));
+    assert!(test(&s), "the overlay's own cell");
 }
 
 // spec: S-0307 Edge cases (quirks.elevation_deck_cell_level off: the 4 levels only for an object on the deck)
@@ -473,21 +494,21 @@ fn quirk_elevation_deck_cell_level_off() {
     assert!(test(&s));
 }
 
-// spec: S-0307 claim 6 (a target under a bridge counts 4 levels higher and reduces the firer's bonus)
+// spec: S-0307 claim 6 (a target under a bridge, in a cell with the elevation-deck mark, counts 4 levels higher and reduces the firer's bonus)
 #[test]
 fn claim6_target_under_a_bridge_reduces_the_bonus() {
     let r = elevation_rules(true, false);
     let mut s = plateau(&r, 3, 0);
     assert!(test(&s));
     // Target cell marked as a high-bridge cell: λ_T = 4 = λ_A, no bonus; it is also measured at deck height.
-    set_deck(&mut s.w, cell_of(3, 0));
+    set_bridge_overlay(&mut s.w, cell_of(3, 0));
     let m = measured_point(&s.w, Target::Object(s.t));
     assert_eq!(m.z, 416);
     // Spatial distance 768 at equal heights, within 1024 even without a bonus.
     assert!(test(&s));
     // At 5 cells (1280) with no bonus: out.
     let mut s5 = plateau(&r, 5, 0);
-    set_deck(&mut s5.w, cell_of(5, 0));
+    set_bridge_overlay(&mut s5.w, cell_of(5, 0));
     assert!(!test(&s5));
 }
 
@@ -1109,10 +1130,145 @@ fn claim_18_approach_step_takes_the_target() {
     assert_eq!(o.target, Some(Target::Object(s.t)));
 }
 
-// spec: S-0307 claim 17 and Open questions (a failed search after non-empty radii: the target is dropped; the nearby-cell search's centre is not established, request Q-0172, interim: the destination is cleared)
+// spec: S-0307 claim 18 (a balloon-hover vehicle with a cell target takes that cell as its destination, with no approach-position search)
 #[test]
-fn claim_17_failure_after_candidates_clears_the_destination() {
+fn claim_18_cell_target() {
+    let mut r = base("5");
+    r.sim.vehicles.get_mut("CART").unwrap().balloon_hover = Some(true);
+    line(&mut r).vertical = Some(true);
+    let mut s = approach_setup(&r);
+    let t = Target::Cell(cell_of(10, 0));
+    let o = s.w.obj_mut(s.a).unwrap();
+    o.beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    o.target = Some(t);
+    glasnost_sim::approach::step(&mut s.w, s.a);
+    let o = s.w.obj(s.a).unwrap();
+    assert_eq!(o.dest, Some(t));
+    assert_eq!(o.target, Some(t));
+}
+
+// spec: S-0307 claim 17 (failure centre: with no primary passing the range test the nearby-cell search is centred on the target's reference cell, even with non-empty radii; the target is dropped)
+#[test]
+fn claim_17_failure_without_an_anchor_centres_on_the_target() {
+    use glasnost_sim::path::{NearbyUse, nearby};
     let r = base("0.1");
     let s = approach_setup(&r);
-    assert_eq!(approach_search(&s.w, s.a, 1152), Some(Approach::Drop(None)));
+    let want = nearby(&s.w, cell_of(10, 0), NearbyUse::Approach { unit: s.a });
+    assert!(want.is_some());
+    assert_eq!(approach_search(&s.w, s.a, 1152), Some(Approach::Drop(want)));
+}
+
+/// Turns the cells within `r` (Chebyshev) of `c` into rock.
+fn rock(w: &mut World, c: CellXY, r: i32) {
+    for dx in -r..=r {
+        for dy in -r..=r {
+            let x = CellXY::new(c.x + dx, c.y + dy);
+            w.cells.grid.get_mut(x).unwrap().land = glasnost_map::terrain::land::ROCK;
+            glasnost_sim::regions::cell_changed(w, x);
+        }
+    }
+    glasnost_sim::regions::ensure(w);
+}
+
+// spec: S-0307 claim 17 (failure centre after candidates: the last primary in F4 order that passes the range test, though not clear, centres the nearby-cell search with the empty-radius parameters; scenario RG17)
+#[test]
+fn claim_17_failure_anchor_is_the_last_ranged_primary() {
+    use glasnost_sim::path::{NearbyUse, nearby};
+    let r = base("2");
+    let mut s = approach_setup(&r);
+    let t = cell_of(10, 0);
+    // The target stands in a rock field: every candidate passes the range
+    // test at radius 256 but none is enterable.
+    rock(&mut s.w, t, 4);
+    assert_eq!(approach_radii(&s.w, 400, 0, false), vec![256]);
+    let got = approach_search(&s.w, s.a, 400);
+    let around = |c: CellXY| nearby(&s.w, c, NearbyUse::Approach { unit: s.a });
+    // F4's last primary at radius 256 is a quarter turn off the attacker's
+    // bearing: the cell beside the target across the line of approach.
+    let anchors = [cell_of(10, -1), cell_of(10, 1)];
+    assert!(anchors.iter().all(|&a| around(a) != around(t)));
+    assert!(
+        anchors
+            .iter()
+            .any(|&a| got == Some(Approach::Drop(around(a)))),
+        "{got:?}"
+    );
+}
+
+// spec: S-0307 claim 19 (a primary in a high-bridge cell is measured at the terrain height plus 416 leptons: at range 4.2 cells the cell four cells west of the target passes at height 0 and fails at deck height)
+#[test]
+fn claim_19_primary_measured_on_the_deck() {
+    let r = base("4.2");
+    let mut s = approach_setup(&r);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(6, 0)))
+    );
+    set_deck(&mut s.w, cell_of(6, 0));
+    glasnost_sim::regions::ensure(&mut s.w);
+    let got = approach_search(&s.w, s.a, 1152);
+    assert!(
+        matches!(got, Some(Approach::Cell(c)) if c != cell_of(6, 0)),
+        "{got:?}"
+    );
+}
+
+// spec: S-0307 claim 19 (a high-bridge candidate's clear-cell test reads the deck occupancy: an occupied ground under an empty deck is accepted, an occupied deck refuses)
+#[test]
+fn claim_19_deck_occupancy() {
+    let r = base("5");
+    let mut s = approach_setup(&r);
+    let c = cell_of(6, 0);
+    set_deck(&mut s.w, c);
+    block(&mut s, 6, 0);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(c)),
+        "the ground is occupied, the deck is empty"
+    );
+    // A vehicle-present claim on the deck.
+    s.w.cells.claim_vehicle(c, Layer::Deck, true);
+    glasnost_sim::regions::ensure(&mut s.w);
+    let got = approach_search(&s.w, s.a, 1152);
+    assert!(
+        matches!(got, Some(Approach::Cell(x)) if x != c),
+        "the deck is occupied: {got:?}"
+    );
+}
+
+// spec: S-0307 claim 19 and Edge cases (quirks.approach_alternative_zero_height: a vehicle's alternative in a high-bridge cell is measured at world height 0; off, at the deck height like a primary)
+#[test]
+fn quirk_approach_alternative_zero_height() {
+    for (quirk, want) in [(true, cell_of(6, -1)), (false, cell_of(7, -2))] {
+        let mut r = base("4.2");
+        r.globals.quirks.approach_alternative_zero_height = quirk;
+        let mut s = approach_setup(&r);
+        block(&mut s, 6, 0);
+        set_deck(&mut s.w, cell_of(6, -1));
+        glasnost_sim::regions::ensure(&mut s.w);
+        assert_eq!(
+            approach_search(&s.w, s.a, 1152),
+            Some(Approach::Cell(want)),
+            "quirk {quirk}"
+        );
+    }
+}
+
+// spec: S-0307 claim 20 (a cell target uses the same search: T is the cell's centre, β = 0; success assigns the candidate cell and keeps the cell target)
+#[test]
+fn claim_20_cell_target() {
+    let r = base("5");
+    let mut s = approach_setup(&r);
+    let t = Target::Cell(cell_of(10, 0));
+    let o = s.w.obj_mut(s.a).unwrap();
+    o.target = Some(t);
+    o.beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    assert_eq!(
+        approach_search(&s.w, s.a, 1152),
+        Some(Approach::Cell(cell_of(6, 0)))
+    );
+    glasnost_sim::approach::step(&mut s.w, s.a);
+    let o = s.w.obj(s.a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell_of(6, 0))));
+    assert_eq!(o.target, Some(t));
 }

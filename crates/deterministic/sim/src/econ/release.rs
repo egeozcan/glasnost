@@ -1228,6 +1228,10 @@ pub fn restore_locomotor(w: &mut World, id: ObjectId) -> bool {
     // spec: S-0215 claim 13 row 1 (it gets its own locomotor back)
     o.drive = None;
     o.econ.temporary_drive = false;
+    // spec: S-0215 claim 13 row 1 and S-0207 claim 20 (a) (the teleporting locomotor given back holds no landing point and no phasing in; its mark is on the own cell: interim, request Q-0233)
+    if let Some(t) = o.teleport.as_mut() {
+        *t = crate::teleport::TeleportState::default();
+    }
     let (c, l) = (o.pos.cell(), o.layer);
     // spec: S-0209 claim 1 (a vehicle without the driving locomotor sets the vehicle-present flag of its cell, as at placement)
     w.cells.claim_vehicle(c, l, true);

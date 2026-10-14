@@ -42,6 +42,7 @@ pub mod starting;
 pub mod starts;
 pub mod surface;
 pub mod targeting;
+pub mod teleport;
 pub mod testkit;
 pub mod tick;
 pub mod tracks;

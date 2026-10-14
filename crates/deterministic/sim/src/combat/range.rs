@@ -234,7 +234,7 @@ pub fn in_range(
 
 /// The firer's weapon range ρ(A, i) (S-0307 claim 13): 0 without a weapon
 /// in the slot, else the weapon's range field; open-topped transports
-/// (their passengers' shortest range) are a seam.
+/// (the shortest range of their passengers' current weapons) are a seam.
 pub fn firer_weapon_range(w: &World, firer: ObjectId, slot: usize) -> i32 {
     // spec: S-0307 claim 13 (0 without a weapon, else R₀ with no bonus)
     super::weapon::slot_weapon(w, firer, slot).map_or(0, |x| w.rules().combat.weapon(x).range)
@@ -315,11 +315,13 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
 /// and `Drop(n)` clears the target and sets the destination to `n` (none
 /// clears it). `None`: the actor has no target or no type.
 ///
-/// Claims 15 and 16 cover ground units on flat height-0 terrain without
-/// bridges, a target that is an object, and types without the close-range
-/// property; the same rules are applied to every other case meanwhile
-/// (request Q-0172, the part of Q-0072 the specs leave open). The regions
-/// must be up to date ([`crate::regions::ensure`]).
+/// Claims 15, 16 and 19 to 21 cover ordinary ground units on any terrain
+/// and near high bridges, object and cell targets, and alternatives
+/// outside the usable area; the same rules are applied meanwhile to
+/// close-range types, jumpjet actors and destroyable-cliff cell targets
+/// (request Q-0172). A failed search centres claim 17's nearby-cell search
+/// on the failure anchor. The regions must be up to date
+/// ([`crate::regions::ensure`]).
 pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach> {
     let r = w.rules();
     let mode = r.mode;
@@ -349,30 +351,68 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     let c = crate::rules::nearest_double("-0.00009587672516830327");
     let a_cell = ap.cell();
     let t_cell = tp.cell();
-    let ground = Layer::Ground;
+    let q = &r.quirks;
     let clear = |cell: CellXY| -> bool {
-        // spec: S-0307 claim 15 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, in the actor's reach region)
-        crate::passability::enterable_by_class(r, w, cell, u.class, u.zone, false)
-            && w.cells.occ(cell, ground).is_none_or(|x| x.empty())
-            && crate::regions::same_region(w, u.zone, o.pos.cell(), o.layer, cell, ground)
+        // spec: S-0307 claim 19 (a high-bridge cell reads its deck occupancy, the deck bypassing the land multiplier; other cells the ground)
+        let deck = w.high_bridge(cell);
+        let layer = if deck { Layer::Deck } else { Layer::Ground };
+        // spec: S-0307 claims 15 and 19 (a clear cell: enterable by class for its class and zone, an occupancy record empty as a whole, the actor's reach region from its own cell and layer, the candidate's ground-layer region)
+        crate::passability::enterable_by_class(r, w, cell, u.class, u.zone, deck)
+            && w.cells.occ(cell, layer).is_none_or(|x| x.empty())
+            && crate::regions::same_region(w, u.zone, o.pos.cell(), o.layer, cell, Layer::Ground)
     };
-    let fits = |cell: CellXY| -> bool {
-        // spec: S-0307 claim 15 (a point outside the usable area never qualifies; the range test from the cell centre at world height 0 with the weapon chosen for the target)
-        w.cells.usable(cell) && in_range(w, id, weapon, Some(t), Some(Pos::centre(cell, 0)))
+    // The candidate's height (claim 19): a primary at the terrain height of
+    // its centre, 416 leptons up on a high bridge; a vehicle's alternative
+    // at world height 0 under `approach_alternative_zero_height`.
+    let height = |cell: CellXY, alternative: bool| -> i32 {
+        if alternative && q.approach_alternative_zero_height {
+            // spec: S-0307 claim 19 (a vehicle's alternatives keep world height 0; quirks.approach_alternative_zero_height)
+            return 0;
+        }
+        let c = Pos::centre(cell, 0);
+        // spec: S-0307 claim 19 and Edge cases (the terrain height at the cell centre, plus 416 leptons on a high bridge)
+        w.surface_at(c.x, c.y) + if w.high_bridge(cell) { 416 } else { 0 }
+    };
+    let ranged = |cell: CellXY, alternative: bool| -> bool {
+        // spec: S-0307 claims 15 and 19 (the range test from the candidate's centre with the weapon chosen for the target; the elevation bonus still reads the firer's own cell)
+        in_range(
+            w,
+            id,
+            weapon,
+            Some(t),
+            Some(Pos::centre(cell, height(cell, alternative))),
+        )
+    };
+    let usable = |cell: CellXY, alternative: bool| -> bool {
+        // spec: S-0307 claim 21 (the usable-area test rejects primaries, not a vehicle's alternatives; quirks.approach_alternative_outside_area)
+        (alternative && q.approach_alternative_outside_area) || w.cells.usable(cell)
     };
     let cheb = |p: CellXY, q: CellXY| (p.x - q.x).abs().max((p.y - q.y).abs());
-    let detour = |cell: CellXY| -> bool {
-        // spec: S-0307 claim 16 and Constants (E(c, t) ≤ C(c, t) + 8 or E(a, c) ≤ C(a, c) + 8 cells; a failed estimate never satisfies)
-        let e = |p: CellXY, q: CellXY| crate::path::coarse_estimate(w, u.zone, p, q);
-        e(cell, t_cell).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)
-            || e(a_cell, cell).is_some_and(|x| x <= cheb(a_cell, cell) + 8) // spec: S-0307 claim 16 (8 cells)
+    // spec: S-0307 claim 19 (the target end on the deck for a deck-standing mobile target or a high-bridge cell target)
+    let t_deck = match t {
+        Target::Object(x) => w.obj(x).is_some_and(|x| x.layer == Layer::Deck),
+        Target::Cell(c) => w.high_bridge(c),
     };
-    let alternatives: &[(i32, i32)] = if r.quirks.approach_alternative_walk {
+    // spec: S-0307 claim 19 and S-0212 claim 7 (the attacker end on its movement layer)
+    let a_deck = o.layer == Layer::Deck;
+    let detour = |cell: CellXY| -> bool {
+        // spec: S-0307 claim 19 (the candidate end on the deck when its cell carries a high bridge)
+        let c_deck = w.high_bridge(cell);
+        let e = |p: CellXY, pd: bool, q: CellXY, qd: bool| {
+            crate::path::coarse_estimate_layers(w, u.zone, p, pd, q, qd)
+        };
+        // spec: S-0307 claim 16 and Constants (E(c, t) <= C(c, t) + 8 or E(a, c) <= C(a, c) + 8 cells; a failed estimate never satisfies)
+        e(cell, c_deck, t_cell, t_deck).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)
+            || e(a_cell, a_deck, cell, c_deck).is_some_and(|x| x <= cheb(a_cell, cell) + 8) // spec: S-0307 claim 16 (8 cells)
+    };
+    let alternatives: &[(i32, i32)] = if q.approach_alternative_walk {
         &ALTERNATIVES
     } else {
         // spec: S-0307 Edge cases (approach_alternative_walk off: the eight neighbours in step-direction order 0 to 7)
         &crate::regions::STEPS
     };
+    // spec: S-0307 claim 17 (the failure centre: the last primary passing the range test, or its alternative that failed only the detour limit)
+    let mut anchor: Option<CellXY> = None;
     for &radius in &radii {
         let rd = F64::from_i64(i64::from(radius), mode);
         for d in BEARINGS {
@@ -389,7 +429,13 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
                 .to_i32_common();
             // spec: S-0307 F4 (candidate cell (trunc(x / 256), trunc(y / 256)))
             let cell = CellXY::new(x / 256, y / 256);
-            if !fits(cell) {
+            if !ranged(cell, false) {
+                continue;
+            }
+            // spec: S-0307 claim 17 (a primary passing the range test is the failure anchor, whether or not it is usable or clear)
+            anchor = Some(cell);
+            // spec: S-0307 claim 15 (a primary outside the usable area never qualifies)
+            if !usable(cell, false) {
                 continue;
             }
             let chosen = if clear(cell) {
@@ -399,16 +445,18 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
                 alternatives
                     .iter()
                     .map(|&(dx, dy)| CellXY::new(cell.x + dx, cell.y + dy))
-                    .find(|&a| fits(a) && clear(a))
+                    .find(|&a| usable(a, true) && ranged(a, true) && clear(a))
             } else {
                 // spec: S-0307 claim 16 (an infantry unit skips a primary cell that is not clear)
                 None
             };
             // spec: S-0307 claim 16 (only the first qualifying alternative meets the detour limit; when it fails the next primary has preference)
-            if let Some(ch) = chosen
-                && detour(ch)
-            {
-                return Some(Approach::Cell(ch));
+            if let Some(ch) = chosen {
+                if detour(ch) {
+                    return Some(Approach::Cell(ch));
+                }
+                // spec: S-0307 claim 17 (an alternative that failed only the detour limit is the centre; a clear primary that failed it leaves the primary's cell)
+                anchor = Some(ch);
             }
         }
     }
@@ -417,13 +465,10 @@ pub fn approach_search(w: &World, id: ObjectId, r_prime: i32) -> Option<Approach
     if hunter || (o.kind == Kind::Infantry && u.vehicle_thief) {
         return Some(Approach::TargetItself);
     }
-    // spec: S-0307 claim 17 (any other actor drops the target; with empty radii the nearby-cell search is centred on the target's reference cell)
-    if radii.is_empty() {
-        let nearby = crate::path::nearby(w, t_cell, crate::path::NearbyUse::Approach { unit: id });
-        return Some(Approach::Drop(nearby));
-    }
-    // spec: S-0307 Open questions and S-0215 Open questions (the centre after candidates is not established and must not be assumed to be the target's cell; request Q-0172, interim: no nearby-cell search, the destination is cleared)
-    Some(Approach::Drop(None))
+    // spec: S-0307 claim 17 (any other actor drops the target; the nearby-cell search is centred on the failure anchor's cell, else on the target's reference cell, with the empty-radius parameters)
+    let centre = anchor.unwrap_or(t_cell);
+    let nearby = crate::path::nearby(w, centre, crate::path::NearbyUse::Approach { unit: id });
+    Some(Approach::Drop(nearby))
 }
 
 /// Whether a balloon-hover vehicle's approach step takes the target object

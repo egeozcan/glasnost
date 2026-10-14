@@ -143,6 +143,58 @@ fn game_wide_fields_and_not_given_values() {
     assert!(warned(&w, "PathDelay \"soon\" has no number"));
 }
 
+/// spec: S-0202 Import mapping (OreTwinkle an animation-type name, OreTwinkleChance a signed integer; omitted or empty layered values keep the value in force)
+#[test]
+fn resource_glint_fields() {
+    let base =
+        "[Animations]\n1=Glint\n[General]\nOreTwinkle=Glint\n[AudioVisual]\nOreTwinkleChance=-3\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.general.ore_twinkle.as_deref(), Some("Glint"));
+    assert_eq!(s.general.ore_twinkle_chance, Some(-3));
+    // An empty value keeps the value in force; `none` names no animation.
+    let (s, _) = sim(base, "[AudioVisual]\nOreTwinkleChance=\n", "");
+    assert_eq!(s.general.ore_twinkle_chance, Some(-3));
+    let (s, _) = sim(base, "[General]\nOreTwinkle=none\n", "");
+    assert_eq!(s.general.ore_twinkle, None);
+    let (s, _) = sim("", "", "");
+    assert_eq!(
+        (s.general.ore_twinkle, s.general.ore_twinkle_chance),
+        (None, None)
+    );
+}
+
+/// spec: S-0207 Import mapping (the teleporting locomotor's [General] keys, WarpOut, the [AudioVisual] and per-type chrono sounds) and F9 Edge cases (k = 0 with the trigger on: a warning)
+#[test]
+fn teleport_fields() {
+    let base = "[Animations]\n1=Flash\n[VehicleTypes]\n1=Cart\n\
+                [General]\nChronoDistanceFactor=-7\nChronoTrigger=no\nChronoMinimumDelay=-2\n\
+                ChronoRangeMinimum=9\nWarpOut=Flash\n\
+                [AudioVisual]\nChronoOutSound=Away\nChronoInSound=Back\n\
+                [Cart]\nChronoOutSound=Off\nChronoInSound=On\n";
+    let (s, w) = sim(base, "", "");
+    let g = &s.general;
+    assert_eq!(g.chrono_distance_factor, Some(-7));
+    assert_eq!(g.chrono_trigger, Some(false));
+    assert_eq!(g.chrono_minimum_delay, Some(-2));
+    assert_eq!(g.chrono_range_minimum, Some(9));
+    assert_eq!(g.warp_out.as_deref(), Some("Flash"));
+    assert_eq!(g.chrono_out_sound.as_deref(), Some("Away"));
+    assert_eq!(g.chrono_in_sound.as_deref(), Some("Back"));
+    let cart = &s.vehicles["Cart"];
+    assert_eq!(cart.chrono_out_sound.as_deref(), Some("Off"));
+    assert_eq!(cart.chrono_in_sound.as_deref(), Some("On"));
+    assert!(!warned(&w, "ChronoDistanceFactor"));
+    // k = 0 with the trigger on (also when the trigger is not given): a warning.
+    let (_, w) = sim("[General]\nChronoDistanceFactor=0\n", "", "");
+    assert!(warned(&w, "ChronoDistanceFactor is 0"));
+    let (_, w) = sim(
+        "[General]\nChronoDistanceFactor=0\nChronoTrigger=no\n",
+        "",
+        "",
+    );
+    assert!(!warned(&w, "ChronoDistanceFactor"));
+}
+
 /// spec: S-0207 claim 1, S-0208 Import mapping (Speed −1 keeps; warnings), S-0215 Import mapping (GuardRange −1)
 #[test]
 fn speed_and_guard_range() {
@@ -864,6 +916,52 @@ AIAutoDeployFrameDelay=70
         &w,
         "AIAutoDeployFrameDelay has fewer than 3 entries"
     ));
+}
+
+/// spec: S-0003 claim 22, row C20 and scenario V17 (the auto-deploy delays: decimal-prefix items, an unreadable non-empty item 0 in its place, empty items none, 511-byte limit; a missing or empty key keeps the held list) (Q-0171)
+#[test]
+fn auto_deploy_delay_items() {
+    let read = |text: &str| {
+        let (s, _) = sim(
+            &format!("[General]\nAIAutoDeployFrameDelay={text}\n"),
+            "",
+            "",
+        );
+        s.general.ai_auto_deploy_frame_delay
+    };
+    assert_eq!(read("5,abc,90"), Some(vec![5, 0, 90]));
+    assert_eq!(read("5,$10,90"), Some(vec![5, 0, 90]));
+    assert_eq!(read("5,10h,90"), Some(vec![5, 10, 90]));
+    assert_eq!(read("5,0x10,90"), Some(vec![5, 0, 90]));
+    assert_eq!(read("5,,40"), Some(vec![5, 40]));
+    assert_eq!(read("5, ,40"), Some(vec![5, 0, 40]));
+    assert_eq!(read("5,4294967336,90"), Some(vec![5, 40, 90]));
+    // The text-limit control: the second item lies beyond byte 127.
+    assert_eq!(read(&format!("5{}40", ",".repeat(130))), Some(vec![5, 40]));
+    // Layer retention: absent and empty keep the held list; a readable list replaces it.
+    let layered = |map: &str| {
+        let (s, w) = sim("[General]\nAIAutoDeployFrameDelay=5,40,90\n", map, "");
+        (s.general.ai_auto_deploy_frame_delay, w)
+    };
+    assert_eq!(layered("").0, Some(vec![5, 40, 90]));
+    assert_eq!(
+        layered("[General]\nAIAutoDeployFrameDelay=\n").0,
+        Some(vec![5, 40, 90])
+    );
+    assert_eq!(
+        layered("[General]\nAIAutoDeployFrameDelay=5,abc,90\n").0,
+        Some(vec![5, 0, 90])
+    );
+    // The entry-count warning counts the same items.
+    let (_, w) = sim(
+        &format!(
+            "[General]\nAIAutoDeployFrameDelay=5{}40,7\n",
+            ",".repeat(130)
+        ),
+        "",
+        "",
+    );
+    assert!(!warned(&w, "AIAutoDeployFrameDelay has fewer"));
 }
 
 /// spec: S-0214 Import mapping (VoiceSelect: the selection responses, a list of sound names kept in the listed order, no entry dropped or reordered; absent: empty)

@@ -192,8 +192,12 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     if a || b || c || d || e || f || g {
         return false;
     }
-    // spec: S-0207 claim 16 (the vehicle's scatter centre: its locomotor destination's cell, else its own; interim wording kept for vehicles, request Q-0200)
-    let centre = path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
+    // spec: S-0207 Terms (vehicle scatter centre cell: the heading point's cell, else its own) and claim 16 (a drive vehicle's heading point is its track's target from the tick the track begins until it ends; never the move destination as such). The heading point of other locomotors and the tunnel exit have no state in M3.
+    let centre = o
+        .drive
+        .as_ref()
+        .and_then(|d| d.track.as_ref())
+        .map_or(o.pos.cell(), |t| t.target_cell);
     let Some(threat) = req.threat else {
         // spec: S-0207 claim 16 (no threat point: no draw; the nearby-cell search's cell; behaviours unchanged)
         crate::regions::ensure(w);

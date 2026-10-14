@@ -79,6 +79,7 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
         drive: (loco == Locomotor::Drive).then(DriveState::new),
         walk: (loco == Locomotor::Walk).then(WalkState::default),
         infantry: (kind == Kind::Infantry).then(InfantryState::default),
+        teleport: (loco == Locomotor::Teleport).then(crate::teleport::TeleportState::default),
         crush_slowdown: false,
         targeting_timer: 0,
         last_turn: -1,
