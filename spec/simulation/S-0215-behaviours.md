@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371]
 supersedes: []
 ---
 
@@ -81,6 +81,9 @@ ranged/raw draw assignments. Q-0238 is answered jointly: S-0212 claim 23a alread
 supplies same-tick destination assignment, queue-only *area guard* and the final nearby
 search; claim 38 supplies its centre. Keep Q-0238 open until the complementary revisions
 are approved together. Q-0241 remains open for its bootstrap and upgrade comparison.
+Q-0371 question 3's behaviour consequence and subsequent processing are clarified by
+claim 11a; S-0212 claim 23 owns the failure categories and route retry delay, and
+S-0402 claims 3 and 13 own seeking and resumption.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -806,6 +809,34 @@ Terms used by this spec:
       moving); medium (the list of three vehicle transitions, the unload or deploy cycle, the
       vehicle-factory conditions and buildings); low (the two *unload* rules, the vehicle below the
       surface and aircraft)
+
+11a. **Failed departure while harvesting.** A non-teleporting harvester leaving a
+    refinery's docking cell has no special behaviour-start or retry rule. The failure
+    categories of S-0212 claim 23 decide whether *harvest* survives:
+
+    | Failure category | Behaviour consequence |
+    |---|---|
+    | The path-computation gate refuses, or a failed search does not give up | No behaviour is queued by the failure. If *harvest* remains current, seeking with neither destination nor remembered cell searches again at its next processing under S-0402 claim 3. |
+    | The failed search gives up | The failure queues *guard* for a human-controlled owner, or *area guard* for a non-human-controlled owner. In our engine every player house uses the human-controlled rule; neutral and special houses retain the non-human-controlled rule. |
+
+    Queueing here requests no immediate start. The current behaviour and processing
+    timer are not changed by that queue request. The queued behaviour starts at the
+    next per-tick start at which claim 11 permits it, without waiting for the old
+    processing timer or path retry delay to expire. Its start expires the processing
+    timer, so that turn processes the newly current behaviour (claims 3a and 11).
+    A failure after that turn's per-tick start cannot use that already-passed start.
+    Until a start occurs, any processing still uses the current behaviour. Thus
+    *guard* need not already be current on the failure tick, but a pending *guard*
+    must not be treated as a promise of another *harvest* processing. Once *guard*
+    starts, the seeking rules no longer run merely because the old destination was
+    cleared. Any later resumption of harvesting follows S-0402 claim 13 or a new order.
+
+    The non-human-owner give-up destination is assigned on the failure tick under
+    S-0212 claim 23a and claim 38 here, not deferred until *area guard* processes.
+    It does not queue *move* or force *area guard* to start.
+    - Backing: `measurable` (B38; S-0402 H20 and S-0212 claim 23's failure scenarios)
+    - Confidence: high for queue/start separation and the absence of a docking-cell
+      exception; medium for the path-failure categories, following S-0212 claim 23
 
 12. **Orders go through the queue.** A player's order that names a behaviour (move, attack, guard,
     area guard, enter, capture and the other orders that carry a behaviour), carried by the order
@@ -4170,6 +4201,28 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Named test-map rules may give unequal invented prices and keep buildings alive
   long enough to record refresh. Remove the named test data afterwards.
 
+- **B38 (claim 11a).** Extend S-0402 H20's human-owned, non-contact ordinary
+  harvester on a docking cell, with the same stock types, speed 2, remote bystander,
+  director and mods off. Use three runs per case. Give a harvest order and record
+  the selected field cell, failed route category, destination, current and queued
+  behaviours, readiness, processing timer and each processing tick with a read-only
+  recorder and scripted input. Use S-0212 claim 23's fixtures to distinguish a
+  gate refusal, a failed search within 1 cell that does not give up, and a failed
+  search to a field more than 1 cell away that gives up. Keep a refinery owned
+  throughout, and separate any new order from the failure reaction.
+
+  Expected: only the give-up case queues *guard*. It does not force a start or
+  restart the processing timer at queueing. At the next permitted per-tick start,
+  *guard* becomes current and processes in that turn even if the old harvest delay
+  or route retry delay has not expired. In the other cases, if neither an order nor
+  another rule changes the behaviour, *harvest* remains current and its next
+  processing follows S-0402 claim 3's interval and seeking rule. Record whether
+  failure preceded or followed the turn's per-tick start rather than assuming
+  an end-of-tick queue is still pending. A docking-cell-only guard force, a start
+  held back solely by either timer, or a harvest processing after guard has started
+  without a new harvest start falsifies the claim. Reuse S-0212 P26 and B37 for
+  neutral/special failure-tick destination assignment and its separate draw audit.
+
 ## Open questions
 
 - **Q-0241 questions 1 and 2:** the first automatic start of a turreted building placed
@@ -4253,18 +4306,17 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - S-0009 claim 40 already says set-up queues *guard* without promising it current.
   Retain that correction at hand-off. Q-0241's bootstrap remains open.
-- S-0212 revision 26 claim 23a, T5 and its Q-0238 hand-off question already cite
+- S-0212 claim 23a and its Q-0238 hand-off question already cite
   claim 38 and F11–F12 here for the complete centre geometry and no-base usable-area
-  correction. T5 also includes the separate base-record-refresh search with claim 38's
-  parameters. Retain these matching contracts in its current correction draft and confirm
+  correction. S-0212 claim 25 also supplies the separate base-record-refresh search
+  with claim 38's parameters. Retain these matching contracts in its current correction draft and confirm
   them at joint sign-off; there is no remaining centre-selection gap. Q-0238 must remain
   open until the complementary revisions are approved together.
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
-Joint hand-off checks: S-0213 revision 13 claim 16 already supplies the route-order timing
+Joint hand-off checks: S-0213 claim 16 already supplies the route-order timing
 pointer, and the current S-0207 claim 20 e already supplies claim 10's live erasing-lock exception
-and restored-target distinction. S-0307 claims 15 to 25 (expanded in revision 9 and
-retained in approved revision 10 and its current correction draft), S-0406 revision 7
+and restored-target distinction. S-0307 claims 15 to 25 and S-0406
 claim 17 and S-0417's current claims 2, 4, 5, 13 and 14 supply the expanded search,
 construction, factory ready-mark and temporary-driving contracts cited here. Hand these corrections off together; no further
 behavioural edit to them is requested. Also confirm S-0207 claim 20 a/e with S-0209's
