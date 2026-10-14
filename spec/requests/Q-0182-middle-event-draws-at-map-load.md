@@ -1,9 +1,9 @@
 ---
 id: Q-0182
 title: Draws of a start event's particles and smudges at map load
-status: open
+status: answered
 related: [S-0109, S-0202, S-0312, S-0009, S-0010]
-answered-by: []
+answered-by: [S-0202]
 ---
 
 ## Need

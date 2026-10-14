@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0018, Q-0046, Q-0101]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182]
 supersedes: []
 ---
 
@@ -473,7 +473,7 @@ original's recording modes are retained as deferred context, not implementation 
       | The animation is a bouncing type (S-0109, Terms) | Three raw values for starting motion, followed by three ranged draws R(−65535, 65535), each of which may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
       | The animation is created with no loop delay (S-0109, claim 11) | Its start event (S-0109, claim 13) happens immediately. When μ = 0, the start event first produces the middle-event draws (S-0109, claim 14), then the type's resource-chain-reaction effects. The specs of those effects (particles, scorch marks, craters and the chain reaction) own their draws. |
 
-      A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the map-load middle-event gates, sprite-derived μ and particle-before-choice ordering, but not all downstream particle and smudge draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
+      A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the map-load middle-event gates, sprite-derived μ and particle-before-choice ordering. Claim 15 below completes the requested particle and smudge creation draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
     - Backing, by part:
 
       | Part | Backing |
@@ -497,7 +497,7 @@ original's recording modes are retained as deferred context, not implementation 
       | Cell animation position and chain-reaction cell; its creation draws precede the tile-animation draws of the same placement | `measurable` (R8 I, using S-0009 M6e) |
       | Animation creation: a chain reaction on a cell without resource takes no draw | `measurable` (R8 F, variant iii) |
       | Game-start pass: new tile animations take their creation draws in visiting order, after end-of-loading tags and before the first tick; cells that already started one in the second pass take no further creation draws | `measurable` (R10) |
-      | Animation creation: the start-event draws come at once, before any later draw | `measurable` for cell-before-tile ordering (R8 I), middle-event gates and choice (S-0109 claims 14 and 25, AN23), and the resource-chain-reaction sequence (S-0401 claim 20, E17); downstream particle and smudge draw counts remain unresolved |
+      | Animation creation: the start-event draws come at once, before any later draw | `measurable` for cell-before-tile ordering (R8 I), middle-event gates and choice (S-0109 claims 14 and 25, AN23), and the resource-chain-reaction sequence (S-0401 claim 20, E17); particle and smudge draw counts are completed by claim 15 (R14) |
       | The list of systems that draw from the scenario random stream | `unmeasured` (no finite number of runs can confirm a list of every system that draws; each system's draws are backed by the topic spec that states them) |
     - Confidence: high (the creation draw is taken; a produced object is created when its
       production begins; the overlay draw counts and forms); medium (the list of kinds; which
@@ -641,8 +641,7 @@ original's recording modes are retained as deferred context, not implementation 
     secret labs or a skipped starting-unit step. The bridge-piece exclusion in claim 10
     already excluded piece cell animations; the end-row and marker exclusions are now explicit.
     S-0009 claim 28 already put cleanup before the late phase but did not place it against
-    the second pass. These refinements do not establish unresolved downstream particle or
-    smudge draw counts. S-0412 claim 14 now fixes the relative positions without asserting
+    the second pass. Claim 15 separately completes the downstream particle and smudge creation draws. S-0412 claim 14 now fixes the relative positions without asserting
     that secret labs or recalculation take the final loading draws.
     - Backing: `measurable` (R10 variants A and B for game-start placement,
       R12 for low-bridge cell-animation exclusion, R13 for resource-glint setup at
@@ -655,6 +654,74 @@ original's recording modes are retained as deferred context, not implementation 
     - Confidence: high for the relative loading positions, cell-animation exclusion and
       resource-glint draw rule; medium for cleanup's recalculations and their conditional
       tile-animation draws
+
+15. **Immediate middle-event effects at map load (Q-0182).** S-0109 claims 14 and 25 already
+    answer the event gates, sprite-derived μ, particle-before-choice ordering and removal of
+    up to 6 resource levels for a crater request. S-0312 claim 26 already answers the smudge
+    footprint fit test, registration-order candidates, ranged selection and draw-free placement.
+    The following completes their composition for tile and cell animations created during loading.
+
+    **Particles.** Each requested particle takes the following scenario-stream draws, in table
+    order. One particle's entire group precedes the next particle's group. No particle-system
+    creation draw is added: the request creates a particle in the existing animation-particle
+    system. Particles do not take the infantry/vehicle/aircraft/building creation draw of claim 10.
+
+    | Condition | Draw and form |
+    |---|---|
+    | Smoke particle behaviour | One raw value, signed remainder modulo 2, for a starting-speed variation. |
+    | Every particle | One raw value for its lifetime variation: magnitude after signed remainder, modulo 10 for railgun behaviour, otherwise modulo the imported lifetime field. |
+    | The colour list is nonempty and at least one component of either starting colour is nonzero | One ranged draw R(0, 2147483646) for the starting-colour interpolation. |
+
+    There are no other scenario-stream creation draws for these requests. A nonempty colour
+    list with both starting colours black uses its first colour without a colour draw. An empty
+    colour list takes no colour draw, even with nonblack starting colours. Normalised particle
+    timing adds no scenario-stream draw. Particle count
+    at most zero, or no particle type, means no particle group. Cell position, terrain height,
+    theater, overlays, buildings and other map state do not alter these groups or their bounds.
+    They can affect the particle's position and later life, not its creation draw count.
+    The lifetime field is a signed integer; its zero-divisor case follows S-0205 claim 3:
+    the original fails after taking the raw value, while our engine substitutes a zero remainder
+    with an importer warning, retaining that draw. Railgun behaviour has no zero-divisor case.
+
+    **Smudges.** After the particle groups and S-0109's conditional scorch-or-crater choice,
+    the chosen kind uses the fit test and selection rule of S-0312 claim 26, with these forms:
+
+    | Request | Fit and candidate preference |
+    |---|---|
+    | Scorch mark, or crater without the large-crater flag | Test buildings as in the plain form. Prefer fitting 1 × 1 types, unless the middle frame's visible width is greater than 60 pixels and its visible height greater than 50 pixels; with both dimensions above those thresholds, use all fitting types. If the preferred list is empty, use all fitting types. |
+    | Crater with the large-crater flag | The large form of S-0312 claim 26: do not test buildings, prefer fitting types wider than 1 cell and taller than 1 cell, falling back to all fitting types. |
+
+    Visible dimensions are the middle image frame's bounds, not the full sprite canvas, and
+    are those of the sprite resolved by S-0109 claim 25. If no sprite is available, both
+    dimensions are 30 pixels. These are integer comparisons, with no rounding. The anchor
+    is the cell containing the animation's actual position, including cell-animation displacement.
+    With *n* candidates in registration order, selection is R(0, *n* − 1): no draw for *n* = 0
+    or 1, and no additional placement draw. Already-present smudges, overlays, slopes,
+    buildings in the non-large form, and the theater's morphable tiles affect the candidates
+    and hence the range and rejection count. A failed request is not a reason to omit the
+    preceding particle groups or the scorch-or-crater choice.
+
+    **Resource removal relative to map data.** An immediate crater request during overlay-type
+    placement, including a tile animation started by that placement's recalculation, acts
+    before the overlay data stream is read. It removes levels from the resource state then
+    present. The later data stream overwrites every legal cell's overlay data, even a cell
+    whose resource was removed. It does not restore an overlay type removed by that request.
+    By contrast the first whole-map recalculation follows the data stream, so a tile animation
+    first created in that pass removes levels from the imported data. The second and game-start
+    passes act later still. Thus there is no single before/after answer for all map-load
+    animations: the animation's creation group in the loading table determines it.
+
+    Resource removal that empties a cell can itself recalculate that cell. Any missing tile
+    animation started there immediately takes claim 10's creation and start-event draws before
+    smudge selection. This is conditional, not an extra fixed draw per crater. The draw order
+    is therefore particle groups, optional kind-choice draw, any resource-removal recalculation
+    effects for a crater, then the smudge-type draw. The subsequent start-event chain reaction
+    remains S-0401 claim 20's rule, after the whole immediate middle event.
+    - Backing: `measurable` (R14 A for particles, B for smudge forms and dimensions, C for
+      data-stream ordering and conditional recalculation)
+    - Confidence: high for particle draw forms, gates and order, smudge candidate preferences
+      and data-stream ordering; medium for absence of further placement draws and conditional
+      resource-removal recalculation composition
 
 ## Formulas
 
@@ -858,6 +925,7 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | Initial fill | one per visited cell, water fill only | S-0009, claim 6 |
 | Tags of cell tags | the draws of each tag created by a cell tag | S-0011, claim 34 |
 | Overlay type stream | in the stream's order: the bridge pieces of each bridge completed by an end marker (3 per cell step) and the creation draws of cell animations (claim 10, *Animation creation draws*). Tile animations started by placement recalculations take their draws in this group too; the placement's cell-animation creation and immediate start-event draws precede that recalculation's tile-animation draws | claim 10 |
+| Overlay data stream | no draw of its own; overwrites overlay data after all overlay-type placement effects and before the first whole-map recalculation (claim 15) | S-0009 claim 13; claim 15 |
 | First recalculation pass | the creation draws of tile animations (S-0010, claims 12 and 19). In this pass and in everything before the second pass, a tile animation starts at the first recalculation of its cell; a cell recalculated earlier in loading (for example by an overlay placement or a bridge piece) starts it there, among that group's draws (low confidence). Each takes the animation creation draws of claim 10 | S-0010, claims 12 and 19; claim 10 |
 | Vein candidates | for each candidate cell that passes the test, in reverse visiting order: the vein pattern draws of claim 10 | S-0009, claim 14; claim 10 |
 | Terrain objects | none found (medium confidence) | — |
@@ -936,8 +1004,19 @@ puts there. The placement rules of claim 10 read these keys:
 | `RandomRate` | an animation type's art section | two integers | no random rate; −1 preserves that end | creation stage-delay draw, S-0109 claim 3; applies equally to tile animations started by cleanup or the game-start pass |
 | `TileNNAnim`, `TileNNAttachesTo` | theater section named by the tileset's `SetName` | animation-type name and integer sub-tile index; NN is the tile number within its set | no animation, attaches-to −1 (never starts) | tile-animation eligibility for cleanup and game-start recalculations; full mapping and placement fields belong to S-0010 claim 19 and its Import mapping |
 | `TiberiumChainReaction` | an animation type's art section | boolean | no | start-event chain-reaction draws, S-0401 claim 20; no resource means no chain-reaction draws |
+| `SpawnsParticle`, `NumParticles` | an animation type's art section | particle-type name, integer count | no particle type, 0 | requested particle groups in claim 15; event gates belong to S-0109 claim 14 |
+| `Scorch`, `Crater`, `ForceBigCraters` | an animation type's art section | boolean each | no each | smudge kind request and large-crater selection form in claim 15 |
+| `BehavesLike` | a particle type's rules section | case-insensitive name: Gas, Smoke, Fire, Spark or Railgun; at most 31 text bytes | no recognised behaviour (also for an unrecognised name or omitted key) | Smoke adds the speed raw value; Railgun uses lifetime modulus 10, every other value uses the lifetime field |
+| `MaxEC` | a particle type's rules section | signed integer | 1 at type creation; omitted or empty layered values keep the previous value | lifetime variation modulus for non-railgun particles; zero warns (claim 15) |
+| `ColorList` | a particle type's rules section | comma-separated parenthesised RGB triples, at most 511 text bytes; integer components reduced modulo 256 | empty, also when omitted or empty in a later layer | nonempty list enables the conditional starting-colour draw |
+| `StartColor1`, `StartColor2` | a particle type's rules section | generic byte triple each (S-0003 claim 11), components reduced modulo 256 | black each at type creation; omitted layered values keep the previous value | nonblack component in either colour enables interpolation when the list is nonempty |
+| `Normalized` | a particle type's rules section | boolean | no at type creation; omitted or empty layered values keep the previous value | normalised particle timing, no extra scenario-stream creation draw |
 | `OreTwinkle` | rules [General] | animation-type name, case-insensitive | no animation at database creation; omitted or empty layered values keep the value in force | resource-glint type for claim 14; its art settings determine applicable creation draws |
 | `OreTwinkleChance` | rules [AudioVisual] | signed integer | 50 at database creation; omitted or empty layered values keep the value in force | resource-glint frequency *f*, not a percentage; choice range R(0, *f* − 1), with subtraction wrapping in signed 32-bit arithmetic |
+
+Smudge type kind flags and footprint dimensions are imported by S-0312 claim 26 and its
+Import mapping; morphable tile eligibility is imported by S-0010. The visible image-frame
+bounds are sprite data (S-0109 claim 25), not rules values.
 
 The contained resource value used for glint eligibility comes from the resource cell and the
 resource value field imported by S-0401, not from the glint frequency.
@@ -1325,6 +1404,55 @@ The recorder is part of the measurement setup (the project lead has approved it)
   recorded. Checkpoints, not just the first-tick animation count, distinguish animations
   removed later and unrelated setup draws.
 
+- **R14, map-load middle-event composition (claim 15; Q-0182).** Small purpose-made skirmish
+  map, speed 4, one human and one bystander computer player on an isolated remote start island.
+  Keep the observed area away from starting units. Director and mods off except named test
+  map overrides, a test art file, one-frame test sprites (μ = 0), and a test smudge list.
+  Use the random-state recorder to compare incoming and outgoing load-time states with the
+  predicted sequence from each recorded seed, and a read-only cell/particle recorder for the
+  resulting types, colours and resource levels. Five fresh launches per variant; the recorder
+  does not set the seed. Account separately for stage delay and bouncing draws, or disable
+  them in the named animation test data. No chain reaction in these test animations.
+  - **A, particles.** Repeat both a tile animation and an overlay cell animation with counts
+    0, 1 and 2. Use each of the five particle behaviours and an unrecognised behaviour.
+    Set the lifetime field to test values 1 and 7. For each, try an empty colour list, a
+    nonempty list with two black starting colours, and a nonempty list with one nonblack
+    component. Include a normalised-timing variant. Repeat selected variants on raised
+    ground, on an occupied cell, and in a second theater using the same named sprite.
+    Expected: each smoke particle takes two raw values before any colour draw, all other
+    behaviours one; the optional colour draw is exactly R(0, 2147483646), with rejections
+    counted. Count 2 gives two complete groups, not grouped speed draws followed by grouped
+    lifetime draws. Terrain, theater and timing variants add no scenario draws. Enable both
+    smudge flags in one variant and predict the kind choice from the state after those groups.
+    Any extra/missing raw value, different ordering, or choice from the pre-particle state
+    falsifies the rule. The field-1 case still consumes its raw lifetime value despite a
+    constant remainder. Do not run the original's zero-divisor crash case.
+  - **B, smudges.** The test list gives each kind two 1 × 1 types and two 2 × 2 types, in
+    known registration order. Place on flat morphable ground with no overlay or smudge at
+    the animation position. Use test middle-frame visible bounds 60 × 51, 61 × 50 and
+    61 × 51 pixels; change the full canvas without changing those bounds in one variant.
+    Try scorch only, crater only, both, and large-crater enabled. Add variants with a building,
+    a slope, an existing smudge and a nonmorphable tile in a candidate footprint, plus
+    candidate lists with only one fitting type and none. Expected: non-large requests prefer
+    the two 1 × 1 types in the first two size cases and use all four in the third; large
+    craters prefer the two 2 × 2 types regardless of sprite dimensions and ignore buildings.
+    Each selection matches R(0, n − 1) from the recorded state, with no placement draws.
+    Zero/one candidate consumes none. Wrong candidate eligibility, dependence on canvas
+    dimensions, or a different draw count falsifies the claim.
+  - **C, resource timing.** Use crater-only animations and resource cells at their actual
+    positions. One fixture starts the animation during overlay placement, another first in
+    the whole-map recalculation. Give resource data a test value 9 in the map data stream,
+    and record resource type and levels at each load milestone, not merely after tick 0.
+    Expected: a removal during placement acts on the earlier level, then data becomes 9
+    if the data stream supplies it, without restoring a removed resource type. First-pass
+    removal instead acts on data 9, reducing it by 6. Separate second-pass repeats from
+    that first event. A named test-data variant makes resource exhaustion expose a missing
+    tile animation with a known random-rate range: its applicable creation draws must fall
+    before smudge selection, and a cell with an already-recorded tile animation adds none.
+    An overlay type restored by data alone, reduction on the wrong side of the data-stream
+    milestone, or a smudge choice made before the conditional tile-animation draws falsifies
+    the claim. Void a fixture in which its intended creation checkpoint is not reached.
+
 ## Open questions
 
 - A discriminating skirmish fixture for cleanup's phase order and conditional tile-animation
@@ -1333,9 +1461,9 @@ The recorder is part of the measurement setup (the project lead has approved it)
   cell-animation ordering and the no-resource chain-reaction case. Q1 belongs to S-0009,
   Q2a's resource-bearing sequence to S-0401 claim 20/E17, and Q2c's sprite-derived μ to
   S-0109 claim 25. For Q2b, S-0109 claims 14 and 25 cover map-load event gates and the
-  particle-before-choice ordering, but downstream particle creation and smudge selection
-  and placement counts still need effect specs.
-  These unresolved effects must not be treated as taking zero draws during map loading.
+  particle-before-choice ordering. Claim 15 completes Q-0182's particle creation draws,
+  smudge forms and map-data timing. These effects must not be treated as taking zero draws
+  during map loading; subsequent particle updates remain outside this spec.
 - Whether any of the unsynchronised random stream's users that were classified only briefly
   changes game state. In internet games, two draws are taken under a condition on the local
   player's house (the same kind of condition as claim 12's extra draw) and could not be tied to a
