@@ -1,9 +1,9 @@
 ---
 id: Q-0266
 title: Which sounds play for the sidebar clicks and refusals of S-0411 claim 12?
-status: open
+status: answered
 related: [S-0411, S-0406, S-0404]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need
