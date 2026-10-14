@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -49,9 +49,7 @@ Terms).
   same order legality as a human-controlled house; the batch's glossary (*AI house*) records the
   decision. For this spec that means: its orders are applied although the original
   drops orders in a computer house's name (claim 3); it is held to S-0214's input rules when it
-  issues an order (claim 3); it has the same pending-order limit (claim 2) and the same checks when
-  its orders are applied (claims 4 and 15), with no exemption; it counts as human-controlled
-  wherever this spec tests that (claims 9, 11, 12 and 20); and it has no teams (table T3, part c).
+  issues an order (claim 3); An AI house has the same pending-order limit (claim 2) and the same application checks as a human-controlled house (claims 4 and 15): only sell checks the actor's owner, and the other listed orders do not (claim 15); it counts as human-controlled wherever this spec tests that (claims 9, 11, 12 and 20); and it has no teams (table T3, part c).
   This is a rule of our engine, not a claim about the original.
 - **Scripted input.** Mouse and keyboard input that a script produces through the game's normal
   input only, as a player would, never writing into the game. It is an allowance of the
@@ -621,8 +619,18 @@ Terms).
     Each command uses S-0214's selection order (Terms) and issues at most one order
     for each selected object, under the conditions in the table. The pending-list limit
     therefore drops the last objects in that order, not necessarily those selected last.
-    - Backing: `measurable` (Scenarios O5 and O6; Scenario O2 for order precedence at the limit)
-    - Confidence: medium (high for stop and scatter)
+    Keyboard-command feedback is owned by S-0701 claim 19 and Scenario D4: outside
+    route mode, guard, stop and scatter request one command cue for a nonempty selection,
+    even when no selected object qualifies for an order. An empty selection requests none.
+    Failed order issuance suppresses the cue even if earlier objects already received orders.
+    Route-mode guard requests no ordinary guard cue. Deploy's game-wide command cue and
+    its silence quirk are also S-0701's, not a change to deploy eligibility here.
+    Ordinary click-response selection is instead S-0214 claim 14 and S-0701 claim 18.
+    Neither kind of feedback establishes that an order took effect at application.
+    - Backing: `measurable` (Scenarios O5 and O6; Scenario O2 for order precedence at the limit,
+      and S-0701 Scenario D4 for keyboard-command feedback)
+    - Confidence: medium (high for stop and scatter); high for the feedback gates, as in
+      S-0701 claim 19
 
 19. **Cheer rate limit.** The cheer command is accepted only if the current tick is more than
     *R* ticks after the last accepted cheer, where *R* is the general rules' maximum-cheer-rate
@@ -1053,6 +1061,11 @@ where a scenario says so or exact timing helps. Scripted input is one of the all
 measurement setup in the batch's glossary (*measurement setup*), added by the
 project lead's decision of 2026-10-09: a script produces mouse and keyboard input through the
 game's normal input only, as a player would, and never writes into the game.
+
+Keyboard-command feedback (claim 18) is tested by S-0701 Scenario D4, including empty
+and nonempty-but-ineligible selections, one cue for several ordered objects, failed issuance
+at the pending-order limit, and route-mode guard. Record cue requests separately from orders
+applied: a cue is not proof that an order passed its application checks.
 
 **Scenario O1: tick boundary (claims 1 and 14).**
 - *Setup:* two identical vehicles of the human player, side by side and selected together, facing
