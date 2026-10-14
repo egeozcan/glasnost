@@ -1,9 +1,9 @@
 ---
 id: Q-0501
 title: Which public layout does the game bitmap font follow, and how are text units, the fallback glyph and colours mapped?
-status: open
+status: answered
 related: [S-0005, S-0213]
-answered-by: []
+answered-by: [S-0014]
 ---
 
 ## Need
