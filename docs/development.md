@@ -207,12 +207,13 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 
 Q-0234 is answered by S-0003 claim 23: the virtual-purifier, extra-credit and computer-timer lists read their items in the decimal-prefix form of claims 20 and 22 (`Form::Maxima`, 511 bytes), and the importer warns for items with no digit, text after the number or a 32-bit wrap, and for a cut beyond 511 bytes.
 
+Q-0216 is answered by S-0105 revision 10, claim 35: top-down, a span's empty count follows its colours for every span, with no first-span exception, which is what `render::voxel::column_steps` already did; the tests check MS-26's two-span and three-span rows.
+
 **Open requests and their placeholders.**
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `render::voxel::section_order` | mixed-depth ties outside F8's six rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24) | Q-0215 |
-| `render::voxel::column_steps` | a top-down normal-mode-0 span applies its empty count after its colours, as claim 35's table has it; claim 35's colour-height relation applies it before them, and MS-26's two-span row follows the relation (S-0105 claim 35) | Q-0216 |
+| `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
 
 ## Map viewer (M2)
 
