@@ -62,6 +62,12 @@ opt-level = 3
 lto = "thin"
 codegen-units = 1
 
+[profile.dev]
+# Line tables keep backtraces and panics readable; full debug info made every test binary about
+# 470 MB, and the link writes of a workspace build stalled the disk.
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 # Dependencies (wgpu, naga) are slow unoptimised; our own crates stay debuggable.
 opt-level = 2
+debug = false
