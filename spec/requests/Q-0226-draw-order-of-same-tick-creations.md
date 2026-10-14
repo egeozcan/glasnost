@@ -1,9 +1,9 @@
 ---
 id: Q-0226
 title: In what order are the creation draws taken when several production lines start items in one tick, and when cloning buildings make copies?
-status: open
+status: answered
 related: [S-0404, S-0203, S-0202, S-0417]
-answered-by: []
+answered-by: [S-0404]
 ---
 
 ## Need

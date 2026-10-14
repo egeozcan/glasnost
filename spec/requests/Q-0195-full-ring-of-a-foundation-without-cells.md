@@ -1,9 +1,9 @@
 ---
 id: Q-0195
 title: The full exit ring of a foundation without cells, with the exit-list switch off
-status: open
+status: answered
 related: [S-0404, S-0108, S-0406]
-answered-by: []
+answered-by: [S-0404]
 ---
 
 ## Need
