@@ -24,7 +24,7 @@ pub const SPRITE: u32 = 950;
 // nocite: our own frame number, past every 16-bit glyph number
 pub const FALLBACK_FRAME: u32 = u32::MAX;
 /// Distance between status-line origins, pixels.
-// spec: S-0213 claim 25 (19 pixels between line origins; the font's line pitch is not used, Q-0530)
+// spec: S-0213 claim 25 (a fixed 19 pixels between line origins, independent of the imported font's line pitch and bitmap height)
 pub const LINE_STEP: i32 = 19;
 /// The first status line's left offset from the battlefield's left edge.
 // spec: S-0213 claim 25 (the first line begins 3 pixels right of the battlefield's left edge, at its top edge)
@@ -48,17 +48,18 @@ pub struct StatusFont {
 
 impl StatusFont {
     /// Wraps `font`; a font without a mapped capital X has no fallback and
-    /// is outside the valid status-font scope (S-0213 claim 25), which our
-    /// engine treats as a missing font (Q-0530 interim).
+    /// is rejected as a whole, as a missing font (S-0014 claim 6, S-0213
+    /// claim 25).
     pub fn new(font: Font) -> Result<Self, String> {
-        // spec: S-0213 Import mapping (mapped capital X: a font without one is outside the valid-font scope; Q-0530 interim)
+        // spec: S-0014 claim 6 (an absent mapping for capital X rejects the entire font), S-0213 Import mapping
         let fallback = font
             .fallback()
             .ok_or_else(|| "it maps no capital X for the fallback glyph".to_owned())?;
         Ok(Self { font, fallback })
     }
 
-    /// Parses and wraps a font file (S-0014).
+    /// Parses and wraps a font file (S-0014); a file outside the valid
+    /// scope is rejected whole (claim 6).
     pub fn parse(bytes: &[u8]) -> Result<Self, String> {
         Self::new(Font::parse(bytes).map_err(|e| e.to_string())?)
     }
@@ -66,6 +67,19 @@ impl StatusFont {
     /// The common bitmap height in pixels (S-0014 claim 1).
     pub fn height(&self) -> usize {
         self.font.height
+    }
+
+    /// The line pitch in pixels (S-0014 claim 1).
+    pub fn line_pitch(&self) -> u32 {
+        self.font.line_pitch
+    }
+
+    /// How many glyph rows, from row 0, a status line may paint:
+    /// min(*H*, *P*) for bitmap height *H* and line pitch *P* (S-0213
+    /// claim 25, Vertical metrics). Exact integers; zero pitch paints none.
+    pub fn painted_rows(&self) -> u64 {
+        // spec: S-0213 claim 25 (a glyph row r is eligible exactly when 0 ≤ r < min(H, P); our engine excludes the original's extra row at P, with no quirk switch)
+        (self.font.height as u64).min(u64::from(self.font.line_pitch))
     }
 
     /// What text unit `c` draws: its mapped glyph, or the fallback when
@@ -142,23 +156,33 @@ pub fn register(
 }
 
 /// Draws the status lines `messages` at the battlefield `m`'s top left,
-/// oldest above newest, each glyph's top row at its line origin (S-0213
-/// claim 25; Q-0530 for the vertical placement), clipped to `m`.
+/// oldest above newest, each glyph's top row at its line origin and only
+/// its first min(*H*, *P*) rows painted (S-0213 claim 25, Vertical
+/// metrics), clipped to `m`.
 pub fn draw(d: &mut DrawList, font: &StatusFont, messages: &[Message], m: Rect) {
-    // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
+    // spec: S-0213 claim 25 (the pitch is each stored line's clipping height: rows 0 ≤ r < min(H, P), within the display surface; it reserves no background and clears no band)
+    let rows = font.painted_rows().min(m.h.max(0) as u64) as i32;
+    if rows == 0 {
+        // spec: S-0213 claim 25 (a zero pitch paints no rows)
+        return;
+    }
+    // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, a fixed 19 pixels between line origins)
     let mut y = m.y;
     for msg in messages {
+        // spec: S-0213 claim 25 (stored row 0 at the line origin, row r at y + r; no baseline adjustment from H or P)
+        let clip = m.intersect(&Rect::new(m.x, y, m.w, rows));
         // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; breaks draw nothing)
         for (dx, c) in status::glyphs(&msg.units, |c| font.width(c)) {
-            d.sprite(SPRITE, frame(font.glyph(c)), m.x + LEFT + dx, y, m);
+            d.sprite(SPRITE, frame(font.glyph(c)), m.x + LEFT + dx, y, clip);
         }
         y += LINE_STEP;
     }
 }
 
 /// Reads the game font for status text. The error is the importer
-/// diagnostic for a missing or unusable font; status text is then omitted
-/// (S-0213 Import mapping; Q-0530 interim for an unusable file).
+/// diagnostic, naming the file and the reason, for a missing font or one
+/// rejected as a whole; status text is then omitted, with no partial use
+/// and no substitute font (S-0213 Import mapping, S-0014 claim 6).
 pub async fn read(vfs: &Vfs) -> Result<StatusFont, String> {
     // spec: S-0213 Import mapping (no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text)
     let omitted = "status text is omitted (S-0213 claim 25)";
@@ -169,8 +193,9 @@ pub async fn read(vfs: &Vfs) -> Result<StatusFont, String> {
         .read_resolved(&r)
         .await
         .map_err(|_| format!("{FILE}: the game font cannot be read; {omitted}"))?;
+    // spec: S-0014 claim 6 (a resolved font outside the valid scope is treated exactly as a missing font)
     StatusFont::parse(&bytes)
-        .map_err(|e| format!("{FILE}: the game font is not usable: {e}; {omitted} (Q-0530)"))
+        .map_err(|e| format!("{FILE}: the game font is rejected (S-0014 claim 6): {e}; {omitted}"))
 }
 
 #[cfg(test)]
@@ -250,12 +275,128 @@ mod tests {
         assert!(!outside);
     }
 
-    /// spec: S-0213 Import mapping (a font without a mapped capital X is outside the valid scope; Q-0530 interim: not loaded)
+    /// spec: S-0014 claim 6 and S-0213 Import mapping (a font without a mapped capital X, or an
+    /// incomplete one, is rejected as a whole, even when the text to draw needs no fallback)
     #[test]
-    fn a_font_without_x_is_not_used() {
+    fn claim_6_a_font_without_x_is_not_used() {
         let mut font = synthetic_font();
         font.map_unit(88, None);
-        assert!(StatusFont::new(font).is_err());
+        assert!(StatusFont::new(font.clone()).is_err());
+        assert!(StatusFont::parse(&font.write()).is_err());
         assert!(StatusFont::parse(b"fonT").is_err());
+    }
+
+    /// A font of height `h` and pitch `p`, 16 pixels per row, whose `A`
+    /// (also the capital X) is 3 pixels wide with a set pixel in column
+    /// `r mod 3` of every row `r`, so each row is told apart by its column.
+    fn tall_font(h: usize, p: u32, blank_top: usize) -> StatusFont {
+        let mut f = Font::empty(2, h, p);
+        let rows: Vec<String> = (0..h)
+            .map(|r| {
+                if r < blank_top {
+                    String::new()
+                } else {
+                    (0..3).map(|x| if x == r % 3 { '#' } else { '.' }).collect()
+                }
+            })
+            .collect();
+        let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+        let j = f.push_glyph(3, &rows);
+        f.map_unit(65, Some(j));
+        f.map_unit(88, Some(j));
+        StatusFont::new(f).unwrap()
+    }
+
+    /// The painted rows of the column-marked glyphs drawn for `messages`
+    /// with `font` in a 40 × 120 battlefield at (0, 0): for each screen row,
+    /// the painted column offsets from the glyph's left edge.
+    fn painted(font: &StatusFont, messages: &[Message]) -> Vec<Vec<i32>> {
+        let mut painter = Painter::new();
+        let mut row = None;
+        register(&mut painter, font, messages, &mut row);
+        let m = Rect::new(0, 0, 40, 120);
+        let mut d = DrawList::new();
+        draw(&mut d, font, messages, m);
+        let quads = painter.quads(&d);
+        let size = (40, 120);
+        let px = painter.reference(&quads, &Default::default(), size);
+        (0..size.1)
+            .map(|y| {
+                (0..3)
+                    .filter(|&x| px[(((y * size.0) + LEFT + x) * 4) as usize] != 0)
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn line(t: &str) -> Message {
+        Message {
+            units: t.encode_utf16().collect(),
+            until: 0,
+        }
+    }
+
+    /// spec: S-0213 claim 25, Vertical metrics, and Scenario O21 d (row 0 at the line origin;
+    /// origins a fixed 19 pixels apart whatever H and P; P clips each line to rows r < min(H, P),
+    /// excluding the original's extra row at P; a zero pitch paints nothing)
+    #[test]
+    fn claim_25_pitch_clips_rows_without_moving_lines() {
+        let h = 12;
+        for p in [0u32, 5, 12, 30] {
+            let font = tall_font(h, p, 0);
+            let rows = painted(&font, &[line("A"), line("A")]);
+            let shown = (h as u32).min(p) as usize;
+            for origin in [0usize, 19] {
+                for r in 0..19 {
+                    let expect: Vec<i32> = if r < shown {
+                        vec![(r % 3) as i32]
+                    } else {
+                        vec![]
+                    };
+                    assert_eq!(
+                        rows[origin + r],
+                        expect,
+                        "P = {p}, origin {origin}, row {r}"
+                    );
+                }
+            }
+            assert!(rows[38..].iter().all(Vec::is_empty), "P = {p}");
+        }
+    }
+
+    /// spec: S-0213 claim 25, Vertical metrics (blank leading rows stay blank at their positions:
+    /// no centring or baseline shift)
+    #[test]
+    fn claim_25_blank_leading_rows_are_not_shifted() {
+        let font = tall_font(8, 8, 3);
+        let rows = painted(&font, &[line("A")]);
+        for r in 0..3 {
+            assert!(rows[r].is_empty(), "row {r}");
+        }
+        for r in 3..8 {
+            assert_eq!(rows[r], [(r % 3) as i32], "row {r}");
+        }
+    }
+
+    /// spec: S-0213 claim 25, Vertical metrics, and Scenario O21 d (with H and P above 19 a tall
+    /// mask overlaps the next line's band, which still starts 19 pixels down; clear bits stay
+    /// transparent and no band is cleared)
+    #[test]
+    fn claim_25_tall_masks_overlap_without_respacing() {
+        let font = tall_font(30, 25, 0);
+        let rows = painted(&font, &[line("A"), line("A")]);
+        // Rows 19 to 24 hold the first line's rows 19 to 24 and the second
+        // line's rows 0 to 5: both marks paint, neither clears the other.
+        for y in 19..25 {
+            let mut expect = vec![(y % 3) as i32, ((y - 19) % 3) as i32];
+            expect.sort();
+            expect.dedup();
+            assert_eq!(rows[y], expect, "row {y}");
+        }
+        // The second line paints its rows 0 to 24 and nothing below them.
+        for y in 25..44 {
+            assert_eq!(rows[y], [((y - 19) % 3) as i32], "row {y}");
+        }
+        assert!(rows[44..].iter().all(Vec::is_empty));
     }
 }

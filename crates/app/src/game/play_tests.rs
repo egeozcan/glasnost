@@ -46,7 +46,12 @@ fn start() -> Play {
 /// a space 2 pixels wide, `W` 9, the capital X 6 and every other glyph 4;
 /// other units are missing.
 fn test_font() -> StatusFont {
-    let mut f = glasnost_fmt::fnt::Font::empty(2, 7, 9);
+    test_font_with_pitch(9)
+}
+
+/// [`test_font`] with line pitch `pitch`.
+fn test_font_with_pitch(pitch: u32) -> StatusFont {
+    let mut f = glasnost_fmt::fnt::Font::empty(2, 7, pitch);
     for c in 32u16..=126 {
         let w = match c {
             32 => 2,
@@ -644,6 +649,32 @@ fn s0213_claim_25_game_font_widths() {
     p.say("ab\0cd");
     let texts: Vec<String> = p.messages.iter().map(|m| m.text()).collect();
     assert_eq!(texts, ["ab"]);
+}
+
+/// spec: S-0213 claim 25, Vertical metrics, and Scenario O21 d (changing the font's line pitch,
+/// zero, below, equal to or above the bitmap height, leaves splitting, wrapping, capacity and
+/// lifetimes unchanged)
+#[test]
+fn s0213_claim_25_pitch_does_not_change_lines() {
+    let said = |pitch: u32| {
+        let mut p = start();
+        p.status_font = Some(test_font_with_pitch(pitch));
+        p.messages.clear();
+        p.status_view(22 + 60, false);
+        p.update_messages(16 * 100);
+        p.say(
+            "one
+two",
+        );
+        p.say("a long line of words that wraps");
+        p.say("WWWWWWWWWWWWWWWW");
+        p.messages.clone()
+    };
+    let reference = said(9);
+    assert_eq!(reference.len(), 6, "capacity reached");
+    for pitch in [0, 3, 7, 40] {
+        assert_eq!(said(pitch), reference, "pitch {pitch}");
+    }
 }
 
 /// spec: S-0213 Import mapping (without a loaded game font there is no status text; the session reports the missing font)
