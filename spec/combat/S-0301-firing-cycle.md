@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0060]
 supersedes: []
@@ -88,7 +88,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Playing death frames.** A vehicle whose type has death frames is *playing* them from the tick its
   death counter starts (S-0102, claim 22), until S-0312 removes it.
 - **Materialising.** The state of an object that has just teleported and is phasing in at its
-  destination, until the teleport specs end it.
+  destination. For the teleporting locomotor's own move, this is exactly *phasing in* of
+  S-0207 claim 20(f): its delay is Formula F9 there, with that claim's end tick and harvester
+  exception. Superweapon and other effect teleports remain owned by their feature specs.
 - **Gattling type.** As S-0308 (Terms). **Spray-attack type.** As S-0313 (Terms).
 - **Ammunition** *a*. A per-firer integer, in rounds. A type's *maximum ammunition* *A* and
   *initial-ammunition field* *J* are imported integers. An initial field of −1 selects *A*
@@ -955,8 +957,14 @@ is absent (the control).
   data has one, else test data giving a harvester a weapon), with an enemy in range while it
   unloads. Expected: no shot from the tick the tether begins until it ends. Falsified if a shot is
   made while it is tethered.
-- (d) Early *rearming* (rank 4): (i) a vehicle that has just teleported, with a target in range:
-  no shot until it has finished phasing in; (ii) a spawner weapon none of whose spawned aircraft is
+- (d) Early *rearming* (rank 4): (i) use the armed test vehicle and distance/delay controls of
+  S-0207 scenario D22 runs 1 and 5, teleporting by its own locomotor, with a stationary enemy
+  target in range at the landing point. Record the jump tick, the end of phasing in and shot
+  ticks. Expected: no shot while materialising, which ends exactly as S-0207 claim 20(f) and
+  Formula F9 specify, including the next-tick end for a nonpositive delay. Once that state ends,
+  it adds no firing restriction of its own; other firing checks and the timing of attempts still
+  apply. Falsified by a shot during phasing in or by materialising ending at a different tick.
+  (ii) a spawner weapon none of whose spawned aircraft is
   alive: no launch until one is alive; (iii) a temporal weapon whose beam holds the target is
   covered by S-0310's scenario T6. Falsified if a shot or launch is made while the condition
   holds.
