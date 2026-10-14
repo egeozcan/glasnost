@@ -939,7 +939,7 @@ fn slave_rules(w: &World, id: ObjectId) -> (i32, i32) {
 
 /// The acceptability test of a slave's ring search: claim 4's, for an
 /// infantry mover.
-fn slave_accepts(w: &mut World, id: ObjectId, from: CellXY, c: CellXY, reference: i32) -> bool {
+fn slave_accepts(w: &mut World, id: ObjectId, c: CellXY, reference: i32) -> bool {
     // spec: S-0402 claim 4 (in the usable area, height-aware; land type tiberium)
     if !w.cells.usable(c) || w.cells.cell(c).is_none_or(|x| x.land != land::TIBERIUM) {
         return false;
@@ -951,13 +951,20 @@ fn slave_accepts(w: &mut World, id: ObjectId, from: CellXY, c: CellXY, reference
     else {
         return false;
     };
+    // spec: S-0209 claim 4 and S-0402 claim 26 (the connection is from the slave's heading-point cell: its own position when it has no destination)
+    let Some(from) = w
+        .obj(id)
+        .map(|o| crate::path::heading_point(w, id).unwrap_or(o.pos).cell())
+    else {
+        return false;
+    };
     regions::ensure(w);
     // spec: S-0402 claim 4 (the movement zone connects it with the searcher's cell)
     let connected = matches!(
         (regions::reach_in(w, from, z), regions::reach_in(w, c, z)),
         (Reach::Region(x), Reach::Region(y)) if x == y
     );
-    // spec: S-0402 claim 4 (the entry outcome clear, here for an infantry mover, S-0209 claim 4)
+    // spec: S-0402 claim 4 (the entry outcome clear, here for an infantry mover, S-0209 claim 4); S-0209 claim 4 (a partly occupied infantry cell qualifies when that outcome is clear)
     connected
         && crate::occupancy::infantry_outcome(w, id, c, reference)
             == crate::occupancy::Outcome::Clear
@@ -996,7 +1003,7 @@ pub fn process_slave(w: &mut World, id: ObjectId) -> i32 {
             let reference = crate::occupancy::reference_level(w, id);
             // spec: S-0402 claim 14 (ring search with the slave scan range, from itself)
             let found = harvest::ring_search_with(w, here, range, &mut |w, c| {
-                slave_accepts(w, id, here, c, reference)
+                slave_accepts(w, id, c, reference)
             });
             match found {
                 Some(c) if c == here => set_slave(w, id, |x| x.phase = SlavePhase::Loading),

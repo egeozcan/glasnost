@@ -914,3 +914,20 @@ fn s0208_claim_4_emergence_faces_north() {
     assert_eq!(seen, SLAVES);
 }
 
+// spec: S-0209 claim 4 (slave field qualification: a partly occupied infantry cell qualifies when the slave's infantry entry outcome there is clear; another unit is not a blanket refusal)
+#[test]
+fn s0209_claim_4_partly_occupied_field_cell_qualifies() {
+    let r = rules();
+    let ore = at(4, 0);
+    let mut w = game_on(&r, &[(ore, ORE, 5)], false);
+    let other = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, ore, 0);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    let t = until(&mut w, 400, |w| {
+        on_map(w, b).into_iter().any(|s| {
+            w.obj(s).unwrap().pos.cell() == ore
+                && slaves::slave_of(w, s).unwrap().phase == SlavePhase::Loading
+        })
+    });
+    assert!(t.is_some(), "a slave loads in the cell the other unit stands in");
+    assert_eq!(w.obj(other).unwrap().pos.cell(), ore);
+}
