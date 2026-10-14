@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0072, Q-0201]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181]
 supersedes: []
 ---
 
@@ -27,7 +27,11 @@ Which sequence an infantry unit shows while it walks, and when fear makes it lie
 panic, belong to S-0107 (claims 7, 10, 15 and 16). How many infantry a cell holds, what a blocked
 walker does and every entry outcome of a cell belong to S-0209, which owns occupancy outcomes (a
 decision under the delegated sign-off, 2026-10-10): where this spec names such an outcome, it
-points to S-0209 and S-0209 decides. This spec owns the infantry scatter from damage (claims 11 and 15).
+points to S-0209 and S-0209 decides. This spec owns the infantry scatter from damage (claims 11 and 15), and the landing-point
+choice for infantry using the teleporting locomotor (claims 19 and 20). S-0207 claim 20 already
+answers Q-0181's jump timing, phasing-in and successive-jump questions; its part c left the
+infantry landing point open. Claims 19 and 20 answer that part. They do not cover a superweapon
+teleport. S-0417 claim 10 supplies a concrete infantry factory-release tether situation.
 For an infantry unit that approaches its target, S-0215 claim 37 owns when the approach step runs
 and whether it keeps, renews or takes a destination, S-0307 owns the approach position and the
 outcomes of a failed search, and S-0310 claim 8 owns the firing check's *moving* answer. This spec
@@ -42,8 +46,8 @@ a successful path to a high-bridge cell ends on its deck; claim 23 already owns 
 failure. Neither supplied the locomotor destination's numeric height. Skirmish only; network games and
 campaigns are out of scope.
 
-Every spec cited here is approved, and the claim, formula, table and scenario numbers cited are
-those of the approved revisions in the spec index: S-0003 (INI value forms), S-0006 (rules
+Citations refer to the approved specs and their current correction-round drafts, including
+S-0417 (factory unloading). The other cited specs are: S-0003 (INI value forms), S-0006 (rules
 layering), S-0009 (map file semantics), S-0011 (map triggers), S-0105 (voxel rendering, for its table trigonometry and
 table square root), S-0106 (slope shapes and terrain surface height), S-0107 (infantry sprite
 sequences, revision 4, which drops its damage-scatter passages and points here), S-0201 (game
@@ -210,8 +214,9 @@ used by this spec:
   unloading manoeuvre with the other. Both hold it from the moment one of them begins loading or
   unloading, gives the other clearance to unload, or docks at a refinery, and both lose it when
   that manoeuvre ends or the link is broken off. A unit holding one is not sent the second case of
-  request A (claim 15). Which situations give an infantry unit one was not determined (Open
-  questions).
+  request A (claim 15). A successful infantry factory-release contact exchange gives the released
+  unit one until its next cell-arrival update (S-0417 claim 10). Whether that interval can isolate
+  the damage-scatter condition remains open (scenario W12).
 
 ## Behaviour
 
@@ -662,11 +667,12 @@ used by this spec:
       neutral and special houses; scenario W9, part e, for the conditions that the locomotor is not
       moving and that the unit has no destination, part c for the order of the two draws; W7 part j
       for the outcome when both requests are accepted). `unmeasured` for the tether-link condition
-      of the second case: no situation is known in which an infantry unit holds a tether link
-      (Terms, Open questions), so no setup can show its effect
+      of the second case: factory release supplies a tether situation (S-0417 claim 10), but no
+      reliable setup yet isolates this condition while the unit also has no target, destination or
+      movement in progress. Scenario W12 is exploratory, not backing for that condition
     - Confidence: medium for the two cases of request A, for request B and for the scatter centre
-      cell of request B when both requests are accepted; low for the situations that set the tether
-      link (Terms, Open questions)
+      cell of request B when both requests are accepted; the factory-release tether situation has
+      S-0417 claim 10's confidence
 
 ### End of a walk and the approaching walker
 
@@ -768,6 +774,72 @@ used by this spec:
       has S-0212 claim 23's backing)
     - Confidence: high for the destination point, height and layer independence; medium for
       the path-exhaustion consequences, which depend on the subsequent search
+
+### Infantry landing with the teleporting locomotor
+
+19. **Landing-point choice (Q-0181).** S-0207 claim 20 owns the jump and its phasing in.
+    For infantry, let *P* be the destination point supplied to the locomotor, and *C* its cell.
+    The desired standing position is the position class of *P*, not the position class of the
+    unit's departure point. Occupants are normally respected: use claim 3's position-choice
+    table with that desired class, including its draw and its refusal cases. The standing-position
+    height is claim 1's surface height, with deck mode on only when *C* carries a high bridge and
+    the unit's present height exceeds the terrain surface height at *P* by more than 312 leptons
+    (3 height levels of 104 leptons). This strict comparison uses integer lepton heights.
+
+    A ready queued behaviour can start when the landing point is chosen (S-0215); the current
+    behaviour below is the one then in force. Occupants are ignored when it is *capture*, *sabotage*, *enter*
+    or *eaten*, and the destination is a vehicle or aircraft in *C*, or the building occupying
+    *C*. This is a destination-object condition, not the broader mission-target rule of claim 4.
+    In that case use claim 4's position choice: the standing position of *P*'s class, without a
+    draw. A destination infantry unit does not give this exception. Whether the candidate cell
+    can be entered is still judged by S-0209's infantry entry outcomes. This check uses the
+    deck's objects and occupancy record on a high-bridge cell, and the ground's otherwise,
+    independently of the standing-position deck mode above. It has no connecting-step height
+    restriction. For a cell at terrain height level −6 or lower, the entry outcome is instead
+    *clear* without an occupant or terrain test: the check's initial reference level is −1,
+    more than four height levels above such a cell. Levels and this comparison are integers.
+    This bypass does not remove the preceding standing-position refusal
+    (`quirks.teleport_infantry_negative_level_entry`, Edge cases). An outcome other than
+    *clear* rejects the landing point even when occupants were ignored for position choice.
+
+    A refused position choice or entry outcome gives no landing point for a cell destination:
+    the destination is removed and the unit does not jump. Only an object destination enables
+    a nearby-cell search after that refusal. That search is S-0212 claim 25 with these choices:
+    - centre: the cell of the destination object's heading point (its next movement point, or
+      its own position when it has none),
+    - locomotion class and movement zone: the infantry type's own, without zone simplification,
+    - reach region: that of the unit's own heading-point cell, using its present bridge-deck
+      status; the teleporting locomotor reports its own position as its heading point,
+    - search deck mode: on when the centre cell carries a high bridge,
+    - a height condition, no further test, no no-overlay condition, bridge cells allowed,
+    - no reference cell, so selection depends on the tick number rather than a random draw.
+
+    A found cell gets another standing-position choice with its centre as desired point,
+    the same occupant-ignoring condition and the same standing-position deck mode as the first
+    choice. Thus an occupant-respecting second choice takes one ranged draw over 0 to 3 when
+    it reaches the centre-class row; an occupant-ignoring choice takes none. There is no second
+    infantry entry-outcome test after this choice. If no cell or no position is found, there is
+    no jump and the destination is removed. No path between departure and landing is required.
+    The point is fixed when the destination is supplied, not followed as the object moves.
+    S-0207 claim 20 e owns the height at the actual jump, which can differ from the point chosen
+    here on a bridge. An infantry unit reserves its chosen standing position, not a
+    vehicle-present mark (S-0209 claim 1).
+    - Backing: `measurable` (scenario W11)
+    - Confidence: high for position choice, the four behaviours, the cell/object distinction and
+      draws; medium for the search choices and bridge consequences
+
+20. **Placement-time clearing is not owner-dependent.** When placement's fall-back to rest
+    supplies a destination to an infantry unit with the teleporting locomotor, the destination
+    cell's ground occupants receive a cell-wide scatter request with no threat point, forced
+    and move-anywhere, before the landing-point choice. S-0209 owns the recipients and their
+    listing order; claims 11 to 13 govern an infantry recipient's refusal, destination and
+    draw. These recipients can therefore take draws before claim 19's position-choice draw.
+    This request is conditional on the placement situation, not on a human-controlled owner,
+    and an ordinary later move to the same occupied cell does not send it merely because the
+    mover is infantry. It is not a promise that every placement supplies a destination.
+    - Backing: `measurable` (scenario W11 part f, exploratory identification of the placement
+      destination followed by a discriminating comparison)
+    - Confidence: medium for the placement condition; high that there is no owner test
 
 ## Formulas
 
@@ -891,6 +963,7 @@ positions are never taken, as claim 3 says).
 | Level of a cell outside the map, for the screen-cover check | 0 | height level | Terms, *screen-cover check* |
 | Height tolerance for the end of a walk | 2 height levels (208 leptons, strict) | leptons | claim 16 |
 | High-bridge addition to a cell locomotor destination | 414 | leptons | claim 18; independent of the walker's layer |
+| Height above destination terrain surface needed for teleport standing-position deck mode | more than 312 | leptons | claim 19; strict integer comparison |
 
 ## State and ordering
 
@@ -908,6 +981,9 @@ positions are never taken, as claim 3 says).
 | Walking, arrival tick | neither of the above; path steps remain | destination kept; asks for its next walking target on the next tick (claim 6) |
 | Walking, arrival tick | destination height test fails; no path steps remain | destination kept, speed fraction 0; subsequent path computation and give-up follow S-0212 (claim 18) |
 | Walking, destination is its target object | firing check answers *can fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
+| Teleporting infantry, destination supplied | first landing choice succeeds | reserves the chosen standing position; jump follows S-0207 claim 20 |
+| Teleporting infantry, first landing choice refused | cell destination | no jump, destination removed |
+| Teleporting infantry, first landing choice refused | object destination | nearby search and second position choice of claim 19; no jump if either finds nothing |
 
 Ordering stated as consequences (the draw counts and order are checked with the read-only recorder
 of the random stream, scenario W9): the random draw of claim 3 happens on the tick on which the walker
@@ -926,6 +1002,12 @@ standing position stops on that same tick and does not ask for a next walking ta
 W10).
 
 ## Edge cases and quirks
+
+- **Negative-level teleport entry** (`quirks.teleport_infantry_negative_level_entry`, default:
+  original). Claim 19's entry check accepts a cell at terrain level −6 or lower without testing
+  terrain or occupants, though standing-position availability is still tested. With the switch
+  off, that early bypass is omitted and the ordinary landing entry check applies. W11(g) tests
+  the bypass. This does not change the map importer or ordinary walking entry rules.
 
 - **The top position is recorded as the centre** (`quirks.top_position_counts_as_centre`, default:
   the original). A unit standing at the top position is recorded as taking the centre (claim 2), so
@@ -1053,9 +1135,11 @@ W10).
 | Art, image section, `Crawls` | can crawl | boolean | yes (S-0107) |
 | Rules, infantry type section, `Cyborg`, `Fraidycat` | cyborg, fraidycat | boolean | no (S-0107) |
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
+| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
+| Rules, infantry type section, `SpeedType`, `MovementZone` | landing-search locomotion class and movement zone (claim 19) | named choices parsed by S-0211 Import mapping | S-0211's defaults and layering rules |
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
 | Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
-| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
+| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9), and landing surface heights and bridge recognition (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
 
 The scatter property of each behaviour (claim 11) is imported by S-0215.
 
@@ -1842,6 +1926,67 @@ cases).**
   by the completion test despite the 414-lepton mismatch, the unit is moved vertically to
   satisfy that test, or the specified later failed search keeps the destination.
 
+**Scenario W11: teleporting infantry landing (claims 19 and 20; Q-0181).**
+- *Setup:* a tiny flat clear skirmish map, a human player's stock teleporting infantry, one
+  bystander computer player kept outside the observed area, game speed index 2, director and
+  mods off. Use scripted orders and a read-only recorder for positions, destinations, occupancy
+  and scenario stream state. Repeat each part with three recorded seeds. Void runs in which
+  an unnamed bystander acts on a test object or enters the observed area.
+- *Procedure:* (a) Order empty cell centres, then cells with one, two and three allied infantry
+  side positions taken. (b) Order a vehicle-occupied cell and an impassable cell, leaving empty
+  neighbours. (c) Use named test-map copies of stock infantry able to enter a transport,
+  capture, sabotage or be absorbed by a building, changing only their locomotor to the
+  teleporting one. Give their corresponding object destinations and check the occupant-ignoring
+  choice. Also use a blocked object destination in a behaviour outside those four and compare
+  its search result with S-0212 claim 25. Repeat on a slope, a high bridge and with destination
+  and departure in different reach regions, logging the inputs to claim 19's search. The named
+  test data is removed afterwards. (d) Use a high bridge and vary the departure elevation above and
+  below claim 19's 312-lepton boundary. (e) Order across a cliff and to an isolated island.
+  (f) Place the stock teleporting infantry by a production release or map-trigger placement
+  with ground infantry occupants nearby. Identify any destination supplied during placement,
+  then compare that event with a later ordinary move, for human and non-player owners where
+  placement can be arranged. Do not manufacture a destination by writing game state.
+- *Observable:* landing cell, standing position and height, refusals, occupants' destinations,
+  and draws attributable to position choice or scatter rather than other actors.
+- *Expected:* (a) a centre desired point gets only a free side position by table O, with its
+  one draw when that row is reached; a fully occupied side record refuses without moving to
+  an empty neighbour. (b) no fallback for a cell destination. (c) an enter destination meeting
+  the exception can choose the centre without a draw; a refused object destination alone
+  permits the nearby search, then the centre-desired position choice. (d) point selection
+  uses the strict height boundary, while actual jump height follows S-0207 claim 20 e.
+  (e) no connecting path is needed. (f) where placement supplies a destination, ground
+  occupants receive the forced move-anywhere request, irrespective of owner; an ordinary
+  later move does not reproduce that placement-only request. (g) On a named test map with
+  impassable ground at levels −5 and −6 and free standing positions, repeat a direct
+  teleport destination. Expect refusal at −5 and acceptance at −6, not a walking route. Remove
+  the test map afterwards. This part tests the negative-level entry bypass.
+- *Falsifiers:* a cell refusal landing in a neighbouring empty cell, a position not given by
+  the stated table, an incorrect draw count, a fallback requiring a path, or an owner-only
+  difference in placement clearing, or refusal of the −6 cell with a free standing position
+  while the default quirk is on. A placement that supplies no destination is not evidence
+  for or against claim 20.
+
+**Scenario W12: candidate factory tether damage test (claim 15).**
+- *Setup:* a tiny clear skirmish map, human-owned infantry factory and stock infantry, a
+  bystander computer player far away, game speed index 2, director and mods off. Produce
+  infantry with no rally point and then with a rally point, three recorded seeds each.
+- *Procedure:* use scripted production and a read-only recorder as in S-0417 U10. Record
+  contact, tether, current and queued behaviour, target, destination and movement in progress
+  from release through the first cell arrival. Seek an interval in which the tether is the
+  only failed condition of claim 15 request A's second case. Only if such an interval exists,
+  use stock no-attacker damage, with the player-scatter rule enabled by a named test-map
+  override, and compare the same surviving unit after tether loss. Remove the override.
+- *Observable:* which conditions coincide with the tether, and whether the hit sends an
+  accepted scatter and a draw. Record health to exclude lethal hits.
+- *Expected:* successful release contact tethers as S-0417 claim 10 states; if all the other
+  conditions can be matched, damage causes no general scatter while tethered and causes it
+  after tether loss. A tethered unit with a destination or movement in progress does not
+  isolate the tether condition. The first phase is exploratory and cannot upgrade backing
+  merely by finding a tether.
+- *Falsifiers:* a successful clearance exchange without a tether falsifies the setup's
+  premise; a general scatter while the tether is the only failed condition falsifies claim
+  15. Failure to find the required interval leaves that condition unmeasured.
+
 ## Open questions
 
 - The screen-cover check (Terms) is exact as arithmetic, but three parts of it are not confirmed:
@@ -1851,9 +1996,10 @@ cases).**
   levels; and that the check matches what a viewer sees hidden on the screen is an interpretation.
   Scenario W7(f) tests the rule on uneven ground; W7(b) relies only on flat ground, where every cell
   passes.
-- Which situations of an infantry unit set the tether link (Terms) was not determined, and no situation
-  on the map in which an infantry unit holds one is known. The link only removes the second case of
-  request A (claim 15), so it matters only for an infantry unit hurt while it holds one.
+- Infantry factory release gives a tether situation (S-0417 claim 10), but it has not been
+  established that a released infantry unit can be hurt while tethered, stationary and without
+  target or destination in a behaviour with the scatter property. W12 checks that conjunction.
+  until it does, the damage-scatter tether condition of claim 15 remains unmeasured.
 - While a unit travels through a tunnel (S-0212 Terms), its scatter centre cell appears to be the
   tunnel's exit cell (Terms *scatter reference point*). Tunnels belong to S-0212 and the movement specs, and this was not checked
   further.
