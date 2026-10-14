@@ -114,8 +114,10 @@ impl Pcm {
                     let mut samples: Vec<i16> = if bits == 8 {
                         body.iter().map(|&b| (i16::from(b) - 128) << 8).collect()
                     } else {
-                        body.chunks_exact(2)
-                            .map(|c| i16::from_le_bytes([c[0], c[1]]))
+                        body.as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|c| i16::from_le_bytes(*c))
                             .collect()
                     };
                     let whole = samples.len() - samples.len() % usize::from(channels);
@@ -263,10 +265,7 @@ mod tests {
         // Compressed formats and garbage are errors, not panics.
         let mut adpcm = wav.clone();
         adpcm[32] = 0x11;
-        assert!(matches!(
-            Pcm::from_wav(&adpcm),
-            Err(Error::Unsupported(_))
-        ));
+        assert!(matches!(Pcm::from_wav(&adpcm), Err(Error::Unsupported(_))));
         assert!(Pcm::from_wav(b"RIFF").is_err());
         assert!(Pcm::from_wav(&wav[..30]).is_err());
     }
