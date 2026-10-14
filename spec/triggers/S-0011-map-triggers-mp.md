@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,9 +22,11 @@ tables I3 and I4), including the order in which the scenario random stream is dr
 This revision covers skirmish only; network games and campaigns are out of scope. Codes outside
 the subset are parsed, and their meaning is left to a later revision.
 
-**Hand-off checks.** S-0003 claim 14's exceptions, S-0109 claim 13's creation-time start
- effects, S-0202's loading-draw table, S-0302's survivor rules and S-0409's all-player-house
-scope agree in their current texts. Check the companion revisions together at sign-off.
+**Hand-off checks.** S-0003 claim 14's exceptions, S-0202's loading-draw table,
+S-0302's survivor rules and S-0409's all-player-house scope agree in their current texts.
+At sign-off, check claim 36 and scenario T21 against S-0109 claim 13, and hand the two
+revisions off together: creation-time sound and resource chain reaction are enabled,
+and only later start events suppress them. Check the other companion revisions together too.
 
 ## Terms
 
@@ -605,10 +607,17 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     loading, in one stream order. Cleanup can take conditional tile-animation draws (S-0202
     claim 14), and secret-lab choices (S-0407 claim 14) precede the remaining-tag arming draws.
     The game-start pass stays after those groups even when no starting units are placed or their
-    setup stops early. Every one of these draws happens before the first tick.
-    - Backing: `measurable` (scenario T23, including variant D for cleanup and secret labs): the random-state recorder reads the stream state before
+    setup stops early. Conditional resource-glint choices and their animation-creation and
+    immediate start-event draws follow the game-start recalculation (S-0202 claim 14).
+    Recalculation is not an exhaustive final-draw boundary for loading. Every one of these
+    draws happens before the first tick.
+    - Backing: `measurable` (scenario T23, including variant D for secret labs and variant E
+      for resource glints): the random-state recorder reads the stream state before
       the first tick and the draws between the groups the table lists. The boundary of the claim,
       the first terrain recalculation pass, is a group the table lists
+    - Cleanup's relative position and conditional animation draws are `unmeasured`, as in
+      S-0202 claim 14: its former R11 used a network fixture, not a supported discriminating
+      skirmish setup. T23 does not supply a replacement fixture.
     - An object with an unresolved house or type creating neither an object nor a tag is
       `unmeasured`: T23 uses valid object entries and does not test rejected entries.
     - Confidence: medium (high for the order of the groups the table lists; whether other draws
@@ -814,8 +823,10 @@ name are not established either. Nothing else in the table fixes an order of int
 | Secret labs | the conditional secret-type choice draws of S-0407 claim 14, in lab creation order, after initial crates and before end-of-loading tags and the game-start recalculation | S-0407, claim 14; S-0202, claim 14 |
 | End of loading: remaining tag set-up (Terms) | claim 14's draws for every tag created there, in registration order, and for each tag its instances in chain order | this spec, claim 34 |
 | Game-start terrain recalculation pass, in S-0009's visiting order | after starting units, initial crates, secret-lab choices and end-of-loading tags, and before the first tick: for each tile animation this pass starts, its creation and immediate start-event draws. A cell that already started one in the second pass starts no second animation, so takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; S-0202 claims 10 and 14; S-0109 |
+| Resource-glint setup, after game-start terrain recalculation | S-0202 claim 14's conditional choices in visiting order; each successful choice's applicable animation-creation and immediate start-event draws precede the next cell's choice. No configured glint animation means no draws in this group. All precede tick 0 | S-0202, claims 10 and 14 |
 
 S-0202 claim 10 specifies the overlay and vein-pattern draws; its loading-draw table incorporates them.
+Claim 14 owns the resource-glint conditions, draw ranges and singleton-frequency case.
 
 ## Edge cases and quirks
 
@@ -1485,16 +1496,25 @@ objects' creation and tag draws. A cell animation's creation and immediate start
 precede its placement's tile-animation draws. Counts and values are S-0202 claim 10's, not
 additional draws of this spec. *Falsified if:* a group lies on the other side of a tag-arming
 group, the cell-animation/tile-animation order is reversed, or a count or value differs from R8.
-Variant D: retain D and E's remaining-tag timers and use S-0202 R11's cleanup fixtures and
-R10 variants A and B's secret-lab and skipped-starting-unit fixtures, separately. Keep those
-scenarios' settings, observed areas, run counts and recorder requirements. *Observable:* the
-stream positions of cleanup animation draws, lab choices, D/E arming and game-start animation
-draws. *Expected:* cleanup's eligible animation draws follow the second pass and precede late
-start-position draws, with none for a cell that already started an animation since the second
-pass. Lab choices follow initial crates and precede D/E arming, which precedes game-start
-animation draws, even with absent or prematurely stopped starting-unit placement. All these
-draws precede tick 0. *Falsified if:* any group has a different relative position, or cleanup
-creates a duplicate animation for a cell already marked as started since the second pass.
+Variant D: retain D and E's remaining-tag timers and use S-0202 R10 variants A and B's
+secret-lab and skipped-starting-unit fixtures, separately. Keep those scenarios' settings,
+observed areas, run counts and recorder requirements. *Observable:* the stream positions of
+lab choices, D/E arming and game-start animation draws. *Expected:* lab choices follow initial
+crates and precede D/E arming, which precedes game-start animation draws, even with absent
+or prematurely stopped starting-unit placement. All these draws precede tick 0.
+*Falsified if:* any group has a different relative position. Cleanup is not tested here:
+S-0202 R11 is deferred because its former fixture was a network game, outside this revision.
+
+Variant E: retain D and E's remaining-tag timers and use S-0202 R13's resource-glint fixtures,
+settings, observed area, five runs per case and recorder checkpoints. *Procedure:* let loading
+finish, logging each group's stream state from the run's own recorded seed. *Observable:*
+the stream positions of D/E arming, game-start tile-animation creation, glint choices and each
+glint's creation draws. *Expected:* D/E arming precedes the game-start recalculation's draws,
+which precede the glint group; all precede tick 0. Within that group the counts, values,
+empty-cell and zero-value controls, and choice-before-creation-before-next-choice order are
+S-0202 claim 14's, as R13 predicts. *Falsified if:* any group has another relative position,
+or any draw count, value or control differs from R13. Retain R13's void rule. An insufficiently
+resolved log is inconclusive, not a passing ordering test.
 
 **Scenario T24 (input-compatibility rules).** Common setup and recorder. One run per case,
 using named test maps removed afterwards.
@@ -1543,6 +1563,8 @@ using named test maps removed afterwards.
 
 ## Open questions
 
+- **Cleanup draw measurement.** A discriminating skirmish fixture for cleanup's phase order
+  and conditional tile-animation draws is not established (claim 34; S-0202 claim 14).
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.
