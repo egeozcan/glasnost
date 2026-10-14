@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1220,6 +1220,12 @@ scenarios' timing expectations use the stated index.
     destination-driven sequence changes and S-0213 claim 21's Q-0072 approach pointers
     together. Immediate destination or sequence changes at order application do not give an
     object a movement turn before the next tick.
+  - S-0414 claims 8, 10, 11, 15 and 16 agree with claims 7 and 8 and row 7 here:
+    house-order defeat tests, next-tick surrender destruction, destruction outside the turn
+    pass and final-tick commitment retain their stated boundaries. S-0415 claim 6 agrees
+    with claims 3, 4 and 10 here on a deployed building's appended place and possible missed
+    first turn. These are confirmations, not new behaviour. Recheck the versions handed off
+    together at sign-off; this check does not replace S-0414's wider joint hand-off checks.
   - S-0404 claims 1 and 11 separate payment priority from creation-draw allocation. The
     simultaneous-start allocation is still explicitly open in its current text, not resolved
     by a count-only random-stream test. Confirm any later resolution against claims 1 and 8
