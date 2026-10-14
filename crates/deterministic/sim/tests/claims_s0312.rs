@@ -1433,6 +1433,34 @@ fn claim_21_exploding_building_awaits_removal() {
     );
 }
 
+// spec: S-0214 claim 16 (a building awaiting removal can still be selected by a click: zero health is not a selection exclusion; a type whose selection flag is off is not selectable)
+#[test]
+fn awaiting_removal_can_be_selected() {
+    use glasnost_sim::targeting::{self, ClickOn, Modifiers};
+    use glasnost_sim::world::HouseId;
+    let (w, id) = awaiting(true, true);
+    assert_eq!(w.obj(id).unwrap().health, 0);
+    assert!(targeting::selectable(&w, id));
+    let r = targeting::click(
+        &w,
+        HouseId(0),
+        &[],
+        ClickOn::Object(id),
+        Modifiers::default(),
+    );
+    assert_eq!(r.selection, Some(vec![id]));
+    // The type's selection flag off: not selectable, with or without health.
+    let mut r = rules();
+    let hut = r.sim.buildings.get_mut("HUT").unwrap();
+    hut.combat.explodes = Some(true);
+    hut.selectable = Some(false);
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    assert!(!targeting::selectable(&w, id));
+    assert_eq!(kill(&mut w, id), HitResult::NowDead);
+    assert!(!targeting::selectable(&w, id));
+}
+
 // spec: S-0312 claim 21 (only the type's explodes flag counts: a building without it, not being sold, leaves play at once)
 #[test]
 fn claim_21_other_buildings_leave_at_once() {

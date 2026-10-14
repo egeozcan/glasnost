@@ -1,6 +1,7 @@
 //! Claim tests for S-0202's draws during map loading on synthetic data:
 //! low-bridge end markers and their pieces, the vein rebuild of S-0009
-//! claim 14 and the visceroid placement draw.
+//! claim 14, the low-bridge exclusion of cell animations and the
+//! visceroid placement draw.
 
 mod common;
 
@@ -191,4 +192,48 @@ fn claim_10_tile_animation_draws() {
         .random_rate = Some([1, 2]);
     s.set_cell(cell(0, 0), 1, 0);
     assert_eq!(s.build().rng.taken(), 1);
+}
+
+/// spec: S-0009 claim 12 and S-0202 claim 14 (low-bridge end markers, their end-row writes and their piece writes start no cell animation, even when the marker or the written type names one; an ordinary placement of such a type does)
+#[test]
+fn claim_14_low_bridges_start_no_cell_animation() {
+    use glasnost_rules::sim::AnimationType;
+    let mut s = overlay_scene();
+    s.map.has_overlay_data = false;
+    s.register("animations", "SPARK");
+    // A random delay: ρ = 2 and 1 give d = 450 and 900, one ranged draw per creation.
+    s.ruleset.sim.animations.insert(
+        "SPARK".into(),
+        AnimationType {
+            random_rate: Some([2, 1]),
+            ..Default::default()
+        },
+    );
+    // The markers, the end-row types and the piece types all name the cell animation.
+    for i in [122, 123, 92, 94, 74, 75, 76, 77, 7] {
+        s.ruleset
+            .sim
+            .overlays
+            .get_mut(&format!("O{i}"))
+            .unwrap()
+            .cell_anim = Some("SPARK".into());
+    }
+    s.cell_mut(cell(-4, 0)).overlay = 123;
+    s.cell_mut(cell(0, 0)).overlay = 122;
+    let w = s.build();
+    // Only the nine piece values and the load's last draw (as in claim_10_low_bridge_pieces).
+    let mut r = Rng::new(s.setup.seed);
+    for _ in 0..9 {
+        let _ = r.raw();
+    }
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
+    // Control: an ordinary overlay of a type with the cell animation takes its creation draw.
+    s.cell_mut(cell(-4, 0)).overlay = NO_OVERLAY;
+    s.cell_mut(cell(0, 0)).overlay = 7;
+    let w = s.build();
+    let mut r = Rng::new(s.setup.seed);
+    let _ = r.ranged(450, 900, true);
+    let _ = r.ranged(0, 65535, true);
+    assert_eq!(w.rng, r);
 }

@@ -66,7 +66,7 @@ pub fn decimal_text(stored: &[u8]) -> Option<String> {
 
 /// The land types in S-0211's order, with our names and their sections.
 // spec: S-0211 Terms (land types 0 to 11), Import mapping (the twelve section names)
-const LAND_TYPES: [(&str, &str); 12] = [
+pub(crate) const LAND_TYPES: [(&str, &str); 12] = [
     ("clear", "Clear"),
     ("road", "Road"),
     ("water", "Water"),
@@ -83,7 +83,7 @@ const LAND_TYPES: [(&str, &str); 12] = [
 
 /// Land-type row keys (S-0211 Import mapping) and our field names.
 // spec: S-0211 claim 2, Import mapping (the seven multiplier keys)
-const LAND_MULTIPLIERS: [(&str, &str); 7] = [
+pub(crate) const LAND_MULTIPLIERS: [(&str, &str); 7] = [
     ("foot", "Foot"),
     ("track", "Track"),
     ("wheel", "Wheel"),
@@ -387,10 +387,12 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("weapon_count", "WeaponCount", Int),
     // spec: S-0214 Import mapping (Teleporter)
     ("teleporter", "Teleporter", Bool),
+    // spec: S-0214 Import mapping (Selectable: the type permits selection, boolean)
+    ("selectable", "Selectable", Bool),
 ];
 
 /// Building rules fields (`glasnost_rules::sim::BuildingType`). `Factory`
-/// is not converted: no approved spec gives the vocabulary of its value.
+/// is converted apart, by its category words (`sim_econ`, S-0003 claim 21).
 const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
     // spec: S-0311 F1 and Import mapping, S-0314 claim 5 and Import mapping (the cost field, an integer)
@@ -398,6 +400,8 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("bib", "Bib", Bool),
     ("gate", "Gate", Bool),
     ("invisible_in_game", "InvisibleInGame", Bool),
+    // spec: S-0214 Import mapping (Selectable: the type permits selection, boolean)
+    ("selectable", "Selectable", Bool),
     ("laser_fence", "LaserFence", Bool),
     ("firestorm_wall", "FirestormWall", Bool),
     ("naval", "Naval", Bool),
@@ -1093,8 +1097,8 @@ impl Builder<'_> {
     }
 
     /// Land-type rows (S-0211 claim 2): a rules layer that contains a land
-    /// type's section sets the whole row, so only the keys of the last
-    /// layer that contains it count.
+    /// type's section sets the whole row; the layering resets the keys it
+    /// omits (S-0006 claim 5), so the folded values are the row.
     fn land_types(&mut self) -> Node {
         let mut rows = Vec::new();
         for (name, section) in LAND_TYPES {
@@ -1110,22 +1114,12 @@ impl Builder<'_> {
                     "the base rules lack the land-type section [{section}]; until a layer gives it, the land type has the start-up row (multipliers 0, not buildable; S-0211 claim 2)"
                 ));
             }
-            let (Some(keys), Some(&last)) = (keys, layers.iter().max()) else {
+            let (Some(keys), false) = (keys, layers.is_empty()) else {
                 continue;
             };
-            let given_in_last = |k: &str| {
-                keys.get(k.as_bytes()).is_some_and(|s| {
-                    s.history
-                        .iter()
-                        .any(|e| e.layer == last && matches!(e.what, What::Set(_)))
-                })
-            };
             let mut rec = Rec::default();
+            // spec: S-0211 claim 2 (a) and (c), S-0006 claim 5 (a missing key resets: the layering records the reset, `quirks.override_resets_keys`)
             for (field, key) in LAND_MULTIPLIERS {
-                if !given_in_last(key) {
-                    // spec: S-0211 claim 2 (a) (a missing key gives 1.0: reset on override)
-                    continue;
-                }
                 let state = keys.get(key.as_bytes());
                 let what = format!("[{section}] {key}");
                 // spec: S-0211 claim 2 (a) (the text; the cap at 1.0 is the simulation's)
@@ -1133,18 +1127,21 @@ impl Builder<'_> {
                     rec.put(field, jsonc::string(text.clone()));
                     if text.starts_with('-') && !is_zero(text.as_bytes()) {
                         // spec: S-0211 Edge cases (the importer warns for any negative land multiplier)
-                        let line = state
-                            .and_then(|s| s.history.iter().rev().find(|e| e.layer == last))
-                            .map_or(0, |e| e.line);
-                        self.warn(last, line, format!(
+                        let (layer, line) = state
+                            .and_then(|s| {
+                                s.history
+                                    .iter()
+                                    .rev()
+                                    .find(|e| matches!(e.what, What::Set(_)))
+                            })
+                            .map_or((0, 0), |e| (e.layer, e.line));
+                        self.warn(layer, line, format!(
                             "[{section}] {key} is negative ({text}): it allows entry and can leave vehicles stuck (S-0211 Edge cases)"
                         ));
                     }
                 }
             }
-            if given_in_last("Buildable")
-                && let Some(b) = fold(keys.get(&b"Buildable"[..]), None, |v, _| value::boolean(v))
-            {
+            if let Some(b) = fold(keys.get(&b"Buildable"[..]), None, |v, _| value::boolean(v)) {
                 // spec: S-0211 claim 2 (c) (the buildable key; missing gives no)
                 rec.put("buildable", jsonc::boolean(b));
             }

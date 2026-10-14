@@ -1511,6 +1511,40 @@ fn suppression_halves_per_allied_building_cell() {
     }
 }
 
+// spec: S-0309 claim 14 (suppression reads the current weapon, slot 0 for a type that is not multi-weapon, the same for every candidate; the second slot's suppress flag does not count)
+#[test]
+fn suppression_reads_the_current_weapon_slot() {
+    for (first_suppresses, counted) in [(true, true), (false, false)] {
+        let mut r = by_special();
+        r.sim.general.fire_supress = Some(d("3"));
+        let mut quiet = r.sim.weapons["Gun"].clone();
+        quiet.supress = Some(false);
+        let mut loud = quiet.clone();
+        loud.supress = Some(true);
+        r.sim.weapons.insert("Quiet".into(), quiet);
+        r.sim.weapons.insert("Loud".into(), loud);
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        let (p, s) = if first_suppresses {
+            ("Loud", "Quiet")
+        } else {
+            ("Quiet", "Loud")
+        };
+        cart.primary = Some(p.into());
+        cart.secondary = Some(s.into());
+        special(&mut r, "T0", "-99999"); // 1
+        let mut w = game(&r);
+        let a = veh(&mut w, "CART", 0, 0, 0);
+        let b = veh(&mut w, "T0", 1, 2, 0);
+        put(&mut w, Kind::Building, "TOWER", 0, 4, 0);
+        let want = if counted { None } else { Some(b) };
+        assert_eq!(
+            range_search(&mut w, a),
+            want,
+            "first slot suppresses: {first_suppresses}"
+        );
+    }
+}
+
 // spec: S-0309 claim 14 (a building is counted once per cell of it in the rings)
 #[test]
 fn suppression_counts_each_building_cell() {

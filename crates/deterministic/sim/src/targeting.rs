@@ -17,9 +17,10 @@
 //! weapon choice, ranges, healing weapons, veterancy abilities and the
 //! firing rules' legality answer come from the combat module (M4), with its
 //! own seams (garrison occupants, upgrades); the weapon cursor flags of rows
-//! I17 and I18 are not imported; vehicles have no deploy state; building
-//! factory kinds have no vocabulary yet (no building is a factory); a
-//! carrier carries nothing. The rows that read these states are in place
+//! I17 and I18 are not imported; vehicles have no deploy state; the
+//! factory kinds of rows B9 to B12 and the factory search of a building's
+//! guard-spot order (S-0213 claim 20) are not applied yet (the clicked
+//! place is used); a carrier carries nothing. The rows that read these states are in place
 //! behind small predicates, so that the states plug in when their topics
 //! arrive. The nearby-cell search of claim 11 always uses the actor's reach
 //! region and own zone (S-0212 table T5's rows for a free mover's no-move
@@ -235,15 +236,25 @@ fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
 }
 
 /// Whether the object can be selected (S-0214 Terms, *can be selected*):
-/// a live unit or building on the map, but not a building whose type is
-/// invisible in the game. Whether a unit below the surface or a cloaked
-/// one can be selected is an open question of S-0214; M3 has neither
-/// state, so such units count as selectable.
+/// a unit or building in play on the map whose type's selection flag
+/// permits it, but not a building whose type is invisible in the game.
+/// Zero health does not exclude a building still in play (awaiting
+/// removal, S-0214 claim 16); being erased does (no erasing weapon yet).
+/// Whether a unit below the surface or a cloaked one can be selected is an
+/// open question of S-0214; neither state exists yet, so such units count
+/// as selectable.
 pub fn selectable(w: &World, id: ObjectId) -> bool {
     // spec: S-0214 Terms (can be selected: units and buildings; a building whose type is invisible in the game is believed not to be, low)
-    unit_or_building(w, id)
-        && !invisible(w, id)
-        && w.obj(id).is_some_and(|o| o.on_map && o.health > 0)
+    // spec: S-0214 Terms and Import mapping (the type's selection flag must permit selection; absent: yes)
+    let flag = match kind(w, id) {
+        Some(Kind::Building) => building(w, id).is_none_or(|b| b.raw.selectable.unwrap_or(true)),
+        _ => unit(w, id).is_none_or(|u| u.raw.selectable.unwrap_or(true)),
+    };
+    // spec: S-0214 claim 16 (zero health does not exclude a building still in play awaiting removal; being erased does)
+    let alive = w.obj(id).is_some_and(|o| {
+        o.on_map && (o.health > 0 || (o.kind == Kind::Building && o.combat.killed))
+    });
+    unit_or_building(w, id) && !invisible(w, id) && flag && alive && !being_erased(w, id)
 }
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
@@ -252,11 +263,29 @@ fn vehicle_like(w: &World, id: ObjectId) -> bool {
     building(w, id).is_some_and(|b| b.raw.undeploys_into.is_some() && b.foundation == (1, 1))
 }
 
-/// Rally-capable (S-0214 Terms): a factory of infantry or vehicles (no
-/// factory vocabulary yet), a cloning building or a repair depot.
+/// Rally-capable (S-0214 Terms): a factory of infantry or vehicles, a
+/// cloning building or a repair depot.
 fn rally_capable(w: &World, id: ObjectId) -> bool {
-    building(w, id)
-        .is_some_and(|b| b.raw.cloning.unwrap_or(false) || b.raw.unit_repair.unwrap_or(false))
+    // spec: S-0214 Terms (rally-capable) and claim 17 (a non-producing category alone does not grant it, nor cancels cloning or repair)
+    building(w, id).is_some_and(|b| {
+        matches!(
+            b.factory,
+            Some(crate::rules::FactoryKind::Infantry | crate::rules::FactoryKind::Vehicle)
+        ) || b.raw.cloning.unwrap_or(false)
+            || b.raw.unit_repair.unwrap_or(false)
+    })
+}
+
+/// Factory-marked (S-0214 Terms): any imported factory category other than
+/// no factory, the recognised non-producing ones included (claim 17).
+fn factory_marked(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Terms (factory-marked) and claim 17
+    building(w, id).is_some_and(|b| b.factory_category.is_some())
+}
+
+/// Marked primary (S-0213 claim 13).
+fn primary(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.econ.building.primary)
 }
 
 /// Movable (S-0214 Terms).
@@ -1073,7 +1102,11 @@ fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
     match g {
         // spec: S-0214 table B row B2
         Action::ToggleSelect => Action::ToggleSelect,
-        // spec: S-0214 table B rows B4 to B6 (no power, absorbed units, occupants or factories yet)
+        // spec: S-0214 table B row B3 (factory-marked and already primary: nothing)
+        Action::Deploy if factory_marked(w, actor) && primary(w, actor) => Action::Nothing,
+        // spec: S-0214 table B row B5 (a factory-marked building: deploy; absorbed units and garrison occupants are not modelled)
+        Action::Deploy if factory_marked(w, actor) => Action::Deploy,
+        // spec: S-0214 table B rows B4 and B6 (the gap generator's power and radius states are not modelled: nothing)
         Action::Deploy => Action::Nothing,
         // spec: S-0214 table B row B7 (a pulse cannon)
         Action::Attack if building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false)) => {
@@ -1619,6 +1652,8 @@ pub fn order(
         // spec: S-0214 table M part 3 (buildings)
         return match (a, on) {
             (Action::Attack, _) => behaviour(Behaviour::Attack, Some(target), None),
+            // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; the unload orders of gap generators, absorbing buildings and garrisons are not modelled)
+            (Action::Deploy, _) if factory_marked(w, id) => Some(Order::Primary { actor: id }),
             // A guard-spot order: the factory search of S-0213 claim 20 waits for the factory vocabulary; the clicked place is used.
             (Action::Move, _) | (Action::Harvest, ClickOn::Cell(_)) if rally_capable(w, id) => {
                 Some(Order::GuardSpot {

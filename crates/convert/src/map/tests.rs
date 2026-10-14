@@ -107,7 +107,7 @@ fn decode_with(text: &str, quirks: MapQuirks) -> Decoded {
     )
 }
 
-/// spec: S-0012 claim 9, Formulas F3 (partial terrain values, quirks.partial_terrain_values)
+/// spec: S-0012 claim 9, Formulas F3 (partial terrain values, the first record included, quirks.partial_terrain_values)
 #[test]
 fn s0012_partial_terrain_values() {
     let full = record_bytes(&[rec(1, 10, 0x0304_0506, 3), rec(2, 10, 0x0102, 4)]);
@@ -132,6 +132,20 @@ fn s0012_partial_terrain_values() {
         // switch off: a partial tile number is the preset 65535
         let c = at(&decode_with(&m.text(), off), 2, 10);
         assert_eq!(c.tile, 65535, "k = {k} off");
+    }
+    // S-0012 revision 2: the first record's partial tile number also takes F3
+    // when its complete coordinate pair selects a legal cell.
+    for (k, want) in [(1usize, 65280 + 0x06), (2, 0x0506), (3, 0x04_0506)] {
+        let m = MapText {
+            ini: ini.clone(),
+            terrain: Some(full[..4 + k].to_vec()),
+            ..Default::default()
+        };
+        let d = decode_text(&m.text());
+        assert_eq!(at(&d, 1, 10).tile, want, "first record, k = {k}");
+        assert!(d.warnings.iter().any(|w| w.text.contains("partway")));
+        let c = at(&decode_with(&m.text(), off), 1, 10);
+        assert_eq!(c.tile, 65535, "first record, k = {k} off");
     }
     // A partial coordinate pair after a record: three bytes select (2, 10) with tile 65535.
     let m = MapText {
@@ -390,7 +404,10 @@ fn preview_and_header() {
     assert_eq!((p.width, p.height), (2, 2));
     assert_eq!(&p.rgb[..9], &[9; 9]);
     assert_eq!(&p.rgb[9..], &[0; 3]);
-    assert_eq!(d.map.header.pairs, vec![Some((3, 4)), Some((0, 0))]);
+    assert_eq!(
+        d.map.header.pairs,
+        vec![Some([Some(3), Some(4)]), Some([Some(0), Some(0)])]
+    );
 }
 
 /// spec: S-0401 claim 4 and Import mapping ([Basic] TiberiumGrowthEnabled, the map growth switch; absent: on)
@@ -680,7 +697,7 @@ fn claim_29_header_pairs_read() {
     let text = format!("{BASE}[Header]\nNumberStartingPoints=10\n{pairs}");
     let d = decode_text(&text);
     assert_eq!(d.map.header.pairs.len(), 10);
-    assert_eq!(d.map.header.pairs[9], Some((10, 10)));
+    assert_eq!(d.map.header.pairs[9], Some([Some(10), Some(10)]));
     let doc = Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new());
     let ctx = DecodeContext {
         quirks: MapQuirks {
@@ -690,4 +707,25 @@ fn claim_29_header_pairs_read() {
         ..DecodeContext::default()
     };
     assert_eq!(decode(&doc, &ctx).map.header.pairs.len(), 8);
+}
+
+/// spec: S-0009 claim 29 and Import mapping ([Header] WaypointN: an unread component of a present pair is completed from the value in force, pairs 1 … 8 at import and pairs 9 … 16 from the mark at each phase, with a warning; a missing pair keeps the whole value in force)
+#[test]
+fn claim_29_unread_header_components() {
+    let text = format!(
+        "{BASE}[Header]\nNumberStartingPoints=11\nWaypoint1=5\nWaypoint9=-1\nWaypoint10=x\n"
+    );
+    let d = decode_text(&text);
+    let p = &d.map.header.pairs;
+    assert_eq!(p[0], Some([Some(5), Some(0)]));
+    assert_eq!(p[1], Some([Some(0), Some(0)]));
+    assert_eq!(p[8], Some([Some(-1), None]));
+    assert_eq!(p[9], Some([None, None]));
+    assert_eq!(p[10], None);
+    let warned = |k: &str| {
+        d.warnings
+            .iter()
+            .any(|w| w.text.contains(k) && w.text.contains("cannot be read"))
+    };
+    assert!(warned("Waypoint1:") && warned("Waypoint9:") && warned("Waypoint10:"));
 }

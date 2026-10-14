@@ -5,9 +5,9 @@
 use crate::value::{self, DecimalField};
 use crate::{Document, Quirks};
 
-/// Parses `data` under the default and the all-off quirk switches, reads
+/// Parses `data` under the default, the all-off and a mixed set of quirk switches, reads
 /// every stored value in every form, and layers the data onto its own
-/// document.
+/// document twice, looking every name up in between.
 pub fn run(data: &[u8]) {
     let off = Quirks {
         ini_final_line_needs_newline: false,
@@ -17,7 +17,12 @@ pub fn run(data: &[u8]) {
         percent_list_integer_prefix: false,
         list_items_untrimmed: false,
     };
-    for quirks in [Quirks::default(), off] {
+    // Hash order on with identity off: the pair comparison (S-0002 Edge cases).
+    let pairs = Quirks {
+        ini_hash_identity: false,
+        ..Quirks::default()
+    };
+    for quirks in [Quirks::default(), off, pairs] {
         let mut warnings = Vec::new();
         let mut doc = Document::parse(data, quirks, &mut warnings);
         for w in &warnings {
@@ -47,6 +52,16 @@ pub fn run(data: &[u8]) {
                 let _ = value::named(v, 31, &["a", "b"]);
             }
         }
-        let _ = doc.layer(data, &mut warnings);
+        doc.layer(data, &mut warnings);
+        for w in &warnings {
+            let _ = w.to_string();
+        }
+        for s in doc.sections() {
+            let _ = doc.section(s.name());
+            for (_, e) in s.list_positions() {
+                let _ = s.get(&e.key);
+            }
+        }
+        doc.layer(data, &mut warnings);
     }
 }

@@ -111,7 +111,10 @@ fn factory_kind_words() {
     assert_eq!(kind("C").as_deref(), Some("aircraft"));
     assert_eq!(kind("D").as_deref(), Some("building"));
     assert_eq!(kind("K").as_deref(), Some("infantry"));
-    for n in ["E", "F", "G", "H", "I", "J", "L"] {
+    // spec: S-0214 Import mapping (Factory: recognised non-producing categories are carried, not aliases of the producing words)
+    assert_eq!(kind("G").as_deref(), Some("terrain"));
+    assert_eq!(kind("H").as_deref(), Some("infantry_object"));
+    for n in ["E", "F", "I", "J", "L"] {
         assert_eq!(kind(n), None, "{n}");
     }
     // Recognised words give no warning; unmatched ones do.

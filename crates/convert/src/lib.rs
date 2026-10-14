@@ -24,6 +24,7 @@ pub mod inputs;
 pub mod kinds;
 pub mod layers;
 pub mod map;
+pub mod modes;
 pub mod names;
 pub mod refs;
 pub mod sim;
@@ -49,9 +50,12 @@ use layers::{GameKind, Layer, LayerQuirks, Outcome, Role, Warning};
 pub struct ImportOptions {
     /// Kind of game: decides the game-mode layer and the side order.
     pub game: GameKind,
-    /// The game-mode file, named directly (Q-0006: the mode list is not
-    /// read). Skirmish games without one get an empty game-mode layer.
+    /// The game-mode file, named directly. Without one a skirmish plays
+    /// the mode `mode` picks from the mode list (S-0006 claim 13).
     pub mode_file: Option<String>,
+    /// Which listed mode a skirmish plays when no game-mode file is named
+    /// (S-0006 claim 13).
+    pub mode: modes::ModeChoice,
     /// The map layer, if any.
     pub map: Option<InputFile>,
     /// Theater for art lookup.
@@ -97,18 +101,62 @@ pub struct Import {
 /// game's per-game archives are mounted (S-0005 claim 13) and every type's
 /// art is looked up (S-0007); the loading archives are released afterwards.
 pub async fn import(vfs: &mut Vfs, options: &ImportOptions) -> Import {
-    let inputs = inputs::read_inputs(
-        vfs,
-        options.mode_file.as_deref(),
-        options.map.clone(),
-        options.ini,
-    )
-    .await;
+    let (mode_name, mode_warnings) = mode_file(vfs, options).await;
+    let mut inputs =
+        inputs::read_inputs(vfs, mode_name.as_deref(), options.map.clone(), options.ini).await;
+    inputs.mode_name = mode_name;
+    inputs.mode_warnings = mode_warnings;
     let mut import = convert(&inputs, options);
     if let Some(theater) = options.theater {
         look_up_art(vfs, options, theater, &mut import, &inputs).await;
     }
     import
+}
+
+/// The game-mode file of the import: the one the options name, or for a
+/// skirmish the file of the mode the mode list gives (S-0006 claim 13),
+/// with the mode list's warnings.
+async fn mode_file(vfs: &Vfs, options: &ImportOptions) -> (Option<String>, Vec<Warning>) {
+    if options.mode_file.is_some() || options.game != GameKind::Skirmish {
+        return (options.mode_file.clone(), Vec::new());
+    }
+    mode_from_list(inputs::read(vfs, modes::MODE_LIST).await.as_ref(), options)
+}
+
+/// The game-mode file a skirmish plays from the mode list `list` (S-0006
+/// claim 13), with the mode list's warnings.
+pub fn mode_from_list(
+    list: Option<&InputFile>,
+    options: &ImportOptions,
+) -> (Option<String>, Vec<Warning>) {
+    let mut warnings = Vec::new();
+    let Some(f) = list else {
+        warnings.push(Warning {
+            file: modes::MODE_LIST.into(),
+            line: 0,
+            message: "the mode list cannot be resolved, so no mode is listed; the game-mode layer is empty (S-0006 claim 13)".into(),
+        });
+        return (None, warnings);
+    };
+    let doc = inputs::parse(f, options.ini, &mut Vec::new());
+    let (list, notes) = modes::read(&doc);
+    for (line, message) in notes {
+        warnings.push(Warning {
+            file: f.label(),
+            line,
+            message,
+        });
+    }
+    let Some(i) = modes::select(&list, options.mode, options.quirks.mode_number_first_wins) else {
+        warnings.push(Warning {
+            file: f.label(),
+            line: 0,
+            message: "the mode list lists no mode; the game-mode layer is empty (S-0006 claim 13)"
+                .into(),
+        });
+        return (None, warnings);
+    };
+    (Some(list[i].file_name()), warnings)
 }
 
 /// Answers art file questions through the game's search order.
@@ -244,7 +292,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     let q = options.ini;
     let mut ini_warnings = Vec::new();
     let mut errors = Vec::new();
-    let mut warnings = Vec::new();
+    let mut warnings = inputs.mode_warnings.clone();
     let mut record = emit::ImportRecord {
         game: match options.game {
             GameKind::Skirmish => "skirmish".into(),
@@ -334,7 +382,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
                 });
             }
             None => {
-                if let Some(name) = &options.mode_file {
+                if let Some(name) = &inputs.mode_name {
                     warnings.push(Warning {
                         file: name.clone(),
                         line: 0,

@@ -27,7 +27,7 @@ pub mod lex;
 pub mod table;
 pub mod value;
 
-pub use doc::{Document, Entry, LayerError, Section};
+pub use doc::{Document, Entry, Section};
 
 /// Quirk switches of S-0001, S-0002 and S-0003. Each defaults to the
 /// original's behaviour.
@@ -131,6 +131,25 @@ pub enum WarningKind {
         /// Line of the earlier name.
         other_line: u32,
     },
+    /// A line of a layered load's second file replaced an entry of a
+    /// different name, or wrote into a section of a different name, because
+    /// the names share a name hash (S-0002 claim 11).
+    LayeredSharedHash {
+        /// The section whose key was replaced, or `None` for a section the
+        /// line wrote into.
+        section: Option<Vec<u8>>,
+        /// The name in the second file.
+        name: Vec<u8>,
+        /// The name already in the document.
+        other: Vec<u8>,
+    },
+    /// A layered load changes a table of the earlier file that holds a
+    /// repeated name hash (S-0002 claim 12).
+    LayeredOntoRepeatedHash {
+        /// The section whose keys the load changes, or `None` for the
+        /// section names.
+        section: Option<Vec<u8>>,
+    },
 }
 
 fn show(b: &[u8]) -> String {
@@ -193,6 +212,37 @@ impl std::fmt::Display for Warning {
                     .as_ref()
                     .map(|s| format!(" in [{}]", show(s)))
                     .unwrap_or_default()
+            ),
+            WarningKind::LayeredSharedHash {
+                section,
+                name,
+                other,
+            } => match section {
+                Some(s) => write!(
+                    f,
+                    "{:?} replaces {:?} in [{}] because the two share a name hash; the section \
+                     now holds the key as {:?} (S-0002 claim 11)",
+                    show(name),
+                    show(other),
+                    show(s),
+                    show(name)
+                ),
+                None => write!(
+                    f,
+                    "[{}] writes into section [{}] because the two share a name hash; the \
+                     section keeps its name (S-0002 claim 11)",
+                    show(name),
+                    show(other)
+                ),
+            },
+            WarningKind::LayeredOntoRepeatedHash { section } => write!(
+                f,
+                "the layered load changes {}, which already hold two occurrences with one name \
+                 hash; the original's result may differ from this engine's (S-0002 claim 12)",
+                match section {
+                    Some(s) => format!("the keys of [{}]", show(s)),
+                    None => "the section names".to_owned(),
+                }
             ),
         }
     }

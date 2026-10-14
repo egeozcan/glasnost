@@ -1030,6 +1030,24 @@ fn blocked_step(w: &mut World, id: ObjectId) {
     }
 }
 
+/// [`spend`], then at a reached track target the arrival-time stop of
+/// S-0207 claim 19 (a): when its conditions hold the vehicle clears its
+/// destination and discards its remaining steps, keeping its target, so
+/// it begins no further track.
+fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
+    let ended = spend(w, id);
+    // spec: S-0207 claim 19 (a) (at a track target, not between track targets; it does not wait for a behaviour processing)
+    if ended
+        && crate::walk::arrival_stop_holds(w, id)
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0207 claim 19 (a) (it clears its destination and discards all remaining path steps; it keeps its target)
+        ob.dest = None;
+        ob.path.steps.clear();
+    }
+    ended
+}
+
 /// Spends the budget on the current track (S-0207 claims 3 to 5). Returns
 /// whether the track ended.
 fn spend(w: &mut World, id: ObjectId) -> bool {
@@ -1183,7 +1201,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         update_rho(w, id, &u);
         let s = progress(w, id, &u);
         add_budget(w, id, s);
-        let mut ended = spend(w, id);
+        let mut ended = spend_and_stop(w, id);
         let mut finished = usize::from(ended);
         while ended && move_goes_on(w, id) {
             // spec: S-0207 claim 12 (the move goes on: a second update, the next track begins this tick)
@@ -1191,7 +1209,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 break;
             }
             update_rho(w, id, &u);
-            ended = spend(w, id);
+            ended = spend_and_stop(w, id);
             finished += usize::from(ended);
             // spec: S-0207 claim 12 (at most two tracks when the tick began on one; quirks.drive_track_end_cap)
             if cap && finished >= 2 {
@@ -1228,7 +1246,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         update_rho(w, id, &u);
         let s = progress(w, id, &u);
         add_budget(w, id, s);
-        let ended = spend(w, id);
+        let ended = spend_and_stop(w, id);
         let mut more = ended && move_goes_on(w, id);
         // spec: S-0207 claim 12 (a tick begun without a track finishes at most one; quirks.drive_track_end_cap off: no limit)
         while more && !cap {
@@ -1236,7 +1254,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 break;
             }
             update_rho(w, id, &u);
-            more = spend(w, id) && move_goes_on(w, id);
+            more = spend_and_stop(w, id) && move_goes_on(w, id);
         }
         if ended && !move_goes_on(w, id) {
             arrive_or_rest(w, id);

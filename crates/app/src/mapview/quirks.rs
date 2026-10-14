@@ -155,14 +155,15 @@ pub fn occupiable_hurt(tech_level: i32, damaged: bool, badly: bool, q: &ViewQuir
 }
 
 /// The body frame drawn for body frame `f` of a sprite with `n` image
-/// frames (S-0108 claim 3).
-pub fn drawn_body_frame(f: usize, n: usize, q: &ViewQuirks) -> usize {
+/// frames (S-0108 claim 3). The result may be negative or past the sprite;
+/// such an index draws nothing (claim 3, F2).
+pub fn drawn_body_frame(f: i32, n: i32, q: &ViewQuirks) -> i32 {
     if q.building_frame_clamp_to_shadow {
-        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋))
+        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋); a negative index is not raised to 0)
         f.min(n / 2)
     } else {
         // spec: S-0108 Edge cases (quirks.building_frame_clamp_to_shadow off: clamp to ⌊N/2⌋ − 1)
-        f.min((n / 2).saturating_sub(1))
+        f.min(n / 2 - 1)
     }
 }
 
@@ -292,7 +293,7 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "gate_double_reverse",
-        "S-0108 claim 4: buildings are not sold",
+        "S-0108 claim 4: a sale's build-down is not drawn (a building being sold is drawn idle)",
     ),
     (
         "building_wrap_normalisation",
@@ -512,7 +513,16 @@ mod tests {
         assert_eq!(drawn_body_frame(1, 4, &on), 1);
         assert_eq!(drawn_body_frame(3, 4, &on), 2);
         assert_eq!(drawn_body_frame(3, 4, &off()), 1);
-        assert_eq!(drawn_body_frame(0, 1, &off()), 0);
+        // Off, a sprite of one frame clamps to −1, which draws nothing.
+        assert_eq!(drawn_body_frame(0, 1, &off()), -1);
+    }
+
+    /// spec: S-0108 claim 3, F2 (a negative index is kept, not raised to image frame 0)
+    #[test]
+    fn negative_body_frame_is_kept() {
+        let on = ViewQuirks::default();
+        assert_eq!(drawn_body_frame(-1, 4, &on), -1);
+        assert_eq!(drawn_body_frame(-3, 4, &off()), -3);
     }
 
     /// Every `quirks.name` that a rendering spec names is a field of a quirk

@@ -1034,18 +1034,24 @@ pub(crate) fn image_run(values: &[i32]) -> Option<[i32; 3]> {
 const FACTORY_TEXT_LIMIT: usize = 31; // spec: S-0003 Import mapping row C19 (31-byte text limit)
 
 /// A factory field's word, compared whole ignoring ASCII case (S-0003
-/// claim 21, row C19): `Some(Some(kind))` for a producing word in our
-/// format's words, `Some(None)` for a recognised word that names no
-/// production kind (the no-factory word included), `None` when unmatched.
+/// claim 21, row C19): `Some(Some(category))` for a producing word or a
+/// recognised word that names no production kind, in our format's words,
+/// `Some(None)` for the no-factory word, `None` when unmatched.
 fn factory_word(word: &[u8]) -> Option<Option<&'static str>> {
     let lower = word.to_ascii_lowercase();
     // spec: S-0003 Import mapping row C19 (the four producing words, the no-factory word and the other recognised words)
+    // spec: S-0214 Import mapping (Factory: the imported category, including recognised non-producing categories) and claim 17
     Some(match lower.as_slice() {
         b"infantrytype" => Some("infantry"),
         b"unittype" => Some("vehicle"),
         b"aircrafttype" => Some("aircraft"),
         b"buildingtype" => Some("building"),
-        b"<none>" | b"terraintype" | b"infantry" | b"unit" | b"aircraft" | b"building" => None,
+        b"terraintype" => Some("terrain"),
+        b"infantry" => Some("infantry_object"),
+        b"unit" => Some("vehicle_object"),
+        b"aircraft" => Some("aircraft_object"),
+        b"building" => Some("building_object"),
+        b"<none>" => None,
         _ => return None,
     })
 }
