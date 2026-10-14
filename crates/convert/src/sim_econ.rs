@@ -107,6 +107,10 @@ const BUILDING_ECON: &[Row] = &[
     ("ore_purifier", "OrePurifier", Bool, "S-0402"),
     ("dock_unload", "DockUnload", Bool, "S-0402"),
     ("weeder", "Weeder", Bool, "S-0402"),
+    ("door_first", "GDIBarracks", Bool, "S-0404"),
+    ("door_second", "NODBarracks", Bool, "S-0404"),
+    ("door_third", "YuriBarracks", Bool, "S-0404"),
+    ("cloning", "Cloning", Bool, "S-0404"),
     // S-0308 table P row 6: a building that is both is no airstrike target.
     ("resource_gatherer", "ResourceGatherer", Bool, "S-0308"),
     (
@@ -544,6 +548,7 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
     ("shroud_rate", AUDIO_VISUAL, "ShroudRate", Dec, "S-0409"),
     ("fog_rate", AUDIO_VISUAL, "FogRate", Dec, "S-0409"),
     ("savour_delay", AUDIO_VISUAL, "SavourDelay", Dec, "S-0414"),
+    ("pose_dir", AUDIO_VISUAL, "PoseDir", Int, "S-0404"),
     (
         "c4_warhead",
         COMBAT_DAMAGE,
@@ -616,6 +621,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         }
     }
     out.push(("buildings", "Owner".to_owned(), "S-0407"));
+    out.push(("buildings", "ExitCoord".to_owned(), "S-0404"));
     for k in NO_EFFECT_FACTORS {
         out.push(("countries", k.to_owned(), "S-0413"));
     }
@@ -698,6 +704,12 @@ impl Builder<'_> {
             }
             Kind::Buildings => {
                 self.efields(&mut econ, t, kind, BUILDING_ECON);
+                if let Some(v) = self.rules_triple(t, "ExitCoord") {
+                    econ.put(
+                        "exit_coord",
+                        jsonc::array(v.iter().map(|&x| int_node(x)).collect()),
+                    );
+                }
                 self.building_art_econ(&mut econ, index, t);
                 if let Some(word) = self.factory_kind(t) {
                     rec.put("factory", jsonc::string(word.to_string()));
@@ -714,6 +726,41 @@ impl Builder<'_> {
         if !econ.0.is_empty() {
             rec.put("econ", econ.node());
         }
+    }
+
+    /// An integer triple of a type's rules keys (S-0003 claim 9): unread
+    /// components keep the value in force's (0 before any), with a warning;
+    /// a reset gives none.
+    fn rules_triple(&mut self, t: &TypeRec, k: &str) -> Option<[i32; 3]> {
+        let mut held: Option<[i32; 3]> = None;
+        let mut unread_at = None;
+        for e in t
+            .keys
+            .get(k.as_bytes())
+            .into_iter()
+            .flat_map(|s| &s.history)
+        {
+            match &e.what {
+                What::Set(v) => {
+                    // spec: S-0003 claim 9 (unread components take the value in force's, our engine; the importer warns)
+                    let (out, unread) = value::int_tuple_or::<3>(v, held.unwrap_or([0; 3]));
+                    if unread {
+                        unread_at = Some((e.layer, e.line, v.clone()));
+                    }
+                    held = Some(out);
+                }
+                What::Reset => held = None,
+                _ => {}
+            }
+        }
+        if let Some((layer, line, v)) = unread_at {
+            self.warn(layer, line, format!(
+                "buildings {} {k} {:?} has fewer than 3 readable integers; the others keep the value in force (S-0003 claim 9)",
+                show(&t.name),
+                show(&v)
+            ));
+        }
+        held
     }
 
     /// The importer warning of S-0402 Edge cases: a building type in a

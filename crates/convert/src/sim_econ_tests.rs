@@ -267,3 +267,26 @@ fn weeder_and_the_dock_unload_warning() {
         "{dock:?}"
     );
 }
+
+// spec: S-0404 Import mapping (ExitCoord an integer triple in leptons; GDIBarracks, NODBarracks, YuriBarracks and Cloning booleans; [AudioVisual] PoseDir an integer)
+#[test]
+fn exit_displacement_doors_cloning_and_pose_direction() {
+    let base = "[BuildingTypes]\n0=HUTA\n1=HUTB\n[HUTA]\nExitCoord=10,-20,30\nGDIBarracks=yes\n\
+NODBarracks=no\nYuriBarracks=yes\n[HUTB]\nCloning=yes\nExitCoord=5\n[AudioVisual]\nPoseDir=96\n";
+    let (s, w) = import(base, "");
+    let a = &s.buildings["HUTA"].econ;
+    assert_eq!(a.exit_coord, Some([10, -20, 30]));
+    assert_eq!(a.door_first, Some(true));
+    assert_eq!(a.door_second, Some(false));
+    assert_eq!(a.door_third, Some(true));
+    assert_eq!(a.cloning, None);
+    let b = &s.buildings["HUTB"].econ;
+    assert_eq!(b.cloning, Some(true));
+    assert_eq!(b.exit_coord, Some([5, 0, 0]));
+    assert!(
+        w.iter()
+            .any(|m| m.contains("ExitCoord") && m.contains("HUTB")),
+        "{w:?}"
+    );
+    assert_eq!(s.general.economy.pose_dir, Some(96));
+}

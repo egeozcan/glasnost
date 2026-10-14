@@ -2193,6 +2193,14 @@
           ],
           "default": null
         },
+        "cloning": {
+          "description": "Buildings: `Cloning`, a cloning building (S-0404 Terms, claim 14);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "defenses_cost_bonus": {
           "description": "Buildings: `DefensesCostBonus`, the cost bonus *β* for defences, a single (S-0404 claim 2); absent: 1.0.",
           "anyOf": [
@@ -2232,6 +2240,30 @@
           ],
           "default": null
         },
+        "door_first": {
+          "description": "Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim\n13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "door_second": {
+          "description": "Buildings: `NODBarracks`, the second barracks door kind (S-0404\nclaim 13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "door_third": {
+          "description": "Buildings: `YuriBarracks`, the third barracks door kind (S-0404\nclaim 13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "eligible_for_ally_building": {
           "description": "Buildings: `EligibileForAllyBuilding` (S-0406 claim 4); absent: no.",
           "type": [
@@ -2247,6 +2279,20 @@
             "null"
           ],
           "default": null
+        },
+        "exit_coord": {
+          "description": "Buildings: `ExitCoord`, the exit displacement in leptons (S-0404\nTerms, claim 13); absent: (0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
         },
         "extra_power": {
           "description": "Buildings: `ExtraPower` (S-0405 claims 1, 2 and 16); absent: 0.",
@@ -3137,6 +3183,15 @@
           "items": {
             "type": "string"
           }
+        },
+        "pose_dir": {
+          "description": "`[AudioVisual] PoseDir`, the pose direction of an aircraft released\nonto a dock in 1/256 turns (S-0404 claim 13); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "prerequisite_barracks": {
           "description": "`[General] PrerequisiteBarracks`, the members of the generic group BARRACKS, building type keys (S-0407 claim 8 b); absent: empty.",

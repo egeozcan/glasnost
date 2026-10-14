@@ -147,6 +147,26 @@ pub struct EconFields {
     /// idle step-off; absent: no.
     #[serde(default)]
     pub weeder: Option<bool>,
+    /// Buildings: `ExitCoord`, the exit displacement in leptons (S-0404
+    /// Terms, claim 13); absent: (0, 0, 0).
+    #[serde(default)]
+    pub exit_coord: Option<[i32; 3]>,
+    /// Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim
+    /// 13); absent: no.
+    #[serde(default)]
+    pub door_first: Option<bool>,
+    /// Buildings: `NODBarracks`, the second barracks door kind (S-0404
+    /// claim 13); absent: no.
+    #[serde(default)]
+    pub door_second: Option<bool>,
+    /// Buildings: `YuriBarracks`, the third barracks door kind (S-0404
+    /// claim 13); absent: no.
+    #[serde(default)]
+    pub door_third: Option<bool>,
+    /// Buildings: `Cloning`, a cloning building (S-0404 Terms, claim 14);
+    /// absent: no.
+    #[serde(default)]
+    pub cloning: Option<bool>,
     /// Buildings: `FactoryPlant`, grants cost bonuses (S-0404 claim 2);
     /// absent: no.
     #[serde(default)]
@@ -585,6 +605,10 @@ pub struct EconGeneral {
     /// claim 8); absent: 0.03.
     #[serde(default)]
     pub savour_delay: Option<Decimal>,
+    /// `[AudioVisual] PoseDir`, the pose direction of an aircraft released
+    /// onto a dock in 1/256 turns (S-0404 claim 13); absent: 0.
+    #[serde(default)]
+    pub pose_dir: Option<i32>,
     /// `[CombatDamage] C4Warhead`, a warhead key (S-0414 claim 5); absent:
     /// none.
     #[serde(default)]
