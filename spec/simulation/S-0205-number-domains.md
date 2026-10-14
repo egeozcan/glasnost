@@ -2,7 +2,7 @@
 id: S-0205
 title: Number domains (integers, floating point, the round-toward-zero mode, conversions)
 topic: simulation
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)

@@ -2,7 +2,7 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -324,10 +324,17 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
     cancels the release at the end of tick 3, and because orders were blocked when it started, they
     stay blocked after it ends (Edge cases and quirks). Our engine reproduces this; it depends on
     ticks only, not on real time.
-    - Backing: `measurable` (scenario T7; scenario T6, part I, for the chrono-flash case)
-    - Confidence: medium for the count of ticks and the chrono-flash case; low for which inputs are
-      blocked: orders and the pointer are, and whether the player can still scroll the view during
-      an order block is not traced (Open questions; scenario T6, part B, records it)
+    - **Scrolling is separate from orders.** S-0101 claims 12 to 15 own edge and unmodified
+      arrow scrolling. During an order block, edge scrolling is suppressed, but an arrow
+      already held before the block continues scrolling in unfrozen cycles. Neither scrolls
+      during frozen cycles or a stand-still, and a freeze does not itself clear edge momentum
+      or held-arrow state. This is presentation behaviour, not another game-speed path to
+      game state. Whether new arrow input is accepted during an order block remains open.
+    - Backing: `measurable` (scenario T7; scenario T6, part I, for the chrono-flash case).
+      Scrolling inherits S-0101 claim 15's `measurable` backing (its scenario M7f)
+    - Confidence: medium for the count of ticks and the chrono-flash case; high for scrolling
+      suppression and retained state, medium for visible resumption (S-0101 claim 15),
+      low for acceptance of new arrow input during an order block
 
 ### Evidence boundaries
 
@@ -710,9 +717,12 @@ whether the vehicle's destination changes.
   value other than 374 (375 alone is consistent with the step counts if the action's own tick takes
   no step, against the order of claim 11; any other value falsifies the step counts), the gap lies
   outside 2.97 to 3.17 s, ticks run during the hold, an order is accepted before the hold
-  ends, or orders remain refused after it. *Also recorded, not judged (claim 14, Open questions):* whether the keyboard's scroll keys
-  and the pointer at the screen edge move the view during the ticks before the hold, while orders
-  are blocked.
+  ends, or orders remain refused after it. For scrolling during the block and hold, use
+  S-0101 scenario M7f: a previously held arrow continues before the hold, edge scrolling is
+  suppressed throughout the block, and both stop during the hold. *Also recorded, not judged
+  (claim 14, Open questions):* with the pointer in the view's interior and no modifier held,
+  press a previously unheld arrow during the block before the hold, and record whether the
+  view moves. This probes new input acceptance, not the already-held-arrow rule.
 - *Part C (claim 10, several actions):* elapsed time 20, one trigger with two pause actions, *N* = 10 then *N* = 2, index 1. *Expected:* the tick number stands at 301 with a gap of
   1.92 s ± 0.1 s. *Falsified if:* the gap is about 9.6 s (first wins) or about 11.5 s (the freezes
   add).
@@ -818,9 +828,11 @@ whether the vehicle's destination changes.
   accepted as they were when it started, so whether orders are accepted in the ticks between the two holds can depend on which
   started first (scenario T6, part G, judges tick numbers only). The full rule for overlapping
   order blocks is not covered.
-- Whether the player can scroll the view during an order block (the first ticks of a game, or a
-  chrono flash before its freeze) is not traced (claim 14). Scenario T6, part B, records it without
-  an expectation; a later revision should state the rule.
+- Whether new arrow input is accepted during an order block (the first ticks of a game, or a
+  chrono flash before its freeze) remains uncertain (claim 14). Scenario T6, part B, records
+  a newly pressed arrow without an expectation. This does not qualify S-0101 claims 12 to 15:
+  edge scrolling is suppressed by the block, a previously held arrow continues in unfrozen
+  cycles, and both stop during frozen cycles or a stand-still.
 - Whether a test map can select a vehicle at game start, as setup 1 of scenario T7 needs, is not
   settled; setup 2 does without it.
 - A freeze that starts during ticks 0 to 3 is not covered: whether the release of the order block

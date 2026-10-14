@@ -2,11 +2,11 @@
 id: S-0413
 title: Country bonuses (what each country field does, which spec owns it, and the fields with no effect)
 topic: simulation
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-11
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -66,7 +66,7 @@ with the glossary's build *progress*). In addition:
    | veteran lists for infantry, vehicles and aircraft | types created at the veteran rank | S-0311 claim 11 |
    | passive for multiplayer | the house takes no start position, no starting units, never loses (S-0414) | S-0009 (Terms, claims 19, 28, 33, 45); S-0414 claim 1 |
    | wall owner | may own the map's walls | S-0210 claim 14; claim 6 |
-   | multiplayer listing flag | presentation only: whether a house of the country appears in the in-game player lists and the score screen | claim 4 |
+   | multiplayer listing flag | filters explicit countries offered by the standard skirmish lobby; also decides whether a house of the country appears in the in-game player lists and the score screen | claim 4; S-0412 claim 15 |
    | colour | presentation only | claim 5 |
    | armour, cost, build time, ground speed, air speed (general factors) | none | claim 2 |
    | parent country, name prefix, name suffix, smart-computer flag | none known | claim 4 |
@@ -113,9 +113,11 @@ with the glossary's build *progress*). In addition:
      vehicles; low that every aircraft locomotion uses this speed (the flight rules have not been
      examined yet; planned S-0501); medium for the order (it is S-0207's order for vehicles)
 
-4. **Fields with no effect on play.** The multiplayer listing flag decides only whether a house of
-   the country is shown in the in-game player lists and the score screen; it does not limit which
-   countries the lobby's random choice can pick (S-0412 claim 6). The parent-country field, the
+4. **Lobby and display fields with no effect on game state.** The multiplayer listing flag is
+   required for a country to be offered explicitly by the standard skirmish lobby (S-0412 claim
+   15, which owns the full filtering rule). It also decides whether a house of the country is
+   shown in the in-game player lists and the score screen. It does not limit which countries the
+   lobby's random choice can pick with the original fixed-range rule (S-0412 claim 6). The parent-country field, the
    name prefix, the name suffix and the smart-computer flag are read, but no rule of play is known
    to use them. Our engine reads all five and gives them no effect on game state. The prefix is
    at most one character and the suffix at most three: from a longer value the field keeps its
@@ -125,14 +127,15 @@ with the glossary's build *progress*). In addition:
    message. An empty prefix value gives an empty prefix (the second exception of claim 1), and
    an empty suffix value is ignored and keeps the value in force. The absent-key defaults are in
    the Import mapping.
-   - Backing: `measurable` (scenario C3 part a, for what the listing flag does to the two
-     displays); `unmeasured` for the absence of any effect on game state, for the listing flag as
+   - Backing: `measurable` (S-0412 scenario K11 part a for explicit-country filtering; scenario
+     C3 part a for what the listing flag does to the two displays); `unmeasured` for the absence of any effect on game state, for the listing flag as
      for the other four (a claim about the absence of any effect; each topic that could use them
      would state it; a comparison of game state between two runs of the original needs the same
      seed, which the measurement setup cannot set), and for the cutting of the prefix, the suffix
      and the parent-country field and the empty-prefix rule (a field with no observable effect
      cannot show what was kept)
-   - Confidence: medium for what the listing flag does to the displays; low that the listing flag
+   - Confidence: high for the listing flag's explicit-country filtering; medium for what it does
+     to the displays; low that the listing flag
      and the other four have no effect on game state; medium for the cutting of the prefix and
      suffix, the 24-character cut and the empty-prefix rule
 
@@ -344,7 +347,9 @@ unit), per run.
 
 **C3: listing flag and colour field.**
 - *Part a.* Runs: 2, for one human and one computer player of different countries. Run 1
-  (baseline): the listing flag of the computer's country on. Run 2: off. The seed differs between
+  (baseline): the listing flag of the computer's country on. Run 2: a named test map override
+  turns the flag off when the map loads. Keep the flag on in the base rules in both runs, so
+  the country can be chosen explicitly before loading (S-0412 claim 15). The seed differs between
   runs and is not fixed; nothing below depends on a random draw, because only the two displays
   are compared. Observable: whether the computer's house appears in the in-game player list, and
   whether it appears in the score screen, at the end of a game that the human ends by resigning
@@ -367,10 +372,17 @@ unit), per run.
   any colour other than the colour at position 2 (in particular the colour at position 1 or at
   position 10).
 
+## Cross-spec hand-off
+
+S-0412 claim 15 owns the standard lobby's explicit-country filtering; claim 4 here now includes
+that use of the listing flag. Joint sign-off must verify these claims against the exact versions
+handed off together. The original random-country rule still ignores the flag (S-0412 claim 6).
+
 ## Open questions
 
 - Whether any rule of play uses the parent-country field, the name prefix or suffix, or the
-  smart-computer flag, or uses the multiplayer listing flag beyond the two displays (claim 4).
+  smart-computer flag, or uses the multiplayer listing flag beyond explicit-country filtering
+  and the two displays (claim 4).
 - Whether every aircraft locomotion uses the speed rule of claim 3.
 - Whether any source gives an aircraft a speed multiplier other than 1.0 (claim 3); if one exists,
   the order of the two factors becomes measurable.

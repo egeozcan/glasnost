@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -42,13 +42,15 @@ Retain S-0207 claim 20 a and e with S-0209 claims 1 and 5 for Q-0240's vehicle g
 reservation, remembered-point clearing, bridge placement marks and shared
 `quirks.teleport_vehicle_ground_reservation`. Retain S-0208 claim 19's landing choices
 and S-0215 claim 10's jump-time target-loss and reversion contract with those companions.
-The approved index already records revision 25; at hand-off update it to this revision 26.
-The earlier requested index update from 24 to 25 has already been applied.
+Retain S-0207 claim 20 e and S-0209 claim 1's aircraft reservation lifecycle and shared
+`quirks.teleport_aircraft_ground_reservation` alongside the vehicle contract above.
+The approved index already records revision 26; at hand-off update it to this revision 27.
+The requested revision 25 to 26 update has already been applied.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
-and absence of additional search draws. S-0215 claim 38 establishes the upstream central-choice
-preference and radius-then-direction draws. Centre geometry, base-centre maintenance and
-no-base usable-area correction remain open; keep the request open until the complementary
-answer is complete and approved.
+and absence of additional search draws. S-0215 claim 38 and F11–F12 supply the upstream
+centre geometry, base-record refresh, no-base usable-area correction and radius-then-direction
+draws. Table T5 includes that refresh's separate nearby search. Keep the request open until
+these complementary revisions are approved together.
 
 ### Evidence scope
 
@@ -1375,7 +1377,7 @@ Terms specific to this spec:
       distinction is our engine's scope rule from the glossary, not an additional oracle claim
     - Confidence: medium for driving, ship and hovering. Low for the remaining locomotors in row 3
 
-23a. **House-selected destination after give-up (Q-0238, partial).** For both the neutral
+23a. **House-selected destination after give-up (Q-0238).** For both the neutral
     and special houses, row 2 assigns the house-selected destination on the same tick as
     the failed search, not on a later processing of *area guard*. This failure reaction
     queues only *area guard*: it neither queues *move* nor forces a behaviour to start.
@@ -1392,13 +1394,15 @@ Terms specific to this spec:
     position. One ranged radius draw precedes one raw scenario-stream direction draw,
     even when the house has no base or start cell. That claim defines the radius bound
     and direction bits; rejection can make the ranged draw consume several raw values
-    (S-0202). The final nearby-cell search takes no additional draw. Centre geometry,
-    base-centre maintenance and correction into the usable area remain open in S-0215.
-    No particular cell is asserted here.
+    (S-0202). The final nearby-cell search takes no additional draw. S-0215 claim 38
+    and F11–F12 define centre geometry, base-record maintenance and correction into
+    the usable area, including the no-base case. The base-record refresh uses its own
+    nearby search in T5; it is distinct from this final search and also takes no draw.
     Player-house units do not take either choice under Departure D5.
     - Backing: `measurable` (P26 for timing, queue, final-search parameters and presence
       of scenario draws; S-0215 claim 38 and B37 for centre preference and radius-then-direction
-      draws; claim 25 and P16 run (u) for the nearby search's no-draw rule).
+      draws and F11–F12's geometry and record maintenance; claim 25 and P16 run (u)
+      for the nearby search's no-draw rule).
       The player-house exclusion is the glossary's scope rule
     - Confidence: high for same-tick assignment, the queue and presence of a ranged draw.
       Medium for the final-search parameters
@@ -1502,7 +1506,8 @@ Terms specific to this spec:
     | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
     | Rally point (S-0213 claim 20) | the clicked cell | *foot*; *amphibious* for a naval factory; *winged* for an aircraft factory | *normal*; *amphibious-crusher* for a naval factory; *fly* for an aircraft factory | that of the building's own cell for that zone | the centre is a bridge cell | no | no | none |
-    | House-selected destination after give-up (claim 23a), original non-human-owner rule retained for neutral and special houses | the centre supplied by S-0215 claim 38's house choice; its geometry remains open | *track* | *normal* | that of the unit's ground cell for *normal* | never | no | no | none |
+    | House base-record refresh (S-0215 claim 38) | the weighted mean cell of S-0215 F12 | *foot* | *normal* | none | always | no | no | none |
+    | House-selected destination after give-up (claim 23a), original non-human-owner rule retained for neutral and special houses | the corrected centre supplied by S-0215 claim 38 and F11–F12 | *track* | *normal* | that of the unit's ground cell for *normal* | never | no | no | none |
     | Aircraft factory edge entry without a rally point (S-0417 claim 14) | the cell of the factory's reference point | the aircraft's, *winged* counted as *track* | the aircraft's own | that of the centre cell for that zone, read for its deck in deck mode | the aircraft is on a bridge deck | no | no | none |
     | Harvester queueing (S-0402 claim 9) | the queueing cell of S-0402 | *wheel* | *normal* | none | never | no | no | the refinery's top-left cell |
     | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
@@ -1591,7 +1596,9 @@ Terms specific to this spec:
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
     processing tick for idle harvester step-off (S-0402 claim 13), release tick for
     aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
-    tick for the house-selected destination after give-up (claim 23a).
+    tick for the house-selected destination after give-up (claim 23a). The base-record
+    refresh uses the tick of its building entry, removal or owner-change event (S-0215
+    claim 38), not a subsequent path-failure tick.
 
     S-0307 claim 16 owns qualification of obstructed approach positions before failure, including
     its two alternative coarse-estimate tests; these are not nearby-cell-search qualification
@@ -1602,7 +1609,8 @@ Terms specific to this spec:
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
       parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
-      final nearby search after give-up (P26), and for both free-unit searches and the no-overlay
+      final nearby search after give-up (P26), for base-record-refresh parameters
+      (S-0215 B37, with P26's refresh comparison), and for both free-unit searches and the no-overlay
       condition (S-0402 scenario H13 parts b and c), for the ordinary approach-failure parameters
       and centre after candidate trials, including close-range failure (S-0307 scenarios RG12,
       RG17 and RG23 f), for the infantry teleport fallback parameters (S-0208 scenario W11), for the teleporting
@@ -1688,29 +1696,41 @@ Terms specific to this spec:
       then comes from the cell's other objects and its occupancy record (S-0209 claim 5, part 5e):
       for example *moving blocker* through the cell's vehicle-present flag or through an allied
       infantry house, and *clear* when nothing gives a value.
-    - An allied building that is not a gate gives *blocked*, unless the building is the target the
-      vehicle's behaviour aims to reach (those exemptions belong to the behaviour specs).
-    - A wall section in the cell gives, for a vehicle that does not crush it, *blocked* when the
-      vehicle has no weapon or its primary weapon cannot damage walls (the combat specs say which
-      weapons can). A vehicle whose primary weapon can damage walls gets *friendly obstacle* for an
-      allied wall section and *enemy obstacle* for an enemy one. A vehicle crushes a wall section
+    - An allied building not counted as moving gives *blocked* only when no earlier
+      exception in S-0209 claim 5's occupant table applies. Those exceptions are not
+      all mission targets: they include buildings invisible in play, non-blocking repair
+      or bunker cells, the bib edge and inactive firestorm walls. Gates, contact,
+      absorbing and grinding buildings and behaviour relations follow that table's
+      rows VP3 and VP5 to VP18, with their stated conditions and precedence.
+    - For a wall section the vehicle does not crush, S-0209 rows VO4 to VO6 give
+      *blocked* when the vehicle has no primary weapon, or its primary weapon's warhead
+      can neither damage walls nor damage wood while the overlay armour is wood.
+      Either wall-damaging ability or that wood case instead gives *friendly obstacle*
+      for an allied wall section and *enemy obstacle* for an enemy one. A vehicle crushes a wall section
       when the wall's overlay type is crushable and the vehicle is a crusher (by its type's crusher
       flag or by the crusher veterancy ability, S-0210 claim 1), or when its movement zone is
       *crusher-all*, whatever the overlay type. It then gets *friendly obstacle* for an allied wall
       section, and an enemy wall section adds no outcome.
-    - When the objects give different outcomes, the most severe counts, in S-0209's order. An object
-      giving *blocked* therefore makes the outcome *blocked*, whatever the others give. Terrain checks
-      (height steps, land multipliers, the usable area) come from claim 10, S-0211 and S-0209.
+    - Occupant overrides follow S-0209 claim 5, using the listing order of its claim 13.
+      A *blocked* overlay or occupant before the first overriding occupant defeats that
+      override. Otherwise the override decides: less severe earlier values and all later
+      occupants, even a later *blocked*, do not change it under the default
+      `quirks.occupancy_override_hides_later_blockers`. Its alternative is owned by S-0209.
+      With no override, take the most severe contents value in S-0209's order, then
+      apply that claim's occupancy-record table. Terrain checks (height steps, land
+      multipliers, the usable area) come from claim 10, S-0211 and S-0209; an occupant
+      override does not cancel a prior terrain refusal.
     - Backing: `measurable` (scenario P7 runs 1 to 4, the held blocker of P6, P14 runs 1 to 4 for a
       unit ahead that faces the same way, P14 run 5 for the close case itself, and P9's train
       refresh run for an allied wall section and a vehicle without a weapon). For moving allied
       units without an outcome of their own, S-0209 claim 5 (its scenario C20 (b) for infantry); the
       split between moving units with and without an outcome of their own has the backing of S-0209
-      rows VP22 and VP23
-    - Confidence: medium for the stationary-vehicle and building rows, the wall row for a vehicle
-      without a weapon, the close case, the rows for moving allied units and the "most severe"
-      rule. Low for the other parts of the
-      wall row (which weapons count, the crusher case) and for the behaviour-target exemptions
+      rows VP22 and VP23. Building exceptions, overrides and the wood-wall case use
+      S-0209's C23, C24, C18 and C20 (j4), respectively
+    - Confidence: medium for the stationary-vehicle row, close case, moving allied units,
+      override precedence and contents severity. The building exceptions retain S-0209's
+      row-specific low or medium confidence; medium for the wood-wall case. Low for
+      the remaining crusher and weapon distinctions not isolated by this spec's scenarios
 
 ## Formulas
 
@@ -3154,6 +3174,18 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   if recorded occupancy establishes that no candidate qualifies through the full radius.
   Otherwise record that branch as untested. No upstream centre-choice claim is confirmed
   by this conditional final-search test.
+- Base-record-refresh comparison (claim 25, T5): use S-0215 B37's owned-building
+  variants with the same stock-data settings and read-only recorder. For each recorded
+  entry, removal or owner-change event, compute the mean cell using S-0215 F12 and
+  predict the new base-start cell with T5 at that event's tick. Record the resulting
+  cell and scenario-stream state around the refresh, separately from a later path
+  failure. Expect the *foot*, *normal*, unrestricted-reach-region search in deck mode,
+  with no height, no-overlay or burrowing condition, bridges allowed and no reference
+  cell, taking no draw. A qualifying candidate at another height distinguishes this
+  search from height-constrained callers; a candidate outside a supplied region
+  distinguishes it from the final give-up search. A different result from the T5
+  prediction or an isolated refresh draw falsifies the rule. Obtain one qualifying
+  event of each kind; unrelated draws or missing contrasts leave that branch untested.
 
 ## Open questions
 
@@ -3193,13 +3225,12 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
   applies them in both.
-- Q-0238 remains partially open. S-0215 claim 38 establishes the central-choice
-  preference, zero-origin fallback and radius-then-direction draw sequence. The exact
-  centre geometry, base-centre maintenance and no-base usable-area correction still
-  need resolution and complementary approval. Claim 23a fixes final nearby-search
-  parameters, same-tick assignment and queue, and no additional search draw, but does
-  not determine a final destination without the centre. Keep the request open until
-  the complete complementary answer is approved.
+- Q-0238 remains open for coordinated approval, not for an unspecified centre.
+  S-0215 claim 38 and F11–F12 define the centre, record maintenance, no-base correction
+  and radius-then-direction draws. Claim 23a and T5 define the final search, same-tick
+  assignment, queue and no additional search draw, and T5 also supplies the separate
+  base-record-refresh search. Keep the request open until both revisions are approved
+  together.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
 

@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,8 +20,10 @@ Sound data, selection and order responses, event sounds, announcements, mixing l
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
 Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Revision 3 supplies literal
-import bindings and qualifies full-level screen requests. Revision 2 already answered Q-0260
+is claim 34; the byte formats of those files are outside this spec. Revision 4 confirms repeated
+route-refusal cues, literal announcement bindings and distinct production-refusal feedback,
+and cites S-0005 claim 10a for independent bank-file precedence. Revision 3 supplied literal
+import bindings and qualified full-level screen requests. Revision 2 already answered Q-0260
 in claims 1 to 15 except complete delayed playback draws; Q-0261's queue, voice-set and sample
 rules in claims 26, 27 and 34; Q-0264's normal report, common death and building fallback rules
 in claims 20 to 22 and 37; and Q-0265's selection and ordinary order rules in claims 16 to 18
@@ -422,11 +424,14 @@ normalisation N of its Formulas F3. In addition:
     - *busy production line* (S-0411 claim 12: a building or defence click while that line already
       holds an item): only the "unable to comply" announcement, no interface sound.
     - *refused placement* (S-0411 claim 10, S-0406): only the "cannot deploy here" announcement, no
-      interface sound. It is raised both by the check made at the click and when a place order of
-      the local player's house fails as it is applied.
+      interface sound. It is requested both by the check made at the click and when a place order of
+      the local player's house fails its placement test as it is applied. An order ignored because
+      no eligible factory remains is silent (S-0406 claim 1), not a refused-placement cue.
+      Announcement playback remains subject to claim 27.
     - *production request refused as it is applied* (S-0404): when the house's queue count has
       reached the imported queue limit, or the type has reached its build limit, the game-wide
-      refusal sound plays, for the local player's house only.
+      refusal sound plays, for the local player's house only. This is neither the busy-line
+      announcement nor the refused-placement announcement above.
     - *refused route-mode click* (S-0213 claim 16): the game-wide refusal sound together with
       the message. Notices before the next tick completes share one message-and-sound cue.
       Completing a tick permits a new cue. A refusal seconds later in the same running game
@@ -594,7 +599,8 @@ normalisation N of its Formulas F3. In addition:
 
 34. **Where samples come from.** Every sample a sound entry names is looked up, ignoring case, in
     one sample bank: an index file and a data file (Import mapping), found through the ordinary
-    file lookup of S-0005, so either may come from a mounted archive or a loose file. Sound entries
+    file lookup of S-0005 claim 10a. The two files resolve independently: a loose index can
+    accompany archived data, and the files need not come from the same archive. Sound entries
     never play separate sample files. Of the installation's two audio archives the expansion's is
     mounted when present, else the original's (S-0005 owns the mounting). Announcements work the
     other way: each is a separate file named by claim 26's eight-character name plus the extension
@@ -930,7 +936,8 @@ Stock data spells some keys `volume`, `Vshift`, `Fshift` and `MinVol`; under cla
 ignored.
 
 Sample bank (claim 34): the index file `AUDIO.IDX` and the data file `AUDIO.BAG`, each found through
-the file lookup of S-0005 and matched ignoring case; their public byte layout is outside this spec.
+the independent file lookup of S-0005 claim 10a and matched ignoring case; their public byte
+layout is outside this spec.
 Announcement samples are separate files, the eight-character voice-set sample name
 specified below plus `.wav`, not the announcement entry's name.
 
@@ -1322,12 +1329,25 @@ level and centre pan. Packing a building up omits the sell sound but retains the
 **F5. Interface sounds.** Exercise each production-feedback click of S-0411 claim 12 (start,
 queue, resume, hold, cancel) and the busy-line refusal (a building click while a building is in
 production), then a refused placement click, then a production request when the queue is full.
+Space actions until all earlier announcements have finished and their waiting queues are empty.
+Use distinguishable named test samples for the build-click and refusal entries and the two
+refusal announcements; capture requested entries as well as playback with a proposed read-only
+recorder. A suppressed announcement is not evidence of an absent request.
 *Expected:* the build click entry plus the matching announcement for the five production clicks,
 only the "unable to comply" announcement for the busy line; only "cannot deploy here" for the
 refused placement; the refusal entry for the full queue. Repeat as each side.
 *Falsified if:* a listed cue is absent, an interface sound accompanies the busy-line or placement
 refusal, or a cue depends on side. A click on an item at its build limit: expect no click sound
-and no announcement. Actions that S-0411 leaves unresolved are recorded, not assigned a prediction.
+and no announcement. Repeat placement with an order that passes the click check but fails its
+cell test at application, using S-0406 PL1's controlled failure setup and order recorder.
+Expect the same placement announcement request, no interface-sound request and a retained
+ready item. A different entry, no announcement request, or a game-wide refusal-sound request
+falsifies the cue rule. Use S-0406 claim 1's no-eligible-factory control separately: expect no
+sound or announcement request, not the placement-refusal cue. Void the cell-failure run if
+no order is issued or it is ignored for lack of a factory. For full-queue and build-limit
+refusal at application, use S-0404 P3(k)'s issue/application recording and void rules.
+Do not substitute an at-limit click that issues no order.
+Actions that S-0411 leaves unresolved are recorded, not assigned a prediction.
 
 **F6. Lightning sound.** Fire the weather superweapon; record the scenario stream per tick.
 *Expected:* for each non-repeated strike point with a nonempty sound list, one raw value after
@@ -1487,6 +1507,12 @@ busy-building refusal and refused placement use distinct announcements and neith
 the game-wide refusal sound. Its current draft has removed the stale correction assertion
 and clarified the corresponding table and scenario wording. Hand off that corrected version,
 not the approved copy's stale assertion. No cue is added for its unresolved actions.
+The approved S-0406 still contradicts claim 24: its claims 1 and 10, State and ordering,
+and refusal measurements describe the game-wide refusal sound for failed placement.
+S-0406's current draft corrects these to the cannot-deploy-here announcement request only,
+without the game-wide refusal sound, including click-time and application-time failure.
+Hand off that correction jointly with this revision; do not retain the approved wording.
+An ignored place order without an eligible factory remains silent.
 Production/payment, offer membership/capacity and cancellation rules remain owned by
 S-0404, S-0407, S-0004 and S-0411, not by this audio revision.
 
@@ -1508,15 +1534,23 @@ Other existing hand-off checks:
   unresolved.
 - S-0213 claim 16 and O8 already correct the earlier once-per-game route cue assertion:
   a completed tick permits another message-and-sound cue. Claim 24 and F8 here now agree.
-  No once-per-game quirk remains. Replace S-0213's stale statement that S-0701 still needs
-  that correction with a joint-confirmation note at hand-off.
+  No once-per-game quirk remains. S-0213 revision 17's hand-off note already confirms
+  that agreement; confirm both current passages at sign-off.
+- S-0406: replace failed-placement refusal-sound wording in claims 1 and 10, State and
+  ordering and the associated scenarios with the cannot-deploy-here announcement request
+  only, with no game-wide refusal sound. Its current draft already makes this correction.
+  Confirm that corrected version at joint hand-off. Keep no-eligible-factory orders silent
+  and distinguish announcement requests from queue-dependent playback (claim 27).
 - S-0404: a request refused as it is applied (full queue or build limit) plays the refusal sound
   for the local player's house (claim 24).
 - S-0414 already agrees on post-defeat alliance-formed and superweapon announcement
   muting, and V20 supplies its end-delay test. Confirm claim 36's defeat, player-defeated
-  and victory bindings at hand-off; muting does not end continued observation.
-- S-0005: confirm the bank-file lookup and expansion audio archive preference against
-  claim 34. The public bank formats need no new spec.
+  and victory bindings at hand-off; muting does not end continued observation. Replace
+  S-0414's stale request to restore withheld bindings with confirmation that this Import
+  mapping already supplies them.
+- S-0005 claim 10a and M25: confirm independent bank-file precedence against claim 34
+  and its M25(b) backing. Claim 10 owns expansion audio archive preference. The public
+  bank formats need no new spec.
 - S-0416: half-volume credit ticks are request level 8192 (claim 35).
 - S-0314 and S-0410: point repeat-suppression questions to F7, retaining the stated unmeasured
   kinds and unresolved zoom duration rather than treating all lifetimes as measured.

@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -33,12 +33,15 @@ states and timing, not a reproduction of the original shell. Power values and me
 meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
 
-**Paired revisions.** S-0404 revision 10 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 11 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
-release with a refund at the place order's application boundary (claims 7 and 13).
-S-0407 revision 11 distinguishes cancellation orders issued
-at the recheck from their application at the tick's end, exempt held-item resume from the
-issue-time limit test, and retain the application-time limit test on queued starts (claims
+release with a refund at the place order's application boundary, without retry (its claims 7
+and 13). No eligible releasing factory instead leaves the item done. Claim 14 here covers
+production continuing during a sale or queued sale; claim 15 owns full-tab suppression and
+later admission. S-0404 relies on those behaviours in its claims 3, 7–9 and 11.
+S-0407 revision 12 distinguishes cancellation orders issued
+at the recheck from their application at the tick's end, exempts held-item resume from the
+issue-time limit test, and retains the application-time limit test on queued starts (claims
 13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
 icon order used by claim 13 below. Its T14 run 7 distinguishes the permanent-removal refund
 from the later sidebar cancellation boundary. The former per-tick-removal correction requests are resolved.
@@ -362,7 +365,7 @@ last recheck). In addition:
     The busy-building-line refusal requests the unable-to-comply announcement, without a
     build-click or game-wide refusal sound. Refused building placement instead requests the
     cannot-deploy-here announcement, without the game-wide refusal sound. These two refusal
-    cues are not the same entry. S-0701 claim 24 and F5 now agree with these two actions.
+    cues are not the same entry (S-0701 claim 24 and F5).
     This spec fixes a cue only for:
     - a left click whose order starts or queues an item, resumes one or cancels one (claim 4, rows 1,
       3 and 5 and the last row, each only when its order takes effect: not a build order that is
@@ -1052,24 +1055,24 @@ the time the script sent a button event, dates a click.
    The lit artwork is the implementer's design.
 8. Q-0120 is partly resolved by S-0404 claims 7, 13 and 15: busy or failed release
    cancels with a refund without retry, and claim 15 gives ordinary aircraft pad positions.
-   The remaining unloading and post-exit movement, take-off, nearby destination,
-   exact infantry exit-entry test, contact-count and placement/search-draw questions
-   belong to S-0417's follow-up. Specialised docking combinations remain outside the
+   S-0417 claim 14 supplies contact-place count, infantry exit-candidate acceptance and
+   nearby destinations for edge-entering aircraft. Remaining no-rally infantry walk-out,
+   take-off, specialised post-contact movement and initial-placement draw questions
+   belong to S-0417's open questions. Specialised docking combinations remain outside the
    verified pad-position rule. This spec adds no rules for those outcomes and does not
    claim to answer the whole request. Q-0196's four questions are answered by claim 15.
 
 ## Changes for other specs
 
-- S-0406 claim 1 still calls placement failure a refusal sound. It must agree with
-  claim 10 and S-0701 claim 24: cannot-deploy-here announcement only, no interface
-  refusal sound. Its Q-0282 message answer is separate from sidebar labels.
-- S-0007 should point from icon choice to claim 16 for frame and content placement.
-  S-0103 should supply Q-0275's dedicated icon-palette loading/conversion and
-  missing-file behaviour; this spec fixes the draw's palette selection, not that
-  missing-palette outcome.
-- S-0408 and S-0213 own the remaining Q-0282 sell/repair and route-mode notices,
-  including their string identifiers and shared message-list capacity, duration
-  and pause behaviour where applicable. Those are not sidebar expiry rules.
+- S-0404: refresh its paired Summary reference from S-0411 revision 13 to revision 14
+  at joint hand-off. Its application-boundary release/refund, sale and capacity contracts
+  already agree; no behavioural replacement is required.
+
+Earlier correction requests are resolved by the current companion drafts: S-0406 claims 1
+and 20 give placement's appropriate announcement and text/no-text feedback; S-0007 claims
+22 and 25 point to claim 16 for icon content; S-0103 claim 13 owns dedicated icon-palette
+loading/conversion and missing-file behaviour. S-0408 claim 18 and S-0213 claim 25 own
+sell/repair text and route notices respectively, separate from sidebar label lifetimes.
 
 ## Questions for the project lead
 

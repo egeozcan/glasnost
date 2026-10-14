@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -38,7 +38,9 @@ S-0109 claims 14 and 25. Subsequent particle updates remain outside this hand-of
 Confirm S-0202 claim 15's crater-removal wording with S-0109 claim 14 and S-0401 claim 3:
 the request takes 6 bales, so a stage-6 cell becomes stage 0 rather than empty.
 Confirm the S-0201 pointers after I4, including its win-action fixture assumption.
-Those pointers add no campaign rules. Check the other companion revisions together too.
+Those pointers add no campaign rules. Check claim 18's arrival-timing pointers with S-0207 claim 22/D24 for driving and
+own-locomotor teleporting, and S-0208 claim 22/W14 for ordinary walking.
+Check the other companion revisions together too.
 
 ## Terms
 
@@ -389,8 +391,14 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     - Confidence: high (medium for the second firing, which claim 35 covers)
 
 18. **Entered-by.** A tag is raised with the entered-by code, with the arriving object as causing
-    object, when a unit arrives in a cell that carries the tag (the moment of arrival belongs to the
-    movement specs, a pointer only). In a cell that carries a high bridge, only units on the bridge
+    object, when a unit arrives in a cell that carries the tag. S-0207 claim 22 owns the
+    arrival timing for driving vehicles and own-locomotor teleports of any object kind.
+    S-0208 claim 22 owns ordinary walking infantry arrival timing. These are movement
+    rules, not a requirement to stop in the cell: a completed driving track target or walking
+    target can raise the tag while the unit continues its journey. Teleport arrival is in
+    the jump tick after landing placement, not at reservation or phasing-in completion.
+    The cited claims own intermediate-cell exceptions and ordering against other arrival
+    effects. In a cell that carries a high bridge, only units on the bridge
     deck raise it. The tag of a building is raised with this code, with the infantry unit as causing
     object, when an infantry unit enters the building to take it over (capture rules: no spec yet, a
     pointer only). A few other ways of entering an object also raise the entered object's tag with
@@ -407,7 +415,8 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     tag the raising carrier loses the tag when the trigger fires or is satisfied (State and
     ordering).
     - Backing: `measurable` (scenario T3, including variants B and C for the bridge and capture)
-     for cell arrival, capture, country matching and the triggering house. Other entry methods
+     for cell arrival, capture, country matching and the triggering house. Movement timing
+     inherits S-0207 claim 22/D24 and S-0208 claim 22/W14's backing and confidence. Other entry methods
      are pointers only, to the specs of those abilities
     - Confidence: medium (low for the bridge rule, the capture case and the other entries)
 
@@ -1226,7 +1235,9 @@ tick 0 and the fourth fires in tick 30 or 31 after the enable action. *Falsified
 run, the position does not follow the setting, or variant B or C differs. *Inconclusive if* in
 variant C the lobby shows a computer-difficulty control that replaces the value 3.
 
-**Scenario T3 (claims 18, 23).** *Setup:* a skirmish of one human player and one computer player
+**Scenario T3 (claims 18, 23).** Arrival-timing discrimination uses S-0207 D24
+(driving and own-locomotor teleporting) and S-0208 W14 (ordinary walking), alongside
+this scenario's event eligibility and house matching. *Setup:* a skirmish of one human player and one computer player
 who both play the same country C, on a map with a cell carrying a one-time cell tag whose trigger has
 an entered-by event and a count action. The cell is walled off from the computer player's start so
 that none of its units can reach it (the human's unit is pre-placed next to it). Variants of the

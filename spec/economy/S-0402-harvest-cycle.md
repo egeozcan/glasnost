@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -649,6 +649,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       condition applies only to a human-controlled owner; in our engine it applies to every player
       house, AI houses included (glossary, *AI house*), and never to the neutral and special houses.
 
+    For this condition, a produced building retains its integer start price through completion,
+    placement and build-up. A later gain or loss of a cost-bonus building does not replace that
+    price with the current price. This record is required regardless of the cancellation-refund
+    setting in S-0404. The comparison uses the type's adjusted cost, not the current production
+    price or the amount paid so far.
+
     A building that a deploying vehicle creates goes through its build-up and gets its free unit at
     the grand opening, with no start price.
 
@@ -677,7 +683,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     take none, except the draws that putting a unit of that type on the map takes in general (none
     for a harvester). The building's other grand-opening effects (its slot animations, S-0108 claim
     11, and any aircraft its type comes with) are other specs'.
-    - Backing: `measurable` (scenario H13, parts a to f)
+    - Backing: `measurable` (scenario H13, parts a to g)
     - Confidence: high for the timing at the grand opening, for no unit after a capture and for the
       first place and its facing; medium for the two searches, the refund, the start of *harvest*
       and the start-price condition; medium for the pre-placed building (S-0009's)
@@ -1374,9 +1380,21 @@ is wrong). *Runs:* 3.
   0 and a building cost factor of 1, so the refinery's price at its production start is its
   adjusted cost *C* (S-0404 claim 2, with *P*ₑ = 0; *C* above 0): no harvester appears. With the
   vehicle cost factor at 1 the price is *C* + *P*ₑ and it appears.
+- *Part g (retained start price):* use named map overrides to give a capturable cost-bonus
+  building factors for which the refinery's price without that building is above its positive
+  adjusted cost *C*, and its price with it is above 0 but at most *C* (S-0404 claim 2).
+  Run 1: start refinery production without the bonus, then capture the bonus building before
+  completion. Run 2: start with the bonus, then sell the bonus building before completion.
+  Repeat both with the gain or loss after completion but before placement, and during build-up.
+  Leave the free unit's exit area clear. Record the price at production start, the later current
+  price, the bonus ownership change and the grand-opening tick. Expected: the free unit appears
+  in every run 1 and in no run 2, despite the opposite prediction from the later current price.
+  The default cancellation-refund setting is used; on our engine repeat with that setting
+  changed and expect the same free-unit outcomes. No cancellation is ordered in these runs.
 - *Falsified if:* another tick, cell or facing; a harvester in part d, e or the first run of f; no
-  refund or another amount in part d.
-- *Runs:* 1 for each part and run.
+  refund or another amount in part d; in part g, the later price rather than the start price
+  determines whether the free unit appears.
+- *Runs:* 1 for each part and run, including each timing variant of g.
 
 **H14. Track-completion route to unloading (claim 10; Q-0197).**
 - *Setup:* H10's human house and ordinary driving harvester, game-speed index 2 at 800 × 600,
