@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -184,7 +184,18 @@ Terms).
 
 3. **Order of application within a tick.** For one house, non-behaviour orders have issue-order precedence among themselves, and behaviour orders have issue-order precedence among themselves. When a non-behaviour order and a behaviour order conflict for the same actor in one tick, the resulting state is the one produced by the behaviour order, regardless of which was issued later. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
 
-   If orders from different houses in one tick affect the same state, the resulting state in our engine is the one given by resolving the houses in their creation order (S-0009 owns that order). In the original this order between houses has no consequence that we know of, because each house's orders act only on its own objects and on its own house state; our engine fixes the outcome for determinism, not as a claim about the original.
+   If orders from different houses in one tick affect the same state, the resulting state in our engine is the one given by resolving the houses in their creation order (S-0009 owns that order). This includes assignment of scenario-stream values to production starts: an earlier house's order-caused starts receive their values before a later house's. This between-house order-boundary extension is a deterministic design rule, not a finding about the original's computer production.
+   - **Production-start draw assignment.** S-0404 claim 11 owns the creation draw at each
+     successful start. A start receives its value at the action that causes it, in order of
+     application, not according to the line's creation or payment priority. Thus automatic
+     cancellations that start replacements assign values in S-0411 claim 13's tab/icon and
+     per-type cancellation order. A replacement that starts and is cancelled by a later order
+     at the same boundary has already taken its creation draw; removing a queued type before
+     it starts takes none. Intervening actions' draws remain between starts, with no values
+     reserved ahead of the causing action. A turn-pass start receives its draw before
+     order-caused starts at that tick's end (S-0203). In our engine, order-boundary starts
+     across houses follow house creation order and, within each house, production-order issue
+     order. The original's computer production is separate (S-0404 claim 12).
    - **Which houses' orders are applied.** In the original only the orders of human-controlled
      houses are applied, and an order issued in the name of a computer-controlled house is dropped
      silently. The original's computer houses never issue orders: its computer player changes its
@@ -202,11 +213,13 @@ Terms).
      a behaviour that a human house's units would not get.
    - Backing: the grouping is `unmeasured`: no input of the original issues a behaviour order and
      a later order of another kind for the same actor in one tick (claim 1), so no scenario can
-     observe it. The drop of a computer house's orders is `measurable` (Scenario O11). The order
-     between houses and the rules for AI houses are design rules of our engine, not claims about
-     the original, so they need no backing.
+     observe it. The drop of a computer house's orders is `measurable` (Scenario O11).
+     Production-start assignment is `measurable` (S-0404 P11 B/C and S-0411 S9, referenced
+     in Measurement scenarios). Between-house order-boundary assignment is `unmeasured`:
+     it is a design extension, not an oracle outcome. The other rules for AI houses are also
+     design rules, not findings about the original.
    - Confidence: medium (the grouping is clear; that nothing else reorders orders of the same
-     house is not certain)
+     house is not certain); medium for production-start assignment, as in S-0404 claim 11
 
 4. **Target and destination checks.** Every check of table T1 is made when the order is applied,
    against the state at that tick boundary, and an order that fails a check of its kind has no
@@ -730,8 +743,8 @@ Terms).
     entry removed from a successfully loaded preferences file has no binding, rather than
     automatically regaining its supplied default. This applies to the six commands of table T2,
     not to the reserved Escape key of claim 23.
-    The three force gestures and entry into attack-move mode are owned by S-0214, not by
-    this table.
+    The three physical force gestures and entry into attack-move mode are owned by S-0214
+    claims 5 and 23, tested by its Scenario T17, not by this table.
     - Backing: `measurable` (Scenario O19, part a)
     - Confidence: high
 
@@ -745,6 +758,8 @@ Terms).
     original's fallback view controls, rather than four entries in table T2. S-0101 claims
     14 and 15 own displacement, simultaneous directions, scrolling limits and freeze behaviour.
     This claim does not specify options-dialog closing keys or modifier-assisted scrolling.
+    S-0214 claims 5 and 23 and Scenario T17 answer the physical force-gesture and
+    attack-move-entry part of Q-0286.
     - Backing: `measurable` (Scenario O19, parts b and c; S-0101 Scenario M7 for scrolling)
     - Confidence: high
 
@@ -934,6 +949,11 @@ unconditional get-up effect of a move behaviour. Scatter and route following use
 only when they actually assign a destination.
 
 **Ordering consequences.**
+- Production starts receive scenario-stream values at their causing actions, not in a
+  line-update draw batch. Cancellation order can therefore change both which replacements
+  exist briefly at the boundary and which values they receive (claim 3; S-0404 claim 11,
+  S-0411 claim 13). Turn-pass starts precede order-boundary starts; across houses at the
+  boundary, house creation order is our engine's design extension.
 - When two orders of the same kind for the same actor are issued in one tick, any state changed
   by both has the value specified by the later-issued order. When a behaviour order and a
   different-kind order affect the same actor in one tick, any state they both change has the
@@ -1612,15 +1632,22 @@ game's normal input only, as a player would, and never writes into the game.
   old copies falsifies the corresponding claim. An update not sampled at exact equality
   cannot test that equality boundary.
 
+**Production-start ordering (claim 3).** S-0404 P11 B/C supplies the setup, procedure,
+observables, expected assignment and falsifiers for same-boundary cancellation starts and
+turn-pass starts before order-boundary starts. S-0411 S9 tests cancellation-order consequences
+when a queued replacement starts and is cancelled at the same boundary, versus removal before
+it starts. These are proposed tests, not recorded results. The between-house order-boundary
+extension is a design rule and has no oracle measurement.
+
 ## Open questions
 
-- Q-0286: claims 22 and 23 answer this spec's default command bindings and options/view-key
-  identities (questions 1 and 3). The current S-0101 draft already answers ordinary arrow
-  scrolling in claims 14 and 15, Scenario M7, since the request was filed. S-0214 already
-  defines the force-fire plus force-select attack-move gesture and command-bar mode in
-  Terms and claim 5, but its physical modifier keys remain its question-2 contribution to
-  complete in the same hand-off. No owned part of Q-0286 remains open here. The keyboard
-  preferences file's full encoding and options-dialog closing shortcuts are outside this request.
+- Q-0286 is answered jointly: claims 22 and 23 here answer default command bindings and
+  options/view-key identities (questions 1 and 3); S-0101 claims 14 and 15 and Scenario M7
+  own ordinary arrow scrolling. S-0214 claims 5 and 23 and Scenario T17 answer question 2:
+  Alt force-move, Ctrl force-fire and Shift force-select, with Ctrl+Shift for the held
+  attack-move gesture or the command-bar button for one-click mode, not a dedicated
+  attack-move key. No part of this request remains open. The keyboard preferences file's
+  full encoding and options-dialog closing shortcuts are outside this request.
 
 - Q-0072: claim 21 answers the order-application contribution in full. S-0215 claim 37
   supplies the approach trigger, gating, renewal and building/deployed-infantry rules
@@ -1703,8 +1730,13 @@ off together at sign-off:
   `quirks.teleport_vehicle_ground_reservation` and same-tick search/landing consequences.
   These remain owned by those specs and introduce no new order-application effect here.
   Confirm that suite together at hand-off; claim 16's route timing already matches.
-- **Q-0286 joint answer:** S-0214 must supply question 2's physical force-gesture keys and
-  attack-move entry explanation, with backing, scenarios and import mapping. Existing role
-  definitions alone do not answer the physical-key question.
+- **Q-0286 joint answer already supplied:** confirm S-0214 claims 5 and 23, Scenario T17
+  and its Import mapping together with claims 22 and 23 here. The request's current
+  answered-by already lists S-0213 and S-0214; preserve both at hand-off.
+- **Production-start ordering already agrees:** S-0404 claim 11/P11 B/C, S-0411
+  claim 13/S9 and S-0202 claim 10 agree with claim 3 here: causing-action draw assignment,
+  cancellation-order consequences and turn-pass starts before order-boundary starts.
+  The between-house order-boundary extension remains a design rule, not an original
+  computer-production measurement. Confirm these passages together at hand-off.
 - **Check at sign-off:** S-0208, Terms and claim 11, define the scatter request's threat point, *forced*,
   *move anywhere* and *effectively forced* that claim 9 uses.
