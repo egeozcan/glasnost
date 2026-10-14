@@ -90,7 +90,7 @@ pub struct Session {
     icons: BTreeMap<TypeRef, IndexedImage>,
     /// Sprite ids of the registered icons.
     icon_ids: BTreeMap<TypeRef, u32>,
-    /// The icon palette's RGBA (interim, Q-0275).
+    /// The icon palette's RGBA (S-0103 claim 13).
     icon_palette: Option<[u8; 1024]>,
     pointer: Option<Point>,
     /// Edge momentum and its retained direction (S-0101 F9).
@@ -142,20 +142,25 @@ impl Session {
         )
         .await;
         let icons = read_icons(vfs, &loaded).await;
-        let icon_palette = loaded
+        // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
+        let icon_file = loaded
             .assets
-            .get(crate::mapview::combat::OVERLAY_PALETTE)
-            .and_then(|b| glasnost_fmt::pal::Palette6::parse(b).ok())
-            .map(|p| {
-                // spec: S-0103 claim 2 (a palette file's components through the load rule)
-                let pal = glasnost_render::palette::palette_from_file(
-                    &p,
-                    &glasnost_render::palette::PaletteQuirks::default(),
-                );
-                pal.to_rgba8()
-            });
+            .get(glasnost_render::palette::ICON_PALETTE_FILE)
+            .and_then(|b| glasnost_fmt::pal::Palette6::parse(b).ok());
+        let icon_missing = icon_file.is_none();
+        let icon_palette = Some(icon_rgba(&glasnost_render::palette::icon_palette_565(
+            icon_file.as_ref(),
+            &glasnost_render::palette::PaletteQuirks::default(),
+        )));
         let scene = std::mem::take(&mut loaded.built.scene);
         let mut problems = std::mem::take(&mut loaded.problems);
+        if icon_missing {
+            // spec: S-0103 claim 13 (our engine's departure: black icons and an importer warning naming the file)
+            problems.push(
+                "CAMEO.PAL: the sidebar icon palette cannot be read; icons are drawn black (S-0103 claim 13)"
+                    .into(),
+            );
+        }
         let Some(live) = loaded.live.as_mut() else {
             return Err(problems
                 .pop()
@@ -677,6 +682,17 @@ fn brackets(d: &mut DrawList, cx: i32, cy: i32, hw: i32, hh: i32) {
 /// Reads and decodes frame 0 of every buildable type's sidebar icon
 /// (S-0007 claims 22 and 25: the main icon; the alternate one needs
 /// infiltration, which no skirmish of M5b has).
+/// The icon palette's 5-6-5 pixels as the painter's RGBA (S-0103 claim 13:
+/// what a packed pixel shows; entry 0 is transparent through the sprite).
+fn icon_rgba(p: &[u16; 256]) -> [u8; 1024] {
+    let mut out = [0u8; 1024];
+    for (dst, &c) in out.as_chunks_mut::<4>().0.iter_mut().zip(p.iter()) {
+        let (r, g, b) = glasnost_render::compose::expand565(c);
+        *dst = [r, g, b, 255];
+    }
+    out
+}
+
 async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<TypeRef, IndexedImage> {
     let mut out = BTreeMap::new();
     let Some(rules) = loaded.rules.as_deref() else {

@@ -386,6 +386,48 @@ pub fn hicolor_555(c: Rgb8) -> u16 {
     (u16::from(c.r >> 3) << 10) | (u16::from(c.g >> 3) << 5) | u16::from(c.b >> 3)
 }
 
+/// The sidebar icon palette's fixed file (S-0103 Import mapping, claim 13).
+pub const ICON_PALETTE_FILE: &[u8] = b"CAMEO.PAL"; // spec: S-0103 Import mapping (fixed asset)
+
+/// Rows of the icon palette's untinted shade table (S-0103 Constants).
+pub const ICON_SHADE_ROWS: usize = 53; // spec: S-0103 Constants (icon shade count 53)
+
+/// The row an ordinary icon pixel shows (S-0103 claim 13: the middle row).
+pub const ICON_ROW: usize = 26; // spec: S-0103 claim 13, Constants (middle row 26)
+
+/// One component of the icon shade table at row `j` (S-0103 Formulas, "Icon
+/// shade table"): min(255, ⌊u·F_j / 65536⌋), F_j = ⌊131072·j / 52⌋.
+pub fn icon_shade_component(u: u8, j: usize) -> u8 {
+    // spec: S-0103 Formulas, "Icon shade table" (F_j = ⌊131072·j / 52⌋)
+    let f = 131_072 * j as u64 / 52;
+    // spec: S-0103 Formulas, "Icon shade table" (min(255, ⌊u·F_j / 65536⌋))
+    (u64::from(u) * f / 65_536).min(255) as u8
+}
+
+/// The icon palette as 5-6-5 pixels (S-0103 claim 13): each file
+/// component through claim 1's load rule, at the middle shade row (the
+/// converted colour exactly, with no subtraction of 1, no house colour, no
+/// battlefield light or tint), packed by the 16-bit step. Entry 0 is
+/// transparent; its packed value is meaningless. With no file (the
+/// original crashes; our engine's departure) every entry is black.
+pub fn icon_palette_565(file: Option<&Palette6>, quirks: &PaletteQuirks) -> [u16; 256] {
+    let Some(file) = file else {
+        // spec: S-0103 claim 13 (our engine's departure: an all-black icon palette)
+        return [0; 256];
+    };
+    let pal = palette_from_file(file, quirks);
+    let mut out = [0u16; 256];
+    for (dst, c) in out.iter_mut().zip(pal.colors.iter()) {
+        // spec: S-0103 claim 13 (the middle row reproduces the converted colour; claim 9's 16-bit step)
+        *dst = hicolor_565(Rgb8::new(
+            icon_shade_component(c.r, ICON_ROW),
+            icon_shade_component(c.g, ICON_ROW),
+            icon_shade_component(c.b, ICON_ROW),
+        ));
+    }
+    out
+}
+
 /// What is drawn, as far as the choice of palette goes (S-0103 claim 8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DrawnObject {
@@ -490,6 +532,31 @@ mod tests {
 
     fn rgb(t: [(u8, u8, u8); 16]) -> [Rgb8; 16] {
         t.map(|(r, g, b)| Rgb8::new(r, g, b))
+    }
+
+    /// spec: S-0103 claim 13, Formulas "Icon shade table" and scenario PL (the icon palette:
+    /// claim 1's ×4 with byte wrap, the middle row exactly, no subtraction of 1, no remap at
+    /// 16–31, the 16-bit step; a missing file gives black in our engine)
+    #[test]
+    fn icon_palette_conversion() {
+        let mut file = Palette6 {
+            colors: [[0; 3]; 256],
+        };
+        file.colors[5] = [1, 2, 3];
+        file.colors[20] = [63, 32, 16];
+        file.colors[200] = [64, 65, 100];
+        let p = icon_palette_565(Some(&file), &PaletteQuirks::default());
+        let split = |c: u16| (c >> 11, (c >> 5) & 0x3F, c & 0x1F);
+        assert_eq!(split(p[5]), (0, 2, 1));
+        assert_eq!(split(p[20]), (31, 32, 8));
+        assert_eq!(split(p[200]), (0, 1, 18));
+        // Row 26 reproduces the converted colour; row 52 doubles it, capped.
+        assert_eq!(icon_shade_component(252, ICON_ROW), 252);
+        assert_eq!(icon_shade_component(100, ICON_SHADE_ROWS - 1), 200);
+        assert_eq!(icon_shade_component(200, ICON_SHADE_ROWS - 1), 255);
+        assert_eq!(icon_shade_component(200, 0), 0);
+        // No file: all black.
+        assert!(icon_palette_565(None, &PaletteQuirks::default()).iter().all(|&c| c == 0));
     }
 
     /// spec: S-0103 claim 11 and Constants (lobby swatches: the slot's RGB reduced directly by the 16-bit step, no subtraction of 1)

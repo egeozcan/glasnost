@@ -448,7 +448,7 @@ Interim rules of the game client, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `session::read_icons`, `register_art` | an icon is frame 0 of its file through the overlay palette file of S-0111, index 0 transparent, its canvas centred in the slot and clipped; a darkened icon gets a translucent black veil; the alternate icon is unused | Q-0275 |
+| `session::read_icons`, `register_art` | an icon is frame 0 of its file, index 0 transparent, its canvas centred in the slot and clipped; a darkened icon gets a translucent black veil; the alternate icon is unused (the palette part is answered, see below; frame selection, placement and the darkening mask are S-0411 claim 16's and not yet brought over) | Q-0275 |
 | `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar, sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
 | `session` | the system pointer; no action cursors | Q-0277 |
 | `session::pointer_up`, `play::select_box` | a left drag of more than 4 px selects the local house's selectable mobile objects whose reference point is inside the box; Shift adds to the selection; an empty box clears it | Q-0278 |
@@ -463,7 +463,7 @@ Answered requests of the game client: Q-0279 by S-0101 claims 12 to 15 (`game::s
 
 Known limits:
 
-- Icons are drawn through the interim palette. Their indices decode to the right picture (`icon-indices.png`), but through that palette the colours come out as noise until Q-0275 is answered.
+- Icons are drawn through the icon palette of S-0103 claim 13 (`palette::icon_palette_565`: `CAMEO.PAL` through claim 1's conversion, the middle shade row, the 16-bit step; black with an importer warning when the file is missing, our engine's departure). The file is read with each game's files, not once at program start, so a side's archives that hold a different copy would change it between games (claim 13's session lifetime is not modelled).
 - With no radar building, the radar box says "No radar" (S-0410).
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
