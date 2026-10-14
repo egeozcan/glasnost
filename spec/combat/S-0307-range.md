@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1421,6 +1421,11 @@ current-weapon rule and bridge-mark question and approved revision 7 retains bot
 S-0212 claim 25 includes close-range approach failures while retaining its other parameters
 and exclusions; S-0215 claim 37 cites claims 15 to 24; S-0208 claims 3 and 21 own the initial
 choice's use and the ordinary walking outcome; the glossary defines the close-range property.
-No further changes to those specs are required by this revision. Sign-off should retain the
-failed-approach row's agreement with claim 17; the other S-0212 coordinated movement checks
-are owned by S-0207 and S-0208.
+These behavioural changes are already in the approved copies as well as the current drafts.
+Sign-off should retain the failed-approach row's agreement with claim 17, including close-range
+failures, and the shortcut's target-reference desired point and ground occupancy inputs in
+claim 22 b and c. S-0215's cross-spec hand-off note still names S-0307 revision 6 as a version
+to hand off together: update that note to recognise approved revision 8 and this revision 9,
+which retain those search contracts. Its claim 37's approach processing and destination
+retention agree with this spec and require no behavioural change. The other S-0212 coordinated
+movement checks are owned by S-0207 and S-0208.
