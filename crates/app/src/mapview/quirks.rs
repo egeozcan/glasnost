@@ -13,7 +13,7 @@
 //! specs name is one or the other.
 
 use glasnost_num::geom::n_step;
-use glasnost_render::projection::{LEVEL_LEPTONS, TERRAIN_LIFT, height_lift};
+use glasnost_render::projection::TERRAIN_LIFT;
 
 /// Switches of S-0102 and S-0108 implemented in `mapview`.
 ///
@@ -27,12 +27,6 @@ pub struct ViewQuirks {
     /// cell one step in front, which alone gives 2. Off: factor 2 whenever
     /// either cell is high.
     pub cliff_fudge_far_cliff_weaker: bool,
-    /// `quirks.overlay_lift_exact_levels` (S-0102 claim 13, Edge cases):
-    /// overlay depth lifts by 15 per level while object depth uses
-    /// −L(z). Off: "use the same lift for both"; the switch is the
-    /// overlay's, so we read it as the overlay taking the objects' lift
-    /// L(104 × level) (S-0101 F2).
-    pub overlay_lift_exact_levels: bool,
     /// `quirks.occupiable_hurt_rule` (S-0108 claim 2): for an occupiable
     /// type, "hurt" is badly damaged at tech level 0 or below and damaged
     /// above. Off: always damaged.
@@ -50,7 +44,6 @@ impl Default for ViewQuirks {
         // spec: S-0102 Edge cases and quirks, S-0108 Edge cases and quirks (every switch defaults on)
         Self {
             cliff_fudge_far_cliff_weaker: true,
-            overlay_lift_exact_levels: true,
             occupiable_hurt_rule: true,
             sprite_vehicle_eight_facings_only: true,
         }
@@ -59,13 +52,12 @@ impl Default for ViewQuirks {
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 4] {
+    pub fn named(&self) -> [(&'static str, bool); 3] {
         [
             (
                 "cliff_fudge_far_cliff_weaker",
                 self.cliff_fudge_far_cliff_weaker,
             ),
-            ("overlay_lift_exact_levels", self.overlay_lift_exact_levels),
             ("occupiable_hurt_rule", self.occupiable_hurt_rule),
             (
                 "sprite_vehicle_eight_facings_only",
@@ -93,17 +85,11 @@ pub fn cliff_factor(high_one: bool, high_two: bool, q: &ViewQuirks) -> i32 {
 }
 
 /// The lift an overlay's depth bias takes for `level` height levels
-/// (S-0102 claim 13: 15 per level). With the switch off the overlay takes
-/// the objects' lift L(z) of S-0101 F2, which since S-0101's exact lift
-/// gives the same value at every whole level.
-pub fn overlay_depth_lift(level: i32, q: &ViewQuirks) -> i32 {
-    if q.overlay_lift_exact_levels {
-        // spec: S-0102 claim 13 (overlay biases lift by 15 per level)
-        TERRAIN_LIFT * level
-    } else {
-        // spec: S-0102 Edge cases (quirks.overlay_lift_exact_levels off: the objects' lift L(z), S-0101 F2)
-        height_lift(LEVEL_LEPTONS * level)
-    }
+/// (S-0102 claim 13: exactly 15 per level, which equals the objects' lift
+/// L(104 × level) at every whole level; there is no switch).
+pub fn overlay_depth_lift(level: i32) -> i32 {
+    // spec: S-0102 claims 11 and 13 (overlays and their shadows use exactly 15 pixels per level)
+    TERRAIN_LIFT * level
 }
 
 /// The facing part *d* of a vehicle drawn as a sprite (S-0102 claim 22)
@@ -318,12 +304,13 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
 mod tests {
     use std::collections::BTreeSet;
 
+    use glasnost_render::projection::{LEVEL_LEPTONS, height_lift};
+
     use super::*;
 
     fn off() -> ViewQuirks {
         ViewQuirks {
             cliff_fudge_far_cliff_weaker: false,
-            overlay_lift_exact_levels: false,
             occupiable_hurt_rule: false,
             sprite_vehicle_eight_facings_only: false,
         }
@@ -391,18 +378,24 @@ mod tests {
         assert_eq!(cliff_factor(true, true, &off), 2);
     }
 
-    /// spec: S-0102 claim 13, Edge cases (quirks.overlay_lift_exact_levels), S-0101 claim 3, F2
+    /// spec: S-0102 claims 11 and 13 (overlays lift exactly 15 per level, equal to L(104·ℓ) at
+    /// every whole level), S-0102 Terms (L(z) = ⌊15·z/104 + ½⌋ for signed z: L(400) = 58),
+    /// S-0101 claim 3, F2
     #[test]
-    fn overlay_lift_switch() {
-        let on = ViewQuirks::default();
-        let off = off();
-        // S-0101's exact lift L(104 × level) is 15 × level at every whole
-        // level, so the two settings agree everywhere.
-        assert_eq!(overlay_depth_lift(20, &on), 300);
+    fn overlay_lift_is_fifteen_per_level() {
+        assert_eq!(overlay_depth_lift(20), 300);
         for level in -128..=127 {
-            assert_eq!(overlay_depth_lift(level, &on), 15 * level, "level {level}");
-            assert_eq!(overlay_depth_lift(level, &off), 15 * level, "level {level}");
+            assert_eq!(overlay_depth_lift(level), 15 * level, "level {level}");
+            assert_eq!(
+                overlay_depth_lift(level),
+                height_lift(LEVEL_LEPTONS * level),
+                "level {level}"
+            );
         }
+        assert_eq!(height_lift(400), 58);
+        // Signed z: the floor, not truncation toward zero (−75/104 + ½ < 0).
+        assert_eq!(height_lift(-5), -1);
+        assert_eq!(height_lift(-3), 0);
     }
 
     /// spec: S-0108 claim 2, Edge cases (quirks.occupiable_hurt_rule)

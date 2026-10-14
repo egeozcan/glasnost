@@ -1492,9 +1492,8 @@ impl Builder<'_> {
                 && (flags.tiberium || rule_bool(self.import, k, idx, b"DrawFlat", true));
             // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
             let depth_level = if deck { level + DECK_LEVELS } else { level };
-            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types;
-            // quirks.overlay_lift_exact_levels)
-            let lift = overlay_depth_lift(depth_level, &ViewQuirks::default());
+            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
+            let lift = overlay_depth_lift(depth_level);
             let bias = if flat || flags.wall || rock || flags.tiberium {
                 -2 - lift
             } else {
@@ -1560,8 +1559,8 @@ impl Builder<'_> {
             };
             // spec: S-0102 claim 13 (an overlay's shadow: −2 − 15 × ℓ_s with ℓ_s the cell's level alone,
             // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
-            // (every overlay kind); S-0102 Edge cases (quirks.overlay_lift_exact_levels covers overlay shadows)
-            let shadow_bias = -2 - overlay_depth_lift(level, &ViewQuirks::default());
+            // (every overlay kind)
+            let shadow_bias = -2 - overlay_depth_lift(level);
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
