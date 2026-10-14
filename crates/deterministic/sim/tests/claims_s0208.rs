@@ -1248,3 +1248,91 @@ fn destination_on_the_target_is_lost_on_firing() {
     }
     assert!(fired, "the walker started a firing sequence");
 }
+
+/// A soldier standing at the centre of cell(4, 0), under a high-bridge deck
+/// laid over cells (3 … 5, 0) of flat ground, or on that deck with `deck`;
+/// it has just its own standing point left as walking target, the cell as
+/// destination and no path steps.
+fn under_deck(quirk: bool, deck: bool) -> (World, ObjectId) {
+    use glasnost_sim::world::Layer;
+    let mut s = scene();
+    s.ruleset.globals.quirks.walker_bridge_destination_deck = quirk;
+    let c = cell(4, 0);
+    s.place_infantry(0, "TESTMAN", c, 0);
+    let mut w = s.build();
+    for x in 3..=5 {
+        let i = w.cells.idx(cell(x, 0)).expect("cell");
+        w.cells.deck[i] = true;
+        w.cells.deck_entry[i] = true;
+        w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+    }
+    w.regions.dirty = true;
+    let id = men(&w)[0];
+    if deck {
+        w.cells.leave(c, Layer::Ground, id);
+        w.cells.enter(c, Layer::Deck, id, false);
+    }
+    let o = w.obj_mut(id).expect("soldier");
+    if deck {
+        o.layer = Layer::Deck;
+        o.pos.z += 416; // spec: S-0208 claim 18 (an arrival on the deck has height H + 416)
+    }
+    o.dest = Some(Target::Cell(c));
+    o.path.steps.clear();
+    let p = o.pos;
+    let ws = o.walk.as_mut().expect("walk state");
+    ws.target = Some(p);
+    ws.fraction = true;
+    (w, id)
+}
+
+// spec: S-0208 claim 18 and F9 (scenario W10 part e: a cell destination on a high-bridge cell is the centre at H + 414 in both layers; an arrival on the deck completes it, an arrival on the ground under it keeps the destination with speed fraction 0; a later failed search clears it by S-0212 claim 23)
+// spec: S-0208 Edge cases (`quirks.walker_bridge_destination_deck` off: the arrival layer's height, so either arrival completes the destination)
+#[test]
+fn claim_18_cell_destination_under_a_deck() {
+    let c = cell(4, 0);
+    for (quirk, deck, kept) in [
+        (true, false, true),
+        (true, true, false),
+        (false, false, false),
+        (false, true, false),
+    ] {
+        let (mut w, id) = under_deck(quirk, deck);
+        let z = w.obj(id).expect("s").pos.z;
+        let h = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+        let expect = match (quirk, deck) {
+            (true, _) => h + 414,
+            (false, true) => h + 416,
+            (false, false) => h,
+        };
+        assert_eq!(walk::cell_destination_height(&w, id, c), expect);
+        tick::step(&mut w);
+        let o = w.obj(id).expect("s");
+        assert_eq!(o.pos.z, z, "never moved vertically");
+        assert_eq!(o.layer == glasnost_sim::world::Layer::Deck, deck);
+        assert_eq!(
+            o.dest.is_some(),
+            kept,
+            "quirk {quirk}, deck {deck}: the destination on the arrival tick"
+        );
+        assert!(
+            !o.walk.as_ref().expect("w").fraction,
+            "speed fraction 0 on the arrival tick"
+        );
+        if kept {
+            // The deck cannot be reached from the ground: the next search fails
+            // and gives up the destination (S-0212 claim 23).
+            let mut cleared = false;
+            for _ in 0..200 {
+                tick::step(&mut w);
+                let o = w.obj(id).expect("s");
+                assert_eq!(o.pos.cell(), c);
+                if o.dest.is_none() {
+                    cleared = true;
+                    break;
+                }
+            }
+            assert!(cleared, "the failed search clears the destination");
+        }
+    }
+}

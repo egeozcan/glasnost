@@ -113,6 +113,10 @@ pub struct Quirks {
     // spec: S-0208 claim 14
     #[serde(default = "on")]
     pub slow_walker_stall: bool,
+    /// A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on; off: the arrival test uses the centre's height on the walker's arrival layer.
+    // spec: S-0208 claim 18 and Edge cases
+    #[serde(default = "on")]
+    pub walker_bridge_destination_deck: bool,
     /// The hard-coded cow type's idle action can scatter it.
     // spec: S-0107 claim 14; S-0208
     #[serde(default = "on")]
@@ -1018,6 +1022,7 @@ impl Default for Quirks {
             prone_noncrawler_speedup: true,
             walker_overshoot: true,
             slow_walker_stall: true,
+            walker_bridge_destination_deck: true,
             cow_idle: true,
             infantry_facing_sector_skew: true,
             unchecked_substitute: true,
@@ -1285,6 +1290,10 @@ impl Quirks {
             ("prone_noncrawler_speedup", self.prone_noncrawler_speedup),
             ("walker_overshoot", self.walker_overshoot),
             ("slow_walker_stall", self.slow_walker_stall),
+            (
+                "walker_bridge_destination_deck",
+                self.walker_bridge_destination_deck,
+            ),
             ("cow_idle", self.cow_idle),
             (
                 "infantry_facing_sector_skew",
