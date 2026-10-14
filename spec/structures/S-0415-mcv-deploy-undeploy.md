@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -314,7 +314,13 @@ vehicle's movement is heading to (S-0207). In addition:
      case of a building with a guard spot; S-0408 scenario S10 for exact completion timing,
      D11 for a type with no pack-up sound; scenarios D7 and
      D10 for the release of survivors from a building without a guard spot and the sound of a sold
-     building). The following parts are `unmeasured`.
+     building; D7's construction-yard variant for a yard with a guard spot that fails the
+     independent redeploy condition). A construction yard that has a guard spot but fails another
+     pack-up condition is `measurable`: S-0402 claim 27a can supply a guard spot through a
+     field-seeking site offer with the lobby redeploy setting off. Use S-0402 scenario H25's
+     site-offer variant to establish the guard spot, then arrange and record the independent
+     pack-up condition. The previous move-click-only setup limitation no longer applies.
+     The following parts are `unmeasured`.
      - Passenger and garrison release or suppression: D6 and D7 carry neither, so those runs cannot
        distinguish these releases from survivor release.
      - Sound ownership: all sounding buildings in D6, D10 and D11 belong to the local player.
@@ -325,9 +331,6 @@ vehicle's movement is heading to (S-0207). In addition:
        not usable: no spec shows that a mind-control weapon can take over a building, so even a
        named bystander controller (which the void rule allows) is not known to produce that state.
        A measurement would first need a test weapon shown to capture a building (S-0215).
-     - A construction yard that has a guard spot but fails another pack-up condition: the only input
-       that gives a yard a guard spot needs the redeploy setting on (S-0214, Terms, *movable*), and
-       no other condition can be made to fail under it, so the state cannot be set up.
    - Confidence: high (the sequence, no refund); medium (the sounds); low (the release rule; the
      second judging)
 
@@ -521,7 +524,8 @@ Claim 4 gives the original's *hunt* replacement for non-human-controlled owners.
   undeploys-into type, while the pack-up itself needs all of S-0213's conditions. So a packing
   building sold through the sell mode releases its crew and still packs up (scenario D7), and a
   construction yard that has a guard spot but fails another pack-up condition is sold with no
-  survivors (`unmeasured`, claim 9). Off: the release is skipped exactly when the building packs up.
+  survivors (`measurable`, claim 9 and D7's construction-yard variant). Off: the release is skipped
+  exactly when the building packs up.
 - `quirks.failed_packup_keeps_vehicle` (default on): claim 11. Off: the vehicle that cannot be put on
   the map does not remain (the refund is still paid, as in claim 11), and it does not count for build limits or for a house's
   survival in the short-game test (S-0414 claim 2). Creation before placement and its draws
@@ -812,9 +816,8 @@ are repetitions that guard against void runs.
   Void the admission subtest if a survivor still occupies the return cell at completion.
   Use the same positive-survivor setup for
   D6's suppression controls, so that observing no survivors is not a zero-attempt result.
-  (The state of a construction yard that has a guard spot and fails another condition cannot be set
-  up, claim 9; D6 covers the case of a packing building that has a guard spot, and S-0213's
-  scenario O15 the sale of a yard that has none.)
+  D6 covers a packing building that has a guard spot, and S-0213 scenario O15 covers the sale
+  of a yard that has none.
 - Runs: 3 per setting, observed area: the 15 × 15 cells around the building.
 - Observable: infantry created at the sale and their release ticks; the build-down-start tick,
   completion-report tick, building's removal tick and vehicle's appearance tick; credits.
@@ -825,6 +828,17 @@ are repetitions that guard against void runs.
 - Falsified if: no survivors, survivors appear only after build-down starts, the vehicle's
   appearance or the building's removal differs from the expected completion tick, no vehicle
   appears, or a refund is paid.
+- Construction-yard variant: use S-0402 claim 27a and H25's named construction-yard
+  slave-master site-offer setup, with the redeploy setting off. Record that a successful
+  field-seeking offer establishes a guard spot before issuing a sell order through sell mode.
+  Keep the positive survivor-attempt overrides and clear standing positions above; record
+  the guard spot and redeploy setting at the order and through completion. Run three times
+  with the same houses, speed and recorder. Expected: the yard is sold rather than packed,
+  pays the ordinary sale refund and produces no returned vehicle, yet releases no survivors
+  under the default quirk. A survivor release with the guard spot retained, or a successful
+  pack-up despite redeploy being off, falsifies this result. A run without the recorded guard
+  spot does not test it. This establishes a condition already failing at the order, not the
+  change of a condition during build-down discussed separately in claim 9.
 
 **D8. Failed pack-up.**
 - Setup: a map-placed packing construction yard, packed up by a move click with the redeploy
