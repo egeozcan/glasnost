@@ -558,6 +558,13 @@ pub fn firing_answer(w: &World, id: ObjectId) -> Option<Answer> {
     None
 }
 
+/// Whether a map's switched-on field of 0 starts a pre-placed building of
+/// type `type_index` switched off (S-0405 claim 18).
+pub fn map_off_applies(w: &World, type_index: u32) -> bool {
+    // spec: S-0405 claim 18 (only with a base drain above 0 or the needs-power flag; the firestorm-wall and power-mode flags do not decide it)
+    bp(w, type_index).is_some_and(|t| t.drain > 0 || t.needs_power)
+}
+
 /// Applies a power-off or power-on order (S-0213 claim 13, S-0405 claim 10).
 pub fn switch(w: &mut World, actor: ObjectId, on: bool) {
     let Some(o) = w.obj(actor) else { return };
