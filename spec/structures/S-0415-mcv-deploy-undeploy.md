@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -30,7 +30,8 @@ stream*, *absent-key default*, *quirk switch*. S-0205's notation applies (trunc,
 S-0215's *slave-master* and its *slaves*, S-0214's *sell mode*, S-0414's *base units* and its
 *insignificant* and *not scored* marks, and S-0011's *tag* (Terms), here called the object's *trigger
 tag*. S-0215's *current behaviour*, *queued behaviour*, "queues" (Queueing wording), *processing timer*
-and *processing delay* (Terms) are used as it defines them; a *destination* is the place that a mobile
+and *processing delay* (Terms) are used as it defines them. An object's *turn* means its share of
+one tick (S-0203), except in phrases about facing or rotation; a *destination* is the place that a mobile
 vehicle's movement is heading to (S-0207). In addition:
 
 - **Deploying vehicle.** A vehicle whose type names a building type it deploys into (Import
@@ -186,10 +187,13 @@ vehicle's movement is heading to (S-0207). In addition:
    under the placement test described below:
    - a building of the deploys-into type, owned by the deploying vehicle's house, is put on the map at the
      centre of the anchor, (256*x* + 128, 256*y* + 128) leptons, standing on the ground layer at height 0
-     above the terrain of that cell, and its behaviour becomes *construction*: its construction state
-     begins (S-0108). Its insertion facing is 0 facing units (map north), not the vehicle's
-     body facing or *D* × 256. Construction processing and the handover after build-up follow
-     S-0406 claims 14 and 15, including retention of the inherited target across that handover.
+     above the terrain of that cell. Its construction state begins at entry (S-0108), with no
+     current behaviour, *construction* queued and the ready mark already set. Its insertion facing
+     is 0 facing units (map north), not the vehicle's body facing or *D* × 256. At the second
+     per-tick start of its first turn *U*, *construction* becomes current; its first construction
+     processing is *C* = *U* + 1 ticks in uninterrupted play (S-0406 claim 17 and F7).
+     Construction processing and handover follow S-0406 claims 14 and 15, including retention
+     of the inherited target across that handover.
      A cell that holds a bridge overlay never passes the cell test (S-0406,
      claim 3 c), so no building is put on a bridge deck. A cell that a high bridge only marks, with
      no overlay in it, passes only for a water-bound type (S-0406, claim 3 d); the building is then
@@ -204,6 +208,19 @@ vehicle's movement is heading to (S-0207). In addition:
    - the building's own target becomes the deploying vehicle's target, if it had one,
    - the deploying vehicle type's deploy sound plays at the deploying vehicle's position (S-0107, Import mapping) and the
      deploying vehicle is removed in the same tick.
+   The successful deploy happens during the vehicle's own turn in tick *T*. The building
+   enters at the end of the update order, and the vehicle's removal counts for
+   `quirks.update_order_removal_skip` (S-0203 claims 3, 4 and 10). With that switch on, if the
+   building directly follows the vehicle, the removal costs the building its turn in *T*:
+   its first turn is *U* = *T* + 1. If another object stands between them, that object loses
+   its turn instead, and the building's first turn is *U* = *T*, unless another counting
+   removal later in the pass costs it that turn. With the switch off, *U* = *T*. These
+   equalities assume no other removal or processing gate postpones the building's turn.
+   Otherwise *U* is its first eligible turn under S-0203 and S-0215. Thus entry does not
+   itself process construction, and the first processing is *T* + 2 or *T* + 1 in the two
+   uninterrupted cases with the switch on, respectively. Tick arithmetic is integer and
+   exact, with no rounding.
+
    The building is put on the map only if every foundation cell passes S-0406's cell test as it
    applies to a placement by the deploying vehicle's house. That test, too, ignores the deploying
    vehicle itself and asks for no adjacency, shroud or tech-tree condition. The only input known
@@ -215,13 +232,15 @@ vehicle's movement is heading to (S-0207). In addition:
    (claim 2). In a later attempt no behaviour is queued, and the vehicle attempts again at its next
    processing.
    - Backing: `measurable` (scenarios D1, D3 and D4 for the completion; D15 for insertion facing,
+     D16 for the first-turn and first-construction-processing ticks, and
      S-0406 scenario PL11 for construction processing and handover; D12 part a for the
      position within the cell, the height and the layer, part b for the water-bound case; scenario D2,
      part g for the failure in a first attempt, part l for the failure in a later attempt and the retry).
      D12 part b is conditional: if no vehicle can stand on the marked cell, the water-bound case
      is `unmeasured` because its starting state cannot be arranged.
    - Confidence: high (building, cell, insertion facing, construction state, health, removal).
-     Construction processing and handover retain S-0406's confidences; medium (the position
+     Construction processing and handover retain S-0406's confidences; medium (the first-turn
+     timing relative to deployment, pending D16; the position
      within the cell and the layer, the take-overs, the retargeting, the placement height); low (the
      water-bound case; the failure after a passed cell test, including what it asks beyond the wall
      owner)
@@ -262,8 +281,11 @@ vehicle's movement is heading to (S-0207). In addition:
      one. The sell sound never plays for a building that packs up, whether or not its type has a
      pack-up sound: a packing building whose type has no pack-up sound makes no sound at the start of
      the build-down at all,
-   - its construction state runs backwards (the build-down, S-0108) as in any sale,
-   - when the build-down has finished and the return cell accepts the vehicle (claim 12), the
+   - its construction state runs backwards (the build-down, S-0108) as in any sale. Exact
+     completion timing is S-0408 claim 17 and F4, including the stage-23 early report without
+     a guard spot, zero-delay completion and ranges that never report. Packing up is acted
+     on in the same selling processing that sees the completion report, not a later tick,
+   - when that processing sees completion and the return cell accepts the vehicle (claim 12), the
      vehicle of claim 10 appears and the building is removed in the same tick. The house receives
      no refund. Refusal has claim 11's outcome instead.
    A building that is sold instead of packing up plays the sell sound as S-0408 gives it; when its
@@ -276,8 +298,9 @@ vehicle's movement is heading to (S-0207). In addition:
    spot. A packing building without a guard spot (a type that is not a construction yard, sold
    through the sell mode of S-0214) releases them as in an ordinary sale before it packs up
    (`quirks.packup_release_by_guard_spot`).
-   - Backing: `measurable` (scenario D6 for the sequence, refund and sounds, and for the no-release
-     case of a building with a guard spot; D11 for a type with no pack-up sound; scenarios D7 and
+   - Backing: `measurable` (scenario D6 for the sequence, refund and sounds and for the no-release
+     case of a building with a guard spot; S-0408 scenario S10 for exact completion timing,
+     D11 for a type with no pack-up sound; scenarios D7 and
      D10 for the release of survivors from a building without a guard spot and the sound of a sold
      building). The following parts are `unmeasured`.
      - Passenger and garrison release or suppression: D6 and D7 carry neither, so those runs cannot
@@ -534,7 +557,8 @@ are repetitions that guard against void runs.
   S-0108, all 9 cells), with its facing already equal to *D*; a second test vehicle that deploys into
   a 2 × 2 building. One obstacle (a tree) per run.
 - Runs: 3 per case below (the outcome does not depend on the random stream; the repetitions guard
-  against void runs).
+  against void runs). Log the vehicle's processing timer, queued behaviour and processing gates
+  per tick, identifying processing opportunities as in D1 rather than from random draws.
 - Part a (3 × 3): the tree at (*x* + 1, *y* + 1), at (*x* − 1, *y* − 1) and at (*x* + 2, *y* + 2),
   relative to the vehicle's cell.
 - Part b (2 × 2): the tree at (*x* + 1, *y* + 1) and at (*x* − 1, *y* − 1).
@@ -641,8 +665,9 @@ are repetitions that guard against void runs.
   own; a named map script gives it *unload*, without a deploy order, so that S-0213 claim 10 does
   not clear its own target before the attempt. It deploys into a construction yard. Record that
   the target remains present immediately before completion, or void that target-transfer subtest.
-  A second run with a slave-master test vehicle that has two
-  slaves (S-0215) deploying into a non-yard building.
+  Repeat the targeting setup with a non-yard deploys-into building, to test that the vehicle
+  thief's target becomes that building rather than being cleared. A further run uses a
+  slave-master test vehicle that has two slaves (S-0215) deploying into a non-yard building.
 - Runs: 3 per setup (the outcome does not depend on the random stream; the repetitions guard against
   void runs); observed area: the 15 × 15 cells around the vehicle, with the tank and the thief placed
   within 6 cells.
@@ -650,8 +675,11 @@ are repetitions that guard against void runs.
   tank's and the thief's targets in the next tick; after the building is destroyed later whether the
   trigger fires; the slaves' owner and master.
 - Expected: the yard is selected, veteran, in the group and holds the vehicle's former target; the
-  tank attacks the yard; the thief has no target; the trigger fires on the building's destruction and
-  not at the vehicle's removal; the slaves are the building's.
+  building's recorded experience equals the vehicle's value immediately before completion, not
+  merely the same veterancy rank; the tank attacks the yard; the thief has no target; the trigger
+  fires on the building's destruction and not at the vehicle's removal. In the non-yard targeting
+  variant both the tank and the thief target the new building; the slaves in the slave-master
+  variant are the building's.
 - Falsified if: any of these differs.
 
 **D5. Counting.**
@@ -661,13 +689,29 @@ are repetitions that guard against void runs.
   building with a power output of 100 as the deployed building, and a house that otherwise has a
   power balance of 0; a test building placed by a place order adjacent to the new building in the tick
   after completion, with the house having no other building within the adjacency distance.
+  In (a) and (b), all other offer conditions hold, there is spare sidebar-tab capacity, and the
+  missing prerequisite or factory respectively is the only obstacle to the icon's admission.
+  In (c), the type is already offered, its sole owned vehicle is eligible for the owned count,
+  a switched-on qualifying vehicle factory remains, all other conditions hold, and its line has
+  no item or queued item. In (d), deploy a full-health vehicle into a switched-on building with
+  no power drain, blackout or other output modifier; prepare the adjacent test building as a
+  done item before deployment, with its cell test and cursor shroud conditions satisfied.
 - Runs: 1 per part (deterministic).
-- Observable: (a) the tick the type's icon appears; (b) the tick the unit's icon appears; (c) the
-  tick the vehicle type is offered again; (d) the power balance per tick and whether the place order
-  succeeds; all against the completion tick.
-- Expected: all of these change at the completion tick itself (S-0407, claim 12); the adjacent
-  placement succeeds.
-- Falsified if: any of these does not change, or changes at a later tick.
+- Observable: (a) the tick the prerequisite-dependent type's icon appears; (b) the tick the unit
+  type's icon appears; (c) the vehicle type's offered status and whether its icon is darkened
+  before and after completion; (d) the power balance per tick; and (e) whether the place order
+  succeeds when applied in the tick after completion. Compare the relevant ticks with the
+  completion tick.
+- Expected: (a) and (b) change at the completion tick itself (S-0407, claim 12). The vehicle
+  type remains offered throughout; when completion removes its last counted owned vehicle and
+  its count falls below the positive build limit, its at-limit status clears and its icon is
+  no longer darkened (S-0407, claim 9; S-0411, claims 2 and 3). The power balance changes from
+  0 to 100 power units in the completion tick (S-0405, claim 7). The adjacent placement
+  succeeds when its order is applied in the tick after completion.
+- Falsified if: either new icon is absent at completion or appears earlier than that tick,
+  the vehicle type loses its offer or its icon stays darkened after completion despite the
+  stated controls, the power balance differs from the expected value or changes in another
+  tick, or the valid adjacent place order fails when applied in the next tick.
 
 **D6. Packing up.**
 - Setup: the redeploy setting on. A construction-yard test type of strength 1000 with a pack-up
@@ -677,7 +721,7 @@ are repetitions that guard against void runs.
   the bystander). Yard *Y*₂ is deployed from a second full-health vehicle at another known cell and
   damaged to 333 hit points by a test trigger. Each yard is packed up by a move click to a far cell
   (S-0213, claim 20), which gives it its guard spot and issues the sell order; the two clicks are on
-  different cells. Part (c): the non-yard test building of D4's second run (deployed from the
+  different cells. Part (c): the non-yard test building of D4's slave-master variant (deployed from the
   slave-master vehicle with two slaves), packed up by a move click in the same way. Credits are
   recorded. Repeat *Y*₁ with a 2 × 2 foundation as well as its ordinary larger foundation,
   to distinguish both return-cell cases of F3. Record the returned position in leptons and verify
@@ -688,9 +732,11 @@ are repetitions that guard against void runs.
   behaviour, selection, experience, group and target of the tank; credits; survivors; the local
   player's sounds with their ticks; in part (c) the slaves' owner and master.
 - Expected: each vehicle appears at the first selling processing that sees the build-down
-  completion report (S-0408 claims 16 and 17), at the cell its deploying vehicle
+  completion report, in the exact completion tick of S-0408 claim 17 and F4 (with a guard
+  spot, no stage-23 early report), at the cell its deploying vehicle
   stood on, facing *D* × 256, moving to the clicked cell; *Y*₁'s vehicle has 600 hit points (ratio 1),
-  is selected, veteran, in the group and targeted by the tank; *Y*₂'s has 199 (trunc of 199.8, F2); no
+  is selected, veteran, has exactly the yard's recorded pre-completion experience, is in the
+  group and targeted by the tank; *Y*₂'s has 199 (trunc of 199.8, F2); no
   credits; no survivors from any of them (each has a guard spot); the deploy sound at the first
   processing of the sale, the pack-up sound at the start of the build-down and no sell sound; in
   part (c) the slaves belong to the vehicle and have it as their master.
@@ -716,11 +762,15 @@ are repetitions that guard against void runs.
   up, claim 9; D6 covers the case of a packing building that has a guard spot, and S-0213's
   scenario O15 the sale of a yard that has none.)
 - Runs: 3 per setting, observed area: the 15 × 15 cells around the building.
-- Observable: infantry created at the sale; the vehicle at the end of the build-down; credits.
+- Observable: infantry created at the sale and their release ticks; the build-down-start tick,
+  completion-report tick, building's removal tick and vehicle's appearance tick; credits.
 - Expected: survivors come out before the build-down, the vehicle appears when the selling
-  processing sees its completion report (S-0408 claim 17), and no refund is paid, in
-  both settings (the quirk's default).
-- Falsified if: no survivors, no vehicle, or a refund is paid.
+  processing sees its completion report, at the tick of S-0408 claim 17 and F4 with no guard
+  spot (including its stage-23 early report), and no refund is paid, in both settings (the
+  quirk's default).
+- Falsified if: no survivors, survivors appear only after build-down starts, the vehicle's
+  appearance or the building's removal differs from the expected completion tick, no vehicle
+  appears, or a refund is paid.
 
 **D8. Failed pack-up.**
 - Setup: a map-placed packing construction yard, packed up by a move click with the redeploy
@@ -876,6 +926,33 @@ are repetitions that guard against void runs.
   at facing 0 in both variants. Packing up still uses *D* × 256 as claim 10 specifies.
 - Falsified if: either inserted building has any facing other than 0, including inheritance of
   the vehicle facing or a result that changes with the deploy-facing field. Construction timing is measured separately by S-0406 PL11.
+
+**D16. First turn and construction processing after deployment.**
+- Setup: the common skirmish measurement setup, game speed index 2, director and mods off.
+  Named test overrides give a non-gate deployed building a range of at least 2 stages with a
+  positive stage delay longer than 2 ticks, no target and no opening-effect units. In variant
+  (a), use a vehicle already on the map and an own building that entered play after it and
+  remains in play. In variant (b), produce the deploying vehicle after all other test objects
+  have entered play, and deploy it once it is still and has no destination. It must be the
+  last object in the update order before deployment. The recorder verifies entry order and
+  records any later entries or removals; an interference that invalidates either ordering
+  condition makes the timing subtest void. No other counting removal may skip the new
+  building in the observed interval.
+- Procedure: issue deploy with the vehicle already facing the deploy facing. Record tick *T*
+  of building entry and vehicle removal, then the building's current and queued behaviours,
+  ready mark, construction stage and processing timer through the first construction
+  processing and the handover. Use the original's removal-skip behaviour; replay with the
+  shared quirk off on our engine as a separate conformance check, not an oracle measurement.
+- Runs: 3 valid runs per variant; observed area as in the common setup.
+- Observable: *T*, the tick *U* at whose end *construction* is current rather than merely
+  queued, the first construction processing tick *C* and its stage-0 restart, and handover.
+- Expected: (a) *U* = *T*, *C* = *T* + 1. (b) *U* = *T* + 1, *C* = *T* + 2: vehicle removal
+  skips the directly following building's first turn. In both, the ready mark was set at
+  entry and handover follows S-0406 claim 15/F7 from *C*. With the shared quirk off on our
+  engine, both variants give *U* = *T* and *C* = *T* + 1.
+- Falsified if: a valid oracle run gives another *U* or *C*, construction is processed at
+  entry, the first processing does not restart stage 0, or handover differs from the cited
+  construction formula in its uninterrupted domain.
 
 ## Open questions
 
