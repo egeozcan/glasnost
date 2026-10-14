@@ -170,6 +170,7 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         }
         // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick; the rest table judges the state after it)
         // spec: S-0215 claim 13 (an actor with attack-move memory may resume its attack move)
+        // Its place after the other common effects is interim, request Q-0202.
         refresh_attack_move(w, id);
     }
     match o.kind {
