@@ -80,7 +80,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 24 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 9 | approved | — |
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 19 | approved | — |
-| [S-0408](economy/S-0408-sell-repair.md) | Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired) | economy | 15 | approved | — |
 | [S-0001](rules-import/S-0001-ini-lexical-rules.md) | INI lexical rules | rules-import | 4 | approved | — |
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 9 | approved | — |
 | [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 16 | approved | — |
@@ -99,3 +98,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 8 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 24 | approved | — |
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 16 | approved | — |
+| [S-0408](economy/S-0408-sell-repair.md) | Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired) | economy | 16 | approved | — |

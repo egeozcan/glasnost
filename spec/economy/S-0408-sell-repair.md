@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -359,7 +359,10 @@ its *master*, and slaves *inside* rather than on the map. In addition:
     Destruction during a sale remains a destruction case (S-0312),
     not this attacker-less sale case. The exact tick of slave cleanup relative to refund and
     foundation removal remains open.
-    - Backing: `measurable` (scenario S13, including its failed-placement control)
+    - Backing: `measurable` (scenario S13, including its failed-placement control) except
+      tagged-hidden-slave notifications and their firing counts, which are `unmeasured`:
+      no established data-only setup attaches a tag to a generated slave. S13's tagging
+      proposal is conditional on finding a valid fixture, as in S-0011 claim 19.
     - Confidence: high for hidden removal, recipient selection, no replacement and no
       old-group transfer on failed placement; medium for the sale integration, guard reset
       and no-recipient hit, destruction notifications and losses, and the cheer request
@@ -1046,22 +1049,29 @@ tick number. Any game speed.
   master's refund and removal ticks. Record each transferred slave's sequence request and
   accepted sequence, rather than inferring the request solely from visible cheering. Compare
   the seller's end-of-game losses with a matched no-sale control, counting only the existing
-  hidden slaves separately from other deaths. With named test-map data, give a hidden slave
-  a repeating destroyed-by-anything tag and a calibrated visible counter action as in
-  S-0312 scenario D20. Record tag firings and confirm no hidden-slave death effects.
+  hidden slaves separately from other deaths. Confirm no hidden-slave death effects.
   Observe through removal and for at least twice the
   imported regeneration delay afterward. Repeat three times. Repeat with all slaves inside,
   and with all on the map. Run the packing-up control with both hidden and emerged slaves.
 - *Expected:* true sale destroys every hidden slave without emergence or placement, with
   one loss per non-excluded hidden slave for its current house and no attacker credit.
-  Tagged hidden slaves receive the no-attacker common destruction group of S-0312
-  claim 29; the repeating-tag counter follows S-0011 claim 19's latches, not an assumed
-  one firing per slave. No death sequence, debris, death weapon or attached bomb occurs
+  No death sequence, debris, death weapon or attached bomb occurs
   for those hidden slaves. On-map slaves keep their positions, lose their master and
   become the neutral house's in this stock setup, with target and destination cleared,
   *guard* queued and *cheer* requested afterward. No replacements or slave
   refunds occur. The control preserves the existing group under the resulting vehicle.
   Record cleanup ticks rather than assuming they equal the foundation-removal tick.
+- *Conditional tagging proposal, unmeasured:* no data-only fixture attaching a tag to a
+  generated slave is established. If one is found, follow S-0011 claim 19 and scenario T25 B
+  with a fresh repeating destroyed-by-anything tag and a calibrated visible counter action.
+  Verify with the read-only recorder that exactly one hidden slave carries the fresh tag
+  before the true sale; do not write into the running game to attach it. Use 5 valid runs.
+  Expect the no-attacker common destruction group of S-0312 claim 29 before removal and
+  two counter firings under S-0011 claim 19's latches, not one firing per slave. A different
+  valid count falsifies that notification prediction. Until the fixture is established,
+  this is a conditional proposal, not measurable backing; losses and disappearance alone
+  do not confirm notifications. An absent tag or interference with the counter makes the
+  notification test inconclusive, not a failure of the ordinary S13 test.
 - *Failed-placement control:* use S-0415 claim 11's scenario D8 setup with a slave-master
   building, some hidden and some emerged slaves, and the ordinary civilian-side recipient.
   Repeat three times, recording the same slave identities and group links through building
@@ -1080,13 +1090,15 @@ tick number. Any game speed.
 - *Falsified if:* hidden slaves appear as survivors, the seller keeps on-map slaves in the stock
   run, a slave continues harvesting for the removed master, a replacement appears, an extra
   slave refund is paid, the recipient variants choose a later qualifying house or ignore the
-  no-recipient hit, the hidden losses or common destruction raises are missing, a transfer
+  no-recipient hit, the hidden losses are missing, a transfer
   omits its cheer request, the no-recipient path requests cheer, or the successful conversion
   frees rather than transfers the group.
   Void and repeat a run if the bystander affects the patch or is defeated.
 
 ## Open questions
 
+- A valid data-only fixture attaching a tag to a generated hidden slave, needed before
+  S13's conditional notification proposal becomes measurable (S-0011 claim 19).
 - The exact slave-cleanup tick relative to a true sale's refund and foundation removal
   (claim 10a; S13 records it).
 - Whether the occupants of a garrison leave before the sale survivors (claim 9; S5 part a), which
