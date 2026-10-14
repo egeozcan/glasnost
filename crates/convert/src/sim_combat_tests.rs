@@ -312,6 +312,7 @@ fn verses_are_exact_doubles() {
         b"50%,12.5%,0.1,1e400,-0,abc,2,100%,25%,0%,7%,9%",
         value::ARMOUR_CLASS_COUNT,
         true,
+        true,
     );
     assert_eq!(pow.len(), 11);
     assert_eq!(pow[0], "0.5");
@@ -370,6 +371,27 @@ fn verses_are_exact_doubles() {
     // The recorded switch.
     let (_, _, q) = import(base, "", "", "", &ImportOptions::default());
     assert_eq!(q.get("percent_list_integer_prefix"), Some(&true));
+}
+
+/// spec: S-0003 claim 13 and Formulas (a `%` item of Verses is Q₅₃(i × c): RZ₅₃ with quirks.chop_rounding on, RN₅₃ off; the switch is recorded)
+#[test]
+fn verses_percent_rounding_follows_chop() {
+    let base = "[Warheads]\n1=Pow\n[Pow]\nVerses=10%\n";
+    let (s, _, q) = import(base, "", "", "", &ImportOptions::default());
+    let on = s.warheads["Pow"].verses.clone().unwrap();
+    assert_eq!(nearest_double(&on[0].0).0, 0x3FB9_9999_9999_9999);
+    assert_eq!(q.get("chop_rounding"), Some(&true));
+    let options = ImportOptions {
+        sim: SimQuirks {
+            chop_rounding: false,
+            ..SimQuirks::default()
+        },
+        ..ImportOptions::default()
+    };
+    let (s, _, q) = import(base, "", "", "", &options);
+    let off = s.warheads["Pow"].verses.clone().unwrap();
+    assert_eq!(nearest_double(&off[0].0).0, 0x3FB9_9999_9999_999A);
+    assert_eq!(q.get("chop_rounding"), Some(&false));
 }
 
 /// spec: S-0302 Import mapping, S-0303 Import mapping, S-0308 Import mapping (warhead fields), S-0303 and S-0312 Edge cases (warhead warnings)
@@ -923,7 +945,7 @@ fn verses_text_round_trips_through_num() {
     for item in [
         "12%", "0.1", "-7.25", "33%", "1e-320", "3.4e38", "abc", "0%",
     ] {
-        let (vals, _) = value::percent_list(item.as_bytes(), 1, true);
+        let (vals, _) = value::percent_list(item.as_bytes(), 1, true, true);
         let text = combat::exact_text(&vals[0]);
         assert!(glasnost_num::decimal::parse_text(&text).is_ok(), "{text}");
         assert_eq!(nearest_double(&text).0, vals[0].bits, "{item} -> {text}");

@@ -182,6 +182,16 @@ pub struct Object {
     pub turret: Turning,
     /// Tick of the last shot (−100 for one that never fired, S-0206 claim 9).
     pub last_fired: i32,
+    /// The creation-derived report value r = x mod 65536 of the creation
+    /// draw (S-0202 claim 10, Q-0327); 0 for terrain objects, which take no
+    /// draw. Presentation reads it; gameplay never does.
+    #[serde(default)]
+    pub report_value: u16,
+    /// A turreted vehicle's latest turret rotation sample (S-0206 claim
+    /// 17): whether its turret was turning, recorded after all the turret
+    /// rows of the last tick that processed them.
+    #[serde(default)]
+    pub rotation_sample: bool,
     /// Behaviour slots and processing (S-0215).
     pub beh: Behaviours,
     /// Current target.

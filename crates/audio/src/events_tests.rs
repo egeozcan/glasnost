@@ -833,26 +833,23 @@ fn turret_sound() {
     let mut u = Rng::new(1);
     a.tick(&w, &[], &mut u);
     assert_eq!(a.mixer().alive(), 0);
-    let tick = w.tick;
-    let o = w.obj_mut(tank).expect("tank");
-    o.turret.t0 = tick;
-    o.turret.duration = 100;
+    // spec: S-0206 claim 17 (the sound update reads the latest rotation sample)
+    w.obj_mut(tank).expect("tank").rotation_sample = true;
     a.tick(&w, &[], &mut u);
     assert_eq!(heard(&mut a, 0), ["Whirr"]);
     // spec: S-0701 claim 23 (successive turning samples keep the existing instance)
     a.tick(&w, &[], &mut u);
     assert_eq!(a.mixer().alive(), 1);
     // spec: S-0701 claim 23 and scenario F12 (a non-turning sample asks it to end looping, no grace, no cut)
+    w.obj_mut(tank).expect("tank").rotation_sample = false;
     w.tick += 10_000;
     a.tick(&w, &[], &mut u);
     assert_eq!(a.mixer().alive(), 1, "still finishing its pass");
     // spec: S-0701 claim 23 (a later turning sample starts a fresh instance; the finishing one is not cut)
-    let tick = w.tick;
-    let o = w.obj_mut(tank).expect("tank");
-    o.turret.t0 = tick;
-    o.turret.duration = 100;
+    w.obj_mut(tank).expect("tank").rotation_sample = true;
     a.tick(&w, &[], &mut u);
     assert_eq!(a.mixer().alive(), 2);
+    w.obj_mut(tank).expect("tank").rotation_sample = false;
     w.tick += 10_000;
     a.tick(&w, &[], &mut u);
     render(&mut a, 100);

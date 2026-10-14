@@ -32,4 +32,8 @@ fn house_update(w: &mut World, h: HouseId) {
     super::tech::house_update(w, h);
     // spec: S-0411 claim 9 (the automatic release order)
     super::sidebar::release_orders(w, h);
+    // spec: S-0314 claim 15 (the automatic-repair hold is released by the start tick's house update: human and AI houses, and the neutral and special houses' delay 0)
+    if let Some(house) = w.houses.get_mut(usize::from(h.0)) {
+        house.combat.repair_hold = false;
+    }
 }

@@ -48,6 +48,7 @@ pub fn run(data: &[u8]) {
                     v,
                     value::ARMOUR_CLASS_COUNT,
                     quirks.percent_list_integer_prefix,
+                    true,
                 );
                 let _ = value::named(v, 31, &["a", "b"]);
             }

@@ -60,6 +60,15 @@ pub fn on_edge(p: (i32, i32), client: (i32, i32)) -> bool {
     p.0 <= 0 || p.0 >= b - 1 || p.1 <= 0 || p.1 >= c - 1
 }
 
+/// Whether edge scrolling may run this cycle: the window has focus and the
+/// simulation tick is outside the order block ending at `blocked_through`
+/// (S-0201 claim 14, S-0213 claim 1). Held arrows are not affected.
+pub fn edge_enabled(focused: bool, tick: i32, blocked_through: i32) -> bool {
+    // spec: S-0201 claim 14 (edge scrolling is suppressed during an order block)
+    // spec: S-0213 claim 1 (the block covers ticks up to its last blocked tick)
+    focused && tick > blocked_through
+}
+
 fn dbl(v: i64) -> F64 {
     F64::from_i64(v, Rounding::TowardZero)
 }
@@ -166,6 +175,26 @@ impl EdgeScroll {
             }
         }
     }
+
+    /// The requested screen direction the edge-scroll cursor shows (S-0213
+    /// claim 24): the pointer's edge direction on the outer client edge,
+    /// otherwise the retained direction while momentum decays, otherwise
+    /// none. `r` is the scroll index.
+    pub fn shown_direction(
+        &self,
+        pointer: Option<(i32, i32)>,
+        client: (i32, i32),
+        r: i32,
+    ) -> Option<(i32, i32)> {
+        // spec: S-0213 claim 24 (the outer edge selects the presentation; S-0101 F9 owns the direction)
+        if let Some(p) = pointer.filter(|&p| on_edge(p, client)) {
+            return Some(edge_direction(p, client));
+        }
+        // spec: S-0213 claim 24 (the retained direction while edge momentum decays)
+        // spec: S-0101 F9 (aₑ = min(a, 7 − r); a run-on request needs aₑ > 0)
+        let ae = self.momentum.min(MOMENTUM_BASE - r);
+        self.direction.filter(|_| ae > 0)
+    }
 }
 
 /// The arrow-key request of one unfrozen cycle (S-0101 claim 14): 21 pixels
@@ -198,6 +227,36 @@ mod tests {
         assert!(!on_edge((1, 300), c));
         assert!(!on_edge((798, 300), c));
         assert!(!on_edge((400, 598), c));
+    }
+
+    /// spec: S-0213 claim 24 (the edge cursor follows the requested direction at the outer edge and the retained direction during decay)
+    #[test]
+    fn s0213_claim_24_shown_direction() {
+        let c = (800, 600);
+        let mut e = EdgeScroll::default();
+        assert_eq!(e.shown_direction(Some((400, 300)), c, 3), None);
+        assert_eq!(e.shown_direction(Some((799, 300)), c, 3), Some((1, 0)));
+        assert_eq!(e.shown_direction(Some((0, 0)), c, 3), Some((-1, -1)));
+        assert_eq!(e.shown_direction(None, c, 3), None);
+        for k in 0..3u64 {
+            e.cycle(Some((799, 300)), c, 3, one(), 16 * k, |_| false);
+        }
+        // Off the edge, the retained direction while momentum decays.
+        assert_eq!(e.shown_direction(Some((400, 300)), c, 3), Some((1, 0)));
+        for k in 3..10u64 {
+            e.cycle(Some((400, 300)), c, 3, one(), 16 * k, |_| false);
+        }
+        assert_eq!(e.momentum, 0);
+        assert_eq!(e.shown_direction(Some((400, 300)), c, 3), None);
+    }
+
+    /// spec: S-0201 claim 14 (edge scrolling is off during an order block and without focus)
+    #[test]
+    fn s0201_claim_14_edge_off_during_order_block() {
+        assert!(!edge_enabled(true, 3, 3));
+        assert!(!edge_enabled(true, 0, 3));
+        assert!(edge_enabled(true, 4, 3));
+        assert!(!edge_enabled(false, 4, 3));
     }
 
     /// spec: S-0101 claim 12 and F9 (corners scroll diagonally, edge midpoints along one screen axis)

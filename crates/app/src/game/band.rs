@@ -63,6 +63,26 @@ pub fn inside(press: Point, end: Point, q: Point) -> bool {
         && (press.y.min(end.y)..=press.y.max(end.y)).contains(&q.y)
 }
 
+/// The most screen candidates admitted in one drawn frame.
+// spec: S-0214 claim 20 and Constants (500 screen candidates per drawn frame; not a selection limit)
+pub const SCREEN_CANDIDATES: usize = 500;
+
+/// The screen candidates admitted for a frame (S-0214 claim 20): mobile
+/// candidates first, then buildings, cut at [`SCREEN_CANDIDATES`]. Every
+/// candidate consumes a place whether or not a box could take it; places
+/// are not replenished. The order inside each group is the callers'.
+pub fn admit<T>(
+    mobile: impl IntoIterator<Item = T>,
+    buildings: impl IntoIterator<Item = T>,
+) -> Vec<T> {
+    // spec: S-0214 claim 20 (mobile drawing candidates consume places before the later building candidates; ineligible objects still consume places)
+    mobile
+        .into_iter()
+        .chain(buildings)
+        .take(SCREEN_CANDIDATES)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +132,22 @@ mod tests {
         assert!(inside(a, c, Point::new(10, 30)));
         assert!(!inside(a, c, Point::new(11, 25)));
         assert!(!inside(a, c, Point::new(7, 19)));
+    }
+
+    // spec: S-0214 claim 20 (at most 500 screen candidates, mobile before buildings; ineligible candidates consume places without replenishment)
+    #[test]
+    fn claim_20_candidate_capacity() {
+        let mobile: Vec<u32> = (0..490).collect();
+        let buildings: Vec<u32> = (1000..1020).collect();
+        let a = admit(mobile.clone(), buildings.clone());
+        assert_eq!(a.len(), 500);
+        assert_eq!(&a[..490], &mobile[..]);
+        assert_eq!(&a[490..], &buildings[..10]);
+        let crowd: Vec<u32> = (0..510).collect();
+        let a = admit(crowd, buildings);
+        assert_eq!(a.len(), 500);
+        assert!(a.iter().all(|&x| x < 1000), "no building gets a place");
+        // Few candidates: all admitted, buildings after mobiles.
+        assert_eq!(admit([1, 2], [9]), [1, 2, 9]);
     }
 }

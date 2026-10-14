@@ -76,6 +76,10 @@ pub struct DriveState {
     pub between_steps: bool,
     /// Tick of the last movement.
     pub moved_tick: Option<i32>,
+    /// The scatter requests sent this tick, cell and layer, kept only with
+    /// `quirks.drive_duplicate_scatter_request` off (S-0207 Edge cases).
+    #[serde(default)]
+    pub requests: Option<(i32, Vec<(CellXY, Layer)>)>,
 }
 
 impl DriveState {
@@ -93,6 +97,7 @@ impl DriveState {
             // spec: S-0209 Terms (a vehicle that has not advanced since it was created is between steps)
             between_steps: true,
             moved_tick: None,
+            requests: None,
         }
     }
 }
@@ -919,6 +924,21 @@ fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
     } else {
         Layer::Ground
     };
+    if !w.rules().quirks.drive_duplicate_scatter_request {
+        // spec: S-0207 Edge cases (quirks.drive_duplicate_scatter_request off: of one vehicle's requests to the same cell and layer in a tick only the earliest is sent)
+        let tick = w.tick;
+        let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) else {
+            return;
+        };
+        let sent = d.requests.get_or_insert_with(|| (tick, Vec::new()));
+        if sent.0 != tick {
+            *sent = (tick, Vec::new());
+        }
+        if sent.1.contains(&(c, layer)) {
+            return;
+        }
+        sent.1.push((c, layer));
+    }
     crate::scatter::cell_request(
         w,
         c,
@@ -1395,4 +1415,40 @@ pub fn stop(w: &mut World, id: ObjectId) {
 pub fn unit_rules(r: &SimRules, w: &World, id: ObjectId) -> Option<UnitRules> {
     let o = w.obj(id)?;
     r.unit(o.kind, o.type_index).cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::Kind;
+    use crate::testkit;
+
+    /// The world after `n` scatter requests from a vehicle to a friendly
+    /// walker's cell in one tick, with the duplicate-request switch `on`.
+    fn after_requests(on: bool, n: usize) -> World {
+        let mut r = testkit::ruleset();
+        r.globals.quirks.drive_duplicate_scatter_request = on;
+        let mut w = testkit::game_with(&r, 40, 3);
+        let v = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(40, 0, 0), 0);
+        let c = testkit::mid(40, 0, -1);
+        testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c, 0);
+        if let Some(o) = w.obj_mut(v) {
+            o.drive.get_or_insert_with(DriveState::new);
+        }
+        for _ in 0..n {
+            request_scatter(&mut w, v, c);
+        }
+        w
+    }
+
+    // spec: S-0207 claim 15 and Edge cases (quirks.drive_duplicate_scatter_request: on, a second request in the tick reaches the receiver again and takes its draw; off, it is omitted with its draws)
+    #[test]
+    fn duplicate_request_in_one_tick() {
+        let once = after_requests(true, 1).rng;
+        let twice = after_requests(true, 2).rng;
+        assert_ne!(once, twice, "on: the second request draws again");
+        let once = after_requests(false, 1).rng;
+        let twice = after_requests(false, 2).rng;
+        assert_eq!(once, twice, "off: the second request is not sent");
+    }
 }

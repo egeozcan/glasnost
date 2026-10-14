@@ -64,6 +64,18 @@ pub struct CombatState {
     pub turret_was_turning: bool,
     /// The tick of the last aim by the attack processing (S-0215 claim 32).
     pub last_shot_target: Option<Target>,
+    /// Hostile-hit mark (S-0314 Terms): a surviving hit by a known attacker
+    /// not allied from this object's owner's side. Never cleared.
+    #[serde(default)]
+    pub hostile_hit: bool,
+    /// A building's captured mark (S-0314 Terms): it has changed owner.
+    /// Never cleared.
+    #[serde(default)]
+    pub captured: bool,
+    /// A building's computer-repair map flag (S-0314 claim 13, S-0009
+    /// claim 40).
+    #[serde(default)]
+    pub computer_repair: bool,
 }
 
 impl CombatState {
@@ -95,6 +107,9 @@ impl CombatState {
             berserk_until: None,
             turret_was_turning: false,
             last_shot_target: None,
+            hostile_hit: false,
+            captured: false,
+            computer_repair: false,
         }
     }
 }
@@ -118,6 +133,9 @@ pub struct HouseCombat {
     pub losses: i32,
     /// Infantry and vehicle self-heal totals (S-0314 claim 10).
     pub self_heal: [i32; 2], // spec: S-0314 claim 10 (two running totals)
+    /// The automatic-repair hold (S-0314 Terms, claims 13 and 15).
+    #[serde(default)]
+    pub repair_hold: bool,
 }
 
 /// A projectile in flight (S-0306), an object of the update order.

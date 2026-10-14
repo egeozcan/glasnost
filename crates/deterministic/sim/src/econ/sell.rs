@@ -356,7 +356,13 @@ pub fn repair(w: &mut World, actor: ObjectId) {
 /// *P*<sub>b</sub> while its repair is on.
 pub fn building_turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    if !o.econ.building.repairing || o.health <= 0 {
+    if o.health <= 0 {
+        return;
+    }
+    // spec: S-0314 claim 12 (every ordinary living building turn that reaches repair work considers automatic action, before claim 8's step)
+    automatic(w, id);
+    let Some(o) = w.obj(id) else { return };
+    if !o.econ.building.repairing {
         return;
     }
     let pb = w.rules().combat.general.repair_period;
@@ -370,6 +376,101 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
         && let Some(ob) = w.obj_mut(id)
     {
         ob.econ.building.repairing = false;
+    }
+}
+
+/// Automatic building repair and sale (S-0314 claims 12 to 15).
+fn automatic(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(owner) = o.owner else { return };
+    let Some(h) = w.houses.get(usize::from(owner.0)) else {
+        return;
+    };
+    let g = &w.rules().combat.general;
+    let (threshold, reserve, sell_back) = (g.iq_repair_sell, g.credit_reserve, g.iq_sell_back);
+    // spec: S-0314 claim 8 (the gate: the house skill level is at least the repair-and-sell threshold)
+    if h.skill < threshold {
+        return;
+    }
+    // spec: S-0314 claim 12 (the behaviour is neither construction nor selling)
+    if matches!(
+        o.beh.seen(),
+        Some(Behaviour::Construction | Behaviour::Selling)
+    ) {
+        return;
+    }
+    // spec: S-0314 claim 12 (repairable under S-0408 claim 14: a full-health building is ineligible)
+    if !repairable(w, id) {
+        return;
+    }
+    let (human, held, role) = (h.human, h.combat.repair_hold, h.role);
+    let (repairing, captured, flagged, hostile) = (
+        o.econ.building.repairing,
+        o.combat.captured,
+        o.combat.computer_repair,
+        o.combat.hostile_hit,
+    );
+    // spec: S-0314 claim 12 (credits at least the reserve: repair only; below it: sale only; signed, equality is repair's)
+    if crate::seams::available_credits(w, owner) >= reserve {
+        // spec: S-0314 claim 13 (repair already on neither sets the hold nor draws; the hold blocks a start)
+        if repairing || held {
+            return;
+        }
+        // spec: S-0314 claim 13 (a human-controlled owner, an AI house included, or the captured mark or the computer-repair flag)
+        if !(human || captured || flagged) {
+            return;
+        }
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0314 claim 13 (the start takes no payment and changes no health; claim 8's next step does)
+            ob.econ.building.repairing = true;
+        }
+        if let Some(hh) = w.houses.get_mut(usize::from(owner.0)) {
+            // spec: S-0314 claim 13 (the start sets the house's hold)
+            hh.combat.repair_hold = true;
+        }
+        if !human && role != HouseRole::Player {
+            // spec: S-0314 claim 15 and F4 (a neutral or special house's delay: R(0, 0) for d = 0, no raw value; the hold is released in this tick's house update)
+            let half = w.rules().quirks.ranged_draw_half_span;
+            let _ = w.rng.ranged(0, 0, half);
+        }
+        return;
+    }
+    // spec: S-0314 claim 14 (below the reserve: only a building with the hostile-hit mark)
+    if !hostile {
+        return;
+    }
+    // spec: S-0314 Terms (the sale skill stays 0 in a skirmish)
+    let sale_skill: i32 = 0;
+    // spec: S-0314 claim 14 (sale skill at least the sale threshold, both read as unsigned 32-bit values)
+    if (sale_skill as u32) < (sell_back as u32) {
+        return;
+    }
+    let half = w.rules().quirks.ranged_draw_half_span;
+    // spec: S-0314 claim 14 and Constants (one ranged draw R(0, 50) on each eligible turn, taken even when a later test fails)
+    let k = w.rng.ranged(0, 50, half);
+    let tech = crate::econ::tech::house_tech_level(w, owner);
+    // spec: S-0314 claim 14 (success: the result strictly below the owner's tech level, read as unsigned)
+    if (k as u32) >= (tech as u32) {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let r = w.rules();
+    let mode = r.mode;
+    // spec: S-0314 claim 14 (no tag)
+    let tagged = w.triggers.objects.contains_key(&id);
+    // spec: S-0314 claim 14 (its type is not a factory for buildings)
+    let factory =
+        r.buildings[o.type_index as usize].factory == Some(crate::rules::FactoryKind::Building);
+    let s = crate::combat::damage::strength(w, id);
+    // spec: S-0314 claim 14 (the floating-point health ratio strictly below the red-health threshold)
+    let ratio =
+        F64::from_i64(i64::from(o.health), mode).div(F64::from_i64(i64::from(s), mode), mode);
+    let red = ratio.lt(r.general.condition_red);
+    // spec: S-0314 claim 14 (a pending delayed kill prevents the sale)
+    let dying = o.combat.delay_kill_until.is_some();
+    if !tagged && !factory && red && !dying {
+        // spec: S-0314 claim 14 (the effect of S-0408 claim 4; the input sellability test is not a condition)
+        sell_building(w, id);
     }
 }
 

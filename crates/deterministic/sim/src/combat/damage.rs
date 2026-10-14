@@ -424,6 +424,17 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     };
     if result != HitResult::NowDead && result != HitResult::PostMortem {
         damage_effect_reaction(w, target, result, hit.warhead);
+        // spec: S-0314 Terms (hostile-hit mark: a surviving hit past claim 8's stopping tests, attacker known, its house not allied from the owner's side)
+        let attacker_house = hit
+            .attacker
+            .map(|a| w.obj(a).map_or(hit.house, |a| a.owner));
+        if let Some(ah) = attacker_house
+            && !w.allied(o.owner, ah)
+            && let Some(ob) = w.obj_mut(target)
+            && ob.health > 0
+        {
+            ob.combat.hostile_hit = true;
+        }
     }
     // A presentation event for the sound reactions (S-0701 claim 20); no state, no draw.
     w.effects.push(crate::combat::effects::Effect::Hit {
