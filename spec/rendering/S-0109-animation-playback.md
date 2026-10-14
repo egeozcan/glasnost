@@ -2,8 +2,8 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 16
-sources-class: [decomp]
+revision: 17
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
@@ -531,17 +531,18 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       visibility of slot animations at fade levels 11 to 14, which depends on how the cloaking specs
       draw the building
 
-21. **Erasure.** When an erasing weapon locks onto a building (Terms, *being erased*), every slot
-    animation the building has at that moment is drawn from then on with translucency code 2, or 3
-    if its type has the double-thick flag, combined (Terms) with the code of claim 20, at every
-    detail level, and is held (claim 23). Both end when the building stops being erased: the slot
-    animations are drawn as before and are released. A slot animation that starts while its
-    building is already being erased starts held but is drawn without the erasure translucency,
-    until the next lock-on of any erasing weapon onto the building (a further shot of the same
-    weapon included, if it fires again), which marks every slot animation the building has then
-    (`quirks.anim_erasure_late_slots_opaque`).
-    - Backing: `measurable` (scenarios AN14, AN16)
-    - Confidence: medium (when weapons lock on and let go is the combat specs' business)
+21. **Erasure.** While a building is being erased (Terms), every slot animation it has is drawn
+    with translucency code 2, or 3 if its type has the double-thick flag, combined (Terms) with
+    the code of claim 20, at every detail level, and is held (claim 23). A slot animation that
+    starts during erasure has that same erasure translucency and hold from its start, without
+    waiting for another weapon lock-on. Both end when the building stops being erased: the slot
+    animations are drawn as before and are released subject to claim 23's independent hold causes.
+    The original omits erasure translucency for slots started during erasure until another
+    weapon lock-on, a drawing inconsistency fixed here as a departure confirmed by the project lead.
+    - Backing: `measurable` (AN14, AN16) for existing-slot drawing and holds; late-slot
+      translucency is a departure tested against this spec, not the original (AN16 part c).
+    - Confidence: medium for the original's erasure transitions (the combat specs own weapon
+      lock-on and release); high for the departure
 
 22. **Attached animations.** An animation can be attached to an owner object. While attached, its
     position is the owner's position plus the displacement it had from the owner when it was
@@ -845,10 +846,6 @@ advance of the same update. So:
   hide rules of claim 20 do not apply, so a slot animation of a building cloaked from the viewer is
   drawn, opaque. Off: an animation with *t* > 15 is not drawn at any detail level; below the
   translucency detail field the code stays 0 otherwise.
-- **`quirks.anim_erasure_late_slots_opaque`** (default: on). A slot animation that starts while its
-  building is being erased is held but drawn without the erasure translucency until the next
-  lock-on of an erasing weapon onto the building (claim 21). Off: it is drawn with the erasure translucency from its start, like
-  the others.
 - **`quirks.anim_damage_starts_at_one`** (default: on). The damage accumulator starts at 1.0 when an
   animation is created, so the first advance delivers at least 1, but at 0.0 after a follow-up switch
   (claim 17, F5). Off: it starts at 0.0 in both cases, so the total after *n* advances is close to
@@ -1164,22 +1161,28 @@ building that can cloak), it sets them in the test map's override section, which
     power before the weapon locks on and restores it only 300 ticks after the firer is destroyed.
   - Part (c), late slot: a slot that starts when power comes back (*light-unpowered*), with power
     cut before the erasing weapon locks on and restored while the building is being erased.
+    Test both an otherwise opaque type without the double-thick flag and one with it; use a
+    translucency detail field of 0. The blend check is a departure test against this spec on
+    our engine, not an oracle measurement; the held-stage check remains an oracle measurement.
   - Part (d), loop delay while held: a *freeze-unpowered* slot of a test type with loop count −1,
     random loop delay 200, 200, a start sound and rate 300; power is cut within the 200 ticks after a
     pass ends and restored 400 ticks later.
   - Observable: the slot animations' image frames per tick, their blend (screen capture), start
     sounds, and the ticks at which the erasing weapon fires (recorder).
-  - Runs: one per part.
+  - Runs: one per part, except (c), one per flag case on each engine.
   - Expected: (a) no advance while unpowered; one advance on the first tick after power returns.
     (b) no advance during the erasure; one advance on the first tick after the firer is destroyed
     and the translucency gone from then on; in the second run no advance until the power returns.
-    (c) the slot starts on its first image frame, opaque, stays opaque at least until the erasing
-    weapon's next shot, if it fires again, and does not advance until the firer is destroyed. (d) the start sound plays 200 updates after the pass end although the building is
+    (c) on our engine the slot has erasure translucency from its first drawn frame: 50 %
+    without the double-thick flag, 75 % with it, without waiting for a further shot. On both
+    engines it starts held on its first image frame and does not advance until the firer is
+    destroyed. (d) the start sound plays 200 updates after the pass end although the building is
     unpowered; the image frame stays on the loop start until power returns.
   - Falsified if: (a) or (b) waits a further 100 ticks after release, an image frame changes while
-    held, the second run of (b) advances before power returns, the late slot of (c) is drawn
-    translucent before any further shot of an erasing weapon or advances while the building is being
-    erased, or (d) plays no start sound while unpowered.
+    held, the second run of (b) advances before power returns, the late slot of (c) on our
+    engine lacks its expected erasure blend at any drawn frame during erasure (including before
+    a further shot), the late slot advances during erasure on either engine, or (d) plays no
+    start sound while unpowered.
 - **AN17 (claim 24; deferred, not a skirmish measurement).** A future mode that genuinely
   enables fog would compare two buildings' slot animations, one with the fog-remove flag absent
   and one with it disabled, after seeing and then fogging both. The expected observation is a
