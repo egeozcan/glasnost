@@ -1,9 +1,9 @@
 ---
 id: Q-0263
 title: Which sample banks and loose sound files does the game play samples from, and which copy wins when a sample name is in several?
-status: open
+status: answered
 related: [S-0005]
-answered-by: []
+answered-by: [S-0005]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0005
 title: Data file precedence (loose files, archive mount order, name lookup)
 topic: rules-import
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-14
 measurements: []
-requests: [Q-0002]
+requests: [Q-0002, Q-0263]
 supersedes: []
 ---
 
@@ -20,7 +20,9 @@ When the original asks for a data file by name (rules, art, sprites, models, pal
 exactly one copy is used: a loose file in the game directory if there is one, otherwise the copy in
 the highest-ranked mounted archive that holds the name. This spec gives that rank order, how a name
 is matched inside an archive, and which copy of each stock rules, art and game-mode file the program
-therefore reads; how those files are then layered is S-0006.
+therefore reads; how those files are then layered is S-0006. Sample-bank and announcement-file
+lookup is included; sample selection is S-0701. This revision's implementation scope is skirmish.
+Older campaign and network references are deferred context, not requirements for those modes.
 
 ## Terms
 
@@ -75,6 +77,9 @@ Terms used only by this spec:
 - **AI, sound, speech and music databases; mode list.** The parsed contents of the expansion's AI,
   sound-effect, voice-announcement and music files, and of the file that lists the multiplayer and
   skirmish game modes. Their file names are in the Import mapping section.
+- **Sample bank.** One named index file giving sound sample names and one named data file holding
+  their audio. A bank sample name is not a separate file name. S-0701 owns the sound-entry and
+  announcement vocabulary and the choice of sample to request.
 - **Kept art.** Art for which the first successful request of a session settles what later
   requests in that session get, for the same name and for any name with the same member id
   (`quirks.kept_art_keyed_by_id`), apart from the discarding described below. It comes in two sorts, which claim 22 tells apart by the
@@ -251,6 +256,32 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     - Confidence: high (order, fallback), medium (no sound archive when the sound system does not
       start)
 
+10a. **One named sample bank, not a search across banks.** When the sound system starts, after
+    mounting the sound archive of claim 10, it reads the one sample bank whose two file names are
+    in Import mapping. Each file is resolved independently by claims 1 and 7. A loose index can
+    therefore accompany archived data, or the two files can come from different archives. There is
+    no requirement that both belong to the sound archive or to the same archive. An earlier-ranked
+    archive can override either file even though the sound archive is mounted.
+
+    Only this resolved index supplies the names sound entries can play, matched without regard to
+    letter case (S-0701 claim 34). A lower-ranked index is not searched for a name missing from the
+    chosen index, and differently named banks are not discovered or merged. When several archives
+    hold banks with the same sample name, the winning index file and the winning data file decide
+    the sample, not a ranking of that sample name across banks. A separate sound file, loose or
+    archived, does not override or supply a sound-entry sample: neither an AUD file nor a WAV file
+    is a fallback for a missing bank sample.
+
+    Announcements instead request separate WAV files through the ordinary lookup, never the bank.
+    The file name is the selected voice-set sample name, cut to eight characters, with the WAV
+    extension appended (S-0701 claims 26 and 34, and its Import mapping). A loose copy wins over an
+    archived copy, and otherwise the first-ranked mounted archive containing that file wins.
+    There is no AUD fallback for that announcement name. The bank's byte layout is outside this
+    spec; public sample formats, not an additional behavioural spec, supply that layout.
+    - Backing: `measurable` (Scenario M25 (a) for same-name bank precedence, (b) for independent
+      index/data lookup, (c) for no bank discovery or per-sample merging, (d) for separate files
+      and announcement precedence; S-0701 A4 for case-insensitive bank sample names)
+    - Confidence: high
+
 11. **Then the extra-cache and extra-local archives.** Every loose file matching `ecache*.mix` is
     mounted, then every loose file matching `elocal*.mix`. A matching directory entry is skipped if
     it is a directory, or if the host marks it as hidden, as a system file or as a temporary file.
@@ -332,11 +363,10 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     - A country with no side at all (S-0004, claim 9 allows one) has no side archive number: no side
       group is mounted, and the game never reaches play.
 
-    With stock data this gives 01 for the Allied side (index 0) and 02 for the Soviet side (index 1)
-    and the Yuri side (index 2). These two numbers are consequences of the stock side order, not
-    engine constants. A side of index 3 or higher asks for the archives numbered 04, 05 and so on.
-    Stock data has none, so such a game never reaches play unless a loose file or an archive
-    supplies `sidecnn.mix` (claim 16). The indices are those of S-0004 claim 9: a side's index is
+    The archive number is determined by the side index using the formula above; it is not an
+    engine constant. A side of index 3 or higher asks for the correspondingly numbered side
+    archives. If the required `sidecnn.mix` cannot be resolved, the game never reaches play
+    (claim 16). The indices are those of S-0004 claim 9: a side's index is
     the order in which it was first created. In a skirmish or multiplayer game the sides that the
     base rules' countries name come first, in the order in which those countries first name them, and
     a side that only the base rules' side list, a game-mode layer or the map layer creates gets the
@@ -932,6 +962,9 @@ regard to letter case):
 | `aimd.ini` | AI database (claim 21a) | `localmd.mix` |
 | `soundmd.ini` | sound database | `expandmd01.mix` |
 | `evamd.ini` | speech database | `localmd.mix` |
+| `audio.idx` | the single sample-bank index (claim 10a), resolved independently of the data file | ordinary lookup after the sound archive is mounted |
+| `audio.bag` | the single sample-bank data file (claim 10a), resolved independently of the index | ordinary lookup after the sound archive is mounted |
+| selected voice-set sample name ‖ `.wav` | separate announcement audio (claim 10a); sample-name keys and eight-character cut are S-0701 Import mapping | ordinary lookup when requested |
 | `thememd.ini` | music database | `localmd.mix` |
 | `mpmodesmd.ini` | mode list: one entry per mode giving its name, tooltip, game-mode file, map filter and whether AI players are allowed | `localmd.mix` |
 | game-mode files named in the mode list | rules layer of the selected mode (S-0006) | `localmd.mix` |
@@ -940,6 +973,11 @@ regard to letter case):
 | `langrule.ini` | language rules file (claim 21) | absent |
 | `rulemd*.ini` (loose only) | alternative rules candidates (claim 20) | absent |
 | `ra2md.ini` (loose only) | settings file | loose |
+
+The two sample-bank names are fixed file names, not INI settings. No alternative bank-name
+setting or separate AUD/WAV fallback setting is imported. Sound-entry sample words and the
+announcement's per-voice-set sample-name fields are imported as specified by S-0701; their absence
+means no sample for that entry, not a search through additional banks.
 
 Archive file names are those of Table 1 and Table 2. The four palette names of claim 22 are fixed
 names, not imported keys.
@@ -1993,6 +2031,55 @@ mean those sides' names as the stock side list writes them.
     Soviet one plays. Variant (ii), without `sidec02.mix`: the Allied mission plays, the Soviet one
     never reaches play.
   - *Falsified if:* any mission reaches play or fails to reach play otherwise than stated.
+
+**Scenario M25: sample-bank and separate-file resolution (claim 10a; Q-0263).**
+- *Common setup:* stock executable, director and mods off except the named test files below,
+  working sound device and nonzero sound and voice volumes. A tiny skirmish map, speed 2, has one
+  local-player infantry and one bystander computer player confined away from it. Record audio
+  output. Keep the bystander from affecting the observed unit; void a run if it does. Use a
+  selection response containing exactly one sample, by a named loose sound-database copy if
+  necessary. Bank files below are valid compatible test files with short unique sample names.
+  Prepare two distinguishable audio markers A and B of equal duration and encoded length. Restore
+  the install after each variant. Each variant uses a fresh session and one selection.
+- (a) *Setup:* two test archives `expandmd98.mix` and `expandmd97.mix`, each containing the two
+  fixed bank files from Import mapping, with the selected sample present in both: marker A in 98,
+  marker B in 97. Control variant: also put 97's two bank files loose in the game directory.
+  *Procedure:* select the test infantry. *Observable:* which marker plays. *Runs:* one fresh
+  skirmish per variant. *Expected:* A without loose files, B with them. *Falsified if:* another
+  marker or silence is heard in either variant.
+- (b) *Setup:* a compatible data file has two equal-sized sample regions, containing A and B.
+  Index I names the selected sample at A's region; index J names it at B's region. A test
+  `expandmd98.mix` supplies I and the data file. Variant (i): J is loose, with no loose data file.
+  Variant (ii): I is archived, and a loose data file has the same region lengths but swaps the
+  audio of A and B. *Procedure:* select the test infantry. *Observable:* the marker played.
+  *Runs:* one fresh skirmish per variant. *Expected:* B in both: (i) combines loose index with
+  archived data, (ii) archived index with loose data. *Falsified if:* A or silence plays in either.
+- (c) *Setup:* 98's compatible bank includes a control sample but omits the selected sample.
+  97's bank includes the selected sample as B. Supply an additional compatible pair under the
+  different names `test.idx` and `test.bag`, both loose and in 98, containing the selected sample
+  as A. Include a second selection response for the control sample, to check sound is working.
+  *Procedure:* select the test infantry, then the control unit. *Observable:* selected response
+  and control response. *Runs:* one fresh skirmish. *Expected:* the selected response is silent,
+  the control is audible: neither the lower-ranked index nor the differently named banks supply
+  the missing sample. *Falsified if:* A or B is heard for the test infantry. An inaudible control
+  makes the run void rather than confirming absence.
+- (d) *Setup:* a valid bank contains the selected sample as A and an audible control sample.
+  Separate files named selected sample ‖ `.wav` and selected sample ‖ `.aud`, holding B in their
+  respective valid formats, are supplied both loose and in 98. Variant (i): bank sample present.
+  Variant (ii): bank index omits it, retaining the control. For announcement variants (iii) and
+  (iv), use a stock building-completion announcement and its selected voice-set file name from
+  S-0701 Import mapping: 98 holds a valid WAV with A, 97 one with B; (iv) also supplies that WAV
+  loose with B. Keep a bank sample of the same stem with different audio, to distinguish it.
+  Variant (v): make that announcement's WAV absent from every mounted archive and loose file,
+  retaining the bank sample and supplying an AUD file of the same stem both loose and in 98.
+  Use a different, unchanged announcement as an audible voice-system control.
+  *Procedure:* (i), (ii) select the test and control units; (iii), (iv), (v) finish a building that
+  requests that announcement; in (v) also trigger the control announcement.
+  *Observable:* recorded response or announcement audio.
+  *Runs:* one fresh skirmish per variant. *Expected:* (i) A, (ii) silence with audible control,
+  (iii) A, (iv) B, (v) silence with audible voice-system control. *Falsified if:* a separate file
+  supplies the selection response, the bank or AUD file supplies the announcement, or another
+  copy wins. An inaudible control voids (ii) or (v), respectively.
 
 ## Open questions
 
