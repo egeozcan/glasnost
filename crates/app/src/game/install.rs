@@ -34,20 +34,27 @@ pub struct Install {
     pub summary: String,
 }
 
-/// The countries the setup screen offers (interim, Q-0281): those that are
-/// not passive and not the neutral or special house's, in registration
-/// order.
-pub fn offered_countries(rules: &SimRules) -> Vec<String> {
+/// The countries the setup screen offers (S-0412 claim 15), in
+/// registration order: registration index 0 … 9 with the multiplayer
+/// listing flag on. The passive flag, the side and the neutral and special
+/// houses' countries are not tested. The resolved display-name condition is
+/// not applied: country display names are not read yet (see
+/// docs/development.md).
+pub fn offered_countries(r: &Ruleset, rules: &SimRules) -> Vec<String> {
     rules
         .country_names
         .iter()
-        .zip(&rules.countries)
-        .filter(|(n, c)| {
-            !c.passive
-                && n.as_str() != glasnost_sim::load::NEUTRAL
-                && n.as_str() != glasnost_sim::load::SPECIAL
+        // spec: S-0412 claim 15 (only registration indices 0 … 9 are offered)
+        .take(10)
+        .filter(|n| {
+            // spec: S-0412 claim 15 and Import mapping (the multiplayer listing flag; absent: off)
+            r.sim
+                .countries
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(n))
+                .is_some_and(|(_, c)| c.econ.multiplay.unwrap_or(false))
         })
-        .map(|(n, _)| n.clone())
+        .cloned()
         .collect()
 }
 
@@ -103,7 +110,7 @@ pub fn setup_rules(r: &Ruleset, sim: &SimRules) -> SetupRules {
         ],
         // spec: S-0201 claim 7 (the lobby's game-speed index from the rules)
         game_speed: sim.general.lobby_game_speed,
-        countries: offered_countries(sim),
+        countries: offered_countries(r, sim),
         colours: slot_swatches(),
     }
 }
@@ -209,6 +216,27 @@ mod tests {
         // No colour definition is consulted: the swatches take no rules input.
         assert_ne!(s[0], s[1]);
         assert_eq!(glasnost_render::palette::lobby_swatch_565(8), None);
+    }
+
+    // spec: S-0412 claim 15 (registration indices 0 … 9 with the listing flag on, in registration order; passive countries are not excluded)
+    #[test]
+    fn claim_15_offered_countries() {
+        let mut r = glasnost_ai::fixture::ruleset();
+        let names: Vec<String> = (0..12).map(|i| format!("Land{i}")).collect();
+        r.registries.insert("countries".into(), names.clone());
+        for (i, n) in names.iter().enumerate() {
+            let mut c = glasnost_rules::sim::Country::default();
+            c.econ.multiplay = Some(i != 2);
+            c.multiplay_passive = Some(i == 1);
+            r.sim.countries.insert(n.clone(), c);
+        }
+        let sim = SimRules::new(&r, "synthetic-countries");
+        let got = offered_countries(&r, &sim);
+        let want: Vec<String> = [0, 1, 3, 4, 5, 6, 7, 8, 9]
+            .iter()
+            .map(|i| format!("Land{i}"))
+            .collect();
+        assert_eq!(got, want);
     }
 
     #[test]
