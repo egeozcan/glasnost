@@ -2,11 +2,11 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0008, Q-0083]
 supersedes: []
@@ -277,13 +277,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
     Name lengths and later reads:
     - The art section's own image key and the eight names other than the build-up name are cut to
-      63 bytes. These are byte limits, not decoded-character limits. S-0108's Import mapping
-      currently describes related building-sprite name limits as characters; those descriptions
-      must be changed to bytes in the same review round. The image key is read afresh at every type
+      63 bytes. These are byte limits, not decoded-character limits. The image key is read afresh at every type
       read from the art section as it is then: when that art section does not set it, that read uses
       the image name, whatever an earlier read's art section had set.
-    - The build-up name is cut to **15** bytes, not decoded characters; the corresponding S-0108
-      Import mapping limit must be changed to bytes in the same review round. A type read whose art
+    - The build-up name is cut to **15** bytes, not decoded characters. A type read whose art
       section does not set it, or sets it empty, keeps the build-up name of the earlier read.
     - **The eight other sprites at a later type read** (deploying, roof-deploying, door,
       under-door, under-roof-door, rubble, special overlay, bib). Each is decided on its own, by the
@@ -302,7 +299,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     - Backing: `measurable` (A1 and A12 parts b, c and e for the body sprite, A2 and A12 parts d and
       e for the build-up sprite, A19 for the eight other sprites at a later type read)
     - Confidence: high (names and substitution, the later-read table), medium (the 63- and
-      15-character cuts)
+      15-byte cuts)
 
 12. **Building art at the theater refresh.** At the theater refresh of every game, a building with the
     theater flag reloads its body sprite as image ‖ .E and its build-up sprite as build-up name ‖ .E.
@@ -631,9 +628,8 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
       parts d and e) and a later read that shares again; `unmeasured` for a later read that drops
       the share flags, because the original's result there is unspecified and a measurement would
       record chance, not a rule. A22 part e also measures which kind wins when a share-source name
-      matches more than one kind. S-0004 claim 13 currently says that this priority is unmeasured
-      because no observable in that spec distinguishes it; that rationale must be revised to
-      acknowledge S-0007's A22 part e in the same review round.
+      matches more than one kind. S-0004 claim 13 marks this priority measurable and cites
+      S-0007's A22 part e, which distinguishes the winning kind through the shared-model outcome.
     - Confidence: high (the file name, the share order and priority), medium (no motion file, the
       afresh share keys)
 
@@ -701,67 +697,63 @@ Notation:
 
 **Infantry, vehicle and aircraft sprite** (voxel flag not set), at each type read:
 
-> theater flag set: file = found(I ‖ .E)
-> new-theater flag set (theater flag not set): file = found(subst(I ‖ .shp))
-> neither: file = found(I ‖ .shp)
+| Flags after the type read | Sprite file |
+|---|---|
+| Theater flag set | `found(I ‖ .E)` |
+| Theater flag not set and new-theater flag set | `found(subst(I ‖ .shp))` |
+| Neither flag set | `found(I ‖ .shp)` |
 
-**Building body sprite**, at each type read, where J is the art section's own image key when that
-key is set, and I otherwise:
+**Building body sprite**, at each type read: Let J be the art section's own image key when it is
+set, and I otherwise. If the theater flag is set, the sprite file is `found(subst(J ‖ .E))`; otherwise
+it is `found(subst(J ‖ .shp))`.
 
-> theater flag set: file = found(subst(J ‖ .E))
-> otherwise: file = found(subst(J ‖ .shp))
+**Building body sprite at the theater refresh**, when the theater flag is set (claim 12): the
+sprite file is I ‖ .E if that name resolves, and ∅ otherwise.
 
-**Building body sprite at the theater refresh**, theater flag set (claim 12):
-
-> file = I ‖ .E when that resolves; = ∅ otherwise
-
-**Animation sprite**, at each type read:
-
-> theater flag set: file = found(I ‖ .E)
-> otherwise: file = found(I ‖ .shp), with no subst
+**Animation sprite**, at each type read: With the theater flag set, the sprite file is
+`found(I ‖ .E)`. Without that flag, it is `found(I ‖ .shp)`, with no letter substitution.
 
 **Animation sprite at the theater refresh:**
 
-> theater flag set: file = (type name) ‖ .E when that resolves; = (type name) ‖ .shp when (type name) ‖ .E
-> does not resolve and (type name) ‖ .shp does; = ∅ otherwise
-> new-theater flag set (theater flag not set): file = found(subst(I ‖ .shp))
-> neither: the sprite of the last type read is kept
+| Flags after the last type read | Sprite at refresh |
+|---|---|
+| Theater flag set | Use (type name) ‖ .E if it resolves. If it does not resolve, use (type name) ‖ .shp if that resolves; otherwise there is no sprite (∅). |
+| Theater flag not set and new-theater flag set | `found(subst(I ‖ .shp))` |
+| Neither flag set | Keep the sprite from the last type read. |
 
-**Terrain object and smudge sprite** (no generic fallback anywhere):
+**Terrain object and smudge sprite** (no generic fallback anywhere): When the theater flag is not
+set, the type read loads I ‖ .shp if it resolves, and otherwise loads no sprite (∅). When the
+theater flag is set, the theater refresh loads (type name) ‖ .E if it resolves, and otherwise
+loads no sprite (∅).
 
-> theater flag not set: file = I ‖ .shp when that resolves at the type read; = ∅ otherwise
-> theater flag set: file = (type name) ‖ .E when that resolves at the theater refresh; = ∅ otherwise
+**Projectile** (claims 26, 27): Let K be the image key in the projectile's section for this type
+read, cut to 24 bytes. I is K when the key is non-empty, and otherwise is empty.
 
-**Projectile** (claims 26, 27), with K the image key of the type read's section (cut to 24
-bytes) and I = K, or empty when K is absent or empty:
-
-> I empty, or invisible projectile: no art
-> voxel flag not set: sprite as the infantry sprite above, from I (never I ‖ "A")
-> voxel flag set: model parts of claim 16 from I, or from I ‖ "A" at a type read where claim 10
-> appends an A (snow only)
+| Condition | Art for this type read |
+|---|---|
+| I is empty, or the projectile is invisible | No art. |
+| I is non-empty and the voxel flag is not set | The sprite given by the infantry-sprite rule above, using I and never I ‖ "A". |
+| I is non-empty and the voxel flag is set | The model parts of claim 16, named from I; at a snow-game read where claim 10 appends A, name them from I ‖ "A" instead. |
 
 **Particle and particle system** (claims 28, 29): the infantry sprite formulas above, with claim 1's
 image name; no art when the art section's voxel flag is set.
 
 **Model of a voxel animation** (claim 30), at each type read:
 
-> any share flag set: the share source's part named by the highest-ranking share flag set (body
-> above turret, turret above barrel), with its motion file,
-> or ∅ when there is no share source or it lacks that part
-> otherwise: model = I ‖ .vxl, no motion file, no fallback
+| Share flags | Model |
+|---|---|
+| At least one share flag is set | Use the share source's part named by the highest-priority set flag (body before turret, turret before barrel), together with its motion file. If there is no share source or it lacks that part, there is no model (∅). |
+| No share flag is set | Use I ‖ .vxl. No motion file is loaded, and there is no fallback. |
 
-**Superweapon icon** (claim 31), at every type read, with s the sidebar icon name cut to 24
-bytes:
+**Superweapon icon** (claim 31), at every type read: Let s be the sidebar icon name cut to 24
+bytes. The icon file is s ‖ .shp when that name resolves; otherwise the placeholder file
+XXICON.SHP is used.
 
-> s ‖ .shp when that resolves; = XXICON.SHP otherwise
-
-**Icons** (claims 22 and 25), with c and a the icon name and the alternate icon name, each cut to 24
-bytes:
-
-> main icon, set at the first type read only: c ‖ .shp when c is non-empty and
-> c ‖ .shp resolves; = XXICON.SHP otherwise
-> alternate icon, at every type read while none is loaded: a ‖ .shp when a is non-empty and
-> a ‖ .shp resolves; = ∅ otherwise
+**Icons** (claims 22 and 25): Let c be the main icon name and a the alternate icon name, each cut
+to 24 bytes. At the first type read only, the main icon is c ‖ .shp if c is non-empty and the
+file resolves; otherwise it is XXICON.SHP. At each type read while no alternate icon is loaded,
+the alternate icon becomes a ‖ .shp if a is non-empty and the file resolves; otherwise no
+alternate icon is loaded (∅). Once loaded, the alternate icon is not replaced.
 
 subst never changes a name whose second character is not A or T, and an extension never affects the
 first two characters of a name of two or more characters. So subst on J ‖ .E changes only names that
