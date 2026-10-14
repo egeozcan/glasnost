@@ -988,7 +988,7 @@ pub struct Quirks {
     pub factory_fixed_hover_exit: bool,
     /// A sidebar item tied with existing items on every key goes before
     /// them (the newest first); off: after them.
-    // spec: S-0004 claim 11
+    // spec: S-0004 claim 11; S-0407 claim 17 and Edge cases
     #[serde(default = "on")]
     pub sidebar_tie_newest_first: bool,
     /// An item with both the counts-as-aircraft and naval flags ranks 1 as
