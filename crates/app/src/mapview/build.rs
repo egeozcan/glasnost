@@ -25,8 +25,8 @@ use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_health};
 use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
-use glasnost_num::F64;
 use glasnost_num::geom::n_step;
+use glasnost_num::{F64, Rounding};
 use glasnost_render::compose::{
     CompanionBody, DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, SignedImage, Translucency,
     companion_origin, row565,
@@ -51,6 +51,7 @@ use super::quirks::{
     sprite_vehicle_facing_part,
 };
 use super::slots;
+use super::unload::{self, Unloading};
 
 /// File bytes read for a scene, by upper-case name.
 #[derive(Clone, Debug, Default)]
@@ -2076,8 +2077,9 @@ impl Builder<'_> {
             let condition = self.building_condition(i, p.health);
             // spec: S-0009 claim 39 (a building's turret starts at 256 × (v mod 256))
             let facing = facing_from_value(p.facing);
+            // A map-placed building is not unloading when the scene is built.
             let items = self.building_items(
-                i, &art, p.cell, cell.level, &p.owner, condition, facing, object, ground,
+                i, &art, p.cell, cell.level, &p.owner, condition, facing, object, None, ground,
             );
             self.built.scene.items.extend(items);
         }
@@ -2087,7 +2089,9 @@ impl Builder<'_> {
     /// top-left cell at `cell` (height level `level`): body, shadow and bib
     /// (returned, for the cell pass) and its voxel turret or barrel (pushed
     /// to `ground` as a ground-layer entry). `condition` is (damaged, badly
-    /// damaged); `facing` the turret's facing.
+    /// damaged); `facing` the turret's facing; `unloading` the unloading
+    /// state of a live building, which adds the images of S-0108 claims 22
+    /// and 23 (the door image goes to `ground` with the turret).
     #[allow(clippy::too_many_arguments)]
     fn building_items(
         &mut self,
@@ -2099,6 +2103,7 @@ impl Builder<'_> {
         condition: (bool, bool),
         facing: u16,
         object: u32,
+        unloading: Option<Unloading>,
         ground: &mut Vec<GroundEntry>,
     ) -> Vec<Item> {
         let mut items = Vec::new();
@@ -2130,9 +2135,16 @@ impl Builder<'_> {
             // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
             self.house_row(hsv, u)
         };
-        let Some(sprite) = art.sprite.clone() else {
+        let Some(body_sprite) = art.sprite.clone() else {
             return items;
         };
+        // spec: S-0108 claim 22 (while unloading, the deploying or roof-deploying sprite replaces the
+        // body sprite; quirks.roof_unload_no_fallback on, its default: the switch is not yet a field)
+        let unload_sprites =
+            unloading.map(|u| unload::unload_sprites(&art.building_sprites, u.roof, true));
+        let replaced = unload_sprites.and_then(|u| u.body);
+        // spec: S-0108 claims 3 and 9 (N, the clamp and the shadow are the sprite in use's)
+        let sprite = replaced.map_or(body_sprite, |(s, _)| s.to_vec());
         let n = self.sprite_frames(&sprite).unwrap_or(0);
         // spec: S-0009 claim 40 (a map-placed building is complete and idle at once);
         // S-0108 claim 6 (a change during the game's set-up is immediate: stage = a of the range)
@@ -2185,8 +2197,11 @@ impl Builder<'_> {
         // a stationary body of a building that is neither under construction nor being sold, so
         // the art displacement applies)
         let companion = self.body_companion(i, anchor);
-        // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib)
-        // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes)
+        // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes; drawn
+        // as a deploying or roof-deploying sprite: −L(z) − 22 or −L(z) − 42 replacing the normal
+        // depth adjustment, the companion depth image as for the normal body)
+        let body_bias = replaced.map_or(-lz - 2 + normal_z, |(_, b)| -lz + b);
+        // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib, then under-door)
         if let Some(frame) = frame_of(body_frame)
             && let Some(item) = self.place_sprite(
                 &sprite,
@@ -2195,7 +2210,7 @@ impl Builder<'_> {
                 DepthTest::Writer,
                 ItemDepth::Profile {
                     profile: Profile::Upright,
-                    bias: -lz - 2 + normal_z,
+                    bias: body_bias,
                     companion,
                 },
                 Paint::Lit(row),
@@ -2252,21 +2267,83 @@ impl Builder<'_> {
         {
             items.push(item);
         }
+        // spec: S-0108 claim 22 (the under-door sprite: image frame 1 when damaged, 0 otherwise;
+        // none past the sprite, S-0108 claim 3), drawn after the bib (S-0102 claim 16). Its anchor
+        // (claim 8's) and paint (the body's lit row) are our placeholders: no spec gives them
+        if let Some(under) = unload_sprites.and_then(|u| u.under_door) {
+            let frame = unload::under_door_frame(damaged);
+            if self.sprite_frames(under).is_some_and(|c| frame < c)
+                && let Some(item) = self.place_sprite(
+                    under,
+                    frame,
+                    anchor,
+                    DepthTest::Writer,
+                    // spec: S-0102 claim 13 (under-door sprites: −L(z) − 2, flat, writes)
+                    ItemDepth::Profile {
+                        profile: Profile::Flat,
+                        bias: -lz - 2,
+                        companion: None,
+                    },
+                    Paint::Lit(row),
+                    Group::Buildings,
+                    false,
+                    Some(object),
+                )
+            {
+                items.push(item);
+            }
+        }
         self.slot_animations(i, cell, z, u, hsv, damaged, object, ground);
+        // The building's parts in the object pass: the door image, then its voxel turret or barrel
+        // (our placeholder order between the two).
+        let mut parts = Vec::new();
+        if let Some(un) = unloading
+            && let Some(door) = art.building_sprites.get("door")
+        {
+            // spec: S-0108 Import mapping (the door-stage count and the damaged-door flag: absent-key
+            // defaults 0 and false; their key names are not given, Q-0540)
+            let (stages, damaged_door) = (0, false);
+            // spec: S-0108 F8, Edge cases (round-toward-zero mode: S-0205's switch, as the rules hold it)
+            let mode = self.rules.map_or(Rounding::TowardZero, |r| r.mode);
+            let frame = unload::door_frame(un.door, stages, damaged, damaged_door, mode);
+            let count = self.sprite_frames(door).unwrap_or(0);
+            if let Some(frame) = unload::door_image_frame(frame, count)
+                // spec: S-0108 claim 23 (at the image anchor of claim 8); its paint, the body's lit row,
+                // is our placeholder: S-0103 and S-0104 do not name the door image
+                && let Some(item) = self.place_sprite(
+                    door,
+                    frame,
+                    anchor,
+                    DepthTest::Reader,
+                    // spec: S-0102 claim 13 (door sprite, object pass: −L(z) − 7, flat, no depth write)
+                    ItemDepth::Profile {
+                        profile: Profile::Flat,
+                        bias: -lz - 7,
+                        companion: None,
+                    },
+                    Paint::Lit(row),
+                    Group::Buildings,
+                    false,
+                    Some(object),
+                )
+            {
+                parts.push(item);
+            }
+        }
         // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
         let turret_voxel = rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
         if turret_voxel || art.voxels.contains_key("barrel") {
-            let items = self.building_voxels(i, art, facing, anchor, lz, u, hsv, object);
+            parts.extend(self.building_voxels(i, art, facing, anchor, lz, u, hsv, object));
+        }
+        if !parts.is_empty() {
             // spec: S-0102 F4 (key = 256·(c_x + c_y) + 32 for a voxel turret − 16 for a gate)
             let key = i64::from(256 * (cell.x + cell.y)) + if turret_voxel { 32 } else { 0 }
                 - if gate { 16 } else { 0 };
-            if !items.is_empty() {
-                ground.push(GroundEntry {
-                    key,
-                    items,
-                    object: Some(object),
-                });
-            }
+            ground.push(GroundEntry {
+                key,
+                items: parts,
+                object: Some(object),
+            });
         }
         items
     }
@@ -3710,6 +3787,7 @@ impl Painter {
                 condition,
                 d.facing,
                 d.object,
+                d.unloading,
                 &mut ground,
             );
             for g in ground {
@@ -3759,6 +3837,9 @@ pub struct LiveBuilding {
     pub facing: u16,
     /// Item object code.
     pub object: u32,
+    /// Its unloading state, while it unloads a unit (S-0417 Terms; S-0108
+    /// claims 22 and 23).
+    pub unloading: Option<Unloading>,
 }
 
 /// A greyscale-free minimap: each cell as two pixels with its tile radar
