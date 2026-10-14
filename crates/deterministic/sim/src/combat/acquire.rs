@@ -460,8 +460,7 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
         SearchKind::MapWide => 0,
     };
     // spec: S-0309 F1 (a healer for acquisition in guard: R = 512)
-    if crate::combat::weapon::healer_for_acquisition(w, a)
-        && o.beh.seen() == Some(Behaviour::Guard)
+    if crate::combat::weapon::healer_for_acquisition(w, a) && o.beh.seen() == Some(Behaviour::Guard)
     {
         big_r = 512;
     }

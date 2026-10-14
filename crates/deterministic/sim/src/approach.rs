@@ -128,7 +128,8 @@ fn shortcut(w: &mut World, id: ObjectId, p: Pos, c: glasnost_map::CellXY) {
         s.target = None;
     }
     // spec: S-0208 claim 21 (deck occupancy and the deck standing height when the cell carries a high bridge and the height exceeds the surface height at P by more than 312, strict; ground occupancy otherwise)
-    let deck = w.high_bridge(own) && o.pos.z > w.surface_at(p.x, p.y).wrapping_add(DECK_CHOICE_ABOVE);
+    let deck =
+        w.high_bridge(own) && o.pos.z > w.surface_at(p.x, p.y).wrapping_add(DECK_CHOICE_ABOVE);
     let layer = if deck { Layer::Deck } else { Layer::Ground };
     // spec: S-0208 claims 3, 4 and 21 (the walking target chosen again with P as the desired point)
     let class = crate::walk::position_class(p.x.rem_euclid(256), p.y.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within the cell)

@@ -28,6 +28,7 @@ pub struct IdleBody {
 
 /// The *idle* range (*a*, *c*, *d*) of a building type (S-0108 Import
 /// mapping, `AnimIdle`) and its normalised mark (`Normalized`).
+// spec: S-0108 Import mapping (AnimIdle: start, count, delay)
 fn range(w: &World, t: u32) -> ([i32; 3], bool) {
     let r = w.rules();
     let Some(b) = r.buildings.get(t as usize) else {
@@ -121,7 +122,11 @@ pub fn turn(w: &mut World, id: ObjectId) {
         if next.stage >= a.wrapping_add(c) {
             // spec: S-0108 claim 6 (past the end of the range, k ≥ a + c, it wraps to a with N(d, s) for idle); Edge cases (quirks.building_wrap_normalisation off: the immediate-entry rule); S-0215 claim 11 (the wrap itself sets no mark)
             next.stage = a;
-            next.delay = if !wrap_rule && !norm { d } else { normalised(w, d) };
+            next.delay = if !wrap_rule && !norm {
+                d
+            } else {
+                normalised(w, d)
+            };
         } else if next.stage == a.wrapping_add(c).wrapping_sub(1) {
             // spec: S-0215 claim 11 (advancing onto the last stage sets the mark)
             mark = true;

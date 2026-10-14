@@ -50,7 +50,11 @@ fn hut(idle: [i32; 3], turret: bool) -> (World, ObjectId) {
 fn step(w: &mut World, id: ObjectId) -> (bool, Option<Behaviour>, i32) {
     glasnost_sim::tick::step(w);
     let o = w.obj(id).unwrap();
-    (o.beh.ready_mark, o.beh.current, o.econ.idle_body.unwrap().stage)
+    (
+        o.beh.ready_mark,
+        o.beh.current,
+        o.econ.idle_body.unwrap().stage,
+    )
 }
 
 // spec: S-0215 claim 1 (at game set-up: the idle body and guard queued, not a construction body or construction queued)
@@ -58,7 +62,10 @@ fn step(w: &mut World, id: ObjectId) -> (bool, Option<Behaviour>, i32) {
 fn claim_1_set_up_building_has_guard_queued() {
     let (w, id) = hut([0, 3, 4], false);
     let o = w.obj(id).unwrap();
-    assert_eq!((o.beh.current, o.beh.queued), (None, Some(Behaviour::Guard)));
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (None, Some(Behaviour::Guard))
+    );
     assert!(!o.econ.construction.building_up);
     let body = o.econ.idle_body.expect("the idle body");
     // spec: S-0108 claim 6 (an immediate change at set-up: stage a, raw d for art not marked normalised)
@@ -144,8 +151,18 @@ fn set_up_turreted_defence_fires() {
         placed: placed("Beta", "CART", cell(3, 0)),
     });
     let mut w = s.build();
-    let tower = w.objects.values().find(|o| o.kind == Kind::Building).unwrap().id;
-    let cart = w.objects.values().find(|o| o.kind == Kind::Vehicle).unwrap().id;
+    let tower = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Building)
+        .unwrap()
+        .id;
+    let cart = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle)
+        .unwrap()
+        .id;
     assert_eq!(w.obj(tower).unwrap().beh.queued, Some(Behaviour::Guard));
     let full = w.obj(cart).unwrap().health;
     for _ in 0..300 {

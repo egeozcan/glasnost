@@ -1114,7 +1114,10 @@ fn s0215_gate_open_and_close_cycle() {
     assert_eq!(closed, Some(c + 90));
     let b = &w.obj(gate).unwrap().beh;
     // The finished stage queued guard; the zero-delay idle body range of the test gate sets the ready mark on every turn, so guard is current by now, its start resetting the progress count (S-0215 claims 3 and 11).
-    assert_eq!((b.current, b.queued, b.progress), (Some(Behaviour::Guard), None, 0));
+    assert_eq!(
+        (b.current, b.queued, b.progress),
+        (Some(Behaviour::Guard), None, 0)
+    );
     assert!(!process::gate_open(&w, gate));
 }
 

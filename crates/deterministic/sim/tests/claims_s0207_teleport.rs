@@ -352,7 +352,16 @@ fn temporary_drive_then_own_locomotor_back() {
 /// draw state before and after it, the timer after it and the targeting
 /// delay of its behaviour. `passive` is the type's passive-acquire flag (the
 /// search gate of S-0309 claim 2; claim 3's opportunity gate is open).
-fn armed_end_tick(passive: bool, left: i32) -> (i32, glasnost_sim::rng::Rng, glasnost_sim::rng::Rng, i32, i32) {
+fn armed_end_tick(
+    passive: bool,
+    left: i32,
+) -> (
+    i32,
+    glasnost_sim::rng::Rng,
+    glasnost_sim::rng::Rng,
+    i32,
+    i32,
+) {
     use glasnost_sim::testkit;
     let mut r = testkit::combat_ruleset();
     let cart = r.sim.vehicles.get_mut("CART").unwrap();
@@ -377,12 +386,20 @@ fn armed_end_tick(passive: bool, left: i32) -> (i32, glasnost_sim::rng::Rng, gla
             assert_eq!(w.obj(id).unwrap().target, None);
             // spec: S-0309 claim 4 (the guard-area delay under area guard, the normal one otherwise); the jump left the cart at rest (claim 20 e)
             let g = &w.rules().general;
-            let n = if w.obj(id).unwrap().beh.current == Some(glasnost_sim::rules::Behaviour::AreaGuard) {
+            let n = if w.obj(id).unwrap().beh.current
+                == Some(glasnost_sim::rules::Behaviour::AreaGuard)
+            {
                 g.guard_area_targeting_delay
             } else {
                 g.normal_targeting_delay
             };
-            return (t, before, w.rng.clone(), w.obj(id).unwrap().targeting_timer, n);
+            return (
+                t,
+                before,
+                w.rng.clone(),
+                w.obj(id).unwrap().targeting_timer,
+                n,
+            );
         }
     }
 }
@@ -390,7 +407,9 @@ fn armed_end_tick(passive: bool, left: i32) -> (i32, glasnost_sim::rng::Rng, gla
 // spec: S-0207 claim 20 (f) and (i) (only with no target: above 10 ticks left the conditional draw over 4 to 8 comes first; a search the gates allow then takes its normal timer draw, which replaces the temporary value; with the gates refusing, only the conditional draw; at 10 or fewer, only the search's draw); S-0309 claim 4 (the search's timer restart N + U(0, 2))
 #[test]
 fn claim_20_end_of_phasing_in_draws_with_the_search_gates() {
-    let half = glasnost_sim::testkit::combat_rules().quirks.ranged_draw_half_span;
+    let half = glasnost_sim::testkit::combat_rules()
+        .quirks
+        .ranged_draw_half_span;
     // Neither draw: the gates refuse and the timer is at 10.
     let (end, before, none, timer, _) = armed_end_tick(false, 10);
     assert_eq!(timer, end + 10);

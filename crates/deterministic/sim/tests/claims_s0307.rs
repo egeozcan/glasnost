@@ -1498,7 +1498,11 @@ fn s0208_claim_21_walk_to_p_on_the_ground() {
     approach_search(&mut probe, a, reach);
     let search_draws = probe.rng.taken() - before.taken();
     glasnost_sim::approach::step(&mut w, a);
-    assert_eq!(w.rng.taken() - before.taken(), search_draws, "no second position-choice draw");
+    assert_eq!(
+        w.rng.taken() - before.taken(),
+        search_draws,
+        "no second position-choice draw"
+    );
     let own = cell_of(0, 0);
     let (u, v) = glasnost_sim::walk::standing_point(position::BOTTOM);
     let p = Pos::new(256 * own.x + u, 256 * own.y + v, 0);
@@ -1514,7 +1518,12 @@ fn s0208_claim_21_walk_to_p_on_the_ground() {
             assert_eq!(o.target, Some(Target::Object(t)));
             return;
         }
-        assert_eq!(o.walk.as_ref().and_then(|s| s.target), Some(p), "tick {}", w.tick);
+        assert_eq!(
+            o.walk.as_ref().and_then(|s| s.target),
+            Some(p),
+            "tick {}",
+            w.tick
+        );
     }
     panic!("the walker never reached P");
 }
@@ -1540,7 +1549,8 @@ fn deck_walker(taken: &[u8]) -> (World, ObjectId, ObjectId) {
         o.pos.z += 416;
     }
     for &p in taken {
-        w.cells.mark_infantry(own, Layer::Deck, p, ObjectId(9999), HouseId(1));
+        w.cells
+            .mark_infantry(own, Layer::Deck, p, ObjectId(9999), HouseId(1));
     }
     let t = walker_target(&mut w, a, 1, 0, position::BOTTOM);
     w.obj_mut(a).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
@@ -1557,11 +1567,19 @@ fn s0208_claim_21_deck_choice_moves_to_another_side_position() {
     assert_eq!(o.dest, Some(Target::Cell(cell_of(1, 0))));
     let s = o.walk.as_ref().unwrap();
     let wt = s.target.expect("a walking target");
-    assert!(matches!(s.standing, position::LEFT | position::RIGHT), "{}", s.standing);
+    assert!(
+        matches!(s.standing, position::LEFT | position::RIGHT),
+        "{}",
+        s.standing
+    );
     let (u, v) = glasnost_sim::walk::standing_point(s.standing);
     assert_eq!(wt, Pos::new(256 * own.x + u, 256 * own.y + v, 416));
     assert!(w.cells.occ(own, Layer::Deck).unwrap().taken(s.standing));
-    assert!(!w.cells.occ(own, Layer::Ground).is_some_and(|x| x.taken(s.standing)));
+    assert!(
+        !w.cells
+            .occ(own, Layer::Ground)
+            .is_some_and(|x| x.taken(s.standing))
+    );
 }
 
 // spec: S-0208 claim 21 (no deck position: no immediate walking target, not a transfer to the ground; the destination still becomes the target's cell)

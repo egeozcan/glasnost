@@ -132,7 +132,8 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
             };
             w.cells.claim_vehicle(old, old_layer, false);
             // The mark is held in the record of the layer the object is listed in after the jump (interim, request Q-0240).
-            w.cells.claim_vehicle(l.cell(), landing_layer(w, l.cell()), true);
+            w.cells
+                .claim_vehicle(l.cell(), landing_layer(w, l.cell()), true);
             st.mark = Some(l.cell());
             st.landing = Some(l);
             st.for_dest = Some(dest);
