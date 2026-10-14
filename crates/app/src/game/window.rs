@@ -182,9 +182,10 @@ impl ApplicationHandler<GameEvent> for GameApp {
         if self.window.is_some() {
             return;
         }
-        let attributes = Window::default_attributes()
-            .with_title("Glasnost")
-            .with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0));
+        let attributes = Window::default_attributes().with_title("Glasnost");
+        // The page's style sizes the canvas on the web.
+        #[cfg(not(target_arch = "wasm32"))]
+        let attributes = attributes.with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0));
         #[cfg(target_arch = "wasm32")]
         let attributes = {
             use winit::platform::web::WindowAttributesExtWebSys;

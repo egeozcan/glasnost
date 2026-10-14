@@ -16,23 +16,24 @@
 </head>
 <body data-glasnost-status="loading">
   <div id="status">Loading…</div>
-  <!-- Folder picker for the asset viewer (?mode=viewer); its button clicks this. -->
+  <!-- Folder picker for the asset viewer (?mode=viewer) and the game (?mode=game); their buttons click this. -->
   <input type="file" id="glasnost-folder" webkitdirectory multiple hidden>
   <footer>
     Glasnost M0 renderer demo: palette-indexed quad, procedural texture.
     Space switches the palette row. <code>?backend=webgl2</code> or
     <code>?backend=webgpu</code> forces a backend; <code>?mode=viewer</code>
-    opens the asset viewer for your own install.
+    opens the asset viewer and <code>?mode=game</code> the game client for your own install.
     Not affiliated with or endorsed by Electronic Arts.
   </footer>
   <script type="module">
     import init from "./glasnost_platform_web.js";
     const status = document.getElementById("status");
-    // The viewer draws its own interface; hide the demo's overlays.
-    if (new URLSearchParams(location.search).get("mode") === "viewer") {
+    // The viewer and the game draw their own interface; hide the demo's overlays.
+    const mode = new URLSearchParams(location.search).get("mode");
+    if (mode === "viewer" || mode === "game") {
       status.hidden = true;
       document.querySelector("footer").hidden = true;
-      document.title = "Glasnost: asset viewer";
+      document.title = mode === "viewer" ? "Glasnost: asset viewer" : "Glasnost";
     }
     const show = () => {
       const d = document.body.dataset;

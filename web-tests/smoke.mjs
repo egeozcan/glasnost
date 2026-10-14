@@ -7,10 +7,12 @@
 //
 // Usage: node smoke.mjs [--browser chromium|firefox|webkit] [--backend webgl2|webgpu|auto]
 //                       [--webgpu] [--expect WebGL2|WebGPU] [--dist ../dist/web] [--out out] [--headed]
-//                       [--viewer [--install DIR]]
+//                       [--viewer [--install DIR] | --game]
 //
 // --viewer opens the asset viewer (?mode=viewer) instead of the demo and
 // imports DIR (default: the synthetic MIX fixtures) through its folder input.
+// --game opens the game client (?mode=game) and checks that its main menu
+// draws.
 //
 // --webgpu turns on Chromium's WebGPU flags (implied by --backend webgpu), so
 // `--backend auto --webgpu --expect WebGPU` checks the runtime selection.
@@ -50,7 +52,10 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const viewer = args.viewer === true;
-const url = `http://127.0.0.1:${server.address().port}/?backend=${backend}${viewer ? "&mode=viewer" : ""}`;
+const game = args.game === true;
+const mode = viewer ? "&mode=viewer" : game ? "&mode=game" : "";
+const suffix = viewer ? "-viewer" : game ? "-game" : "";
+const url = `http://127.0.0.1:${server.address().port}/?backend=${backend}${mode}`;
 // Synthetic install for the viewer lane: our own fixture archives, never game data.
 const syntheticInstall = path.resolve(here, args.install ?? "../tests/fixtures/synthetic/mix");
 
@@ -113,7 +118,7 @@ try {
     // Let a few frames render, then screenshot just the canvas.
     await page.waitForTimeout(500);
     fs.mkdirSync(outDir, { recursive: true });
-    const png = await page.locator("canvas").screenshot({ path: path.join(outDir, `${browserName}-${backend}${viewer ? "-viewer" : ""}.png`) });
+    const png = await page.locator("canvas").screenshot({ path: path.join(outDir, `${browserName}-${backend}${suffix}.png`) });
 
     // Decode the PNG in a blank page and measure it.
     const probe = await browser.newPage();
@@ -133,7 +138,9 @@ try {
     await probe.close();
 
     console.log(`[${browserName}/${backend}] canvas ${stats.w}x${stats.h}, centre ${stats.centre}, corner ${stats.corner}, ${stats.distinct} colours in the middle`);
-    if (!viewer) {
+    if (game) {
+      if (stats.distinct < 2) fail("the game client's menu did not draw");
+    } else if (!viewer) {
       if (stats.distinct < 8) fail(`only ${stats.distinct} distinct colours in the middle; the checkerboard did not render`);
       if (stats.corner.some((c) => c > 64)) fail(`corner ${stats.corner} is not the dark clear colour`);
     } else if (stats.distinct < 2) {

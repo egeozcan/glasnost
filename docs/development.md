@@ -378,6 +378,51 @@ Provisional rules of M5b, each tied to a request:
 | `Audio::acknowledge` | orders with their own kind of acknowledgement (harvest, attack, move, attack move, enter, capture, unload) play nothing and take no draw; selecting an object plays nothing | Q-0265 |
 | `Audio::cue` | sidebar cues (build started, resumed, held, cancelled, refused, placement refused, construction complete) are silent | Q-0266 |
 
+## Game client (M5b)
+
+A person plays a skirmish against our AI from the main menu to the end screen, natively (`cargo run -p glasnost-platform-native -- --game --game-dir DIR`) and on the web (`?mode=game`, docs/web.md). The interface is our own code, `glasnost-ui` (no egui), drawn by `glasnost_render::batch2d` within the WebGL2 core.
+
+- **Screens (`glasnost_ui::shell`).** Main menu, then skirmish setup (S-0412), then the game, then the end screen (S-0414), then back to the menu. The setup offers every multiplayer map with at least two start positions (S-0009 claim 23, `install::start_count`). Maps are known by their position in the list and, in the game, by a content hash (`session::content_hash`), never by a stock name. Lobby colours are the colour slots of S-0103 claim 10.
+- **Modules (`crates/app/src/game`).**
+  - `install` reads what the menus need from the mounted install: the base rules (setup values, S-0412 Import mapping), the maps and their start counts, the sound names and the sample bank.
+  - `play` is the running game without drawing: selection, tools (select, place, sell, repair, power), sidebar clicks (`econ::sidebar::click`), status messages and the end screen. Every order goes through `glasnost_ai::game::Game::issue`, so it is in the replay.
+  - `session` is a game on a loaded map: camera (S-0101 limits), the live scene, radar, gestures, and the HUD's draw list.
+  - `paint` turns draw lists into batch quads, and draws them on the CPU for tests.
+  - `client` holds the screens, jobs, pacing, sound and input, without a window.
+  - `window` runs winit and wgpu. The battlefield is drawn on the GPU (`map_gpu::MapRenderer` into a target the batch shows through `Batch2d::set_image_view`); if that fails, it falls back to the CPU compose.
+- **Pacing.** `mapview::live::Pacer` gives one tick per drawn frame at most, measured from each cycle's start (S-0201 claims 2 to 4). Nothing ticks while the options menu is open (claim 8) or the window is out of focus (claim 9). The speed comes from the setup and the options menu.
+- **Sound.** `Audio` is created at the first game start from the install's bank and names and resumed on the first gesture. Each frame the client sets the listener to the view centre and calls `frame`. After each tick it calls `play_effects`, plus `cue` for sidebar cues and `acknowledge` after a click, with the unsynchronised stream seeded with the game's seed (S-0202 claim 8).
+- **Input.** Clicks go through `glasnost_sim::targeting` (S-0214). The key commands are S-0213 table T2. Box selection, scrolling and key bindings are interim (table below).
+- **Tests.**
+  - `game::play` tests: select, move, deploy, build and place, box selection, and surrender to an end screen, all on the synthetic skirmish.
+  - `game::client` tests: menu, setup and the start job on a synthetic install.
+  - `game::paint` tests and `crates/render/tests/offscreen_batch2d.rs`: the batch's pixels against the CPU reference, image views included.
+  - The local lane: `GLASNOST_GAME_DIR=<install> cargo test -p glasnost-app --test ui_lane -- --ignored --nocapture` drives the client from the menu through a game (deploy, a few hundred ticks, a building ready for placement, surrender) to the end screen. It writes `menu.png`, `setup.png`, `game.png`, `placement.png` and `end.png` to `local-lane/ui/` (git-ignored; never commit them). `GLASNOST_UI_MAP=n` picks the n-th offered map and `GLASNOST_UI_TICKS=n` sets the ticks before `game.png`.
+
+Interim rules of the game client, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `session::read_icons`, `register_art` | an icon is frame 0 of its file through the overlay palette file of S-0111, index 0 transparent, its canvas centred in the slot and clipped; a darkened icon gets a translucent black veil; the alternate icon is unused | Q-0275 |
+| `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar, sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
+| `session` | the system pointer; no action cursors | Q-0277 |
+| `session::pointer_up`, `play::select_box` | a left drag of more than 4 px selects the local house's selectable mobile objects whose reference point is inside the box; Shift adds to the selection; an empty box clears it | Q-0278 |
+| `client::update`, `session::edge_scroll` | 16 px per drawn frame within 4 px of a window edge (corners scroll diagonally) or while an arrow key is held, also while paused, then S-0101 claim 8's limits | Q-0279 |
+| `install::slot_swatches` | a lobby swatch is the colour definition of the slot through S-0103's HSV formula; grey when missing | Q-0280 |
+| `install::offered_countries`, `glasnost_ui::setup` | the setup offers the non-passive countries except the neutral and special houses', in registration order; at most 8 slots, the first always the person's; teams 1 to 4 or none | Q-0281 |
+| `play::say` | status messages are our own texts at the battlefield's top left, at most 4 at a time, each for 90 ticks | Q-0282 |
+| `glasnost_ui::hud` | a tab with a newly ready item flashes, lit while (tick / 10) is even | Q-0283 |
+| `play::click_map` (sell mode) | walls get no sell order | Q-0284 |
+| `play::end`, `glasnost_ui::end` | the end screen shows, per house, the result, objects built, kills, losses and the house's combat score; the time is the last tick × the paced period; there is no harvested figure | Q-0285 |
+| `client::key`, `window::GameApp::modifiers` | S stop, X scatter, G guard, D deploy, C cheer; Shift is force-select, Ctrl or Cmd force-fire, Alt force-move; attack-move mode has no key; Escape opens and closes the options menu; no route mode | Q-0286 |
+
+Known limits:
+
+- Icons are drawn through the interim palette and may show the wrong colours until Q-0275 is answered.
+- With no radar building, the radar box says "No radar" (S-0410).
+- The seed of a game comes from the host clock when Start is clicked.
+- Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
+
 ## Tests
 
 ```sh
