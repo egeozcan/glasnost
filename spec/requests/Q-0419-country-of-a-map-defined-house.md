@@ -3,7 +3,7 @@ id: Q-0419
 title: Which country a house defined by a map belongs to, for its inherited colour
 status: answered
 related: [S-0103, S-0009]
-answered-by: [S-0009]
+answered-by: [S-0009, S-0103]
 ---
 
 ## Need
