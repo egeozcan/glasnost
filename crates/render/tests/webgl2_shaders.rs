@@ -59,3 +59,13 @@ fn map_shader_translates_to_glsl_es_300() {
     assert!(fs.contains("gl_FragDepth"), "depth is written per fragment");
     assert!(fs.contains("texelFetch"));
 }
+
+#[test]
+fn batch2d_translates_to_glsl_es_300() {
+    let src = glasnost_render::batch2d::SHADER_SOURCE;
+    let vs = translate_for_webgl2(src, naga::ShaderStage::Vertex, "vs_main");
+    let fs = translate_for_webgl2(src, naga::ShaderStage::Fragment, "fs_main");
+    assert!(vs.starts_with("#version 300 es"));
+    assert!(fs.contains("texelFetch"));
+    assert!(!vs.contains("gl_BaseVertex") && !vs.contains("gl_BaseInstance"));
+}

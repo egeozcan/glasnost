@@ -299,7 +299,7 @@ pub fn type_name(rules: &SimRules, kind: SimKind, index: u32) -> String {
 }
 
 /// Runs `f`, turning a panic into an error on hosts that can unwind.
-fn guarded<T>(f: impl FnOnce() -> T) -> Result<T, String> {
+pub fn guarded<T>(f: impl FnOnce() -> T) -> Result<T, String> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|p| {
@@ -326,10 +326,26 @@ pub fn start(
     tiles: glasnost_map::terrain::TileCatalogue,
     mode: GameMode,
 ) -> Result<(World, Arc<SimRules>, GameSetup, Vec<String>), String> {
+    start_with(map, resolved, tiles, mode, None)
+}
+
+/// Makes a game setup from the map's typed rules (the game client's lobby).
+pub type MakeSetup<'a> = &'a dyn Fn(&SimRules) -> Result<GameSetup, String>;
+
+/// [`start`] with the setup made by `make` when given (the game client's
+/// skirmish of S-0412), else by `mode`.
+pub fn start_with(
+    map: &glasnost_map::Map,
+    resolved: &glasnost_rules::Resolved,
+    tiles: glasnost_map::terrain::TileCatalogue,
+    mode: GameMode,
+    make: Option<MakeSetup<'_>>,
+) -> Result<(World, Arc<SimRules>, GameSetup, Vec<String>), String> {
     let rules = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
-    let (setup, substituted) = match mode {
-        GameMode::Sandbox => glasnost_sim::load::sandbox_setup(map, &rules, SANDBOX_SEED),
-        GameMode::Skirmish => (skirmish_setup(&rules)?, Vec::new()),
+    let (setup, substituted) = match (make, mode) {
+        (Some(f), _) => (f(&rules)?, Vec::new()),
+        (None, GameMode::Sandbox) => glasnost_sim::load::sandbox_setup(map, &rules, SANDBOX_SEED),
+        (None, GameMode::Skirmish) => (skirmish_setup(&rules)?, Vec::new()),
     };
     if setup.houses.is_empty() {
         return Err("the map places no owned objects: the sandbox game has no house".into());
@@ -563,9 +579,23 @@ impl Live {
             self.failed = Some(format!("the simulation failed in a tick: {p}"));
             return;
         }
+        self.after_tick();
+    }
+
+    /// What [`Live::step`] does after its tick, for a tick run elsewhere
+    /// (the game client's `glasnost_ai::game::Game`): the ground layer's
+    /// pass, its members and keys, and the tick's presentation events
+    /// (taken out of the world: read them before).
+    pub fn after_tick(&mut self) {
         self.ground.pass(&ViewQuirks::default());
         self.sync_ground();
         self.take_effects();
+    }
+
+    /// Drops the computer houses' scripts: their houses are played
+    /// elsewhere (the game client's `Game`).
+    pub fn clear_scripts(&mut self) {
+        self.scripts.clear();
     }
 
     /// Takes the tick's presentation events out of the game (they are not

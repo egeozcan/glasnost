@@ -42,6 +42,16 @@ The page shows a palette-indexed checkerboard: an R8 index texture resolved thro
 
 The viewer lists archives (nested ones included) and their entries, previews sprites, tiles, images, palettes, string tables and a simple voxel view with a chosen palette and house-colour rows, and plays IDX samples and AUD sounds. Names come from text entries in the install, or type a file name under **Find file**. The remap range and the palette expansion are provisional settings (spec requests Q-0001 and Q-0003). Natively, sound previews go through a command-line player (`pw-play`, `paplay`, `aplay` or `afplay`). In-game sound goes through `glasnost-audio`'s mixer instead (docs/development.md, "Audio (M5b)").
 
+## Game client
+
+`/?mode=game` opens the game client (M5b): main menu, skirmish setup, a game against our AI, and the end screen (docs/development.md, "Game client (M5b)"). **Game folder** on the main menu opens the same folder dialog as the viewer. The install is mounted lazily as above, then the rules, maps and samples are read. **Skirmish** is offered once that is done. Sound starts on the first click or key press (browsers only allow audio after a gesture). The battlefield is drawn on the GPU into a texture that the 2D batch shows. Everything stays within the WebGL2 core. There is no Quit button on the web.
+
+Natively:
+
+```sh
+cargo run --release -p glasnost-platform-native -- --game --game-dir DIR
+```
+
 ## Native demo
 
 ```sh
@@ -64,6 +74,7 @@ node smoke.mjs --browser firefox --backend webgl2
 node smoke.mjs --browser chromium --backend webgpu   # optional lane: forced WebGPU
 node smoke.mjs --browser chromium --backend auto --webgpu --expect WebGPU   # runtime choice
 node smoke.mjs --browser chromium --backend webgl2 --viewer   # viewer: imports the synthetic MIX fixtures
+node smoke.mjs --browser chromium --backend webgl2 --game     # game client: its main menu draws
 ```
 
 `--viewer` loads `?mode=viewer`, gives the folder input the synthetic MIX fixtures with `setInputFiles` and waits for the viewer to report the mount on `<body>` (`data-glasnost-mount`).

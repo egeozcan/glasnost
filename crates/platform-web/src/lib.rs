@@ -5,15 +5,16 @@
 //! parameter (`?backend=webgl2` or `?backend=webgpu`) overrides the runtime
 //! choice; the default picks WebGPU where the browser offers it and WebGL2
 //! otherwise. **M1**: `?mode=viewer` starts the asset viewer with its
-//! folder picker. **M5** moves the simulation into a worker on its own
-//! clock.
+//! folder picker. **M5b**: `?mode=game` starts the game client (menu,
+//! skirmish setup, a game against the AI, end screen) with the same folder
+//! picker.
 //!
 //! On native targets this crate is empty so that the whole workspace builds
 //! and tests with plain `cargo`.
 
 #[cfg(target_arch = "wasm32")]
 mod web {
-    use glasnost_app::{DemoOptions, Status, ViewerOptions};
+    use glasnost_app::{DemoOptions, GameOptions, Status, ViewerOptions};
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen(start)]
@@ -38,7 +39,14 @@ mod web {
                 return;
             }
         };
-        let result = if param("mode") == "viewer" {
+        let mode = param("mode");
+        let result = if mode == "game" {
+            glasnost_app::run_game(GameOptions {
+                backend,
+                game_dir: None,
+                exit_after_frames: None,
+            })
+        } else if mode == "viewer" {
             glasnost_app::run_viewer(ViewerOptions {
                 backend,
                 game_dir: None,

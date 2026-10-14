@@ -4,14 +4,16 @@
 //! file-system importer and the game itself; the shell lives in `glasnost-app`
 //! and is shared with the web build.
 //!
-//! Usage: `glasnost [--viewer [--game-dir DIR] [--map NAME]] [--backend auto|gl|vulkan] [--frames N]`.
-//! Without `--viewer` it runs the M0 palette-quad demo; with it, the asset
-//! viewer (optionally mounting `DIR` at start, and opening the map viewer on
-//! the first map whose name contains `NAME`).
+//! Usage: `glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--backend auto|gl|vulkan] [--frames N]`.
+//! With `--game`, the game client (M5b: menu, skirmish setup, a game against
+//! the AI, end screen), reading the install in `DIR`. With `--viewer`, the
+//! asset viewer (optionally mounting `DIR` at start, and opening the map
+//! viewer on the first map whose name contains `NAME`). Without either, the
+//! M0 palette-quad demo.
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
-    use glasnost_app::{DemoOptions, ViewerOptions};
+    use glasnost_app::{DemoOptions, GameOptions, ViewerOptions};
     use std::process::ExitCode;
 
     env_logger::Builder::from_env(
@@ -21,6 +23,7 @@ fn main() -> std::process::ExitCode {
 
     let mut options = DemoOptions::default();
     let mut viewer = false;
+    let mut game = false;
     let mut game_dir = None;
     let mut open_map = None;
     let mut args = std::env::args().skip(1);
@@ -37,11 +40,15 @@ fn main() -> std::process::ExitCode {
                 viewer = true;
                 Ok(())
             }
+            "--game" => {
+                game = true;
+                Ok(())
+            }
             "--game-dir" => value("--game-dir").map(|v| game_dir = Some(v)),
             "--map" => value("--map").map(|v| open_map = Some(v)),
             "-h" | "--help" => {
                 println!(
-                    "usage: glasnost [--viewer [--game-dir DIR] [--map NAME]] [--backend auto|gl|vulkan] [--frames N]"
+                    "usage: glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--backend auto|gl|vulkan] [--frames N]"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -53,7 +60,17 @@ fn main() -> std::process::ExitCode {
         }
     }
 
-    let result = if viewer {
+    if game && viewer {
+        eprintln!("glasnost: --game and --viewer exclude each other");
+        return ExitCode::from(2);
+    }
+    let result = if game {
+        glasnost_app::run_game(GameOptions {
+            backend: options.backend,
+            game_dir,
+            exit_after_frames: options.exit_after_frames,
+        })
+    } else if viewer {
         glasnost_app::run_viewer(ViewerOptions {
             backend: options.backend,
             game_dir,
