@@ -1,9 +1,9 @@
 ---
 id: Q-0233
 title: What a teleporting vehicle's own locomotor holds when it gets it back after a temporary drive
-status: open
+status: answered
 related: [S-0207, S-0417, S-0215]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

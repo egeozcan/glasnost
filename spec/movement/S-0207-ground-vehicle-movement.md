@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233]
 supersedes: []
 ---
 
@@ -21,9 +21,10 @@ progress along fixed cell-to-cell tracks (straight, diagonal and two-cell curves
 between track points, and what it does when the cell of its next step may not be entered. It also
 states which locomotor a mobile type has (claim 14) and how every vehicle, whatever its locomotor,
 answers a scatter request (claim 16), while where a vehicle may go (S-0211), which steps it takes
-(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16, 19 and 20) are
+(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16, 19, 20 and 21) are
 left to other specs. Claim 20 states how an object with the teleporting locomotor moves on its
-own: where it lands, what the jump does and how long it then phases in. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
+own: where it lands, what the jump does and how long it then phases in. Claim 21 covers
+its retained state after temporary driving. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
 that approaches a target stops once the target is in range, and what happens to its destination. This spec covers skirmish. Network games and campaigns are out of scope.
 
@@ -70,7 +71,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 
   - claim 19 and scenario D21 cover vehicles with driving, ship and hovering locomotors,
   - claim 20 and scenario D22 cover every object, of any kind, that moves with the teleporting
-    locomotor (S-0208 claims 19–20 own infantry landing-point choice and placement clearing).
+    locomotor (S-0208 claims 19–20 own infantry landing-point choice and placement clearing),
+  - claim 21 and scenario D23 cover teleporting vehicles whose own movement is temporarily
+    replaced by driving.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -469,6 +472,18 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     | without a track | one, towards the target fraction (claim 9) of the track the vehicle begins in this tick (claim 7) | *s* once, at the updated fraction | the tick ends there, with no track, and the leftover is kept | one |
     | on a track | one; and if the track ends and the next track begins in the same tick, a second, towards the new track's target | *s* once, at the fraction after the first update; nothing more after the second | if the move goes on and the vehicle faces its next step and its step check lets it begin, the next track begins in the same tick and the leftover is spent on it; if that track ends too, the tick ends there, with no track. A vehicle that must first turn in place, waits for a gate or is refused by its step check (claim 15) gets no second update and no new track in that tick, and its budget is emptied (claim 3) | two |
 
+    **Arrival reports at completion.** Reaching the track target, including the target of a
+    factory exit track, is a cell-arrival update (S-0417 claim 7). The report uses the completed
+    arrival position with no current track or heading point, and its effects are visible before
+    any next track begins in that tick. A tethered harvester's refinery arrival report and its
+    possible refusal scatter are S-0402 claim 10's. That report precedes the cell-centre
+    crushing of S-0210 claims 3 and 8; a mid-track cell-boundary slowdown can already have
+    happened. S-0417 claims 7 and 8 own factory clear reports and their fallback scatter.
+    A vehicle that chains a curve also has a cell-arrival update at the chain-point transition
+    (claim 8); crossing a cell boundary mid-track or turning in place is not such an update.
+    This does not give a refinery the chain-point report: S-0402 claim 10 requires track
+    completion.
+
     A vehicle at rest has *ρ* = 0, so with the acceleration flag on its first tick from rest gives it
     *ρ* = clamp(min(*a*, *ρ*ₜ), 0, 1) and it earns trunc(*s*₂ × *ρ*), unless an earlier row of claim
     10's table applies. For example, within *D*ₛ of its destination the braking floor gives
@@ -482,10 +497,13 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     turns in place, waits for a gate or is refused a track by its step check, or kept when it comes to rest (claim
     3). On straight and diagonal steps
     this caps a vehicle at one cell per tick.
-    - Backing: `measurable` (scenarios D1, D3 and D13; D8 part e for the budget emptied by a wait
+    - Backing: `measurable` (scenarios D1, D3 and D13; S-0402 H14 for the completion
+      report's timing, refusal scatter and ordering, S-0417 U8 for factory arrival reporting,
+      D8 part e for the budget emptied by a wait
       after a track ended in the tick)
     - Confidence: medium (the order of the two updates and the cap were inferred from reading, not
-      observed; the cap was simulated)
+      observed; the cap was simulated); medium for completion-report ordering, with the
+      factory chain-point report inheriting S-0417 claim 7's unmeasured backing
 
     **Quirk `quirks.drive_track_end_cap`.** Default (original): as above. Off (a design behaviour,
     since the original has no such mode): the two rows of the table become one rule, for a tick that
@@ -791,6 +809,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       number of the request (S-0212 claim 25). A vehicle that has a destination refuses the order.
     - The request of a blocked vehicle (claim 15) and the crowding requests of S-0209 claim 12 are
       move-anywhere, so a vehicle accepts them even when it has a destination.
+    - A refused refinery arrival report sends a forced, no-threat-point request that is not
+      move-anywhere (S-0402 claim 10). A receiver with a destination refuses by case e.
+      otherwise an accepting receiver searches around its own arrival cell because its
+      completed track has no heading point. No behaviour is queued and no scatter draw is taken.
     - The scatter off a building of S-0215 claim 28 and the scatter from damage of S-0215 claim 19
       are forced and have no threat point, so they follow the first case above.
     - Factory apron clearing during unloading or while idle (S-0417 claims 4 and 13) sends forced, move-anywhere requests to every
@@ -815,10 +837,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       threat-point case and its direction draw, part f for case d, part g for case f; scenario D17
       part a for a move-anywhere request, part c for the refusal in *sticky*; D18 part h for case
       h; D18 part i for the vehicle scatter centre cell on a track and at rest; D18 part j for
-      factory clearing, including case j and moving receivers; S-0417 U5 and U11 for the unloading and idle senders of the two clearing
+      factory clearing, including case j and moving receivers; S-0402 H14 for the refused
+      refinery-arrival sender; S-0417 U5 and U11 for the unloading and idle senders of the two clearing
       request kinds). `unmeasured` for these parts, each for the reason given:
       - case c: every sender of a request to a vehicle whose options are known sends a forced one
-        (S-0209 claim 12, S-0215 claims 19 and 28, S-0417 claims 4 and 13, claim 15 here), so no setup is known that sends
+        (S-0209 claim 12, S-0215 claims 19 and 28, S-0417 claims 4 and 13,
+        S-0402 claim 10, claim 15 here), so no setup is known that sends
         a vehicle a request that is not forced.
       - case g: which effects switch a locomotor off belongs to specs not yet written, so no setup
         can yet be defined.
@@ -982,24 +1006,41 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       order sets one, S-0215), the locomotor takes it at once. It drops the destination and does
       nothing, when the object is disabled by an electromagnetic pulse, is under a paralysing
       effect, is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
-      **landing point** *L* at once (parts b and c). For a non-infantry object, the vehicle-present
+      **landing point** *L* at once (parts b and c). For a vehicle, the vehicle-present
       mark of the occupancy record (S-0209) moves at once from the cell of the object's old point
-      to the cell of *L*. Infantry instead reserve the chosen standing position (S-0208 claim 19). The old
+      to the cell of *L*. An aircraft instead moves the object-present mark, not a vehicle-present
+      mark. Its reservation at *L*, whose chosen height is *H*, is in the ground layer, even
+      when that cell carries a high bridge. Its old-point mark is read in the deck layer only
+      on a high-bridge cell when the old point's height is at least *H* + 416 leptons there
+      (an exact integer comparison), otherwise in ground. Infantry reserve the chosen standing position (S-0208 claim 19). The old
       point is the previous *L* when an earlier destination had fixed one that was not yet jumped
       to, and otherwise the object's own position. The object stays listed in its old cell until the
       jump. From then until the jump it counts as moving (S-0212 claim 27), and the point it
       reports as its locomotor's goal is *L*.
     - (b) **The landing point of an object that is not infantry.** When the object's entry outcome
-      for the destination cell (S-0209 claim 5) is *clear*, *L* is the centre of that cell, at height
-      *H*. Otherwise *L* is the
+      for the destination cell (S-0209 claim 5 for vehicles, claim 14 for aircraft) is *clear*,
+      *L* is the centre of that cell, at height *H*. A vehicle asks at the destination cell's
+      height level plus 4 on a high-bridge cell, and at its ground level elsewhere. This
+      initial test is independent of the mover's own height and of the search's deck mode:
+      a vehicle on ground can therefore find an occupied deck refused while the ground
+      underneath is free. An aircraft's entry outcome is *clear*, so it does not take the
+      fallback search merely because the cell is occupied. Otherwise *L* is the
       cell that a nearby-cell search (S-0212 claim 25) gives with these choices:
       - centre: the destination cell,
       - locomotion class and movement zone: the object's own (the zone is not simplified),
-      - reach region: that of the destination cell for the object's own zone,
+      - reach region: that of the destination cell for the object's own zone, read for its
+        deck in deck mode; when that cell lies in no reach region, there is no reach-region
+        restriction on candidates,
       - deck mode: when the destination cell is a high-bridge cell and the object's world height is
         more than 312 leptons (3 height levels) above the surface height *H* at the destination,
       - no height condition, no further test, no no-overlay condition, bridge cells allowed,
       - no reference cell, so the pick depends on the tick number (S-0212 claim 25).
+
+      A destination in no reach region does not by itself fail the search. The ordinary
+      class, occupancy and usable-area tests of S-0212 claim 25 still apply, and its collection
+      order and tick-number pick choose among the qualifying cells, even in different reach
+      regions. For example, an unenterable water destination of a ground vehicle can give a
+      free bank cell; if none qualifies within the search radius, the search gives no cell.
 
       *L* is the centre of the chosen cell, and its height is *H* there. The point within the
       destination cell does not matter. No path is searched, so the object can land beyond cliffs,
@@ -1030,7 +1071,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       old point, then the departure sound at the old point. The object is removed from its old
       cell's listing, takes position *L*, and is listed in *L*'s cell. On a high-bridge cell its
       cell layer is the bridge deck and its height is *H* + 416 leptons; elsewhere its cell layer
-      is ground and its height is *H*. This actual landing height can differ from the infantry
+      is ground and its height is *H*. This includes an aircraft: it lands at terrain height,
+      or on the deck, not at a flight or cruise height, and is listed in that landing layer.
+      This actual landing height can differ from the infantry
       position-choice height (S-0208 claim 19). Its facing does not change. The arrival sound
       plays at *L*. Entering *L*'s cell has the arrival effects of the object's own kind: for a
       vehicle these are the effects of reaching a track target in a new cell, not a rule imposed
@@ -1068,7 +1111,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       that moves rarely gets a chance to move in between. A destination given while the object is
       phasing in is dropped. Whether a behaviour that chases a moving target gives a new
       destination after the jump is S-0215's.
-    - (i) **Random draws.** The jump itself takes none. Nearby landing searches depend on the
+    - (i) **Random draws.** Landing choice and position change take no draw of their own.
+      The two warp animations are ordinary animation creations and take every applicable
+      creation draw of S-0202 claim 10. The old-point animation's creation draws precede
+      the landing-point animation's creation draws in the jump tick. There is no special
+      draw-free animation creation for a jump. Other arrival effects may take their own
+      draws between the two creations. Nearby landing searches depend on the
       tick number, not on a draw. Infantry position choices and placement-clearing recipients can
       take draws as S-0208 claims 19–20 specify, with recipients' draws before position choice.
       At phasing-in end, part f's conditional 4-to-8-tick draw precedes the normal search-timer
@@ -1084,16 +1132,44 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       dropped while phasing in and for part h, run 7 for the draw at the end of phasing in and for
       part i, run 8 for a shot in flight, run 9 for part j; S-0208 W11 for part c and infantry
       reservations, landing draws and placement clearing; S-0215 B18 d for ordinary target-loss
-      and revert). `unmeasured`: the occupancy mark moving before the jump, because the jump
+      and revert; runs 10 to 12 for the entry-test level, absent reach restriction, aircraft
+      mark and landing, and animation creation draws). `unmeasured`: the occupancy mark moving before the jump, because the jump
       follows within the same or the next movement update and no observable falls between them. Also
       the live erasing-lock exception, because no stock setup establishes a retained lock at a
       locomotor jump (S-0215 claim 10).
     - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
-      (the search's choices were read, and the asked level of the entry outcome is not settled,
-      Open questions), for part a's list of disabling states, for part d's same-tick consequence and
+      (including the entry-test level and the search without a reach restriction), for the
+      aircraft reservation and landing rules, for part a's list of disabling states, for part d's same-tick consequence and
       for part h's consequences; part c inherits S-0208 claims 19–20's confidence, high for
       position choice and draws and medium for search choices, bridge consequences and placement
       conditions; low for part j's statement that nothing else changes
+
+21. **Teleporting locomotion after temporary driving (Q-0233).** The temporary drive of
+    S-0417 claim 5 suspends the object's own teleporting movement; it does not make a new,
+    empty teleporting state when S-0215 claim 13 restores that movement. At that restoration
+    boundary a previously fixed landing point and a pending jump are retained, not rebased
+    to the vehicle's current cell. A pending jump proceeds on the next update using teleporting
+    movement, subject to claim 20's disabling and phasing-in states. A retained landing point
+    without a pending move does not by itself cause a jump. A destination changed or removed
+    by the rest of the fall-back can replace or cancel the move as usual; restoration is not
+    a promise that an earlier jump survives those separate effects.
+
+    A phasing-in state and its original expiry tick are also retained. Time spent temporarily
+    driving does not restart or extend its delay: on the first teleporting movement update
+    at or after expiry it ends as claim 20 f says. No occupancy mark is moved merely by
+    restoration, either to the current cell or to an old landing cell. While driving is active,
+    new destinations affect driving movement and its ordinary occupancy rules (S-0209), not
+    the suspended teleporting landing point or its reservation. Thus an ordinary newly
+    created vehicle with no pending teleport before its factory exit acquires no teleport
+    reservation from its exit or rally destination while driving. Its first destination
+    taken after restoration fixes a landing point by claim 20 a.
+    - Backing: `measurable` (D23 for the ordinary factory exit, destination routing and first
+      post-restoration jump). `unmeasured` for a pre-existing pending jump or phasing-in
+      state: no established stock setup starts temporary driving in the interval before a
+      pending jump or during phasing in. These are conditional retention rules, not an
+      assertion that a factory-produced vehicle starts in either state.
+    - Confidence: high for retention at restoration and no teleport destination handling
+      during driving; medium for the ordinary factory consequence
 
 ## Formulas
 
@@ -1631,12 +1707,13 @@ its new destination from that tick.
   (a design behaviour): no limit on the tracks finished in a tick, with one fraction update at the
   start of the tick and one more at each track that begins after a track end in it, each towards
   the target fraction of the track that begins (claim 12 gives the full rule).
-- **Leftover kept at rest** (claim 3). A vehicle that stops at its destination keeps its leftover
-  budget, which speeds up the first tick of its next move if that move needs no turn in place. This
-  is original behaviour and has no switch, because its effect is small. Below the track-end cap the
-  leftover is at most one tick's progress *s* plus 5 progress units (the largest end correction of
-  claim 3), so it shortens the next move by about one tick, and by a few ticks only for the slowest
-  types. Above the cap, claim 12 limits the first tick to one track whatever the leftover.
+- **`quirks.drive_leftover_kept_at_rest`** (claim 3). Default (original): a vehicle that stops at
+  its destination keeps its leftover budget, which speeds up the first tick of its next move if
+  that move needs no turn in place. Off: the leftover budget is cleared when the vehicle comes to
+  rest. Below the track-end cap the retained leftover is at most one tick's progress *s* plus 5
+  progress units (the largest end correction of claim 3), so it shortens the next move by about
+  one tick, and by a few ticks only for the slowest types. Above the cap, claim 12 limits the first
+  tick to one track whatever the leftover.
 - **Asymmetric acceleration** (claim 10) is original behaviour and has no switch, because it is how
   the acceleration and deceleration fields are defined: mods tune the fields with it in mind, and a
   symmetric rule would only change what those fields mean.
@@ -1730,6 +1807,13 @@ imported lead fields. No key supplies a progress-to-lepton conversion or a waiti
 
 The other chrono keys of `[General]` (the chronosphere's delays and its landing warhead) feed the
 superweapon specs, not claim 20.
+
+| No data key | non-infantry entry-test level, unrestricted reach comparison for a destination in no region, kind-specific reservation and landing (claim 20) | engine behaviour, not imported fields | fixed rules of claim 20 |
+| No data key | retained teleporting state and no teleport destination handling during temporary driving (claim 21) | runtime state, not imported fields | a newly created teleporting object has no pending jump and no phasing in |
+
+Animation type fields governing creation draws are imported by S-0109 and S-0202,
+there is no jump-specific key that suppresses those draws. Temporary factory driving and
+fall-back restoration have no additional key here (S-0417 and S-0215).
 
 No other speed field of a country or of a difficulty level enters the formulas of this spec
 (Open questions).
@@ -2512,6 +2596,38 @@ cell before *X*.
     in range, and in a second run an enemy crushing vehicle is ordered over *T*'s cell. *Expected:*
     *T*'s recorded health falls as for a standing vehicle of its type, and the crushing vehicle
     treats it as it treats such a vehicle (S-0210).
+  - Run 10 (entry level and missing region, Q-0232). At game speed index 2, use a high
+    bridge over flat water with banks at deck level, and *T* on ground. First order a deck
+    cell occupied by a friendly drive vehicle while its ground layer is empty. Repeat with
+    the deck empty and a ship below. Record the selected landing cell, layers, positions and
+    marks. Expect refusal of the occupied deck, independent of *T*'s height, and acceptance
+    of the empty deck despite the ship below. Separately give *T* a destination on water
+    for which its own zone has no reach region, with at least one free enterable bank cell
+    inside the nearby search radius. If the click rules substitute a bank destination first,
+    use a named test-map move trigger to supply the water cell and qualify only when the
+    recorded destination really is that cell. Expect the nearby-cell collection and
+    tick-number pick with no region restriction, not automatic failure. Block all
+    qualifying cells in a control: expect no jump and destination removal. Different
+    entry-layer results, rejection solely for no region, or a pick outside the predicted
+    collection falsifies this part.
+  - Run 11 (aircraft, Q-0232). A named test type copies an ordinary aircraft but omits its
+    locomotor field from every rules layer. Place it on flat ground, then order a clear
+    distant cell and, separately, a high-bridge cell. Log listings, both occupancy layers,
+    position and height. Expect an object-present reservation, not vehicle-present, at the
+    landing point at terrain height; after the jump expect ground listing and height *H*
+    on flat ground, deck listing and height *H* + 416 on the bridge. An aircraft may land
+    in an occupied destination because its entry outcome is clear. A flight-height landing,
+    vehicle-present reservation, or a different listing layer falsifies this part. Also
+    record whether a ground reservation remains beneath the bridge after deck placement,
+    that cleanup result is an open question, not a pass criterion.
+  - Run 12 (jump-tick animation draws, Q-0232). Repeat run 1, isolating other actors and
+    recording animation creation ticks and the scenario stream. Compute the applicable
+    S-0202 claim 10 draws from the imported warp-animation type. As a discriminating
+    named test-map variant, select a non-bouncing test animation with no start-event
+    effects and a random stage-delay range 2 to 3 ticks. Expect one ranged draw per
+    creation, old point before landing point, both in the jump tick. The normal variant
+    may take none if no creation condition needs a draw; that is not a special exemption.
+    Missing either test draw, reversed assignment or delayed creation falsifies the claim.
 - *Runs:* 3 each, run 3's main case at three different tick numbers; run 7 until each class has at
   least 3 runs.
 - *Falsified if:* a turn or a wait precedes the jump, the jump comes a tick later than stated, the
@@ -2519,6 +2635,31 @@ cell before *X*.
   or island in run 4, any phasing-in length differs from F9, *H* phases in, the order of run 6 is
   carried out, the draw count of run 7 differs, the projectile of run 8 hits *T*, or in run 9 *T*
   cannot be damaged or is treated differently by the crusher.
+
+**D23: temporary drive and return to teleporting (claim 21; Q-0233).**
+- *Setup:* S-0417 U6's stock vehicle factory and produced chrono miner, a human house,
+  one bystander computer player kept away, game speed index 2, director and mods off.
+  Record position, active movement kind, destination, pending landing point, phasing-in
+  state and occupancy marks each tick. Observe the factory, exit track, apron and ordered
+  destinations; void a run if an unrelated bystander object acts there or it is defeated.
+- *Procedure:* produce the vehicle with a distant rally cell. In a second run give a move
+  order by scripted input during its temporary drive, qualifying only if the order is
+  accepted while driving. After the first recorded restoration and fall-back have finished,
+  give a new distant clear-cell move order. Run each case three times.
+- *Expected:* while driving, an accepted destination belongs to driving movement and does
+  not fix a teleport landing point or move a teleport reservation. Restoration alone takes
+  no occupancy action or jump. After restoration a newly taken destination fixes its landing
+  point and jumps as claim 20 says. Occupancy during the exit follows S-0209's driving
+  rules, not a mark attached to the rally cell. Record any destination that the factory
+  supplied before temporary driving began; such a run is not evidence for an initially
+  empty suspended state.
+- *Falsified if:* a destination accepted while driving changes the suspended landing point,
+  causes a jump before restoration, or moves a teleport mark; or restoration alone resets
+  or moves the recorded teleport state. A post-restoration move that drives rather than
+  jumps also falsifies the restoration hypothesis shared with S-0215 B15 e.
+- A retained pending jump or phasing-in control needs a stock event that starts temporary
+  driving in that state. No such event is established. Do not fabricate one through memory
+  writes; these conditional rules remain unmeasured.
 
 ## Open questions
 
@@ -2541,11 +2682,12 @@ cell before *X*.
 - Whether a live erasing-weapon lock can coexist with a teleporting locomotor jump (claim 20 e)
   is not established by a stock setup. The conditional exception follows S-0215 claim 10.
   reachability belongs to the erasing-weapon rules.
-- At which height level the entry outcome of claim 20 b is asked for the destination cell (the
-  ground or a bridge deck) was not settled.
-- What claim 20 b does when the destination cell lies in no reach region of the object's movement
-  zone (for example water for a ground vehicle): whether the search then finds any cell was not
-  checked (S-0212 claim 4 gives no region to such a cell).
+- Whether any stock setup gives a vehicle a pending teleport or a phasing-in state before
+  temporary driving begins (claim 21). Factory exit establishes the ordinary case, not those
+  conditional states.
+- Whether an aircraft's ground-layer landing reservation on a high-bridge cell persists
+  after its deck-layer placement (claim 20 a, e). The two marking heights differ; the
+  complete cleanup interaction is not settled here.
 - Whether an object of a type without a locomotor field that is not infantry, landing by claim 20
   on a cell where it cannot exist, starts sinking (see the sinking question above) was not traced, and
   claim 20 b's search normally avoids such cells.

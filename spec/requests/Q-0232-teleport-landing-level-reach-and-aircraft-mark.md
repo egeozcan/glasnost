@@ -1,9 +1,9 @@
 ---
 id: Q-0232
 title: The teleporting landing's entry-outcome level, a destination in no reach region, an aircraft's mark and the warp animation's draws
-status: open
+status: answered
 related: [S-0207, S-0202, S-0209, S-0212]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
