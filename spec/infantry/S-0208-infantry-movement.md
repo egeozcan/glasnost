@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 22
+revision: 23
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295]
 supersedes: []
 ---
 
@@ -34,6 +34,10 @@ infantry landing point open. Claims 19 and 20 answer that part. They do not cove
 teleport. Q-0235 question 3 was already answered by S-0207 claim 20 e's corrected
 bridge-deck landing rule; claim 19 here makes the position-choice record, reservation
 record and refused replacement explicit for all four questions. S-0417 claim 10 supplies a concrete infantry factory-release tether situation.
+Claim 23 answers Q-0295's walking cell-arrival and clear-report timing. Claims 6 and 22
+already establish the standing-position arrival tick; claim 23 connects it to that report.
+S-0417 owns the release, contact exchange and consequences of the report; S-0409 owns sight
+refreshes, not the definition of a walking arrival.
 For an infantry unit that approaches its target, S-0215 claim 37 owns when the approach step runs
 and whether it keeps, renews or takes a destination, S-0307 owns the approach position and the
 outcomes of a failed search, including claim 22's close-range searches. This spec owns the
@@ -970,7 +974,7 @@ used by this spec:
     - Confidence: high for the two distinct points and the second position choice; medium
       for the combined arrival and subsequent destination outcome
 
-### Cell-tag arrival
+### Cell-arrival effects
 
 22. **Walking cell-tag arrival timing (Q-0268 part 1).** An ordinary walking infantry
     unit raises the current cell's entered-by tag during the arrival update on the
@@ -999,6 +1003,35 @@ used by this spec:
     - Backing: `measurable` (scenario W14; teleport timing also S-0207 scenario D24)
     - Confidence: high for walking-target arrival versus reservation or boundary
       crossing; medium for the combined observable ordering and same-cell case
+
+23. **Walking arrival and the clear report (Q-0295).** For ordinary walking infantry,
+    a cell-arrival update is the arrival tick of claim 6 at each walking target: the
+    tick the unit snaps to the cell's chosen standing position, not the tick it
+    crosses a cell boundary. It is not limited to the end of the whole walk. The
+    same-cell arrival of claim 21 also counts. Reserving a position on the asking
+    tick, taking an ordinary physical step, or stopping without reaching a walking
+    target does not by itself produce this update.
+
+    A tethered infantry unit gives its clear report on that update. For an ordinary
+    unit released by an infantry factory under S-0417 claim 10, this is the first
+    standing-position arrival after the tether is established. Neither leaving the
+    foundation nor reaching the exit destination is required: an arrival still on
+    the foundation reports too. If the release walk spans several cells, it reports
+    at the first such arrival, even while its exit destination is farther away and
+    movement continues. A one-cell release walk can instead make that first arrival
+    coincide with reaching the exit cell. There is no separate test for the first
+    cell outside the foundation, and the vehicle report's building-cell suppression
+    of S-0417 claim 7 does not apply to this infantry report.
+
+    S-0417 claim 10 owns the resulting end of factory contact and tether; the report
+    does not by itself finish or redirect the infantry's walk to the exit. Claims 16
+    and 17 still own walking completion. This rule covers an ordinary release walk
+    without an entry interaction that removes the unit before it can report; it
+    does not prescribe jumpjet, teleporting or passenger-unloading behaviour.
+    - Backing: `measurable` (scenario W15; S-0417 scenario U10(a) supplies the release setup)
+    - Confidence: high for the walking arrival event, report on the first update,
+      and absence of a foundation/destination test; medium for the combined release
+      and continuing-walk consequence
 
 ## Formulas
 
@@ -1312,6 +1345,8 @@ W10).
 | Map, `[CellTags]`, `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | cell-tag attachment and entered-by event/action eligibility at claim 22's arrival | map records and event/action parameters parsed by S-0009 and S-0011 | no attached tag or trigger when absent, as those specs give; arrival timing is an engine rule, not an imported delay |
 | Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
 | Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9), and landing surface heights, bridge recognition and occupancy-record selection (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
+
+| Rules, infantry type section, `Locomotor`; rules, factory type section, `ExitCoord`; art, factory image section, `Foundation` | locomotion and release geometry for claim 23's factory walk | locomotor identifier owned by S-0207 claim 14; integer lepton triple for release displacement and foundation form owned by S-0404 and S-0417 | those specs' defaults and layering rules; claim 23's arrival event and report timing have no imported delay or foundation-clearance setting |
 
 The scatter property of each behaviour (claim 11) is imported by S-0215.
 Claim 19's 312-lepton strict choice threshold, 416-lepton reservation threshold and
@@ -2256,6 +2291,39 @@ cases).**
   snap, a missing eligible intermediate arrival, or a tag action preceding the
   stated destination clearing. A polled trigger firing later than the variable
   change is not a falsifier: record the entered-by action itself.
+
+**Scenario W15: walking factory clear-report timing (claim 23; Q-0295).**
+- *Setup:* a tiny flat clear skirmish map with a human-owned stock infantry factory,
+  enough credits and prerequisites to produce ordinary walking infantry, one
+  bystander computer player kept away, game speed index 2, director and mods off.
+  Set a rally point beyond the exit cell. Observe the factory, its foundation and
+  the full route to the rally point. Use S-0417 U10(a)'s ordinary release setup.
+  If stock release geometry gives only one walking-target arrival before the exit,
+  repeat with a named test-map release-displacement override placing the unit
+  at a legal appear position at least three cells from the factory's unchanged
+  exit cell. Qualify this setup by recording successful placement, contact and
+  tether; leave all other rules unchanged. Include a route with an intermediate standing position on the
+  foundation if the type's legal placement and exit geometry permits it.
+- *Procedure:* produce one unit and give no further orders. In three runs per
+  arrangement, use a read-only per-tick recorder for position, cell, walking target,
+  destination, factory contact and tether. Compare boundary crossing, arrival snaps,
+  first departure from the foundation and reaching the exit. Apply the glossary's
+  bystander void rule. A run without a successful contact/tether exchange cannot
+  test report timing.
+- *Observable:* the first tick contact and tether end, the standing position reached
+  on that tick, and whether the exit destination is still farther away. Continue
+  recording until the exit and rally legs complete.
+- *Expected:* contact and tether end on the first standing-position arrival after
+  tether establishment, not at its preceding boundary crossing. On the multi-cell
+  release walk the unit still has farther to walk to the exit and continues there.
+  If a foundation arrival is reached first, it reports there; leaving the foundation
+  is not a prerequisite. No extra report is required at later arrivals once untethered.
+- *Falsifiers:* loss of contact/tether merely at boundary crossing, retention until
+  the exit despite an earlier ordinary arrival, a foundation-arrival suppression,
+  or premature completion of the exit walk caused solely by this report. Failure
+  to obtain a foundation arrival leaves that subcase untested, not disproved.
+- *Tool:* scripted input and a read-only recorder; S-0417 U10(a) can incorporate
+  these recordings without changing the oracle.
 
 ## Open questions
 

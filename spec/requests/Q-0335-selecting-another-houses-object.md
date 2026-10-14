@@ -1,9 +1,9 @@
 ---
 id: Q-0335
 title: Does selecting another house's object take the selection response draw
-status: open
+status: answered
 related: [S-0701, S-0202]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

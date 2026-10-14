@@ -1,9 +1,9 @@
 ---
 id: Q-0340
 title: Which production clicks request the building announcement and which the training one
-status: open
+status: answered
 related: [S-0701, S-0411]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

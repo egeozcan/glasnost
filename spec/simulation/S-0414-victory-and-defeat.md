@@ -2,7 +2,7 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -30,7 +30,11 @@ leaving no hostile pair ends the game, and later same-tick defeats turn pending 
 losses only with `quirks.defeat_during_end_delay` on. Claims 8 and 16 retain the final-tick
 commitment boundary. S-0009 claims 28 and 45 agree too: cleanup removes the house itself, and a removed house
 receives no starting units and takes no defeat test. These are confirmations of existing rules,
-not additional behaviour.
+not additional behaviour. S-0011 claim 35 agrees with claim 18/V15 on owner-house raises
+within the update and their continuation after defeat. S-0202 claim 16 agrees with claims
+19 and 23 on score-request eligibility, house order and continuation of the scenario stream.
+S-0701's Import mapping already supplies the literal defeat, player-defeated and victory
+announcement bindings; its post-defeat muting agrees with claim 5 and V20 here.
 
 **Partial request answer.** Q-0193 is listed only for claim 17's defeat-count answer to
 part of question 3. Reopen the request at hand-off and record that limited answer.
@@ -664,6 +668,8 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     displays *b* + ⌊*b* / 2⌋ + *r*, where *r* is an inclusive ranged draw from
     ⌊*b* / 2⌋ through *b* on the scenario random stream (S-0202). There is one ranged
     request per undefeated listed house, in house order, after simulation has stopped.
+    The stream continues from the state left by play, with no score-specific reseeding
+    (S-0202 claim 16); request order is not derived from displayed scores.
     Defeated and omitted houses request none. Equal bounds consume no raw value and other
     ranges consume the values S-0202 claim 4 specifies. Integer sums use signed 32-bit wrap.
     The original bases this bonus on the house's defeat state at screen preparation, not
@@ -1316,14 +1322,8 @@ our presentation requirement and cannot itself be measured in the original.
 
 ## Changes for other specs
 
-- S-0202: add the post-game winner-score ranged requests of claim 23, on the scenario
-  stream in listed-house order, with no raw draw for equal bounds; simulation has stopped.
-- S-0407: claim 10's ever-built count excludes not-scored released types, but not a type
-  marked only insignificant; this same total feeds claim 20's end-screen built statistic.
-- S-0701: claim 36 currently gives announcement roles, not the literal entry-name bindings
-  described in the supplied report. Restore those bindings in Import mapping under the
-  lead's 2026-10-14 convention. Its post-defeat muting agrees with claim 5 here; V20 adds
-  an end-delay diagnostic without claiming an already measured result.
+None for these confirmations. S-0407 claim 10 already excludes not-scored released types
+but includes types marked only insignificant, agreeing with claim 20's built total.
 
 ## Open questions
 

@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -33,13 +33,13 @@ states and timing, not a reproduction of the original shell. Power values and me
 meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
 
-**Paired revisions.** S-0404 revision 11 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 12 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary, without retry (its claims 7
 and 13). No eligible releasing factory instead leaves the item done. Claim 14 here covers
 production continuing during a sale or queued sale; claim 15 owns full-tab suppression and
 later admission. S-0404 relies on those behaviours in its claims 3, 7–9 and 11.
-S-0407 revision 12 distinguishes cancellation orders issued
+S-0407 revision 13 distinguishes cancellation orders issued
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test, and retains the application-time limit test on queued starts (claims
 13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
@@ -396,6 +396,17 @@ last recheck). In addition:
     cancels followed by all cancel-all orders. In our engine the same order applies for every
     player house, using the icon order that S-0004 would give that house as the local player.
 
+    Each replacement start receives its scenario-stream creation value at the cancellation
+    that causes it, in the application order above (S-0404 claim 11; S-0213 claim 3).
+    This is not a separate batch in line creation or payment-priority order. Intervening
+    actions keep their draws between starts; no value is reserved ahead of the causing
+    action. A replacement started and cancelled at the same boundary has already taken
+    its draw; removing it from the queue before it starts takes none. Turn-pass starts
+    precede order-caused starts at that tick's end. Across houses, order-boundary starts
+    in our engine follow house creation order and each house's production-order issue
+    order (S-0213 claim 3). That between-house extension is deterministic design, not
+    a finding about the original's computer production.
+
     An automatic cancellation is not a build order. When applied it can start the next queued
     type under S-0404 claims 6 and 10, even if the same recheck has removed that type's offer.
     Offer membership is not tested again for such a queued start. Factory eligibility and the
@@ -408,8 +419,10 @@ last recheck). In addition:
     the same boundary. With no price change between those orders, B starts at the current
     price and is refunded 0 credits: it has paid nothing. A bonus gained before this boundary
     does not by itself change that result. General cancellation refunds remain S-0404 claim 6's.
-    - Backing: `measurable` (scenario S9) for local-player orders and intermediate starts,
-      `unmeasured` for the every-player extension, a project rule not observable in the original
+    - Backing: `measurable` (scenario S9; S-0404 P11 B/C for value assignment and turn-pass
+      precedence) for local-player orders and intermediate starts; `unmeasured` for the
+      every-player and between-house order-boundary extensions, project rules not observable
+      in the original
     - Confidence: high (tab and icon order, per-type grouping); medium (intermediate starts)
 
 14. **Production during a sale (Q-0121).** The start of selling, and merely queueing a sale,
@@ -487,7 +500,8 @@ last recheck). In addition:
     is the dedicated icon palette named in Import mapping, not a theater unit palette
     or a house-colour ramp. Selection of the same icon file is therefore independent
     of theater and house colour; side archive precedence can supply different file
-    contents (S-0005). Palette loading and colour conversion belong to S-0103.
+    contents (S-0005). Palette loading, session lifetime, colour conversion and missing-file
+    behaviour belong to S-0103 claim 13, including its safe missing-palette departure.
 
     Darkening draws frame 0 of the separate darkening-mask file over the already-drawn
     icon. At each nonzero mask index, each destination hi-colour channel becomes
@@ -614,7 +628,7 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | Input | Concept | Form and absent behaviour |
 |---|---|---|
 | `Cameo`, `AltCameo` (art, type's art section) | icon file choice before frame 0 is drawn | text cut to 24 bytes; main empty/missing uses `XXICON.SHP`, alternate empty/missing has no alternate; first-read retention and use conditions are S-0007 claims 22 and 25 |
-| `CAMEO.PAL` | dedicated icon palette | fixed file name, no rules selector; file resolution follows S-0005, colour conversion is S-0103's ownership; missing-file behaviour is not established here |
+| `CAMEO.PAL` | dedicated icon palette | fixed file name, no rules selector; file resolution follows S-0005; startup loading, conversion, session lifetime and missing-file behaviour, including the black-palette warning departure, are S-0103 claim 13's ownership |
 | `DARKEN.SHP` | unavailable-icon mask | fixed file name, frame 0, zero index transparent, nonzero indices halve destination channels; no rules selector; a missing mask adds no darkening |
 | `TXT_READY` (string table) | ready label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
@@ -935,8 +949,12 @@ the time the script sent a button event, dates a click.
   line, A-before-B creates B and cancels it at the same boundary, with one creation draw and
   no B progress step and a refund of 0 credits. B-before-A creates no B and takes no creation
   draw for B. Its queued removal changes no credits. The cost-bonus control still refunds
-  0 for transient B because both its start and its cancel use the same current price. Other line starts contribute the draws that S-0404 specifies
-  and are recorded separately. Void a run with an unrelated draw or earlier cancellation.
+  0 for transient B because both its start and its cancel use the same current price.
+  Across the other lines, replacements receive their creation values in the recorded
+  cancellation-application order, not line creation or payment-priority order (S-0404
+  P11 B). Any intervening action's draws remain between those starts. A transient item
+  keeps its consumed draw even when a later order cancels it. Other release-specific
+  draws remain S-0404's and are recorded separately. Void a run with an unrelated draw or earlier cancellation.
 - Falsified if: orders follow registration rather than icon order, are separated into all
   cancels then all cancel-all orders, or any ordering, intermediate start, refund or draw
   differs despite unchanged factory and limit eligibility. If no transient recording is
@@ -1007,8 +1025,9 @@ the time the script sent a button event, dates a click.
   The same resolved palette and icon bytes do not change with house colour/theater.
 - Falsified if: a state uses frame 1, the canvas is centred or stretched, clipping
   differs, or the mask paints colours rather than halving destination channels.
-  Palette-file loading/conversion tests are delegated to S-0103; this does not
-  predict a missing palette's result. One run per variant, screen capture plus
+  Palette-file loading, conversion, session lifetime and missing-file tests are
+  delegated to S-0103 claim 13 and PL, including the original startup failure and
+  our engine's safe departure. One run per variant, screen capture plus
   read-only image/palette inspection by the measurer.
 
 **S12. Sidebar text versus audio (claim 17).**
@@ -1064,7 +1083,7 @@ the time the script sent a button event, dates a click.
 
 ## Changes for other specs
 
-- S-0404: refresh its paired Summary reference from S-0411 revision 13 to revision 14
+- S-0404: refresh its paired Summary reference from S-0411 revision 14 to revision 15
   at joint hand-off. Its application-boundary release/refund, sale and capacity contracts
   already agree; no behavioural replacement is required.
 

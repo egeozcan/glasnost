@@ -1,9 +1,9 @@
 ---
 id: Q-0328
 title: S-0701 claim 18's selection order against the selection order of S-0213 and S-0214
-status: open
+status: answered
 related: [S-0701, S-0213, S-0214]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

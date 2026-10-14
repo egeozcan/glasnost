@@ -1,9 +1,9 @@
 ---
 id: Q-0337
 title: How a turret's rotation sound ends, and how often it starts
-status: open
+status: answered
 related: [S-0701, S-0206]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0336
 title: Do the guard, stop and scatter command sounds play when the command orders nothing
-status: open
+status: answered
 related: [S-0701, S-0213]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

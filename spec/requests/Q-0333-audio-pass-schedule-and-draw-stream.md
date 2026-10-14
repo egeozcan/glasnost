@@ -1,9 +1,9 @@
 ---
 id: Q-0333
 title: Our engine's audio pass schedule and the stream of per-instance sound draws
-status: open
+status: answered
 related: [S-0701, S-0202]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

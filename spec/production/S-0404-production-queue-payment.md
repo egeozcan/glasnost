@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,10 +22,10 @@ losing power affect the lines. Step length is S-0403, clicks are S-0411 and the 
 S-0416; factory unloading and qualified post-contact destinations are S-0417. Skirmish only,
 network games and campaigns are out of scope.
 
-**Paired revisions.** S-0407 revision 12 separates the issue of claim 9's cancellation orders
+**Paired revisions.** S-0407 revision 13 separates the issue of claim 9's cancellation orders
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test and keeps claim 10's application-time limit test on queued starts
-(S-0407, claims 13 and 16). S-0411 revision 13 specifies cancellation with refund at the
+(S-0407, claims 13 and 16). S-0411 revision 14 specifies cancellation with refund at the
 place-order application boundary for a busy or failed unit release, without retry; no eligible
 factory leaves the item done (claims 7 and 13 below). Its claim 14 states the continued steps
 and payments while a factory is being sold or queued to be sold. The relevant factory-eligibility
@@ -38,7 +38,7 @@ admission order; S-0004 retains sidebar sorting and capacity ownership. S-0417 c
 contact-place count, infantry exit-candidate acceptance and edge-aircraft nearby destinations.
 Release queues unloading rather than starting it synchronously. Claim 10 already distinguishes
 upgrade placement from ordinary placement, as required by S-0406 claim 12.
-S-0202 revision 16 claim 10 and S-0203 revision 16 claim 8 now agree with claim 11's
+S-0202 revision 17 claim 10 and S-0203 revision 17 claim 8 now agree with claim 11's
 causing-action rule and P11 B/C. Payment priority alone does not determine that assignment.
 Their proposed assignment measurements are not measured results. S-0202 claim 15's
 middle-event creation draws do not change production-start precedence.
@@ -404,7 +404,7 @@ addition:
     | Starting or queuing build order for a building or defence | The line has no item (in progress, held, or done), and the type is offered to the house and not at its build limit. These are the state rule of S-0411 (claims 4 to 6) and the offer rule of S-0407 (claim 13). An offer can remain stale until the next recheck; `quirks.stale_offer_orderable` and its alternative are owned by S-0407, claim 13. |
     | Starting or queuing build order for another kind | The type is offered to the house and not at its build limit, under S-0407 (claim 13). An offer can remain stale until the next recheck; `quirks.stale_offer_orderable` and its alternative are owned by S-0407, claim 13. |
     | Build order resuming the held item of the ordered type | The order is exempt from the busy-line and build-limit tests, but not from the offer rule (S-0411, claim 4; S-0407, claim 13). |
-    | Place order with a cell | For an ordinary building or defence, adjacency and explored ground hold (S-0406, claim 6, with S-0411, claim 10). For an upgrade order, the upgrade-specific legality conditions of S-0406 claim 12 apply: adjacency does not, but explored ground still does. Applying the order does not judge these conditions again. |
+    | Place order with a cell | For an ordinary building or defence, adjacency and explored ground hold (S-0406, claim 6, with S-0411, claim 10). For an upgrade order, the upgrade-specific legality conditions of S-0406 claim 12 apply: adjacency does not, but explored ground still does. Applying the order does not judge adjacency or explored ground again; for an upgrade, its target ownership, compatibility and room conditions are checked again at application under S-0406 claim 12. |
 
     A legal build order is then applied or refused by claim 3 (the factory conditions, the
     build-limit answer with the production allowance, the queue limit and S-0407's claim 16). This claim only lists the rules; each stays owned by the spec
@@ -422,9 +422,11 @@ addition:
     type, as any player hold (claim 5), which an AI house has to give like a person. When the first queued type cannot start even so (no factory building could
     make it), it is dropped from the queue (Edge cases).
     - Backing: `measurable` (scenario P3 for the refusal of a second building through the sidebar,
-      scenario P10 for the forced start and the dropped queue head)
-    - Confidence: high (the legality rule, a rule of our engine); medium (the forced-start hold and
-      its affordability test); low (dropping a queued type that cannot start, Edge cases)
+      scenario P10 for the forced start and the dropped queue head); upgrade target rechecks
+      inherit S-0406 claim 12's backing (PL10 part j, conditional on establishing its event timing).
+    - Confidence: high (the legality rule, a rule of our engine); medium (the forced-start hold,
+      its affordability test and upgrade target rechecks); low (dropping a queued type that cannot
+      start, Edge cases)
 
 11. **Random draws: one creation draw per item started.** Starting an item creates its object, and
     that creation takes one raw value from the scenario random stream (S-0202, claim 10, which

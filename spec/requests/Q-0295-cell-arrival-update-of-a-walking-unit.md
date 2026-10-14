@@ -1,9 +1,9 @@
 ---
 id: Q-0295
 title: Which updates of a walking infantry unit are its cell-arrival updates for the clear report
-status: open
+status: answered
 related: [S-0417, S-0208, S-0409]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
