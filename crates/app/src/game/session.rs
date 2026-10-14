@@ -368,6 +368,11 @@ impl Session {
             .map(|r| r.rgba(&self.play.game.world, self.play.local))
     }
 
+    /// The icon frame read for type `t` (palette indices), for checks.
+    pub fn icon(&self, t: TypeRef) -> Option<&IndexedImage> {
+        self.icons.get(&t)
+    }
+
     /// Registers the icon frames with the painter (once per game).
     pub fn register_art(&mut self, painter: &mut Painter) {
         let Some(pal) = self.icon_palette else {

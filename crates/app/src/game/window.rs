@@ -352,14 +352,125 @@ struct MapGpu {
     targets: Option<(wgpu::Texture, wgpu::Texture)>,
 }
 
+/// The client's frames on a device: the 2D batch, and the battlefield on
+/// the GPU unless the client composes it on the CPU. The window draws it to
+/// its surface; the local lane draws it offscreen.
+pub struct GpuDraw {
+    batch: Batch2d,
+    map: Option<MapGpu>,
+}
+
+impl GpuDraw {
+    /// A drawer for targets of `format`.
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+        Self {
+            batch: Batch2d::new(device, format),
+            map: None,
+        }
+    }
+
+    /// Takes the client's frame for a target of `size`: records the
+    /// battlefield into `encoder` (falling back to the CPU compose for good
+    /// when that fails) and uploads and prepares the batch. Draw it with
+    /// [`GpuDraw::draw`] after `encoder`'s work.
+    pub fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        client: &mut Client,
+        size: (u32, u32),
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let (list, images) = client.frame();
+        if !client.cpu_map
+            && client.shell.screen == Screen::Game
+            && let Some(s) = client.session.as_ref()
+            && let Err(e) = self.render_map(device, queue, s, client.game_serial, encoder)
+        {
+            log::warn!("the battlefield is drawn on the CPU from now on: {e}");
+            client.cpu_map = true;
+        }
+        let painter = &mut client.painter;
+        if painter.dirty {
+            self.batch.set_palettes(device, queue, &painter.palettes);
+            painter.dirty = false;
+        }
+        self.batch.upload_atlas(queue, &mut painter.atlas);
+        for (id, w, h, rgba) in &images.changed {
+            self.batch.set_image(device, queue, *id, *w, *h, rgba);
+        }
+        let quads = painter.quads(&list);
+        self.batch.prepare(device, queue, size, &quads);
+    }
+
+    /// Records the prepared frame into `pass`.
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        self.batch.draw(pass);
+    }
+
+    /// Draws the session's battlefield into the map target.
+    fn render_map(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        s: &Session,
+        serial: u64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), String> {
+        // A game's scene only grows: upload what it gained, or all of it for
+        // a new game or when the atlas is full.
+        let synced = match self.map.as_mut() {
+            Some(m) if m.serial == serial => m.renderer.sync(device, queue, &s.scene).is_ok(),
+            _ => false,
+        };
+        if !synced {
+            let renderer = MapRenderer::new(device, queue, &s.scene, COLOR_FORMAT)
+                .map_err(|e| e.to_string())?;
+            self.map = Some(MapGpu {
+                serial,
+                renderer,
+                size: (0, 0),
+                targets: None,
+            });
+        }
+        let m = self.map.as_mut().ok_or("no map renderer")?;
+        let v = s.view();
+        if m.size != v.size || m.targets.is_none() {
+            let (color, depth) = targets(device, v.size, COLOR_FORMAT);
+            self.batch.set_image_view(
+                device,
+                MAP_IMAGE,
+                &color.create_view(&Default::default()),
+                v.size,
+            );
+            m.targets = Some((color, depth));
+            m.size = v.size;
+        }
+        let (color, depth) = m.targets.as_ref().ok_or("no map targets")?;
+        let alpha = s.light_alpha();
+        m.renderer.render_lit(
+            device,
+            queue,
+            encoder,
+            &color.create_view(&Default::default()),
+            &depth.create_view(&Default::default()),
+            &s.scene,
+            &v,
+            s.filter(),
+            &glasnost_render::compose::ComposeQuirks::default(),
+            Some(&alpha),
+        );
+        Ok(())
+    }
+}
+
 struct Gfx {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    batch: Batch2d,
-    map: Option<MapGpu>,
+    draw: GpuDraw,
     backend: &'static str,
     webgpu_extras: bool,
     frames_presented: u64,
@@ -394,15 +505,14 @@ impl Gfx {
             config.format = linear;
         }
         config.present_mode = wgpu::PresentMode::AutoVsync;
-        let batch = Batch2d::new(&device, config.format);
+        let draw = GpuDraw::new(&device, config.format);
         let mut gfx = Self {
             window,
             surface,
             device,
             queue,
             config,
-            batch,
-            map: None,
+            draw,
             backend: gpu::backend_label(info.backend),
             webgpu_extras,
             frames_presented: 0,
@@ -433,37 +543,17 @@ impl Gfx {
                 return Err("the surface texture failed validation".into());
             }
         };
-        let (list, images) = client.frame();
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("game frame"),
             });
-        if !client.cpu_map
-            && client.shell.screen == Screen::Game
-            && let Some(s) = client.session.as_ref()
-            && let Err(e) = self.render_map(s, client.game_serial, &mut encoder)
-        {
-            log::warn!("the battlefield is drawn on the CPU from now on: {e}");
-            client.cpu_map = true;
-        }
-        let painter = &mut client.painter;
-        if painter.dirty {
-            self.batch
-                .set_palettes(&self.device, &self.queue, &painter.palettes);
-            painter.dirty = false;
-        }
-        self.batch.upload_atlas(&self.queue, &mut painter.atlas);
-        for (id, w, h, rgba) in &images.changed {
-            self.batch
-                .set_image(&self.device, &self.queue, *id, *w, *h, rgba);
-        }
-        let quads = painter.quads(&list);
-        self.batch.prepare(
+        self.draw.prepare(
             &self.device,
             &self.queue,
+            client,
             (self.config.width, self.config.height),
-            &quads,
+            &mut encoder,
         );
         let view = frame
             .texture
@@ -482,68 +572,12 @@ impl Gfx {
                 })],
                 ..Default::default()
             });
-            self.batch.draw(&mut pass);
+            self.draw.draw(&mut pass);
         }
         self.queue.submit([encoder.finish()]);
         self.window.pre_present_notify();
         self.queue.present(frame);
         self.frames_presented += 1;
-        Ok(())
-    }
-
-    /// Draws the session's battlefield into the map target.
-    fn render_map(
-        &mut self,
-        s: &Session,
-        serial: u64,
-        encoder: &mut wgpu::CommandEncoder,
-    ) -> Result<(), String> {
-        // A game's scene only grows: upload what it gained, or all of it for
-        // a new game or when the atlas is full.
-        let synced = match self.map.as_mut() {
-            Some(m) if m.serial == serial => m
-                .renderer
-                .sync(&self.device, &self.queue, &s.scene)
-                .is_ok(),
-            _ => false,
-        };
-        if !synced {
-            let renderer = MapRenderer::new(&self.device, &self.queue, &s.scene, COLOR_FORMAT)
-                .map_err(|e| e.to_string())?;
-            self.map = Some(MapGpu {
-                serial,
-                renderer,
-                size: (0, 0),
-                targets: None,
-            });
-        }
-        let m = self.map.as_mut().ok_or("no map renderer")?;
-        let v = s.view();
-        if m.size != v.size || m.targets.is_none() {
-            let (color, depth) = targets(&self.device, v.size, COLOR_FORMAT);
-            self.batch.set_image_view(
-                &self.device,
-                MAP_IMAGE,
-                &color.create_view(&Default::default()),
-                v.size,
-            );
-            m.targets = Some((color, depth));
-            m.size = v.size;
-        }
-        let (color, depth) = m.targets.as_ref().ok_or("no map targets")?;
-        let alpha = s.light_alpha();
-        m.renderer.render_lit(
-            &self.device,
-            &self.queue,
-            encoder,
-            &color.create_view(&Default::default()),
-            &depth.create_view(&Default::default()),
-            &s.scene,
-            &v,
-            s.filter(),
-            &glasnost_render::compose::ComposeQuirks::default(),
-            Some(&alpha),
-        );
         Ok(())
     }
 }

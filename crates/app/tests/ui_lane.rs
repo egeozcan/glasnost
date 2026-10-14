@@ -103,6 +103,56 @@ fn ticks(c: &mut Client, clock: &mut i64, n: usize) {
     }
 }
 
+/// The same frame drawn through the window's GPU path (`GpuDraw`)
+/// offscreen, when there is an adapter: written to `game-gpu.png` and
+/// compared with the CPU frame.
+fn gpu_shot(shots: &Shots, c: &mut Client, cpu: &[u8]) {
+    use glasnost_render::gpu::{self, BackendChoice};
+    use glasnost_render::offscreen::{OFFSCREEN_FORMAT, render_rgba};
+    use glasnost_render::wgpu;
+    let Some((device, queue)) = pollster::block_on(async {
+        let instance = gpu::create_instance(BackendChoice::Auto, None).await;
+        let adapter = gpu::request_adapter(&instance, None).await.ok()?;
+        gpu::request_device(&adapter).await.ok()
+    }) else {
+        println!("no GPU adapter: game-gpu.png not written");
+        return;
+    };
+    let (w, h) = (c.size.0 as u32, c.size.1 as u32);
+    let mut draw = glasnost_app::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+    c.cpu_map = false;
+    // The batch's palettes and atlas go to this device too.
+    c.painter.dirty = true;
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("lane map"),
+    });
+    draw.prepare(&device, &queue, c, (w, h), &mut encoder);
+    queue.submit([encoder.finish()]);
+    let rgba = render_rgba(&device, &queue, w, h, |pass| draw.draw(pass));
+    assert!(!c.cpu_map, "the GPU battlefield did not fail");
+    c.cpu_map = true;
+    std::fs::write(shots.dir.join("game-gpu.png"), png::png(w, h, &rgba)).unwrap();
+    let m = c.session.as_ref().unwrap().map_rect();
+    let mut colours = std::collections::BTreeSet::new();
+    let (mut diff, mut n) = (0u64, 0u64);
+    for y in m.y..m.y + m.h {
+        for x in m.x..m.x + m.w {
+            let at = ((y * c.size.0 + x) * 4) as usize;
+            colours.insert([rgba[at], rgba[at + 1], rgba[at + 2]]);
+            for k in 0..3 {
+                diff += u64::from(rgba[at + k].abs_diff(cpu[at + k]));
+                n += 1;
+            }
+        }
+    }
+    println!(
+        "wrote game-gpu.png: {} colours on the battlefield, mean difference from the CPU frame {:.2}",
+        colours.len(),
+        diff as f64 / n.max(1) as f64
+    );
+    assert!(colours.len() > 16, "the GPU battlefield is blank");
+}
+
 #[test]
 #[ignore = "local lane: needs GLASNOST_GAME_DIR"]
 fn client_screens_from_menu_to_end() {
@@ -165,6 +215,8 @@ fn client_screens_from_menu_to_end() {
         t0.elapsed().as_millis()
     );
     shots.save(&mut c, "game");
+    let cpu_game = c.frame_rgba();
+    gpu_shot(&shots, &mut c, &cpu_game);
 
     // Build the first building icon and enter placement mode.
     let s = c.session.as_mut().unwrap();
@@ -172,6 +224,18 @@ fn client_screens_from_menu_to_end() {
     let first = s.play.world().houses[usize::from(local.0)].econ.tech.icons[0]
         .first()
         .map(|i| i.t);
+    // The first icon's indices as grey levels, to tell the icon palette
+    // (Q-0275) from the decoding.
+    if let Some(img) = first.and_then(|t| s.icon(t)) {
+        let grey: Vec<u8> = img
+            .pixels()
+            .iter()
+            .flat_map(|&i| [i, i, i, 255])
+            .collect();
+        let path = shots.dir.join("icon-indices.png");
+        std::fs::write(&path, png::png(img.width(), img.height(), &grey)).unwrap();
+        println!("icon {}x{}: wrote icon-indices.png", img.width(), img.height());
+    }
     s.play.tab_click(0);
     s.play.cameo_click(0, Button::Left, false);
     let mut placing = false;

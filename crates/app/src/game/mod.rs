@@ -17,4 +17,4 @@ pub mod play;
 pub mod session;
 pub mod window;
 
-pub use window::{GameOptions, run_game};
+pub use window::{GameOptions, GpuDraw, run_game};
