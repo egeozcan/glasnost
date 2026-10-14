@@ -2,13 +2,13 @@
 id: S-0005
 title: Data file precedence (loose files, archive mount order, name lookup)
 topic: rules-import
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0002, Q-0263]
+requests: [Q-0002, Q-0263, Q-0451]
 supersedes: []
 ---
 
@@ -525,6 +525,14 @@ end. Claims 9 to 14a list the order. Table 1 in State and ordering gives it in o
     - Confidence: high (all but the AI database), medium (the AI database: its observable depends
       on computer play, which involves random draws)
 
+18a. **Game bitmap font.** Status text uses `game.fnt`, resolved by the ordinary loose-file
+    and archive precedence of claims 1 to 8. With stock data and no loose override, it comes from
+    `local.mix`, nested inside `ra2.mix`. Its layout follows the public bitmap-font file format.
+    This spec adds no separate byte-layout contract. S-0213 claim 25 owns the use of its glyph
+    widths and fallback glyph, including character advances, tabs and line breaks.
+    - Backing: `measurable` (Scenario M26; S-0213 claim 25 for text measurement and drawing)
+    - Confidence: high
+
 19. **Missing game-mode file.** The mode list names one game-mode file per mode. If that file cannot
     be resolved, the mode behaves as if the file were empty: the mode is still offered and the
     game-mode layer changes nothing. The other rules layers (S-0006) apply as usual.
@@ -970,6 +978,7 @@ regard to letter case):
 | game-mode files named in the mode list | rules layer of the selected mode (S-0006) | `localmd.mix` |
 | `uimd.ini` | interface layout file (claim 16a) | `localmd.mix` |
 | `keyboardmd.ini` | keyboard file | `langmd.mix` |
+| `game.fnt` | game bitmap font in the public font format (claim 18a), used by S-0213 claim 25 | `local.mix`, inside `ra2.mix` |
 | `langrule.ini` | language rules file (claim 21) | absent |
 | `rulemd*.ini` (loose only) | alternative rules candidates (claim 20) | absent |
 | `ra2md.ini` (loose only) | settings file | loose |
@@ -2080,6 +2089,21 @@ mean those sides' names as the stock side list writes them.
   (iii) A, (iv) B, (v) silence with audible voice-system control. *Falsified if:* a separate file
   supplies the selection response, the bank or AUD file supplies the announcement, or another
   copy wins. An inaudible control voids (ii) or (v), respectively.
+
+**Scenario M26: game bitmap-font lookup (claim 18a; Q-0451).**
+- *Setup:* measurement setup, director and mods off except named test files. Use a tiny skirmish
+  map at speed 2 with a local-player unit and a bystander computer player isolated from it.
+  Prepare a valid test copy of `game.fnt` with a visibly altered glyph used in a repeatable
+  status notice, keeping its width unchanged. Variant (a): replace that member in a loose copy
+  of `local.mix`, extracted from `ra2.mix`. Variant (b): leave the stock archives unchanged and
+  supply the test font loose instead. A stock-only fresh session is the control.
+- *Procedure:* in each fresh session, trigger the same notice as in S-0213 claim 25 and capture
+  the status display. Void a run if the bystander affects the test unit or ends the game.
+- *Observable:* the chosen glyph's picture in the notice.
+- *Runs:* one fresh skirmish per variant and one control.
+- *Expected:* both variants show the altered glyph; the control shows the stock glyph.
+- *Falsified if:* either variant shows the stock glyph, or the control shows the altered glyph.
+  Width and fallback-use controls are S-0213 claim 25's measurement scenario.
 
 ## Open questions
 
