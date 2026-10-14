@@ -5,7 +5,9 @@
 //! (git-ignored). Prints counts, cells and timings only.
 //!
 //! Run with `cargo test -p glasnost-app --test fix_lane -- --ignored
-//! --nocapture`. `GLASNOST_UI_MAP=n` picks the n-th offered map (default 0).
+//! --nocapture`. `GLASNOST_UI_MAP=n` picks the n-th offered map (default 0),
+//! `GLASNOST_FACTORY=n` the n-th ground vehicle factory type when none has a
+//! door sprite (default 1), `GLASNOST_WIDE=n` the wide window's width.
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -15,7 +17,8 @@ use glasnost_app::game::client::{Client, Key, run_job};
 use glasnost_app::game::play::Button;
 use glasnost_app::mapview::png;
 use glasnost_map::CellXY;
-use glasnost_sim::rules::Kind;
+use glasnost_sim::behaviour::Door;
+use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::Modifiers;
 use glasnost_sim::world::ObjectId;
 use glasnost_ui::geom::{Point, Rect};
@@ -88,6 +91,27 @@ impl Shots {
         let path = self.dir.join(format!("{name}.png"));
         std::fs::write(&path, png::png(w as u32, h as u32, &rgba)).unwrap();
         println!("wrote {name}.png");
+    }
+
+    /// Writes `name-zoom.png`: the 300 × 200 pixels around `at`, enlarged
+    /// twice.
+    fn zoom(&self, c: &mut Client, name: &str, at: Point) {
+        let rgba = c.frame_rgba();
+        let (w, h) = c.size;
+        let (cw, ch, k) = (300, 200, 2);
+        let (x0, y0) = (
+            (at.x - cw / 2).clamp(0, w - cw),
+            (at.y - ch / 2).clamp(0, h - ch),
+        );
+        let mut out = Vec::with_capacity((cw * ch * k * k * 4) as usize);
+        for y in 0..ch * k {
+            for x in 0..cw * k {
+                let i = (((y0 + y / k) * w + x0 + x / k) * 4) as usize;
+                out.extend_from_slice(&rgba[i..i + 4]);
+            }
+        }
+        let path = self.dir.join(format!("{name}-zoom.png"));
+        std::fs::write(&path, png::png((cw * k) as u32, (ch * k) as u32, &out)).unwrap();
     }
 
     /// Writes 600-pixel-wide crops at the left and right ends of the drawn
@@ -196,6 +220,21 @@ fn point_of(c: &mut Client, cell: Option<CellXY>, obj: Option<ObjectId>) -> Opti
     None
 }
 
+/// The mean screen point of the pixels that hit object `obj`.
+fn centre_of(c: &mut Client, obj: ObjectId) -> Option<Point> {
+    let s = c.session.as_mut().unwrap();
+    let m = s.map_rect();
+    let (mut sx, mut sy, mut n) = (0i64, 0i64, 0i64);
+    for y in (m.y..m.y + m.h).step_by(3) {
+        for x in (m.x..m.x + m.w).step_by(3) {
+            if s.under(Point::new(x, y)).1 == Some(obj) {
+                (sx, sy, n) = (sx + i64::from(x), sy + i64::from(y), n + 1);
+            }
+        }
+    }
+    (n > 0).then(|| Point::new((sx / n) as i32, (sy / n) as i32))
+}
+
 /// The local base unit, deployed where it stands; returns its cell.
 fn deploy(c: &mut Client, clock: &mut i64) -> CellXY {
     ticks(c, clock, 5);
@@ -239,11 +278,30 @@ fn rally_point_from_a_factory() {
         .map(|b| b.name.clone())
         .collect();
     println!("{} ground vehicle factory types", names.len());
+    // The factory types' door sprites (S-0108 claim 23): use one that has one.
+    let import = &s.loaded.import;
+    let has_door: Vec<bool> = names
+        .iter()
+        .map(|n| {
+            let ti = w.rules().index_of(Kind::Building, n).unwrap() as usize;
+            let roles = import
+                .arts
+                .get(&(glasnost_convert::kinds::Kind::Buildings, ti))
+                .map(|a| a.building_sprites.keys().copied().collect::<Vec<_>>())
+                .unwrap_or_default();
+            println!("factory type {n}: sprite roles {roles:?}");
+            roles.contains(&"door")
+        })
+        .collect();
+    let pick = has_door
+        .iter()
+        .position(|&d| d)
+        .unwrap_or(env_num("GLASNOST_FACTORY", 1).min(names.len() - 1));
     let at = CellXY::new(base.x + 5, base.y - 1);
     let fact = glasnost_sim::testkit::spawn(
         &mut s.play.game.world,
         Kind::Building,
-        &names[0],
+        &names[pick],
         local.0,
         at,
         0,
@@ -253,6 +311,43 @@ fn rally_point_from_a_factory() {
     look_at(&mut c, CellXY::new(at.x + 3, at.y + 3));
     ticks(&mut c, &mut clock, 1);
     let on_fact = point_of(&mut c, None, Some(fact)).expect("the factory is on screen");
+    let fact_centre = centre_of(&mut c, fact).unwrap_or(on_fact);
+    {
+        // The factory type's door art as imported (S-0108 claims 22 to 24).
+        let s = c.session.as_ref().unwrap();
+        let ti = s
+            .play
+            .world()
+            .obj(fact)
+            .map(|o| o.type_index as usize)
+            .unwrap();
+        let import = &s.loaded.import;
+        if let Some(a) = import
+            .arts
+            .get(&(glasnost_convert::kinds::Kind::Buildings, ti))
+        {
+            let doc = glasnost_ini::Document::parse(
+                &import
+                    .art_file
+                    .as_ref()
+                    .map(|f| f.bytes.clone())
+                    .unwrap_or_default(),
+                Default::default(),
+                &mut Vec::new(),
+            );
+            let key = |k: &[u8]| {
+                doc.value(&a.image, k)
+                    .map(|v| String::from_utf8_lossy(v).into_owned())
+            };
+            println!(
+                "factory image {}: sprite roles {:?}; DoorStages {:?}, DamagedDoor {:?}",
+                String::from_utf8_lossy(&a.image),
+                a.building_sprites.keys().collect::<Vec<_>>(),
+                key(b"DoorStages"),
+                key(b"DamagedDoor"),
+            );
+        }
+    }
     click_at(&mut c, Button::Left, on_fact);
     let s = c.session.as_ref().unwrap();
     println!("selection after the factory click: {:?}", s.play.selection);
@@ -267,6 +362,8 @@ fn rally_point_from_a_factory() {
         s.play.selection,
         s.play.world().obj(fact).and_then(|o| o.guard_spot)
     );
+    shots.save(&mut c, "rally-set");
+    shots.zoom(&mut c, "door-before", fact_centre);
     let s = c.session.as_mut().unwrap();
     s.play.game.world.houses[usize::from(local.0)].credits = 100_000;
     let vehicle = s.play.world().houses[usize::from(local.0)]
@@ -285,6 +382,8 @@ fn rally_point_from_a_factory() {
     println!("build orders taken: {n}");
     let before: Vec<ObjectId> = own_vehicles(&c);
     let mut seen = None;
+    let mut doors: Vec<&str> = Vec::new();
+    let mut going = false;
     for _ in 0..3000 {
         ticks(&mut c, &mut clock, 1);
         let s = c.session.as_ref().unwrap();
@@ -295,12 +394,40 @@ fn rally_point_from_a_factory() {
                 println!("vehicle {id:?} made at tick {}", w.tick);
             }
         }
+        // Item 3: the factory's door through the unload (S-0108 claim 23).
+        let door = w
+            .obj(fact)
+            .and_then(|o| (o.beh.current == Some(Behaviour::Unload)).then_some(o.beh.gate.door));
+        let name = match door {
+            Some(Door::Opening { .. }) => Some("door-opening"),
+            Some(Door::Open) => Some("door-open"),
+            Some(Door::Closing { .. }) => Some("door-closing"),
+            Some(Door::Closed) => Some("door-closed-unloading"),
+            None => None,
+        };
+        let tick = w.tick;
+        if let Some(name) = name
+            && !doors.contains(&name)
+        {
+            doors.push(name);
+            println!("{name} at tick {tick}");
+            shots.save(&mut c, name);
+            shots.zoom(&mut c, name, fact_centre);
+        }
+        let s = c.session.as_ref().unwrap();
+        let w = s.play.world();
         if let Some(o) = seen.and_then(|id| w.obj(id))
             && o.on_map
-            && o.pos.cell() == rally
         {
-            println!("reached the rally cell at tick {}", w.tick);
-            break;
+            if o.pos.cell() == rally {
+                println!("reached the rally cell at tick {}", w.tick);
+                break;
+            }
+            let (dx, dy) = (o.pos.cell().x - rally.x, o.pos.cell().y - rally.y);
+            if !going && door.is_none() && dx.abs() + dy.abs() <= 4 {
+                going = true;
+                shots.save(&mut c, "rally-going");
+            }
         }
     }
     let s = c.session.as_ref().unwrap();
@@ -313,7 +440,7 @@ fn rally_point_from_a_factory() {
             o.dest
         );
     }
-    shots.save(&mut c, "rally");
+    shots.save(&mut c, "rally-arrived");
 }
 
 fn own_vehicles(c: &Client) -> Vec<ObjectId> {
@@ -364,4 +491,150 @@ fn wide_view_and_the_right_edge() {
     let y = s.view().origin.1 + s.map_rect().h / 2;
     s.set_centre((1_000_000, y));
     shots.save(&mut c, "right-edge");
+}
+
+/// High bridges of the map whose both ends are banks at deck level: the
+/// (bank, bank) pairs along each deck run (S-0209 claim 15's crossing).
+fn bridges(c: &Client) -> Vec<(CellXY, CellXY)> {
+    use glasnost_sim::cells::Axis;
+    let w = c.session.as_ref().unwrap().play.world();
+    let cells = &w.cells;
+    let level = |c: CellXY| cells.cell(c).map(|c| i32::from(c.level));
+    let deck = |c: CellXY| cells.idx(c).is_some_and(|i| cells.deck[i]);
+    let mut out = Vec::new();
+    for y in 0..512 {
+        for x in 0..512 {
+            let start = CellXY::new(x, y);
+            let Some(i) = cells.idx(start) else { continue };
+            if !cells.deck[i] {
+                continue;
+            }
+            let (dx, dy) = match cells.bridge_axis[i] {
+                Axis::X => (1, 0),
+                Axis::Y => (0, 1),
+                Axis::None => continue,
+            };
+            // The first cell of each run only.
+            if deck(CellXY::new(x - dx, y - dy)) {
+                continue;
+            }
+            let mut end = start;
+            while deck(CellXY::new(end.x + dx, end.y + dy)) {
+                end = CellXY::new(end.x + dx, end.y + dy);
+            }
+            let (a, b) = (
+                CellXY::new(x - dx, y - dy),
+                CellXY::new(end.x + dx, end.y + dy),
+            );
+            let ground = level(start).unwrap_or(0);
+            if level(a) == Some(ground + 4) && level(b) == Some(ground + 4) && end != start {
+                out.push((a, b));
+            }
+        }
+    }
+    out
+}
+
+/// Item 1: infantry walking across a high bridge on its deck, ordered with
+/// the client's left click, and one ordered onto the deck itself.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn infantry_on_a_bridge_deck() {
+    use glasnost_sim::world::Layer;
+    let Some((mut c, shots)) = start((1280, 800)) else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let mut clock = 0i64;
+    reveal(&mut c);
+    ticks(&mut c, &mut clock, 2);
+    let found = bridges(&c);
+    println!("{} high bridges with banks at deck level", found.len());
+    let Some(&(a, b)) = found.first() else {
+        println!("no such bridge on this map: pick another with GLASNOST_UI_MAP");
+        return;
+    };
+    println!("bridge from {a:?} to {b:?}");
+    let s = c.session.as_mut().unwrap();
+    let local = s.play.local;
+    let w = s.play.world();
+    let walker = w
+        .rules()
+        .infantry
+        .iter()
+        .find(|u| u.locomotor == glasnost_sim::rules::Locomotor::Walk && !u.jumpjet && u.speed > 0)
+        .map(|u| u.name.clone())
+        .expect("a walking infantry type");
+    let mut men = Vec::new();
+    for k in 0..2 {
+        men.push(glasnost_sim::testkit::spawn(
+            &mut s.play.game.world,
+            Kind::Infantry,
+            &walker,
+            local.0,
+            a,
+            16384 * k,
+        ));
+    }
+    ticks(&mut c, &mut clock, 2);
+    let mid = CellXY::new((a.x + b.x) / 2, (a.y + b.y) / 2);
+    look_at(&mut c, mid);
+    ticks(&mut c, &mut clock, 1);
+    // The first across to the far bank, the second onto the deck's middle.
+    for (man, to) in [(men[0], b), (men[1], mid)] {
+        let s = c.session.as_mut().unwrap();
+        s.play.select_box(&[man], false);
+        let p = point_of(&mut c, Some(to), None).expect("the cell is on screen");
+        click_at(&mut c, Button::Left, p);
+    }
+    let mut shot = false;
+    let mut last = Vec::new();
+    for _ in 0..1500 {
+        ticks(&mut c, &mut clock, 1);
+        let s = c.session.as_ref().unwrap();
+        let w = s.play.world();
+        let now: Vec<_> = men
+            .iter()
+            .filter_map(|&m| w.obj(m))
+            .map(|o| {
+                (
+                    o.pos.cell(),
+                    o.layer,
+                    o.pos.z - w.surface_at(o.pos.x, o.pos.y),
+                )
+            })
+            .collect();
+        if now.iter().map(|n| n.1).collect::<Vec<_>>() != last {
+            println!("tick {}: {now:?}", w.tick);
+            last = now.iter().map(|n| n.1).collect();
+        }
+        let first = w.obj(men[0]).unwrap();
+        if !shot && first.layer == Layer::Deck && first.pos.cell() == mid {
+            shot = true;
+            shots.save(&mut c, "bridge-deck");
+        }
+        let s = c.session.as_ref().unwrap();
+        let w = s.play.world();
+        let done = men.iter().all(|&m| {
+            w.obj(m).is_some_and(|o| {
+                o.dest.is_none() && o.walk.as_ref().is_some_and(|s| s.target.is_none())
+            })
+        });
+        if shot && done {
+            break;
+        }
+    }
+    let s = c.session.as_ref().unwrap();
+    let w = s.play.world();
+    for &m in &men {
+        let o = w.obj(m).unwrap();
+        println!(
+            "{m:?} ends at {:?} on {:?}, {} above the ground, destination {:?}",
+            o.pos.cell(),
+            o.layer,
+            o.pos.z - w.surface_at(o.pos.x, o.pos.y),
+            o.dest
+        );
+    }
+    shots.save(&mut c, "bridge-deck-standing");
 }
