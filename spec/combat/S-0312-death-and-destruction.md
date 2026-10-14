@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -159,11 +159,13 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 5. **Exploding objects kill their passengers.** When an exploding object dies, every passenger it
    carries dies with it, and each death is credited to the attacker of the killing hit (score and
    experience belong to their specs). The passengers show no death effects of their own and take no
-   draws. Their deaths come before the death weapon goes off (claim 6), so a passenger is already
+   draws for those suppressed effects. Tagged passengers still receive destruction notifications
+   under S-0011 claim 19; actions they fire complete with their effects and draws before that
+   passenger is removed. Their deaths come before the death weapon goes off (claim 6), so a passenger is already
    dead when the detonation's damage is dealt. The passengers die one after another in the order
    they are held, and the passengers of a passenger die before it does. That order is observable
-   only in the order in which the deaths reach things that react to them, such as the triggers
-   attached to the passengers (S-0011); nothing else in the game state depends on it.
+   through reactions to their deaths, including attached triggers and their actions' effects
+   and draws (S-0011 claim 19).
    - Backing: `measurable` (scenario D5, variant b for the order)
    - Confidence: high for the deaths, the credit and their coming before the detonation; medium
      for the order among passengers
@@ -736,13 +738,12 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     without a killing hit are not established by this claim. Never-placed production masters
     retain Q-0193's boundary.
 
-    **Companion-spec correction required.** S-0011 claim 19 currently describes the
-    destroyed-by-anything raise only at a killing hit. It must also admit the hidden-slave
+    **Companion-spec hand-off confirmation.** S-0011 claim 19 includes the hidden-slave
     destruction notifications in this claim and claim 31, including temporary hidden slaves
-    discarded during successful pack-up. This is a specific exception, not a rule that every
-    removal raises destruction events. Ordinary final removal after an infantry death sequence
-    makes no new destruction raises as claim 29 states. Hand these passages off
-    only with the corresponding S-0011 claim 19 correction.
+    discarded during successful pack-up. These are specific no-hit destruction cases, not a
+    rule that every removal raises destruction events. Ordinary final removal after an infantry
+    death sequence makes no new destruction raises as claim 29 states. Hand these passages off
+    together with S-0011 claim 19.
     - Backing: `measurable` (scenario D21) for hidden removal, attacker and normal civilian
       transfer, guard queueing, no regeneration and before-debris timing; `unmeasured` for
       hidden-slave tag notifications (no established data-only setup attaches a tag to a
@@ -948,7 +949,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | before 1 | tagged infantry, vehicle, aircraft, building | destruction raises and all actions they fire (claim 29); the initial lethal hit of a delayed-death building has these raises before its reprieve | only the actions' and their effects' draws |
 | before 1 | slave master | hidden slaves removed, on-map slaves freed or hit when no new owner exists (claim 30); after the master's killing-hit destruction raises | resulting slave notifications and damage effects; release-draw details remain open |
 | 1 | all | debris (claim 4, F1); skipped for a bomb-marked vehicle low over water (claim 11) | F1 |
-| 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water (claim 11) | the detonation's |
+| 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water (claim 11) | passenger-trigger actions and their effects, then the detonation's |
 | 3 | all | attached bomb (claim 7) | the bomb's |
 | 4 | infantry | death sequence or removal (S-0107 claim 17) | S-0107 |
 | 4 | vehicle | sinking (claim 10), or wake and splash (claim 11), or explosion and destruction animations (claim 9) | up to two list picks (claim 9); none for sinking or for claim 11 |
@@ -1037,13 +1038,12 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   can release up to twice the survivor count *C* in total, and it takes that round's draws. Off: it
   takes no second round; it leaves play and its cells, its remaining passengers die, and its
   rubble and crate are placed, taking no draws but the crate's. Turning it off changes every later draw.
-- **Smudge footprints beyond the map edge** (ordinary specified behaviour; no switch). Claim 26
-  tests only the anchor cell for lying on the map. A footprint cell beyond the map edge is tested
-  in the original as a placeholder cell that holds nothing and has the first tile type of the
-  theater, so it is believed to pass when that tile type's tileset has the morphable flag. Our
-  engine does the same. This can matter only for a smudge larger than one cell anchored on the last
-  row or column of the map. This is treated as ordinary specified behaviour, not as a quirk, so no
-  alternative behaviour or switch is defined.
+- **`quirks.smudge_footprints_beyond_map_edge`** (default: on, the original). Claim 26 tests only
+  the anchor cell for lying on the map. A footprint cell beyond the map edge is tested as a
+  placeholder cell that holds nothing and has the theater's first tile type; it passes when that
+  tile type's tileset has the morphable flag. Our engine does the same by default. This can matter
+  only for a smudge larger than one cell anchored on the last row or column of the map. Off: a
+  footprint extending beyond the map edge does not fit, so that smudge type is not a candidate.
 - **Departure: absorbed passengers beyond the last cell** (no switch). With more absorbed passengers
   than foundation cells, the original goes on past the last foundation cell and places the rest at
   unspecified positions. Our engine treats each
@@ -1156,7 +1156,8 @@ positive debris counts and death weapons, and give the transport distinct explos
 destruction animations. Record and replay debris, detonations, deaths and animations. Expected:
 transport debris precedes passenger deaths; no passenger debris or death weapon appears; the
 transport death-weapon detonation completes before the bomb's, and both precede its vehicle
-animations. Contrary precedence or an extra passenger draw falsifies b.
+animations. Contrary precedence or a draw for a passenger's suppressed death effects falsifies b.
+Any passenger-trigger action draws are accounted for separately under S-0011 claim 19.
 
 **D2. Cyborg crippling (claim 2).** *Setup:* a test infantry type with the cyborg flag and strength
 200; a weapon that deals 1000 damage (not ignoring defences). *Observable:* the unit's health and
@@ -1201,7 +1202,13 @@ flag carrying two infantry units, each with its own attached trigger whose actio
 after that unit's death, sets the same map variable to a different value; the variable's final
 value shows which passenger's trigger ran last, and the same with a passenger carrying a passenger.
 *Expected:* the holder's first passenger's trigger runs before the second's, and a passenger's own
-passengers' before its own; *falsified if* the order differs. Claim 29 fixes these firings inside each passenger's death, before the transport's death weapon.
+passengers' before its own; *falsified if* the order differs. S-0011 claim 19 fixes these
+notifications and their actions before passenger removal and the transport's death weapon.
+Repeat with a passenger-trigger action that creates an animation with known scenario-stream
+draws, recording and replaying those draws separately from the transport's effects. Expected:
+only the actions and their effects add passenger-related draws; no suppressed passenger death
+effects draw. A missing action draw, a draw for a suppressed effect, or an action completing
+after the death weapon falsifies this variant.
 
 **D6. Death weapon (claim 6).** *Setup:* (a) a test vehicle with the explodes flag, a death weapon
 of damage 100 and damage factor 1.5, killed beside a target with versus 100 %, no other damage
