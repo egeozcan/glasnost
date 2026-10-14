@@ -2,13 +2,13 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 22
+revision: 23
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311]
+requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356]
 supersedes: []
 ---
 
@@ -30,9 +30,8 @@ Cited specs: S-0003, S-0004, S-0006, S-0009 (map file semantics), S-0105, S-0107
 facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infantry movement),
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0213 (human
 orders), S-0214 (order targeting rules) and S-0215 (behaviours) are approved specs of the index in
-`spec/README.md`. Claim, formula, table and row labels cited from them are those of the revisions
-that index lists, except for the latest drafts in this correction batch: S-0207 revision 16,
-S-0208 revision 21 and S-0212 revision 27. Hand off their coordinated texts and this one
+`spec/README.md`. Claim, formula, table and row labels refer to the current coordinated texts,
+including the latest drafts in this correction batch. Hand off their coordinated texts and this one
 together for the teleporting-vehicle, aircraft and infantry reservation lifecycles,
 shared quirks and vehicle entry-outcome summary. S-0212 claim 22's immediate fresh search and
 same-tick follow-up remain coordinated with S-0207 claim 15 and scenario D17(d3). S-0208 and S-0212 use their current correction-batch texts where revised.
@@ -425,7 +424,7 @@ rank* and *elite weapon*), *n*
      occupant rows of claims 4 and 5 (row VP1 for the vehicle itself) still see it. Moving into a
      new cell during a track clears nothing. When hovering vehicles, ships and walking vehicles
      clear their flags is not established (Open questions).
-   - *Teleporting vehicles.* S-0207 claim 20 a and e owns their reservation lifecycle.
+   - *Teleporting vehicles.* S-0207 claim 20 a, e and k owns their reservation lifecycle.
      Fixing a landing point reserves its ground record, even for a high-bridge cell and even
      when the nearby search uses deck mode. Replacing a remembered landing point clears that
      point's ground reservation, including after a completed jump. Before any landing point
@@ -437,8 +436,24 @@ rank* and *elite weapon*), *n*
      The old deck mark stays until the next jump removes the vehicle from that cell.
      The ground reservation is not a listed ground occupant, and reservation layer need not
      match listing layer. This uses the shared `quirks.teleport_vehicle_ground_reservation`
-     (Edge cases). These are pointers with S-0207 claim 20's medium confidence and
-     `measurable` backing (its scenario D22, run 13), not additional driving release rules.
+     (Edge cases). Removal clears the actual cell's flag at actual height, not a separate
+     remembered or pending ground reservation. After deck landing without replacement,
+     removal therefore leaves ground marked and deck clear. With an accepted replacement
+     not yet jumped to, old ground is already clear, removal clears old deck, and the new
+     ground reservation survives. Off a high bridge, removal clears the ground flag when
+     actual occupancy and reservation coincide. A distinct pending reservation also survives
+     removal before the first jump. These results assume no other flag writer intervenes.
+     These are pointers with S-0207 claim 20's medium confidence and `measurable`
+     backing (its scenario D22, runs 13 and 15), not additional driving release rules.
+   - *Temporary driving after a teleport.* S-0207 claim 21 owns this conditional case.
+     Installing temporary driving alone clears neither mark of a previous two-record deck
+     landing. Ordinary driving departure clears actual deck occupancy but leaves the separate
+     remembered ground reservation. Driving marks its current cell at actual height.
+     Restoration relocates no mark and does not recreate the former deck mark. This assumes
+     no earlier replacement destination or other flag writer changed those records.
+     Confidence: medium. Backing: `unmeasured` for this previous-deck state, because no
+     established stock factory exit starts in it; S-0207 scenario D23 gives a conditional
+     observation protocol, not permission to manufacture the state.
    - *Buildings.* A building sets the building-present flag of its foundation cells.
    - *Terrain objects.* A terrain object marks the side positions that its type's side-position
      pattern (Terms) gives, in the ground layer of its cell. It never sets the infantry house, and it
@@ -454,12 +469,17 @@ rank* and *elite weapon*), *n*
      immediately after an uninterrupted landing both records are marked, but only the
      deck lists the aircraft. The next accepted destination clears the remembered ground
      reservation; the next jump's departure clears the actual deck mark. Destruction and
-     removal while the aircraft remains on deck clear only deck, leaving ground marked.
+     removal while the aircraft remains on deck clear only actual deck occupancy, not a
+     separate remembered or pending reservation (S-0207 claim 20 k). Without replacement,
+     ground stays marked. With a replacement accepted but not jumped to, old ground is
+     already clear and the new ground reservation survives removal. Before the first jump,
+     a distinct pending ground reservation likewise survives actual-cell clearing. Off a
+     high bridge, removal clears the coincident actual/reservation ground flag.
      These flags are not counts of objects: another object's marking or clearing of the
      same flag can overwrite that result. The ground mark is neither a listed aircraft
      nor a vehicle-present flag. This shares `quirks.teleport_aircraft_ground_reservation`
      (Edge cases), with medium confidence and `measurable` backing through S-0207
-     scenario D22, run 14, and scenario C30 here.
+     scenario D22, runs 14 and 15, and scenario C30 here.
 
    Consequence of the clearing rule: in a cell whose terrain object marks a side position, the
    infantry house never goes back to none while the terrain object stands, once an infantry unit has
@@ -1273,9 +1293,14 @@ Ordering stated as consequences:
 - **`quirks.teleport_vehicle_ground_reservation`** (shared with S-0207 claim 20 a and e).
   Default original: reserve ground for a vehicle's high-bridge teleport landing and keep that
   reservation through deck placement, which also marks deck. Replacement clears the remembered
-  ground reservation; departure clears the actual deck mark. Off: reserve and clear the eventual
-  landing layer (deck on a high bridge, ground elsewhere), with no separate ground reservation
-  beneath a deck landing. S-0207 owns the lifecycle and the alternative; claims 1 and 5 here
+  ground reservation; departure clears the actual deck mark. Removal clears only actual
+  occupancy, retaining a separate remembered or pending ground reservation (S-0207 claim 20 k).
+  Temporary driving clears old deck on departure but retains old ground; restoration relocates
+  no mark (S-0207 claim 21). Off: reserve and clear the eventual landing layer (deck on a high
+  bridge, ground elsewhere), with no separate ground reservation beneath a deck landing.
+  Removal clears both pending reservation and actual occupancy, leaving no orphan reservation.
+  The default removal behaviour is `measurable` through S-0207 scenario D22 run 15,
+  with medium confidence. S-0207 owns the lifecycle and the alternative; claims 1 and 5 here
   own their occupancy and entry-outcome consequences.
 - **`quirks.teleport_infantry_ground_reservation`** (shared with S-0208 claim 19).
   Default original: a ground standing-position reservation survives deck landing,
@@ -1290,10 +1315,13 @@ Ordering stated as consequences:
 - **`quirks.teleport_aircraft_ground_reservation`** (shared with S-0207 claim 20 a and e).
   Default original: reserve ground at terrain height, retain it through deck placement,
   clear the remembered ground reservation on the next accepted destination, and clear
-  only actual deck occupancy on removal without replacement. Destruction on deck can
-  therefore leave a ground object-present flag. Off: reserve only the eventual landing
-  layer, clear that reservation on replacement, and clear the landing-layer mark on
-  removal, leaving no separate ground mark. S-0207 owns this lifecycle and alternative.
+  only actual occupancy on removal, not a separate remembered or pending reservation
+  (S-0207 claim 20 k). Destruction on deck can therefore leave the old ground
+  object-present flag or a replacement landing cell's ground flag. Off: reserve only the
+  eventual landing layer, clear that reservation on replacement, and clear both pending
+  reservation and actual occupancy on removal, leaving no orphan reservation.
+  The default removal behaviour is `measurable` through S-0207 scenario D22 runs 14 and 15,
+  with medium confidence. S-0207 owns this lifecycle and alternative.
   Claims 1, 3, 5 and 6 here own occupancy, entry and standing-position consequences.
 - **Rounding.** The rounding mode is S-0205's (claim 5, switch `quirks.chop_rounding`), and this
   spec defines no switch of its own for it. The conversions to integers in F1 and F2 truncate toward
@@ -2836,6 +2864,13 @@ That moment is called the *window*. Common setup:
   marked after removal, the retained flag alone makes either entry outcome non-clear,
   or the ordinary walker reserves a standing position despite that flag and no open
   gate. A missing captured pre-jump interval is inconclusive for reservation timing.
+- *Additional removal controls (Q-0356):* S-0207 scenario D22 run 15 supplies the
+  shared setup, three repetitions, recorder fields and falsifiers for vehicle and
+  aircraft removal before a pending jump, deck removal after replacement, and
+  off-bridge removal with coincident marks. Expect actual occupancy clear and any
+  distinct pending ground reservation retained, with old ground already clear after
+  replacement. A missed pre-jump interval is inconclusive. Apply the separate entry
+  and standing-position probes above to each isolated aircraft ground flag.
 - *Tool:* read-only state recorder and scripted normal input. No result is yet an
   M-record.
 
