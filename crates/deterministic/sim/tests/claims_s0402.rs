@@ -285,6 +285,15 @@ fn claim_5_f1_load_timing() {
     }
     let ret = until(&mut w, 100, |w| harvest::phase(w, h) == Phase::Returning).expect("returning");
     assert_eq!(ret - t0, 19 + CAPACITY * (9 * l + 1));
+    // spec: S-0402 F1 (r18: that processing changes it to returning; refinery selection occurs no earlier than its following processing)
+    let o = w.obj(h).unwrap();
+    assert_eq!((o.dest, o.contact), (None, None));
+    let chosen = until(&mut w, 100, |w| {
+        let o = w.obj(h).unwrap();
+        o.dest.is_some() || o.contact.is_some()
+    })
+    .expect("a refinery chosen");
+    assert!(chosen > ret);
 }
 
 // spec: S-0402 claim 5 and F6 (rises: p > 0 at a + kp, k ≥ 1; p < 0 every tick; p = 0 none; counted from r to t − 1)
@@ -408,6 +417,34 @@ fn claim_8_quirk_refinery_distance_wraps() {
     assert!(harvest::squared_distance(d, 0, true) < 0);
     assert_eq!(harvest::squared_distance(d, 0, false), d * d);
     assert_eq!(harvest::squared_distance(300, 400, true), 250000);
+}
+
+// spec: S-0402 claim 8, F5 and Edge cases (r18: with quirks.refinery_distance_wraps off only the squared distance changes; both choice levels, the primary-building overrides and the tie rules are the same)
+#[test]
+fn claim_8_quirk_off_keeps_primary_and_levels() {
+    let mut r = ruleset();
+    r.globals.quirks.refinery_distance_wraps = false;
+    let mut w = game(&r);
+    let near = place_building(&mut w, "REFN", 0, at(-6, -1));
+    let far = place_building(&mut w, "REFN", 0, at(5, -1));
+    let h = place_vehicle(&mut w, "HARV", 0, at(-1, 0), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, h, false), Some(near));
+    // A primary building still defeats a nearer one.
+    w.obj_mut(far).unwrap().econ.building.primary = true;
+    assert_eq!(harvest::choose_refinery(&mut w, h, false), Some(far));
+    // A primary building earlier in holding order than a nearer one: the nearer one wins.
+    w.obj_mut(far).unwrap().econ.building.primary = false;
+    w.obj_mut(near).unwrap().econ.building.primary = true;
+    let h2 = place_vehicle(&mut w, "HARV", 0, at(3, 0), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, h2, false), Some(far));
+    // Two levels: the type's best is not primary, so across types the nearest wins.
+    let mut w = game(&r);
+    let p = place_building(&mut w, "REFN", 0, at(8, -1));
+    let near = place_building(&mut w, "REFN", 0, at(-6, -1));
+    place_building(&mut w, "REF2", 0, at(4, 3));
+    w.obj_mut(p).unwrap().econ.building.primary = true;
+    let h = place_vehicle(&mut w, "HARV", 0, at(-1, 0), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, h, false), Some(near));
 }
 
 // spec: S-0402 claim 9 (within the too-far distance: contact and requesting; else the queueing cell)
@@ -534,6 +571,35 @@ fn claim_11_15_f2_unloading() {
     let back = until(&mut w, 10, |w| current(w, h) == Some(Behaviour::Harvest)).expect("harvest");
     assert_eq!(back - fin, 1);
     assert_eq!(w.obj(h).unwrap().contact, None);
+}
+
+// spec: S-0402 claim 11 and F2 (r18: with a dump rate of 0 or below the first payment comes at the first processing after the start row, then each payment and the change to finishing max(1, ⌈900 × D⌉) = 1 tick apart; never two payments in one processing)
+#[test]
+fn claim_11_f2_zero_and_negative_dump_rate() {
+    for d in ["0", "-0.02"] {
+        let mut r = ruleset();
+        r.sim.general.economy.harvester_dump_rate = dec(d);
+        let mut w = game(&r);
+        let (_, h) = docked(&mut w, vec![4, 3], 49152);
+        let c0 = w.houses[0].credits;
+        let u0 = until(&mut w, 100, |w| harvest::state_of(w, h).unloading).expect("unloading");
+        let (_, start_delay) = w.obj(h).unwrap().beh.last.expect("the start row");
+        let p1 = until(&mut w, 100, |w| w.houses[0].credits != c0).expect("first payment");
+        assert_eq!(
+            p1 - u0,
+            start_delay,
+            "{d}: the first processing after the start row"
+        );
+        assert_eq!(
+            w.houses[0].credits - c0,
+            4 * ORE_VALUE,
+            "{d}: one tiberium per payment"
+        );
+        let p2 = until(&mut w, 10, |w| harvest::load(w, h) == vec![0, 0]).expect("second payment");
+        assert_eq!(p2 - p1, 1, "{d}");
+        let fin = until(&mut w, 10, |w| harvest::state_of(w, h).finishing).expect("finishing");
+        assert_eq!(fin - p2, 1, "{d}");
+    }
 }
 
 // spec: S-0402 claim 11 (unloading with no building in the neighbouring cell: breaks off contact, harvest at once)

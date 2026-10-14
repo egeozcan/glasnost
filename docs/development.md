@@ -202,11 +202,13 @@ Q-0470 is answered by S-0105 revision 13, claim 22 and F6: a part or shadow imag
 
 Q-0460 is answered by S-0409 revision 10 (claim 5, F2) and S-0101 revision 10 (claim 3, F2: the exact lift is the drawing lift only; `mapview::tests::drawing_lift_is_not_the_sight_lift`): the sight centre keeps its own floating-point simulation lift (`glasnost_sim::econ::shroud::height_lift`, unchanged, now cited to S-0409 F2 and tested on its check values: level 20 moves the centre 9 cells, not the 10 of the exact drawing lift), while the renderer draws with S-0101 claim 3's exact lift; S-0102 revision 13 retires `quirks.overlay_lift_exact_levels`, so overlays lift exactly 15 per level (`mapview::quirks::overlay_depth_lift`).
 
+Q-0490 is answered by S-0102 revision 14, claim 33: when `BUILDNGZ.SHA` is missing, cannot be read as a shape file, has no image frames (whatever its canvas) or has an image frame 0 that cannot be decoded, the map view and the live game warn once with a scene note naming the file and the failure (`mapview::build::read_companion`, `notes::no_companion`) and draw every eligible body with no companion: the same draw point and claim 13 bias, the plain upright profile of F2, writing depth, and no longer provisional. A valid image frame 0 with an empty rectangle keeps its empty coverage (the body draws nothing and writes no depth, on the CPU and the GPU) with no warning. Foundations 8 or more cells wide use no companion either way. Remembered bodies are not drawn yet, so their recovery waits with them. A frame with a rectangle but no pixel data is Q-0520.
+
 **Open requests and their placeholders.**
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `app::mapview::build` (`body_companion`) | without `BUILDNGZ.SHA`, or with an unreadable image frame 0, a building body on a foundation under 8 cells wide is drawn with the plain upright profile (S-0102 F2), marked provisional and noted; S-0102 leaves missing-file recovery unspecified | Q-0490 |
+| `app::mapview::build` (`read_companion`) | an image frame 0 of `BUILDNGZ.SHA` with a non-empty rectangle and pixel-data position 0 is treated as undecodable (S-0102 claim 33): an eligible body is drawn with the plain upright profile (S-0102 F2), marked provisional and noted; claim 33 does not say whether such a frame is undecodable or a valid frame with empty coverage | Q-0520 |
 | `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
 
 ## Map viewer (M2)
@@ -287,13 +289,14 @@ Provisional rules of combat, each tied to a request:
 
 - **Building body range (S-0108 claim 6, S-0215 claims 1 and 11).** `econ::body` follows only the *idle* body range of a building (`AnimIdle` and `Normalized`, imported as `anim_idle` and `normalized`): a building placed at game set-up enters it at once (`set_up`, which also queues *guard* with no current behaviour), a construction handover enters it deferred, and entering construction or a sale leaves it. On each building turn, before the first per-tick start, the stage of a building without a turret advances and wraps, and the ready mark is set when it lands on the last stage, or on every turn of a zero-delay range (`quirks.building_wrap_normalisation`). The other body states (*active*, *aux-1*, *aux-2*, *full*) and what enters them are a seam: the range runs on as *idle* through them.
 
+Q-0500 is answered by S-0402 revision 18, claim 27a: a field-seeking building's successful search offers the shifted site cell (`econ::slaves::offer_site`). A building that is not currently *selling* and is a factory of infantry or vehicles, a cloning building, a repair depot or a construction yard takes it as its guard spot (`takes_site_offer`), the one remembered destination a later pack-up uses; any other building keeps its earlier guard spot or its absence, and no building is given a movement destination. *Move* is requested without an immediate start in every case (current *selling* refuses it under S-0215 claim 7), and a building's *move* processing does nothing for 450 ticks (`process`, S-0215 claim 4 and T1), so the group's return to rest leaves it current. Revision 18's other changes need no code change and are now tested: the exact non-wrapping refinery distance with `quirks.refinery_distance_wraps` off keeps the primary and tie rules, a dump rate of 0 or below pays one tiberium per processing, and refinery selection comes no earlier than the processing after the change to returning.
+
 Provisional rules of M5a, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
 | `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
-| `econ::slaves::building_update` | a building whose group is in field seeking and finds a site (S-0402 claim 27) is given the site as its object destination with *move* queued, as a vehicle master is (`slaves::move_to`), not as its guard spot; selling refuses only the queued *move* (S-0215 claim 7), never the destination | Q-0500 |
 
 ## Own AI (M5b)
 

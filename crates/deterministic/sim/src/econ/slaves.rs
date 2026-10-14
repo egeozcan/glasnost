@@ -21,7 +21,7 @@ use crate::cells::position;
 use crate::combat::damage::Hit;
 use crate::path::{NearbySettings, NearbyUse};
 use crate::regions::{self, Reach};
-use crate::rules::{Behaviour, Kind};
+use crate::rules::{Behaviour, FactoryKind, Kind};
 use crate::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// The period of uninterrupted group updates, and the delay of the first
@@ -841,6 +841,46 @@ fn building_ring(w: &mut World, id: ObjectId, range: i32) -> Option<CellXY> {
     })
 }
 
+/// Whether a building's type takes a field-seeking site offer as its guard
+/// spot (S-0402 claim 27a): a factory of infantry or vehicles, a cloning
+/// building, a repair depot or a construction yard. A slave group or an
+/// undeploys-into type alone does not qualify it.
+fn takes_site_offer(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Building {
+        return false;
+    }
+    w.rules()
+        .buildings
+        .get(o.type_index as usize)
+        .is_some_and(|b| {
+            // spec: S-0402 claim 27a and Import mapping (an infantry or vehicle factory category, S-0003 claim 21; absent: no factory)
+            matches!(b.factory, Some(FactoryKind::Infantry | FactoryKind::Vehicle))
+            // spec: S-0402 claim 27a and Import mapping (Cloning, UnitRepair, ConstructionYard; each absent: no)
+            || b.raw.cloning.unwrap_or(false)
+            || b.raw.unit_repair.unwrap_or(false)
+            || b.raw.construction_yard.unwrap_or(false)
+        })
+}
+
+/// The field-seeking building's site offer (S-0402 claim 27a): the guard
+/// spot of a qualifying building that is not currently selling becomes the
+/// site cell; any other keeps its earlier guard spot, or its absence. There
+/// is no separate movement destination. *Move* is requested independently,
+/// without an immediate start.
+fn offer_site(w: &mut World, id: ObjectId, site: CellXY) {
+    let qualifies = takes_site_offer(w, id);
+    let Some(o) = w.obj_mut(id) else { return };
+    // spec: S-0402 claim 27a (currently in selling: keeps its earlier guard spot; construction state, power, owner and the redeploy setting add no exclusion)
+    let selling = o.beh.current == Some(Behaviour::Selling);
+    if !selling && qualifies {
+        // spec: S-0402 claims 27a and 28 (the site cell replaces the guard spot, the building's one remembered destination)
+        o.guard_spot = Some(Target::Cell(site));
+    }
+    // spec: S-0402 claim 27a and S-0215 claim 7 (move requested without an immediate start, independently of the destination result; current selling refuses it and keeps the earlier queued behaviour)
+    o.beh.queue(Some(Behaviour::Move));
+}
+
 /// The group update's decision for a building master (S-0402 claims 22
 /// and 25 to 27). Returns whether ready slaves are offered places.
 fn building_update(w: &mut World, id: ObjectId) -> bool {
@@ -871,9 +911,8 @@ fn building_update(w: &mut World, id: ObjectId) -> bool {
             let field = building_ring(w, id, range);
             match field.and_then(|f| site_search(w, id, f)) {
                 Some((_, s)) => {
-                    // spec: S-0402 claim 27 (success offers the site as the building's destination and queues move without an immediate start, under the ordinary rules, which a selling building can refuse, S-0215 claim 7; the group enters travelling regardless)
-                    // interim: Q-0500 (the destination offered is the object's destination, as for a vehicle, not its guard spot; no separate destination refusal while selling)
-                    move_to(w, id, s);
+                    // spec: S-0402 claims 27 and 27a (success offers the shifted site cell of claim 24, requests move without an immediate start and enters travelling)
+                    offer_site(w, id, s);
                     set_group(w, id, |g| g.state = GroupState::Travelling);
                 }
                 None => {

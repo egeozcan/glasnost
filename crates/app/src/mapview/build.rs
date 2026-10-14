@@ -230,7 +230,14 @@ mod notes {
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
-    pub const NO_COMPANION: &str = "the building depth image file BUILDNGZ.SHA (S-0102 claim 31) is missing or its image frame 0 is unreadable: building bodies are drawn with the plain upright profile (S-0102 F2); recovery from a missing file is not specified (Q-0490)";
+    /// The importer warning of S-0102 claim 33: the shared building depth
+    /// image file and why it is unavailable.
+    pub fn no_companion(failure: &str) -> String {
+        format!(
+            "the building depth image file BUILDNGZ.SHA {failure}: building bodies on foundations under 8 cells wide use no companion and are drawn with the plain upright profile (S-0102 claim 33, F2)"
+        )
+    }
+    pub const COMPANION_NO_PIXELS: &str = "image frame 0 of the building depth image file BUILDNGZ.SHA has a non-empty rectangle but no pixel data: building bodies on foundations under 8 cells wide are drawn with the plain upright profile (S-0102 F2); whether this is undecodable input (S-0102 claim 33) is not specified (Q-0520)";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
     pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
@@ -779,6 +786,56 @@ struct Rows {
     alt: Option<(usize, usize)>,
 }
 
+/// The shared building companion depth image as read (S-0102 claims 31
+/// and 33).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Companion {
+    /// Read: its index in `Scene::signed` and its stored rectangle's canvas
+    /// column and row. A valid empty rectangle is read too: it covers no
+    /// body pixel.
+    Image(u32, (i32, i32)),
+    /// Unavailable: eligible bodies use no companion. `provisional` when
+    /// whether the input failed is not specified (Q-0520).
+    Unavailable { provisional: bool },
+}
+
+/// Reads image frame 0 of the shared building companion depth image file
+/// `bytes` (S-0102 claims 31 and 33): its signed adjustments and its stored
+/// rectangle's canvas column and row, or the warning saying why it is
+/// unavailable and whether that outcome is provisional.
+fn read_companion(bytes: Option<&[u8]>) -> Result<(SignedImage, (i32, i32)), (String, bool)> {
+    // spec: S-0102 claim 33 (a missing or unreadable file, zero image frames or an undecodable image frame 0: warn, no companion)
+    let fail = |why: &str| Err((notes::no_companion(why), false));
+    let Some(bytes) = bytes else {
+        return fail("is missing");
+    };
+    let shp = match Shp::parse(bytes) {
+        Ok(s) => s,
+        Err(e) => return fail(&format!("cannot be read as a shape file ({e})")),
+    };
+    let Some(f) = shp.frames.first().copied() else {
+        return fail("has no image frames");
+    };
+    if f.offset == 0 && f.width > 0 && f.height > 0 {
+        // interim: Q-0520 (a non-empty rectangle with no pixel data is treated as undecodable input: plain upright profile, provisional)
+        return Err((notes::COMPANION_NO_PIXELS.to_owned(), true));
+    }
+    // spec: S-0102 claim 33 (a valid, decodable empty rectangle retains its empty coverage, with no warning)
+    let img = match shp.decode_frame(0) {
+        Ok(i) => i,
+        Err(e) => {
+            return fail(&format!(
+                "has an image frame 0 that cannot be decoded ({e})"
+            ));
+        }
+    };
+    // spec: S-0102 claim 31 (image frame 0 of the shared file; its bytes are signed depth adjustments decoded by F5, neither colours nor transparency)
+    Ok((
+        SignedImage::from_companion_bytes(img.width(), img.height(), img.pixels()),
+        (i32::from(f.x), i32::from(f.y)),
+    ))
+}
+
 /// What a scene's builder keeps for drawing more items later: the art file,
 /// cell lights, palette rows and the images already added to the scene.
 pub struct Painter {
@@ -803,10 +860,9 @@ pub struct Painter {
     vpl: Option<Option<Vpl>>,
     /// Tile files decoded once, by upper-case name.
     tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
-    /// The shared building companion depth image (S-0102 claim 31), once
-    /// read: its index in `Scene::signed` and its stored rectangle's canvas
-    /// column and row; `Some(None)` when the file or its frame 0 is missing.
-    companion: Option<Option<(u32, (i32, i32))>>,
+    /// The shared building companion depth image (S-0102 claims 31 and
+    /// 33), once read.
+    companion: Option<Companion>,
     /// Voxel models (upper-case file names) already warned about for an
     /// image larger than the retained limit (S-0105 claim 22: once per
     /// model).
@@ -1934,35 +1990,30 @@ impl Builder<'_> {
     }
 
     /// The shared building companion depth image, read once into
-    /// [`Scene::signed`]: its index and its stored rectangle's canvas column
-    /// and row (S-0102 claim 31, F5). `None` when the file is missing or its
-    /// image frame 0 cannot be read.
-    fn companion_image(&mut self) -> Option<(u32, (i32, i32))> {
-        if self.p.companion.is_none() {
-            // spec: S-0102 claim 31 (image frame 0 of the shared file; its bytes are signed depth
-            // adjustments decoded by F5, neither colours nor transparency)
-            let read = self.assets.get(COMPANION_FILE).and_then(|bytes| {
-                let shp = Shp::parse(bytes).ok()?;
-                let f = *shp.frames.first()?;
-                let img = shp.decode_frame(0).ok()?;
-                Some((
-                    SignedImage::from_companion_bytes(img.width(), img.height(), img.pixels()),
-                    (i32::from(f.x), i32::from(f.y)),
-                ))
-            });
-            let entry = read.map(|(image, stored)| {
-                self.built.scene.signed.push(image);
-                ((self.built.scene.signed.len() - 1) as u32, stored)
-            });
-            self.p.companion = Some(entry);
+    /// [`Scene::signed`] (S-0102 claims 31 and 33, F5). An unavailable
+    /// image is warned about once, when it is first needed.
+    fn companion_image(&mut self) -> Companion {
+        if let Some(c) = self.p.companion {
+            return c;
         }
-        self.p.companion.flatten()
+        let c = match read_companion(self.assets.get(COMPANION_FILE)) {
+            Ok((image, stored)) => {
+                self.built.scene.signed.push(image);
+                Companion::Image((self.built.scene.signed.len() - 1) as u32, stored)
+            }
+            Err((warning, provisional)) => {
+                // spec: S-0102 claim 33 (an importer warning naming the shared file and the failure; loading continues)
+                self.note(&warning);
+                Companion::Unavailable { provisional }
+            }
+        };
+        self.p.companion = Some(c);
+        c
     }
 
     /// The companion of the body of building type `i` drawn at draw point
     /// `p` (S-0102 claim 31, F5: live constants, the art displacement
-    /// applied), and whether the body is provisional: an eligible body
-    /// without the shared file is drawn with plain F2 and noted (Q-0490).
+    /// applied), and whether the body is provisional (Q-0520 only).
     fn body_companion(&mut self, i: usize, p: (i32, i32)) -> (Option<(u32, i32, i32)>, bool) {
         let foundation = self.foundation(i);
         // spec: S-0102 Import mapping (ZShapePointMove: two integers, default 0, 0)
@@ -1970,16 +2021,17 @@ impl Builder<'_> {
             .art_value(Kind::Buildings, i, b"ZShapePointMove")
             .map(|v| value::int_tuple_or::<2>(v, [0, 0]).0)
             .unwrap_or([0, 0]);
-        let Some((id, stored)) = self.companion_image() else {
-            // spec: S-0102 F5 (foundations 8 or more cells wide use no companion)
-            let eligible = foundation.0 < COMPANION_WIDTH_LIMIT;
-            if eligible {
-                self.note(notes::NO_COMPANION);
+        match self.companion_image() {
+            Companion::Image(id, stored) => {
+                let origin =
+                    companion_origin(p, foundation, (m[0], m[1]), CompanionBody::Live, stored);
+                (origin.map(|(x, y)| (id, x, y)), false)
             }
-            return (None, eligible);
-        };
-        let origin = companion_origin(p, foundation, (m[0], m[1]), CompanionBody::Live, stored);
-        (origin.map(|(x, y)| (id, x, y)), false)
+            // spec: S-0102 claim 33 (an unavailable companion: the body keeps its draw point and bias, uses the plain upright profile of F2 and writes depth); F5 (widths of 8 cells or more use no companion anyway)
+            Companion::Unavailable { provisional } => {
+                (None, provisional && foundation.0 < COMPANION_WIDTH_LIMIT)
+            }
+        }
     }
 
     /// Buildings in the cell pass (S-0108, S-0102 claims 13 and 16).

@@ -925,6 +925,33 @@ mod tests {
         assert_ne!(f.color[3], before.0[3], "a covered pixel is drawn");
     }
 
+    /// spec: S-0102 claim 33 (a valid empty companion rectangle covers no body pixel: the body
+    /// draws nothing and writes no depth)
+    #[test]
+    fn empty_companion_covers_nothing() {
+        let q = ComposeQuirks::default();
+        for (w, h) in [(0, 2), (1, 0), (0, 0)] {
+            let mut f = Frame::new(2, 3, 0, DEPTH_REFERENCE);
+            let before = (f.color.clone(), f.depth.clone());
+            let a = img(2, 3, 1);
+            let comp = SignedImage::from_companion_bytes(w, h, &[]);
+            let d = Drawing {
+                image: &a,
+                x: 0,
+                y: 0,
+                test: DepthTest::Writer,
+                depth: DepthSource::Profile {
+                    profile: Profile::Upright,
+                    bias: -2,
+                    companion: Some((&comp, 0, 0)),
+                },
+                paint: Paint::Row(0),
+            };
+            f.draw(&d, &rows(), &q);
+            assert_eq!((f.color, f.depth), before, "{w} × {h}");
+        }
+    }
+
     /// spec: S-0102 claim 26, F7 (each hi-colour channel halved, rounded down; twice gives ⌊v/4⌋)
     #[test]
     fn shadow_halves() {
