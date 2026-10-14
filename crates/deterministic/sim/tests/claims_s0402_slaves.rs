@@ -723,7 +723,7 @@ fn claim_10a_sold_master_hidden_slaves_destroyed() {
     }
     assert_eq!(losses, SLAVES, "one loss per hidden slave");
     let (_, _, removed_losses, removed_fired) =
-        hidden_group_ends(&r, |w, b| glasnost_sim::objects::remove(w, b));
+        hidden_group_ends(&r, glasnost_sim::objects::remove);
     assert_eq!(removed_losses, SLAVES);
     assert!(removed_fired > 0, "the tagged hidden slave raises its tag");
     assert_eq!(fired, removed_fired, "the same notifications as a removal");
