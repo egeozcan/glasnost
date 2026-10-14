@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -425,8 +425,9 @@ skirmishes only; network games and campaigns are out of scope.
      tick *n* when a harvester delivers enough credits during the turn pass of tick *n*. The lines
      also come before the orders of the tick (claim 7). So a hold order given in the cycle of tick
      *n* does not stop a progress step that falls in tick *n*: the line is on hold at the end of
-     tick *n* and has still made that step. The order among the lines is left to the production
-     specs.
+     tick *n* and has still made that step. S-0404 claim 1 owns the creation-order payment
+     priority when a house's lines compete for credits; this is not by itself a rule for assigning
+     random values to simultaneous item starts (S-0404 claim 11).
    - **Houses.** Each house's own update also comes after the turn pass of the same tick. A house
      matter decided in the house update therefore sees what the turn pass did. One example is the
      raise of a house's tags in every eighth tick (S-0011, claim 35): it sees a trigger variable that
@@ -455,9 +456,10 @@ skirmishes only; network games and campaigns are out of scope.
      its place is fixed by the draw order of claim 1: the houses come after the production lines,
      one after another in house order (S-0009, claim 19), and before the orders (claim 7). No draw
      is known in a production line's own update, but the lines keep the original's place before the
-     houses for the same reason (claim 1). The order among one house's production lines, and among
-     all lines, is left to the production specs, which state it in the original's order if a line
-     can take draws (Open questions).
+     houses for the same reason (claim 1). S-0404 claim 11 distinguishes item-start creation
+     draws from a line's own update, which takes none under that claim. Its assignment of random
+     values to simultaneous starts remains open; payment priority does not settle it. The
+     production specs own that within-part draw order (Open questions).
    - Backing: `measurable` (scenario O7, part A for the lines after the turn pass, part C for the
      lines before the orders, and part B for the houses); for the draw order among them, claim 1's
      backing (`unmeasured`)
@@ -1128,10 +1130,11 @@ scenarios' timing expectations use the stated index.
   is whose turn performs going inside anything else. It decides which object loses its turn when a
   unit boards or goes inside (claim 10) and whether a boarding open-topped passenger's next turn is
   its second of the tick (claim 11).
-- The order among the production lines is not fixed here. The production specs own it, including
-  what happens when lines compete for the same credits. No draw from the scenario random stream was
-  found in a line's own update, but not every path was traced; if a line can take draws, the
-  production specs state the order in the original's sequence (claims 1 and 8).
+- S-0404 claim 1 settles payment priority among a house's lines, and claim 11 states that a
+  line's own update takes no scenario-stream draw. Claim 11 leaves the allocation of successive
+  random values to simultaneous item starts open. This spec fixes the parts' relative places
+  (claims 1 and 8), not that within-part allocation. Confirm the production spec's resolution
+  together with S-0202 claim 10 at hand-off; a payment-priority test alone cannot resolve it.
 - Rows 6, 10, 13 and 14 keep the original's places only because they might take draws (claim 1).
   If their owning specs show that they take none, their places can be released to the freedom of
   claim 1's last point. Likewise, if work listed there turns out to take draws, it needs a row.
@@ -1213,4 +1216,11 @@ scenarios' timing expectations use the stated index.
   - Current S-0202 claim 10 includes a house update among the places that can start production
     and take a produced object's creation draw; the earlier cross-spec correction is complete.
   - S-0213's citations of claims 7 and 8 still hold; claim 7 also places the orders after the
-    houses.
+    houses. Confirm the latest same-batch S-0201 cycle wording, S-0107 claim 15's
+    destination-driven sequence changes and S-0213 claim 21's Q-0072 approach pointers
+    together. Immediate destination or sequence changes at order application do not give an
+    object a movement turn before the next tick.
+  - S-0404 claims 1 and 11 separate payment priority from creation-draw allocation. The
+    simultaneous-start allocation is still explicitly open in its current text, not resolved
+    by a count-only random-stream test. Confirm any later resolution against claims 1 and 8
+    here and S-0202 claim 10 before handing the versions off together.
