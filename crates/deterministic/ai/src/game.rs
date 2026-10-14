@@ -1,0 +1,210 @@
+//! A game with its AI houses: the simulation's world plus the state of our
+//! own AI for every AI house of the setup (glossary *AI house*), stepped,
+//! saved and hashed together.
+//!
+//! The AI runs inside the tick: [`Game::step`] lets every AI house that is
+//! still in the game think at the tick boundary, after the person's orders
+//! for that tick were issued and before the tick runs, and issues its
+//! orders through the same `orders::issue` as a person's (the legality
+//! rules and the pending-order limit apply, and a refused order is simply
+//! not applied). Its state is part of the saved game and of the state
+//! hash, so a save in mid-game, loaded and continued, plays on alike, and
+//! a replay holds only the setup and the person's orders: replaying it runs
+//! the AI again.
+
+use std::sync::Arc;
+
+use glasnost_map::Map;
+use glasnost_map::terrain::TileCatalogue;
+use glasnost_sim::econ::victory;
+use glasnost_sim::load::{LoadError, new_game};
+use glasnost_sim::orders::{self, Order};
+use glasnost_sim::rules::SimRules;
+use glasnost_sim::save::{self, Replay, SaveError};
+use glasnost_sim::tick;
+use glasnost_sim::world::{GameSetup, HouseId, HouseRole, World};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use crate::brain::Brain;
+
+/// Format version of a game save (the world's own save inside it carries
+/// the simulation's version).
+// nocite: version number of our own save format
+pub const GAME_FORMAT_VERSION: u32 = 1;
+
+/// A running game.
+pub struct Game {
+    /// The simulation state.
+    pub world: World,
+    /// One brain per AI house, in house order.
+    brains: Vec<Brain>,
+    /// The setup and the person's orders.
+    replay: Replay,
+}
+
+/// The saved form of the AI's part.
+#[derive(Serialize, Deserialize)]
+struct SavedGame {
+    version: u32,
+    world: Vec<u8>,
+    brains: Vec<Brain>,
+    replay: Replay,
+}
+
+/// The AI houses of a setup.
+fn ai_houses(setup: &GameSetup) -> Vec<HouseId> {
+    setup
+        .houses
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| h.ai && h.role == HouseRole::Player)
+        .map(|(i, _)| HouseId(i as u8))
+        .collect()
+}
+
+impl Game {
+    /// Starts a game: the world from the setup, a brain for every AI house.
+    pub fn new(
+        rules: Arc<SimRules>,
+        map: &Map,
+        map_name: &str,
+        catalogue: Arc<TileCatalogue>,
+        setup: GameSetup,
+    ) -> Result<Self, LoadError> {
+        let world = new_game(rules.clone(), map, catalogue, &setup)?;
+        let brains = ai_houses(&setup)
+            .into_iter()
+            .filter(|&h| !world.houses[usize::from(h.0)].removed)
+            .map(|h| Brain::new(&world, map, h))
+            .collect();
+        let replay = Replay::new(&rules, map_name, setup);
+        Ok(Self {
+            world,
+            brains,
+            replay,
+        })
+    }
+
+    /// Issues a person's order in the current tick; it is recorded in the
+    /// replay when the simulation takes it.
+    pub fn issue(&mut self, house: HouseId, order: Order) -> bool {
+        let taken = orders::issue(&mut self.world, house, order.clone());
+        if taken {
+            self.replay.record(self.world.tick, house, order);
+        }
+        taken
+    }
+
+    /// Runs one tick: the AI houses think, then the simulation steps.
+    pub fn step(&mut self) {
+        for b in &mut self.brains {
+            let h = b.house();
+            if victory::defeated(&self.world, h) || self.world.houses[usize::from(h.0)].removed {
+                continue;
+            }
+            for o in b.think(&mut self.world) {
+                orders::issue(&mut self.world, h, o);
+            }
+        }
+        tick::step(&mut self.world);
+        self.replay.ticks = self.world.tick;
+    }
+
+    /// The game's result once it is over (S-0414).
+    pub fn outcome(&self) -> Option<victory::Outcome> {
+        victory::outcome(&self.world)
+    }
+
+    /// The AI houses.
+    pub fn ai_houses(&self) -> Vec<HouseId> {
+        self.brains.iter().map(Brain::house).collect()
+    }
+
+    /// The replay so far: the setup and the person's orders.
+    pub fn replay(&self) -> &Replay {
+        &self.replay
+    }
+
+    /// The state hash of the world and the AI's state together.
+    pub fn state_hash(&self) -> String {
+        let mut h = Sha256::new();
+        h.update(save::state_hash(&self.world).as_bytes());
+        h.update(postcard::to_allocvec(&self.brains).expect("the AI state serializes"));
+        h.finalize().iter().fold(String::new(), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}"); // nocite: hexadecimal text of a digest
+            s
+        })
+    }
+
+    /// Saves the game.
+    pub fn save(&self) -> Vec<u8> {
+        postcard::to_allocvec(&SavedGame {
+            version: GAME_FORMAT_VERSION,
+            world: save::save(&self.world),
+            brains: self.brains.clone(),
+            replay: self.replay.clone(),
+        })
+        .expect("the game serializes")
+    }
+
+    /// Loads a game saved by [`Game::save`] under the same rules.
+    pub fn load(
+        bytes: &[u8],
+        rules: Arc<SimRules>,
+        catalogue: Arc<TileCatalogue>,
+    ) -> Result<Self, SaveError> {
+        let s: SavedGame =
+            postcard::from_bytes(bytes).map_err(|e| SaveError::Format(e.to_string()))?;
+        if s.version != GAME_FORMAT_VERSION {
+            return Err(SaveError::Format(format!(
+                "game format version {}",
+                s.version
+            )));
+        }
+        let world = save::load(&s.world, rules, catalogue)?;
+        Ok(Self {
+            world,
+            brains: s.brains,
+            replay: s.replay,
+        })
+    }
+
+    /// Replays a game from its replay up to its last tick, calling `each`
+    /// after every tick: the person's orders as recorded, the AI anew.
+    pub fn run_replay(
+        replay: &Replay,
+        rules: Arc<SimRules>,
+        map: &Map,
+        catalogue: Arc<TileCatalogue>,
+        mut each: impl FnMut(&Game),
+    ) -> Result<Self, SaveError> {
+        if replay.rules_hash != rules.hash {
+            return Err(SaveError::RulesMismatch {
+                saved: replay.rules_hash.clone(),
+                given: rules.hash.clone(),
+            });
+        }
+        let mut g = Self::new(rules, map, &replay.map, catalogue, replay.setup.clone())
+            .map_err(SaveError::Load)?;
+        while g.world.tick < replay.ticks {
+            g.issue_recorded(replay);
+            g.step();
+            each(&g);
+        }
+        Ok(g)
+    }
+
+    /// Issues the orders `replay` recorded for the current tick.
+    fn issue_recorded(&mut self, replay: &Replay) {
+        let tick = self.world.tick;
+        let from = replay.orders.partition_point(|o| o.0 < tick);
+        for (t, h, o) in &replay.orders[from..] {
+            if *t != tick {
+                break;
+            }
+            self.issue(*h, o.clone());
+        }
+    }
+}

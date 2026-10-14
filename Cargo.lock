@@ -905,6 +905,9 @@ dependencies = [
  "glasnost-map",
  "glasnost-rules",
  "glasnost-sim",
+ "postcard",
+ "serde",
+ "sha2",
 ]
 
 [[package]]
@@ -937,6 +940,12 @@ dependencies = [
 name = "glasnost-audio"
 version = "0.0.0"
 dependencies = [
+ "glasnost-fmt",
+ "glasnost-ini",
+ "glasnost-rules",
+ "glasnost-sim",
+ "glasnost-vfs",
+ "pollster",
  "wasm-bindgen",
  "web-sys",
 ]

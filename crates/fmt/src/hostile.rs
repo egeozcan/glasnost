@@ -34,6 +34,8 @@ pub enum Target {
     Idx,
     /// AUD.
     Aud,
+    /// Plain PCM WAVE.
+    Wav,
     /// LZO1X decompression.
     Lzo,
     /// LCW decompression, both position modes.
@@ -56,6 +58,7 @@ pub const ALL: &[Target] = &[
     Target::Csf,
     Target::Idx,
     Target::Aud,
+    Target::Wav,
     Target::Lzo,
     Target::Lcw,
     Target::MapPack,
@@ -138,6 +141,11 @@ pub fn run(target: Target, data: &[u8]) {
         Target::Aud => {
             if let Ok(a) = crate::aud::Aud::parse(data) {
                 let _ = a.decode();
+            }
+        }
+        Target::Wav => {
+            if let Ok(p) = crate::pcm::Pcm::from_wav(data) {
+                let _ = p.to_wav();
             }
         }
         Target::Lzo => {

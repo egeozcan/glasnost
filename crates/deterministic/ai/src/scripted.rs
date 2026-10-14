@@ -35,9 +35,10 @@ use glasnost_sim::econ::{deploy, placement, production, shroud, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use serde::{Deserialize, Serialize};
 
 /// A build plan.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plan {
     /// Type names to use instead of finding types by role; an empty list
     /// leaves that role to the rules.
@@ -49,7 +50,7 @@ pub struct Plan {
 }
 
 /// Type names of a plan, by role.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Names {
     /// Power plants.
     pub power: Vec<String>,
@@ -225,7 +226,7 @@ fn dist2(a: CellXY, b: CellXY) -> i64 {
 }
 
 /// A scripted house.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Script {
     /// The house.
     pub house: HouseId,

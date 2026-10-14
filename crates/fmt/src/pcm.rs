@@ -4,7 +4,9 @@
 //! produces a [`Pcm`]. [`Pcm::to_wav`] writes a canonical 44-byte-header
 //! RIFF/WAVE file for playback and export.
 
-use crate::bytes::PutLe;
+use crate::bytes::{PutLe, Reader};
+use crate::error::{Error, Result};
+use crate::limits::MAX_DECOMPRESSED;
 use crate::synth::SynthRng;
 
 /// Interleaved signed 16-bit PCM audio.
@@ -61,6 +63,78 @@ impl Pcm {
             out.put_i16(s);
         }
         out
+    }
+
+    /// Reads a plain PCM RIFF/WAVE file: format code 1, 8-bit unsigned or
+    /// 16-bit signed samples, one or two channels. Chunks other than `fmt `
+    /// and `data` are skipped (each is padded to an even length, as RIFF
+    /// requires); a `data` chunk that claims more bytes than the file holds
+    /// is cut to what is there, and a partial last frame is dropped.
+    /// Compressed WAVE formats are [`Error::Unsupported`].
+    pub fn from_wav(data: &[u8]) -> Result<Self> {
+        let mut r = Reader::new(data);
+        if r.array::<4>()? != *b"RIFF" {
+            return Err(Error::Invalid("not a RIFF file"));
+        }
+        r.skip(4)?;
+        if r.array::<4>()? != *b"WAVE" {
+            return Err(Error::Invalid("not a WAVE file"));
+        }
+        let mut format: Option<(u16, u32, u16)> = None;
+        while r.remaining() >= 8 {
+            let id = r.array::<4>()?;
+            let len = r.u32()? as usize;
+            let avail = len.min(r.remaining());
+            let body = r.bytes(avail)?;
+            match &id {
+                b"fmt " => {
+                    let mut f = Reader::new(body);
+                    let code = f.u16()?;
+                    let channels = f.u16()?;
+                    let rate = f.u32()?;
+                    f.skip(6)?;
+                    let bits = f.u16()?;
+                    if code != 1 {
+                        return Err(Error::Unsupported("compressed WAVE format"));
+                    }
+                    if !(1..=2).contains(&channels) || rate == 0 {
+                        return Err(Error::Invalid("WAVE channel count or sample rate"));
+                    }
+                    if bits != 8 && bits != 16 {
+                        return Err(Error::Unsupported("WAVE sample width"));
+                    }
+                    format = Some((channels, rate, bits));
+                }
+                b"data" => {
+                    let (channels, sample_rate, bits) =
+                        format.ok_or(Error::Invalid("WAVE data before its format"))?;
+                    if body.len() > MAX_DECOMPRESSED {
+                        return Err(Error::TooLarge("WAVE data"));
+                    }
+                    let mut samples: Vec<i16> = if bits == 8 {
+                        body.iter().map(|&b| (i16::from(b) - 128) << 8).collect()
+                    } else {
+                        body.as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|c| i16::from_le_bytes(*c))
+                            .collect()
+                    };
+                    let whole = samples.len() - samples.len() % usize::from(channels);
+                    samples.truncate(whole);
+                    return Ok(Self {
+                        sample_rate,
+                        channels,
+                        samples,
+                    });
+                }
+                _ => {}
+            }
+            if len % 2 == 1 && r.remaining() > 0 {
+                r.skip(1)?;
+            }
+        }
+        Err(Error::Invalid("WAVE file without a data chunk"))
     }
 
     /// A synthetic test signal of our own: a triangle wave of `period`
@@ -156,6 +230,44 @@ mod tests {
         // A partial last frame is not exported.
         pcm.channels = 2;
         assert_eq!(pcm.to_wav().len(), WAV_HEADER_LEN + 8);
+    }
+
+    #[test]
+    fn wav_round_trips() {
+        for channels in [1, 2] {
+            let pcm = Pcm::synthetic_tone(22050, channels, 300, 40, 9000, 5);
+            assert_eq!(Pcm::from_wav(&pcm.to_wav()).unwrap(), pcm);
+        }
+    }
+
+    #[test]
+    fn wav_reader_handles_8_bit_extra_chunks_and_truncation() {
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF\0\0\0\0WAVE");
+        // An odd-length chunk of our own before the format, padded.
+        wav.extend_from_slice(b"junk");
+        wav.put_u32(3);
+        wav.extend_from_slice(&[1, 2, 3, 0]);
+        wav.extend_from_slice(b"fmt ");
+        wav.put_u32(16);
+        wav.put_u16(1);
+        wav.put_u16(1);
+        wav.put_u32(8000);
+        wav.put_u32(8000);
+        wav.put_u16(1);
+        wav.put_u16(8);
+        wav.extend_from_slice(b"data");
+        wav.put_u32(100); // claims more than is there
+        wav.extend_from_slice(&[128, 255, 0]);
+        let pcm = Pcm::from_wav(&wav).unwrap();
+        assert_eq!(pcm.sample_rate, 8000);
+        assert_eq!(pcm.samples, vec![0, 127 << 8, -128 << 8]);
+        // Compressed formats and garbage are errors, not panics.
+        let mut adpcm = wav.clone();
+        adpcm[32] = 0x11;
+        assert!(matches!(Pcm::from_wav(&adpcm), Err(Error::Unsupported(_))));
+        assert!(Pcm::from_wav(b"RIFF").is_err());
+        assert!(Pcm::from_wav(&wav[..30]).is_err());
     }
 
     #[test]
