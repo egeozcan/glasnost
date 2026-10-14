@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -34,10 +34,21 @@ other parameters and exclusions of that row. Hand off these coordinated texts to
 Claim 25's non-infantry teleport search removes the reach-region restriction when the
 ordered destination lies in no reach region, agreeing with S-0207 claim 20 b and D22 run 10.
 The aircraft-factory edge-entry row and release-tick selection agree with S-0417 claim 14.
-The approved index already records revision 24; at hand-off update it to this revision 25.
+Claim 25's click-search conditions agree with S-0214 claim 11: direct destinations bypass
+search, and a free mover's no-move search has no reach-region restriction, including inside
+the usable area. P16 distinguishes move orders from rally-point searches.
+Claim 27 remains a summary of S-0209 claim 5, which owns the full vehicle entry-outcome table.
+Retain S-0207 claim 20 a and e with S-0209 claims 1 and 5 for Q-0240's vehicle ground
+reservation, remembered-point clearing, bridge placement marks and shared
+`quirks.teleport_vehicle_ground_reservation`. Retain S-0208 claim 19's landing choices
+and S-0215 claim 10's jump-time target-loss and reversion contract with those companions.
+The approved index already records revision 25; at hand-off update it to this revision 26.
+The earlier requested index update from 24 to 25 has already been applied.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
-and whether any scenario randomness occurs. Its upstream house-centre choice and complete draw
-sequence remain open in S-0215; do not mark the request answered until that part is approved.
+and absence of additional search draws. S-0215 claim 38 establishes the upstream central-choice
+preference and radius-then-direction draws. Centre geometry, base-centre maintenance and
+no-base usable-area correction remain open; keep the request open until the complementary
+answer is complete and approved.
 
 ### Evidence scope
 
@@ -1374,14 +1385,20 @@ Terms specific to this spec:
 
     The destination is a nearby-cell result around a centre supplied by the house's
     choice, not necessarily that centre itself. Table T5 specifies this final search.
-    No result leaves the destination absent. Choosing the centre takes scenario randomness,
-    including at least one ranged draw, even when the house has no base or start cell.
-    The final nearby-cell search takes no additional draw. The complete centre choice,
-    its fallback when the house has no base or start cell, and its complete draw sequence
-    belong to S-0215 and remain open; no particular cell or total draw count is asserted here.
+    No result leaves the destination absent. S-0215 claim 38 owns the centre choice:
+    infantry and vehicles use the central choice regardless of their weapons, with no
+    outer-choice index draw. The recorded base centre is preferred to the recorded
+    base-start cell; absent both, displacement uses the zero world point, not the unit's
+    position. One ranged radius draw precedes one raw scenario-stream direction draw,
+    even when the house has no base or start cell. That claim defines the radius bound
+    and direction bits; rejection can make the ranged draw consume several raw values
+    (S-0202). The final nearby-cell search takes no additional draw. Centre geometry,
+    base-centre maintenance and correction into the usable area remain open in S-0215.
+    No particular cell is asserted here.
     Player-house units do not take either choice under Departure D5.
     - Backing: `measurable` (P26 for timing, queue, final-search parameters and presence
-      of scenario draws; claim 25 and P16 run (u) for the nearby search's no-draw rule).
+      of scenario draws; S-0215 claim 38 and B37 for centre preference and radius-then-direction
+      draws; claim 25 and P16 run (u) for the nearby search's no-draw rule).
       The player-house exclusion is the glossary's scope rule
     - Confidence: high for same-tick assignment, the queue and presence of a ranged draw.
       Medium for the final-search parameters
@@ -1458,7 +1475,13 @@ Terms specific to this spec:
     a bridge cell's reach region is read for its deck, a bridge-cell centre's level includes the
     deck (claim 24's switch aside, below), and the ring cut-off of the collection is the first ring that contains any collected
     cell rather than the first that contains one passing the visibility test. Table T5
-    lists every user and what each use fixes.
+    lists every user and what each use fixes. Its cell/object order rows apply only
+    when S-0214 claim 11 selects a search: that claim's direct-destination cases bypass
+    this search, even when the clicked cell is occupied. A free mover's *no-move*
+    search on a cell or object has no reach-region restriction, including inside the
+    usable area; for object clicks use T5's stated free-mover conditions, which do not
+    depend on an ion storm. Rally-point clicks use their own search row, not the
+    move-order direct-destination conditions.
     The **simplified movement zone** of claim 24 maps crushing and destroying variants to their base
     zone: *normal*, *crusher*, *destroyer* and *crusher-all* map to *normal*; *amphibious*,
     *amphibious-crusher* and *amphibious-destroyer* map to *amphibious*; *infantry* and
@@ -1479,7 +1502,7 @@ Terms specific to this spec:
     | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
     | Rally point (S-0213 claim 20) | the clicked cell | *foot*; *amphibious* for a naval factory; *winged* for an aircraft factory | *normal*; *amphibious-crusher* for a naval factory; *fly* for an aircraft factory | that of the building's own cell for that zone | the centre is a bridge cell | no | no | none |
-    | House-selected destination after give-up (claim 23a), original non-human-owner rule retained for neutral and special houses | the centre supplied by the house's choice, still open in S-0215 | *track* | *normal* | that of the unit's ground cell for *normal* | never | no | no | none |
+    | House-selected destination after give-up (claim 23a), original non-human-owner rule retained for neutral and special houses | the centre supplied by S-0215 claim 38's house choice; its geometry remains open | *track* | *normal* | that of the unit's ground cell for *normal* | never | no | no | none |
     | Aircraft factory edge entry without a rally point (S-0417 claim 14) | the cell of the factory's reference point | the aircraft's, *winged* counted as *track* | the aircraft's own | that of the centre cell for that zone, read for its deck in deck mode | the aircraft is on a bridge deck | no | no | none |
     | Harvester queueing (S-0402 claim 9) | the queueing cell of S-0402 | *wheel* | *normal* | none | never | no | no | the refinery's top-left cell |
     | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
@@ -2799,7 +2822,12 @@ P16 run (u) checks this separately from other activity in the tick.
     Procedure: click a move order for the vehicle onto (*x*, *y*), 10 times, each time with the
     vehicle placed afresh and the click in a different tick. Observable: the tick number *N* in
     force when the click is handled (recorder), and the vehicle's destination after the order.
-    Expected: (*x*, *y*) fails the reach-region comparison of claim 6, so S-0214 claim 11 uses the search. Ring 1
+    Direct-destination control: repeat once without the land-type override, on unoccupied,
+    revealed clear ground inside the usable area and in the vehicle's reach region.
+    Expected: the clicked cell itself is the destination and no nearby search occurs,
+    independent of *N*. A substituted destination or a recorded nearby search falsifies
+    that control. Restore the override for the ten search runs.
+    Expected: (*x*, *y*) fails the reach-region comparison of S-0214 claim 11, so that claim uses the search. Ring 1
     holds eight qualifying cells, in scan order (*x* − 1, *y* − 1), (*x* − 1, *y* + 1),
     (*x*, *y* − 1), (*x*, *y* + 1), (*x* + 1, *y* − 1), (*x* + 1, *y* + 1), (*x* − 1, *y*) and
     (*x* + 1, *y*). All pass the visibility test, so the destination is the cell at position
@@ -2818,7 +2846,9 @@ P16 run (u) checks this separately from other activity in the tick.
     human house stand on (*x*, *y* − 1) and (*x* + 1, *y*), and a second such vehicle on
     (*x* − 1, *y* + 1). Procedure: set the barracks' rally point by a click on (*x*, *y*), 10 times,
     each in a different tick. Observable: *N* as in run (u), and the barracks' guard spot after the
-    click (S-0213 claim 20). Expected: the same five cells as in run (s), in the same order, so the
+    click (S-0213 claim 20). This is a rally-point search, not a unit move order: the
+    direct-destination bypass of S-0214 claim 11 does not apply. Expected: the same five
+    cells as in run (s), in the same order, so the
     guard spot is the cell at position (*N* mod 5). Falsified if: it is a wall cell or a vehicle's
     cell, or it differs from that cell.
   - Run (t), the further test of a no-move order (table T5, no-move row for a cell; test data).
@@ -3163,11 +3193,13 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
   applies them in both.
-- Q-0238 question 1 and the complete draw sequence underlying question 2 remain open:
-  S-0215 must specify the house-supplied centre of claim 23a, including for a neutral or
-  special house with no base or start cell. This revision fixes its final nearby-search
-  parameters, same-tick assignment and queue, and establishes that the centre choice
-  uses scenario randomness; it does not yet determine the destination without that input.
+- Q-0238 remains partially open. S-0215 claim 38 establishes the central-choice
+  preference, zero-origin fallback and radius-then-direction draw sequence. The exact
+  centre geometry, base-centre maintenance and no-base usable-area correction still
+  need resolution and complementary approval. Claim 23a fixes final nearby-search
+  parameters, same-tick assignment and queue, and no additional search draw, but does
+  not determine a final destination without the centre. Keep the request open until
+  the complete complementary answer is approved.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
 
