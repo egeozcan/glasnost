@@ -98,6 +98,9 @@ pub struct Session {
     pointer: Option<Point>,
     /// Edge momentum and its retained direction (S-0101 F9).
     edge: EdgeScroll,
+    /// Whether the last scroll cycle allowed edge scrolling (focus, no
+    /// order block: S-0201 claim 14).
+    edge_live: bool,
     press: Option<(Point, Button)>,
     /// The armed band-box drag (S-0214 claim 18).
     drag: Option<band::Drag>,
@@ -228,6 +231,7 @@ impl Session {
             icon_palette,
             pointer: None,
             edge: EdgeScroll::default(),
+            edge_live: true,
             press: None,
             drag: None,
             cursor_art,
@@ -326,22 +330,14 @@ impl Session {
     /// One unfrozen cycle's scrolling (S-0101 claims 12 to 14): the edge
     /// request of F9 plus the held arrows' (left, right, up, down), added
     /// before F5 limits the centre. `edge` is false while edge scrolling is
-    /// suppressed (no focus).
+    /// suppressed (no focus, or an order block: S-0201 claim 14).
     pub fn scroll_cycle(&mut self, now_ms: u64, held: [bool; 4], edge: bool) {
+        let w = &self.play.game.world;
+        // spec: S-0201 claim 14 (edge scrolling is suppressed during an order block; held arrows continue)
+        let edge = scroll::edge_enabled(edge, w.tick, w.orders_blocked_through);
+        self.edge_live = edge;
         let pointer = self.pointer.filter(|_| edge).map(|p| (p.x, p.y));
-        let f = self.loaded.map.footprint;
-        let size = self.view_size();
-        let centre = self.centre;
-        // spec: S-0101 F9 (a one-pixel request in the direction blocked by F5)
-        let blocked = |d: (i32, i32)| {
-            limit_centre(
-                (centre.0 + d.0, centre.1 + d.1),
-                size,
-                f.width,
-                f.local,
-                &ProjectionQuirks::default(),
-            ) == centre
-        };
+        let blocked = self.scroll_blocked();
         let e = self.edge.cycle(
             pointer,
             self.screen,
@@ -353,6 +349,25 @@ impl Session {
         let a = scroll::arrows(held);
         // spec: S-0101 claim 14 (mouse and arrow requests add before the next view position, subject to F5)
         self.scroll((e.0 + a.0, e.1 + a.1));
+    }
+
+    /// Whether F5 blocks a one-pixel scroll in a screen direction from the
+    /// current centre (S-0101 F9; S-0213 claim 24's trial).
+    fn scroll_blocked(&self) -> impl Fn((i32, i32)) -> bool + use<> {
+        let f = self.loaded.map.footprint;
+        let size = self.view_size();
+        let centre = self.centre;
+        // spec: S-0101 F9 (a one-pixel request in the direction blocked by F5)
+        // spec: S-0213 claim 24 (blocked when a one-pixel trial cannot move the view under S-0101's limits)
+        move |d: (i32, i32)| {
+            limit_centre(
+                (centre.0 + d.0, centre.1 + d.1),
+                size,
+                f.width,
+                f.local,
+                &ProjectionQuirks::default(),
+            ) == centre
+        }
     }
 
     /// The map view.
@@ -647,21 +662,40 @@ impl Session {
         if self.cursor_art.is_none() || self.paused {
             return;
         }
-        let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+        let Some(art) = self.cursor_art.as_ref() else {
             return;
         };
-        let Some((offer, shrouded)) = self.offer(p) else {
-            return;
+        let size = art.size;
+        // spec: S-0213 claim 24 (during edge scrolling the cursor shows the requested screen direction; the whole outer edge, sidebar included, selects it)
+        let edge = self
+            .edge
+            .shown_direction(
+                self.pointer.map(|p| (p.x, p.y)),
+                self.screen,
+                scroll::DEFAULT_SCROLL_INDEX,
+            )
+            .filter(|_| self.edge_live)
+            .and_then(|d| cursor::edge(d, self.scroll_blocked()(d), size.0, size.1));
+        let (frames, frame, hot) = if let Some((frames, hot)) = edge {
+            (frames, frames.first, hot)
+        } else {
+            let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+                return;
+            };
+            let Some((offer, shrouded)) = self.offer(p) else {
+                return;
+            };
+            let retain = self
+                .play
+                .game
+                .world
+                .rules()
+                .quirks
+                .damaging_entry_cursor_retained;
+            let choice = cursor::table_c(offer, shrouded, retain);
+            let (frames, frame) = self.animator.frame(choice, self.clock_ms);
+            (frames, frame, cursor::hot_spot(frames, size.0, size.1))
         };
-        let retain = self
-            .play
-            .game
-            .world
-            .rules()
-            .quirks
-            .damaging_entry_cursor_retained;
-        let choice = cursor::table_c(offer, shrouded, retain);
-        let (frames, frame) = self.animator.frame(choice, self.clock_ms);
         let Some(art) = self.cursor_art.as_ref() else {
             return;
         };
@@ -676,7 +710,7 @@ impl Session {
             }
         }
         if painter.has_sprite(CURSOR_SPRITE, u32::from(frame)) {
-            self.cursor_shown = Some((frame, cursor::hot_spot(frames, art.size.0, art.size.1)));
+            self.cursor_shown = Some((frame, hot));
         }
     }
 

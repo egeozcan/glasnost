@@ -446,14 +446,13 @@ Interim rules of the game client, each tied to a request:
 |---|---|---|
 | `session::read_icons`, `register_art` | an icon is frame 0 of its file, index 0 transparent, its canvas centred in the slot and clipped; a darkened icon gets a translucent black veil; the alternate icon is unused (the palette part is answered, see below; frame selection, placement and the darkening mask are S-0411 claim 16's and not yet brought over) | Q-0275 |
 | `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar, sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
-| `session::update_cursor` | battlefield and sidebar-mode cursors follow S-0214 claims 21 and 22 (`game::cursor`); the parts still open keep the system pointer: edge scrolling, the radar, building-placement hover and route-point editing | Q-0277 |
+| `session::update_cursor` | battlefield and sidebar-mode cursors follow S-0214 claims 21 and 22 and the edge-scroll cursor S-0213 claim 24 (`game::cursor`); the parts not yet brought over keep the system pointer: the radar, building-placement hover and route-point editing | Q-0277 |
 | `session::box_candidates`, `play::select_box` | S-0214 claims 18 to 20 apply; the parts still open: a box's candidates are every non-terrain object in play whose position, projected with height lift, is inside (transient drawing displacements ignored), added in object order, with no 500-candidate frame limit | Q-0278 |
 | `install::offered_countries`, `glasnost_ui::setup` | the setup offers the non-passive countries except the neutral and special houses', in registration order; at most 8 slots, the first always the person's; teams 1 to 4 or none | Q-0281 |
 | `play::say` | status messages are our own texts at the battlefield's top left, at most 4 at a time, each for 90 ticks | Q-0282 |
 | `glasnost_ui::hud` | a tab with a newly ready item flashes, lit while (tick / 10) is even | Q-0283 |
 | `play::click_map` (sell mode) | walls get no sell order | Q-0284 |
 | `play::end`, `glasnost_ui::end` | the end screen shows, per house, the result, objects built, kills, losses and the house's combat score; the time is the last tick × the paced period; there is no harvested figure | Q-0285 |
-| `window::GameApp::modifiers` | the command, options and arrow keys follow S-0213 claims 22 and 23 (`client::bound`); the physical modifier keys (question 2, S-0214's part) are still open: Shift is force-select, Ctrl or Cmd force-fire, Alt force-move, and attack-move mode has no key | Q-0286 |
 
 Answered requests of the game client: Q-0279 by S-0101 claims 12 to 15 (`game::scroll`: edge scrolling at the outermost client pixel with F9's direction, momentum and magnitude table scaled by the imported `ScrollMultiplier`, 21 px per held arrow, both once per unfrozen cycle; the scroll index is the default 3, since our engine has no settings file yet, and no order block or timed freeze is modelled), and Q-0280 by S-0103 claims 11 and 12 (`install::slot_swatches`: the fixed slot colours after the 16-bit step).
 

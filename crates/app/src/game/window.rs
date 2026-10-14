@@ -127,10 +127,10 @@ struct GameApp {
 
 impl GameApp {
     fn modifiers(&self) -> Modifiers {
-        // Interim default bindings (Q-0286).
+        // spec: S-0214 claim 23 (Alt force-move, Ctrl force-fire, Shift force-select, either side; no Cmd binding)
         Modifiers {
             force_select: self.mods.shift_key(),
-            force_fire: self.mods.control_key() || self.mods.super_key(),
+            force_fire: self.mods.control_key(),
             force_move: self.mods.alt_key(),
             attack_move_mode: false,
         }
