@@ -5858,6 +5858,11 @@
           "type": "boolean",
           "default": true
         },
+        "blocked_arrow_events": {
+          "description": "View-arrow presses and releases made during an order block are discarded; off: they are accepted (unit orders stay blocked).",
+          "type": "boolean",
+          "default": true
+        },
         "build_step_period_cap": {
           "description": "The step period never exceeds 255 ticks.",
           "type": "boolean",

@@ -472,7 +472,15 @@ impl Client {
             _ => None,
         };
         if let Some(i) = arrow {
-            self.held[i] = down;
+            // spec: S-0213 claim 23 and S-0201 claim 14 (a press or release during an order block is discarded: an accepted contribution stays, a new press adds none)
+            let accepted = self.shell.screen != Screen::Game
+                || self
+                    .session
+                    .as_ref()
+                    .is_none_or(|s| s.arrow_event_accepted());
+            if accepted {
+                self.held[i] = down;
+            }
             return;
         }
         if !down || self.shell.screen != Screen::Game {

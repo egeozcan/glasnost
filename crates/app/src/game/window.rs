@@ -310,13 +310,17 @@ impl ApplicationHandler<GameEvent> for GameApp {
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let down = event.state == ElementState::Pressed;
+                // Auto-repeated key-downs are not new presses: holding an arrow
+                // first pressed during an order block must not become an
+                // accepted press afterwards (S-0213 claim 23).
                 let key = match &event.logical_key {
+                    _ if event.repeat => None,
                     keyboard::Key::Named(NamedKey::Escape) => Some(Key::Escape),
                     keyboard::Key::Named(NamedKey::ArrowLeft) => Some(Key::Left),
                     keyboard::Key::Named(NamedKey::ArrowRight) => Some(Key::Right),
                     keyboard::Key::Named(NamedKey::ArrowUp) => Some(Key::Up),
                     keyboard::Key::Named(NamedKey::ArrowDown) => Some(Key::Down),
-                    keyboard::Key::Character(s) if !event.repeat => {
+                    keyboard::Key::Character(s) => {
                         s.chars().next().map(|c| Key::Char(c.to_ascii_lowercase()))
                     }
                     _ => None,

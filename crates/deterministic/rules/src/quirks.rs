@@ -411,6 +411,10 @@ pub struct Quirks {
     // spec: S-0214 claim 21 and Edge cases
     #[serde(default = "on")]
     pub damaging_entry_cursor_retained: bool,
+    /// View-arrow presses and releases made during an order block are discarded; off: they are accepted (unit orders stay blocked).
+    // spec: S-0213 claim 23 and Edge cases; S-0201 claim 14
+    #[serde(default = "on")]
+    pub blocked_arrow_events: bool,
     /// Queued move and attack move are processed as sleep.
     // spec: S-0215 claim 5
     #[serde(default = "on")]
@@ -1263,6 +1267,7 @@ impl Default for Quirks {
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
             damaging_entry_cursor_retained: true,
+            blocked_arrow_events: true,
             queued_move_sleeps: true,
             override_suspends_queued: true,
             refused_override_retargets: true,
@@ -1687,6 +1692,7 @@ impl Quirks {
                 "damaging_entry_cursor_retained",
                 self.damaging_entry_cursor_retained,
             ),
+            ("blocked_arrow_events", self.blocked_arrow_events),
             ("queued_move_sleeps", self.queued_move_sleeps),
             ("override_suspends_queued", self.override_suspends_queued),
             (
