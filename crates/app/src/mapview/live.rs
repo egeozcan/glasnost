@@ -220,6 +220,9 @@ pub struct Live {
     pub building_ids: BTreeMap<u32, ObjectId>,
     painter: Painter,
     static_ground: Vec<GroundEntry>,
+    /// The static objects' entries of the other layers, in entering order
+    /// (S-0102 claim 7).
+    static_layered: Vec<(super::slots::Layer, GroundEntry)>,
     /// The cell pass as built, before any building left it.
     cell_pass: Vec<Item>,
     cell_pass_len: usize,
@@ -464,6 +467,7 @@ impl Live {
             }
         }
         let static_ground = std::mem::take(&mut built.ground);
+        let static_layered = std::mem::take(&mut built.layered);
         let mut live = Self {
             world,
             rules,
@@ -473,6 +477,7 @@ impl Live {
             building_ids,
             painter,
             static_ground,
+            static_layered,
             cell_pass: built.scene.items[..built.scene.cell_pass_len].to_vec(),
             cell_pass_len: built.scene.cell_pass_len,
             gone: BTreeSet::new(),
@@ -815,6 +820,9 @@ impl Live {
                 scene.items.extend(items);
             }
         }
+        // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
+        // top after it; each unsorted)
+        self.draw_layers(scene, |l| l < super::slots::Layer::Ground);
         for e in self.ground.order() {
             match e {
                 Entrant::Static(i) => {
@@ -831,9 +839,30 @@ impl Live {
                 }
             }
         }
+        self.draw_layers(scene, |l| l > super::slots::Layer::Ground);
         self.objects_end = scene.items.len();
         self.draw_effects(scene);
         self.draw_status(inputs, scene);
+    }
+
+    /// Draws the static entries of the layers `which` picks, layer by layer
+    /// in drawing order, each in entering order (S-0102 claims 1 and 7).
+    fn draw_layers(&self, scene: &mut Scene, which: impl Fn(super::slots::Layer) -> bool) {
+        let mut layers: Vec<super::slots::Layer> = self
+            .static_layered
+            .iter()
+            .map(|(l, _)| *l)
+            .filter(|l| which(*l))
+            .collect();
+        layers.sort();
+        layers.dedup();
+        for layer in layers {
+            for (_, g) in self.static_layered.iter().filter(|(l, _)| *l == layer) {
+                if g.object.is_none_or(|o| !self.gone.contains(&o)) {
+                    scene.items.extend_from_slice(&g.items);
+                }
+            }
+        }
     }
 
     /// Draws the combat placeholders after the object pass: projectiles in

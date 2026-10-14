@@ -15,5 +15,6 @@ pub mod png;
 pub mod quirks;
 pub mod radar;
 pub mod sidebar;
+pub mod slots;
 #[cfg(test)]
 mod tests;

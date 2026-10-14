@@ -1046,3 +1046,161 @@ fn animated_terrain_object_in_the_object_pass() {
     assert!(!vehicle.is_empty());
     assert!(vehicle.iter().all(|v| at(v) > at(shadow)));
 }
+
+/// The slot-animation test context: HUTX's art starts five slot animations
+/// (S-0108 claim 11) and names a special slot that the set-up never starts.
+fn slot_context() -> (glasnost_convert::Import, Catalogue, Assets) {
+    let rules =
+        format!("{RULES}[Animations]\n0=SLOTA\n1=SLOTB\n2=SLOTC\n3=SLOTD\n4=SLOTE\n5=SLOTF\n");
+    let art = format!(
+        "{ART}[HUTX]\nActiveAnim=SLOTA\nActiveAnimX=30\nActiveAnimY=15\nActiveAnimZAdjust=-5\n\
+         ActiveAnimYSort=40\nIdleAnim=SLOTB\nActiveAnimTwo=SLOTC\nActiveAnimThree=SLOTD\n\
+         ActiveAnimFour=SLOTE\nSpecialAnim=SLOTF\n\
+         [SLOTA]\nLayer=ground\nShadow=yes\nStart=1\nYDrawOffset=3\nZAdjust=99\n\
+         [SLOTB]\nFlat=yes\nShadow=yes\n\
+         [SLOTC]\nLayer=ground\nDetailLevel=1\n\
+         [SLOTD]\nLayer=top\nAltPalette=yes\nShouldUseCellDrawer=no\n\
+         [SLOTE]\nLayer=top\nShouldUseCellDrawer=no\n\
+         [SLOTF]\nLayer=ground\n"
+    );
+    let mut ctx = context_full(&rules, &art);
+    for (i, name) in ["SLOTA", "SLOTB", "SLOTC", "SLOTD", "SLOTE", "SLOTF"]
+        .iter()
+        .enumerate()
+    {
+        let file = format!("{}.shp", name.to_ascii_lowercase());
+        ctx.0
+            .arts
+            .insert((Kind::Animations, i), art_of(name, &file));
+        // Canvas 20 × 20, 6 image frames of 2 × 2 at (9, 9); frame i has pixel value i + 1.
+        ctx.2
+            .insert(file.as_bytes(), shp((20, 20), 6, (2, 2), (9, 9)));
+    }
+    ctx
+}
+
+/// The default options at detail level 0.
+fn low_detail() -> Options {
+    Options {
+        detail: glasnost_render::light::DetailLevel::Low,
+        ..Options::default()
+    }
+}
+
+/// The scene of one neutral HUTX on (6, 10) in the slot context.
+fn slot_scene(options: &Options) -> Built {
+    build_in(
+        slot_context(),
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+        options,
+    )
+    .0
+}
+
+/// spec: S-0108 claim 10 (placement at the anchor moved by the displacement, S-0101 F6);
+/// S-0108 claim 11 (the set-up starts idle and active-1 … active-4, not the special slot);
+/// S-0102 claim 17 (a slot animation is an unattached animation in its type's layer, a depth
+/// reader; the slot's depth adjustment and y-sort replace the type's); S-0102 claim 13 (the
+/// animation rows: ordinary, flat, shadow); S-0102 claims 1 and 7 (layer order);
+/// S-0109 claims 1 and 10 (first image frame a; shadow frame f + ⌊N/2⌋, none for a flat type);
+/// S-0109 claim 19 (a detail field above the player's level is not drawn)
+#[test]
+fn slot_animations_of_a_placed_building() {
+    let b = slot_scene(&low_detail());
+    let slots: Vec<Item> = b.scene.items[b.scene.cell_pass_len..].to_vec();
+    let px = |i: &Item| b.scene.images[i.image as usize].pixels()[0];
+    // SLOTA (ground: shadow, image), SLOTB (air: image only, flat types draw no shadow),
+    // SLOTD and SLOTE (top, in entering order). SLOTC's detail field 1 is above the player's
+    // level 0, SLOTF is in a slot the set-up does not start.
+    assert_eq!(slots.len(), 5);
+    assert!(slots.iter().all(|i| i.test == DepthTest::Reader));
+    assert!(slots.iter().all(|i| i.group == Group::Buildings));
+    let (a_shadow, a, flat) = (slots[0], slots[1], slots[2]);
+    // Anchor (−120, 240); displacement (30, 15) is (256, 0) leptons (F6), so the position
+    // (1792, 2560, 0) projects to (−90, 255); the vertical draw shift 3 moves it to (−90, 258).
+    // Canvas 20 × 20 centred there, frame at (9, 9).
+    assert_eq!((a.x, a.y), (-90 - 10 + 9, 258 - 10 + 9));
+    assert_eq!((a_shadow.x, a_shadow.y), (a.x, a.y));
+    // Image frame Start = 1 (pixel 2); the shadow frame 1 + ⌊6/2⌋ = 4 (pixel 5).
+    assert_eq!((px(&a), px(&a_shadow)), (2, 5));
+    assert_eq!(a_shadow.paint, Paint::Shadow);
+    // Ordinary row: shift 3 + slot adjustment −5 (the type's 99 is replaced) − L(0) − 2.
+    assert_eq!(bias(&a), (Profile::Upright, -4));
+    // Shadow row: −2 − L(0), flat.
+    assert_eq!(bias(&a_shadow), (Profile::Flat, -2));
+    // Flat row: 0 + 0 − L(0) − 3; its image frame 0.
+    assert_eq!(bias(&flat), (Profile::Flat, -3));
+    assert_eq!(px(&flat), 1);
+    assert!(slots.iter().all(|i| i.provisional));
+}
+
+/// spec: S-0102 claims 5 and 17 (the sort key is X + Y of the position plus the slot's y-sort)
+#[test]
+fn slot_animation_sort_key() {
+    let (import, catalogue, assets) = slot_context();
+    let doc = Document::parse(
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+        Quirks::default(),
+        &mut Vec::new(),
+    );
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = super::build::Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, _) = super::build::build_parts_with(&inputs, true, Default::default());
+    // SLOTA: 1792 + 2560 + its slot's y-sort 40; SLOTC: the anchor (1536, 2560) and no y-sort.
+    let keys: Vec<i64> = built.ground.iter().map(|g| g.key).collect();
+    assert_eq!(keys, [1792 + 2560 + 40, 1536 + 2560]);
+    // SLOTB (air) and SLOTD, SLOTE (top) are kept apart, in entering order.
+    let layers: Vec<_> = built.layered.iter().map(|(l, _)| *l).collect();
+    use super::slots::Layer;
+    assert_eq!(layers, [Layer::Air, Layer::Top, Layer::Top]);
+}
+
+/// spec: S-0103 claim 8 (row 3: drawn with its building, the owner's 53-shade palette at the
+/// building's brightness; row 4: the alternative palette, one row; row 5: the anim palette's
+/// 53-row untinted table)
+#[test]
+fn slot_animation_palettes() {
+    let b = slot_scene(&low_detail());
+    let body = items_of(&b, "building")[0];
+    let slots: Vec<Item> = b.scene.items[b.scene.cell_pass_len..].to_vec();
+    let lit = |i: &Item| match i.paint {
+        Paint::Lit(s) => s,
+        p => panic!("not lit: {p:?}"),
+    };
+    // SLOTA is drawn with its building: the body's own table and brightness.
+    assert_eq!(lit(&slots[1]), lit(&body));
+    // SLOTD: the single-shade table of the first colour definition.
+    assert_eq!(lit(&slots[3]).rows, 1);
+    // SLOTE: the anim palette's table, 53 rows, not the house table.
+    assert_eq!(lit(&slots[4]).rows, 53);
+    assert_ne!(lit(&slots[4]).base, lit(&body).base);
+}
+
+/// spec: S-0109 claim 19 (a type whose detail field is 1 is drawn at level 2, not at level 0)
+#[test]
+fn slot_animation_detail_level() {
+    let high = slot_scene(&Options::default());
+    let low = slot_scene(&low_detail());
+    let n = |b: &Built| b.scene.items.len() - b.scene.cell_pass_len;
+    assert_eq!((n(&high), n(&low)), (6, 5));
+}

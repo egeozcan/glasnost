@@ -37,7 +37,7 @@ use glasnost_render::overlay::{
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
     LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, cell_centre, cell_top, height_lift,
-    project_lifted,
+    project_lifted, screen_to_ground,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
@@ -47,6 +47,7 @@ use super::quirks::{
     ViewQuirks, cliff_factor, drawn_body_frame, occupiable_hurt, overlay_depth_lift,
     sprite_vehicle_facing_part,
 };
+use super::slots;
 
 /// File bytes read for a scene, by upper-case name.
 #[derive(Clone, Debug, Default)]
@@ -155,6 +156,9 @@ pub struct Built {
     /// With a live simulation: the static objects' ground-layer entries
     /// (building voxel parts), not merged into the items.
     pub ground: Vec<GroundEntry>,
+    /// With a live simulation: the static objects' entries of the other
+    /// layers (S-0102 claim 7: never sorted, in the order they entered).
+    pub layered: Vec<(slots::Layer, GroundEntry)>,
     /// Each drawn cell's shown tile image: its file and the tile cell's
     /// index there (S-0010 claims 13 and 24), for the tile radar colour.
     pub shown_tiles: BTreeMap<CellXY, (Vec<u8>, usize)>,
@@ -199,7 +203,11 @@ mod notes {
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
-    pub const NO_SLOT_ANIMS: &str = "building slot animations (S-0108) need animation playback (S-0109), which is not implemented yet: not drawn";
+    pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
+    pub const SLOT_ANIM_DRAW_POINT: &str = "a slot animation's draw point is taken as the screen pixel of its position moved down by its type's vertical draw shift (no spec gives an animation's draw point, S-0102 claim 19)";
+    pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20) has no spec";
+    pub const SLOT_ANIM_TILED: &str = "tiled (stacked) slot animations are drawn as one copy: the number of stacked copies (S-0102 claim 13) has no spec";
+    pub const SLOT_ANIM_SHADOW_ORDER: &str = "a slot animation's shadow image frame is drawn before its image: their order (S-0109 claim 10) has no spec";
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
@@ -297,7 +305,13 @@ pub fn wanted_files(
         );
     }
 
-    let mut add_art = |kind: Kind, idx: usize| art_files(import, kind, idx, &mut out);
+    let art = art_document(import);
+    let mut add_art = |kind: Kind, idx: usize| {
+        art_files(import, kind, idx, &mut out);
+        if kind == Kind::Buildings {
+            slot_files(import, &art, idx, &mut out);
+        }
+    };
     let used_overlays: BTreeSet<u8> = map.cells.iter().map(|(_, c)| c.overlay).collect();
     for o in used_overlays {
         if o != NO_OVERLAY {
@@ -375,12 +389,45 @@ fn art_files(import: &Import, kind: Kind, idx: usize, out: &mut BTreeSet<Vec<u8>
 /// game can create types the map does not hold (deploys, production).
 pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
     let mut out = BTreeSet::new();
+    let art = art_document(import);
     for &(kind, idx) in import.arts.keys() {
         if matches!(kind, Kind::Buildings | Kind::Vehicles | Kind::Infantry) {
             art_files(import, kind, idx, &mut out);
         }
+        if kind == Kind::Buildings {
+            slot_files(import, &art, idx, &mut out);
+        }
     }
     out
+}
+
+/// The import's art file as a document (empty without one).
+fn art_document(import: &Import) -> Document {
+    match &import.art_file {
+        Some(f) => Document::parse(&f.bytes, Default::default(), &mut Vec::new()),
+        None => Document::empty(Default::default()),
+    }
+}
+
+/// The sprites of the animations a building of type `idx` starts when it
+/// is placed (S-0108 claim 11), normal and damaged variants.
+fn slot_files(import: &Import, art: &Document, idx: usize, out: &mut BTreeSet<Vec<u8>>) {
+    let Some(image) = import.arts.get(&(Kind::Buildings, idx)).map(|a| &a.image) else {
+        return;
+    };
+    for base in slots::SETUP_SLOTS {
+        let def = slots::read_slot(art, image, base);
+        for name in [&def.normal, &def.damaged] {
+            if let Some(a) = find_type(import, Kind::Animations, name)
+                && let Some(sprite) = import
+                    .arts
+                    .get(&(Kind::Animations, a))
+                    .and_then(|a| a.sprite.as_ref())
+            {
+                out.insert(upper(sprite));
+            }
+        }
+    }
 }
 
 /// The motion file of a model file (S-0105 glossary *voxel model*: same
@@ -418,6 +465,11 @@ struct Rows {
     /// The start-up tables: `false` the resource table, `true` the mine
     /// table (S-0112 claim 2).
     startup: BTreeMap<bool, (usize, usize)>,
+    /// The anim palette's untinted table (S-0103 claim 8 row 5).
+    anim: Option<(usize, usize)>,
+    /// The single-shade table of the first colour definition (S-0103
+    /// claim 8 row 4).
+    alt: Option<(usize, usize)>,
 }
 
 /// What a scene's builder keeps for drawing more items later: the art file,
@@ -544,10 +596,7 @@ pub fn build_parts_with(
     canvas: voxel::VoxelCanvas,
 ) -> (Built, Painter) {
     let import = inputs.import;
-    let art = match &import.art_file {
-        Some(f) => Document::parse(&f.bytes, Default::default(), &mut Vec::new()),
-        None => Document::empty(Default::default()),
-    };
+    let art = art_document(import);
     let mut b = Builder {
         map: inputs.map,
         rules: inputs.rules,
@@ -572,7 +621,6 @@ pub fn build_parts_with(
     let mut ground = Vec::new();
     b.structures(&mut ground);
     b.built.scene.cell_pass_len = b.built.scene.items.len();
-    b.built.notes.insert(notes::NO_SLOT_ANIMS.into());
     if live {
         b.built.ground = terrain;
         b.built.ground.extend(ground);
@@ -585,7 +633,23 @@ pub fn build_parts_with(
     entries.extend(ground);
     // spec: S-0102 claim 6 (an entering object goes before the first strictly greater key: a stable sort)
     entries.sort_by_key(|g| g.key);
+    // spec: S-0102 claims 1 and 7 (the layers in the order underground, surface, ground, air, top;
+    // the other layers unsorted, in entering order)
+    let layered = std::mem::take(&mut b.built.layered);
+    let (below, above): (Vec<_>, Vec<_>) = layered
+        .into_iter()
+        .partition(|(l, _)| *l < slots::Layer::Ground);
+    let mut below = below;
+    below.sort_by_key(|(l, _)| *l);
+    let mut above = above;
+    above.sort_by_key(|(l, _)| *l);
+    for (_, g) in below {
+        b.built.scene.items.extend(g.items);
+    }
     for g in entries {
+        b.built.scene.items.extend(g.items);
+    }
+    for (_, g) in above {
         b.built.scene.items.extend(g.items);
     }
     (b.built, b.p)
@@ -1807,6 +1871,7 @@ impl Builder<'_> {
         {
             items.push(item);
         }
+        self.slot_animations(i, cell, z, u, hsv, damaged, object, ground);
         // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
         let turret_voxel = rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
         if turret_voxel || art.voxels.contains_key("barrel") {
@@ -1823,6 +1888,231 @@ impl Builder<'_> {
             }
         }
         items
+    }
+
+    /// The slot animations a building starts when it is placed (S-0108
+    /// claims 10 and 11), each drawn at its first image frame as an
+    /// animation of its own in its type's layer (S-0102 claim 17): ground
+    /// layer entries go to `ground`, the others to [`Built::layered`].
+    #[allow(clippy::too_many_arguments)]
+    fn slot_animations(
+        &mut self,
+        i: usize,
+        cell: CellXY,
+        z: i32,
+        u: i32,
+        hsv: [u8; 3],
+        damaged: bool,
+        object: u32,
+        ground: &mut Vec<GroundEntry>,
+    ) {
+        let Some(image) = self
+            .import
+            .arts
+            .get(&(Kind::Buildings, i))
+            .map(|a| a.image.clone())
+        else {
+            return;
+        };
+        let refinery = rule_bool(self.import, Kind::Buildings, i, b"Refinery", false);
+        // spec: S-0108 claim 11 (placed during the set-up: idle and active-1 … active-4, occupied
+        // variants allowed; grand opening of a building completed in play: a refinery only the active
+        // slot of its fill level, which is active-1 with no stored ore by claim 15, others the same
+        // five slots)
+        let starts: &[&[u8]] = if self.live && refinery {
+            &slots::SETUP_SLOTS[1..2]
+        } else {
+            &slots::SETUP_SLOTS
+        };
+        let defs: Vec<slots::SlotDef> = starts
+            .iter()
+            .map(|base| slots::read_slot(&self.p.art, &image, base))
+            .collect();
+        let mut any = false;
+        for def in defs {
+            // spec: S-0108 claim 11 (no occupants at placement: the damaged or the normal variant)
+            let name = slots::variant(&def, damaged, false, true).to_vec();
+            if name.is_empty() {
+                continue;
+            }
+            // Unknown names start nothing here (S-0108 claim 11 leaves them unmeasured).
+            let Some(a) = find_type(self.import, Kind::Animations, &name) else {
+                continue;
+            };
+            let Some(art) = self.import.arts.get(&(Kind::Animations, a)).cloned() else {
+                continue;
+            };
+            let Some(sprite) = art.sprite.clone() else {
+                continue;
+            };
+            any = true;
+            let t = slots::read_anim(&self.p.art, &art.image);
+            // spec: S-0109 claim 19 (detail field above the player's level: not drawn)
+            if !slots::shown_at(&t, self.options.detail.number()) {
+                continue;
+            }
+            let n = i32::try_from(self.sprite_frames(&sprite).unwrap_or(0)).unwrap_or(i32::MAX);
+            // spec: S-0108 claim 10, S-0101 F6 (the anchor moved by the displacement, converted to
+            // world units)
+            let (dx, dy) = screen_to_ground(def.x, def.y);
+            let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
+            let lz = height_lift(z);
+            let p = project_lifted(pos.0, pos.1, pos.2);
+            let point = (p.0, p.1 + t.y_draw_offset);
+            let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
+            if slots::first_translucency(&t, self.options.detail.number(), n) > 0 {
+                self.note(notes::SLOT_ANIM_TRANSLUCENT);
+            }
+            if t.tiled {
+                self.note(notes::SLOT_ANIM_TILED);
+            }
+            let frame = slots::first_frame(&t, n);
+            let frame_of = |x: i32| {
+                usize::try_from(x)
+                    .ok()
+                    .filter(|&x| (x as i64) < i64::from(n))
+            };
+            let mut items = Vec::new();
+            // spec: S-0109 claim 10 (a shadow type also draws f + ⌊N/2⌋ as its shadow, unless flat or tiled)
+            if t.shadow
+                && !t.flat
+                && !t.tiled
+                && let Some(sf) = frame_of(frame.saturating_add(n / 2))
+            {
+                self.note(notes::SLOT_ANIM_SHADOW_ORDER);
+                if let Some(item) = self.place_sprite(
+                    &sprite,
+                    sf,
+                    point,
+                    DepthTest::Reader,
+                    // spec: S-0102 claim 13 (animation shadow: −2 − L(z), flat)
+                    ItemDepth::Profile {
+                        profile: Profile::Flat,
+                        bias: -2 - lz,
+                        companion: None,
+                    },
+                    Paint::Shadow,
+                    Group::Buildings,
+                    true,
+                    Some(object),
+                ) {
+                    items.push(item);
+                }
+            }
+            // spec: S-0102 claims 13 and 17 (animation rows; the slot's depth adjustment replaces the type's)
+            let (profile, bias) = if t.tiled {
+                (Profile::Upright, t.y_draw_offset + def.z_adjust - lz - 50)
+            } else if t.flat {
+                (Profile::Flat, t.y_draw_offset + def.z_adjust - lz - 3)
+            } else {
+                (Profile::Upright, t.y_draw_offset + def.z_adjust - lz - 2)
+            };
+            if let Some(f) = frame_of(frame)
+                && let Some(item) = self.place_sprite(
+                    &sprite,
+                    f,
+                    point,
+                    // spec: S-0102 claim 17 (slot animations are depth readers)
+                    DepthTest::Reader,
+                    ItemDepth::Profile {
+                        profile,
+                        bias,
+                        companion: None,
+                    },
+                    Paint::Lit(row),
+                    Group::Buildings,
+                    true,
+                    Some(object),
+                )
+            {
+                items.push(item);
+            }
+            if items.is_empty() {
+                continue;
+            }
+            let entry = GroundEntry {
+                // spec: S-0102 claims 5 and 17 (key X + Y of the position plus the slot's y-sort)
+                key: i64::from(pos.0) + i64::from(pos.1) + i64::from(def.y_sort),
+                items,
+                object: Some(object),
+            };
+            // spec: S-0102 claims 3 and 17 (an unattached animation is in its type's layer)
+            if t.layer == slots::Layer::Ground {
+                ground.push(entry);
+            } else {
+                self.built.layered.push((t.layer, entry));
+            }
+        }
+        if any {
+            self.note(notes::SLOT_ANIMS_STILL);
+            self.note(notes::SLOT_ANIM_DRAW_POINT);
+        }
+    }
+
+    /// The shade row of a building's slot animation of type `t` (S-0103
+    /// claim 8 rows 3 to 5): `hsv` and `u` are its building's colour
+    /// definition and brightness, `cell` the animation's cell.
+    fn anim_row(&mut self, t: &slots::AnimType, hsv: [u8; 3], u: i32, cell: CellXY) -> Shade {
+        if t.cell_drawer {
+            // spec: S-0103 claim 8 row 3 (the owner's 53-shade palette at the building's U, or 1000
+            // with the normal-light flag)
+            return self.house_row(
+                hsv,
+                if t.normal_light {
+                    NEUTRAL_BRIGHTNESS
+                } else {
+                    u
+                },
+            );
+        }
+        if t.alt_palette {
+            let (base, n) = match self.p.rows.alt {
+                Some(r) => r,
+                None => {
+                    // spec: S-0103 claim 8 row 4, claim 5 (the single-shade palette of the first colour
+                    // definition, never tinted, S-0104 claim 3)
+                    let first = self
+                        .import
+                        .outcome
+                        .colours
+                        .first()
+                        .map_or([0, 0, 0], |c| c.hsv);
+                    let pal = house_palette(&self.palettes.unit, first);
+                    let t = light::shade_table(&pal, WHITE, 1, None);
+                    let base = self.built.scene.rows.len();
+                    for row in &t {
+                        self.built.scene.add_row(row565(row));
+                    }
+                    self.p.rows.alt = Some((base, t.len()));
+                    (base, t.len())
+                }
+            };
+            return Shade::new(base, n, NEUTRAL_BRIGHTNESS);
+        }
+        let (base, n) = match self.p.rows.anim {
+            Some(r) => r,
+            None => {
+                // spec: S-0103 claim 8 row 5, S-0104 claim 6 (the anim palette's untinted table)
+                let t = light::untinted_table(&self.palettes.anim);
+                let base = self.built.scene.rows.len();
+                for row in &t {
+                    self.built.scene.add_row(row565(row));
+                }
+                self.p.rows.anim = Some((base, t.len()));
+                (base, t.len())
+            }
+        };
+        // spec: S-0103 claim 8 row 5, S-0104 claim 13 (its cell's unscaled ground level; 1000 with
+        // the normal-light flag)
+        let b = if t.normal_light {
+            NEUTRAL_BRIGHTNESS
+        } else {
+            self.p
+                .lights
+                .get(cell)
+                .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+        };
+        Shade::new(base, n, b)
     }
 
     /// A building's voxel turret and barrel, or its barrel alone (S-0105
@@ -2976,6 +3266,11 @@ impl Painter {
                 &mut ground,
             );
             for g in ground {
+                items.extend(g.items);
+            }
+            // Our placeholder order for a building the game placed: its slot
+            // animations of every layer follow its other items.
+            for (_, g) in std::mem::take(&mut b.built.layered) {
                 items.extend(g.items);
             }
             out.push(items);
