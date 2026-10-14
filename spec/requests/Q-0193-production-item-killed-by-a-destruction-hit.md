@@ -1,9 +1,9 @@
 ---
 id: Q-0193
 title: What a production item killed by a defeat or surrender hit does afterwards
-status: open
+status: answered
 related: [S-0414, S-0404, S-0312]
-answered-by: []
+answered-by: [S-0414]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0150, Q-0151]
+requests: [Q-0150, Q-0151, Q-0193]
 supersedes: []
 ---
 
@@ -27,7 +27,9 @@ games are outside this spec.
 bases-off edge case here: qualifying objects still prevent defeat; otherwise the first defeat
 leaving no hostile pair ends the game, and later same-tick defeats turn pending wins into
 losses only with `quirks.defeat_during_end_delay` on. Claims 8 and 16 retain the final-tick
-commitment boundary. These are confirmations of existing rules, not additional behaviour.
+commitment boundary. S-0009 claims 28 and 45 agree too: cleanup removes the house itself, and a removed house
+receives no starting units and takes no defeat test. These are confirmations of existing rules,
+not additional behaviour.
 
 ## Terms
 
@@ -455,25 +457,9 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 
 ### Destruction order and the final tick
 
-15. **Order and scope of the destruction hits (Q-0150).** The defeat and surrender hits of claim 5
-    follow creation order across all four object kinds together, subject to the cancellation
-    exception below, not kind order and not order of
-    entering the map. Boarding, leaving a transport and changing owner do not change an object's
-    place. Production start is the object's creation (S-0404 claim 11), not its eventual release.
-    Off-map status does not exclude an object. An earlier object's death effects complete before
-    the next destruction hit, so its death draws precede that next object's death draws (S-0312
-    claim 1). The sweep takes no random draws of its own.
+15. **Observable hit ordering and scope (Q-0150).** For defeat and surrender destruction, the observable precedence of offered hits and their associated death effects follows object creation order across all four object kinds, subject to the cancellation exception below; it is not grouped by kind or by order of entering the map. Boarding, leaving a transport and changing owner do not change this precedence. For a produced item, creation is the start of production (S-0404 claim 11), not eventual release. Off-map objects are included. Where two offered hits are both reached, the earlier-created object's death effects and death draws precede the later-created object's hit and death draws (S-0312 claim 1). The destruction process itself takes no random draws.
 
-    Eligibility follows the state at the object's place in this order, not a snapshot taken before
-    the first hit. A passenger that has already died with an earlier-hit carrier does not die
-    again or add another set of death draws. A production object deleted by an earlier factory
-    loss and cancellation is no longer available for a hit. Conversely, an object created by
-    an earlier death effect is later in creation order and is included when claim 5's ownership
-    conditions hold. Creation order also decides which death effect can change control or
-    cancel production before a later object's hit. Objects still present after their hit are
-    not hit repeatedly merely because their removal is delayed. The amount is their health at
-    the moment of the offered hit; an already dead object gains no second death from a zero hit.
-    This does not replace the passenger, cancellation or death rules of S-0312 and S-0404.
+    Eligibility and hit consequences reflect the object's state when its hit is offered, including changes caused by earlier death effects, rather than a fixed eligibility set from before destruction begins. A passenger already killed with its carrier receives no second death and contributes no second set of death draws. A production object immediately deleted by factory loss and cancellation is unavailable for a hit. An object created by a death effect is included at its creation position when claim 5's ownership conditions hold. A death effect may change control or cancel production in time to affect a later-created object's eligibility. An object that remains present after a hit because its removal is delayed receives no repeated hit for that reason. The offered hit uses the object's health at that time; an already-dead object does not undergo a second death from a zero hit. S-0312 and S-0404 retain ownership of passenger, cancellation and death rules.
 
     **Cancellation exception.** Under `quirks.defeat_cancellation_skip` (default original), if the effects of a destruction hit immediately delete *k* objects whose creation positions are at or before that hit's position in the combined creation order, the next max(*k* − 1, 0) objects in that order receive no destruction hit from this sweep. Count all four object kinds and all owners, including objects that would not themselves qualify for a destruction hit. An immediate deletion means the object ceases to exist at once, as in production cancellation; merely leaving the map or awaiting delayed removal after death is not a deletion for this rule. Thus an otherwise eligible later object can miss its hit. The count and formula use non-negative integers, exact arithmetic, and no rounding. With the switch off, such deletions do not cause any eligible object to miss its hit. One immediate deletion skips no objects; otherwise objects that remain retain their creation order.
     - Backing: `measurable` (V11 for cross-kind order, re-entry, off-map passengers and production
@@ -508,6 +494,33 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
       a person-played house is `unmeasured`, since the original has no such result state
     - Confidence: high for the relative places of destruction, power, radar and tech-tree work,
       medium for the boundary result, pending V12's discriminating run
+
+17. **Defeat counts of a killed production item (Q-0193, count part of question 3).**
+    For an item that has never entered the map, reducing its health to 0 does not by itself
+    remove its contribution to the existence counts of claim 4. While its object still exists
+    for the same owner, a counted-building item contributes one to *B* in either game, and an
+    eligible base-unit vehicle contributes one to the short-game vehicle count. The type
+    exclusions and first-three-position rule of claim 2 still apply. An infantry, aircraft or
+    other vehicle item contributes nothing to the normal game's on-map counts, before or after
+    that hit. All these contributions are integer counts, with no rounding.
+
+    Cancellation that deletes the object removes its existence contribution at that deletion,
+    not at the earlier killing hit. If deletion and the defeat test happen in the same tick,
+    the test sees whichever contributions remain at its own house update. This does not
+    reverse a defeat already recorded: a defeated house is never tested again (claim 1).
+    Nor does the zero-health item exempt the house from the destruction sweep (claim 15).
+    This is the existing event-count rule made explicit, not a separate quirk.
+
+    Whether the hit itself causes deletion, what death effects it takes, and whether the line
+    continues, finishes or releases the item are separate death and production questions,
+    owned by S-0312 and S-0404. This claim does not assume that every killed item survives
+    until cancellation, or that a killed item can be placed.
+    - Backing: `measurable` (V14 for the retained counted-building item and its cancellation).
+      The base-unit vehicle's isolated contribution remains `unmeasured` for the factory
+      masking reason in claim 2. The absence of on-map contributions for never-placed units
+      follows claim 4 and is checked with V14's infantry control
+    - Confidence: high for the health-independent count and deletion rule; medium for arranging
+      a retained killed item in the proposed setup
 
 ## Formulas
 
@@ -667,6 +680,10 @@ included), is empty (claim 6, departure); our engine does not.
 | `[MultiplayerDialogSettings]` `AllyChangeAllowed` | ally-change-allowed flag (claim 14) | boolean | yes |
 | building type, `Foundation` | one-cell foundation (Terms; S-0108) | foundation name | as S-0108 |
 | country section, `MultiplayPassive` | passive house (claim 1; S-0009) | boolean | as S-0009 |
+
+Claim 17 uses the existing type-exclusion and base-unit-list rows above; zero health and
+object deletion introduce no additional imported field. Its cancellation input is owned by
+S-0404, and any death-effect input by S-0312.
 
 The creation-order destruction and the house-update cutoff of claims 15 and 16 use no INI
 settings; the cancellation exception is controlled only by its quirk switch. Their warhead and end-delay field use the existing rows above. Cleanup and
@@ -967,7 +984,30 @@ A lobby unable to start the no-computer setup makes this run unavailable, not a 
 result. S-0009 claim 28 already answers removal of the house itself; this scenario checks its
 victory-rule consequence. Run each available deterministic variant once.
 
+**V14: a killed item and the defeat counts (claim 17).** Use the common skirmish setup,
+normal game, with a remote enemy bystander and V11 part c's named test map and production
+ordering. Start and hold a counted building item P before creating the replacement factory
+of buildings, then sell the original factory without cancelling P. Tool: read-only recorder
+of P's health and continued existence, the house's counted-building count and defeat state,
+plus scripted input. Procedure: surrender and sample during the destruction interval, between
+P's hit and the later replacement factory loss, then through P's cancellation. Expected:
+while P still exists at 0 health, its contribution to *B* is unchanged; deletion removes that
+contribution. Distinguish the factory's own contribution and deletion from P's. An end-of-tick
+count alone does not distinguish death from cancellation. In a control use V11 part c's held
+infantry item: it contributes nothing to the on-map infantry count at either point. A count
+reduction at P's killing hit while P still exists falsifies claim 17. If P is deleted by its
+own hit, the retained-item part is inconclusive and that deletion is recorded for the death
+and production specs, not treated as proof of continued production. Repeat each variant once.
+Void an earlier cancellation of P or an unintended bystander intervention. This scenario
+checks counts only; progress, draws, refunds and release results belong to the separate
+Q-0193 questions.
+
 ## Open questions
+
+- Q-0193 questions 1, 2, the progress/completion/release/placement parts of question 3, and
+  question 4 remain for S-0312 and S-0404. Claim 17 answers only this spec's defeat-count part
+  of question 3. The existing creation-order hit and factory-cancellation rules do not establish
+  the killed item's subsequent death effects or production-line lifetime.
 
 - Whether the original's skirmish lobby can start a game with an observer, and whether the game
   then ends in tick 1 as Edge cases, *Observers* reads it (scenario V10; our engine's rule does not
