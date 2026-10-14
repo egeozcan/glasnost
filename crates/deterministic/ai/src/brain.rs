@@ -15,7 +15,8 @@
 //!   deploys into one, then deploy it).
 //!
 //! It sees only what its own house sees: its own objects and enemy objects
-//! on cells its shroud shows (S-0409 Terms, *seen*), and the map's start
+//! on cells its house has explored (fog of war is off in a skirmish, S-0409
+//! claim 19, so a person sees what stands there), and the map's start
 //! waypoints (lobby knowledge). It issues only orders a human could, through
 //! the same `orders::issue`; a refused order is simply not applied, and the
 //! next think tries again. It draws nothing from any random stream.

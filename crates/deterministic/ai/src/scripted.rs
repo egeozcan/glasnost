@@ -2,17 +2,20 @@
 //! could issue, for the headless skirmish and the determinism gate.
 //!
 //! Each think looks only at the house's own objects, its production lines,
-//! what its sidebar offers and the cells its shroud shows, and returns
-//! orders:
+//! what its sidebar offers and what stands on the cells its shroud shows
+//! (every explored cell: fog of war is off in a skirmish, S-0409 claim 19),
+//! and returns orders:
 //!
 //! 1. deploy the MCV (any vehicle that deploys into a building) while the
 //!    house has no construction yard;
 //! 2. build a power plant, a refinery, then a factory of infantry and one of
-//!    vehicles, and place each one when it is done, on the first cell of a
+//!    vehicles (skipping, for now, a role the house cannot build a type for
+//!    yet), and place each one when it is done, on the first cell of a
 //!    square spiral around the construction yard that passes the place
 //!    order's conditions and the cell test;
 //! 3. build another power plant whenever the drain reaches the output;
-//! 4. keep the plan's harvester count, and send idle harvesters to harvest;
+//! 4. keep the plan's harvester count, and send idle or resting harvesters
+//!    to harvest;
 //! 5. once the harvesters are kept, build army units round-robin, and when
 //!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
 //!    knowledge: the map's start waypoints), and once every start position
@@ -149,7 +152,12 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             };
             match role {
                 Role::Power => b.factory.is_none() && b.raw.econ.power.unwrap_or(0) > 0,
-                Role::Refinery => b.raw.econ.refinery == Some(true),
+                // The refinery flag, or a member of the refinery group
+                // (S-0407 Import mapping, PROC).
+                Role::Refinery => {
+                    b.raw.econ.refinery == Some(true)
+                        || r.econ.tech.groups[tech::Group::Proc as usize].contains(&t.index)
+                }
                 Role::Factory(k) => b.factory == Some(k) && !b.naval,
                 Role::Yard => b.factory == Some(FactoryKind::Building),
                 _ => false,
@@ -376,16 +384,25 @@ impl Script {
             }
         } else {
             let p = &w.houses[usize::from(house.0)].econ.power;
-            let wanted = if p.output <= p.drain || self.of_role(w, Role::Power).is_empty() {
-                Some(Role::Power)
-            } else if self.of_role(w, Role::Refinery).is_empty() {
-                Some(Role::Refinery)
-            } else {
-                FACTORIES
-                    .into_iter()
-                    .map(Role::Factory)
-                    .find(|&f| self.of_role(w, f).is_empty())
-            };
+            // The first missing role the house can build a type for now
+            // (a role it cannot build yet, such as a refinery that needs a
+            // factory first, does not hold up the others).
+            let low_power = p.output <= p.drain || self.of_role(w, Role::Power).is_empty();
+            let wanted = low_power
+                .then_some(Role::Power)
+                .into_iter()
+                .chain(
+                    self.of_role(w, Role::Refinery)
+                        .is_empty()
+                        .then_some(Role::Refinery),
+                )
+                .chain(
+                    FACTORIES
+                        .into_iter()
+                        .map(Role::Factory)
+                        .filter(|&f| self.of_role(w, f).is_empty()),
+                )
+                .find(|&r| !self.candidates(w, r).is_empty());
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
             }
@@ -395,8 +412,18 @@ impl Script {
         let harvesters = self.of_role(w, Role::Harvester);
         let refineries = self.of_role(w, Role::Refinery);
         if !refineries.is_empty() {
+            // A harvester that rests (whatever destination it kept) or is
+            // idle is sent to harvest.
             for &h in &harvesters {
-                if idle(w, h) {
+                let resting = w.obj(h).is_some_and(|o| {
+                    matches!(
+                        o.beh.current,
+                        None | Some(Behaviour::Guard)
+                            | Some(Behaviour::AreaGuard)
+                            | Some(Behaviour::Stop)
+                    )
+                });
+                if resting || idle(w, h) {
                     out.push(Order::Behaviour {
                         actor: h,
                         behaviour: Behaviour::Harvest,
@@ -413,12 +440,13 @@ impl Script {
 
         // The army: one type round-robin per kind of factory, once the
         // harvesters are kept (while a harvester can still be had: a
-        // harvester type or a vehicle factory to build or one owned).
+        // harvester type to build now, or a vehicle factory to build while
+        // the house has none).
         let vehicle_factory = Role::Factory(FactoryKind::Vehicle);
         let economy_first = harvesters.len() < self.plan.harvesters
             && (!self.candidates(w, Role::Harvester).is_empty()
-                || !self.candidates(w, vehicle_factory).is_empty()
-                || !self.of_role(w, vehicle_factory).is_empty());
+                || (self.of_role(w, vehicle_factory).is_empty()
+                    && !self.candidates(w, vehicle_factory).is_empty()));
         let army_types = if economy_first {
             Vec::new()
         } else {
@@ -520,7 +548,9 @@ impl Script {
             .min_by_key(|&c| (dist2(c, from), c.y, c.x))
     }
 
-    /// Enemy objects on cells the house sees, with their cells.
+    /// Enemy objects on cells the house has explored, with their cells: fog
+    /// of war is off in a skirmish (S-0409 claim 19), so a person in the
+    /// house's seat sees what stands on every explored cell.
     pub(crate) fn seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
         let me = &w.houses[usize::from(self.house.0)];
         w.objects
@@ -533,7 +563,7 @@ impl Script {
                     && !me.allies.contains(&owner)
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
-                (enemy && shroud::seen(w, self.house, c)).then_some((o.id, c))
+                (enemy && shroud::explored(w, self.house, c)).then_some((o.id, c))
             })
             .collect()
     }
@@ -581,13 +611,15 @@ impl Script {
     pub(crate) fn free_but(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>) -> bool {
         let cells = placement::foundation_cells(w, t.index, c);
         // Only what the house knows: its own objects and those on cells it
-        // sees (the AI sees only its own house's shroud).
+        // has explored (the AI sees only its own house's shroud; fog is off
+        // in a skirmish, S-0409 claim 19).
         w.objects
             .values()
             .filter(|o| {
                 o.on_map
                     && Some(o.id) != but
-                    && (o.owner == Some(self.house) || shroud::seen(w, self.house, o.pos.cell()))
+                    && (o.owner == Some(self.house)
+                        || shroud::explored(w, self.house, o.pos.cell()))
             })
             .all(|o| {
                 // A building's position is its top-left cell's centre.
