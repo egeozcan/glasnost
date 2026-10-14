@@ -5558,8 +5558,18 @@
           "type": "boolean",
           "default": true
         },
+        "approach_alternative_outside_area": {
+          "description": "A vehicle's approach alternatives skip the usable-area test; off:\nthey must pass it as primaries do.",
+          "type": "boolean",
+          "default": true
+        },
         "approach_alternative_walk": {
           "description": "A vehicle's approach search tries the eight alternative cells in\nthe original's order (0, −1), (1, −2), …, (0, 0); off: the eight\nneighbours in direction order 0 to 7.",
+          "type": "boolean",
+          "default": true
+        },
+        "approach_alternative_zero_height": {
+          "description": "A vehicle's approach alternatives are measured at world height 0;\noff: at the terrain height of their centre, plus 416 leptons on a\nhigh bridge, as primaries are.",
           "type": "boolean",
           "default": true
         },

@@ -153,6 +153,13 @@ fn set_deck(w: &mut World, c: CellXY) {
     w.cells.deck[i] = true;
 }
 
+/// Places a high-bridge overlay (index 24) in `c`, which gives the cell the
+/// elevation-deck mark (S-0307 Terms), and marks it as a high-bridge cell.
+fn set_bridge_overlay(w: &mut World, c: CellXY) {
+    set_deck(w, c);
+    w.cells.grid.get_mut(c).unwrap().overlay = 24; // spec: S-0211 claim 15 (high-bridge overlay index 24)
+}
+
 /// Gives the catalogue a water role: tiles `first` to `first + 13` are the
 /// theater's water tiles (tile 0 is every cell's tile).
 fn water_role(w: &mut World, first: i32) {
@@ -3099,11 +3106,14 @@ fn claim22_allied_wall_transparency() {
     }
 }
 
-// spec: S-0306 claim 22 and S-0307 Terms (the cliff test compares elevation levels: plus 4 for a bridge-deck cell)
+// spec: S-0306 claim 22 and S-0307 Terms (the cliff test compares elevation levels: plus 4 for a cell with the elevation-deck mark)
 #[test]
 fn claim22_cliff_with_a_deck_cell() {
     let (mut s, p) = lof_rules(true, false);
+    // A high-bridge cell without an overlay of its own has no elevation-deck mark: no cliff.
     set_deck(&mut s.w, cell_of(2, 0));
+    assert_eq!(lof::walk(&s.w, &p, None, c(0, 0, 0), c(5, 0, 0)), None);
+    set_bridge_overlay(&mut s.w, cell_of(2, 0));
     assert_eq!(
         lof::walk(&s.w, &p, None, c(0, 0, 0), c(5, 0, 0)),
         Some(cell_of(2, 0))

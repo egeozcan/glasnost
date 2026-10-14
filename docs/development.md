@@ -278,7 +278,8 @@ Provisional rules of combat, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `combat::range::approach_search`, `approach::search` | the search of S-0307 claims 15 to 17 is applied unchanged to the cases those claims do not cover (cell targets, close-range types, slopes and bridges, alternatives outside the usable area); when the radii are not empty and no candidate qualifies, an ordinary actor drops its target and its destination is cleared (no nearby-cell search, so no centre is assumed); a balloon-hover vehicle attacking a cell takes that cell as its destination | Q-0172 |
+| `combat::range::approach_search`, `approach::search` | the ordinary search of S-0307 claims 15 to 21 is applied unchanged to the cases those claims leave open: close-range types, jumpjet actors (their failure centre included) and destroyable-cliff cell targets; an alternative off the legal cells never passes the clear-cell test | Q-0172 |
+| `combat::range::approach_search` | an alternative outside the usable area fails the clear-cell test's reach-region condition (S-0211's off-map category, S-0212 claims 2 to 4), so `quirks.approach_alternative_outside_area` has no effect | Q-0230 |
 | `process::fall_back` | the attack-move refresh of S-0309 claim 23 (b) runs after the other common effects of S-0215 claim 13, so a resumed attack move's destination replaces a guard spot, route point or approach destination given in the same fall-back | Q-0202 |
 
 ## Simulation (M5a: economy and base building)

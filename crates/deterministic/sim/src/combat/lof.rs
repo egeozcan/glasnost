@@ -8,11 +8,12 @@ use crate::combat::data::ProjectileRules;
 use crate::world::{HouseId, Pos, World};
 
 /// The elevation level of a cell (S-0307 Terms): its height level, plus 4
-/// for a cell marked as carrying a bridge deck.
+/// for a cell with the elevation-deck mark (a high-bridge overlay's own
+/// cell, not the other cells of its bridge marking).
 pub fn elevation_level(w: &World, c: CellXY) -> i32 {
     let level = w.cells.cell(c).map_or(0, |cell| i32::from(cell.level));
-    // spec: S-0307 Terms (elevation level: height level plus 4 for a deck-marked cell)
-    level + if w.high_bridge(c) { 4 } else { 0 }
+    // spec: S-0307 Terms (elevation level: height level plus 4 for a cell with the elevation-deck mark)
+    level + if w.cells.elevation_deck(c) { 4 } else { 0 }
 }
 
 /// The plain height level of a cell.

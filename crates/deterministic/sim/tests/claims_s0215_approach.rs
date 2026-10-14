@@ -340,7 +340,7 @@ fn guard_rules() -> Ruleset {
     r
 }
 
-// spec: S-0215 claim 37 (a2) (the per-tick approach follows the per-tick search: a target found by that search is dropped on that very tick when unreachable and out of range, with no destination held)
+// spec: S-0215 claim 37 (a2) (the per-tick approach follows the per-tick search: a target found by that search is dropped on that very tick when unreachable and out of range)
 // spec: S-0215 claim 33 (b) and (d) (the per-tick search in guard)
 #[test]
 fn per_tick_approach_follows_the_per_tick_search() {
@@ -366,5 +366,12 @@ fn per_tick_approach_follows_the_per_tick_search() {
     let o = w.obj(a).unwrap();
     assert!(o.targeting_timer > before, "the targeting timer restarted");
     assert_eq!(o.target, None, "dropped on its acquisition tick");
-    assert_eq!(o.dest, None);
+    // spec: S-0307 claim 17 (the failure centre's nearby-cell search, in the actor's own reach region: a cell on its side of the wall)
+    let Some(Target::Cell(c)) = o.dest else {
+        panic!(
+            "the nearby-cell search's cell is the destination: {:?}",
+            o.dest
+        );
+    };
+    assert!(c.x < at(2, 0).x, "{c:?}");
 }

@@ -993,6 +993,17 @@ pub struct Quirks {
     // spec: S-0307 claim 16, Edge cases
     #[serde(default = "on")]
     pub approach_alternative_walk: bool,
+    /// A vehicle's approach alternatives are measured at world height 0;
+    /// off: at the terrain height of their centre, plus 416 leptons on a
+    /// high bridge, as primaries are.
+    // spec: S-0307 claim 19, Edge cases
+    #[serde(default = "on")]
+    pub approach_alternative_zero_height: bool,
+    /// A vehicle's approach alternatives skip the usable-area test; off:
+    /// they must pass it as primaries do.
+    // spec: S-0307 claim 21, Edge cases
+    #[serde(default = "on")]
+    pub approach_alternative_outside_area: bool,
 }
 
 impl Default for Quirks {
@@ -1240,6 +1251,8 @@ impl Default for Quirks {
             initial_ammo_above_capacity: true,
             building_removal_second_round: true,
             approach_alternative_walk: true,
+            approach_alternative_zero_height: true,
+            approach_alternative_outside_area: true,
         }
     }
 }
@@ -1814,6 +1827,14 @@ impl Quirks {
                 self.building_removal_second_round,
             ),
             ("approach_alternative_walk", self.approach_alternative_walk),
+            (
+                "approach_alternative_zero_height",
+                self.approach_alternative_zero_height,
+            ),
+            (
+                "approach_alternative_outside_area",
+                self.approach_alternative_outside_area,
+            ),
         ]
     }
 
