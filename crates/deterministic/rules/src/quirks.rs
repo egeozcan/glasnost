@@ -2218,6 +2218,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "red_normalisation_divisor",
         "renderer (render::light), S-0104",
     ),
+    (
+        "shroud_on_flat_grid",
+        "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claim 6 names it for the radar's shroud and gap tests (S-0410 r15, not yet followed by the radar)",
+    ),
     ("sequence_value_length_limit", "importer, S-0107 claim 22"),
     ("case_sensitive_direction", "importer, S-0107 claim 22"),
     (

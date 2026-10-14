@@ -351,7 +351,7 @@ fn claim_21_vehicle_master_blocks_emergence() {
     };
     let mut x = twin;
     let due = group(&w, m).next_update;
-    while w.tick < due {
+    while w.tick <= due {
         testkit::run(&mut w, 1);
         testkit::run(&mut x, 1);
     }
@@ -663,6 +663,8 @@ fn claim_25_failed_search_packs_toward_origin() {
         w.obj(b).is_none() || group(w, b).state == GroupState::Packing
     })
     .expect("packing");
+    // spec: S-0402 claim 28 (the automatic old-cell memory is the building's guard spot)
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)));
     // spec: S-0402 claim 25 (with a packing request no emergence)
     assert!(on_map(&w, b).is_empty());
     until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
@@ -671,7 +673,6 @@ fn claim_25_failed_search_packs_toward_origin() {
     assert_eq!(o.dest, Some(Target::Cell(a)));
     assert_eq!(o.beh.queued, Some(Behaviour::Move));
     assert_eq!(group(&w, v).state, GroupState::Packing);
-    assert_eq!(group(&w, v).remembered, None);
     until(&mut w, 20, |w| group(w, v).state != GroupState::Packing).expect("updated");
     assert_eq!(group(&w, v).state, GroupState::FieldSeeking);
 }
@@ -922,6 +923,190 @@ fn s0415_claim_11_failed_pack_up_quirk_off() {
             .all(|o| o.kind != Kind::Vehicle || o.type_index != smv)
     );
     assert!(w.objects.values().all(|o| o.econ.group.is_none()));
+}
+
+/// What one direct pack-up of a working SMB did: the building's old
+/// slaves, the first object id the pack-up allocated (the vehicle), the
+/// random draws it took and the owner's losses it added.
+struct PackUp {
+    old: Vec<ObjectId>,
+    first: u32,
+    draws: u64,
+    losses: i32,
+}
+
+/// Packs up a working SMB at once (S-0415 claims 10 to 12), its return
+/// cell blocked by another house's vehicle when `blocked`.
+fn pack_up_now(r: &Ruleset, blocked: bool) -> (World, PackUp) {
+    let mut w = game_on(r, &field(5, -1, 5), true);
+    let b = working_building(&mut w);
+    unblock(&mut w);
+    if blocked {
+        place_vehicle(&mut w, "HARV", 1, at(1, 0), 0);
+    }
+    let old = slaves::slaves_of(&w, b);
+    let first = w.next_id;
+    let taken = w.rng.taken();
+    let losses = stats::of(&w, HouseId(0)).losses;
+    glasnost_sim::econ::deploy::pack_up(&mut w, b);
+    assert!(w.obj(b).is_none());
+    let p = PackUp {
+        old,
+        first,
+        draws: w.rng.taken() - taken,
+        losses: stats::of(&w, HouseId(0)).losses - losses,
+    };
+    (w, p)
+}
+
+/// The ids the return vehicle's own initial slaves were created with: the
+/// ones right after the vehicle's.
+fn temporary_ids(p: &PackUp) -> Vec<ObjectId> {
+    (1..=SLAVES as u32).map(|n| ObjectId(p.first + n)).collect()
+}
+
+// spec: S-0402 claim 19a (a successful pack-up creates the return vehicle and its own initial hidden slaves, each with its creation draw, before placement; they are destroyed and removed with S-0312 claim 31's notifications, counted as losses, before the old working group is transferred; their draws are not undone)
+#[test]
+fn claim_19a_successful_pack_up_discards_temporary_slaves() {
+    let r = rules();
+    let (w, p) = pack_up_now(&r, false);
+    let v = ObjectId(p.first);
+    assert_eq!(w.obj(v).unwrap().kind, Kind::Vehicle);
+    assert!(w.obj(v).unwrap().on_map);
+    assert_eq!(slaves::slaves_of(&w, v), p.old, "the old group transferred");
+    for s in temporary_ids(&p) {
+        assert!(w.obj(s).is_none(), "temporary slave {s:?} removed");
+    }
+    assert!(p.draws > SLAVES as u64, "the creation draws are taken");
+    assert_eq!(p.losses, SLAVES, "the discarded slaves count as losses");
+}
+
+// spec: S-0402 claim 19a and S-0415 claim 11 (a refused pack-up under quirks.failed_packup_keeps_vehicle: the vehicle's new hidden group, created before placement with its draws, is kept; only the old group ends)
+#[test]
+fn claim_19a_refused_pack_up_keeps_new_group() {
+    let r = rules();
+    let (w, p) = pack_up_now(&r, true);
+    let v = ObjectId(p.first);
+    assert!(!w.obj(v).unwrap().on_map);
+    assert_eq!(slaves::slaves_of(&w, v), temporary_ids(&p));
+    for s in &p.old {
+        assert!(!slaves::is_slave(&w, *s) || w.obj(*s).is_none());
+    }
+    assert!(p.draws > SLAVES as u64);
+}
+
+// spec: S-0402 claim 19a (quirks.failed_packup_keeps_vehicle off: the already-created vehicle and its new group are removed on refusal; their creation draws still occur)
+#[test]
+fn claim_19a_refused_pack_up_quirk_off_draws_still_taken() {
+    let mut r = rules();
+    r.globals.quirks.failed_packup_keeps_vehicle = false;
+    let (w, p) = pack_up_now(&r, true);
+    assert!(w.obj(ObjectId(p.first)).is_none());
+    for s in temporary_ids(&p) {
+        assert!(w.obj(s).is_none());
+    }
+    assert!(p.draws > SLAVES as u64);
+    assert!(w.objects.values().all(|o| o.econ.group.is_none()));
+}
+
+/// A placed SMB whose group is put into `state` (test set-up only: a
+/// building reaches these states when its vehicle deployed another way),
+/// run through its next group update. Returns the building and the tick of
+/// that update.
+fn building_in_state(w: &mut World, state: GroupState) -> (ObjectId, i32) {
+    let b = place_building(w, "SMB", 0, at(0, -1));
+    w.obj_mut(b).unwrap().econ.group.as_mut().unwrap().state = state;
+    let due = group(w, b).next_update;
+    while w.tick <= due {
+        testkit::run(w, 1);
+    }
+    (b, due)
+}
+
+// spec: S-0402 claim 27 (field seeking, building, with a field and site: the site offered as the building's destination, move queued without an immediate start, travelling; no emergence or field-check transition)
+#[test]
+fn claim_27_seeking_building_with_a_site_travels() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let (b, _) = building_in_state(&mut w, GroupState::FieldSeeking);
+    assert_eq!(group(&w, b).state, GroupState::Travelling);
+    let o = w.obj(b).unwrap();
+    assert!(matches!(o.dest, Some(Target::Cell(_))));
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    assert!(on_map(&w, b).is_empty());
+    // spec: S-0402 claim 27 (the next update sees travelling and puts the group at rest)
+    let next = group(&w, b).next_update;
+    while w.tick <= next {
+        testkit::run(&mut w, 1);
+    }
+    let g = group(&w, b);
+    assert_eq!(g.state, GroupState::AtRest);
+    assert_eq!(g.last_rest, next);
+    assert!(on_map(&w, b).is_empty());
+}
+
+// spec: S-0402 claim 27 (field seeking, building, with no field: at rest, this tick recorded as last-rest, no emergence)
+#[test]
+fn claim_27_seeking_building_without_a_field_rests() {
+    let r = rules();
+    let mut w = game_on(&r, &[], false);
+    let (b, due) = building_in_state(&mut w, GroupState::FieldSeeking);
+    let g = group(&w, b);
+    assert_eq!(g.state, GroupState::AtRest);
+    assert_eq!(g.last_rest, due);
+    assert_eq!(w.obj(b).unwrap().dest, None);
+    assert!(on_map(&w, b).is_empty());
+}
+
+// spec: S-0402 claim 27 (travelling or retrying deployment, building: at rest with this tick as last-rest, without field search, deployment attempt or emergence)
+#[test]
+fn claim_27_travelling_or_retrying_building_rests() {
+    for state in [GroupState::Travelling, GroupState::Retrying] {
+        let r = rules();
+        let mut w = game_on(&r, &field(5, -1, 5), false);
+        let (b, due) = building_in_state(&mut w, state);
+        let g = group(&w, b);
+        assert_eq!(g.state, GroupState::AtRest, "{state:?}");
+        assert_eq!(g.last_rest, due, "{state:?}");
+        assert_eq!(w.obj(b).unwrap().dest, None, "{state:?}");
+        assert!(on_map(&w, b).is_empty(), "{state:?}");
+    }
+}
+
+// spec: S-0402 claim 28 (one remembered destination: automatic relocation replaces an earlier guard spot with the old top-left cell; a later order that changes the guard spot replaces that cell, and the pack-up heads there)
+#[test]
+fn claim_28_one_remembered_destination() {
+    let r = rules();
+    let (mut w, b, a) = no_field_building(&r);
+    unblock(&mut w);
+    let manual = Target::Cell(at(-6, -6));
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::GuardSpot {
+            actor: b,
+            spot: manual
+        }
+    ));
+    until(&mut w, 15, |w| {
+        w.obj(b).is_none() || group(w, b).state == GroupState::Packing
+    })
+    .expect("packing");
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)));
+    let later = Target::Cell(at(-7, -7));
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::GuardSpot {
+            actor: b,
+            spot: later
+        }
+    ));
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(later));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    assert_eq!(w.obj(v).unwrap().dest, Some(later));
 }
 
 /// A vehicle master whose slaves are out (handed over from a working

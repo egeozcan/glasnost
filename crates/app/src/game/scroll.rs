@@ -1,6 +1,6 @@
 //! Edge and arrow-key scrolling of the battlefield view (S-0101 claims 12
-//! to 15, F9), and right-drag scrolling (claims 16 and 17, F10) once S-0214
-//! claim 27's gesture is a scroll drag.
+//! to 15, F9), and the displacement of right-drag scrolling (claim 16,
+//! F10), which is not wired to input until S-0214 claim 27's gesture is.
 //!
 //! Scrolling is presentation state: it moves the view centre only, once per
 //! unfrozen game cycle, and never reaches the simulation.
@@ -245,7 +245,7 @@ pub struct DragRequest {
 /// The right-drag request of one unfrozen cycle (S-0101 claim 16, F10):
 /// `anchor` and `pointer` are view pixels, `client` the full client size
 /// (*B*, *C*), `r` the scroll index 0 … 6. Activation, the anchor and the
-/// release are S-0214 claim 27's ([`drag_cycle`] applies it).
+/// release are S-0214 claim 27's; this is not wired to input yet.
 pub fn drag_request(
     anchor: (i32, i32),
     pointer: (i32, i32),
@@ -304,50 +304,6 @@ pub fn drag_request(
         displacement,
         recentre,
     }
-}
-
-/// The right-drag method (S-0101 Import mapping: the scrolling-method
-/// preference defaults to 0). Our engine has no settings file yet, so it
-/// always applies; method 0 never returns the pointer to the anchor.
-pub const DEFAULT_DRAG_METHOD: DragMethod = DragMethod::Hold; // spec: S-0101 Import mapping (scrolling-method preference default 0)
-
-/// One permitted update of an active right drag (S-0101 claims 16 and 17).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DragCycle {
-    /// F10's request.
-    pub request: DragRequest,
-    /// The screen directions (up, right, down, left) in which a one-pixel
-    /// view-centre request is refused before the request applies: they
-    /// pick the drag cursor (claim 17).
-    pub refused: [bool; 4],
-}
-
-/// One permitted update of an active right drag (S-0101 claims 16 and 17,
-/// F10): `anchor` and `pointer` (sampled once for the cycle) are client
-/// pixels, `view` the battlefield view's top-left client pixel, `client`
-/// the full client size, and `blocked` whether F5 refuses a one-pixel
-/// request from the current centre.
-pub fn drag_cycle(
-    anchor: (i32, i32),
-    pointer: (i32, i32),
-    view: (i32, i32),
-    client: (i32, i32),
-    r: i32,
-    method: DragMethod,
-    blocked: impl Fn((i32, i32)) -> bool,
-) -> DragCycle {
-    // spec: S-0101 claim 17 (before the update's displacement applies, a one-pixel view-centre
-    // request in each of the four screen directions is tested)
-    let refused = [(0, -1), (1, 0), (0, 1), (-1, 0)].map(blocked);
-    // spec: S-0101 F10 (anchor and pointer are view pixels; B and C the full client size)
-    let request = drag_request(
-        (anchor.0 - view.0, anchor.1 - view.1),
-        (pointer.0 - view.0, pointer.1 - view.1),
-        client,
-        r,
-        method,
-    );
-    DragCycle { request, refused }
 }
 
 /// The arrow-key request of one unfrozen cycle (S-0101 claim 14): 21 pixels
@@ -513,64 +469,6 @@ mod tests {
         let d = e.cycle(Some((799, 300)), client, 3, one(), 10_000, |_| false);
         assert_eq!(held.momentum, 3);
         assert_eq!(d, (MAGNITUDE[5] as i32, 0));
-    }
-
-    /// spec: S-0101 claim 16, F10 (anchor and pointer are view pixels, B and C the full client
-    /// size; method 0 by default, S-0101 Import mapping), claim 17 (the four one-pixel refusals are
-    /// tested before the displacement applies, whatever its magnitude)
-    #[test]
-    fn claims_16_17_drag_cycle() {
-        let client = (800, 600);
-        // The battlefield view starts at client row 30.
-        let view = (0, 30);
-        let free = |_: (i32, i32)| false;
-        // Interior anchor: (30, 0) at r = 3, method 0: g = 1/4, 30/4 truncates to 7.
-        let c = drag_cycle(
-            (100, 50),
-            (130, 50),
-            view,
-            client,
-            DEFAULT_SCROLL_INDEX,
-            DEFAULT_DRAG_METHOD,
-            free,
-        );
-        assert_eq!(c.request.displacement, (7, 0));
-        assert!(!c.request.recentre, "method 0 never recentres");
-        assert_eq!(c.refused, [false; 4]);
-        // An anchor on the view's top row is at view row 0: the zero vertical difference
-        // becomes −1 and is boosted to −4 × 5 = −20, which r = 3 scales to −5.
-        let top = drag_cycle(
-            (100, 30),
-            (100, 30),
-            view,
-            client,
-            DEFAULT_SCROLL_INDEX,
-            DEFAULT_DRAG_METHOD,
-            free,
-        );
-        assert_eq!(top.request.displacement, (0, -5));
-        // A latched drag whose magnitude rounds to zero still reports the refusals.
-        for bits in 0..16u8 {
-            let set = [bits & 1 != 0, bits & 2 != 0, bits & 4 != 0, bits & 8 != 0];
-            let blocked = |d: (i32, i32)| match d {
-                (0, -1) => set[0],
-                (1, 0) => set[1],
-                (0, 1) => set[2],
-                (-1, 0) => set[3],
-                _ => panic!("only one-pixel screen directions are tried: {d:?}"),
-            };
-            let still = drag_cycle(
-                (300, 200),
-                (301, 200),
-                view,
-                client,
-                DEFAULT_SCROLL_INDEX,
-                DEFAULT_DRAG_METHOD,
-                blocked,
-            );
-            assert_eq!(still.request.displacement, (0, 0));
-            assert_eq!(still.refused, set);
-        }
     }
 
     /// spec: S-0101 claim 14 (21 pixels per held arrow, no acceleration, perpendicular arrows add, opposed arrows cancel)

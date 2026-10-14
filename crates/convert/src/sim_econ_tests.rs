@@ -380,6 +380,26 @@ NODBarracks=no\nYuriBarracks=yes\n[HUTB]\nCloning=yes\nExitCoord=5\n[AudioVisual
     assert_eq!(s.general.economy.pose_dir, Some(96));
 }
 
+// spec: S-0410 Import mapping (RadarEventSpeed and RadarEventRotationSpeed floating numbers or percent, RadarEventMinRadius an integer; a later layer without the key keeps the value)
+#[test]
+fn radar_event_zoom_keys() {
+    let base =
+        "[General]\nRadarEventSpeed=150%\nRadarEventMinRadius=3\nRadarEventRotationSpeed=0.2\n";
+    let (s, _) = import_with_map(base, "[General]\nRadarEventMinRadius=4\n");
+    let g = &s.general.economy;
+    assert_eq!(
+        g.radar_event_speed.as_ref().map(|d| d.0.as_str()),
+        Some("150%")
+    );
+    assert_eq!(g.radar_event_min_radius, Some(4));
+    assert_eq!(
+        g.radar_event_rotation_speed.as_ref().map(|d| d.0.as_str()),
+        Some("2e-1")
+    );
+    let (s, _) = import("[General]\nFlashFrameTime=7\n", "");
+    assert_eq!(s.general.economy.radar_event_speed, None);
+}
+
 // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
 #[test]
 fn considered_aircraft_flag() {

@@ -221,10 +221,10 @@ impl Play {
     /// its own lifetime and counting against the capacity, never
     /// refreshing an older copy; a line added at capacity removes the
     /// oldest. Widths are our own font's until the game font can be read
-    /// (interim, Q-0451).
+    /// (interim, Q-0501).
     pub fn say(&mut self, text: impl Into<String>) {
         let text = text.into();
-        // spec: S-0213 claim 25 (Line splitting and font; interim glyph widths, Q-0451)
+        // spec: S-0213 claim 25 (Line splitting and font; interim glyph widths, Q-0501)
         let split = status::split(&text, self.status_width, status::our_glyph_width);
         if split.unfittable {
             // spec: S-0213 Edge cases (Unfittable status text: the remainder is omitted with a warning)
@@ -437,8 +437,7 @@ impl Play {
             self.selection.clear();
         }
         let mut first = None;
-        // Candidates are added in their admitted order: buildings, then
-        // mobile objects in drawing order (interim, Q-0452).
+        // spec: S-0214 claim 29 (successful additions keep the admitted candidate order of claim 25 restricted to the box and claim 19's eligibility, whether the box replaces or adds and whatever the drag direction; no reversal or re-sort at release)
         for &id in candidates {
             if targeting::box_eligible(w, local, &self.selection, id) {
                 // spec: S-0214 claims 12 and 20 (additions use the selection order; no count limit on the selection)
@@ -446,7 +445,7 @@ impl Play {
                 first = first.or(Some(id));
             }
         }
-        // spec: S-0701 claim 17 and S-0214 claim 20 (only the first successful addition speaks)
+        // spec: S-0701 claim 17 and S-0214 claims 20 and 29 (only the earliest successful addition in candidate order speaks, not the eventual first selected object)
         self.selected.extend(first);
         false
     }

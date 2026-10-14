@@ -315,6 +315,96 @@ fn claim_19_force_select_adds() {
     assert_eq!(p.selection, units);
 }
 
+/// Two GUNR (armed) and two MINR (unarmed) of the local house beside its
+/// base unit, in creation order GUNR, MINR, GUNR, MINR, then the base unit
+/// and these as the own mobiles.
+fn mixed_mobiles(p: &mut Play) -> Vec<ObjectId> {
+    let mut mobiles = own(p, Kind::Vehicle);
+    let local = p.local;
+    let w = &mut p.game.world;
+    let base = w.obj(mobiles[0]).unwrap().pos.cell();
+    for (i, n) in ["GUNR", "MINR", "GUNR", "MINR"].into_iter().enumerate() {
+        let t = w.rules().index_of(Kind::Vehicle, n).expect("fixture type");
+        let id = glasnost_sim::objects::create(w, Kind::Vehicle, t, Some(local));
+        let c = CellXY::new(base.x + 2 + i as i32, base.y + 3);
+        let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+        glasnost_sim::objects::place(w, id, glasnost_sim::world::Pos::centre(c, z), 0);
+        mobiles.push(id);
+    }
+    mobiles
+}
+
+/// The selection claim 12 builds from `eligible` added one by one in that
+/// order: positive-primary-damage objects in reverse order at the front,
+/// the others in order at the end.
+fn claim_12_order(p: &Play, eligible: &[ObjectId]) -> Vec<ObjectId> {
+    let w = p.world();
+    let mut front: Vec<ObjectId> = eligible
+        .iter()
+        .copied()
+        .filter(|&id| targeting::positive_primary(w, id))
+        .collect();
+    front.reverse();
+    front.extend(
+        eligible
+            .iter()
+            .copied()
+            .filter(|&id| !targeting::positive_primary(w, id)),
+    );
+    front
+}
+
+/// spec: S-0214 claim 29 (an ordinary box adds its eligible candidates in candidate order, ineligible ones skipped, through claim 12's front and end rule, whichever order the candidates come in; S-0701 claim 17's response belongs to the earliest successful addition in candidate order)
+#[test]
+fn claim_29_box_addition_order() {
+    let mut p = start();
+    let mobiles = mixed_mobiles(&mut p);
+    let armed = |id: &ObjectId| targeting::positive_primary(p.world(), *id);
+    assert!(mobiles.iter().any(armed) && !mobiles.iter().all(armed));
+    let theirs = others(&p);
+    for reversed in [false, true] {
+        let mut candidates = mobiles.clone();
+        if reversed {
+            candidates.reverse();
+        }
+        // An ineligible enemy candidate between the own ones is skipped.
+        candidates.splice(1..1, theirs.iter().copied().take(1));
+        p.selection.clear();
+        p.selected.clear();
+        assert!(!p.select_box(&candidates, false));
+        let eligible: Vec<ObjectId> = candidates
+            .iter()
+            .copied()
+            .filter(|id| mobiles.contains(id))
+            .collect();
+        assert_eq!(p.selection, claim_12_order(&p, &eligible));
+        assert_eq!(p.selected, [eligible[0]], "the earliest addition speaks");
+    }
+}
+
+/// spec: S-0214 claim 29 (in an additive box an already-selected object is neither added again nor moved, and does not speak; the others are added in candidate order)
+#[test]
+fn claim_29_additive_box_keeps_the_selected_in_place() {
+    let mut p = start();
+    let mobiles = mixed_mobiles(&mut p);
+    let kept = mobiles[mobiles.len() - 1];
+    p.selection = vec![kept];
+    p.selected.clear();
+    assert!(!p.select_box(&mobiles, true));
+    let added: Vec<ObjectId> = mobiles.iter().copied().filter(|&id| id != kept).collect();
+    let w = p.world();
+    let mut expected = vec![kept];
+    for &id in &added {
+        if targeting::positive_primary(w, id) {
+            expected.insert(0, id);
+        } else {
+            expected.push(id);
+        }
+    }
+    assert_eq!(p.selection, expected);
+    assert_eq!(p.selected, [added[0]]);
+}
+
 /// spec: S-0214 claim 19 and Edge cases (an unmodified empty box falls through to the release click under quirks.empty_box_release_click; with force-select it is inert)
 #[test]
 fn claim_19_empty_box_release_click() {

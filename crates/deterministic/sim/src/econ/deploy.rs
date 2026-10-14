@@ -425,8 +425,9 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     let d = deploy_facing(w, o.type_index);
     let strength = w.rules().unit(Kind::Vehicle, v).map_or(1, |u| u.strength);
     let health = handed_health(w, id, strength);
-    // spec: S-0402 claim 19 and S-0415 claim 10 (packing up keeps the working slave group: the vehicle creates no group of its own, it takes the building's slaves)
     let vid = crate::objects::create_converted(w, Kind::Vehicle, v, Some(house));
+    // spec: S-0402 claim 19a (the return vehicle creates its own initial hidden slaves, each with its creation draw, before the placement attempt and while the building's old group still exists, on success and refusal alike)
+    super::slaves::created(w, vid);
     if let Some(ob) = w.obj_mut(vid) {
         // spec: S-0415 claim 10 and F2 (health max(1, trunc(r × S)); the building's experience)
         ob.health = health;
@@ -440,12 +441,14 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         ob.combat.experience = o.combat.experience;
     }
     if accepted {
-        // spec: S-0415 claim 10 and S-0402 claim 25 (an automatic pack-up's remembered cell, the building's old top-left cell, is the vehicle's immediate destination; otherwise the guard spot)
-        let automatic = group.as_ref().and_then(|g| g.remembered);
-        let dest = automatic.map(Target::Cell).or(o.guard_spot);
-        if let Some(mut g) = group {
-            g.remembered = None;
-            // spec: S-0415 claim 10 (the vehicle takes over the building's slaves; the group state is unchanged by the conversion, S-0402 claims 22 and 28)
+        // spec: S-0415 claim 10 and S-0402 claims 25 and 28 (the building's one remembered destination, its guard spot, which an automatic pack-up set to the old top-left cell, is the vehicle's immediate destination)
+        let dest = o.guard_spot;
+        if let Some(temporary) = super::slaves::detach(w, vid) {
+            // spec: S-0402 claim 19a (successful placement destroys and removes the vehicle's newly created hidden slaves before the old group's transfer, with S-0312 claim 31's notifications; their draws are not undone)
+            super::slaves::end_removed(w, temporary);
+        }
+        if let Some(g) = group {
+            // spec: S-0415 claim 10 and S-0402 claim 19a (the vehicle takes over the building's slaves; the group state is unchanged by the conversion, S-0402 claims 22 and 28)
             super::slaves::attach(w, vid, g);
         }
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
@@ -484,14 +487,16 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         }
         if let Some(g) = group {
             // spec: S-0415 claim 11 and S-0312 claim 31 (refusal does not transfer the old group: the building's removal ends it without a killing hit)
-            super::slaves::end_refused(w, g);
+            super::slaves::end_removed(w, g);
         }
         // spec: S-0415 claim 11 and Edge cases (quirks.failed_packup_keeps_vehicle: the vehicle goes on existing off the map)
-        if w.rules().quirks.failed_packup_keeps_vehicle {
-            // spec: S-0415 claim 11 and S-0402 claim 19 (the retained vehicle keeps its own newly created hidden group, not the old slaves; when it is created is Q-0441)
-            super::slaves::created(w, vid);
-        } else {
-            // spec: S-0415 claim 11 (quirk off: the refused vehicle and its new group do not remain)
+        // spec: S-0402 claim 19a (with the quirk on the retained vehicle keeps its new hidden group, created before placement; removing the building ended only the old group)
+        if !w.rules().quirks.failed_packup_keeps_vehicle {
+            if let Some(temporary) = super::slaves::detach(w, vid) {
+                // spec: S-0402 claims 19a and 27 and S-0312 claim 31 (quirk off: the vehicle's new group is removed too, its creation draws already taken)
+                super::slaves::end_removed(w, temporary);
+            }
+            // spec: S-0415 claim 11 and S-0402 claim 19a (quirk off: the refused vehicle does not remain)
             w.objects.remove(&vid);
         }
     }

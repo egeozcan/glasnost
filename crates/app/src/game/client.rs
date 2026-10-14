@@ -535,6 +535,8 @@ impl Client {
             s.scroll_cycle(now_ms.max(0) as u64, self.held, self.focused);
             if let Some(a) = self.audio.as_mut() {
                 a.tick(&s.play.game.world, &s.play.effects, &mut self.unsync);
+                // spec: S-0410 claim 15, S-0201 claim 6 (radar-event zoom advances once per drawn frame, one per cycle, frozen or not, with or without radar; none in a stand-still)
+                a.radar_frame(&s.play.game.world, s.radar_origin());
             }
         }
         let cues = std::mem::take(&mut s.play.cues);

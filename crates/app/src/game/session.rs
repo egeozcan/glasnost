@@ -108,9 +108,9 @@ pub struct Session {
     /// The right-button press in the battlefield and its scroll-drag
     /// classification (S-0214 claims 26 to 28, F8).
     right: Option<band::RightDrag>,
-    /// The screen directions (up, right, down, left) F5 refused before the
-    /// last permitted right-drag update, while a scroll drag is active
-    /// (S-0101 claim 17).
+    /// The refused one-pixel directions (up, right, down, left) of the last
+    /// permitted right-drag update, for its cursor (S-0101 claim 17); none
+    /// when the last scroll cycle made no drag update.
     drag_refused: Option<[bool; 4]>,
     /// The imported cursor image (S-0214 claim 22), when the install has it.
     cursor_art: Option<CursorArt>,
@@ -309,6 +309,13 @@ impl Session {
         }
     }
 
+    /// The radar map's top-left pixel on the screen (S-0410 F9's origin
+    /// before the image's own offset).
+    pub fn radar_origin(&self) -> (i32, i32) {
+        let r = Layout::new(self.screen).radar;
+        (r.x, r.y)
+    }
+
     /// The battlefield's rectangle on the screen.
     pub fn map_rect(&self) -> Rect {
         Layout::new(self.screen).map
@@ -370,54 +377,43 @@ impl Session {
     pub fn scroll_cycle(&mut self, now_ms: u64, held: [bool; 4], edge: bool) {
         let w = &self.play.game.world;
         // spec: S-0201 claim 14 (edge scrolling is suppressed during an order block; held arrows continue)
-        // spec: S-0101 claims 15 and 16 (order blocks and stand-stills suppress drag updates as they
-        // do edge updates)
-        let permitted = scroll::edge_enabled(edge, w.tick, w.orders_blocked_through);
-        // spec: S-0101 claim 12 (no edge scrolling while a mouse button is held)
-        let edge = permitted && self.press.is_none();
+        let edge = scroll::edge_enabled(edge, w.tick, w.orders_blocked_through);
         self.edge_live = edge;
-        let pointer = self.pointer.filter(|_| edge).map(|p| (p.x, p.y));
         let blocked = self.scroll_blocked();
+        // spec: S-0101 claims 16 and 17 (each unfrozen cycle of an active right drag samples the pointer once; order blocks suppress drag updates as they do edge updates)
+        let dragging = self.right.filter(|r| r.scrolling && edge).zip(self.pointer);
+        self.drag_refused = dragging.map(|_| {
+            // spec: S-0101 claim 17 (before the update's displacement, a one-pixel request in each screen direction is tried under claim 8)
+            cursor::DRAG_TRIALS.map(&blocked)
+        });
+        let d = dragging.map_or((0, 0), |(r, p)| {
+            let m = self.map_rect();
+            // spec: S-0101 F10 (anchor and pointer in view pixels; the full client size; method 0, the default of the scrolling-method preference, which keeps the pointer displaced)
+            scroll::drag_request(
+                (r.press.x - m.x, r.press.y - m.y),
+                (p.x - m.x, p.y - m.y),
+                self.screen,
+                scroll::DEFAULT_SCROLL_INDEX,
+                scroll::DragMethod::Hold,
+            )
+            .displacement
+        });
+        // spec: S-0101 claim 12 (edge scrolling only without a mouse button held)
+        let pointer = self
+            .pointer
+            .filter(|_| edge && self.press.is_none())
+            .map(|p| (p.x, p.y));
         let e = self.edge.cycle(
             pointer,
             self.screen,
             scroll::DEFAULT_SCROLL_INDEX,
             self.loaded.scroll_multiplier,
             now_ms,
-            &blocked,
-        );
-        let d = self.drag_cycle(permitted, &blocked);
-        let a = scroll::arrows(held);
-        // spec: S-0101 claim 14 (mouse and arrow requests add before the next view position, subject to F5)
-        self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
-    }
-
-    /// The right-drag request of one unfrozen cycle (S-0101 claims 16 and
-    /// 17, F10): while S-0214 claim 27's gesture is a scroll drag and
-    /// scrolling is `permitted`, the pointer sampled once for this cycle
-    /// requests F10's displacement, and the directions F5 refuses before
-    /// it is applied pick the drag cursor.
-    fn drag_cycle(&mut self, permitted: bool, blocked: &dyn Fn((i32, i32)) -> bool) -> (i32, i32) {
-        self.drag_refused = None;
-        let Some(anchor) = self.right.filter(|r| r.scrolling).map(|r| r.press) else {
-            return (0, 0);
-        };
-        let Some(p) = self.pointer.filter(|_| permitted) else {
-            return (0, 0);
-        };
-        let o = self.map_rect();
-        let cycle = scroll::drag_cycle(
-            (anchor.x, anchor.y),
-            (p.x, p.y),
-            (o.x, o.y),
-            self.screen,
-            scroll::DEFAULT_SCROLL_INDEX,
-            scroll::DEFAULT_DRAG_METHOD,
             blocked,
         );
-        self.drag_refused = Some(cycle.refused);
-        // Method 0 never recentres (S-0101 claim 16), so the pointer is not moved.
-        cycle.request.displacement
+        let a = scroll::arrows(held);
+        // spec: S-0101 claims 14 and 16 (mouse and arrow requests add before the next view position, subject to F5)
+        self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
     }
 
     /// Whether F5 blocks a one-pixel scroll in a screen direction from the
@@ -790,12 +786,11 @@ impl Session {
             return;
         };
         let size = art.size;
-        // spec: S-0101 claim 17 (each permitted active drag update shows the static drag-scroll
-        // image, not an edge-scroll image)
+        // spec: S-0101 claim 17 (each permitted active drag update shows the static drag-scroll image, not an edge-scroll image)
         let drag = self
             .drag_refused
             .filter(|_| self.right.is_some_and(|r| r.scrolling))
-            .map(|refused| cursor::drag(refused, size.0, size.1));
+            .map(|r| cursor::drag(r, size.0, size.1));
         // spec: S-0213 claim 24 (during edge scrolling the cursor shows the requested screen direction; the whole outer edge, sidebar included, selects it)
         let edge = drag.or_else(|| {
             self.edge
@@ -937,7 +932,7 @@ impl Session {
             );
         }
         // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
-        // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0451)
+        // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0501)
         let mut y = m.y;
         for msg in &self.play.messages {
             let wdt = msg

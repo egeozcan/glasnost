@@ -4,7 +4,7 @@
 //! The splitter works on the text's 16-bit units and asks a glyph-width
 //! provider for each character's width. The original measures with the
 //! imported game bitmap font; our engine has no reader for that file yet
-//! (Q-0451), so the client passes [`our_glyph_width`], our own font's
+//! (Q-0501), so the client passes [`our_glyph_width`], our own font's
 //! widths, in the meantime.
 
 use crate::font;
@@ -50,7 +50,7 @@ pub fn advance(x: i32, c: u16, glyph_width: &impl Fn(u16) -> i32) -> i32 {
     match c {
         // spec: S-0213 claim 25 (a tab advances to the next multiple of 64 pixels from the line origin)
         TAB => (x.div_euclid(TAB_STOP) + 1) * TAB_STOP,
-        // Interim (Q-0451, question 4): an explicit break has no advance.
+        // Interim (Q-0501, question 5): an explicit break has no advance.
         CR | LF => x,
         // spec: S-0213 claim 25 (the glyph's width and one extra pixel of advance, integer pixels)
         _ => x + glyph_width(c) + EXTRA_ADVANCE,
@@ -127,7 +127,7 @@ fn line_end(units: &[u16], start: usize, budget: i32, glyph_width: &impl Fn(u16)
 
 /// A glyph's width in our own font: the mask width, a space 2 pixels, `?`
 /// for a character the font lacks. Interim provider until the game font can
-/// be read (Q-0451).
+/// be read (Q-0501).
 pub fn our_glyph_width(c: u16) -> i32 {
     let ch = char::from_u32(u32::from(c)).unwrap_or('?');
     font::advance(ch) - font::SPACING

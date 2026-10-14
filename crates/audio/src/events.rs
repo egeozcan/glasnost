@@ -15,6 +15,7 @@ use glasnost_sim::combat::damage::HitResult;
 use glasnost_sim::combat::effects::{Effect, Sound};
 use glasnost_sim::combat::veterancy::{self, Rank};
 use glasnost_sim::combat::weapon;
+use glasnost_sim::econ::minimap::{self, Grid, Image, Zoom};
 use glasnost_sim::econ::{TypeRef, power, production};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rng::Rng;
@@ -116,7 +117,11 @@ impl RadarKind {
 struct RadarEvent {
     kind: RadarKind,
     cell: (i32, i32),
-    until: i32,
+    /// The zoom square (S-0410 claim 14); `None` before the first drawn
+    /// frame after acceptance.
+    zoom: Option<Zoom>,
+    /// The end of the post-zoom lifetime (S-0701 F7), once zoom completed.
+    until: Option<i32>,
 }
 
 /// An object's response slot (S-0701 claim 16).
@@ -152,6 +157,7 @@ pub struct Audio {
     turrets: BTreeMap<ObjectId, InstanceId>,
     ranks: BTreeMap<ObjectId, Rank>,
     radar: Vec<RadarEvent>,
+    radar_map: Option<(Grid, Image)>,
     low_funds_after: Option<i32>,
     low_power: bool,
     now_ms: i64,
@@ -205,6 +211,7 @@ impl Audio {
             turrets: BTreeMap::new(),
             ranks: BTreeMap::new(),
             radar: Vec::new(),
+            radar_map: None,
             low_funds_after: None,
             low_power: false,
             now_ms: 0,
@@ -292,6 +299,7 @@ impl Audio {
         self.turrets.clear();
         self.ranks.clear();
         self.radar.clear();
+        self.radar_map = minimap::grid(w).map(|g| (g, minimap::image(&g)));
         self.low_funds_after = None;
         self.low_power = false;
     }
@@ -480,9 +488,9 @@ impl Audio {
     /// F7: tries to create a radar event; false when a nearby one of the
     /// same kind suppresses it.
     fn radar_event(&mut self, kind: RadarKind, cell: (i32, i32), tick: i32) -> bool {
-        // interim: Q-0331 (the zoom-in phase lasts 0 ticks: an event lasts t ticks from its creation)
-        self.radar.retain(|e| e.until > tick);
-        let (r, t) = kind.table();
+        // spec: S-0410 claim 14, S-0701 F7 (an event lasts through its zoom, then t ticks from the completion frame's tick)
+        self.radar.retain(|e| e.until.is_none_or(|u| u > tick));
+        let (r, _) = kind.table();
         let near = self.radar.iter().any(|e| {
             let dx = i64::from(e.cell.0 - cell.0);
             let dy = i64::from(e.cell.1 - cell.1);
@@ -495,9 +503,37 @@ impl Audio {
         self.radar.push(RadarEvent {
             kind,
             cell,
-            until: tick + t,
+            zoom: None,
+            until: None,
         });
         true
+    }
+
+    /// Advances the zoom of every radar event for one drawn frame of the
+    /// game (S-0410 claims 14 and 15, F9): once per cycle, frozen or not,
+    /// with or without radar. `origin` is the radar map's top-left pixel
+    /// on the screen.
+    pub fn radar_frame(&mut self, w: &World, origin: (i32, i32)) {
+        let Some((g, img)) = self.radar_map else {
+            return;
+        };
+        let rules = w.rules().econ.radar.zoom;
+        // spec: S-0410 F9 (Oₓ, Oᵧ: the image's top-left pixel in screen coordinates)
+        let o = (origin.0 + img.left, origin.1 + img.top);
+        for e in &mut self.radar {
+            if e.until.is_some() {
+                continue;
+            }
+            let z = e.zoom.get_or_insert_with(|| {
+                let c = minimap::event_centre(&g, &img, o, e.cell.0, e.cell.1);
+                Zoom::new(&rules, c, img.width, img.height)
+            });
+            // spec: S-0410 claim 14 (the first drawn frame after acceptance advances the initial square once)
+            if z.advance(&rules) {
+                // spec: S-0410 claim 14 (completion starts S-0701 F7's post-zoom lifetime at the tick number of that drawn frame)
+                e.until = Some(w.tick + e.kind.table().1);
+            }
+        }
     }
 
     /// Handles one tick: its effects (claims 20 to 23 and 28), the response

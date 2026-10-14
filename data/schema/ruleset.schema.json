@@ -3378,6 +3378,37 @@
           "format": "int32",
           "default": null
         },
+        "radar_event_min_radius": {
+          "description": "`[General] RadarEventMinRadius`, the minimum zoom radius *M* in\npixels (S-0410 F9); absent: 5.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "radar_event_rotation_speed": {
+          "description": "`[General] RadarEventRotationSpeed`, the initial angular speed *Ω*\nin radians per drawn frame, a single (S-0410 F9); absent:\n0.10000000149011612.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "radar_event_speed": {
+          "description": "`[General] RadarEventSpeed`, the radar-event zoom contraction speed\n*S* in pixels per drawn frame, a single (S-0410 F9); absent: 1.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "refund_percent": {
           "description": "`[General] RefundPercent`, *r*, a double (S-0408 claim 1); absent: 0.5.",
           "anyOf": [
