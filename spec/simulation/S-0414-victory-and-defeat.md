@@ -2,7 +2,7 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,6 +22,12 @@ defeated house's objects, the end test with allied victory, the delay between th
 result, the order of events when several houses fall in one tick, and what the surrender and
 alliance orders of S-0213 do. Campaign missions (whose results come from map triggers) and network
 games are outside this spec.
+
+**Joint hand-off confirmation.** S-0412 claim 11 agrees with claims 2, 6, 9 and 10 and the
+bases-off edge case here: qualifying objects still prevent defeat; otherwise the first defeat
+leaving no hostile pair ends the game, and later same-tick defeats turn pending wins into
+losses only with `quirks.defeat_during_end_delay` on. Claims 8 and 16 retain the final-tick
+commitment boundary. These are confirmations of existing rules, not additional behaviour.
 
 ## Terms
 
@@ -469,16 +475,7 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     the moment of the offered hit; an already dead object gains no second death from a zero hit.
     This does not replace the passenger, cancellation or death rules of S-0312 and S-0404.
 
-    **Cancellation exception.** Under `quirks.defeat_cancellation_skip` (default original), a
-    hit's effects that immediately delete k objects at or before that hit's place in the combined
-    creation order skip max(k − 1, 0) of the remaining objects directly after it. Count all four
-    kinds and all owners, including objects that would not qualify for a destruction hit.
-    Here deletion means that the object ceases to exist immediately, as on production
-    cancellation, not merely that it leaves the map or awaits delayed removal after death.
-    This can leave a later eligible object without its destruction hit. The count and formula
-    are non-negative integers, with exact arithmetic and no rounding. With the switch off,
-    no eligible object loses its destruction hit through such deletion. Ordinary single-object
-    deletion skips none; surviving objects otherwise keep creation order.
+    **Cancellation exception.** Under `quirks.defeat_cancellation_skip` (default original), if the effects of a destruction hit immediately delete *k* objects whose creation positions are at or before that hit's position in the combined creation order, the next max(*k* − 1, 0) objects in that order receive no destruction hit from this sweep. Count all four object kinds and all owners, including objects that would not themselves qualify for a destruction hit. An immediate deletion means the object ceases to exist at once, as in production cancellation; merely leaving the map or awaiting delayed removal after death is not a deletion for this rule. Thus an otherwise eligible later object can miss its hit. The count and formula use non-negative integers, exact arithmetic, and no rounding. With the switch off, such deletions do not cause any eligible object to miss its hit. One immediate deletion skips no objects; otherwise objects that remain retain their creation order.
     - Backing: `measurable` (V11 for cross-kind order, re-entry, off-map passengers and production
       items, V11 part d for the cancellation exception; S-0312 claim 1 for completion of each
       death's effects). Inclusion of newly created
