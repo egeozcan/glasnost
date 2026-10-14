@@ -12,6 +12,7 @@
 //! the asset viewer; **M2** terrain chunks and lighting; **M3+** draw lists
 //! built from simulation snapshots. The renderer only reads simulation state.
 
+pub mod batch2d;
 pub mod compose;
 pub mod gpu;
 pub mod light;
