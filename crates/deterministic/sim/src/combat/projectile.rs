@@ -1674,6 +1674,10 @@ pub fn kind_of(w: &World, pr: &Projectile) -> Option<ProjectileKind> {
 }
 
 /// Events of the drawing: a shot left a firer.
-pub fn shot_effect(w: &mut World, firer: ObjectId, from: Pos) {
-    w.effects.push(Effect::Shot { firer, from });
+pub fn shot_effect(w: &mut World, firer: ObjectId, weapon: WeaponId, from: Pos) {
+    w.effects.push(Effect::Shot {
+        firer,
+        weapon,
+        from,
+    });
 }

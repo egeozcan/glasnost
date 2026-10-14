@@ -28,8 +28,28 @@ pub enum Effect {
     Shot {
         /// The firer.
         firer: ObjectId,
+        /// The weapon fired (its report sounds, S-0701 claim 21).
+        weapon: crate::combat::data::WeaponId,
         /// The fire point.
         from: Pos,
+    },
+    /// A hit's damage-state result (S-0302 claim 12), for the sound
+    /// reactions of S-0701 claims 20 and 28. Not reported for a hit that
+    /// claim 8 stops before its health stage, nor for a berserk hit (S-0302
+    /// claim 10: it has no reactions).
+    Hit {
+        /// The object hit.
+        id: ObjectId,
+        /// Its type (the object may be gone when the effect is read).
+        of: crate::econ::TypeRef,
+        /// Its owner.
+        owner: Option<crate::world::HouseId>,
+        /// Where it was.
+        pos: Pos,
+        /// The result.
+        result: crate::combat::damage::HitResult,
+        /// The attacker, if any.
+        attacker: Option<ObjectId>,
     },
     /// An object was killed (S-0312).
     Killed {
@@ -82,6 +102,9 @@ pub enum Sound {
     CannotDeploy,
     /// The unit-sold announcement (S-0408 claim 11).
     UnitSold,
+    /// A produced unit left its factory (S-0701 claims 23 and 28): `of` is
+    /// the unit's type, `pos` the factory's position.
+    UnitReady,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

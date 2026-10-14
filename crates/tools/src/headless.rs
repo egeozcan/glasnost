@@ -164,7 +164,10 @@ async fn smoke_async(
                         Effect::Shot { .. } => fight[0] += 1,
                         Effect::Detonation { .. } => fight[1] += 1,
                         Effect::Killed { .. } => fight[2] += 1,
-                        Effect::Anim { .. } | Effect::Sound { .. } | Effect::Trigger { .. } => {}
+                        Effect::Anim { .. }
+                        | Effect::Sound { .. }
+                        | Effect::Trigger { .. }
+                        | Effect::Hit { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());

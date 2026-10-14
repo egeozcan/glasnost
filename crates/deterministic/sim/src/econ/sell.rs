@@ -528,21 +528,21 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
                 release_occupants(w, id);
             }
             if !sale.packs {
-                // spec: S-0408 claim 6 (the sell sound for the owner's player)
+                // spec: S-0408 claim 6 (the sell sound for the owner's player); S-0701 claim 23 (positional at the building)
                 w.effects.push(Effect::Sound {
                     sound: Sound::Sell,
                     of: Some(t),
                     house: o.owner,
-                    pos: None,
+                    pos: Some(o.pos),
                 });
             }
-            // spec: S-0415 claim 9 (the pack-up sound at the start of the build-down, for the owner's player, when the type has one; quirks.packup_sound_on_sale for a sold building)
+            // spec: S-0415 claim 9 (the pack-up sound at the start of the build-down, for the owner's player, when the type has one; quirks.packup_sound_on_sale for a sold building); S-0701 claim 23 (positional)
             if sale.packs || w.rules().quirks.packup_sound_on_sale {
                 w.effects.push(Effect::Sound {
                     sound: Sound::Packup,
                     of: Some(t),
                     house: o.owner,
-                    pos: None,
+                    pos: Some(o.pos),
                 });
             }
             // spec: S-0408 claim 6 (build-down begins)
