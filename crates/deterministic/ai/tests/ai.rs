@@ -285,3 +285,52 @@ fn plays_to_a_winner() {
         }
     }
 }
+
+// A house without income and without the credits for anything it could
+// build sells a sellable building for its refund.
+#[test]
+fn a_broke_house_sells_a_building() {
+    // The power plant has a build-up sprite, so it is sellable (S-0408 claim 3).
+    let mut r = fixture::ruleset();
+    let p = r
+        .sim
+        .buildings
+        .get_mut("POWR")
+        .expect("fixture power plant");
+    p.econ.buildup = Some(true);
+    p.econ.buildup_frames = Some(8);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"));
+    let new = || {
+        Game::new(
+            rules.clone(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            testkit::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the synthetic skirmish loads")
+    };
+    let mut g = new();
+    assert!(step_until(&mut g, 3000, |w| ["YARD", "POWR", "PROC"]
+        .iter()
+        .all(|n| !of(w, 0, n).is_empty())));
+    // No income from now on: the harvesters go, and the credits too.
+    for id in of(&g.world, 0, "MINR") {
+        objects::remove(&mut g.world, id);
+    }
+    g.world.houses[0].credits = 0;
+    let from = g.world.tick;
+    let powr = of(&g.world, 0, "POWR").len();
+    let sold = step_until(&mut g, from + 4000, |w| of(w, 0, "POWR").len() < powr);
+    assert!(
+        sold,
+        "house 0 sold its power plant by tick {}",
+        g.world.tick
+    );
+    // A house with income does not sell.
+    let mut g = new();
+    let sold = step_until(&mut g, 6000, |w| {
+        w.objects.values().any(|o| o.econ.sale.is_some())
+    });
+    assert!(!sold, "no sale while the economy runs");
+}
