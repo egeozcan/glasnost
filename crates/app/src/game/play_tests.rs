@@ -120,13 +120,17 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     p.cameo_click(0, Button::Left, false);
     assert_eq!(p.tool, Tool::Place(t));
     // spec: S-0214 claim 28 (a battlefield right click ends placement mode with no order and no deselection; the item stays ready and can be taken up again)
+    // spec: S-0411 claim 10 (a battlefield right click without a scroll drag ends placement mode and keeps the completed item ready: no place or cancel order, no refund; clicking the ready icon again re-enters placement mode)
     let orders = p.game.replay().orders.len();
     let selection = p.selection.clone();
+    let credits = p.world().houses[usize::from(p.local.0)].credits;
     let yard_cell = p.world().obj(own(&p, Kind::Building)[0]).unwrap().pos.cell();
     p.click_map(Button::Right, None, yard_cell, Modifiers::default());
     assert_eq!(p.tool, Tool::Select);
     assert_eq!(p.game.replay().orders.len(), orders);
     assert_eq!(p.selection, selection);
+    p.step();
+    assert_eq!(p.world().houses[usize::from(p.local.0)].credits, credits);
     assert!(icon_ready(p.world(), p.local, t));
     p.cameo_click(0, Button::Left, false);
     assert_eq!(p.tool, Tool::Place(t));

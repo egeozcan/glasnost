@@ -591,6 +591,7 @@ impl Session {
         let scrolled = right.is_some_and(|r| r.scrolling) && b == Button::Right;
         match self.targets.hit(start) {
             // spec: S-0214 claim 27 (a scroll drag's release neither clears the selection, nor cancels a targeting mode, nor gives an order)
+            // spec: S-0411 claim 10 (a classified right drag and release keep placement mode and the ready item: no cancellation, no refund)
             Some(HudHit::Map) if scrolled => {}
             Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
                 let end = band::limit(p, self.map_rect());
