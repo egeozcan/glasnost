@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 6
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,14 +27,14 @@ and the draws of putting a released unit on the map (Open question 8). Claim 14 
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
 the search's no-draw rule; their untested cases remain qualified there.
 
-**Paired hand-off confirmations.** S-0404 revision 10 claim 13 retains the fulfilled release
+**Paired hand-off confirmations.** S-0404 revision 11 claim 13 retains the fulfilled release
 hand-off: release queues *unload*, and contact-place count, infantry candidate acceptance and
 edge-entry nearby destination refer to claim 14 here. Nearby-search draws are resolved as none.
-Initial-placement draws remain open. S-0212 revision 25 table T5 includes the aircraft factory
+Initial-placement draws remain open. S-0212 revision 27 table T5 includes the aircraft factory
 edge-entry-without-rally row with claim 14's parameters, and claim 25 uses the release tick to
-select its destination. S-0215 revision 21 claim 11 records that factory release and unloading
+select its destination. S-0215 revision 23 claim 11 records that factory release and unloading
 neither set nor clear the ready mark, with start consequences owned by claim 2 here. Its claim 13
-and S-0207 revision 14 claim 21 jointly own restoration and retained teleporting state after
+and S-0207 revision 16 claim 21 jointly own restoration and retained teleporting state after
 claim 5's temporary drive. The decided apron off-state rules remain in Edge cases. Confirm
 these companion passages at sign-off. No further change to them is requested by this revision.
 
@@ -276,9 +276,16 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     Thus, with a rally point outside its own cell, an ordinary infantry unit walks first to the
     exit cell and then, when *move* falls back to rest there, to the rally point by the guard-spot
     row of S-0215 claim 13. A jumpjet or teleporting infantry type heads straight for the rally
-    point with an empty guard spot. A tethered infantry unit reports clear on its next
-    cell arrival. An ordinary infantry factory does not give the run-away reply: contact and
-    tether simply end.
+    point with an empty guard spot. A tethered ordinary walking infantry unit reports clear
+    on its first standing-position arrival after tether establishment (S-0208 claim 23),
+    not merely on crossing a cell boundary. An intermediate arrival while continuing towards
+    the exit cell counts, including an arrival still on K's foundation: neither reaching the
+    exit cell nor leaving the foundation is required. Claim 7's vehicle building-cell
+    suppression does not apply. An ordinary infantry factory does not give the run-away reply:
+    contact and tether simply end, without the report itself finishing or redirecting the
+    exit walk. S-0208 claims 16 and 17 own walking completion; claim 23 excludes an entry
+    interaction that removes the unit before it can report and does not prescribe jumpjet
+    or teleporting arrival timing.
 
     With no rally point (or a rally point in the unit's own cell), neither placement nor the release
     gives a destination or queues *move*. The unit rests in *guard*, and no rule of resting
@@ -293,14 +300,16 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     The original's computer-controlled release also queues *area guard* and can choose a
     base-cell guard spot. Our player houses use the human rule; neutral and special houses retain
     the original owner rule.
-    - Backing: `measurable` (U10 a for ordinary release and the two-leg walk; U10 b for the
+    - Backing: `measurable` (U10 a and S-0208 W15 for ordinary release, first-arrival
+      clear-report timing and the two-leg walk; U10 b for the
       absence of an immediate no-rally destination; U10 c for jumpjet release). Teleporting
       infantry, cloning contact hand-over, a rally in the appear cell and zero-draw contact
       exchanges are `unmeasured` here: these parts do not exercise those releases or isolate
       their contact draws. Non-player-house production is `unmeasured`: no stock factory-release
       setup for it is established. Later spontaneous movement in the no-rally case remains an
       open question, not a prediction of a permanent wait.
-    - Confidence: high (release destinations and contact hand-over), medium (the two-leg walk),
+    - Confidence: high (release destinations, contact hand-over and first-arrival report test),
+      medium (the two-leg walk and intermediate/foundation arrival consequences),
       low (later movement in the no-rally case)
 
 11. **Aircraft factory.** It does not enter these factory unloading stages. Edge-entry orders and
@@ -675,14 +684,25 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   assignment, a missing or differently timed animation change, the second processing waiting
   for the door to stop, or a different guard-start tick under that ready-mark condition.
 - **U10, infantry.** Part a: rally point set several cells from an infantry factory. Record
-  the saved guard spot, current and queued behaviours, destination per tick from release,
-  contact, tether and each cell arrival. Expect: on the release tick the destination is the exit
-  cell, *move* is queued and the guard spot equals the rally point. The unit walks to the exit
-  cell, reports clear on its first cell arrival without a run-away reply, then heads for the rally
-  point with an empty guard spot. Falsifiers: rally point as the first destination, barracks unload
-  stages or door movement, a guard spot differing from the saved rally on release or remaining
-  nonempty on the second leg, contact or tether remaining after the first cell-arrival clear
-  report, or a vehicle-factory run-away reply given by the infantry factory. Contact exchange draws are not scored from the release's total
+  the saved guard spot, current and queued behaviours, destination, position, cell and walking
+  target per tick from release, plus contact and tether. Distinguish boundary crossings,
+  standing-position arrival snaps, first departure from the foundation and reaching the exit.
+  Expect: on the release tick the destination is the exit cell, *move* is queued and the guard
+  spot equals the rally point. Contact and tether end on the first standing-position arrival
+  after tether establishment, without a run-away reply. The unit continues to the exit cell
+  if it has not reached it, then heads for the rally point with an empty guard spot.
+  Include S-0208 W15's multi-cell release arrangement and, where legal placement and exit
+  geometry permit, its first-arrival-on-foundation subcase. W15 permits a named test-map
+  release-displacement override if stock geometry gives only one arrival before the exit.
+  This is an exception to the no-data-change instruction above, limited to that arrangement.
+  Keep all other rules unchanged and score only runs with successful placement, contact and
+  tether. An unavailable foundation-arrival subcase remains untested.
+  Falsifiers: rally point as the first destination, barracks unload stages or door movement,
+  a guard spot differing from the saved rally on release or remaining nonempty on the second
+  leg, contact/tether loss merely at boundary crossing, retention past the first ordinary
+  standing-position arrival (including on the foundation), premature completion of the exit
+  walk caused solely by the report, or a vehicle-factory run-away reply given by the infantry
+  factory. Contact exchange draws are not scored from the release's total
   draw count, because placement's own draws remain open. Part b: no rally point.
   Record destination, position, contact and tether over 300 ticks, then order a second infantry
   unit and record its release result. Expect no destination and no *move* from the release

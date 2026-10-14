@@ -599,3 +599,65 @@ fn right_click_on_an_enemy_orders_an_attack() {
         Some(Target::Object(walker))
     );
 }
+
+/// spec: S-0102 claim 6 (r11: the ordering transition's drawing-position
+/// table, every position and comparison on the pre-transition order;
+/// keys 10, 5, 3 become 5, 3, 10; equal keys keep their order; entry into
+/// 5, 10, 3 with key 4 gives 4, 5, 10, 3)
+#[test]
+fn ground_layer_transition_table() {
+    let o = |n| Entrant::Object(ObjectId(n));
+    // The table, 1-based positions, on the keys before the transition.
+    let table = |k: &[i64]| -> Vec<usize> {
+        let n = k.len();
+        let mut out = vec![0; n];
+        for i in 0..n {
+            let pos = if k[..i].iter().any(|&e| e > k[i]) {
+                i // (i + 1) − 1
+            } else if let Some(j) = (i + 1..n).find(|&j| k[j] >= k[i]) {
+                j // (j + 1) − 1
+            } else {
+                n
+            };
+            out[pos - 1] = i + 1;
+        }
+        out
+    };
+    let cases: [&[i64]; 6] = [
+        &[10, 5, 3],
+        &[5, 10, 3],
+        &[40, 10, 20, 30],
+        &[7, 7, 3, 7, 1],
+        &[3, 9, 2, 9, 4, 1, 8],
+        &[1, 2, 3],
+    ];
+    for keys in cases {
+        let mut g = GroundLayer::default();
+        for (n, &k) in keys.iter().enumerate() {
+            g.list_for_test_push(o(n as u32 + 1), k);
+        }
+        g.pass(&ViewQuirks::default());
+        let got: Vec<usize> = g
+            .order()
+            .map(|e| match e {
+                Entrant::Object(ObjectId(n)) => n as usize,
+                Entrant::Static(_) => unreachable!(),
+            })
+            .collect();
+        assert_eq!(got, table(keys), "keys {keys:?}");
+    }
+    // The claim's worked example.
+    let mut g = GroundLayer::default();
+    for (n, k) in [(1, 10), (2, 5), (3, 3)] {
+        g.list_for_test_push(o(n), k);
+    }
+    g.pass(&ViewQuirks::default());
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(3), o(1)]);
+    // Entry: 5, 10, 3 and a newcomer with key 4 give 4, 5, 10, 3.
+    let mut h = GroundLayer::default();
+    for (n, k) in [(1, 5), (2, 10), (3, 3)] {
+        h.list_for_test_push(o(n), k);
+    }
+    h.enter(o(4), 4);
+    assert_eq!(h.order().collect::<Vec<_>>(), [o(4), o(1), o(2), o(3)]);
+}

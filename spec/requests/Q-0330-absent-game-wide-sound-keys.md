@@ -1,9 +1,9 @@
 ---
 id: Q-0330
 title: Defaults of the game-wide sound keys and the speak delay when the rules leave them out
-status: open
+status: answered
 related: [S-0701]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

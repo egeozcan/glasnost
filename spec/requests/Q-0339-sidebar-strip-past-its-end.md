@@ -1,9 +1,9 @@
 ---
 id: Q-0339
 title: When the sidebar strip counts as scrolled past its end
-status: open
+status: answered
 related: [S-0701, S-0411]
-answered-by: []
+answered-by: [S-0411]
 ---
 
 ## Need

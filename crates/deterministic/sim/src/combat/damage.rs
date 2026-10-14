@@ -661,6 +661,8 @@ fn killing_hit(
             h.spread,
             hit.distance,
         );
+        // spec: S-0312 claim 29 (a delayed-kill building's destruction raises come on the initial lethal hit, before its health is restored to 1 and the countdown is kept or started)
+        crate::combat::death::destruction_raises(w, id, hit);
         let now = w.tick;
         let again = o.combat.delay_kill_until.is_some();
         if let Some(ob) = w.obj_mut(id) {

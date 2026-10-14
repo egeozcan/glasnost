@@ -2,13 +2,13 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 11
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0110, Q-0112]
+requests: [Q-0110, Q-0112, Q-0277, Q-0331]
 supersedes: []
 ---
 
@@ -18,8 +18,9 @@ supersedes: []
 
 When a house has radar, and what the radar map in the sidebar shows while it does: which cells and
 objects appear, in which colours, how cells map to the panel, and which object wins when several
-share a point. Radar reaches no game state: it only reads what other specs own (explored state,
-positions, colours). Skirmish only; network games and campaigns are out of scope.
+share a point, plus the cursor offers over the radar image. The picture only reads what
+other specs own (explored state, positions, colours); cursor offers do not change those rules.
+Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -101,6 +102,14 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
 - **Flash frame time, combat flash time.** Two game-wide rules values in ticks (Import mapping).
 - **Radar flash countdown.** A per-object countdown in ticks, set to the combat flash time when the
   object is hurt (combat specs). Claim 10 says what it changes on the radar map.
+
+- **Radar cursor target.** The listed object picked at the pointer's radar pixel, or the cell
+  obtained from F3 when no object is listed there (claim 12). This is an input target, not
+  necessarily the object whose colour the pixel shows.
+- **Miniature cursor.** A dedicated image-frame range in the same imported cursor sprite as
+  the battlefield cursor (S-0214 claims 21 and 22). It is not a scaled copy of a full-size frame.
+  Frame numbers are counted from 0. *Action*, *representative* and *cursor hot spot* are
+  S-0214's terms. *Route mode* is S-0213's term.
 
 ## Behaviour
 
@@ -375,17 +384,131 @@ The halving belongs to the tile colour only: the other colours are used as given
 
 11. **Radar events and the view outline.** Radar events (S-0011, claim 32), beacons (markers that
     players place on the map) and the outline that marks the battlefield view's part of the map are
-    drawn over the radar map; a click on the radar
-    map moves the battlefield view (S-0102, *view jump*). Their details belong to the interface
-    specs. S-0701 Formulas F7 owns radar-event repeat suppression: the per-kind radii,
+    drawn over the radar map; camera-centering input on the radar
+    map moves the battlefield view (S-0102, *view jump*). Command cursor offers are claims
+    12 and 13, not a rule that every radar click must move the view. Other details belong to
+    the interface specs. S-0701 Formulas F7 owns radar-event repeat suppression: the per-kind radii,
     which kinds suppress nearby repeats, and the lifetime after the zoom-in phase. Its
     scenario G3 covers unit production, base attacks and harvester attacks; the remaining
-    kinds and cross-creator suppression remain `unmeasured` there. The zoom-in duration,
-    whether it advances with ticks or drawn frames, and whether it advances without radar
-    remain unresolved in S-0701; the post-zoom lifetime is not the total suppression duration.
+    kinds and cross-creator suppression remain `unmeasured` there. Claims 14 and 15 and F9
+    own the zoom-in duration and cadence, including without radar. The post-zoom lifetime
+    is not the total suppression duration.
     - Backing: `unmeasured` here (pointer only; S-0701 F7 carries the suppression backings
       and scenario G3, including its unmeasured cases)
     - Confidence: high that they exist
+
+12. **Radar cursor selection (Q-0277, radar).** These rules apply while the panel is fully
+    open and showing the radar map, with no camera-drag gesture in progress. Inside the radar
+    image the input target is a listed object at that pixel, if any. Picking uses the reverse
+    of claim 8's listing priority: other houses' objects before own objects, latest arrival
+    first among the others and earliest arrival first among own objects. It does not apply
+    claim 7's draw-time tests. Thus a hidden listed object can be picked, and the picked
+    object need not be the one whose colour is visible. With an object target, its current
+    position supplies the target cell: each horizontal coordinate in leptons is divided by
+    256 and truncated toward zero. With no object target, F3 supplies the target cell.
+    The shroud presentation test uses that cell's centre surface height, as claim 6 does.
+
+    With a nonempty selection and no superweapon targeting mode, the representative and
+    its object or cell action are S-0214's rules. With an empty selection and no such mode,
+    the radar shows the miniature arrow, including over an own selectable object: it does
+    not offer battlefield selection. Repair, sell, power, beacon and placement modes do
+    not substitute their battlefield cursor offers here. With a selection they still use
+    the representative's ordinary action, and without one the miniature arrow.
+
+    The radar accepts only these ordinary actions for cursor presentation: move, no-move,
+    attack, harvest, enter, capture, sabotage and area guard. Every other ordinary action
+    gives the miniature arrow and is not a radar command offer. In particular deploy,
+    select, no-enter, repair, sell, bomb, demolish and airstrike do not get their battlefield
+    images here. Attack-move modifies an accepted move or attack to the attack-move image
+    after this restriction; it does not enable another refused action. While route mode
+    is held, a selection containing an object that cannot participate in a planned route
+    (S-0213 claim 16) also gives the miniature arrow rather than an ordinary command image.
+
+    Superweapon targeting uses table C1. Nuclear strike, weather storm, either paradrop
+    kind, psychic domination, spy plane and psychic reveal have explicit offers independent
+    of selection. Invulnerability and genetic mutation give the miniature arrow even with
+    a selection. Teleport source/destination and force-shield targeting instead fall back
+    to the ordinary selected representative's radar action, or the miniature arrow with
+    an empty selection. These are not inferred from battlefield hovering.
+    A pointer in the panel margin outside the radar image shows the full-size arrow
+    (frame 0), not the miniature arrow. These cursor rules are presentation and input
+    offers only; they do not change weapon legality or unit actions.
+    - Backing: `measurable` (scenario R12). Unreachable action/target combinations and
+      route-ineligible selections remain `unmeasured` until R12 reaches them, rather than
+      assuming that every action can be arranged with stock types
+    - Confidence: high for the ordinary action restriction and frame choices; medium for
+      reverse picking priority, mode bypasses, route eligibility and the shroud test
+
+13. **Miniature frames and playback.** Table C1 lists the actual frames shown. All other
+    accepted ordinary actions use the revealed or shrouded presentation choice of S-0214
+    table C, then the miniature substitution in C1. A kind with no miniature frames uses
+    its full-size frames, never a geometrically reduced image. The animation interval and
+    hot spot are S-0214 claim 22's: 4 units of the 16-millisecond real-time presentation
+    clock for animated ranges, one advance per update with no catch-up, independent of
+    simulation speed. Miniature animation wraps within its own range, not the full-size
+    range. Changing between full-size and miniature presentation of the same kind restarts
+    at that range's first frame and restarts the interval; repeated requests for the same
+    kind and presentation do not restart it. A single-frame miniature remains visually
+    static. The miniature arrow has hot spot (0, 0); every other row has the centre hot
+    spot of the full cursor canvas, (⌊width/2⌋, ⌊height/2⌋) pixels, not the centre of its
+    opaque picture. No separate half-size canvas or palette is used.
+    - Backing: `measurable` (scenario R12)
+    - Confidence: high
+
+14. **Radar-event zoom progression (Q-0331).** A newly accepted event has a rotating square
+    centred on its radar position. Its initial radius is the largest of the distances from
+    that position to the four edges of the radar image. Its radius contracts by the imported
+    contraction speed per drawn frame, clamped to the imported minimum radius. Rotation
+    starts at the imported angular speed. Once the contracted radius is within 0.01 pixels
+    of the minimum, rotation slows until the completion test of F9 succeeds. Thus reaching
+    the minimum radius alone does not end zoom-in: the angle and angular speed also decide.
+    F9 gives its exact duration as a count of drawn frames, not a fixed number of ticks.
+    The first drawn frame after acceptance advances the initial square once and presents
+    that result. Each subsequent frame presents its own advance's result. Zoom completion starts the
+    post-zoom lifetime of S-0701 F7 at the tick number of that drawn frame, not at creation.
+    - Backing: `measurable` (scenario R13 A and B). Exact floating-point equality
+      boundaries remain `unmeasured` unless R13 B reaches them: ordinary input variations
+      need not produce exact equality in the completion comparisons
+    - Confidence: high for contraction, completion and lifetime start; medium for exact
+      floating-point boundary cases and initial radius placement
+
+15. **Radar-event cadence without radar (Q-0331).** Zoom advances once per drawn frame,
+    even when the local player has no radar or the panel is opening or closing. It does not
+    wait for the radar map to be visible, and has no separate wall-clock interval or catch-up.
+    In ordinary skirmish play there is one advance per cycle, hence one per tick-running
+    cycle (S-0201 claim 6). During a timed freeze, drawn frames still advance zoom while the
+    tick number stands still; the post-zoom lifetime, once started, waits on ticks instead.
+    During a stand-still with no drawn frames, neither zoom nor that lifetime advances.
+    An event created without radar can finish zoom and expire without ever being displayed.
+    Restoring radar does not restart it. S-0701's nearby-event suppression therefore cannot
+    be reproduced by assigning zero zoom duration or by pausing events whenever radar is off.
+    - Backing: `measurable` (scenario R13 C to E)
+    - Confidence: high
+
+**Table C1. Radar cursor frames** (claims 12 and 13). Ranges are inclusive. The ordinary
+rows apply only to actions admitted by claim 12. Shroud affects the presentation choice,
+not permission to issue an order. All static entries remain on the named frame.
+
+| Offer or action | Revealed target | Shrouded target |
+|---|---|---|
+| no radar command offer | 1, static miniature arrow | 1, static miniature arrow |
+| move | 42–51 | 42–51 |
+| no-move | 52, static | 42–51 if the first selected object's type permits shroud moves, otherwise 52 |
+| attack | 63–67, for either in-range or out-of-range battlefield attack kind | 42–51 |
+| harvest | 63–67 | 1, static |
+| enter, capture | 100–109 | 1, static |
+| sabotage | 309–318, full-size fallback | 1, static |
+| area guard | 73–77 | 73–77 |
+| attack-move to a place or on a target, after an accepted move or attack | 63–67 | 63–67 |
+| nuclear strike targeting | 513, static | 513, static |
+| weather storm targeting | 514, static | 514, static |
+| paradrop targeting, either paradrop kind | 516, static | 516, static |
+| psychic domination targeting | 516, static | 516, static |
+| spy-plane targeting | 512, static | 512, static |
+| psychic reveal targeting | 515, static | 515, static |
+| invulnerability or genetic mutation targeting | 1, static | 1, static |
+| teleport source/destination or force-shield targeting, empty selection | 1, static | 1, static |
+| teleport source/destination or force-shield targeting, nonempty selection | ordinary radar offer from the representative | ordinary radar offer from the representative |
 
 ## Formulas
 
@@ -496,6 +619,50 @@ The top pixel is (*p*, *q*), not the centre of this set. At scale 1, a 2 × 2 fo
 widths 1, 3, 1 pixels, while both 3 × 3 foundation forms have row widths 1, 3, 5, 3, 1 pixels.
 Pixels outside the radar image are omitted, never clamped (claim 8).
 
+**F9. Radar-event zoom duration** (claims 14 and 15). This recurrence describes the
+square's radius and angle, not an implementation structure. Let its centre relative to the
+radar image be (*p*, *q*) pixels and image size (*w*, *h*) from F2. Let *S* be the imported
+contraction speed, *M* the integer minimum radius and *Ω* the imported angular speed.
+For an event at usable cell (*x*, *y*), its centre uses the cell's left radar point of F1,
+not the stored-position centre used for an object in F4. Let (*O*ₓ, *O*ᵧ) be the image's
+top-left pixel in screen coordinates. Then *p* = trunc((*x* − *y* + *a*) × *s* + *O*ₓ) − *O*ₓ
+and *q* = trunc((*x* + *y* − *b*) × *s* + *O*ᵧ) − *O*ᵧ, products and additions in double
+precision and truncation toward zero. A resulting column −1 is replaced by 0. In ordinary
+interior cells this is simply the scaled left radar point. This mapping is specified for
+the usual local-area geometry of claim 4; unusual areas retain that claim's uncertainty.
+Radius *R*, angle *θ* and angular increment *ω* are single precision. Initially:
+
+> *R*₀ = max(*p*, *q*, *w* − *p*, *h* − *q*) pixels,
+> *θ*₀ = 0.7853981852531433 radians, *ω*₀ = *Ω* radians per drawn frame.
+
+Let *RZ₃₂(a)* denote *a* rounded toward zero to single precision. Intermediate arithmetic is
+in double precision under S-0205's round-toward-zero mode. For the advance associated with
+frame *n* + 1, define the contracted radius and the angular remainder:
+
+> *ρ* = max(*R*ₙ − *S*, *RZ₃₂(M)*), *R*ₙ₊₁ = *RZ₃₂(ρ)*.
+>
+> *a* = *θ*ₙ + 0.7853981633974483,
+> *k* = trunc(*a* × 0.6366197723675814),
+> *d* = *RZ₃₂(a* − *k* × 1.5707963267948966) radians.
+
+The integer conversion in *k* truncates toward zero. Zoom completes on this frame precisely
+when |*ρ* − *M*| < 0.01 pixels and *d* < *ω*ₙ. Equality in either comparison does not complete it.
+The angle on completion becomes *RZ₃₂(θ*ₙ + *d*) rather than taking a whole angular increment.
+While zoom has not completed, its next angle is *RZ₃₂(θ*ₙ + *ω*ₙ), and its angular increment is:
+
+| Condition | *ω*ₙ₊₁ |
+|---|---|
+| \|*ρ* − *M*\| ≥ 0.01 pixels | *ω*ₙ |
+| \|*ρ* − *M*\| < 0.01 pixels and *d* ≥ *ω*ₙ | *RZ₃₂(max(Ω* × 0.3333333432674408, *RZ₃₂(ω*ₙ − *Ω* × 0.019999999552965164))) |
+
+For either angle result, a value strictly greater than 6.283185307179586 radians is replaced
+by *RZ₃₂* of that value minus 6.283185307179586, once, not by an unrestricted modulo.
+The zoom duration *D* is the smallest positive integer frame count at which the completion
+condition holds. There is no rounding of *D* into ticks: the lifetime starts at the tick
+number held by that particular frame. In a freeze, several advances can have that same tick
+number. With finite inputs that never satisfy the completion condition, *D* is infinite:
+for example a zero angular speed keeps the initial angle and never completes zoom.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -516,6 +683,9 @@ Pixels outside the radar image are omitted, never clamped (claim 8).
 | Half-step added to the terrain mean | ½ | 8-bit channel value (added before truncation) | F6 |
 | Flash frame time, absent | 7 | ticks | Import mapping |
 | Combat flash time, absent | 21 | ticks | Import mapping |
+| Zoom minimum-radius tolerance | 0.01 | pixels, strict | claim 14, F9 |
+| Zoom angular-speed floor factor | 0.3333333432674408 | dimensionless | F9; single-precision constant |
+| Zoom angular deceleration factor | 0.019999999552965164 | dimensionless per drawn frame | F9; single-precision constant |
 
 ## State and ordering
 
@@ -537,6 +707,11 @@ that behaviour; a lock ending is a known cause. Rechecks run in the houses' part
 forced radar-on effect nevertheless applies immediately (S-0414 claim 16). The terrain, shroud and gap colours follow the cells' states at the time of each drawn frame. Objects
 are drawn at their listed pixels (claim 8): a pixel change that happens in a turn shows from the
 next tick's drawn frames on. The order of objects at one pixel is claim 8's.
+
+Radar-event zoom progresses with drawn frames, including hidden frames without radar.
+Its post-zoom tail progresses with ticks (claims 14 and 15). A frame that ends zoom starts
+the tail at its current tick number and can already show the completed square, without
+any intervening tick during a freeze.
 
 ## Edge cases and quirks
 
@@ -596,14 +771,28 @@ next tick's drawn frames on. The order of objects at one pixel is claim 8's.
 | Rules, infantry, vehicle, aircraft or building type section, `RadarVisible` | radar-visible (claim 7) | boolean | no |
 | Rules, `[General]`, `FlashFrameTime` | flash frame time *F* (claim 10) | integer, ticks | 7 (engine default) |
 | Rules, `[General]`, `RadarCombatFlashTime` | combat flash time (claim 10) | integer, ticks | 21 (engine default) |
+| Rules, `[General]`, `Radar` + `EventSpeed` | zoom contraction speed *S* (F9) | floating number or percent, stored single precision; pixels per drawn frame | 1 pixel per drawn frame |
+| Rules, `[General]`, `Radar` + `EventMinRadius` | minimum zoom radius *M* (F9) | integer, pixels | 5 pixels |
+| Rules, `[General]`, `Radar` + `EventRotationSpeed` | initial angular speed *Ω* (F9) | floating number or percent, stored single precision; radians per drawn frame | 0.10000000149011612 radians per drawn frame |
 | Rules, `[AudioVisual]`, `RadarOn`, `RadarOff` | radar-on and radar-off sounds (claim 3) | sound name | none |
 | Rules, country section, `MultiplayPassive` | passive country (claim 7) | boolean | no |
 | Art, building image-name section and type-id section, `Foundation` | foundation rectangle dimensions for F8 (claim 8); occupied-cell shape is not used | named value, case-insensitive, text cut to 31 characters; vocabulary and section precedence as S-0108 Import mapping | `1x1`; unrecognised words also give `1x1` |
 
+In the three zoom-key rows, join the quoted prefix and suffix without spaces or the plus
+sign to obtain the data-file key. Their absent values are fresh-session engine defaults.
+A missing key in a later rules layer keeps the value already in force (S-0006). Parsing of
+the floating number or percent follows S-0003, with narrowing under S-0205.
+The zoom-field defaults have backing `measurable` (R13 B), confidence high.
+
+Radar cursors use the cursor sprite and palette imported by S-0214's Import mapping.
+Their frame assignments, miniature substitutions and timing are engine constants, not
+rules or art settings; no additional cursor data file or key is imported here.
+
 There is no imported radar-discovery flag. Claim 7 reads the per-house discovery mark produced
 by S-0409, separately from the object's owner, position and sight fields.
 
-The absent-key defaults in this table are `unmeasured` here: the scenarios use supplied data
+Except for the three zoom fields tested by R13 B, the absent-key defaults in this table
+are `unmeasured` here: the scenarios use supplied data
 rather than removing each key independently. Confidence: medium. The foundation vocabulary,
 parsing and its defaults inherit S-0108's backing rather than claiming a separate radar test.
 
@@ -612,8 +801,9 @@ parsing and its defaults inherit S-0108's backing rather than claiming a separat
 **Common setup.** The glossary's *measurement setup*; a skirmish with one human player and one
 enemy bystander computer player (scenarios that need an allied or a second one say so) on a
 purpose-made map, fog of war off, game speed index 2, 800 × 600 pixels; screenshots of the radar
-panel and a *recorder* for tick numbers and explicitly named state readings. Director and mods
-are off except for named test data. The observed area is the test objects, routes and cells
+panel and a *recorder* for tick numbers and explicitly named state readings. No automated
+external game controller, engine add-on or data mod is active; only the glossary's scripted
+input, recorders and explicitly named test data are allowed. The observed area is the test objects, routes and cells
 of each part; the glossary's bystander void rule applies. One valid run per case. A part that
 cannot reach its distinguishing states is recorded as inconclusive, not as confirmation.
 
@@ -855,8 +1045,8 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   A differing channel, phase, countdown start or duration falsifies claim 10; merely alternating
   with the right period but the wrong phase does not pass. Part B: a
   human vehicle attacks an enemy vehicle that the map pre-places within weapon range; Expected:
-  the enemy vehicle's pixel does not flash. Falsified if: no inversion, another phase length, or
-  flashing of enemy units. Part C (a second part freezes the game while the vehicle flashes and
+  the enemy vehicle's pixel does not flash. Any inversion of that enemy pixel falsifies
+  the other-house exclusion; part A separately tests own-object inversion and phase. Part C (a second part freezes the game while the vehicle flashes and
   captures drawn frames): expected, the colour of the frozen tick in every drawn frame; falsified
   if the colour alternates during the freeze. Part D (F5, negative frame time): the override
   section gives the flash frame time the value −7 in one run and 7 in another, with the same
@@ -921,12 +1111,104 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   Falsified if: the own one vanishes or sits unclamped, or the enemy one is shown.
 
 
+- **R12 (claims 12 and 13; Q-0277).** Common setup, free radar on, a fully opened panel,
+  flat explored test cells and isolated own and enemy objects. Use scripted input and
+  frame captures that include the pointer, with wall-clock timestamps; compare images
+  with the user's imported cursor frames. Record the selection, offered action, target
+  cell and object through a read-only recorder. One valid run per case; test file changes
+  needed for an otherwise unreachable action are explicitly named in the record.
+  Part A: empty selection over own objects and empty ground; a selected tank over open
+  and blocked cells, an enemy in range and out of range, and shrouded ground; a harvester
+  over resources, an engineer over a capturable enemy building, an infantry unit over a
+  transport that admits entry, and sabotage and area-guard offers where reachable.
+  Expected: exactly C1, with select, deploy, refused entry and other rejected actions
+  giving frame 1, not their battlefield cursor. Test both settings of the first selected
+  type's shroud-move permission using named test data. Repeat accepted move and attack
+  with attack-move held, expecting 63–67. A different frame or a refused action gaining
+  its battlefield image falsifies the corresponding rule.
+  Part B: empty and nonempty selections in repair, sell, power, beacon and placement
+  modes over the same cells. Expected: frame 1 without selection and the ordinary
+  representative's radar offer with it, not the mode's battlefield image. Also hold
+  route mode with a route-compatible selection and, if achievable, an incompatible one.
+  Expected ordinary offer for the former, frame 1 for the latter. Unreached incompatible
+  selections are inconclusive. Any differing offer falsifies the mode or route rule.
+  Part C: own and enemy objects share a pixel on a large map whose scale is below 1.
+  Arrange both arrival orders, and pairs of other houses' objects in both orders.
+  Expected picked identity: other over own, and latest-arriving other object. Use two
+  own objects and record earliest-arriving own identity too. A radar-invisible enemy
+  (named type override), still listed in explored ground, is a control for picking
+  without the draw-time tests. Record the target identity as well as the visible colour:
+  a different identity or inability to pick the hidden listed control falsifies claim 12.
+  At empty pixels check F3's cell, and at an object pixel check the cell from its current
+  position, including a moving unit before its listing has caught up. A differing cell
+  falsifies the coordinate rule. Repeat on slopes with the candidate explored states of
+  R4 F to discriminate the centre-height shroud test.
+  Part D: obtain each superweapon targeting mode of C1 in separate skirmishes using
+  named test data that grants it and shortens its charge delay. Hover over revealed and
+  shrouded empty cells, with and without a selection. Expected: the static frames listed
+  in C1 for explicit offers and refusals. Teleport and force-shield targeting instead
+  show the representative's ordinary radar offer with a selection, frame 1 without one.
+  A different image or an animated single-frame miniature falsifies the row. These are cursor observations, not assertions
+  that a click may fire a superweapon in shroud.
+  Part E: capture ten advances of move, attack, enter, area guard and attack-move at
+  speed indices 2 and 5. Expected ranges and wrapping are C1's, with S-0214 claim 22's
+  real-time interval, not a tick-based interval. Move the pointer between battlefield
+  and radar while preserving the same move kind: expected frame 31 on entering the
+  battlefield and frame 42 on entering radar, with a fresh interval each time. Remaining
+  within the radar must not restart the animation. Record the hot spot relative to the
+  input pixel; expected full-canvas centre, or (0, 0) for the arrow. Hover in every panel
+  margin: expected full-size frame 0. Wrong wrap length, phase reset, hot spot, speed
+  dependence or margin frame falsifies claim 13 or claim 12's margin rule.
+
+- **R13 (claims 14 and 15; Q-0331).** Common setup. Use elapsed-time triggers to request
+  isolated radar events at known cells, with no other event of the same kind nearby; keep
+  the bystander away. Capture every drawn frame and its tick number. Read the imported
+  zoom fields and the event's radius, angle, zoom-completion state and lifetime start tick
+  with a read-only recorder. Named test data is a map override of the three zoom fields.
+  One valid run per case, with the following variants.
+  Part A: free radar on, events near the image centre and near each edge on wide and tall
+  maps. Expected initial radius is F9's maximum edge distance. Radius and angle in each
+  displayed frame follow that frame's advance of F9; completion occurs at exactly *D*
+  advances, including the angular deceleration after the radius reaches its minimum.
+  A differing radius, angular increment or completion frame falsifies the relevant formula.
+  Part B: use positive contraction and angular speeds with values on both sides of a
+  completion comparison, and a second override with zero angular speed. Expected strict
+  comparisons and *D* from F9; the zero-speed case keeps rotating-phase status without
+  expiry for an observation interval exceeding the ordinary run's zoom plus tail. Any
+  completion in that case, or completion on an equality rather than a strict comparison,
+  falsifies F9. Unreached exact equalities are inconclusive. In separate fresh sessions,
+  remove the three keys from all supplied rules layers using a named test rules file and
+  named archive replacements; expected fields are the Import mapping defaults. This
+  default-removal part tests those defaults separately from the supplied stock values.
+  Any recorded field differing from its stated default falsifies that default.
+  Part C: repeat A without any radar building or free radar. Expected the same *D* for the
+  same image geometry and imported fields, with the tail starting at the completion
+  frame's tick. Restore radar once midway through zoom and once after the tail expired:
+  expected continued progress in the former, no resurrected event in the latter. Paused
+  progress, restart on opening, or a surviving expired event falsifies claim 15. In another
+  run start with radar on, switch its sole radar building off during zoom, and restore it
+  before completion. Record every opening and closing frame as well as the hidden ones:
+  each must advance F9 once. Any skipped or extra advance falsifies the transition-state
+  cadence, independently of whether the square is visible.
+  Part D: arrange S-0201's timed-freeze action during zoom, long enough that zoom can
+  complete inside it. Expected each frozen drawn frame advances F9, the lifetime starts
+  at the frozen tick number, and its remaining ticks do not decrease until ticks resume.
+  No progress or tick-based zoom completion falsifies the frame cadence. Repeat at game
+  speed indices 2 and 5: the frame count *D* is unchanged although real time differs.
+  Part E: open the options menu midway through zoom and wait before closing it. Expected
+  no advance during the stand-still, then resumption, not catch-up. Use S-0701 G3's
+  repeated unit production or attacks as an audible control in separate runs with and
+  without radar: suppressed announcements resume only after the observed zoom-completion
+  tick plus that kind's tail and the next expiry-processing drawn frame. An accepted
+  repeat during zoom, expiry measured from creation, or radar-dependent delay falsifies
+  claims 14 or 15. Other suppression kinds retain S-0701's existing unmeasured backing.
+
 ## Open questions
 
-- Radar-event repeat suppression is owned by S-0701 F7, not an unresolved radius or
-  post-zoom lifetime here. Its unmeasured kinds and cross-creator cases retain that backing,
-  the zoom-in duration and its advancement with or without radar remain open there
-  (S-0701 scenario G3).
+- Radar-event repeat suppression is owned by S-0701 F7. Its unmeasured kinds and
+  cross-creator cases retain that backing. Q-0331's zoom timing and advancement with or
+  without radar are specified by claims 14 and 15 and F9 here; scenario R13 remains proposed,
+  not an oracle measurement.
 - Which pixels the mean of F6 rounds either way when it lies within about 10⁻⁶ of an exact half
   (the original sums in floating point and the order of its summation was not fixed here): not
   measurable by design; an implementation may differ there.

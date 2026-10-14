@@ -1,9 +1,9 @@
 ---
 id: Q-0326
 title: The rules keys of the weapon responses, the undeploy response and the death response
-status: open
+status: answered
 related: [S-0701]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

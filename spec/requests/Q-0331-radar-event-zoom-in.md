@@ -1,9 +1,9 @@
 ---
 id: Q-0331
 title: How long a radar event's zoom-in phase lasts for the nearby-event suppression of S-0701 F7
-status: open
+status: answered
 related: [S-0701, S-0410]
-answered-by: []
+answered-by: [S-0410]
 ---
 
 ## Need

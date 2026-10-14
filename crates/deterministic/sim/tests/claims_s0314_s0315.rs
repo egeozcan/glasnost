@@ -175,7 +175,7 @@ fn claims_4_and_5_step_size_and_cost() {
 }
 
 // spec: S-0314 claim 3 (the rows in order: full health is not needed, before the money test; cannot pay changes nothing; otherwise the paying house, the object's owner, pays and health rises by the step size, more needed, or becomes the strength, done)
-// spec: S-0314 claim 3 (a step cost of 0 is never refused, even with no money)
+// spec: S-0314 claim 3 (a step cost of 0 is not refused at 0 credits)
 #[test]
 fn claim_3_repair_step_outcomes() {
     use heal::StepOutcome::*;
@@ -203,6 +203,21 @@ fn claim_3_repair_step_outcomes() {
     w.houses[0].credits = 0;
     assert_eq!(heal::repair_step(&mut w, g), Some(MoreNeeded));
     assert_eq!(health(&w, g), 51);
+}
+
+// spec: S-0314 claim 3 (revision 7: a step cost of 0 is not refused at 0 credits, but the affordability comparison still applies at a negative balance)
+#[test]
+fn claim_3_zero_cost_at_a_negative_balance() {
+    use heal::StepOutcome::*;
+    let mut w = game(&repair_rules());
+    let g = spawn(&mut w, Kind::Infantry, "GRUNT", 0, 2, 0);
+    set_health(&mut w, g, 50);
+    w.houses[0].credits = -1;
+    assert_eq!(heal::repair_step(&mut w, g), Some(CannotPay));
+    assert_eq!((health(&w, g), w.houses[0].credits), (50, -1));
+    w.houses[0].credits = 0;
+    assert_eq!(heal::repair_step(&mut w, g), Some(MoreNeeded));
+    assert_eq!((health(&w, g), w.houses[0].credits), (51, 0));
 }
 
 // spec: S-0314 F1 (P_b = trunc(RZ₅₃(r × 900)), K = the smallest positive integer with RZ₅₃(r × 900) ≤ K: the double 0.016 and the decimal 0.016 give 14 and 15, 0.1 gives 90 and 91, 0.125 gives 112 and 113)

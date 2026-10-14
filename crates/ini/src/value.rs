@@ -360,6 +360,65 @@ pub fn decimal_prefix_list(stored: &[u8]) -> Vec<i32> {
         .collect()
 }
 
+/// What S-0003 asks the importer to warn about in a decimal-prefix integer
+/// list (claims 20, 22 and 23, with claim 3's warnings item by item and
+/// claim 1's text-cut warning).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DecimalListNotes {
+    /// Items with no decimal digit (each gives 0 and keeps its place).
+    pub no_digit: usize,
+    /// Items with bytes other than whitespace after their number (no
+    /// hexadecimal suffix exception).
+    pub trailing: usize,
+    /// Items whose digits exceed 32 bits (they wrap, claim 4).
+    pub overflow: usize,
+    /// The 511-byte cut discarded a byte that is not whitespace.
+    pub cut: bool,
+}
+
+impl DecimalListNotes {
+    /// Whether there is anything to warn about.
+    pub fn any(&self) -> bool {
+        self.no_digit + self.trailing + self.overflow > 0 || self.cut
+    }
+}
+
+/// The importer notes of [`decimal_prefix_list`] for one stored value.
+pub fn decimal_prefix_list_notes(stored: &[u8]) -> DecimalListNotes {
+    let mut notes = DecimalListNotes {
+        // spec: S-0003 claim 1 (the importer warns when the cut discards a byte that is not whitespace)
+        cut: stored
+            .iter()
+            .skip(DEBRIS_MAXIMA_TEXT_LIMIT)
+            .any(|&b| !is_whitespace(b)),
+        ..DecimalListNotes::default()
+    };
+    for item in list(stored, DEBRIS_MAXIMA_TEXT_LIMIT) {
+        // spec: S-0003 claim 3 (warnings: no digit; bytes other than whitespace after the number) and claim 23 (no hexadecimal suffix exception)
+        let (neg, rest) = sign(item, true);
+        let n = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+        if n == 0 {
+            notes.no_digit += 1;
+        }
+        if rest[n..].iter().any(|&b| !is_whitespace(b)) {
+            notes.trailing += 1;
+        }
+        // spec: S-0003 claim 4 (decimal form: the importer warns when the signed number read lies outside the 32-bit range)
+        let magnitude = rest[..n].iter().fold(0u64, |v, &d| {
+            v.saturating_mul(10).saturating_add(u64::from(d - b'0'))
+        });
+        let bound = if neg {
+            1u64 << 31
+        } else {
+            (1u64 << 31) - 1
+        };
+        if magnitude > bound {
+            notes.overflow += 1;
+        }
+    }
+    notes
+}
+
 /// A fixed-count percentage list (S-0003 claim 13), such as a warhead's
 /// armour modifiers. Returns `k` doubles and what claim 13 asks the
 /// importer to warn about: missing items (our engine fills them with 1.0;

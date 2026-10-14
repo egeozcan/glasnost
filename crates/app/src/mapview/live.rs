@@ -153,9 +153,10 @@ impl GroundLayer {
         self.list.retain(|(x, _)| *x != e);
     }
 
-    /// The once-per-tick pass: adjacent swaps from front to back where the
-    /// later entry's key is strictly smaller, on the keys as they stood
-    /// before this tick's movement. With
+    /// The once-per-tick ordering transition, on the keys as they stood
+    /// before this tick's movement. One front-to-back pass of adjacent swaps
+    /// where the later entry's key is strictly smaller gives exactly the
+    /// drawing positions of claim 6's table (r11). With
     /// `quirks.ground_layer_single_pass_sort` off, a full stable sort by key.
     pub fn pass(&mut self, q: &ViewQuirks) {
         if !q.ground_layer_single_pass_sort {
@@ -163,7 +164,7 @@ impl GroundLayer {
             self.list.sort_by_key(|(_, k)| *k);
             return;
         }
-        // spec: S-0102 claim 6 (one pass of adjacent swaps per tick, front to back)
+        // spec: S-0102 claim 6 (one ordering transition per tick; its drawing-position table is the result of one front-to-back adjacent-swap pass), Constants (ground-layer ordering transitions)
         for i in 1..self.list.len() {
             if self.list[i].1 < self.list[i - 1].1 {
                 self.list.swap(i, i - 1);

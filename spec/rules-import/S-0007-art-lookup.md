@@ -2,7 +2,7 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,7 +23,7 @@ vehicles, aircraft, buildings, animations, overlays, terrain objects and smudges
 projectiles, particles, particle systems, voxel animations and the superweapon sidebar icon; it says
 that weapons, warheads and tiberiums load no art file of their own (claim 32). File resolution
 itself is S-0005, and drawing the loaded art belongs to the rendering specs (S-0105, S-0107, S-0108 and
-planned S-0109; a translucent sprite is drawn as a light-glow image, S-0104 and S-0110).
+S-0109; a translucent sprite is drawn as a light-glow image, S-0104 and S-0110).
 
 ## Terms
 
@@ -53,8 +53,8 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 - **Type read.** One reading of a type's rules and art settings, at which its art is built and
   loaded. Every game creates the types of every kind this spec covers afresh, after the game's
   theater is set (claim 24); only tiberiums carry over between games (S-0004 claim 1), and they load
-  no art file of their own (claim 32). The rules layers of a game are the base rules, the language rules file if a valid
-  one exists, the game-mode layer and the map layer (S-0006). A type has a type read in a rules layer
+  no art file of their own (claim 32). The rules layers of a game are the base rules, the language
+  rules file if a valid or empty one exists, the game-mode layer and the map layer (S-0006). A type has a type read in a rules layer
   when it exists by the time its kind's reading pass runs in that rules layer (S-0004 claim 6) and
   the rules layer has a section for it. A type that a rules layer creates by a reference that S-0004
   claim 6 leaves unread in that rules layer (for example an animation first named by a building,
@@ -63,13 +63,13 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
   - **Animations** are read from the art database in every rules layer (S-0006 claim 8), so an
     animation with an own art section has a type read in every rules layer in which it already
     exists when the animation pass runs, whatever that rules layer's own file holds.
-  - The game-mode layer is applied in every game that is not a campaign mission, except a game at
+  - The game-mode layer is applied in every skirmish, except a game at
     whose start the language rules file fails its check (S-0006 claim 12). A mode whose
-    game-mode file is not named or cannot be resolved contributes an empty rules layer (S-0005 claim
+    named game-mode file cannot be resolved contributes an empty rules layer (S-0005 claim
     19), which still gives every existing animation a type read.
   - So, under the measurement setup (no language rules file), an animation that the base rules'
-    animation list names has **three** type reads in every skirmish or multiplayer game and **two**
-    in a campaign mission, and one more in each with a valid language rules file. An animation
+    animation list names has **three** type reads in every skirmish, and one more with a valid
+    or empty language rules file. An animation
     created later, by such a reference or by a later rules layer's animation list, has fewer.
 - **Theater refresh.** A pass over overlays, terrain objects, smudges, buildings and animations that
   rebuilds their theater-dependent art. It runs once in **every** game, after all type reads of that
@@ -95,7 +95,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
   sidebar shows one of them for the type.
 - **Translucent sprite, translucent-sprite name.** A type's optional secondary (alpha) sprite, and
   the name that the section of claim 1 gives it (claim 23). It is drawn as the type's light-glow
-  image (S-0104), not with the translucency codes of S-0109 (animation playback, planned).
+  image (S-0104), not with the translucency codes of S-0109 (animation playback).
 - **Infiltrated factory.** A house *has infiltrated a barracks* once, in the current game, one of its
   infiltrating units has entered another house's building that produces infantry, and *has
   infiltrated a war factory* once one has entered another house's building that produces vehicles
@@ -103,6 +103,8 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
   How infiltration happens belongs to a special-abilities spec; this spec only uses the result.
 
 ## Behaviour
+
+This spec covers skirmish only. Network games and campaigns are out of scope.
 
 ### Image name and art section
 
@@ -113,7 +115,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    Projectiles differ (claim 26). Values
    longer than 24 bytes are cut to their first 24 bytes. For **animations**, the image key
    is read from the own art section, not from the rules database.
-   - Backing: `measurable` (A4; S-0004 K7 for byte rather than decoded-character limits)
+   - Backing: `measurable` (A4 for infantry, A9 for animation image indirection; S-0004 K7 for
+     byte rather than decoded-character limits). `unmeasured` for other kinds individually and
+     an animation's missing-image default: these scenarios do not isolate those cases.
    - Confidence: high
 
 2. **Art section; animation flags.** All art settings of a type (the theater flag, the new-theater
@@ -138,7 +142,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    animation's sprite file. When that read did find it, the art section's value is in force. When the image name equals the type name, the two
    sections are one and the flags are simply its values.
    (`quirks.anim_flags_follow_held_sprite`)
-   - Backing: `measurable` (A9)
+   - Backing: `measurable` (A9 for the animation flag table, A9 iii for read-count dependence).
+     `unmeasured` for retention of every other art setting individually: their consumers need
+     separate scenarios; A9 does not establish the general retention assertion.
    - Confidence: high (the table), medium (the number of type reads per game, Terms)
 
 3. **Image keys inside the art database.** An art section can itself hold an image key. It is
@@ -146,8 +152,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    **animations** the image key that counts is the one in the own art section (claim 1). An image key
    in the art section named by an animation's image name is never used. For infantry, vehicles and
    aircraft an image key in the art section is ignored: their file names come from the image name of
-   claim 1. Stock data contains such unused keys.
-   - Backing: `measurable` (A4 for infantry, A9 for animations, A12 part b for buildings)
+   claim 1.
+   - Backing: `measurable` (A4 for infantry, A9 for animations, A12 part b for buildings).
+     `unmeasured` for ignoring an art-section image key on vehicles and aircraft individually:
+     no scenario part changes that key for those kinds.
    - Confidence: high
 
 4. **Sprite or voxel model.** Infantry, vehicles and aircraft use a voxel model when their art section's
@@ -158,8 +166,14 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    voxel flag is set and as a sprite otherwise (claim 27). Particles and particle systems use sprite
    files only, and have no sprite and no model when their art section sets the voxel flag (claims 28,
    29).
-   A voxel animation always uses a voxel model (claim 30).
-   - Backing: `measurable` (A5 part h)
+   A voxel animation always uses a voxel model (claim 30). These are lookup choices, not a
+   promise that a kind renders every loaded part. In particular, an aircraft with the voxel
+   flag cleared still looks up sprite art but draws no body (S-0102 claim 21, scenario D34,
+   confidence high). Its trailer can still be observed, as in A24.
+   - Backing: `measurable` (A5 h for a vehicle's missing voxel body not selecting a sprite,
+     A20 c for voxel projectiles, A21 b for particles). `unmeasured` for the remaining
+     per-kind sprite/voxel choices: no local part isolates each choice, and particle-system
+     lookup has no picture of its own (claim 29).
    - Confidence: high
 
 ### Sprite file names
@@ -167,14 +181,18 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 5. **Base sprite name.** The sprite file of an infantry, vehicle, aircraft, overlay or animation type
    is image ‖ .shp, changed by claims 6 to 10. The same holds for particles, particle systems,
    voxel animations and projectiles, with the differences that claims 26 to 30 state.
-   - Backing: `measurable` (A1, A4)
+   - Backing: `measurable` (A4 for infantry, A2 for overlays, A8 for animations, A20 b for
+     projectiles, A21 a for particles). `unmeasured` for sprite vehicles and aircraft and the
+     auxiliary sprite lookups of particle systems and voxel animations: the proposed pictures
+     do not distinguish these individual base-name rules.
    - Confidence: high
 
 6. **Theater flag: theater extension.** For the kinds of claim 5, when the art section's theater flag
    is set (for an animation, the theater flag as claim 2 gives it), the sprite file is image ‖ .E instead, where E is the current theater's extension (for
    example ".tem" in the temperate theater). Letter substitution is not applied to such a name.
    Buildings differ (claim 11).
-   - Backing: `measurable` (A2)
+   - Backing: `measurable` (A2 for overlays). `unmeasured` for the theater-extension choice
+     for each remaining kind of claim 5: A2 does not isolate them individually.
    - Confidence: high
 
 7. **Letter substitution.** When it applies (Table 2), letter substitution changes the second
@@ -200,7 +218,7 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
    section. This is the general rule for animation properties (S-0006 claim 8), not a special case,
    so an animation's flag is the same at every type read of a game. If the flag is set and the
    current theater is snow, the letter A is appended to the image name at the type read (claim 10 gives when
-   exactly), and the sprite name is built from the suffixed name (so image "X" loads "XA.shp"). The
+   exactly, subject to the eligibility below), and the sprite name is built from the suffixed name (so image "X" loads "XA.shp"). The
    suffixed name is cut to 24 bytes. The suffixed name then serves as the image name for every
    purpose: the type's own sprite (claim 5), the sidebar icons (claims 22 and 25), and the art
    settings that other specs read from the art section, which come from the art section named by
@@ -224,19 +242,22 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
      animation's flag comes from. While the theater flag stays set the suffix is invisible (above),
      and a test that clears the flag at the last read would rest on claim 2's alternation and the
      game's read count as well, so the source section cannot be told apart cleanly on screen.
+     The remaining per-kind suffix eligibility, suffix truncation and art-section selection are
+     `unmeasured`: A6 tests infantry sprite, icon and same-read voxel selection only; no part
+     isolates each other setting or kind. Claim 33 and A24 separately cover reference sections.
    - Confidence: high (the suffix and the sprite, the section an animation's flag comes from),
-     medium (which settings come from which section)
+     medium (which settings come from which section).
 
 10. **When the arctic suffix is added.** Only snow games are affected. At each type read after which
-    the alternate-arctic-art flag is set, an A is appended to the image name as that read leaves it,
+    the alternate-arctic-art flag is set and claim 9 makes the type eligible, an A is appended to the image name as that read leaves it,
     unless the flag was also set after the type's previous type read in the same game. The first type
     read of a game counts as following a read with the flag not set. A read after which the flag is
     not set appends nothing and removes nothing. So an A is appended exactly at the reads where the
     flag goes from not set to set, and at the first read if the flag is set there. Whether the
     previous read appended an A does not matter. Observable consequences within one game:
-    - A later type read (game-mode file or map override section, S-0006) that **has an image key**
-      replaces the image name with that key's value, whatever the value is (even the same text as the
-      rules database's), and the result gets **no** A while the flag stays set. On snow the type then
+    - A later type read (game-mode file or map override section, S-0006) that **has a non-empty image key**
+      replaces the image name with that key's value, even when it repeats the same text as the
+      earlier rules layer's value, and the result gets **no** A while the flag stays set. On snow the type then
       shows the non-arctic file, and its later art settings come from the unsuffixed art section.
       Further type reads without an image key do not bring the A back while the flag stays set
       (for example a game-mode override section with an image key, then a map override section
@@ -297,7 +318,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
       same art section again and gives the same result.
     (`quirks.building_substitution_ignores_flag`)
     - Backing: `measurable` (A1 and A12 parts b, c and e for the body sprite, A2 and A12 parts d and
-      e for the build-up sprite, A19 for the eight other sprites at a later type read)
+      e for the build-up sprite, A19 for the bib sprite at a later type read). `unmeasured`
+      for the seven other secondary sprite roles and their 63-byte limits, and generic fallback
+      on secondary sprites individually: the bib test does not expose each of those roles.
     - Confidence: high (names and substitution, the later-read table), medium (the 63- and
       15-byte cuts)
 
@@ -308,10 +331,11 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     build-up file cannot be resolved it has no build-up sprite, even if the type read of claim 11 had
     found one. A building with the new-theater flag (and not the theater
     flag) rebuilds all its sprites exactly as in claim 11, which gives the same names again. A
-    building with neither flag keeps the result of claim 11. Stock data has no building with the
-    theater flag.
+    building with neither flag keeps the result of claim 11.
     (`quirks.theater_refresh_building_no_fallback`)
-    - Backing: `measurable` (A2 for the new-theater case, A12 for the theater-flag case)
+    - Backing: `measurable` (A2 for the new-theater case, A12 for the theater-flag body case).
+      `unmeasured` for the theater-flag build-up replacement and its no-fallback rule: A12
+      does not isolate that sprite, and the other scenarios leave the theater flag cleared.
     - Confidence: high
 
 ### Terrain objects, smudges, animations, overlays
@@ -330,7 +354,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
     The general rule of claim 5 does not apply to these two kinds.
     (`quirks.theater_art_uses_type_name`)
-    - Backing: `measurable` (A2, A11, A13)
+    - Backing: `measurable` (A2, A11, A13 for final visible names and terrain's lack of generic
+      fallback). `unmeasured` for whether theater-flag terrain loads nothing at a type read,
+      the smudge's transient image-named load and smudge-specific fallback failure: no screen
+      result precedes refresh, and A11 c tests terrain only.
     - Confidence: high
 
 14. **Animations.** At each type read of an animation, its sprite is loaded again, using the flags in
@@ -347,10 +374,11 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     - other animations keep the sprite from their last type read.
 
     So in play a new-theater animation shows its theater-substituted sprite: the refresh's result is
-    the one seen, not the type read's. Stock data uses both flags on animations: the new-theater flag
-    on building animations and the theater flag on terrain-like animations.
+    the one seen, not the type read's.
     (`quirks.theater_art_uses_type_name`)
-    - Backing: `measurable` (A8, A13)
+    - Backing: `measurable` (A8, A13 for refresh results; A9 for type-read resolution affecting
+      subsequent flags). `unmeasured` for individual generic-fallback cases at animation type
+      reads: the final refresh hides the intermediate picture and no local part isolates them.
     - Confidence: high
 
 15. **Overlays.** When an overlay type is read, claims 5 to 8 apply. At the theater refresh of every
@@ -380,14 +408,16 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     A vehicle without the turret flag has no turret or barrel part. When an alternate body is drawn
     instead of the body is a rendering question (Open questions).
     (`quirks.apc_water_body`)
-    - Backing: `measurable` (A5)
+    - Backing: `measurable` (A5 for sampled vehicle parts and the exact APC-name restriction).
+      `unmeasured` for non-vehicle parts, decimal numbering beyond the sampled turret 1, the
+      gatling exception and WO precedence over W: A5 does not isolate those individual rules.
     - Confidence: high
 
 17. **Multiple-turret count.** The rules count n of claim 16 selects n turret models. The original
     supports a multiple-turret count of at most 18. With a count above 18 its behaviour is
     *unspecified*. Our engine treats such a count as 18, and the importer warns.
-    - Backing: `unmeasured` (the original's result above the limit is unspecified, so there is nothing
-      stable to measure)
+    - Backing: `unmeasured` (no scenario exercises the 18-part boundary, and above it the
+      original's result is unspecified, so there is no stable comparison for excessive counts).
     - Confidence: high
 
 18. **Missing or broken voxel parts.**
@@ -406,7 +436,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     - A numbered barrel that exists but is invalid gives an *unspecified* result in the original. Our
       engine discards the voxel art, as for any other invalid part.
     (`quirks.voxel_part_failure_discards_all`)
-    - Backing: `measurable` (A5)
+    - Backing: `measurable` (A5 for missing body, optional barrel, numbered turret/barrel,
+      alternate body and missing/invalid motion files on the tested vehicles). `unmeasured`
+      for remaining optional-part failures, invalid model files, each non-vehicle kind and
+      invalid numbered barrels: these cases are not isolated, or have unspecified results.
     - Confidence: high (missing body, missing numbered turret, missing optional parts, invalid motion
       file), medium (a missing motion file next to a found model, A5 part i; that nothing is drawn
       after a discard)
@@ -415,7 +448,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     the turret flag also looks for a voxel turret I ‖ "TUR" and barrel I ‖ "BARL" (single parts only,
     no numbered parts), provided its body sprite loaded. Each part loads on its own: a missing or
     invalid part never removes the body sprite or the other part, and nothing is discarded.
-    - Backing: `measurable` (A14) for the body sprite staying whatever the turret files are.
+    - Backing: `measurable` (A14) for the body sprite staying with valid parts and an invalid
+      turret motion file. `unmeasured` for missing parts and individual barrel failures:
+      A14 does not vary them.
       `unmeasured` for the lookup of the voxel turret and barrel, which shows only in how they are
       drawn on a sprite body (S-0105), so A14 records whether a turret appears without an expected
       result.
@@ -435,19 +470,22 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     | no | not set | none | **T itself** |
 
     Each model loads with its motion file of the same base name. A missing file leaves that part
-    absent. Stock defences rely on the last row: their only model is in the barrel role. Unlike
+    absent. Unlike
     vehicle voxels (claim 18), nothing is discarded here: each part loads or not on its own.
     (`quirks.building_turret_without_tur_in_barrel_role`, `quirks.building_tur_search_skips_four`)
-    - Backing: `measurable` (A10)
+    - Backing: `measurable` (A10 for the four supplied-name cases). `unmeasured` for missing
+      parts, repeated late occurrences, case-insensitive matching and other early positions:
+      no scenario part isolates these cases. Model role placement remains low-confidence
+      until rendering scenarios distinguish it.
     - Confidence: high (which files load), low (what the barrel role means on screen, S-0105)
 
 21. **No separate shadow files.** No object kind loads a separate shadow file. A sprite's shadow is
     drawn from image frames inside the same sprite file, and
     a voxel shadow is derived from the model (S-0105). Which image frames hold the shadow is
-    given for infantry by S-0107 and for buildings by S-0108; for animations it will be given by
-    S-0109 (animation playback, planned).
-    For overlays, terrain objects, smudges, projectiles and particles no spec gives it
-    yet; this claim says only that no separate file is loaded for them. It holds for every kind in
+    given for infantry by S-0107 and for buildings by S-0108; for animations it is given by
+    S-0109 (animation playback).
+    For overlays, terrain objects, smudges, projectiles and particles shadow-frame selection is outside
+    this spec; this claim says only that no separate file is loaded for them. It holds for every kind in
     this spec.
     - Backing: `unmeasured` (A15 tests an infantry sprite only. The universal claim that no kind
       loads a separate shadow file has no observable measurement proposal here: the absence of a
@@ -462,10 +500,13 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     cannot be resolved (or the name is empty), the hard-coded placeholder "XXICON.SHP" is used. The
     icon is set at the type's first type read in a game and is not replaced by later type reads in the
     same game: a game-mode file or map override section cannot change it, not even by changing the
-    image name. When the sidebar shows the main icon is claim 25.
+    image name. When the sidebar shows the main icon is claim 25. S-0411 claim 16 owns
+    the chosen icon file's image frame and content placement.
     (`quirks.main_icon_first_read_only`)
-    - Backing: `measurable` (A16)
-    - Confidence: high (placeholder, first-read freeze), medium (the 24-character cut)
+    - Backing: `measurable` (A16 for placeholder, first-read freeze and byte limit).
+      `unmeasured` for empty icon names and absence of theater handling or generic fallback:
+      A16 does not supply competing files for those lookups.
+    - Confidence: high (placeholder, first-read freeze), medium (the 24-byte cut)
 
 23. **Translucent sprite.** If a type's own section sets a translucent-sprite name, the file
     translucent-sprite name ‖ .shp is loaded, with no theater handling and no generic fallback. The
@@ -475,17 +516,19 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     of S-0104 (Terms, claim 15) and S-0110 (claim 6), which changes the light-alpha values under it
     instead of being painted. A building shows it, and so does an animation, from its creation. This
     spec makes no claim about which other kinds show it, or when. It is unrelated to an animation's
-    translucency codes (planned S-0109), which only make the animation's own sprite see-through. Where the glow is placed and how it writes
+    translucency codes (S-0109), which only make the animation's own sprite see-through. Where the glow is placed and how it writes
     the values is S-0104's and S-0110's.
-    - Backing: `measurable` (A17; part d for an animation's translucent sprite)
+    - Backing: `measurable` (A17; part d for an animation's translucent sprite).
+      `unmeasured` for missing-name retention across layers and every remaining type kind:
+      the proposed glow tests exercise buildings and animations only.
     - Confidence: medium (high for the section an animation's key comes from; medium that an
       animation's glow shows, since the glow's own drawing is S-0104's)
 
 24. **When names are built.** Every game creates the types of the kinds this spec covers afresh after
     the game's theater is set (Terms, *type read*).
     Sprite and voxel names are built and loaded at the type reads of the game (base rules, language
-    rules file if a valid one exists, game-mode layer except in campaign missions and in a game at
-    whose start the language rules file fails its check, map layer; Terms,
+    rules file if valid or empty, game-mode layer except in a game at whose start the language
+    rules file fails its check, map layer; Terms,
     *type read*), and the theater refresh follows after all of them. The refresh does not touch
     projectiles, particles, particle systems, voxel animations or superweapon icons: for them the
     last type read's result is the one seen in play. The observable consequences
@@ -493,7 +536,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     S-0005, so they match without regard to letter case. Which of these loads go through the
     per-session store, and as which sort (kept file, deferred sprite or art read afresh), is S-0005
     claim 22; this spec makes no claim about it.
-    - Backing: `measurable` (A1, A4, A8)
+    - Backing: `measurable` (A1, A4, A8 for sampled game-start and layered consequences).
+      `unmeasured` for rebuilding every kind individually and refresh exclusions for every
+      auxiliary kind: no scenario independently contrasts these for each listed kind.
     - Confidence: high
 
 ### Alternate sidebar icon
@@ -517,8 +562,13 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 
       Aircraft types and other building types always show the main icon. The choice is made each
       time the sidebar shows the icon, so it changes as soon as the infiltration happens.
+      S-0411 claim 16 owns the chosen file's image frame and content placement.
     (`quirks.alt_icon_kept_once_loaded`)
-    - Backing: `measurable` (A18)
+    - Backing: `measurable` (A18 for infiltration, trainability, missing files and late first
+      loading). `unmeasured` for retaining an already loaded alternate icon, its byte limit,
+      theater handling, generic fallback and empty names: no part varies those cases.
+      The exact tick at which the sidebar choice changes is also `unmeasured`: screenshots
+      after infiltration do not isolate same-tick display.
     - Confidence: high (the loading rules, the three conditions), medium (that the choice follows the
       infiltration at once)
 
@@ -528,17 +578,20 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     image key in that read's section of the projectile (cut to 24 bytes), and **empty** when that
     section has no image key or an empty one. Unlike claim 1, there is no default of the type name and
     nothing carries over from an earlier type read. A projectile with an empty image name has no
-    sprite and no model; its translucent sprite still follows claim 23. (Its lookups would use names with an empty base, such as ".shp"; no stock
-    file has such a name, and our engine gives it no art.)
+    sprite and no model in our engine; its translucent sprite still follows claim 23. For an empty
+    image name, the original attempts empty-base names such as ".shp". Its result when such files
+    are supplied is not established here. Suppressing these lookups is a documented departure.
     Consequences:
-    - Stock data has projectiles without an image key that are not invisible projectiles. They show
-      no sprite in flight.
+    - A non-invisible projectile without an image value shows no body art when no empty-base file
+      resolves.
     - A later type read of a projectile (a game-mode file or map override section for it, S-0006)
       that has no image key leaves it without art for the rest of the game, even if the base rules
       gave it an image key. The importer warns when such a section has no image key while an earlier
       rules layer gave one.
     (`quirks.projectile_image_afresh`)
-    - Backing: `measurable` (A20 parts a and b; S-0004 K7 for the byte limit)
+    - Backing: `measurable` (A20 a and b; S-0004 K7 for the byte limit; A24 for empty values).
+      `unmeasured` for original lookups when empty-base files exist: no part supplies them,
+      and their outcome is not established. Our engine's suppression is a design departure.
     - Confidence: high
 
 27. **Projectile art.** Let I be a projectile's non-empty image name (claim 26). Its art section is
@@ -564,7 +617,10 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     - **Invisible projectiles** are never drawn, whatever art files exist, so their art is never
       seen and this spec gives no result for it. An implementation need not look it up.
     - The theater refresh does not touch projectiles (claim 24).
-    - Backing: `measurable` (A20 parts b to f)
+    - Backing: `measurable` (A20 b to f for image selection, invalid body motion, first arctic
+      transition and invisibility; A24 for the unsuffixed trailer). `unmeasured` for projectile
+      theater and generic names, optional parts and loss of the arctic suffix on a subsequent
+      read: no part isolates those rules for a projectile.
     - Confidence: high (sprite names, voxel parts), medium (the arctic results)
 
 28. **Particles.** A particle's image name follows claim 1 (its rules section; default the type
@@ -573,7 +629,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     fallback and arctic suffix. A particle whose art section sets the voxel flag has no sprite and
     no model; its translucent sprite still follows claim 23. The theater refresh does not touch
     particles.
-    - Backing: `measurable` (A21)
+    - Backing: `measurable` (A21 for generic fallback and voxel-flag suppression).
+      `unmeasured` for the other particle-specific name rules, default and retention:
+      A21 does not vary theater, arctic state or omitted image values.
     - Confidence: high
 
 29. **Particle systems.** A particle system's art is looked up exactly as a particle's (claim 28),
@@ -630,6 +688,9 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
       record chance, not a rule. A22 part e also measures which kind wins when a share-source name
       matches more than one kind. S-0004 claim 13 marks this priority measurable and cites
       S-0007's A22 part e, which distinguishes the winning kind through the shared-model outcome.
+      Remaining own-name defaults, arctic eligibility, missing share sources or parts, building
+      part sharing and same-layer source-read selection are `unmeasured`: no scenario part
+      isolates those individual rules, and late source rereads have unspecified original results.
     - Confidence: high (the file name, the share order and priority), medium (no motion file, the
       afresh share keys)
 
@@ -640,13 +701,15 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
     the placeholder "XXICON.SHP" is used, as for the main icon (claim 22). Unlike the main icon, the
     superweapon icon is built again at **every** type read, so a game-mode file or map override
     section can change it.
-    - Backing: `measurable` (A23)
+    - Backing: `measurable` (A23 for replacing, retaining and missing icon names).
+      `unmeasured` for type-name default, empty names, byte limit and absence of theater
+      handling or generic fallback: A23 does not distinguish those cases.
     - Confidence: high
 
 32. **Kinds without art files of their own.** Weapons, warheads and tiberiums load no art file of
     their own, through an image name or any other name. Weapons and warheads only name other types
     (animations, particle systems, projectiles), whose art follows those types' own claims. A
-    tiberium's image key is a number that selects its overlays, not a file name (a tiberium spec
+    tiberium's image key is a number that selects its overlays, not a file name (S-0401
     covers it).
     - Backing: `unmeasured`. A load that does not happen leaves nothing to see, and these kinds have
       no picture through which a file could show.
@@ -682,7 +745,7 @@ floating point is involved. Letters are compared without regard to case.
 
 Notation:
 - I is the image name *after* claims 1, 9 and 10 (so it already carries any arctic suffix), and
-  "type name" is the type's type name.
+  "type name" is the type's type name. The projectile formula below overrides this definition of I.
 - E is the current theater's extension and L its letter (Table 1). A theater is always set when these
   formulas apply (claim 24).
 - For a file name f, f₁ and f₂ are its first and second characters, and f⟨2 → x⟩ is f with its second
@@ -731,12 +794,12 @@ read, cut to 24 bytes. I is K when the key is non-empty, and otherwise is empty.
 
 | Condition | Art for this type read |
 |---|---|
-| I is empty, or the projectile is invisible | No art. |
+| I is empty, or the projectile is invisible | No body art in our engine (claim 26). |
 | I is non-empty and the voxel flag is not set | The sprite given by the infantry-sprite rule above, using I and never I ‖ "A". |
 | I is non-empty and the voxel flag is set | The model parts of claim 16, named from I; at a snow-game read where claim 10 appends A, name them from I ‖ "A" instead. |
 
 **Particle and particle system** (claims 28, 29): the infantry sprite formulas above, with claim 1's
-image name; no art when the art section's voxel flag is set.
+image name; no body art when the art section's voxel flag is set.
 
 **Model of a voxel animation** (claim 30), at each type read:
 
@@ -819,8 +882,8 @@ start with a matching pair.
 
 | State | Event | Result |
 |---|---|---|
-| image name | type read with an image key | the key's value, cut to 24 bytes |
-| image name | type read without an image key | unchanged |
+| non-projectile image name | type read with a non-empty image key | the key's value, cut to 24 bytes, then any eligible arctic suffix (claims 9, 10) |
+| non-projectile image name | type read without a non-empty image key | kept, then any eligible arctic suffix (claims 9, 10) |
 | arctic flag set after the previous read (snow): no (also before the first read) | type read after which the flag is set | A appended (claims 9, 10); now "yes" |
 | arctic flag set after the previous read (snow): yes | type read after which the flag is set | nothing appended, whatever the image name now is; stays "yes" |
 | arctic flag set after the previous read (snow): either | type read after which the flag is not set | nothing appended or removed; now "no" |
@@ -837,8 +900,8 @@ start with a matching pair.
 | voxel animation share flags and source: any | any type read | the read's values, or "not set" and "none" without them (claim 30) |
 | superweapon icon: any | any type read | rebuilt from the sidebar icon name then in force (claim 31) |
 
-For an animation, only type reads after which its theater flag is set take part in the three arctic
-rows. Its other type reads append nothing and leave the arctic state unchanged (claims 9, 10).
+The arctic rows apply only where claims 9 and 27 make the type eligible. For an animation,
+only type reads after which its theater flag is set take part in those rows. Its other type reads append nothing and leave the arctic state unchanged (claims 9, 10).
 
 Observable consequences of the order "theater set, type reads (base rules, language rules file,
 game-mode layer, map layer, as far as the game has them), then theater refresh":
@@ -872,20 +935,16 @@ Each switch defaults to the original (YR) behaviour.
   the game while the flag stays set, and a flag set, cleared and set again appends it twice. Alternative: the final image name, after all type reads,
   gets exactly one A if the flag is finally set and the theater is snow.
 - **`quirks.building_substitution_ignores_flag`** (claim 11). YR: buildings always get letter
-  substitution. Alternative: only with the new-theater flag. Stock buildings without the flag depend
-  on the YR behaviour (their per-theater sprite files exist under substituted names), so the
-  alternative breaks stock data.
+  substitution. Alternative: only with the new-theater flag.
 - **`quirks.theater_art_uses_type_name`** (claims 13, 14). YR: terrain objects, smudges and
   animations with the theater flag build their refreshed file from the type name. Alternative: use the
-  image name. In stock data the image name equals the type name for all of these, so both give the
-  same files.
+  image name. The two settings give the same names whenever the image name equals the type name.
 - **`quirks.theater_refresh_building_no_fallback`** (claim 12). YR: the theater-flag refresh of a
   building has no generic fallback and ignores the art section's image key, and a miss leaves the
   building without a body sprite. Alternative: keep the type read's result.
 - **`quirks.apc_water_body`** (claim 16). YR: only a vehicle whose type name is exactly "APC" looks for
   the I ‖ "W" alternate body. Alternative: every vehicle with the voxel flag and without the turret
-  flag looks for it, whatever its type name. Stock data has no vehicle type with the type name "APC" and no
-  vehicle whose image name ‖ "W" names a stock model, so the choice does not change stock games.
+  flag looks for it, whatever its type name.
 - **`quirks.voxel_part_failure_discards_all`** (claim 18). YR: a missing numbered turret, or any
   found but invalid part (or its motion file), discards the whole voxel art of the type, and nothing
   of it is drawn. Alternative: only that part is absent; only a missing or invalid body removes the
@@ -894,8 +953,7 @@ Each switch defaults to the original (YR) behaviour.
   without a late "TUR" (and no barrel-animation-is-voxel flag) becomes the barrel model. Alternative:
   load it as the turret model.
 - **`quirks.building_tur_search_skips_four`** (claim 20). YR: "TUR" counts only from the fifth
-  character of the turret-animation name. Alternative: an occurrence anywhere in the name counts. No
-  stock name is affected.
+  character of the turret-animation name. Alternative: an occurrence anywhere in the name counts.
 - **`quirks.main_icon_first_read_only`** (claim 22). YR: the main icon is set at the first type read
   of a game, and later type reads never replace it, even when they change the image name, and with
   it the art section. Alternative: a later type read builds the main icon again by claim 22's rule
@@ -910,19 +968,19 @@ Each switch defaults to the original (YR) behaviour.
   fallback) that its type reads name never reaches the screen, so this is not a quirk and needs no
   switch. That name still matters through whether it resolves, because that decides the flags of
   the animation's later reads (claim 2). An implementation therefore need not load that picture,
-  but must determine whether its name resolves. Backing: none needed; the type-read picture is
-  never visible, so this entry is informative only.
+  but must determine whether its name resolves. Backing and confidence are those of claims 2
+  and 14; this entry introduces no separate rule.
 - **Unused art-section image keys** (claim 3). For infantry, vehicles and aircraft an importer must
-  ignore an image key inside the art section. Using it would change which file stock types load.
-  Backing: `measurable` (A4).
+  ignore an image key inside the art section. Using it could select a different file from the
+  rules-selected image name.
+  Backing and confidence follow claim 3: A4 isolates infantry only.
 - **Turret count above 18** (claim 17) and **invalid numbered barrel** (claim 18): the original's
   result is unspecified. Our engine clamps the count to 18 with an importer warning, and discards the
   voxel art for an invalid numbered barrel. These are departures, not quirk switches.
 - **`quirks.projectile_image_afresh`** (claim 26). YR: a projectile's image name is its type read's
   image key or empty, so a later type read without the key leaves the projectile without art.
   Alternative: a later type read without an image key keeps the image name of the earlier read (the
-  first read still gives an empty name without a key, so stock projectiles without a key stay
-  without art). With either setting the importer warns about an override section that drops the
+  first read still gives an empty name without a key). With either setting the importer warns about an override section that drops the
   key.
 - **`quirks.voxel_anim_share_afresh`** (claim 30). YR: the share flags and the share source of a
   voxel animation are read afresh at every type read, so an override section that omits them turns
@@ -1018,6 +1076,11 @@ building's body sprite does not select these reference sections.
 
 The map's theater (S-0009) selects the theater row of Table 1.
 
+The tables' parse forms follow S-0003. Backing and confidence for the mapped behaviour follow
+its cited claim. Absent-key defaults not isolated by those scenarios are `unmeasured`, confidence
+high: explicit settings in the fixtures do not expose what omission would do, and no separate
+consumer scenario is proposed for each such default here.
+
 ## Measurement scenarios
 
 **Common setup.** Every scenario uses the glossary's measurement setup: an unmodified install with no
@@ -1036,76 +1099,94 @@ say where:
   game-mode files rank below the expansion archives, so their copies in the test expansion archive
   win.
 
-All test data is removed afterwards. Test sprite and model files are copies of stock files, chosen so
-that the pictures to tell apart are clearly different (for example, two infantry of different
-sides). Every scenario is a skirmish on the test map, with the objects owned by the player and in
-view, except A9 (iii-b), which says so. Scenarios that count type reads use types that the base rules'
-type lists name, so that the counts of Terms (*type read*) hold. Art lookup is deterministic, so each scenario needs **one run** per map and per variant. The
-observable is always a screenshot, or the sidebar, and what it shows.
+All test data is removed afterwards. Use a named loose copy of the base rules and an art database copy in the test expansion
+archive for each fixture, plus the stated game-mode copy. A **test type** is a
+copy of a usable type definition, with every art-related field stated by the scenario explicitly
+set or omitted in these copies. The fixture, not the shipped definition, supplies these properties.
+Use invented image names absent from the install, supply all stated valid files as copies of
+compatible owned assets, and supply distinguishable pictures wherever alternatives are compared.
+Names used as missing files must also have missing generic candidates. Unless varied, clear the
+theater, new-theater, arctic and voxel flags, use sprite art, and give explicit image names.
+List test types in the base rules so they receive the stated reads, except where a scenario
+explicitly adds a type in the map. For weapons and projectiles, establish the references in the
+base rules instead. Later sections contain an unrelated valid entry as well, so omitting or
+emptying a tested key does not remove the section itself (S-0001).
+
+Every run is a skirmish at game speed 2 and 800×600, director off and mods off except the named
+test data. Invented names use ASCII bytes, so the scenarios' character counts equal byte counts.
+One human player owns the observed objects; one bystander computer player stays
+outside the observed map patch or firing corridor, with the glossary's void rule. All observed
+objects are in view unless fog is explicitly tested. Start a fresh session for each variant to
+avoid the per-session art store, and repeat A1 and A8 in a second game of the same session to
+test game-start refresh. Art lookup is deterministic: one run per map and variant, apart from
+A22's debris repetitions. Capture screenshots, the sidebar or tick-labelled video as appropriate.
+A positive control that explicitly selects each candidate picture must show it. Otherwise a
+missing picture is inconclusive, not evidence for a lookup rule. Any result other than a
+scenario's stated expected picture, absence or timing falsifies its tested rule, once controls
+pass. The scenarios describe imposed test inputs, not properties of shipped types or files.
 
 **Pictures compared across theaters.** Each theater has its own unit, tile and theater palettes
 (glossary, *palette*), so one sprite file can look different on two theaters. Where a scenario
 compares an object's pictures on maps of different theaters, and the palette that object is drawn
 with differs between those theaters (S-0103), "the same picture" means the same image frames
 whatever their colours, and "different pictures" means a difference that the change of palette
-alone cannot produce. A stock object of the same kind, drawn with the same palette, whose file name
+alone cannot produce. A test object of the same kind, drawn with the same palette, whose file name
 does not depend on the theater, placed on the same maps, shows what the palette alone changes. For
 example, in A1 a building of part (b) drawn with the same palette as the building of part (a) is
-that control, and in A6 part (a) a stock infantry type without the alternate-arctic-art flag, the
+that control, and in A6 part (a) a test infantry type without the alternate-arctic-art flag, the
 theater flag or the new-theater flag is.
 
 - **A1 — building letter substitution without the new-theater flag (claims 5, 7, 11, 24).**
-  - Setup: stock data. Four tiny maps, temperate, snow, urban and desert, each with the same stock
-    building placed on it. Choose a building whose art section does not set the new-theater flag and
-    whose image name letter substitution changes (claim 7): first letter G, N, C or Y and second
-    letter A or T.
+  - Setup: test data. Four tiny maps, temperate, snow, urban and desert, with the same test building.
+    Set its image name to an invented name beginning GA, clear both theater flags, and provide
+    distinct body pictures under the GT, GA, GU and GD variants of that name.
   - Procedure: start each map, also as the first game of a fresh session, and screenshot the
     building.
   - Observable: the building's picture on each map.
   - Expected: four different, theater-specific pictures.
   - Falsified if all four show the same picture.
-  - (b) Negative case of claim 7. Setup: the same four maps with a stock building without the
-    theater flag whose body sprite name (its art section's own image key if set, else its image
-    name) does *not* start with a pair of claim 7 (the first letter is not G, N, C or Y, or the
-    second is not A or T). Observable: its main picture on each map. Expected: the same main
+  - (b) Negative case of claim 7. Setup: the same maps with a test building whose theater flag is
+    cleared and body name begins ZZ, with one supplied body sprite. Observable: its main picture
+    on each map. Expected: the same main
     picture on all four. Falsified if any two differ.
-- **A2 — theater extension and refresh for stock kinds (claims 6, 11, 12, 13, 15).**
-  - Setup: stock data. The same four maps, each with: a stock tree (terrain object with the theater
-    flag), a stock overlay with the theater flag, a stock smudge with the theater flag, and a stock
-    building with the new-theater flag that has a build-up sprite.
+- **A2 — theater extension and refresh (claims 6, 11, 12, 13, 15).**
+  - Setup: test data. The same maps with test terrain, overlay and smudge types whose theater
+    flag is explicitly set, and a test building whose new-theater flag is set, theater flag cleared
+    and build-up name supplied. Provide distinguishable files for every expected theater name.
+    Repeat the overlay test with only the new-theater flag set and distinct letter-substituted files.
   - Procedure: start each map, screenshot all four objects, and watch the building's build-up when a
     copy of it is placed.
   - Observable: each object's picture and the build-up animation on each map.
-  - Expected: theater-specific pictures for all of them on every map where stock data has the
-    theater's files.
+  - Expected: the supplied picture for each object's theater-specific name.
   - Falsified if the tree, overlay or smudge is missing on a theater that has its file (type name ‖
     .E for the tree and the smudge, image ‖ .E for the overlay), or if the building or its build-up looks the same on all four theaters.
   - (b) No letter substitution on theater-extension names (claim 6). Test data, temperate map: in
-    the art database copy, a section "GAZZO" copied from the art section of a stock overlay with the
-    theater flag; in the map, an override section setting that overlay's image key to "GAZZO". In
+    the art database copy, a section "GAZZO" for a test overlay with the
+    theater flag explicitly set; in the map, an override section setting that overlay's image key to "GAZZO". In
     the test expansion archive, "GAZZO.tem" (picture P) and "GTZZO.tem" (picture Q, a clearly
     different overlay picture). Observable: the overlay's picture. Expected: P. Falsified if Q shows.
 - **A3 — generic fallback (claims 7, 8).**
-  - (a) Setup: stock data, a temperate map with a stock building whose image name letter substitution
-    changes, for which stock data has a snow sprite and a generic (second letter G) sprite but no
-    temperate sprite. A snow map with the same building as reference. Expected: on temperate the
-    building is visible with the generic picture, which differs from the snow picture. Falsified if
-    it is invisible on temperate, or shows the snow picture.
-  - (b) Test data: in the art database copy, a section "FOO" copied from a stock infantry's art
+  - (a) Setup: test building with an invented GA image name, both theater flags cleared. Supply
+    only its GA and GG body sprites, with distinct pictures. Run temperate and snow maps.
+    Expected: GG on temperate, GA on snow. Any other result falsifies. Repeat for each eligible
+    first letter G, N, C and Y, each eligible second letter A and T, and lower-case names.
+  - (b) Test data: in the art database copy, a section "FOO" copied from a test infantry's art
     section. In the test expansion archive, a sprite "FGO.shp" (a copy of a different infantry's
     sprite) and no "FOO.shp". In the map, an override section setting that infantry's image key to
     "FOO". Expected: the infantry shows the FGO picture. Falsified if it is invisible.
   - (c) Test data: as (b), with the section and image key "Q" and a sprite file named "QGshp" (no
     dot). Expected: the infantry shows the QGshp picture. Falsified if it is invisible.
   - (d) Theater extension. Test data: in the art database copy, a section "FOO" copied from the art
-    section of a stock overlay with the theater flag. In the map, an override section setting that
+    section of a test overlay with the theater flag explicitly set. In the map, an override section setting that
     overlay's image key to "FOO", on a temperate map where the overlay is placed. In the test
     expansion archive, "FGO.tem" (a copy of a clearly different overlay picture) and no "FOO.tem".
     Expected: the overlay shows the FGO picture. Falsified if it is invisible.
+  - (e) As (b), with both FOO.shp and FGO.shp absent. Expected: invisible. A visible body
+    falsifies the final missing-file outcome, provided a supplied-file control shows the body.
   - Observable: the object's picture. Runs: one per map and variant.
 - **A4 — image indirection, unused art-section image keys, letter case, length cut (claims 1, 3, 5,
   24).**
-  - (a) Test data: in the art database copy, give a stock infantry's art section an image key that
+  - (a) Test data: in the art database copy, give a test infantry's art section an image key that
     names another infantry's sprite. Expected: the infantry looks unchanged. Falsified if it looks
     like the other infantry.
   - (b) Test data: in the map, an override section giving the same infantry an image key that names
@@ -1116,38 +1197,45 @@ theater flag or the new-theater flag is.
     .shp copied from the other infantry's sprite. In the map, an override section setting the
     infantry's image key to N followed by six more characters. Expected: the infantry shows the N
     picture. Falsified if it is invisible.
+  - (d) In the test base rules, omit the infantry's image key and provide type name ‖ .shp.
+    Expected: that picture. Then give the base read an explicit different image and let the map
+    section omit the image key, then set it empty in a separate run. Expected: the explicit
+    picture remains in both. A contrary picture or absence falsifies each case.
   - Observable: the infantry's picture. Runs: one per variant.
 - **A5 — voxel parts (claims 4, 16, 18).** Two kinds of change are used: an *invalid* part is an
-  empty file under the part's name in the test expansion archive; a *removed* part uses the loose
-  nested-archive copy minus that file. Observable: whether the vehicle is drawn, and which parts it
+  empty file under the part's name in the test expansion archive; a *removed* part is omitted
+  from the test archive. Invented image names ensure there is no lower-ranked copy. Observable: whether the vehicle is drawn, and which parts it
   shows. Runs: one per variant.
-  - (a) A stock single-turret tank: invalid turret motion file (I ‖ "TUR" ‖ .hva). Expected: the tank
+  - (a) A test tank with voxel and turret flags set, multiple-turret count 0, and valid body,
+    turret and barrel model/motion pairs supplied: invalid turret motion file (I ‖ "TUR" ‖ .hva). Expected: the tank
     is not drawn at all. Falsified if it is drawn.
   - (b) The same tank: invalid barrel motion file (I ‖ "BARL" ‖ .hva). Expected: not drawn.
     Falsified if drawn.
   - (c) The same tank: barrel model removed. Expected: drawn, without a barrel. Falsified if not
     drawn.
-  - (d) A stock vehicle with a multiple-turret count of at least 2 and no gatling flag: turret 1
+  - (d) A test vehicle with voxel and turret flags set, multiple-turret count 2, gatling flag
+    cleared, and all named pairs supplied: turret 1
     model (I ‖ "TUR1") removed. Expected: not drawn. Falsified if drawn.
-  - (e) The same vehicle: barrel 1 model (I ‖ "BARL1") removed, if stock data has it. Expected:
+  - (e) The same vehicle: supplied barrel 1 model (I ‖ "BARL1") removed. Expected:
     drawn. Falsified if not drawn.
-  - (f) A stock vehicle without the turret flag that sets the no-spawn-alternate flag and has an I ‖
-    "WO" model in stock data: invalid I ‖ "WO" ‖ .hva. Expected: not drawn. Then instead remove its I
+  - (f) A test voxel vehicle with the turret flag cleared, no-spawn-alternate flag set and valid
+    body and I ‖ "WO" pairs supplied: invalid I ‖ "WO" ‖ .hva. Expected: not drawn. Then instead remove its I
     ‖ "WO" model. Expected: drawn. Falsified by either other outcome.
   - (g) Test data: the map lists a new vehicle type "APC" with a full definition copied from a stock
-    vehicle without the turret flag and without the no-spawn-alternate flag, and a second new type
-    "APD" defined the same way (S-0006 claim
+    vehicle, with its image key omitted and the turret and no-spawn-alternate flags explicitly
+    cleared, and a second new type "APD" defined the same way (S-0006 claim
     7). The art database copy has sections "APC" and "APD" with the voxel flag set. The test
     expansion archive has valid body files APC and APD (.vxl and .hva copies of a stock vehicle), and
     APCW.vxl and APDW.vxl with *empty* motion files APCW.hva and APDW.hva. Place one of each.
     Expected: "APC" is not drawn and "APD" is drawn. Falsified if both are drawn or neither is.
-  - (h) Test data: the stock tank of (a) with its body model removed, and a body sprite I ‖ .shp
+  - (h) Test data: the test tank of (a) with its body model removed, and a body sprite I ‖ .shp
     (copy of a stock vehicle sprite) added. Expected: not drawn. Falsified if the sprite shows.
   - (i) The tank of (a): its turret motion file (I ‖ "TUR" ‖ .hva) removed, the turret model kept.
     Expected: not drawn. Falsified if drawn.
-- **A6 — arctic alternate (claim 9).** Setup: stock data, plus test data in variants (b) and (c). A snow map
-  and a temperate map, each with a stock infantry type that sets the alternate-arctic-art flag,
-  buildable from the sidebar.
+- **A6 — arctic alternate (claim 9).** Setup: test data. Snow and temperate maps with a test
+  infantry type buildable from the sidebar, arctic flag explicitly set, other art flags cleared.
+  Supply distinct unsuffixed and A-suffixed sprites and art sections. Give the base rules this
+  type's only rules section, except where a variant requires more reads.
   - (a) Observable: the infantry's picture. Expected: different pictures on snow and temperate.
     Falsified if they are the same.
   - (b) Test data: in the art database copy, give the suffixed art section (image ‖ "A") an icon name
@@ -1164,12 +1252,12 @@ theater flag or the new-theater flag is.
   infantry as A6, and test data as stated. Every infantry type used here is named by the base rules'
   infantry list, so it has a type read in the base rules (Terms, *type read*). Observable: the infantry's picture. Runs: one per map.
   - (a) The map has an override section for the infantry that sets its image key to its unsuffixed
-    image name (its stock image key's value, or its type name if it has none). A second
+    image name (the explicit value in the test base rules). A second
     map has none. Expected: the arctic picture without the override, the
     non-arctic picture with it. Falsified if both show the arctic picture.
   - (b) The override section sets another key unrelated to art, and no image key. Expected: the
     arctic picture. Falsified if it shows the non-arctic picture.
-  - (c) For a stock infantry that does not set the flag: the override section sets the flag, and the
+  - (c) For a test infantry whose base-rules arctic flag is explicitly cleared: the override section sets the flag, and the
     test expansion archive and art database copy provide image ‖ "A" (sprite and art section copied
     from another infantry). Expected: the other infantry's picture on snow. Falsified if the
     infantry looks unchanged.
@@ -1186,17 +1274,16 @@ theater flag or the new-theater flag is.
     nothing, because the flag was already set after the game-mode read). Falsified if the arctic
     picture shows.
 - **A8 — animation theater rules (claims 14, 24).**
-  - Setup: stock data. Tiny temperate, snow and desert maps, each with a stock building whose active
-    animation has the new-theater flag and an image name that letter substitution changes, and a
-    stock theater-flag animation W (a waterfall or tunnel top) placed on the map. Both animations
-    are named by the base rules' animation list.
+  - Setup: test data. Tiny temperate, snow and desert maps. A test building continuously plays
+    a test animation with only the new-theater flag set and an invented GA image name. Place a
+    second test animation W with only the theater flag set. List both in the test base rules.
+    Supply distinct pictures for the substituted animation names and W's type name ‖ .E files.
   - Procedure: start each map, including as the first game of a fresh session, and screenshot the
-    building's animated part and the waterfall.
+    building's animated part and W.
   - Observable: their pictures per theater.
   - Expected: theater-specific pictures in every theater, including the first game.
   - Falsified if the building's animation shows the same picture on all three theaters, or if W
-    shows the same picture on two theaters for which stock data has different W type name ‖ .E
-    files, or is invisible on a theater for which stock data has W's type name ‖ .E file.
+    shows a picture other than the supplied W type name ‖ .E picture, or is invisible.
   - Optional test data (claim 14, refresh by type name with the .shp retry), temperate map only. Two
     conditions make it discriminate: the image name must differ from the type name, or the
     image-named and type-name-named files would be the same files; and the theater flag must still
@@ -1204,13 +1291,12 @@ theater flag or the new-theater flag is.
     path. So: in the art database copy, W's own art section gets an image key naming an invented
     name "ZZW", and the copy has **no** section "ZZW", so every read takes the theater flag from W's
     own art section (claim 2). In the test expansion archive: "ZZW.tem" (picture P) and W's type
-    name ‖ .shp (picture S, a copy of a clearly different sprite). W's type name ‖ .tem is made
-    absent with a loose copy of the stock nested archive that holds it, minus that file (Common
-    setup). Expected: S. Falsified if P shows, if W's usual picture shows, or if W is invisible.
+    name ‖ .shp (picture S, a copy of a clearly different sprite). Remove the fixture's W type
+    name ‖ .tem file from the test archive; W's invented type name has no lower-ranked copy. Expected: S. Falsified if P shows, if W's usual picture shows, or if W is invisible.
   - Runs: one per map.
 - **A9 — animation flags from two sections (claims 2, 3).**
-  - Setup: test data on a temperate map with a stock building whose active animation X has the
-    new-theater flag in its own art section. In the art database copy: X's own art section gets the
+  - Setup: test data on a temperate map with a test building continuously playing animation X.
+    Explicitly set X's own new-theater flag and clear its theater flag. In the art database copy: X's own art section gets the
     image key "GAZZT" (an invented name that letter substitution changes). A new section "GAZZT"
     sets the new-theater flag to *no* and has its own image key "ZZOTHER". In the test expansion
     archive: "GTZZT.shp" (picture Q) and "ZZOTHER.shp" (picture R), and, for variant (i) only,
@@ -1223,8 +1309,9 @@ theater flag or the new-theater flag is.
   - In both variants R never shows (claim 3). Falsified if it does.
   - Observable: the picture of the building's animated part. Runs: one per variant.
   - (iii) Only the previous read counts. Separate test data on a temperate map
-    with a stock theater-flag animation X placed on the map (as in A8), named by the base rules'
-    animation list and chosen so that stock data has X ‖ .tem (its usual picture, R′). Neither of the sections below sets the new-theater flag.
+    with a test animation X placed on the map (as in A8), listed in the test base rules. Set
+    X's own theater flag and supply X ‖ .tem with picture R′. Neither section below sets the
+    new-theater flag.
     In the art database copy: X's own art section gets the image key "ZZQ", and a new section "ZZQ"
     sets the theater flag to *no*. In the test expansion archive: "ZZQ.tem" (picture P′, a clearly
     different sprite). No "ZZQ.shp" and no "ZGQ.shp" exist.
@@ -1233,20 +1320,15 @@ theater flag or the new-theater flag is.
       section's theater flag and finds ZZQ.tem. Read 2 follows a read that found the sprite file, so
       it takes the "ZZQ" section's cleared flag and finds nothing. Read 3 follows a read that found
       nothing, so the theater flag is set once more, and the refresh loads X ‖ .tem. Expected: R′. Falsified if the animation is invisible or shows P′.
-    - (iii-b) The same test map and test data, played as a campaign mission instead of a skirmish
-      (the exception in Common setup): a mission map file of the test map's content, with X placed
-      in view, stands in for a stock mission's map as a loose file of that name (S-0005 claim 1). A
-      campaign mission has no game-mode layer, so X has two type reads (base rules, map layer). The
-      last read leaves the theater flag cleared and no sprite. Expected: the animation is
-      invisible. Falsified if R′ or P′ shows.
-    - In general the hypothesis predicts R′ when the game has an odd number of animation type reads
-      and nothing when it has an even number. Since (iii-a) and (iii-b) differ by one read, the
-      hypothesis is also falsified if both variants give the same result, whatever the read count.
-      If, instead, the second row of claim 2 applied to every read after any read that had found
-      the sprite file, both variants would show nothing.
+    - (iii-b) The same skirmish with a named empty language rules file present before session
+      start. This adds one applied layer (S-0006), so X has four type reads. The last read leaves
+      the theater flag cleared and no sprite. Expected: invisible. Falsified if R′ or P′ shows.
+    - The hypothesis predicts R′ after three reads and nothing after four. Thus (iii-a) and
+      (iii-b) must differ, while a rule based on whether any earlier read ever found a sprite
+      would leave both invisible.
     - Observable: the animation's picture. Runs: one per variant.
 - **A10 — building voxel turret names (claim 20).** Test data. In the map, override sections give a
-  stock defence that sets the turret-animation-is-voxel flag (and not the barrel flag) the
+  test defence with the turret-animation-is-voxel flag set and barrel flag cleared the
   turret-animation names below. The test expansion archive has the named files as copies of two
   clearly different stock models, M and N, with their motion files. Observable: how many models the
   defence shows, and which. Runs: one per name.
@@ -1258,10 +1340,10 @@ theater flag or the new-theater flag is.
   - (d) As (c) with the barrel-animation-is-voxel flag set and the voxel barrel file name "ZZBAR",
     file ZZBAR (N). Expected: only N shows. Falsified if M shows.
 - **A11 — terrain objects and smudges without the theater flag (claim 13).**
-  - (a) Setup: stock data. Temperate and snow maps with a stock crater smudge and a stock burn smudge
-    (both without the theater flag). Expected: drawn, with the same picture on both theaters.
+  - (a) Setup: test data. Temperate and snow maps with two test smudges, theater flag cleared,
+    explicit image names and supplied sprites. Expected: drawn, with the same frames on both.
     Falsified if invisible.
-  - (b) Test data: in the art database copy, clear the theater flag of a stock tree. In the test
+  - (b) Test data: in the art database copy, clear the theater flag of a test terrain object. In the test
     expansion archive, image ‖ .shp (a copy of a different tree's temperate picture). Temperate and
     snow maps with the tree. Expected: the copied picture on both maps. Falsified if the tree is
     invisible or theater-specific.
@@ -1269,7 +1351,7 @@ theater flag or the new-theater flag is.
     .shp is absent. Expected: the tree is invisible (no fallback). Falsified if it shows.
   - Observable: the object's picture. Runs: one per map and variant.
 - **A12 — building art-section names and the theater-flag refresh (claims 11, 12).**
-  - (a) Test data: in the art database copy, give a stock building the theater flag and an art-section
+  - (a) Test data: in the art database copy, give a test building the theater flag and an art-section
     image key J naming an invented file name whose first two letters are not a pair of claim 7. In
     the test expansion archive, J ‖ .tem (a copy of the building's picture). No file image name ‖
     .tem exists.
@@ -1279,7 +1361,7 @@ theater flag or the new-theater flag is.
     shows.
   - Falsified if the J picture shows in the first run, or if the added image name ‖ .tem picture
     does not show in the second.
-  - (b) Test data: in the art database copy, give a stock building *without* the theater flag an
+  - (b) Test data: in the art database copy, give a test building with the theater flag explicitly cleared an
     art-section image key J (as above) and add J ‖ .shp (a clearly different picture) to the test
     expansion archive. Expected: the building shows the J picture. Falsified if it shows its usual
     picture.
@@ -1288,14 +1370,14 @@ theater flag or the new-theater flag is.
     expansion archive is J ‖ .shp. Expected: the J picture. Falsified if the building has no main
     picture.
   - (d) Length cut of the build-up name. Test data: in the art database copy, set the build-up name
-    of a stock building without the theater flag to B followed by four more characters, where B is
+    of a test building with the theater flag cleared to B followed by four more characters, where B is
     an invented name of exactly 15 characters whose first two letters are not a pair of claim 7. In
     the test expansion archive, B ‖ .shp (a copy of a clearly different building's build-up sprite).
     Procedure: place the building. Expected: the copied build-up plays. Falsified if no build-up or
     the usual one plays.
-  - (e) Afresh image key, kept build-up name. Test data: a stock building without the theater flag
-    whose art section sets its own image key (in the art database copy, give it one if no stock
-    building has one) and a build-up name. In the art database copy, a section "ZZB" copied from
+  - (e) Afresh image key, kept build-up name. Test data: a test building with the theater flag
+    cleared and its initial art section explicitly giving an image key and build-up name.
+    Supply the corresponding body and build-up sprites. In the art database copy, a section "ZZB" copied from
     that art section without the image key and without the build-up name. In the map, an override
     section sets the building's image key to "ZZB". In the test expansion archive, "ZZB.shp" (a
     clearly different building picture). Procedure: place the building. Expected: the building shows
@@ -1303,16 +1385,19 @@ theater flag or the new-theater flag is.
     first image key, or if no build-up plays.
   - Runs: one per variant.
 - **A13 — refresh by type name (claims 13, 14).** Test data: on temperate, override sections in the
-  map set the image key of a stock theater-flag tree and of a stock theater-flag smudge to the image
-  name of another stock tree and smudge with the theater flag. Animations ignore map sections (S-0006
-  claim 8), so for them the art database copy gives the own art section of a stock theater-flag
-  animation an image key naming another stock theater-flag animation. All three types are named by
+  map set the image keys of test terrain and smudge types, whose theater flags are set, to
+  invented names different from their type names. Supply distinct pictures for the type-named
+  and image-named theater files. Animations ignore map sections (S-0006
+  claim 8), so for them the art database copy gives a test animation's own section a set theater
+  flag and an image key naming a different invented art section with that flag also set.
+  Supply distinct type-named and image-named theater files. All three types are named by
   the base rules' type lists. Observable: their pictures.
   Expected: each shows its own usual picture. Falsified if it shows the other object's picture.
   Runs: one.
 - **A14 — sprite body with a voxel turret (claim 19).**
-  - Test data: in the art database copy, clear the voxel flag of a stock single-turret tank, and add
+  - Test data: in the art database copy, clear the voxel flag of a test tank with its turret flag explicitly set, and add
     its body sprite I ‖ .shp (a copy of a stock vehicle sprite) to the test expansion archive.
+    Supply valid I ‖ "TUR" and I ‖ "BARL" model/motion pairs for the control.
   - (a) Expected: the body sprite is drawn. Falsified if the vehicle is invisible.
   - (b) Add an empty I ‖ "TUR" ‖ .hva. Expected: the body sprite is still drawn. Falsified if the
     vehicle is invisible.
@@ -1326,8 +1411,8 @@ theater flag or the new-theater flag is.
   - (a) Test data: in the art database copy, point a buildable unit's icon name at a non-existent
     file. Expected: the placeholder icon on the sidebar. Falsified if the unit's usual icon or no
     icon shows.
-  - (b) Test data: in the map, an override section sets that unit's image key (with the stock art
-    database) to another buildable unit's image name. Expected: the unit in play looks like the other
+  - (b) Test data: provide two test art sections with distinct body and icon sprites. In the map,
+    an override section sets the unit's image key to the second section's name. Expected: the unit in play looks like the other
     unit, but its sidebar icon stays its own. Falsified if the icon changes.
   - (c) Length cut. Test data: in the art database copy, set the unit's icon name to C followed by
     four more characters, where C is an invented name of exactly 24 characters. In the test
@@ -1335,8 +1420,8 @@ theater flag or the new-theater flag is.
     Falsified if the placeholder shows.
   - Observable: the sidebar icon and the unit's picture. Runs: one per variant.
 - **A17 — translucent sprite (claim 23).**
-  - Test data: in the map, an override section gives a stock building a translucent-sprite name,
-    naming a stock translucent sprite used by another type.
+  - Test data: give a test building an invented translucent-sprite name in the map section.
+    Supply that named file as a copy of a compatible light-glow sprite.
   - (a) On temperate and snow maps. Expected: the same translucent picture on both. Falsified if it
     is missing or differs.
   - (b) The key names an invented file "GAZZL" while the test expansion archive holds only
@@ -1344,9 +1429,9 @@ theater flag or the new-theater flag is.
   - (c) The key names an invented name of 24 characters followed by four more, and the test
     expansion archive holds a file named by the first 24 ‖ .shp. Expected: that picture shows.
     Falsified if nothing shows.
-  - (d) Animation. Test data: in the art database copy, the own art section of a stock looping
-    animation that a stock object plays continuously (a building's idle animation, for example) sets
-    a translucent-sprite name naming a stock translucent sprite used by another type; in a second
+  - (d) Animation. Test data: configure a test building to play a test looping animation
+    continuously. In the art database copy, give that animation's own section an invented
+    translucent-sprite name, supplied as a compatible light-glow sprite copy; in a second
     run, the same name is set in a map override section for that animation instead. Use a night
     lighting setting and fog of war on, with the animation's place fogged, so that the glow is
     easy to see (S-0110 claim 6).
@@ -1357,13 +1442,11 @@ theater flag or the new-theater flag is.
   - Observable: the translucent sprite at the building; in part d, the glow at the animation.
     Runs: one per map and variant.
 - **A18 — alternate icon (claim 25).**
-  - Setup: stock data unless stated. A small test map with the player's house, which can build an
-    infiltrating unit, and an enemy computer house with a barracks and a war factory within reach.
-    The player has a barracks, a war factory and an aircraft factory of their own. Choose, from stock
-    data, a trainable infantry type, a trainable vehicle type and an aircraft type that the player
-    can build and whose art sections set an alternate icon name naming a stock file. Where stock
-    data has no such type of a kind, give one an alternate icon name in the art database copy and
-    put the named file (a copy of a clearly different icon) in the test expansion archive.
+  - Setup: test data. A small map with the player's infiltrating unit and an enemy barracks and
+    war factory within reach. The player has their own barracks, war factory and aircraft factory.
+    Provide buildable test infantry, vehicle and aircraft types with trainable flags explicitly
+    set. Give their art sections distinct main and alternate icon names and supply each named
+    sprite. Use only the named enemy buildings for infiltration; keep other enemy activity away.
   - Procedure: note the three sidebar icons. Send an infiltrating unit into the enemy barracks and
     note them again, then into the enemy war factory and note them again.
   - Observable: the three sidebar icons at each step.
@@ -1382,13 +1465,14 @@ theater flag or the new-theater flag is.
     override section sets the vehicle's image key to "ZZV". Expected: before the infiltrations the
     vehicle's main icon is its usual one (claim 22); after the war factory infiltration it shows the
     other unit's icon. Falsified if it still shows the main icon after the infiltration.
-  - (e) A stock building type whose undeploy-into vehicle is set and whose art section sets an
-    alternate icon name (test data as in Setup if none). Expected: its icon changes after the war
+  - (e) A test building type with trainable flag set, undeploy-into vehicle explicitly named and
+    supplied main and alternate icons. Include a control building without an undeploy reference:
+    its main icon must remain after either infiltration. Expected: its icon changes after the war
     factory infiltration and not after the barracks infiltration. Falsified otherwise.
   - Runs: one per variant.
 - **A19 — building secondary sprites at a later type read (claim 11).**
-  - Setup: test data on a temperate map. Choose a stock building B without the theater flag whose
-    art section sets a bib name and no image key of its own. In the art database copy, a new section
+  - Setup: test data on a temperate map. Provide test building B with the theater flag cleared,
+    its art section explicitly giving a bib name and omitting its own image key. Supply that bib. In the art database copy, a new section
     "ZZB" copied from B's art section without the bib name. In the test expansion archive, "ZZB.shp"
     (a copy of B's body sprite, so that the body looks the same). In the map, an override section
     sets B's image key to "ZZB". B is placed on the map.
@@ -1397,8 +1481,8 @@ theater flag or the new-theater flag is.
     there is no bib.
   - (c) "ZZB" sets the bib name to the invented name "ZZNOBIB", and no file "ZZNOBIB.shp" or
     "ZGNOBIB.shp" exists. Expected: no bib. Falsified if the usual bib is drawn.
-  - (d) "ZZB" sets the bib name to the bib name of a clearly different stock building. Expected:
-    that building's bib. Falsified if the usual bib or no bib is drawn.
+  - (d) "ZZB" sets the bib name to a second invented name with a supplied distinct bib. Expected:
+    the second bib. Falsified if the usual bib or no bib is drawn.
   - Observable: the bib under B. Runs: one per variant.
 - **A20 — projectiles (claims 26, 27).**
   - Setup: a temperate map with a unit of the player that fires a slow, clearly visible sprite
@@ -1408,10 +1492,10 @@ theater flag or the new-theater flag is.
   - (a) The map's override section for the projectile sets an unrelated key and no image key.
     Expected: the projectile is not drawn in flight (its hit effects still show). A control run
     without the override shows it. Falsified if it is drawn.
-  - (b) The override section sets the projectile's image key to the image name of another stock
-    sprite projectile. Expected: the other projectile's picture. Falsified if the usual picture
+  - (b) The override section sets the projectile's image key to a second test art section,
+    with a distinguishable supplied sprite. Expected: the other projectile's picture. Falsified if the usual picture
     shows.
-  - (c) A stock projectile with the voxel flag: in the test expansion archive, an empty file under
+  - (c) A test projectile with the voxel flag explicitly set and valid model/motion pairs: in the test expansion archive, an empty file under
     its image name ‖ .hva. Expected: the projectile is not drawn. Falsified if it is drawn.
   - (d) Snow map, the voxel projectile of (c) without the change: the override section restates its
     image key I and sets the alternate-arctic-art flag. The test expansion archive has I ‖ "A" ‖ .vxl
@@ -1421,13 +1505,15 @@ theater flag or the new-theater flag is.
     sets the alternate-arctic-art flag. The test expansion archive has I ‖ "A" ‖ .shp, a copy of a
     clearly different sprite. Expected: the usual picture. Falsified if the different picture
     shows.
-  - (f) A stock weapon with an invisible projectile: the override section gives that projectile the
+  - (f) A test weapon with its projectile's invisible flag explicitly set: the override section gives that projectile the
     image key of the sprite projectile of (a). Expected: still nothing drawn in flight. Falsified if
     the sprite shows.
   - Observable: the projectile in flight. Runs: one per variant, several shots each.
 - **A21 — particles (claim 28).**
-  - Setup: test data on a temperate map with a stock effect that visibly emits a listed particle
-    type P (for example smoke from a damaged building or a weapon), triggered in the game.
+  - Setup: test data on a temperate map with a test weapon effect configured to emit listed particle
+    type P. Supply visible particle sprite art and trigger the effect in view. When a map section
+    re-reads a particle or particle system, restate its behaviour and emitted-particle reference
+    to avoid unrelated resets (S-0006).
   - (a) In the art database copy, a section "FOO" copied from P's art section (or empty if P's
     image name has none). In the map, an override section sets P's image key to "FOO". In the test
     expansion archive, "FGO.shp" (a copy of a clearly different particle sprite) and no "FOO.shp".
@@ -1436,27 +1522,27 @@ theater flag or the new-theater flag is.
     absent) sets the voxel flag. Expected: P's particles are not drawn. Falsified if they are drawn.
   - Observable: the particles. Runs: one per variant.
 - **A22 — voxel animations (claim 30).**
-  - Setup: test data on a temperate map where the player destroys several stock vehicles whose
-    destruction throws a listed, non-sharing voxel animation V (debris such as a tire). Debris is
-    thrown at random, so each variant repeats destructions until V has been seen at least three
-    times.
+  - Setup: test data on a temperate map. Configure a test vehicle's destruction to throw only
+    listed voxel animation V, with no share flags in the base rules and valid body art supplied.
+    Use an explicit debris count and trigger three destructions per variant. An unchanged-art
+    control must show V on all three; otherwise the run cannot judge invisible debris.
   - (a) In the map, an override section sets V's image key to "ZZVA". In the test expansion archive,
     "ZZVA.vxl" (a copy of a clearly different stock voxel animation's model) and **no** "ZZVA.hva".
     Expected: the debris shows the copied model. Falsified if it is invisible or looks as usual.
-  - (b) The override section for V sets the body share flag and names a stock vehicle with a voxel
-    body as share source. Expected: the debris shows that vehicle's body. Falsified otherwise.
-  - (c) A stock voxel animation W that shares a vehicle's turret (thrown when that vehicle is
-    destroyed). The override section for W sets the turret share flag again and names a different
-    stock vehicle with a voxel turret as share source. Expected: W shows that other vehicle's turret.
+  - (b) The override section for V sets the body share flag and names a test vehicle with voxel flag set and a valid supplied
+    body pair as share source. Expected: the debris shows that vehicle's body. Falsified otherwise.
+  - (c) A test voxel animation W configured in the base rules to share a test vehicle's supplied
+    turret. Configure destruction to emit only W. The map section sets the turret share flag
+    again and names another test vehicle with a distinguishable supplied voxel turret. Expected: W shows that other vehicle's turret.
     Falsified if it shows the usual turret.
   - (d) Flag priority. The override section for V sets the body and the turret share flags and
-    names a stock vehicle with a voxel body and a voxel turret as share source. Expected: the debris
+    names a test vehicle with voxel and turret flags set and supplied body/turret pairs as share source. Expected: the debris
     shows that vehicle's body. Falsified if it shows the turret. Then the section sets the turret and
-    the barrel share flags instead, with a stock vehicle that has a voxel turret and a voxel barrel.
+    the barrel share flags instead, with a test vehicle having voxel and turret flags set and supplied turret/barrel pairs.
     Expected: the turret. Falsified if the barrel shows.
   - (e) Kind priority. Test data: the map's type lists add one new type name "ZZS" to two kinds at a
     time (S-0006 claim 7, as in A5 part g). Both types read the one rules section "ZZS", which does
-    not set the turret flag, and the art section "ZZS" in the art database copy, which sets the voxel
+    explicitly clears the turret flag and sets the image name to "ZZS", and the art section "ZZS" in the art database copy, which sets the voxel
     flag. The test expansion archive has the models ZZS, ZZSTUR and ZZSBARL with their motion files,
     copies of clearly different stock models. The override section for V names "ZZS" as share
     source. Expected, by claims 16, 18 and 30:
@@ -1470,9 +1556,10 @@ theater flag or the new-theater flag is.
   - Observable: the debris model. Runs: one per variant.
 - **A23 — superweapon sidebar icon (claim 31).**
   - Setup: a temperate map, superweapons enabled in the skirmish settings, on which the player owns
-    a stock superweapon building, so that the superweapon's icon is on the sidebar.
-  - (a) The map's override section for the superweapon sets its sidebar icon name to that of another
-    stock superweapon. Expected: the other superweapon's icon. Falsified if the usual icon shows.
+    a test building explicitly configured to grant the listed test superweapon, with a supplied
+    initial icon, so that its icon is on the sidebar.
+  - (a) The map's override section for the superweapon sets its sidebar icon name to a second
+    invented name with a distinguishable supplied icon. Expected: the other superweapon's icon. Falsified if the usual icon shows.
   - (b) It sets the name to an invented name with no file. Expected: the placeholder icon. Falsified
     if the usual icon or no icon shows.
   - (c) It sets only an unrelated key. Expected: the usual icon. Falsified otherwise.
@@ -1517,12 +1604,9 @@ theater flag or the new-theater flag is.
 
 ## Open questions
 
-- The one stock terrain type without the theater flag has an image name that names no stock file. It
-  is presumably drawn by its own special rules rather than through claim 13. This belongs to the spec
-  for that terrain type.
 - Which parts of a voxel projectile's model are drawn (claim 27), and how a voxel animation's model is
   drawn without a motion file (claim 30): rendering, S-0105.
-- When an alternate body (claim 16) is drawn instead of the body, and the on-screen meaning of the
-  barrel role for building voxel models (claim 20): rendering, S-0105.
+- The on-screen meaning of the barrel role for building voxel models (claim 20): rendering,
+  S-0105. Alternate-body selection is already owned by S-0105 claim 12, not an open lookup rule.
 - What the original draws for a voxel animation whose own model (I ‖ .vxl) cannot be resolved or is
   invalid (claim 30). Our engine's result there is the departure that claim 30 states.

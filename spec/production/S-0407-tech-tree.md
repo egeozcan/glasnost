@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -74,7 +74,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
   the insignificant flag (Import mapping) are never counted.
 - **Ever-built count.** For a house and a type: how many objects of the type the house has received
   from its factories, never lowered by losses or captures (claim 10 says which releases count).
-  Don't-score types are never counted.
+  Don't-score types are never counted; the insignificant flag alone does not exclude a release.
 - **Build limit.** A type's integer field *L* (Import mapping), a signed 32-bit integer: positive, a
   limit on the owned count; negative, a limit of |*L*| on the ever-built count; zero, never
   buildable. The most negative value, *L* = −2³¹, also makes the type never buildable, whatever its
@@ -283,12 +283,17 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
      building, so its present count is always 0.
    - (d) A name in the list that is neither a generic group word nor a building type registered at the
      time the type is read (S-0004) is dropped when the list is read; vehicle, infantry and aircraft
-     names are dropped too. The importer warns.
+     names are dropped too (`quirks.prerequisite_names_dropped`, default on = original).
+     With the switch off, each such entry instead remains an unmet prerequisite, even if a
+     matching building is registered later. Neither setting creates a type by reference.
+     The importer warns in both settings. Claims 3 and 4 still bypass this condition.
    An empty list is met.
-   - Backing: `measurable` (scenario T8)
+   - Backing: `measurable` (scenario T8). The switch-off alternative and importer warnings
+     are `unmeasured`: they are design rules of our engine, not observables of the original
    - Confidence: high (a, b, d's dropping, the don't-score vehicle count); medium (c: that only
      one building decides is tested by T8 (e) for two buildings only; which building counts as the most recently acquired after a capture, a deploy or
-     a transfer of ownership is not verified, Open question 3)
+     a transfer of ownership is not verified, Open question 3). Other ownership-transfer
+     ordering effects are `unmeasured` here: T8 isolates placement, capture and deploy only
 
 9. **Build limit.** Let *L* be the type's build limit.
    - *L* > 0: the answer is at limit when the owned count is *L* or more, allowed otherwise. Exception:
@@ -309,7 +314,10 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 
 10. **What counts as ever built.** The ever-built count of a type rises by one when one of the
     house's factories releases an object of that type (a vehicle, infantry or aircraft leaving its
-    factory, S-0404 claim 7). A building put on the map by a place order does **not** raise it, so a
+    factory, S-0404 claim 7), unless the type has the don't-score flag. The insignificant flag
+    alone does not exclude a release: an insignificant type without the don't-score flag counts.
+    These are the same per-type counts summed for S-0414 claim 20's built total, not that spec's
+    separate kill and loss counts. A building put on the map by a place order does **not** raise it, so a
     negative build limit other than −2³¹ never takes effect on a building type for a player (−2³¹
     refuses whatever the count, claim 9)
     (`quirks.placed_buildings_not_ever_built`). Objects that come from starting units, crates, deploying
@@ -321,8 +329,11 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     without retry; no eligible releasing factory instead leaves the item done (S-0404 claim 7).
     A cancelled release raises no ever-built count. Queue acceptance (claim 16) guarantees neither a later start
     nor a release.
-    - Backing: `measurable` (scenario T10, parts b, c, g and h; S-0404 P12 for aircraft release)
-    - Confidence: medium
+    - Backing: `measurable` (scenario T10, parts b, c, g, h and j; S-0404 P12 for aircraft release).
+      The no-increment rule for cancelled releases is `unmeasured`: no scenario part here
+      isolates that count change from the production cancellation and factory-loss consequences
+    - Confidence: high (don't-score exclusion and insignificant-only inclusion); medium (other
+      release and creation-source conditions)
 
 ### Queueing, orders and countries
 
@@ -410,7 +421,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       state depend on T14 run 6 or 8 showing that the original leaves the offer stale after a
       non-event; if it does not, those runs are void and this claim is revised. `unmeasured`: (i),
       because no such sale is known in the original, so it is a rule of our engine with nothing to
-      observe; and the further recheck following an event caused by a recheck (a cancellation
+      observe; superweapon resumption and loss in (k), because T14 run 13 isolates suspension
+      only and no scenario part here separates resumption or loss from other recheck events.
+      Also `unmeasured`: the further recheck following an event caused by a recheck (a cancellation
       applied at the tick boundary, a superweapon found lost), because seeing it needs a non-event inside the single tick between
       the two house updates, which a scenario cannot arrange reliably (the first recheck already
       shows every earlier change).
@@ -594,8 +607,8 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 |---|---|---|
 | Building not on the map, or owned by another house | Building put on the map (placement, deploy, capture) | present count up; recheck needed, claim 12 (a) |
 | Building on the map, owned by the house | Building leaves the map or changes owner | present count down for the old owner; recheck needed, claim 12 (b) |
-| any | Item starts | owned count up (the item's object); queue-time limit counts it twice (claim 16) |
-| any | Unit released by a factory | ever-built count up (claim 10); recheck needed, claim 12 (f) |
+| any | Item starts | owned count up unless its type has the don't-score or insignificant flag (Terms); queue-time limit also counts the item (claim 16) |
+| any | Unit released by a factory | ever-built count up unless its type has the don't-score flag; insignificant alone does not exclude it (claim 10); recheck needed, claim 12 (f) |
 | any | Spy infiltrates a tech-lab building | stolen-tech flag set (claim 6); recheck needed, claim 12 (h) |
 | Type offered or not offered | Claim 1 (a) or (b) starts or stops holding without an event of claim 12 (the start of a sale, or a non-event (l) to (o)) | the offer of the type is unchanged until the next recheck, whatever event causes it (claims 1 and 12) |
 | Type offered and in production | A recheck removes the type from the taken-up set | S-0404 claim 9 orders are issued in that house update and applied at the end of that tick |
@@ -619,11 +632,12 @@ after the placement order is applied, while the building is still in its constru
   recently acquired eligible building. Off: the entry is met when any building of the house that is
   on the map, switched on, not being sold and not queued to be sold holds the upgrade.
 - `quirks.placed_buildings_not_ever_built` (default original): claim 10. Off: a building put on the map by
-  a place order raises its type's ever-built count, so a negative build limit on a building type
-  works.
+  a place order raises its type's ever-built count unless it has the don't-score flag, so a
+  negative build limit on an eligible building type works. Insignificant alone does not exclude it.
 - `quirks.secret_lab_pick_by_position` (default original): claim 14. Off: lab *k* gets the entry that
-  stands at position *r*ₖ among the entries not yet given (drawing without replacement), so no two
-  labs share a secret type. The number and range of the draws are the same. A lab with a fixed secret
+  stands at position *r*ₖ among the entries not yet given (drawing without replacement), so no
+  list entry is drawn twice. Duplicate type names in different entries can still give the same
+  type to two labs, as can fixed secret types. The number and range of the draws are the same. A lab with a fixed secret
   type still takes its draw, and the entry it draws counts as given (it is not drawn again), because
   the range of lab *k* is 0 … *N* − 1 − *k*, which fits exactly the *N* − *k* entries left after *k* are given.
 - `quirks.unit_changes_no_recheck` (default original): claim 12. An infantry, vehicle or aircraft
@@ -656,8 +670,11 @@ after the placement order is applied, while the building is still in its constru
   more than 32 countries are registered.
 - **Don't-score buildings** never meet a prerequisite and are never counted for limits (claims 8
   and 9). No switch; the importer warns when a prerequisite list names a don't-score building type.
-- **Dropped prerequisite names** (claim 8 d): a misspelt name makes the condition easier, not
-  harder. The importer warns.
+- **Dropped prerequisite names** (`quirks.prerequisite_names_dropped`, default on = original,
+  owned here; claim 8 d): an unrecognised prerequisite entry is dropped, making the condition
+  easier rather than harder. Off: the entry remains unmet, without creating a type or resolving
+  it against later registrations. Valid entries still have to be met, and claims 3 and 4 still
+  lift the prerequisite condition. The importer warns in either setting.
 
 ## Import mapping
 
@@ -681,8 +698,8 @@ after the placement order is applied, while the building is still in its constru
 | `Owner` (rules, type) | owner countries (claims 1 and 11) | list of country names | none (never offered) |
 | `Factory` (rules, building type) | factory kind (claim 1) | named vocabulary, S-0003 claim 21 and Import mapping row C19 | no factory initially; missing or empty keeps the value in force |
 | `Naval` (rules, type) | naval kind (claim 1) | boolean | no |
-| `DontScore` (rules, type) | don't-score flag (Terms, claims 8 and 9) | boolean | no |
-| `Insignificant` (rules, type) | insignificant flag (Terms) | boolean | no |
+| `DontScore` (rules, type) | don't-score flag (Terms, claims 8 to 10); excludes ever-built releases | boolean | no |
+| `Insignificant` (rules, type) | insignificant flag (Terms); excludes owned counts but not ever-built releases by itself (claim 10) | boolean | no |
 | `VehicleThief` (rules, infantry type) | vehicle-thief flag (claim 9) | boolean | no |
 | `SecretLab` (rules, building type) | secret-lab flag (claims 4 and 14) | boolean | no |
 | `SecretInfantry`, `SecretUnits`, `SecretBuildings` (rules, `General`) | the three secret lists (claim 14) | lists of type names | empty |
@@ -699,7 +716,9 @@ lost.
 ## Measurement scenarios
 
 Measurement setup (glossary); a tiny purpose-made skirmish map, one human house (the local player,
-whose build icons are observed) and one bystander computer player (glossary), named test rules
+whose build icons are observed) and one bystander computer player (glossary). Unless a part
+states otherwise, run once per configuration at speed index 2 and 800×600, crates off, engine
+add-ons and director off; repeat unexpected results in a fresh session. Use named test rules
 files in the map's override sections, scripted input, test triggers to give, destroy and capture
 buildings, and a recorder logging the sidebar's icon list and darkened state per tick. The
 observed area of every scenario is the human house's base and the buildings of the bystander that
@@ -718,6 +737,11 @@ of the scenarios.
   second run: it appears only after the switch-on.
 - Falsified if: the icon waits for the end of the construction state, or appears while the only
   factory is switched off.
+- Third run (claim 1's construction-state factory): begin with no factory of the test type's kind
+  but every other condition met. Place the house's only factory of that kind and record its
+  placement, construction end and icon ticks. Expected: the icon appears in the next tick's
+  house update, while the factory is still in construction. An icon that waits for construction
+  to end falsifies the qualifying-factory definition.
 
 **T2. Captured factories and owner countries.**
 - Runs 1 and 2 (one game). Setup: the human house, whose country belongs to one side, captures (test trigger) a barracks
@@ -749,6 +773,14 @@ of the scenarios.
 - Expected: offered once the override building is on the map; gone when it is destroyed.
 - Falsified if: the type stays unoffered, or is still offered after the override building is
   destroyed.
+- Bypass variants (claims 2 and 3): repeat with one otherwise refusing condition at a time:
+  an excluding required-country list, an including forbidden-country list, a missing stolen-tech
+  flag, and a building with a disableable first superweapon while the setup setting is off.
+  Meet all other conditions, keep each type off the tech-lab list and grant its eligible
+  factory. Expected: absent before
+  the override building, offered after acquisition, absent after its destruction. Any different
+  sequence falsifies that bypass. Repeat with a build limit of zero: the override must not offer
+  that type; appearance falsifies the retained-limit rule.
 - Second run (precedence, claim 2): as the setup above, with the test type's build limit 1; give the override
   building, then one object of the type by test trigger. Expected: the icon is present and
   darkened (lifted, at limit); after the override building is destroyed the icon is gone (not
@@ -835,6 +867,24 @@ of the scenarios.
   after a later event of claim 12 (a test building put on the map), since the frozen offer alone
   (claim 1) would keep the icon until then, (h) offered (both names are dropped, and the
   empty list is met), (i) still offered in both runs.
+- Extend (h) with separate test types naming only an infantry type, only an aircraft type, and
+  one valid but absent building together with an unknown name. Expected in the original:
+  the first two are offered; the mixed-list type is absent until the valid building is placed.
+  Also test a building registered only by a later rules layer: its earlier prerequisite
+  reference is dropped and the dependent type is offered without owning that building.
+  With `quirks.prerequisite_names_dropped` off in our engine, all these invalid-entry types,
+  including the original (h) type, stay unoffered after a recheck even after the valid building
+  is placed or the later name is registered. Give every test type an eligible factory and
+  no other restriction or lifting condition; keep tabs below capacity. Record icons after
+  each recheck. Any different result falsifies the stated setting's rule; the switch-off
+  replay is an engine conformance test, not an oracle measurement.
+- Acquisition-order variants of (e): capture an enemy building created before the upgraded
+  building but acquired afterwards; separately deploy a vehicle into a building after the
+  upgraded building was acquired. Keep the newly acquired building switched on, without the
+  upgrade, and not being sold; it must be the last building acquired. Expected: the icon is
+  absent after that acquisition's recheck; removing the new building makes it appear again.
+  An offered icon with the new unupgraded building eligible, or an absent icon after its removal,
+  falsifies the acquisition-order hypothesis. No other qualifying buildings may intervene.
 - Falsified if: any differs.
 
 **T9. Secret labs.**
@@ -854,6 +904,14 @@ of the scenarios.
   them over 0 … 2 and consuming a raw value, so the stream state advances as in run 1. If the
   lab with a fixed type took no draw, the later labs' draws would be over different ranges and the
   stream state would differ from run 1.
+- Bypass variants (claim 4): repeat run 2 with the fixed secret type otherwise refused by each
+  condition tested in T3's bypass variants, and separately by a tech level above the house's
+  level and an unmet building prerequisite. After capture, expect each type offered; after loss
+  of the lab, expect it absent. Set only the fixed-type field of the tested kind, meet all
+  other conditions and give an eligible factory. Use no override or second lab.
+  Repeat with a zero build limit:
+  expect it absent even with the lab. A different icon result falsifies the corresponding
+  bypass or retained-limit rule.
 - Run 3 (loss of the lab, claim 4): as run 1, the human house captures one lab and its secret type
   is offered; the lab is then destroyed (test trigger). Expected: the icon is gone in the first
   house update after the destruction (claim 12), unless another condition lifts the type.
@@ -922,6 +980,19 @@ of the scenarios.
   change of owner or a deploy moves an ever-built count (claims 10 and 15). In (i), a darkened icon
   would mean that such objects count towards a positive limit.
 
+- Part (j), ever-built exclusions (claim 10): at speed index 2, use named map override sections
+  defining four test types of one unit kind, each with *L* = −1 and otherwise met conditions.
+  The four combinations are neither flag, don't-score only, insignificant only, and both flags.
+  Start and release one copy of each through ordinary production, with no cloning building.
+  Record successful release, the icon after the following recheck, and whether a later build
+  click starts another copy. Repeat for infantry, vehicles and aircraft, one game per kind,
+  with sufficient credits, eligible factories and free docks where required. Expected: the
+  neither-flag and insignificant-only icons disappear after the first release, and another
+  copy cannot be ordered. The don't-score-only and both-flags icons remain offered and permit
+  another start. A failed or cancelled first release makes that sub-test inconclusive.
+  Any other icon or second-start result after a successful release falsifies the flag rule.
+  Use scripted input and the common sidebar recorder at 800×600; no engine add-ons or director.
+
 **T11. Build order and the offer.**
 - Run 1 (at limit): the local player's build order (scripted input) for an offered test vehicle
   type with *L* = 1 of which the house owns one on the map, with no item of it in production.
@@ -977,6 +1048,12 @@ of the scenarios.
   is destroyed.
 - Falsified if: a type appears before the capture or does not appear after it, or is still shown
   after the destruction of its building.
+- Stolen-tech control (claim 15): add a fourth type needing the same flag as type 3 but having
+  no override list. The captured building is on the tech-lab list, non-radar and without positive
+  power output, and its base-planning side would give that flag on infiltration. Expected:
+  the fourth type stays absent after capture, whereas a subsequent spy infiltration of another
+  enemy building of that type makes it appear. Appearance at capture falsifies the no-stolen-tech
+  rule; failure of the infiltration control makes the run inconclusive.
 
 **T14. Rechecks, seen as icons that appear or disappear (claim 12).** Only an icon that appears or
 disappears can show that an event called for a recheck; the darkened state cannot (claim 12,
@@ -1092,7 +1169,8 @@ Backing).
   the claims they test is medium (low for run 13) until measured.
 
 **T15. Simultaneous admissions (Q-0191, claim 17).**
-- Setup: the common measurement setup, speed index 2, fixed seed, engine add-ons and director
+- Setup: the common measurement setup, speed index 2, seed logged by the random-state recorder,
+  engine add-ons and director
   off. Named test data defines two distinguishable icons A and B of one kind, with A registered
   before B, otherwise tied on every S-0004 claim 11 key, including display name, current price,
   category rank and side. Keep the tab below capacity. Both share one prerequisite building
@@ -1117,6 +1195,13 @@ Backing).
   the factory-precedence rule. Record factory ownership-change and icon ticks; void a run with
   an intervening recheck that already admitted either test type.
 
+## Changes for other specs
+
+- S-0004 claim 13: its find-only rule still creates no type, but prerequisite-list failures must
+  defer to S-0407 claim 8 (d) and `quirks.prerequisite_names_dropped`. With that switch off,
+  an invalid prerequisite entry remains unmet rather than acting as an absent entry. Qualify
+  the prerequisite result in scenario I1 as the default-switch result.
+
 ## Open questions
 
 1. The original's own list of events that call for a recheck (claim 12) may hold more events than
@@ -1128,11 +1213,11 @@ Backing).
    and see whether the icon of *Y* changes before the control event. An event found that way is
    added to the table in a revision. For our engine the table is the whole list.
 2. Whether a building in its construction state can serve as a factory for claim 1 (c) (it is on
-   the map and switched on) was not measured.
+   the map and switched on) was not measured; T1's third run discriminates it.
 3. Which building counts as the most recently acquired for claim 8 (c) after a capture, a deploy
-   or another transfer of ownership was not verified; T8 (e) uses two buildings placed one after
-   the other. A measurement would capture an older building after a newer one is placed and
-   repeat (e).
+   or another transfer of ownership was not verified; T8's acquisition-order variants test
+   capture and deploy. Other ownership transfers are `unmeasured` here: no scenario part
+   isolates their ordering effect.
 4. Resolved by S-0411 claim 15. A suppressed type is absent from the taken-up set, so orders
    for it are not legal; it gives no suppression-removal orders; and its admission is reconsidered
    only at a later recheck with a qualifying factory. Vacancies do not refill during the

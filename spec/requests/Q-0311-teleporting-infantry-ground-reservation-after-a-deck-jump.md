@@ -3,7 +3,7 @@ id: Q-0311
 title: Where a teleporting infantry unit's ground-record reservation goes after it jumps onto a bridge deck
 status: answered
 related: [S-0208, S-0207, S-0209]
-answered-by: [S-0208]
+answered-by: [S-0208, S-0209]
 ---
 
 ## Need

@@ -281,7 +281,7 @@ fn tile_animation_position() {
     assert_eq!(tile_anim_position(c, 0, -3, 1), (892, 1429, 0));
 }
 
-/// spec: S-0202 claim 15 (a crater from a tile animation that an overlay placement's recalculation starts acts before the overlay data stream: it empties the resource then present, and the data stream writes the cell's data without restoring the removed overlay type) and S-0010 claim 19
+/// spec: S-0009 claim 13 and S-0202 claim 15 (a crater from a tile animation that an overlay placement's recalculation starts acts before the overlay data stream: it empties the resource then present, and the data stream writes the cell's data without restoring the removed overlay type) and S-0010 claim 19
 #[test]
 fn claim_15_crater_before_the_data_stream() {
     use glasnost_map::NO_OVERLAY;

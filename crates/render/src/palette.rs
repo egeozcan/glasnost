@@ -349,6 +349,31 @@ pub fn slot_position(slot: u8) -> Option<usize> {
     SLOT_POSITIONS.get(usize::from(slot)).copied()
 }
 
+/// The fixed RGB colour of each setup-screen colour slot 0 … 7 (S-0103
+/// claim 11 and Constants, "Lobby swatch colours"): engine constants,
+/// independent of every colour definition.
+// spec: S-0103 Constants (lobby swatch colours, claim 11)
+pub const LOBBY_SWATCHES: [Rgb8; 8] = [
+    Rgb8::new(221, 226, 13),
+    Rgb8::new(255, 25, 25),
+    Rgb8::new(42, 116, 226),
+    Rgb8::new(62, 209, 46),
+    Rgb8::new(255, 160, 25),
+    Rgb8::new(50, 215, 230),
+    Rgb8::new(149, 40, 189),
+    Rgb8::new(255, 154, 235),
+];
+
+/// The setup-screen swatch of colour slot `slot` as a 5-6-5 pixel (S-0103
+/// claim 11: the slot's fixed RGB reduced directly by the 16-bit step, with
+/// no HSV conversion, ramp, palette multiplication, lighting or subtraction
+/// of 1), or `None` for a slot above 7.
+pub fn lobby_swatch_565(slot: u8) -> Option<u16> {
+    LOBBY_SWATCHES
+        .get(usize::from(slot))
+        .map(|&c| hicolor_565(c))
+}
+
 /// A colour in the 16-bit 5-6-5 pixel layout (S-0103 claim 9).
 pub fn hicolor_565(c: Rgb8) -> u16 {
     // spec: S-0103 Formulas (red5 = ⌊R/8⌋, green6 = ⌊G/4⌋, blue5 = ⌊B/8⌋)
@@ -359,6 +384,48 @@ pub fn hicolor_565(c: Rgb8) -> u16 {
 pub fn hicolor_555(c: Rgb8) -> u16 {
     // spec: S-0103 Formulas (5-5-5 layout: green5 = ⌊G/8⌋)
     (u16::from(c.r >> 3) << 10) | (u16::from(c.g >> 3) << 5) | u16::from(c.b >> 3)
+}
+
+/// The sidebar icon palette's fixed file (S-0103 Import mapping, claim 13).
+pub const ICON_PALETTE_FILE: &[u8] = b"CAMEO.PAL"; // spec: S-0103 Import mapping (fixed asset)
+
+/// Rows of the icon palette's untinted shade table (S-0103 Constants).
+pub const ICON_SHADE_ROWS: usize = 53; // spec: S-0103 Constants (icon shade count 53)
+
+/// The row an ordinary icon pixel shows (S-0103 claim 13: the middle row).
+pub const ICON_ROW: usize = 26; // spec: S-0103 claim 13, Constants (middle row 26)
+
+/// One component of the icon shade table at row `j` (S-0103 Formulas, "Icon
+/// shade table"): min(255, ⌊u·F_j / 65536⌋), F_j = ⌊131072·j / 52⌋.
+pub fn icon_shade_component(u: u8, j: usize) -> u8 {
+    // spec: S-0103 Formulas, "Icon shade table" (F_j = ⌊131072·j / 52⌋)
+    let f = 131_072 * j as u64 / 52;
+    // spec: S-0103 Formulas, "Icon shade table" (min(255, ⌊u·F_j / 65536⌋))
+    (u64::from(u) * f / 65_536).min(255) as u8
+}
+
+/// The icon palette as 5-6-5 pixels (S-0103 claim 13): each file
+/// component through claim 1's load rule, at the middle shade row (the
+/// converted colour exactly, with no subtraction of 1, no house colour, no
+/// battlefield light or tint), packed by the 16-bit step. Entry 0 is
+/// transparent; its packed value is meaningless. With no file (the
+/// original crashes; our engine's departure) every entry is black.
+pub fn icon_palette_565(file: Option<&Palette6>, quirks: &PaletteQuirks) -> [u16; 256] {
+    let Some(file) = file else {
+        // spec: S-0103 claim 13 (our engine's departure: an all-black icon palette)
+        return [0; 256];
+    };
+    let pal = palette_from_file(file, quirks);
+    let mut out = [0u16; 256];
+    for (dst, c) in out.iter_mut().zip(pal.colors.iter()) {
+        // spec: S-0103 claim 13 (the middle row reproduces the converted colour; claim 9's 16-bit step)
+        *dst = hicolor_565(Rgb8::new(
+            icon_shade_component(c.r, ICON_ROW),
+            icon_shade_component(c.g, ICON_ROW),
+            icon_shade_component(c.b, ICON_ROW),
+        ));
+    }
+    out
 }
 
 /// What is drawn, as far as the choice of palette goes (S-0103 claim 8).
@@ -465,6 +532,45 @@ mod tests {
 
     fn rgb(t: [(u8, u8, u8); 16]) -> [Rgb8; 16] {
         t.map(|(r, g, b)| Rgb8::new(r, g, b))
+    }
+
+    /// spec: S-0103 claim 13, Formulas "Icon shade table" and scenario PL (the icon palette:
+    /// claim 1's ×4 with byte wrap, the middle row exactly, no subtraction of 1, no remap at
+    /// 16–31, the 16-bit step; a missing file gives black in our engine)
+    #[test]
+    fn icon_palette_conversion() {
+        let mut file = Palette6 {
+            colors: [[0; 3]; 256],
+        };
+        file.colors[5] = [1, 2, 3];
+        file.colors[20] = [63, 32, 16];
+        file.colors[200] = [64, 65, 100];
+        let p = icon_palette_565(Some(&file), &PaletteQuirks::default());
+        let split = |c: u16| (c >> 11, (c >> 5) & 0x3F, c & 0x1F);
+        assert_eq!(split(p[5]), (0, 2, 1));
+        assert_eq!(split(p[20]), (31, 32, 8));
+        assert_eq!(split(p[200]), (0, 1, 18));
+        // Row 26 reproduces the converted colour; row 52 doubles it, capped.
+        assert_eq!(icon_shade_component(252, ICON_ROW), 252);
+        assert_eq!(icon_shade_component(100, ICON_SHADE_ROWS - 1), 200);
+        assert_eq!(icon_shade_component(200, ICON_SHADE_ROWS - 1), 255);
+        assert_eq!(icon_shade_component(200, 0), 0);
+        // No file: all black.
+        assert!(icon_palette_565(None, &PaletteQuirks::default()).iter().all(|&c| c == 0));
+    }
+
+    /// spec: S-0103 claim 11 and Constants (lobby swatches: the slot's RGB reduced directly by the 16-bit step, no subtraction of 1)
+    #[test]
+    fn lobby_swatch_is_the_stepped_constant() {
+        // Slot 0 is (221, 226, 13): ⌊221/8⌋ = 27, ⌊226/4⌋ = 56, ⌊13/8⌋ = 1.
+        assert_eq!(lobby_swatch_565(0), Some((27 << 11) | (56 << 5) | 1));
+        for s in 0..8u8 {
+            assert_eq!(
+                lobby_swatch_565(s),
+                Some(hicolor_565(LOBBY_SWATCHES[usize::from(s)]))
+            );
+        }
+        assert_eq!(lobby_swatch_565(8), None);
     }
 
     /// spec: S-0103 Constants (the bit patterns are the tabulated singles)

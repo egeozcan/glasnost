@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,7 +23,7 @@ behaviour, which resting behaviour it falls back to, and the per-behaviour prope
 rules data can set. It also gives what the general-purpose behaviours and a gate's *open* behaviour
 do at each processing, the approach step by which an attacking infantry unit or vehicle decides
 whether to keep, renew or take a destination towards its target (claim 37, answering the behaviour
-side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 24), the area-guard threshold's engine default (the guard stray distance has
+side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 25), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
 that own the other behaviours (harvesting, structures, superweapons, team scripts).
 
@@ -60,7 +60,7 @@ refuses only requests with a threat point (claims 17 and 19), with the vehicle's
 destination left to S-0207 claim 16. It answers request Q-0030, where within a gate's own turn its
 door reaches rest, in claim 35 (d) and scenario B28 case g. Q-0072 is answered in part:
 claim 37 gives the approach triggers, destination retention and renewal, and the building and
-deployed-infantry exceptions. S-0307 claims 15 to 24 give covered searches and failure outcomes.
+deployed-infantry exceptions. S-0307 claims 15 to 25 give covered searches and failure outcomes.
 S-0207 claim 19 gives driving, sailing and hovering outcomes after coming in range. S-0208 claims 16 and 17 give the ordinary walker's stopping and destination outcomes.
 The deploying-search gap remains open, so this is not a complete answer to Q-0072. Q-0161 is
 answered in full by claim 37 a2: the per-tick approach follows processing and the per-tick
@@ -2138,7 +2138,7 @@ apply in our engine to the actors of every player house.
       |---|---|
       | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | destination unchanged: an absent one stays absent, and an airborne actor's held one stays held |
       | not the case above, and the actor is a vehicle with at least one approach destination (Terms) | it takes the first approach destination as its destination, that entry leaves the list, and the step ends |
-      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 24, with only the deploying-search gap remaining; claim 17 supplies the failure centre after candidate trials as well as with empty radii |
+      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 25, with only the deploying-search gap remaining; claim 17 supplies the failure centre after candidate trials as well as with empty radii |
 
       (f2) **Deploy-to-fire vehicle.** A vehicle whose type deploys to fire (S-0301), standing on
       a cell where its deploy test fails (S-0301, the must-deploy answer), searches as in the
@@ -4236,10 +4236,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   fall back to rest and start the resting behaviour at once before choosing its standard delay,
   which would then take the rate of the started behaviour (claim 6). The entry protocol's specs
   own those cases.
-- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 24 cover ground
+- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 25 cover ground
   candidates on terrain and bridges, cell targets including destroyable cliffs, failure centres
-  after trials, usable-area exceptions, balloon-hover destinations, close-range searches and
-  the jumpjet detour exemption. Only the deploying-search gap remains.
+  after trials, usable-area exceptions, balloon-hover destinations, close-range searches,
+  the jumpjet detour exemption and the non-walking shortcut response. Only the deploying-search
+  gap remains.
 - Which parts of the approach fill a vehicle's approach destinations (Terms; claim 37 f).
 - The in-the-playfield mark (Terms; claim 37 f): which objects other than ones arriving from
   outside the usable area lack it.
@@ -4252,23 +4253,28 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - S-0009 claim 40 already says set-up queues *guard* without promising it current.
   Retain that correction at hand-off. Q-0241's bootstrap remains open.
-- S-0212 claim 23a, T5 and its Q-0238 hand-off question should replace their remaining
-  open-centre qualifications by claim 38 and F11–F12 here. Add the base-record-refresh
-  nearby-search use to T5 with claim 38's parameters. Q-0238 must remain open until
-  these complementary revisions are approved together.
+- S-0212 revision 26 claim 23a, T5 and its Q-0238 hand-off question already cite
+  claim 38 and F11–F12 here for the complete centre geometry and no-base usable-area
+  correction. T5 also includes the separate base-record-refresh search with claim 38's
+  parameters. Retain these matching contracts in its current correction draft and confirm
+  them at joint sign-off; there is no remaining centre-selection gap. Q-0238 must remain
+  open until the complementary revisions are approved together.
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
 Joint hand-off checks: S-0213 revision 13 claim 16 already supplies the route-order timing
 pointer, and the current S-0207 claim 20 e already supplies claim 10's live erasing-lock exception
-and restored-target distinction. S-0307 revision 8 claims 15 to 24, approved revision 9
-claims 15 to 25 and current revision 10's matching contracts, S-0406 revision 7 claim 17 and S-0417's current claims 4 and 13 supply the expanded search,
-construction and factory contracts cited here. Hand these corrections off together; no further
+and restored-target distinction. S-0307 claims 15 to 25 (expanded in revision 9 and
+retained in approved revision 10 and its current correction draft), S-0406 revision 7
+claim 17 and S-0417's current claims 2, 4, 5, 13 and 14 supply the expanded search,
+construction, factory ready-mark and temporary-driving contracts cited here. Hand these corrections off together; no further
 behavioural edit to them is requested. Also confirm S-0207 claim 20 a/e with S-0209's
 matching ground-reservation and bridge-record consequences and their shared
 `quirks.teleport_vehicle_ground_reservation`; S-0212 claim 22 with S-0207 claim 15 and
 D17 d3 for immediate fresh search and same-tick follow-up; and S-0208 claim 19 with
-claim 10 here for teleport landing and target-loss/reversion. These are coordination
-checks, not additional rules of this spec.
+claim 10 here for teleport landing and target-loss/reversion. Retain claim 2's phase-in
+processing, claim 11's unchanged factory ready mark and claim 13's restoration hand-off
+to S-0207 claim 21; S-0417's release and temporary driving do not supply exceptions to
+them. These are coordination checks, not additional rules of this spec.
 
 ## Questions for the project lead
 

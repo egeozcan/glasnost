@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 16
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327]
 supersedes: []
 ---
 
@@ -30,9 +30,10 @@ secret-lab choices and end-of-loading tags. The cleanup and low-bridge refinemen
 remain in force. S-0109 claims 14 and 25 own the middle-event gates and sprite-derived μ.
 Claim 15 here supplies the downstream particle and smudge creation draws at map load
 and during play, including immediate middle events (Q-0217).
-S-0404 claim 11 and P11 B/C supply production-start draw assignment at the causing
-action, distinct from payment priority; the between-house order-boundary extension remains
-an unmeasured design rule. S-0701 claims 13, 14, 20 and 25 supply sound-instance and
+S-0404 claim 11 and P11 B/C, with S-0203 claim 8, supply production-start draw assignment
+at the causing action, distinct from payment priority: turn-pass starts precede order-boundary
+starts, and completion alone creates no replacement-start draw batch. The between-house
+order-boundary extension remains an unmeasured design rule. S-0701 claims 13, 14, 20 and 25 supply sound-instance and
 feedback draws on the unsynchronised stream and the lightning-sound exception on the
 scenario stream. S-0401 claim 20 and S-0011 claim 36 agree with S-0109 claim 13:
 the creation start event can react, while later trigger-played start events are suppressed.
@@ -40,6 +41,9 @@ Check these revisions together, including claim 15's 6-bale removal under S-0401
 a stage-6 resource cell becomes stage 0, not empty. S-0011 claim 36 covers the specified
 middle-event composition during loading and play, while subsequent particle updates remain
 outside it and must not be treated as draw-free. Event timing, sprite-derived μ and the height gate remain S-0109's.
+S-0414 claims 19 and 23 and V18 agree with claim 16 here: post-game score requests use
+the scenario stream in listed-house order after simulation stops, and equal bounds take
+no raw value. Check this addition with the same hand-off.
 
 ## Terms
 
@@ -313,14 +317,28 @@ original's recording modes are retained as deferred context, not implementation 
     computer-player decisions, map loading and start positions (S-0009), resource growth and
     spread (including the vein patterns below), random map events, crates and triggers. Several
     effects that look like presentation also draw from it: animations, particles and particle
-    systems, debris, smudges, and the overlay placement effects below. Consequence for our engine:
+    systems, debris, smudges, and the overlay placement effects below. Post-game winner-score
+    bonuses also use it after simulation stops (claim 16). Consequence for our engine:
     these presentation-like effects must run inside the deterministic simulation, in the
     original's order, or every later draw of the stream shifts. Three kinds of draw are stated here
     because no feature spec lists them yet:
     - **The creation draw.** Every creation of an infantry, vehicle, aircraft or building object
       takes one raw value, whatever else that creation draws, at the moment the object is created.
       Creating an object is not the same as its entering play (S-0203): the draw is taken even for
-      an object that never enters play. Where the creation falls:
+      an object that never enters play.
+      **Creation-derived report value (Q-0327).** Our engine retains the low 16 bits of
+      this existing draw as an unsigned integer *r* = *x* mod 65536, in 0 … 65535,
+      where *x* is the creation's raw value. This exact integer reduction involves no
+      rounding and no additional draw. The value belongs to the object's persistent
+      simulation state: saved games preserve it, loading restores it, and the
+      deterministic state hash includes it. Presentation can obtain it for pre-placed,
+      starting, newly created and restored objects, even if presentation begins after
+      creation. Gameplay rules do not consult it, and sound choices do not feed back
+      into simulation. S-0701 claims 21 and 32 own the report selection from this value,
+      including exceptions. Retaining it must not replace the variant with zero or
+      reconstruct it using another draw. Persistence and hashing are a design contract
+      of our engine, not an additional claim about the original's save or hash format.
+      Where the creation falls:
       - *Map loading.* A pre-placed object is created when its map entry is read, so its creation
         draw comes before the draws of its own tag (S-0011, claim 34) and before any draw its
         placement takes. An entry that names no house of the game (S-0009, claim 27) or an unknown
@@ -521,6 +539,8 @@ original's recording modes are retained as deferred context, not implementation 
       | Part | Backing |
       |---|---|
       | The creation draw is taken when an object is created | `measurable` (R5 b; R8 G for its exact count) |
+      | Creation-derived report value: low-bit reduction and fixed normal report selection | `measurable` (S-0701 F2), high confidence |
+      | Our engine retains, saves, restores and hashes the report value and exposes it to presentation without another draw | `unmeasured` design contract (Q-0327), high confidence; this is a requirement of our engine, not an oracle claim |
       | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
       | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
       | Lightning sound choice: stream, count, guards and position within a strike | `measurable` (S-0701 F6); high confidence for stream/count/order, medium for the same-point guard |
@@ -821,6 +841,26 @@ original's recording modes are retained as deferred context, not implementation 
       test; medium for absence of further placement draws and conditional
       resource-removal recalculation composition
 
+16. **Post-game winner-score draws.** Preparing the skirmish result statistics after simulation
+    has stopped takes one scenario-stream ranged request per undefeated listed house, in
+    house order, under S-0414 claims 19 and 23. For that house's signed 32-bit integer running
+    score *p*, let *b* = max(*p*, 0) score points. Its request is R(⌊*b* / 2⌋, *b*), with
+    exact integer division rounded down. Defeated houses and houses omitted from the result
+    statistics request none. Listed houses are those still present, non-passive and not the
+    observer's house, including defeated houses. The order is house order, not an order
+    derived from their displayed scores.
+
+    The stream continues from the state left by play; there is no score-specific reseeding.
+    Equal bounds take no raw value under claim 4, so a zero-score undefeated house advances
+    nothing. Other bounds consume claim 4's raw values, including rejections, before the next
+    eligible house's request. Eligibility uses defeat state at statistics preparation, not
+    a committed victory result: a house defeated in the final tick requests none even if its
+    committed result remains a win. These draws contribute only to the displayed score.
+    They cause no further simulation tick and change no simulation outcome. S-0414 claim 23
+    owns the displayed-score formula.
+    - Backing: `measurable` (R15 and S-0414 V18)
+    - Confidence: high
+
 ## Formulas
 
 All arithmetic in this section is on integers, exact, unless it says otherwise. "mod 2³²" reduces
@@ -1006,6 +1046,7 @@ the order map north, map east, map south, map west.
 | Suspended | A raw value is requested | Returns 0; no advance (the original) |
 | Suspended | Clearing ends | Running again, with the state it had when the clearing began (the original) |
 | Running | Saved game loaded | Scenario random stream state replaced by the saved state (claim 9) |
+| Running | Post-game statistics prepared after simulation stops | Eligible listed houses take claim 16's ranged requests in house order, continuing the scenario stream without reseeding; equal bounds do not advance it |
 
 Observable ordering: because both streams start from the same seed, the first draws of a game from
 the two streams are the same raw values when no other draw has been taken from either. The order
@@ -1637,6 +1678,22 @@ The recorder is part of the measurement setup (the project lead has approved it)
   scenario-stream choice with audible/silent, empty-list and repeated-point controls.
   Their setups, observations and falsifiers are owned by those scenarios. No results
   from them are claimed here, and none measures the between-house design extension.
+
+- **R15, post-game winner-score requests (claim 16).** Use S-0414 V18's purpose-made
+  skirmish fixture with stock data except its named map overrides, director and mods off,
+  speed 4 and 800 × 600 pixels. Run ten naturally recorded seeds with scripted input,
+  screen capture and read-only running-score, defeat-state and random-state recorders.
+  Include multiple undefeated listed houses with distinct positive scores, a zero-score
+  undefeated control, and defeated and omitted-house controls. Record the scenario stream
+  at the end of play and during statistics preparation, with the final tick number.
+  Expected: each eligible house receives R(⌊max(p, 0) / 2⌋, max(p, 0)) from the continuing
+  stream in house order, with all rejections accounted for. The zero-score control and
+  excluded houses consume no raw values. Displayed scores match S-0414 claim 23, and no
+  new simulation tick occurs during preparation. A reseed, other stream, wrong assignment
+  order, extra or missing value, or simulation tick caused by the requests falsifies the rule.
+  S-0414 V12 c supplies the additional final-tick-defeat control: a committed win does not
+  override the defeated house's exclusion from the bonus. Void runs with unaccounted
+  scenario draws between the sampled end-of-play state and the score requests.
 
 ## Open questions
 

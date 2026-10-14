@@ -53,6 +53,9 @@ pub struct Loaded {
     pub live: Option<Live>,
     /// The typed rules, when the ruleset resolved.
     pub rules: Option<Arc<SimRules>>,
+    /// The edge-scroll multiplier μ (S-0101 F9 and Import mapping:
+    /// `[AudioVisual] ScrollMultiplier`, 1.0 when absent), presentation only.
+    pub scroll_multiplier: glasnost_num::F64,
     /// The cells after loading, when the game was set up.
     pub cells: Option<glasnost_map::CellGrid>,
     /// The shroud and fog sprites of a skirmish game (S-0110 claim 3).
@@ -208,6 +211,15 @@ pub async fn load_with(
         .as_ref()
         .ok()
         .map(|r| Arc::new(SimRules::new(&r.ruleset, &r.sim_rules_hash)));
+    // spec: S-0101 Import mapping (ScrollMultiplier: a double; absent: 1.0)
+    let scroll_multiplier = resolved
+        .as_ref()
+        .ok()
+        .and_then(|r| r.ruleset.sim.general.scroll_multiplier.as_ref())
+        .map_or(
+            glasnost_num::F64::from_i64(1, glasnost_num::Rounding::TowardZero),
+            |d| d.value(glasnost_num::Rounding::TowardZero),
+        );
     let mut options = options.clone();
     if started.is_ok() && options.game == build::GameMode::Sandbox {
         // The sandbox game places every owner's objects (S-0009 claim 27 in
@@ -271,6 +283,7 @@ pub async fn load_with(
         problems,
         live,
         rules,
+        scroll_multiplier,
         cells,
         canvas,
         covers,

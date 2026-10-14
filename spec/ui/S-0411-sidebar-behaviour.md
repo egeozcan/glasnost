@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 13
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339]
 supersedes: []
 ---
 
@@ -33,12 +33,15 @@ states and timing, not a reproduction of the original shell. Power values and me
 meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
 
-**Paired revisions.** S-0404 revision 10 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 13 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
-release with a refund at the place order's application boundary (claims 7 and 13).
-S-0407 revision 11 distinguishes cancellation orders issued
-at the recheck from their application at the tick's end, exempt held-item resume from the
-issue-time limit test, and retain the application-time limit test on queued starts (claims
+release with a refund at the place order's application boundary, without retry (its claims 7
+and 13). No eligible releasing factory instead leaves the item done. Claim 14 here covers
+production continuing during a sale or queued sale; claim 15 owns full-tab suppression and
+later admission. S-0404 relies on those behaviours in its claims 3, 7–9 and 11.
+S-0407 revision 13 distinguishes cancellation orders issued
+at the recheck from their application at the tick's end, exempts held-item resume from the
+issue-time limit test, and retains the application-time limit test on queued starts (claims
 13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
 icon order used by claim 13 below. Its T14 run 7 distinguishes the permanent-removal refund
 from the later sidebar cancellation boundary. The former per-tick-removal correction requests are resolved.
@@ -359,10 +362,16 @@ last recheck). In addition:
     use the game-wide build-click sound (S-0701 claim 24). Announcements follow S-0701 claims
     27 and 28, including nearby-event suppression where applicable: requesting one does not
     guarantee immediate audible playback.
+    Starting or resuming infantry requests the training announcement; starting or resuming
+    any other producible kind requests the building announcement, including vehicles,
+    naval vehicles, aircraft and defences. Adding a queued copy to an already active line
+    requests no new training or building announcement, but retains the build-click sound.
+    These are announcement requests, not promises of audible playback. S-0701 claim 28
+    already states the same split and suppression.
     The busy-building-line refusal requests the unable-to-comply announcement, without a
     build-click or game-wide refusal sound. Refused building placement instead requests the
     cannot-deploy-here announcement, without the game-wide refusal sound. These two refusal
-    cues are not the same entry. S-0701 claim 24 and F5 now agree with these two actions.
+    cues are not the same entry (S-0701 claim 24 and F5).
     This spec fixes a cue only for:
     - a left click whose order starts or queues an item, resumes one or cancels one (claim 4, rows 1,
       3 and 5 and the last row, each only when its order takes effect: not a build order that is
@@ -377,7 +386,7 @@ last recheck). In addition:
     4); the build-limit row; and a click whose build order is ignored when it is applied (the
     darkened icon, the lit aircraft icon with every dock taken). Scenarios S3 and S4 record these
     without a prediction.
-    - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8; S-0701 F5)
+    - Backing: `measurable` (scenarios S3, S4, S5, S7, S8 and S14; S-0701 F5 and F11)
     - Confidence: medium
 
 13. **Several offers removed at one recheck (Q-0123).** For types with shown icons, the
@@ -393,6 +402,17 @@ last recheck). In addition:
     cancels followed by all cancel-all orders. In our engine the same order applies for every
     player house, using the icon order that S-0004 would give that house as the local player.
 
+    Each replacement start receives its scenario-stream creation value at the cancellation
+    that causes it, in the application order above (S-0404 claim 11; S-0213 claim 3).
+    This is not a separate batch in line creation or payment-priority order. Intervening
+    actions keep their draws between starts; no value is reserved ahead of the causing
+    action. A replacement started and cancelled at the same boundary has already taken
+    its draw; removing it from the queue before it starts takes none. Turn-pass starts
+    precede order-caused starts at that tick's end. Across houses, order-boundary starts
+    in our engine follow house creation order and each house's production-order issue
+    order (S-0213 claim 3). That between-house extension is deterministic design, not
+    a finding about the original's computer production.
+
     An automatic cancellation is not a build order. When applied it can start the next queued
     type under S-0404 claims 6 and 10, even if the same recheck has removed that type's offer.
     Offer membership is not tested again for such a queued start. Factory eligibility and the
@@ -405,8 +425,10 @@ last recheck). In addition:
     the same boundary. With no price change between those orders, B starts at the current
     price and is refunded 0 credits: it has paid nothing. A bonus gained before this boundary
     does not by itself change that result. General cancellation refunds remain S-0404 claim 6's.
-    - Backing: `measurable` (scenario S9) for local-player orders and intermediate starts,
-      `unmeasured` for the every-player extension, a project rule not observable in the original
+    - Backing: `measurable` (scenario S9; S-0404 P11 B/C for value assignment and turn-pass
+      precedence) for local-player orders and intermediate starts; `unmeasured` for the
+      every-player and between-house order-boundary extensions, project rules not observable
+      in the original
     - Confidence: high (tab and icon order, per-type grouping); medium (intermediate starts)
 
 14. **Production during a sale (Q-0121).** The start of selling, and merely queueing a sale,
@@ -484,7 +506,8 @@ last recheck). In addition:
     is the dedicated icon palette named in Import mapping, not a theater unit palette
     or a house-colour ramp. Selection of the same icon file is therefore independent
     of theater and house colour; side archive precedence can supply different file
-    contents (S-0005). Palette loading and colour conversion belong to S-0103.
+    contents (S-0005). Palette loading, session lifetime, colour conversion and missing-file
+    behaviour belong to S-0103 claim 13, including its safe missing-palette departure.
 
     Darkening draws frame 0 of the separate darkening-mask file over the already-drawn
     icon. At each nonzero mask index, each destination hi-colour channel becomes
@@ -523,6 +546,42 @@ last recheck). In addition:
     - Backing: `measurable` (scenario S12)
     - Confidence: high (listed sidebar events and label entries)
 
+18. **Scrolling and end feedback (Q-0339).** A scroll-button click requests one page
+    in its direction on the displayed tab. A page is the number of complete visible
+    icon rows. The original has two icons per row; shell geometry remains a design
+    choice. At settled positions let *N* be the tab's icon count, *R* its complete
+    visible row count and *T* the zero-based row at the top. The top end is *T* = 0.
+    the bottom end is reached when 2 × (*T* + *R*) ≥ *N*. A button request already
+    at its requested end requests the game-wide refusal sound. With any room left
+    it is accepted and requests the tab-scroll sound instead, even when less than
+    a full page remains. Movement stops at the end; reaching that end during the
+    accepted movement generates no additional refusal sound. S-0701 claim 24
+    already establishes this feedback distinction, not the input dispatch below.
+
+    Both buttons are enabled whenever the tab has more icons than fit, even at
+    either end. When all icons fit, both buttons are disabled. Clicking a disabled
+    button gives no scroll request and no scroll/refusal sound. Thus the conditional
+    refusal for a dispatched request on an all-fitting strip is not a prediction
+    of a sound from an ordinary click on its disabled button.
+
+    The button acts on release over the button after a press there, not repeatedly
+    while held. Left and right button clicks use the same page response. Holding
+    for many cycles adds no requests; releasing outside the button does not activate
+    it. There is no held-button repeat delay or interval to import.
+
+    The mouse wheel instead requests one row per wheel event, upward for a positive
+    wheel delta and downward for a negative one, irrespective of the delta's magnitude
+    or the pointer's location over the battlefield or sidebar. It affects the
+    displayed tab and uses the same ends, but requests neither the tab-scroll nor
+    the refusal sound, including at an end or when all icons fit. It does not
+    activate a disabled page button. These controls change presentation only,
+    not production orders or offer membership. The predictions concern normal
+    active skirmish play, not wheel events delivered to a modal dialog.
+    - Backing: `measurable` (scenario S13; S-0701 F10)
+    - Confidence: high (end predicate, partial-page feedback, disabled buttons and
+      wheel's one-row silent path); medium (release activation and pointer-independent
+      wheel observation)
+
 ## Formulas
 
 - **Clock stage** = progress + 1 (claim 8). Integers: progress is S-0403's integer from 0 to 54, so
@@ -535,6 +594,14 @@ last recheck). In addition:
   exact, no rounding; the remainder lies from 0 to 9. Subsequent toggle spacing is 10 ticks.
   Initial lit state: ⌊*t*/10⌋ + 1 even. After the first toggle: ⌊(*u* + 1)/10⌋ even
   at tick *u*. Each floor division rounds down in the non-negative integer domain.
+
+- **Settled scroll end** (claim 18): *E* = max(0, ⌈*N*/2⌉ − *R*) rows.
+  *N*, *R* and the top row *T* are non-negative integers; *R* is positive.
+  The division rounds upward, counting an incomplete final row. A single accepted
+  page from a settled strip finishes at min(*E*, *T* + *R*) downward or
+  max(0, *T* − *R*) upward. A wheel event uses 1 row instead of *R*.
+  All additions, comparisons and clamping are exact integer operations.
+  The end-feedback test uses the starting *T*, not the clamped destination.
 
 ## Constants
 
@@ -611,12 +678,15 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | Input | Concept | Form and absent behaviour |
 |---|---|---|
 | `Cameo`, `AltCameo` (art, type's art section) | icon file choice before frame 0 is drawn | text cut to 24 bytes; main empty/missing uses `XXICON.SHP`, alternate empty/missing has no alternate; first-read retention and use conditions are S-0007 claims 22 and 25 |
-| `CAMEO.PAL` | dedicated icon palette | fixed file name, no rules selector; file resolution follows S-0005, colour conversion is S-0103's ownership; missing-file behaviour is not established here |
+| `CAMEO.PAL` | dedicated icon palette | fixed file name, no rules selector; file resolution follows S-0005; startup loading, conversion, session lifetime and missing-file behaviour, including the black-palette warning departure, are S-0103 claim 13's ownership |
 | `DARKEN.SHP` | unavailable-icon mask | fixed file name, frame 0, zero index transparent, nonzero indices halve destination channels; no rules selector; a missing mask adds no darkening |
 | `TXT_READY` (string table) | ready label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | No data key | queue count format and label lifetime | decimal integer count; labels are state-bound, not timed messages; claims 7, 8 and 17 |
 | No data key | tab flash | initial parity/countdown and later 10-tick periods are engine constants, claim 11 |
+| No data key | scroll dispatch and end tests | claim 18: page button on release, no held repeat, wheel one row per event; disabled buttons emit no request; no imported repeat timer |
+| `GUITabSound`, `ScoldSound` (rules, audio-visual section) | accepted page-scroll and refused page-scroll sound respectively | single sound-entry names; initially no sound, later omission or unknown name retains earlier value, including session retention; S-0701 Import mapping |
+| `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
 
 These delegated inputs matter to claims 13 and 14:
 
@@ -932,8 +1002,12 @@ the time the script sent a button event, dates a click.
   line, A-before-B creates B and cancels it at the same boundary, with one creation draw and
   no B progress step and a refund of 0 credits. B-before-A creates no B and takes no creation
   draw for B. Its queued removal changes no credits. The cost-bonus control still refunds
-  0 for transient B because both its start and its cancel use the same current price. Other line starts contribute the draws that S-0404 specifies
-  and are recorded separately. Void a run with an unrelated draw or earlier cancellation.
+  0 for transient B because both its start and its cancel use the same current price.
+  Across the other lines, replacements receive their creation values in the recorded
+  cancellation-application order, not line creation or payment-priority order (S-0404
+  P11 B). Any intervening action's draws remain between those starts. A transient item
+  keeps its consumed draw even when a later order cancels it. Other release-specific
+  draws remain S-0404's and are recorded separately. Void a run with an unrelated draw or earlier cancellation.
 - Falsified if: orders follow registration rather than icon order, are separated into all
   cancels then all cancel-all orders, or any ordering, intermediate start, refund or draw
   differs despite unchanged factory and limit eligibility. If no transient recording is
@@ -1004,8 +1078,9 @@ the time the script sent a button event, dates a click.
   The same resolved palette and icon bytes do not change with house colour/theater.
 - Falsified if: a state uses frame 1, the canvas is centred or stretched, clipping
   differs, or the mask paints colours rather than halving destination channels.
-  Palette-file loading/conversion tests are delegated to S-0103; this does not
-  predict a missing palette's result. One run per variant, screen capture plus
+  Palette-file loading, conversion, session lifetime and missing-file tests are
+  delegated to S-0103 claim 13 and PL, including the original startup failure and
+  our engine's safe departure. One run per variant, screen capture plus
   read-only image/palette inspection by the measurer.
 
 **S12. Sidebar text versus audio (claim 17).**
@@ -1035,6 +1110,51 @@ the time the script sent a button event, dates a click.
   its state remains, a different string-table entry supplies either label, or the
   missing-entry result lacks its identifier.
 
+**S13. Scroll dispatch and end feedback (claim 18, Q-0339).**
+- Setup: common sidebar probe skirmish, speed 6, 800 × 600, director and mods off.
+  Named map overrides offer enough types for two extra rows on one tab and fewer
+  than one page on another. Count complete visible rows rather than assuming a
+  shell size. Screen/audio capture and a read-only recorder log scroll positions,
+  input activations and requested sound entries. Use S-0701 F10's named distinct
+  tab-scroll/refusal test sounds if the stock entries cannot be distinguished.
+- Procedure: at the top, click up; click down once with only two rows left, wait
+  for movement to settle, then click down at the bottom. Repeat upward with less
+  than a page left. On the all-fitting tab, click both disabled buttons. Separately
+  press and hold each enabled button for 100 cycles before releasing over it,
+  then repeat releasing outside it. Repeat with right-button clicks. Wheel in
+  both directions at the top, interior and bottom and on the all-fitting tab,
+  first with the pointer over icons and then over the battlefield. Compare single
+  delivered wheel events with different positive and negative delta magnitudes.
+  Run each variant once; date received input rather than script-send time.
+- Observable: request counts, settled top rows, enabled states, sound-entry
+  requests and audible playback. Allow the existing movement to finish before
+  testing an end, so animation does not obscure the starting position.
+- Expected: an enabled page button already at its end requests refusal; a
+  partial page requests the tab-scroll cue and stops at the end without a later
+  refusal. Both buttons stay enabled on the overflowing tab. Both are disabled
+  and silent on the all-fitting tab. Holding dispatches nothing until release
+  over the button, then exactly one page; release outside gives none. Left and
+  right clicks agree. Wheel events move at most one row each, independent of
+  magnitude and pointer location, and request neither cue in all tested states.
+- Falsified by different end feedback, refusal after accepted partial movement,
+  a disabled-button request, held repeat, activation on press, outside-release
+  activation, wheel page movement or either wheel cue. The recorder distinguishes
+  a missing sound request from playback suppression.
+
+**S14. Start/resume announcement kind and queue suppression (claim 12).**
+- Setup: common skirmish, slow infantry, ground/naval vehicle, aircraft, ordinary
+  building and defence items, eligible factories, free docks, ample credits and
+  unreached limits. Screen/audio and read-only announcement-request recorder.
+- Procedure: start each kind, hold it, then resume from its own icon. For each
+  unit line add another copy while its first item runs. One run per kind, with
+  distinct input cycles; S-0701 F11 may serve as the same run.
+- Observable: requested announcement identifiers, build-click requests and actual
+  line/queue changes, separately from audible playback.
+- Expected: infantry start/resume requests training, every other kind building.
+  Queue additions retain build-click feedback but request neither announcement.
+  Falsified by any opposite kind, missing predicted request or a new start/resume
+  announcement merely for adding an active-line queued copy.
+
 ## Open questions
 
 1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
@@ -1052,24 +1172,37 @@ the time the script sent a button event, dates a click.
    The lit artwork is the implementer's design.
 8. Q-0120 is partly resolved by S-0404 claims 7, 13 and 15: busy or failed release
    cancels with a refund without retry, and claim 15 gives ordinary aircraft pad positions.
-   The remaining unloading and post-exit movement, take-off, nearby destination,
-   exact infantry exit-entry test, contact-count and placement/search-draw questions
-   belong to S-0417's follow-up. Specialised docking combinations remain outside the
+   S-0417 claim 14 supplies contact-place count, infantry exit-candidate acceptance and
+   nearby destinations for edge-entering aircraft. Remaining no-rally infantry walk-out,
+   take-off, specialised post-contact movement and initial-placement draw questions
+   belong to S-0417's open questions. Specialised docking combinations remain outside the
    verified pad-position rule. This spec adds no rules for those outcomes and does not
    claim to answer the whole request. Q-0196's four questions are answered by claim 15.
 
 ## Changes for other specs
 
-- S-0406 claim 1 still calls placement failure a refusal sound. It must agree with
-  claim 10 and S-0701 claim 24: cannot-deploy-here announcement only, no interface
-  refusal sound. Its Q-0282 message answer is separate from sidebar labels.
-- S-0007 should point from icon choice to claim 16 for frame and content placement.
-  S-0103 should supply Q-0275's dedicated icon-palette loading/conversion and
-  missing-file behaviour; this spec fixes the draw's palette selection, not that
-  missing-palette outcome.
-- S-0408 and S-0213 own the remaining Q-0282 sell/repair and route-mode notices,
-  including their string identifiers and shared message-list capacity, duration
-  and pause behaviour where applicable. Those are not sidebar expiry rules.
+- S-0404: refresh its paired Summary reference from S-0411 revision 15 to revision 16
+  at joint hand-off. Its application-boundary release/refund, sale and capacity contracts
+  already agree; no behavioural replacement is required.
+- S-0701: Q-0339's dispatch is now claim 18 and S13 here. Replace its remaining
+  dispatch-open wording with that pointer: all-fitting tabs disable both buttons,
+  holding does not repeat, and wheel requests are one-row and silent.
+- S-0406: Q-0282 placement text/no-text is already answered by claim 20 and PL15.
+  retain that ownership. No behavioural change required.
+- S-0408: Q-0282 sell/repair text/no-text is already answered by claim 18 and S12.
+  retain that ownership. No behavioural change required.
+- S-0213: Q-0282 route notices and the shared message lifetime/capacity are already
+  answered by claim 25 and O21; retain that ownership. No behavioural change required.
+- S-0007: Q-0275 main/alternate icon selection is already claims 22 and 25.
+  retain the pointer to claim 16 here. No behavioural change required.
+- S-0103: Q-0275 palette conversion, lifetime and missing-file behaviour are already
+  claim 13; retain that ownership. No behavioural change required.
+
+Earlier correction requests are resolved by the current companion drafts: S-0406 claims 1
+and 20 give placement's appropriate announcement and text/no-text feedback; S-0007 claims
+22 and 25 point to claim 16 for icon content; S-0103 claim 13 owns dedicated icon-palette
+loading/conversion and missing-file behaviour. S-0408 claim 18 and S-0213 claim 25 own
+sell/repair text and route notices respectively, separate from sidebar label lifetimes.
 
 ## Questions for the project lead
 

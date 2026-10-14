@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1274,4 +1274,8 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
     adopts claim 11's causing-action precedence, with P11 B/C's proposed assignment tests,
     including turn-pass starts before order-boundary starts and the unmeasured between-house
     design extension. Confirm claims 1 and 8 here and S-0202 claim 10 against the versions
-    handed off together. The unrelated row-6 versus row-7 comparison remains unmeasured.
+    handed off together. Revision 17 rechecks this agreement against current S-0404
+    claims 7 and 11 and S-0202 claim 10: completion alone causes no replacement-start
+    draw batch in row 6. A later release or place action causes any queued successor's
+    start and its creation draw. Keep P11 B/C as proposed measurements, not measured
+    results. The unrelated row-6 versus row-7 comparison remains unmeasured.

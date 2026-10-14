@@ -214,6 +214,35 @@ pub fn leave_play(w: &mut World, id: ObjectId) {
     crate::objects::remove(w, id);
 }
 
+/// The destruction raises of a killing hit on an infantry unit, vehicle,
+/// aircraft or building (S-0312 claim 29), made after health reaches 0 and
+/// before the death debris; the actions they fire complete here. A known
+/// attacker, or a supplied attacking house, enables the attacker-dependent
+/// raises; a supplied house other than the attacker's leaves only the
+/// common group. The vehicle's extra group is behind
+/// `quirks.vehicle_destruction_extra_raises`; our engine remembers no
+/// hijacker type, so its exception never applies.
+pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
+    let Some(o) = w.obj(id) else { return };
+    let kind = o.kind;
+    // spec: S-0312 claim 29 (a tagged infantry unit, vehicle, aircraft or building)
+    if !matches!(
+        kind,
+        Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+    ) {
+        return;
+    }
+    let attacker_house = hit.attacker.and_then(|a| w.obj(a)).and_then(|a| a.owner);
+    // spec: S-0312 claim 29 (a supplied attacking house other than the known attacker's, or a house without an attacker: only the common group, its three preliminary raises enabled by that house)
+    let other_house = hit.house.is_some() && hit.house != attacker_house;
+    let known = hit.attacker.is_some() || hit.house.is_some();
+    // spec: S-0312 claim 29 and Edge cases (a vehicle's extra earlier group, quirks.vehicle_destruction_extra_raises)
+    let extra = kind == Kind::Vehicle
+        && !other_house
+        && w.rules().quirks.vehicle_destruction_extra_raises;
+    crate::triggers::destruction_raises(w, id, known, extra);
+}
+
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(o) = w.obj(id).cloned() else { return };
@@ -225,6 +254,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         // Q-0193 (interim: no other death effect, no draws; it stays on its line with health 0)
         return;
     }
+    // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris)
+    destruction_raises(w, id, hit);
     // spec: S-0312 table, step 1 (debris)
     debris(w, id);
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon)
@@ -267,7 +298,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         }
         Kind::Aircraft => {
             let tc = type_combat(w, id).cloned().unwrap_or_default();
-            // An empty list shows nothing and takes no draw (unknown in S-0312 claim 16; interim, request Q-0236).
+            // spec: S-0312 claim 16 (an empty explosion list: no aircraft-specific animation, no draw and no fallback, at any height)
             if !tc.explosion.is_empty() {
                 // spec: S-0312 claim 16 (one list pick from the explosion list)
                 let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;

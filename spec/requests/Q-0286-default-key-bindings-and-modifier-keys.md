@@ -3,7 +3,7 @@ id: Q-0286
 title: Which keys and modifier keys give the human order gestures by default?
 status: answered
 related: [S-0213, S-0214]
-answered-by: [S-0213]
+answered-by: [S-0213, S-0214]
 ---
 
 ## Need

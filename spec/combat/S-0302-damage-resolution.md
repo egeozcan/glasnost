@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -47,9 +47,12 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   rule.
 - **Turn.** In this spec "turn" means only the glossary's second sense, an object's share of one
   tick (S-0203, Terms): claims 16 and 19 use it. A rotation is written with facing words.
-- **Airborne, in the air.** Both mean the test that claim 17 states and the glossary's *airborne*
-  entry asks this spec to name: the object's height is more than 0 leptons. Whether that height
-  is taken above the surface or above the terrain is not settled (Open questions).
+- **Height test for mutation hits.** Claim 17 uses the glossary's *height above the surface*,
+  measured in integer leptons, and asks whether it is strictly positive. It does not use the
+  airborne-state test of S-0308 (Terms), shared by S-0303 and S-0309. A standing infantry unit
+  on a high bridge deck has height 0 above the surface and does not meet claim 17's test.
+  The existing switch name `quirks.airborne_mutation_hit_raised` is retained; its scope is
+  this height test, not the airborne-state test.
 - **Demolition warhead.** The one warhead that the rules name in their combat-damage section as the
   warhead of destruction (Import mapping; S-0011, claim 27 and S-0303, claim 19 give its
   uses). It is the warhead of the trigger kill and of the ore burst of claim 20.
@@ -194,7 +197,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      not established, so no isolated test of those values is specified; the wave's
      attacking house column: a wave kill credits the attacker whether the wave carries its
      firer's house or none (claim 14), so a wave that carries its firer's house is not told apart
-     from one that carries none; the other believed scripted sources mentioned outside the table:
+     from one that carries none; the wave's no-escape marker: D24 part f observes credit but
+     does not provide a crewed target and an escape-chance control, so it cannot distinguish
+     the marker values; the other believed scripted sources mentioned outside the table:
      no precise source setup and expected metadata are established here)
    - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
@@ -503,20 +508,22 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    warhead is no further case. The same hang follows from the immune bridge repair hut, which is a
    property of the type in the map's data and not of the warhead. The hang also follows from a
    building that the demolition warhead puts into a delayed kill (claim 16), if that warhead
-   causes delayed kills, and from an airborne infantry unit hit by a demolition warhead of
-   infantry-death kind 9 (claim 17). S-0011's departure for the survivor (damage it once per
+   causes delayed kills, and from an infantry unit at positive height above the surface hit by
+   a demolition warhead of infantry-death kind 9 (claim 17). S-0011's departure for the survivor (damage it once per
    firing and go on) and its importer warning cover all these survivor cases. At hand-off,
    confirm this survivor coverage together with S-0011 claim 27, including the distinction
-   between general immunity and an immune bridge repair hut. The zero-amount
-   row stops a trigger kill only in the airborne case just named: every other
+   between general immunity and an immune bridge repair hut. S-0011 claim 27 must replace
+   its airborne wording and unsettled height reference with the positive-height-above-the-surface
+   test of claim 17; it is not S-0308's airborne-state test. The zero-amount
+   row stops a trigger kill only in the positive-height case just named: every other
    target has health at the trigger kill, so the amount is above 0. The self-damage
    row cannot stop a trigger kill (it needs an attacker), and the two no-health rows do not apply to
    it (S-0011 acts on present objects only, *No-health targets* in claim 8).
    - Backing: `measurable` (through S-0011's scenario T9 for its claim 27, and S-0210's scenario K6
      for trains; the immune bridge repair hut through scenario D16, part d2, which expects the
-     hang; the delayed-kill and airborne survivors through D16 parts d3 and d4)
+     hang; the delayed-kill and positive-height infantry survivors through D16 parts d3 and d4)
    - Confidence: high (what the marker skips); medium (the hang for the immune hut, the delayed
-     kill and the airborne case: the hang has not been observed, S-0011)
+     kill and the positive-height infantry case: the hang has not been observed, S-0011)
 
 10. **Side effects that happen even when the hit does nothing.** Two effects belong to the stages of
     claim 8's table. Neither depends on the final amount, and both happen for hits that end up
@@ -609,7 +616,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     yellow* the intensity of its light source is scaled by a fixed factor (D11, part c). Two
     more are pointers only, owned elsewhere and not claims of this spec: the trigger events that
     a hit sets off through the target's tag, whose list S-0011 leaves to a later revision, and the
-    building's damage sound on *now yellow* or *now red*, which the structures specs own. Quirk
+    building's sound reactions, owned by S-0701 claims 20 and 37. Claim 37 specifies the
+    any-owner building damage fallback on *now yellow* or *now red* and the death fallback
+    when a lethal hit begins the destruction reaction, not at later removal. Quirk
     `quirks.yellow_state_at_half` (Edge cases).
     - *Post-mortem when a reaction removes the target.* When one of those reactions takes the
       target out of play (a trigger that the hit sets off can destroy it, S-0011), the hit reports
@@ -632,10 +641,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     whose health ratio (S-0214, Terms) is at or below the game-wide yellow ratio (Import mapping; unlike the fixed half of claim 12, this is the imported ratio) and that has no damage
     particle effect yet gets one, chosen from its type's list of damage particle systems by one
     ranged draw from the scenario random stream over 0 … *n* − 1, where *n* is the number of
-    eligible entries, provided *n* > 0 and the object is less than 10 leptons below the surface
-    (the object's height is above −10 leptons; whether that height is taken above the surface or
-    above the terrain is not settled, and the two differ only on a bridge deck). The eligible entries are the particle system types of the
-    list whose behaviour is *smoke* (Import mapping); a draw of *k* picks the (*k* + 1)-th eligible
+    eligible entries, provided *n* > 0 and the object's height above the surface is greater than
+    −10 leptons (the glossary's surface includes a bridge deck when the object is on it).
+    The eligible entries are the particle system types of the list whose behaviour is *smoke* (Import mapping); a draw of *k* picks the (*k* + 1)-th eligible
     entry counted from the end of the list, so a draw of 0 picks the last one. After a hit that
     leaves the health ratio above the yellow ratio, an existing damage particle effect is removed.
     This includes healing hits and hits that the stage 4 rows of claim 8 stop (no health on a target
@@ -666,9 +674,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     themselves (S-0109 gives what a burning animation deals).
 
     **No other draws.** The amount of a hit never depends on a draw. Apart from the two cases
-    above, nothing in this spec draws from the scenario random stream. A hit that reports *now
-    yellow* or *now red* on a building plays its damage sound (claim 12), and the sound can take
-    draws from the unsynchronised random stream, which never reach game state (S-0202, claim 11).
+    above, nothing in this spec draws from the scenario random stream. Building sound requests
+    follow S-0701 claims 20 and 37, including the threshold fallback only when the type names
+    no damage sound of its own. Sounds can take draws from the unsynchronised random stream,
+    which never reach game state (S-0202, claim 11).
     Whether each of the two results takes them does not matter to any rule here. The death of an object takes draws of its own (S-0312).
     - Backing: `measurable` (scenario D11 for the damage effect; D22 for the draw, the eligibility
       by behaviour and the counting from the end of the list, by replay of the recorded
@@ -794,7 +803,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     reproduce any other internal ordering within the turn.
 
     When the expiry hit reports *now dead*, all applicable shared and building death effects
-    of S-0312 occur in that same building turn, with their normal draws and order. Its later
+    of S-0312 occur in that same building turn, with their normal draws and order. The building
+    death-sound fallback follows S-0701 claim 37: it is requested at this destruction reaction,
+    not at later removal or at a delayed-kill hit that reports *post-mortem*. Its later
     removal, if any, follows S-0312 claim 21, not the countdown's duration. The hit still obeys
     column I of claim 8 and the delayed-kill rule itself. If the demolition warhead stops it,
     or causes another delayed kill, the building can survive expiry and receive another expiry
@@ -815,7 +826,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       and the resulting health amount and ownerless shot; part j for healing and nonlethal
       follow-up hits; D24 for the credit); `unmeasured`
       (the *post-mortem* result of the hits: it has no known observable, claim 12, so
-      no scenario tests it; postponement while being erased: D13 h tests electromagnetic-pulse
+      no scenario tests it; dropping an animation-delayed shot whose normal firing check
+      refuses it on the expiry turn: D13 i aligns permitted shots only, so that refusal case
+      is not discriminated here; postponement while being erased: D13 h tests electromagnetic-pulse
       blocking, not an erasing lock across expiry; the expiry hit's no-escape marker: this marker affects vehicle crew,
       not the building target, so D13 cannot distinguish its values; credit to a separately
       recorded charge planter: D13 uses no planted charge and no charge-planting scenario is
@@ -831,18 +844,19 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
 
 ### Kind-specific rules
 
-17. **Airborne infantry and the mutating warhead.** A hit on an infantry unit in the air (a
-    paratrooper or a flying infantry unit: one whose height is more than 0; whether that is its
-    height above the surface or its height above the terrain, which differ on a bridge deck, is not
-    settled), by a warhead of infantry-death kind 9 (S-0107, Terms), has a delivered amount *d*₀ of 0,
+17. **Infantry above the surface and the mutating warhead.** A hit on an infantry unit whose
+    height above the surface is strictly greater than 0 leptons, by a warhead of infantry-death
+    kind 9 (S-0107, Terms), has a delivered amount *d*₀ of 0,
     whatever amount it carries (this is the reset that claim 8 and F2 refer to). When the hit
     does not ignore defences, the minimum of claim 5 raises that 0 to 1, so a direct hit deals trunc(*v*) (at most the cap of claim 6, for a versus value of 0 or more), the whole-number part of the versus value: nothing for
     a versus value from 0 % up to but not including 100 %, 1 at 100 %. A hit that ignores defences then does nothing.
-    Quirk `quirks.airborne_mutation_hit_raised` (Edge cases).
-    - Backing: `measurable` (scenario D14 for ordinary hits; D16 part d4 for unchanged health
-      and the resulting hang when the trigger kill ignores defences); `unmeasured` (which
-      surface the height is relative to: neither scenario places the infantry on a bridge
-      deck, the only case that distinguishes the two height definitions)
+    This is a height test, not a flight-state or type test: it also applies during ascent or
+    descent at a positive height close to the surface. Standing on a high bridge deck does not
+    reset the amount; the deck is the surface for that unit. Quirk
+    `quirks.airborne_mutation_hit_raised` (Edge cases).
+    - Backing: `measurable` (scenario D14 for ordinary hits, including its near-surface and
+      bridge-deck parts; D16 part d4 for unchanged health and the resulting hang when the
+      trigger kill ignores defences)
     - Confidence: medium (the reset to 0 and the later raise are both clear; the intent is not)
 
 18. **Expected damage for targeting.** When an object fires at another, the original also computes
@@ -1071,7 +1085,7 @@ integer boundaries; D11 part d deliberately tests the non-exact decimal input.
 | Minimum for undemolishable buildings | 1 | health points | Claim 7 |
 | Damage particle depth limit | 10 | leptons below the surface | Claim 13: the effect starts only at a height above −10 |
 | Maximum damage, absent-key default | 1000 | health points | Claim 6 |
-| Infantry-death kind of the mutating warhead | 9 | infantry-death kind (S-0107) | Claim 17: a warhead of this kind resets the amount of a hit on an infantry unit in the air |
+| Infantry-death kind of the mutating warhead | 9 | infantry-death kind (S-0107) | Claim 17: resets the amount of a hit on infantry at positive height above the surface |
 | Red ratio, absent-key default | 0.5 | fraction | Claim 12; as S-0107, S-0108 and S-0111 |
 | Prone factor, absent-key default | 1.0 | factor | Claim 5 |
 | Edge percentage, absent-key default | 1.0 | fraction | F3: no falloff |
@@ -1140,8 +1154,9 @@ Observable consequences within one hit:
   place of the red one), consistent with the health bar of S-0111. The two settings agree only
   when the yellow ratio is one half.
 - **`quirks.airborne_mutation_hit_raised`** (claim 17; default on, the original). On: the hit
-  delivers 0, which the minimum of claim 5 raises to 1. Off: an airborne infantry unit takes no
-  damage from such a warhead (the 0 is not raised to 1).
+  delivers 0 to infantry at positive height above the surface, which the minimum of claim 5
+  raises to 1. Off: such infantry take no damage from this warhead (the 0 is not raised to 1).
+  Neither setting changes the damage to infantry standing at height 0, including on a bridge deck.
 - **`quirks.readiness_from_defended_damage`** (claim 10; default on, the original). On: readiness
   loss uses the amount after the defences but before the versus value, and happens even when a
   later rule stops the hit. Off: it uses the final amount *m* of the hit (after claim 7) and does
@@ -1278,7 +1293,10 @@ D28 part f's crew creation and health draws; the latter fixes escape chance to 1
 crew presence, not the drawn health. Each scenario runs 3 times and must give the same health values every time (D18 and D22 are statistical and
 say how). Parts d, d2 and d3 of D24 depend on where the bolts of a superweapon strike, which this
 spec does not own: each of their runs is checked against the part's own expectation, which is
-stated per destroyed vehicle, and the runs need not give equal values.
+stated per destroyed vehicle, and the runs need not give equal values. For every deterministic
+part below, any valid run whose recorded observable differs from its stated expected result
+falsifies that part, not only the illustrative alternatives listed as falsifiers. Statistical
+parts use their stated replay checks and rejection thresholds instead.
 
 - **D1 (claims 2, 6, 11: versus and truncation).** A test weapon with damage 37, a projectile that
   hits its target directly, and a warhead without spread whose versus values for eleven test
@@ -1503,11 +1521,27 @@ stated per destroyed vehicle, and the runs need not give equal values.
   building's turn at *t* + 300 and delivers 16. *Falsified if* either follow-up adds credit,
   damage starts a shorter countdown ending at *t* + 110, healing cancels expiry, or expiry's
   delivered amount differs from 16. Void a run with any other hit, healing, repair or protection.
-- **D14 (claim 17).** A test map gives a stock flying infantry type (a jumpjet type) strength 1000, and
-  a test warhead of infantry-death kind 9 with versus 250 % against its class and damage 50. Hit in
-  the air: loss 2 (trunc(1 × 2.5)); standing at height 0: loss 125. With versus 100 %: loss 1 in the air.
-  *Falsified if* the airborne loss is not 2 with versus 250 % or not 1 with versus 100 %,
-  or the standing unit's loss is not 125 with versus 250 %.
+- **D14 (claim 17: positive surface-relative height).** A tiny test map with flat ground and
+  a high bridge gives a stock flying infantry type (a jumpjet type) strength 1000, and a test
+  warhead of infantry-death kind 9 with versus 250 % against its class and damage 50.
+  Use a direct-hit projectile that can reach the target in flight, with no spread, and record
+  target health, world height, surface height and hit tick with the read-only state recorder.
+  (a) Hit while flying well above the surface: loss 2 (trunc(1 × 2.5)); standing at height 0:
+  loss 125. With versus 100 %: loss 1 above the surface.
+  (b) Order takeoff or landing and time the same direct hit during the movement, retaining
+  only hits whose recorded height above the surface is between 1 and 207 leptons inclusive.
+  *Expected:* loss 2 at versus 250 %, not the standing loss 125. This tests the strictly
+  positive height rule near the surface rather than relying only on established flight.
+  (c) A non-jumpjet infantry test type of the same armour class, strength 1000, stands on
+  the high bridge deck; an identical unit stands under the bridge, with no prone state or
+  armour bonuses. Hit each directly once with the damage-50, versus-250 % weapon. The deck
+  unit has positive height above the terrain but height 0 above its surface.
+  *Expected:* loss 125 for both, not 2 for the deck unit. Repeat every part three times at
+  game speed index 2, director and ordinary mods off under the common setup. Void a run
+  with another hit, an unintended prone state, or movement away from the required height
+  at impact. *Falsified if* any named loss differs; in particular, a loss of 125 in a valid
+  near-surface run rejects the positive-height test, and a loss of 2 for the standing deck
+  unit rejects the surface-relative baseline.
 
 - **D15 (claim 4: no stacking).** A test rules file leaves only a firepower crate and an armour
   crate possible (firepower factor 1.5, armour factor 2.0; the keys are in Import mapping), with
@@ -1550,10 +1584,10 @@ stated per destroyed vehicle, and the runs need not give equal values.
   (d3) *Delayed-kill survivor, run separately:* use a tagged test building eligible for delayed
   kills and a demolition warhead that causes them, with a positive delay. Fire the trigger kill.
   *Expected:* the building remains at 1 health and the tick counter stops at that firing.
-  *Falsified if* it dies at once or ticks continue. (d4) *Airborne survivor, run separately:*
+  *Falsified if* it dies at once or ticks continue. (d4) *Positive-height infantry survivor, run separately:*
   tag a flying infantry unit and give the demolition warhead infantry-death kind 9. Fire the
-  trigger kill while it is in the air. *Expected:* its health is unchanged and ticks stop at
-  that firing. *Falsified if* its health falls or ticks continue. In d3 and d4 record health
+  trigger kill while its recorded height above the surface is positive. *Expected:* its health
+  is unchanged and ticks stop at that firing. *Falsified if* its health falls or ticks continue. In d3 and d4 record health
   and ticks with the read-only recorder, and keep a second tagged target for the never-reached
   continuation as in d2. These tests deliberately hang the original and must each run alone.
 - **D17 (claim 8 stages, claim 10).** (a) A test warhead that makes targets go berserk (damage
@@ -1890,9 +1924,6 @@ stated per destroyed vehicle, and the runs need not give equal values.
   alliances of the lobby only.
 - Which objects can be 10 leptons or more below the surface while they take a hit (claim 13, the
   depth limit of the damage effect) is not known.
-- Whether the original measures the height of claims 13 and 17 above the surface or above the
-  terrain is not settled. The two differ only on a bridge deck, which no scenario here sets up, so
-  the confidence of claim 17 stays medium and the depth limit of claim 13 low.
 - A hit with an attacking house that differs from the owner of a present attacker (claim 14) has no
   known source.
 - Whether the superweapon sources of claim 1 (the storm bolt and the others it lists) deliver the

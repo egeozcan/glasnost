@@ -1,9 +1,9 @@
 ---
 id: Q-0338
 title: Which vehicle type is the repair-response vehicle of S-0701 F6
-status: open
+status: answered
 related: [S-0701]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

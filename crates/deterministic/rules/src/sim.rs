@@ -517,6 +517,11 @@ pub struct General {
     /// `EngineerCaptureLevel` (S-0214 F2).
     #[serde(default)]
     pub engineer_capture_level: Option<Decimal>,
+    /// `[AudioVisual] ScrollMultiplier`, the edge-scroll multiplier μ, a
+    /// double (S-0101 F9 and Import mapping); absent: 1.0. Presentation
+    /// only: the simulation never reads it.
+    #[serde(default)]
+    pub scroll_multiplier: Option<Decimal>,
     /// `BaseUnit`: the base-unit list, vehicle type keys (S-0009 claim 45).
     #[serde(default)]
     pub base_unit: Option<Vec<String>>,

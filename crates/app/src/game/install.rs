@@ -51,19 +51,15 @@ pub fn offered_countries(rules: &SimRules) -> Vec<String> {
         .collect()
 }
 
-/// The swatch of each lobby colour slot 0 … 7: the colour definition at
-/// the slot's position (S-0103 claim 10), through S-0103's HSV formula
-/// (interim, Q-0280); grey when the definition is missing.
-pub fn slot_swatches(r: &Ruleset) -> Vec<Rgba> {
+/// The swatch of each lobby colour slot 0 … 7 (S-0103 claims 11 and 12):
+/// the slot's fixed RGB after the 16-bit step, the same for the open list
+/// and the selected choice, and independent of the colour definitions.
+pub fn slot_swatches() -> Vec<Rgba> {
     (0..8u8)
-        .map(|s| {
-            glasnost_render::palette::slot_position(s)
-                .and_then(|p| r.colours.get(p))
-                .map_or([128, 128, 128, 255], |c| {
-                    let [h, sat, v] = c.hsv;
-                    let rgb = glasnost_render::palette::hsv_to_rgb(h, sat, v);
-                    [rgb.r, rgb.g, rgb.b, 255]
-                })
+        .filter_map(glasnost_render::palette::lobby_swatch_565)
+        .map(|p| {
+            let (r, g, b) = glasnost_render::compose::expand565(p);
+            [r, g, b, 255]
         })
         .collect()
 }
@@ -108,7 +104,7 @@ pub fn setup_rules(r: &Ruleset, sim: &SimRules) -> SetupRules {
         // spec: S-0201 claim 7 (the lobby's game-speed index from the rules)
         game_speed: sim.general.lobby_game_speed,
         countries: offered_countries(sim),
-        colours: slot_swatches(r),
+        colours: slot_swatches(),
     }
 }
 
@@ -198,6 +194,21 @@ mod tests {
         let text = b"[Waypoints]\n0=1000\n1=2000\n2=-1\n5=3000\n8=4000\n";
         assert_eq!(start_count(text), 3);
         assert_eq!(start_count(b"[Basic]\nName=x\n"), 0);
+    }
+
+    /// spec: S-0103 claims 11 and 12 (the setup swatches are the fixed slot colours after the 16-bit step: flat, eight slots, independent of the colour definitions) (Q-0280)
+    #[test]
+    fn lobby_swatches_are_fixed_colours() {
+        let s = slot_swatches();
+        assert_eq!(s.len(), 8);
+        let (r, g, b) = glasnost_render::compose::expand565(glasnost_render::palette::hicolor_565(
+            glasnost_render::palette::LOBBY_SWATCHES[1],
+        ));
+        assert_eq!(s[1], [r, g, b, 255]);
+        assert_eq!(s[1][0], 255);
+        // No colour definition is consulted: the swatches take no rules input.
+        assert_ne!(s[0], s[1]);
+        assert_eq!(glasnost_render::palette::lobby_swatch_565(8), None);
     }
 
     #[test]

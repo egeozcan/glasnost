@@ -1593,3 +1593,171 @@ fn s0208_claim_21_no_deck_position_no_walking_target() {
     assert_eq!(o.walk.as_ref().unwrap().target, None);
     assert_eq!(o.layer, Layer::Deck);
 }
+
+// ---------------------------------------------------------------------------
+// Revision 10: claims 21 and 25 and the two bad-data switches.
+// ---------------------------------------------------------------------------
+
+// spec: S-0307 claim 21 (winged class: the clear-cell test accepts without occupancy or region tests, so a blocked range-passing primary is still taken and no alternative is tried)
+#[test]
+fn claim_21_winged_class_bypasses_the_clear_cell_test() {
+    for (class, want) in [
+        (None, cell_of(6, -1)),
+        (
+            Some(glasnost_rules::sim::LocomotionClass::Winged),
+            cell_of(6, 0),
+        ),
+    ] {
+        let mut r = base("5");
+        if class.is_some() {
+            r.sim.vehicles.get_mut("CART").unwrap().locomotion_class = class;
+        }
+        let mut s = approach_setup(&r);
+        block(&mut s, 6, 0);
+        assert_eq!(
+            approach_search(&mut s.w, s.a, 1152),
+            Some(Approach::Cell(want)),
+            "class {class:?}"
+        );
+    }
+}
+
+// spec: S-0307 claim 21 (a legal cell outside the usable area has no reach region, so a ground actor inside a region refuses it in the clear-cell test even on open flat ground)
+#[test]
+fn claim_21_outside_area_cell_is_in_no_reach_region() {
+    use glasnost_map::{CellGrid, Footprint};
+    use glasnost_rules::sim::MovementZone;
+    let r = base("5");
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-test"));
+    let mut map = testkit::empty_map(N);
+    let fp = Footprint::new(N, N, [4, 4, N - 8, N - 8]);
+    let mut grid = CellGrid::new(fp);
+    let legal: Vec<CellXY> = grid.iter().map(|(c, _)| c).collect();
+    for c in legal {
+        *grid.get_mut(c).unwrap() = *map.cells.get(c).unwrap();
+    }
+    map.footprint = fp;
+    map.cells = grid;
+    let mut w =
+        glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(1))
+            .expect("synthetic test game loads");
+    glasnost_sim::regions::ensure(&mut w);
+    let inside = cell_of(0, 0);
+    assert!(w.cells.usable(inside));
+    let outside: Vec<CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| !w.cells.usable(c))
+        .collect();
+    assert!(!outside.is_empty());
+    for c in outside {
+        assert!(
+            !glasnost_sim::regions::same_region(
+                &w,
+                MovementZone::Normal,
+                inside,
+                Layer::Ground,
+                c,
+                Layer::Ground
+            ),
+            "{c:?}"
+        );
+    }
+}
+
+// spec: S-0307 claim 25 (a close-range vehicle on a high-bridge deck: its deck vehicle mark is not read by the shortcut's choice, so the shortcut succeeds; the target is kept, the destination is the target's cell, and no standing position is reserved and no walking target set)
+#[test]
+fn claim_25_deck_vehicle_shortcut_sets_only_the_destination() {
+    let mut r = base("0.5");
+    r.sim.vehicles.get_mut("CART").unwrap().close_range = Some(true);
+    let mut w = testkit::game_with(&r, N, 1);
+    let own = cell_of(0, 0);
+    let a = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, own, 0);
+    set_deck(&mut w, own);
+    // Move the cart's vehicle mark from the ground record to the deck.
+    w.cells.occ_mut(own, Layer::Ground).unwrap().vehicles -= 1;
+    w.cells.occ_mut(own, Layer::Deck).unwrap().vehicles += 1;
+    let p = w.obj(a).unwrap().pos;
+    w.obj_mut(a).unwrap().layer = Layer::Deck;
+    put(&mut w, a, Pos::new(p.x, p.y, 416)); // spec: S-0307 Constants (deck 416 leptons)
+    let t = walker_target(&mut w, a, 1, 0, position::BOTTOM);
+    let got = approach_search(&mut w.clone(), a, 1152);
+    assert!(
+        matches!(got, Some(Approach::Shortcut(_, c)) if c == cell_of(1, 0)),
+        "{got:?}"
+    );
+    w.obj_mut(a).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Attack);
+    glasnost_sim::approach::step(&mut w, a);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(cell_of(1, 0))));
+    assert_eq!(o.target, Some(Target::Object(t)));
+    assert!(o.walk.is_none());
+    assert_eq!(o.pos, Pos::new(p.x, p.y, 416), "no movement point changed");
+    let ground = w.cells.occ(own, Layer::Ground).copied().unwrap_or_default();
+    assert!(ground.empty(), "no standing position reserved");
+}
+
+// spec: S-0307 Edge cases (quirks.negative_elevation_cap off: max(0, c) replaces c in F2, so a cap of −1 gives no bonus on flat ground)
+#[test]
+fn quirk_negative_elevation_cap_off() {
+    let mut r = elevation_rules(true, false);
+    r.sim.general.elevation_bonus_cap = Some(d("-1"));
+    r.globals.quirks.negative_elevation_cap = false;
+    // Limit 1024 with E = 0.
+    assert!(test(&setup(&r, 4, 0)));
+    assert!(!test(&setup(&r, 5, 0)));
+    let mut ra = r.clone();
+    line(&mut ra).arcing = Some(true);
+    assert!(test(&setup(&ra, 4, 0)));
+    assert!(!test(&setup(&ra, 5, 0)));
+    // A positive cap is unchanged: RG3's bonus is the same with the switch off.
+    let on = elevation_rules(true, false);
+    let mut off = on.clone();
+    off.globals.quirks.negative_elevation_cap = false;
+    for (dx, dy) in [(5, 0), (5, 1), (6, 0)] {
+        assert_eq!(test(&plateau(&on, dx, dy)), test(&plateau(&off, dx, dy)));
+    }
+}
+
+// spec: S-0307 Edge cases (quirks.negative_range_fields off: max(0, value) for a negative weapon range, minimum range and air bonus; a weapon range of −512 stays unlimited)
+#[test]
+fn quirk_negative_range_fields_off() {
+    let off = |range: &str| {
+        let mut r = base(range);
+        r.globals.quirks.negative_range_fields = false;
+        r
+    };
+    // Weapon range −1.5 cells becomes 0.
+    let s = setup(&off("-1.5"), 1, 0);
+    assert_eq!(s.w.rules().combat.weapon(s.wp).range, 0);
+    // With an air bonus of 3 cells, an airborne target at ⌊r(500² + 250²)⌋ ≈ 559:
+    // on, R = −384 + 768 = 384 (out); off, R = 0 + 768 (in).
+    let mut on_r = base("-1.5");
+    on_r.sim.vehicles.get_mut("CART").unwrap().combat.air_range_bonus = Some(d("3"));
+    let mut off_r = on_r.clone();
+    off_r.globals.quirks.negative_range_fields = false;
+    for (r, fires) in [(&on_r, false), (&off_r, true)] {
+        let mut s = setup(r, 1, 0);
+        let a = s.w.obj(s.a).unwrap().pos;
+        put(&mut s.w, s.t, Pos::new(a.x + 500, a.y, 250));
+        assert_eq!(test(&s), fires, "switch {}", r.globals.quirks.negative_range_fields);
+    }
+    // A negative air bonus becomes 0: range 3 cells, bonus −2, the same airborne target.
+    let mut nb = off("3");
+    nb.sim.vehicles.get_mut("CART").unwrap().combat.air_range_bonus = Some(d("-2"));
+    let mut s = setup(&nb, 1, 0);
+    let a = s.w.obj(s.a).unwrap().pos;
+    put(&mut s.w, s.t, Pos::new(a.x + 500, a.y, 250));
+    assert!(test(&s));
+    // A negative minimum range becomes 0.
+    let mut m = off("5");
+    weapon(&mut m).minimum_range = Some(d("-1.5"));
+    let s = setup(&m, 1, 0);
+    assert_eq!(s.w.rules().combat.weapon(s.wp).min_range, 0);
+    // −2 cells is still the unlimited sentinel.
+    let s = setup(&off("-2"), 30, 0);
+    assert_eq!(s.w.rules().combat.weapon(s.wp).range, -512); // spec: S-0307 Constants (unlimited-range sentinel −512 leptons)
+    assert!(test(&s));
+}

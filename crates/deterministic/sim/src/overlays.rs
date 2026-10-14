@@ -134,7 +134,7 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
         place_overlay(w, c, o);
     }
     if map.has_overlay_data {
-        // spec: S-0009 claim 13 (the data stream's values are final with respect to overlay creation)
+        // spec: S-0009 claim 13 (the data stream's values are final with respect to overlay creation; an immediate crater request made during placement acted before this overwrite, and the overwrite restores no overlay type it removed)
         for &(c, _, d) in stream {
             if let Some(cell) = w.cells.grid.get_mut(c) {
                 cell.overlay_data = d;

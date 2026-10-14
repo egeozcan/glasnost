@@ -1799,7 +1799,7 @@ mod tests {
         assert_eq!(shade_table(&grey(), [1000; 3], 53, None)[26][248].r, 247);
     }
 
-    /// spec: S-0104 claim 6 (rows 0 and 52; tint-exempt ramp over the first L rows)
+    /// spec: S-0104 claim 6 (rows 0 and 52; tint-exempt ramp over the first L rows; r18: in 53 rows, row 6 and later are full palette colour, only rows below 6 darken)
     #[test]
     fn shade_rows() {
         let p = synthetic();
@@ -1819,6 +1819,8 @@ mod tests {
         assert_eq!(table[5][250].r, (i64::from(e.r) * 54608 / 65536) as u8);
         assert_eq!(table[6][250], e);
         assert_eq!(table[52][250], e);
+        assert!((0..6).all(|j| table[j][250].r < e.r));
+        assert!((6..53).all(|j| table[j][250] == e));
         // No exempt indices (tile palette): index 250 follows the tint.
         let tile = shade_table(&p, [1000; 3], 53, None);
         assert_eq!(tile[52][250].r, 255);

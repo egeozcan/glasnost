@@ -2,7 +2,7 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -24,13 +24,16 @@ appear, how ore mines make new resource cells, and how all of this is ordered wi
 draws from the scenario random stream. The harvesting units that take the bales, and the credits a
 house gets for them, are S-0402's.
 
-**Joint hand-off.** At sign-off, check claim 20 and E17 against S-0109 claim 13 and
+**Joint hand-off.** At sign-off, check claim 20 and E17 against S-0109 claims 13–14 and
 S-0011 claim 36 and T21: creation-time resource chain reaction is enabled, and only
-later start events of a trigger-played animation suppress it. Hand off these aligned
-revisions together. S-0202 claims 10 and 15 and R14 own the middle-event
+later start events of a trigger-played animation suppress it. S-0109 claim 13 and T21
+also retain the creation-time start sound. Hand off these aligned revisions together.
+Check the event gates, sprite-derived μ and particle-before-choice ordering against
+S-0109 claims 14 and 25. S-0202 claims 10 and 15 and R14 own the middle-event
 draw composition during loading and play, including later playback events; subsequent
-particle updates remain outside that established scope. Check claim 16c and E13 against
-S-0202 claim 15 and R14: taking 6 bales leaves a stage-6 cell at stage 0, not empty.
+particle updates remain outside that established scope. Check claims 3 and 16c and E13
+against S-0202 claim 15 and R14: taking 6 bales leaves a stage-6 cell at stage 0 with
+its resource overlay still present, not empty.
 
 ## Terms
 

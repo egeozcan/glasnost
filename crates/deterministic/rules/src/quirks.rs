@@ -1094,6 +1094,16 @@ pub struct Quirks {
     // spec: S-0307 claim 21, Edge cases
     #[serde(default = "on")]
     pub approach_alternative_outside_area: bool,
+    /// A negative elevation bonus cap applies as it is, even at no height
+    /// difference; off: the cap is max(0, cap) in the elevation bonus.
+    // spec: S-0307 claim 6, Edge cases (quirks.negative_elevation_cap)
+    #[serde(default = "on")]
+    pub negative_elevation_cap: bool,
+    /// Negative weapon range, minimum range and air range bonus fields are
+    /// used as they are; off: max(0, value), the unlimited −512 kept.
+    // spec: S-0307 claim 1, Edge cases (quirks.negative_range_fields)
+    #[serde(default = "on")]
+    pub negative_range_fields: bool,
     /// The sound data's game-wide default priority is read and never applied: an entry without its own priority is normal; off: it is the default for entries without their own priority.
     // spec: S-0701 claim 3, Edge cases
     #[serde(default = "on")]
@@ -1400,6 +1410,8 @@ impl Default for Quirks {
             approach_alternative_walk: true,
             approach_alternative_zero_height: true,
             approach_alternative_outside_area: true,
+            negative_elevation_cap: true,
+            negative_range_fields: true,
             default_sound_priority_ignored: true,
             missing_sample_silences_entry: true,
             sound_order_startup_draw: true,
@@ -2051,6 +2063,8 @@ impl Quirks {
                 "approach_alternative_outside_area",
                 self.approach_alternative_outside_area,
             ),
+            ("negative_elevation_cap", self.negative_elevation_cap),
+            ("negative_range_fields", self.negative_range_fields),
             (
                 "default_sound_priority_ignored",
                 self.default_sound_priority_ignored,
@@ -2093,6 +2107,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "persist_global_overrides",
         "importer (convert::layers::LayerQuirks), S-0006 claim 10",
+    ),
+    (
+        "colour_redefinition_ignored",
+        "importer (convert::layers::LayerQuirks), S-0103 claim 5 and S-0006 claim 2",
     ),
     (
         "persist_tiberium_overrides",

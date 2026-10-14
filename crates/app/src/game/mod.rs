@@ -16,6 +16,7 @@ pub mod cursor;
 pub mod install;
 pub mod paint;
 pub mod play;
+pub mod scroll;
 pub mod session;
 pub mod window;
 

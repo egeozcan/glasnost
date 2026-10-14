@@ -1,9 +1,9 @@
 ---
 id: Q-0278
 title: How does dragging a box on the battlefield select objects?
-status: open
+status: answered
 related: [S-0214, S-0101]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

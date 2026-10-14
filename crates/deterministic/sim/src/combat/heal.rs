@@ -189,8 +189,8 @@ pub fn repair_step(w: &mut World, id: ObjectId) -> Option<StepOutcome> {
         return Some(StepOutcome::NotNeeded);
     }
     let cost = step_cost(w, id)?;
-    // spec: S-0314 claim 3 (the paying house's available credits below the step cost: cannot pay; a cost of 0 is never refused)
-    if cost > 0 && crate::seams::available_credits(w, house) < cost {
+    // spec: S-0314 claim 3 (the paying house's available credits below the step cost: cannot pay; a cost of 0 is not refused at non-negative credits, but the comparison still applies at a negative balance)
+    if crate::seams::available_credits(w, house) < cost {
         return Some(StepOutcome::CannotPay);
     }
     let size = step_size(w, id);

@@ -2921,7 +2921,7 @@
           "default": null
         },
         "ai_hate_delays": {
-          "description": "`[General] AIHateDelays`, the original's computer-player timer list\nby difficulty index (S-0412 claim 3, the original only; no effect in\nour engine); absent: no entries.",
+          "description": "`[General] AIHateDelays`, the original's computer-player timer list\nby difficulty index (S-0412 claim 3, the original only; no effect in\nour engine; decimal-prefix items, S-0003 claim 23); absent: no\nentries.",
           "type": [
             "array",
             "null"
@@ -2933,7 +2933,7 @@
           }
         },
         "ai_virtual_purifiers": {
-          "description": "`[General] AIVirtualPurifiers`, per difficulty (S-0402 claim 12, the\noriginal only); absent: empty.",
+          "description": "`[General] AIVirtualPurifiers`, per difficulty (S-0402 claim 12, the\noriginal only; decimal-prefix items, S-0003 claim 23); absent: empty.",
           "type": [
             "array",
             "null"
@@ -3242,7 +3242,7 @@
           "default": null
         },
         "multiplayer_aicm": {
-          "description": "`[General] MultiplayerAICM`, the original's extra-credit percentages\nby difficulty index (S-0412 claim 3); absent: no entries.",
+          "description": "`[General] MultiplayerAICM`, the original's extra-credit percentages\nby difficulty index (S-0412 claim 3; decimal-prefix items, S-0003\nclaim 23); absent: no entries.",
           "type": [
             "array",
             "null"
@@ -4394,6 +4394,17 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "scroll_multiplier": {
+          "description": "`[AudioVisual] ScrollMultiplier`, the edge-scroll multiplier μ, a\ndouble (S-0101 F9 and Import mapping); absent: 1.0. Presentation\nonly: the simulation never reads it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "self_heal_infantry_amount": {
           "description": "`[General] SelfHealInfantryAmount` (S-0314 claim 10).",
@@ -6389,8 +6400,18 @@
           "type": "boolean",
           "default": true
         },
+        "negative_elevation_cap": {
+          "description": "A negative elevation bonus cap applies as it is, even at no height\ndifference; off: the cap is max(0, cap) in the elevation bonus.",
+          "type": "boolean",
+          "default": true
+        },
         "negative_level_floor_raised": {
           "description": "The level base below level 0 is one lepton higher.",
+          "type": "boolean",
+          "default": true
+        },
+        "negative_range_fields": {
+          "description": "Negative weapon range, minimum range and air range bonus fields are\nused as they are; off: max(0, value), the unlimited −512 kept.",
           "type": "boolean",
           "default": true
         },

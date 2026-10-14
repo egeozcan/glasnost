@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1054,7 +1054,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       - deck mode: when the destination cell is a high-bridge cell and the object's world height is
         more than 312 leptons (3 height levels) above the surface height *H* at the destination,
       - no height condition, no further test, no no-overlay condition, bridge cells allowed,
-      - no reference cell, so the pick depends on the tick number (S-0212 claim 25).
+      - no reference cell, so the pick uses the landing-point fixation tick number
+        (S-0212 claim 25), not a later jump tick.
 
       A destination in no reach region does not by itself fail the search. The ordinary
       class, occupancy and usable-area tests of S-0212 claim 25 still apply, and its collection
@@ -2858,8 +2859,10 @@ cell before *X*.
 - Q-0240: hand off this revision with S-0209's matching claim 1 pointer and claim 5
   reservation consequences. Claim 20 a/e here owns the teleporting vehicle's ground
   reservation, remembered-point clearing and two-record bridge placement; S-0209 owns
-  the entry outcomes and must share `quirks.teleport_vehicle_ground_reservation`.
+  the entry outcomes and shares `quirks.teleport_vehicle_ground_reservation`.
   A reservation is not necessarily in the cell layer where the vehicle is listed.
+  Retain S-0212 claim 27's summary-only role: S-0209 claim 5 owns the full vehicle
+  entry-outcome table.
 - The coordinated blocked-first-check rule is already stated in claim 15, D17(d3)
   and S-0212 claim 22: immediate fresh search despite a running retry timer, then
   same-tick repeated check when a path is found. Confirm those texts together at sign-off.
@@ -2867,6 +2870,17 @@ cell before *X*.
   retained non-infantry landing point; its actual deck landing follows claim 20 e.
   S-0215 claim 10's target-loss exception and restored-target distinction likewise remain
   coordinated with claim 20 e. These checks require no new rule in those companions.
+- Confirm claim 20 b and S-0212 claim 25's non-infantry teleport row together:
+  destination-centred search, own unsimplified zone, destination reach region with no
+  restriction when absent, strict deck-mode height threshold, no height or further
+  condition, bridges allowed, and selection on the landing-point fixation tick.
+  S-0208 claim 19 owns the different infantry fallback parameters and distinct deck
+  modes; neither search waits until the jump to select its result.
+- Confirm claim 21 with S-0417's temporary-driving contract and S-0215 claim 13's
+  restoration contract: destinations accepted while driving do not change the
+  suspended teleport landing point or reservation, and restoration alone resets
+  neither retained state nor occupancy. Separate later fall-back destination changes
+  from restoration itself.
 
 ## Open questions
 

@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -668,9 +668,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     different from the known attacker's house, or supplies a house without an attacker, only
     the common group occurs, with its three preliminary raises enabled by that supplied house.
     With `quirks.vehicle_destruction_extra_raises` off, only the common
-    group occurs for every vehicle. S-0011 claim 19 and T7 need the corresponding
-    vehicle-multiplicity refinement in the same revision round: their two-firing expectation
-    describes the common group alone, not a normal vehicle with the extra group.
+    group occurs for every vehicle. S-0011 claim 19 and T7 agree with these groups:
+    with the original's persistent latch, a fresh repeating destroyed-by-anything trigger
+    fires seven times for a normal vehicle with an attacker, four without, and twice for
+    a common-group-only death. Hand these passages off together with D20.
 
     **Deferred deaths.** A cyborg's crippling hit does not reach health 0 after its reprieve
     and makes no destruction raise. A delayed-kill building does reach 0 before the reprieve:
@@ -1445,8 +1446,13 @@ passenger deaths and removal, separating incoming-weapon effects from death effe
 trigger animation's immediate draws and effects must precede the dying object's debris and
 all remaining death effects. A later action, or action draws after death-debris draws,
 falsifies the timing; an unresolved within-hit trace is inconclusive. Repeat without a known
-attacker using the destruction action of a separate map trigger: destroyed-by-anything still
-fires before debris. Run 30 kills per kind and variant.
+attacker using a separate polled tag's explosion-at-a-waypoint action (S-0011 claim 28),
+with a weapon lethal to the test object. The separate tag must not be the dying object's
+counter tag, and the explosion must not hit the counter target. Destroyed-by-anything still
+fires before debris. Do not use destroy-attached-objects for this control: it damages carriers
+of its own firing tag, whose nested raises are suppressed while that tag is being raised
+(S-0011 claim 12), so it cannot isolate the no-attacker destruction raises. Run 30 kills per
+kind and variant.
 
 *Repeating groups:* attach a repeating tag with a single destroyed-by-anything event and an
 explosion-at-a-waypoint action aimed at an isolated durable neutral building. Use S-0011's
@@ -1456,8 +1462,9 @@ loss by the calibrated single-firing loss using exact integer arithmetic, before
 poll. Give each trigger an owner country no house plays, avoiding owner-house raises. Fresh tags and full-health objects ensure no earlier latch. With the
 original's persistent latch, a normal vehicle killed by a known attacker gives seven firings
 within the killing hit, compared with two for infantry, aircraft and buildings; without an
-attacker the vehicle gives four and the other kinds two. Each action's effects and draws
-precede death debris. A different count or position in the replay falsifies the groups.
+attacker the vehicle gives four and the other kinds two. Use the separate polled tag's
+lethal waypoint explosion above for every no-attacker count, not destroy-attached-objects.
+Each action's effects and draws precede death debris. A different count or position in the replay falsifies the groups.
 On our engine with the new extra-raise quirk off, the vehicle gives two. Repeat the original's
 vehicle case after takeover by a vehicle thief, first with the tag-carries-over flag clear and
 then set on one definition in its chain: the flag-clear case retains the extra group, the

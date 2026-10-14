@@ -353,6 +353,8 @@ pub fn wanted_files(
     ] {
         out.insert(upper(f));
     }
+    // spec: S-0103 claim 13 (the sidebar icon palette)
+    out.insert(upper(glasnost_render::palette::ICON_PALETTE_FILE));
     out
 }
 
