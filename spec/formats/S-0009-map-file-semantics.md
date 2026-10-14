@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1308,8 +1308,10 @@ read, in the placement order of claim 43, while the game's set-up at game start 
 40. **Initial state of a pre-placed building.** A building placed by the map is complete at once:
     it never enters the *construction* state and shows no build-up. Its placement sets its body
     state to *idle* at once, at stage *a* of the idle range, with the delay that S-0108 claim 6
-    gives an immediate change (it is made during the set-up), and the building starts in the
-    *guard* behaviour (S-0215). Its grand opening (S-0108 claim 11) does not happen. Instead, at
+    gives an immediate change (it is made during the set-up), and the set-up queues *guard*
+    (S-0215 claim 1). This does not guarantee that *guard* is already current. The first
+    automatic start for a turreted building placed at set-up remains open in S-0215
+    (Q-0241); no first-tick start is assumed here. Its grand opening (S-0108 claim 11) does not happen. Instead, at
     placement, the set-up starts the *idle* and *active-1* … *active-4* slot animations, as S-0108
     claim 11 says for buildings placed during the set-up. The slots that only a grand opening
     starts are therefore not started at placement: the refinery fill slot, the superweapon slot
@@ -1361,7 +1363,8 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     - Backing: `measurable` (scenario M21: variant A for the complete idle start, the slot starts
       and the damaged variant, variant B for the sprite turret slot, variant C for an eligible
       switched-off start, variant D for upgrades and the carried-over field; S-0405 W13 for
-      the startup power-state conditions and firestorm-wall cases). The effects of the three
+      the startup power-state conditions and firestorm-wall cases; S-0215 B36 for the
+      queued/current distinction). The effects of the three
       computer flags are `unmeasured` here: the repair flag's effect is S-0314's (its scenario
       H9 measures the gate), and the sell and rebuild flags act only through the computer
       players' base logic, which no scenario of this spec observes. The *guard* start is
