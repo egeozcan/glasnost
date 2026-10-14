@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
-requests: [Q-0087]
+requests: [Q-0087, Q-0212]
 supersedes: []
 ---
 
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-How a soldier's image frame and shadow are chosen from its type's sequence table, its facing and a
+Skirmish only; network games and campaigns are out of scope. How a soldier's image frame and shadow are chosen from its type's sequence table, its facing and a
 stage counter, and which sequence kind plays at any moment (movement, firing, fear, water, idling,
 dying). The fear rules and the attack state (claims 11, 15 and 16) are infantry behaviour kept here
 for now because they choose sequences; they are expected to move to a future infantry-behaviour
@@ -269,8 +269,8 @@ used by this spec only:
    the same kind again: for example, still walking asks for *walk*. Claim 6 turns that request down,
    so the stage simply keeps growing and the displayed image frame wraps through *k mod C*. Such
    kinds therefore loop with no break. A **one-shot** is a sequence whose completion follow-up
-   starts a different kind. A one-shot of *C* image frames lasts exactly *C × d* ticks, and its follow-up starts on the same tick as the completion. The wrapped image frame *S* + 0
-   of the finished one-shot is never displayed.
+   starts a different kind. For *C* ≥ 1 and *d* ≥ 1, an uninterrupted one-shot of *C* image frames lasts exactly *C × d* ticks, and its follow-up starts on the same tick as the completion. A positive-count sequence with *d* = 0 never reaches completion by stage advancement. The wrapped image frame *S* + 0
+   of the finished positive-count one-shot is never displayed.
    - Backing: `measurable` (scenario M3)
    - Confidence: high
 
@@ -283,7 +283,7 @@ used by this spec only:
    *parachute* and *shovel*) never changes the facing, whatever its entry declares. Entries without a
    declared direction never change the facing. A one-facing sequence (*M* = 0) with a declared
    direction thus leaves the unit facing the way its image frames showed it.
-   - Backing: `measurable` (scenario M7: part (a) for the snap, part (b) for *deploy* and
+   - Backing: `measurable` (scenario M7: part (a) for the snap and its repetition, part (b) for *deploy* and
      *undeploy*, part (c) for *parachute* and *shovel*); `unmeasured` (that the die kinds and the
      air-death kinds never snap: a die kind removes the unit on completion, so no facing is left to
      observe, and the air-death kinds cannot be started by a scenario, claim 21)
@@ -399,6 +399,11 @@ used by this spec only:
     | Any other unit | The outcome of *r* in the table below | The timer draw, *r*, then δ when the outcome is a turn |
 
     *r* and *e* are integers, each drawn uniformly from 0 to 10 inclusive.
+    The cow designation depends only on the infantry type's registry name, compared
+    case-insensitively with the identifier given in Import mapping. Neither its display
+    name nor its image name selects this rule (Q-0212). A renamed copy with the same
+    appearance therefore loses the cow-specific idle effects, while another infantry
+    type registered under the designated name gains them.
 
     **Owners that are not human-controlled.** The original applies the first row, and the scatter of
     the outcome *r* = 8, to units whose owner is not human-controlled. In our engine an AI house
@@ -429,7 +434,8 @@ used by this spec only:
     - Backing: `measurable` (scenario M9: part (a) for the timer bounds and the outcome ratios,
       measured statistically over many games; part (b) for the streams used, the number and the
       order of the draws, read with a *recorder* (glossary) that reads the random streams'
-      state; part (c) for the *hunt* trigger)
+      state; part (c) for the *hunt* trigger; part (d) for the cow identifier and the
+      exclusion of display and image names)
     - Confidence: high (outcomes, the streams used, the draw order, and that the four behaviours
       named are the only ones whose processing attempts an idle action)
 
@@ -605,9 +611,10 @@ used by this spec only:
     number and reduced modulo the list length. When *wet-die-1*, *wet-die-2* or *air-death-end*
     complete, the unit is removed with no corpse. Because of the water case above, a wet death
     sequence may in practice be seen only on beach cells.
-    - Backing: `measurable` (scenario M10: part (a) for the table, the corpse pick and the falling
+    - Backing: `measurable` (scenario M10: part (a) for the tested death kinds and falling
       paratroopers, part (b) for the switch's default, part (c) for the removal of a cyborg killed by
-      damage that ignores defences); `unmeasured` (row 1, the water case, and the sentence of the cyborg paragraph that
+      damage that ignores defences, part (d) for corpse-list precedence and the raw draw,
+      part (e) for the type's death-animation list); `unmeasured` (row 1, the water case, and the sentence of the cyborg paragraph that
       depends on its per-object condition: that condition is not identified, so no scenario can
       set it up, and M10 only records the water-cell outcome to help identify it; and a general
       corpse list left over from an earlier game, Import mapping: the original's result is
@@ -658,7 +665,9 @@ used by this spec only:
     (Import mapping), but no stock behaviour ever starts any of the three. Their entries therefore
     never show. The guard conditions of claims 11 and 14 apply only if a mechanic of another
     spec starts guard.
-    - Backing: `measurable` (scenario M16)
+    - Backing: `measurable` for the activities exercised in M16; `unmeasured` for the exhaustive
+      absence of all three kinds from every stock behaviour, because finite play tests cannot
+      exercise every behaviour path. M16 can falsify that broader claim but cannot confirm it.
     - Confidence: medium
 
 21. **Kinds started by other mechanics.** These kinds are started by mechanics that other specs
@@ -670,9 +679,15 @@ used by this spec only:
     and their completion (State and ordering) are given here. *air-death-fall* is started only by
     the completion of *air-death-start*. It has no completion rule of its own, so when it completes
     the general follow-up rows apply (`quirks.air_death_fall_generic_follow_up`).
-    - Backing: `unmeasured`. The stock triggers of the air deaths lie in the jumpjet locomotor,
-      which has no spec yet, so there is no controlled way to start them. The other kinds are covered
-      by the scenarios of their own specs.
+    - Backing: `measurable` for deploy/undeploy starts (M7(b)), parachute starts (M7(c)), and
+      harvesting starts of shovel (M7(c), M17(a)). `unmeasured` for the air-death starts and
+      follow-up: no controlled scenario is known that starts these kinds through the jumpjet
+      locomotor. The start rules for cheer, scripted idle orders and the deployment sounds are
+      also `unmeasured` here: no controlled legal skirmish trigger for celebration or scripted idle
+      orders is specified here, and the deployment-sound start boundary has no isolated observation
+      in the proposed deployment runs.
+      Their timing, once started, follows claims 4 and 5; this is not evidence that their start
+      triggers have been measured.
     - Confidence: high (that these mechanics start these kinds), medium (the *air-death-fall*
       follow-up)
 
@@ -686,12 +701,11 @@ used by this spec only:
       is known. A pair with an unknown sound is dropped and does not count towards the two. Later
       pairs never play (`quirks.two_sound_cues`).
     - The reference to the sequence section, each kind value and each cue value are read as at
-      most 31 characters. The value is parsed as if it ended after its 31st character, so a cue
+      most 31 bytes of text. The value is parsed as if it ended after its 31st byte, so a cue
       pair that begins after it never plays, and a field of a kind value that begins after it keeps
       its default of claim 1 (`quirks.sequence_value_length_limit`).
-    - Backing: `measurable` (scenario M18; the 31-character limit is tested on a kind value and a
-      cue value, and the reference to the sequence section follows from the same reading rule)
-    - Confidence: high (the direction rule and the two-cue limit), medium (the 31-character limit)
+    - Backing: `measurable` (scenario M18; the 31-byte limit is tested on a kind value, a cue value and the sequence-section reference)
+    - Confidence: high (the direction rule and the two-cue limit), medium (the 31-byte limit)
 
 ## Formulas
 
@@ -741,8 +755,7 @@ not pass through single precision. *x* is an integer from one ranged draw, unifo
 >
 > T = trunc(Q + (P − Q) × u)
 
-*c* is the double (2³⁰ + 1) / 2⁶¹, which is 1/2147483646 rounded to a double (toward zero and to
-nearest give the same value). All arithmetic is done at double precision, with a 53-bit significand, and each
+*c* is the double nearest to 1/2147483646, namely (2³⁰ + 1) / 2⁶¹. All arithmetic is done at double precision, with a 53-bit significand, and each
 of these results is rounded toward zero: the two products, the difference P − Q, the scaled draw
 *u*, the product (P − Q) × *u* and the final sum: the glossary's *round-toward-zero mode*, owned
 by S-0205 (number domains, claim 5) with its switch `quirks.chop_rounding`. trunc converts the
@@ -771,7 +784,7 @@ ratios at their absent-key default of 0.5, *i* is 50 or 12 and never 25.
 
 **Strength 0.** The health ratio needs a strength other than 0. With a strength of 0, the
 original's health ratio comes out as positive infinity, with no error, which lies above both
-ratios, so *i* is 12 (medium confidence, not measured). Our engine reaches the same result without dividing: for a strength of
+ratios, so *i* is 12 (confidence: medium; backing: `unmeasured`, because no controlled scenario is known in which a zero-strength infantry unit survives damage and reaches this fear calculation). Our engine reaches the same result without dividing: for a strength of
 0 it takes *h* to lie above both ratios, so *i* = 12. A strength of 0 or below is bad data, and the
 importer warns about any infantry type that has one (glossary *importer warning*). Whether a unit of strength 0 can survive
 damage at all is an open question.
@@ -803,7 +816,7 @@ damage at all is an open question.
 | Airborne height | 2 | height levels | 208 leptons, for the *hover* substitution |
 | Water death height | 11 | leptons | Height above the surface; killed below it over water: splash, no sequence |
 | Idle comment chance | 1 in 3 | draws | Unsynchronised random stream, draw 0 of 0 to 2 |
-| Value length limit | 31 | characters | Sequence art values (claim 22, Import mapping, `quirks.sequence_value_length_limit`) |
+| Value length limit | 31 | bytes of text | Sequence art values (claim 22, Import mapping, `quirks.sequence_value_length_limit`) |
 | Generic shadow image frame | 1 | image frame | Of the generic infantry-shadow sprite (claim 19) |
 
 **T1. Engine table per sequence kind** (I = interruptible, b = base delay in ticks, n = normalised
@@ -999,7 +1012,7 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   general follow-up (*stand*, *walk*, *prone* or *crawl*, forced), even while the unit is still in
   the air. Off: *air-death-fall* loops until *air-death-end* replaces it.
 - **`quirks.sequence_value_length_limit`** (default: on, claim 22). The art values of the sequence table are
-  read as at most 31 characters (Import mapping), so a long cue list loses its tail. Off: no limit.
+  read as at most 31 bytes of text (Import mapping), so a long cue list loses its tail. Off: no limit.
 - **`quirks.two_sound_cues`** (default: on, claim 22). At most two sound cues are kept per entry.
   Off: keep every pair whose sound is known.
 - *die-3* to *die-5* are never selected (claim 17). This is not a switch, because no rule refers
@@ -1060,8 +1073,8 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   by spaces, commas or tabs. Each pair is a cue frame (integer) and a sound name. A pair whose sound
   is unknown is dropped, and at most two pairs are kept (claim 22).
 - **Value length:** the `Sequence=` value, each kind value and each `Sounds` value are read as at
-  most 31 characters. Anything longer is cut off before it is parsed, so a long cue list loses its
-  tail (claim 22). The importer warns about any such value that is longer than 31 characters, and about a
+  most 31 bytes of text, not 31 decoded characters (S-0003 claim 1). Anything longer is cut off before it is parsed, so a long cue list loses its
+  tail (claim 22). The importer warns about any such value that is longer than 31 bytes, and about a
   `Sounds` value with more than two valid pairs.
 - **Fire frames:** `FireUp` (standing), `FireProne` (prone), `SecondaryFire` (secondary) and
   `SecondaryProne` (secondary-prone) as integers in the type's art section itself, not the sequence
@@ -1130,13 +1143,25 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   "Infantry type" means the infantry type's own section in the rules file. "Any unit type" and
   "any object type" mean the same section, through keys that other kinds of type also have; their
   other uses belong to other specs. `Cyborg` also selects the cyborg death case of claim 17.
-- **Hard-coded identifiers:** Claim 14 singles out the cow infantry type by a case-insensitive comparison of its type identifier. Claim 19 uses the generic infantry-shadow sprite for an airborne infantry unit.
+- **Hard-coded identifiers:** Claim 14 singles out the cow infantry type using the following
+  data-name mapping (Q-0212). It is an engine comparison, not an absent-key default.
+
+  | Input | Form | Match | Use |
+  |---|---|---|---|
+  | Infantry type name registered from `[InfantryTypes]`, naming its rules section | type identifier, as imported by S-0004 | `COW`, case-insensitive | cow-specific idle draw and scatter of claim 14 |
+  | `Name`, `UIName`, `Image` in the infantry rules section | display-name or image-name inputs, owned by their respective specs | not tested | changing these cannot grant or remove the cow designation |
+
+  No matching registered type means no unit receives this designation. Any infantry type
+  with the matching registry name receives it, regardless of its art or display name.
+  Claim 19 uses the generic infantry-shadow sprite for an airborne infantry unit.
 
 ## Measurement scenarios
 
-Common setup: the glossary's measurement setup (an unmodified install with stock data, no loose
+Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, director and mods off, and the glossary's measurement setup (an unmodified install with stock data, no loose
 override files and no engine add-ons), a tiny flat map with clear terrain and one water and beach
-strip, and a fixed game speed unless stated otherwise. Image frame numbers are read from a
+strip, and a fixed game speed unless stated otherwise. Include one distant bystander computer
+player unless a part already includes a computer-controlled test owner. The observed area contains
+only that part's named test objects; apply the glossary's bystander void rule. Image frame numbers are read from a
 screen capture that keeps every drawn frame, by matching the drawn sprite against the image frames
 of the type's body sprite. Ticks are counted by a recorder that reports the tick number of each
 captured drawn frame, as
@@ -1190,7 +1215,12 @@ whose …") means any stock type with that property; the property is a precondit
   idle uses 2. Falsified
   by a walk delay that depends on speed, by idle delays other than T3, or by a delay that changes
   in mid-idle. The recorder reads tick numbers (common setup), so speed 0 can be added as a fourth
-  run with the expected idle delay 5; it is optional. Runs: one per game speed.
+  run with the expected idle delay 5; it is optional. Also use named test art with a *stand*
+  entry of at least three image frames, no declared direction or cues, and an idle-frequency
+  field long enough to outlast the observation after the first attempt. Observe 300 ticks of
+  uninterrupted *stand*: expected stage 0 and the entry's first frame throughout, not a
+  zero-tick completion. Any advancing *stand* frame or completion falsifies the zero-delay
+  rule. Runs: one per game speed, including this stationary variant.
 - **M4 (claims 6, 15).**
   - (a) Destination equality and timing (Q-0087). On a flat skirmish test map, game speed 6,
     place a soldier of the human player that can crawl and has get-up image frames, and a
@@ -1246,9 +1276,9 @@ whose …") means any stock type with that property; the property is a precondit
   frame. Runs: three units per cell kind.
 - **M6 (claims 15, 16; State and ordering).**
   - (a) Damage an idle soldier of a computer-controlled owner once with a weak attack from a known
-    attacker. Expected: *go-prone* at once, then *prone* (with *crawl* while any move lasts: a move
+    attacker. Expected: *go-prone* on the tick after the hit, then *prone* (with *crawl* while any move lasts: a move
     to attack back, or a scatter that S-0208 claims 11 and 15 may give, which this scenario does not
-    test); and *get-up* 51 ticks after the hit (fear 100 decays to 49). Falsified by another time
+    test); and *get-up* 51 ticks after the hit (fear 100 decays to 49). Falsified by *go-prone* on the hit tick rather than the next tick, or by another time
     from the hit to *get-up*.
   - (b) The same with a fraidycat (a civilian type). Expected: scattering, and *panic* image frames
     while it runs for about 100 ticks (300 down to 199). Falsified by no *panic* image frames, or
@@ -1285,7 +1315,13 @@ whose …") means any stock type with that property; the property is a precondit
   - (a) The snap. Use an infantry type whose *idle-a* entry declares a direction. Watch an idle
     unit of that type finish *idle-a*. Expected: its facing afterwards equals the declared
     direction, whatever it faced before. Falsified if the old facing returns. Runs: three idles
-    that start from different facings.
+    that start from different facings. For repeated snaps, named test art gives a two-frame
+    *walk* entry a declared direction different from a long straight move's direction, with
+    *M* > 0 and no fear or target. Record the facing group during at least three wraps.
+    Expected: after the first completion it shows the declared direction on every tick while
+    *walk* stays current, including non-advance ticks. Falsified by a return to the movement
+    direction between completions. Control: remove only the declared direction; its group
+    should follow the move. Runs: three moves per variant.
   - (b) No snap after a kind with its own follow-up. Use a type that can deploy, whose *deploy*
     and *undeploy* entries have image frames and whose *stand* entry has *M* > 0. Test art gives the
     *deploy* and *undeploy* entries the declared direction map south (*D* = 4) and removes any
@@ -1388,17 +1424,23 @@ whose …") means any stock type with that property; the property is a precondit
     fraidycat, and 0 otherwise. Falsified if the 99% confidence interval of the pooled share lies
     wholly outside 0.76 to 0.81.
   - (b) Streams, number and order of the draws, with a *recorder* (glossary) that reads the random
-    streams' state. Map: a test map with no computer players and nothing that moves or animates,
-    whose houses are the local player's and one neutral house that is not human-controlled and
-    runs no computer player. Control: for each case, a control game on the same map with the same
+    streams' state. Map: a skirmish test map with the local player, one distant bystander computer player,
+    and test units of the neutral house, which is not human-controlled and runs no computer
+    player. The observed area is the isolated clear area containing only the named test units.
+    Apply the glossary's bystander void rule. Log and predict the bystander's random draws
+    separately under the owning specs; a tick whose unrelated draws cannot be accounted for
+    is void for the stream comparison. Control: for each case, a control game on the same map with the same
     houses and orders but without the case's unit (and, in case (2), without its attacker), run for
-    300 ticks with the recorder on. Expected in the control game: the scenario random stream does
-    not advance on any tick. If it does, the cause is removed from the map before the case is run.
-    The unsynchronised random stream may advance in the control game through presentation uses
-    such as music or object flicker (S-0202 claim 11). Its per-tick advance there is the baseline,
-    and case (3) predicts only the advance beyond it. A tick on which such a use can be seen to
-    draw in the case's game (for example a change of music track, which is audible) is left out of
-    the unsynchronised comparison. In separate games,
+    300 ticks with the recorder on. Expected in the control game: no scenario-stream advance beyond the separately accounted
+    bystander and other unrelated draws. Any unexplained advance voids the control and must
+    be resolved before the case is run; a different seed is predicted from its own recorded
+    state, never assumed to reproduce the control's raw values.
+    The unsynchronised random stream may advance through presentation uses such as music or
+    object flicker (S-0202 claim 11). The control identifies these uses; its per-tick advance is
+    not a numerical baseline for a differently seeded run. In case (3), predict the idle-comment
+    draw from that run's recorded state and account separately for identifiable presentation
+    draws. Leave a tick out of the comparison if those unrelated draws cannot be accounted for,
+    for example during a music-track change whose intervening draws are not isolated. In separate games,
     the test map then places: (1) one unit of the hard-coded cow type, owned by the neutral house,
     never hurt; (2) one unit of a fraidycat type, owned by the neutral house, after test rules data
     has made the type fearless and it has been hit once, as in M6(c), so that its fear level stays
@@ -1418,15 +1460,17 @@ whose …") means any stock type with that property; the property is a precondit
     scatters' draws as S-0208 gives them. Every processing of the unit's behaviour, whether or not
     it attempts the idle action and whether or not the attempt goes ahead, also takes the draw of
     that behaviour's delay, after any draws of the attempt; predict it, and the ticks of the
-    processings, from S-0215's delay rule for *guard* (claims 6 and 24). Expected: on every tick the
-    recorded advance of the scenario random stream equals the prediction, and that of the
-    unsynchronised stream equals the prediction beyond the baseline; the visible outcomes match the
-    predicted *r*, *e* and δ; the next attempt comes at the tick that F4 gives from the predicted
-    timer draw; the comment heard is always the type's first comment sound; a selected unit takes
+    processings, from S-0215's delay rule for *guard* (claims 6 and 24). Expected: on every non-void tick the
+    recorded advance of the scenario random stream, less accounted unrelated draws, equals the prediction, and that of the
+    unsynchronised stream equals the prediction plus its accounted presentation draws; the visible outcomes match the
+    predicted *r*, *e* and δ; the timer expires after the length F4 gives from the predicted timer draw, and the next
+    eligible behaviour processing makes the next attempt; the comment heard is always the type's first comment sound; a selected unit takes
     no draw from the unsynchronised stream at its attempts. Falsified by any other advance (for
     example an *r* draw in case (2), no *e* draw in case (1), or an unsynchronised draw from a
-    selected unit), by an outcome that differs from the prediction, or by an attempt at another
-    tick. Runs: one game per case, until at least 30 attempts of the unit have been recorded.
+    selected unit), by an outcome that differs from the prediction, or by an attempt before expiry or at a different eligible processing. Runs: one game per case, until at least 30 attempts of the unit have been recorded. Timer
+    expiry only enables an attempt: if expiry falls between behaviour processings, or the unit
+    is moving or playing an ineligible sequence then, the next attempt is the first later
+    processing that meets every eligibility condition of claim 14, not necessarily the expiry tick.
   - (c) The *hunt* trigger. A skirmish test map (not a campaign game) places one soldier of the
     human player with *hunt* as its initial behaviour, and test rules data gives its type the
     stupid-hunt flag (S-0215 claim 27 and Import mapping), so that its hunt never keeps a target
@@ -1436,6 +1480,25 @@ whose …") means any stock type with that property; the property is a precondit
     *idle-b* image frames or turns of facing), never two visible outcomes less than ⌊450·R⌋ ticks
     apart. Falsified if no idle outcome appears in the 18000 ticks while the unit stays in *hunt*.
     Runs: three games.
+- **M9(d) (claim 14, Q-0212).** On a tiny flat skirmish map at game speed 6, with one
+  distant bystander computer player, director and mods off, use named test rules data
+  to register an invented infantry type under the designated cow identifier of Import
+  mapping and a copy of the stock cow under an unrelated invented identifier. Give both
+  to the human player, keep them unselected, unhurt and without targets, and use clear
+  open areas where scatter is legal. Keep the invented type's display and image names
+  unrelated to the cow identifier. For the renamed copy, test separately retaining the
+  cow's original display and image names and setting those inputs to the designated
+  identifier. In separate runs change only the letter case of the matching registry name.
+  Record idle attempts, positions and the scenario random stream with the read-only
+  recorder, accounting separately for scatter-destination draws (S-0208).
+  Expected: only the matching registry name takes the extra idle draw *e* and the
+  owner-independent scatter on outcome 8, in every letter-case variant. In particular
+  draws satisfying *e* < 5 force outcome 8 for that type. The renamed copy takes no
+  *e* draw and does not scatter on outcome 8 under this owner, whatever its display or
+  image name. Falsified by either effect following a display or image name instead, or
+  by a letter-case variant losing the designation. Runs: at least 100 eligible idle
+  attempts per variant over at least three games; remove the named test data afterwards.
+
 - **M10 (claim 17).**
   - (a) Kill soldiers standing on a land cell with warheads of infantry-death kinds
   1 and 2. Expected: *die-1* and *die-2*; the corpse appears and the unit disappears *C* ticks after
@@ -1458,8 +1521,8 @@ whose …") means any stock type with that property; the property is a precondit
   image frames ever appear. Also kill an amphibious-destroyer soldier with a warhead of kind 1, 2 or
   9, once on a beach cell and once on a water cell. Expected on the beach: *wet-die*. The water-cell
   result is only recorded: it has no expected value, because it is meant to settle the open
-  condition of claim 17 (low confidence). Runs: three kills per case; the corpse pick is the only
-  random draw.
+  condition of claim 17 (low confidence). Runs: three kills per case; the corpse pick is the only death-specific draw in these cases; unrelated behaviour draws
+  are accounted for separately.
   - (b) The default of `quirks.refused_death_keeps_unit` (claim 17). Test art empties the *die-1* entry of
     one infantry type (*C* = 0). Kill a unit of it on a land cell with a warhead of infantry-death
     kind 1. In a second run, empty the *die-1* entry of the "not human" type used above and kill
@@ -1479,13 +1542,32 @@ whose …") means any stock type with that property; the property is a precondit
     and then leaves a corpse (or none, if its type has none). Falsified if the cyborg shows a
     *die-1* image frame or leaves a corpse, or if the control shows no *die-1*. Runs: three per
     case.
+  - (d) Corpse list and pick. Start each variant in a fresh program session. Named test rules
+    replace all definitions of the chosen corpse lists, rather than trying to clear an existing
+    list with an empty override value (Import mapping). Give a land soldier a three-entry corpse
+    list of visibly distinct stock animations. Kill it with infantry-death kind 1 and record the
+    scenario random stream around completion, as in M9(b). Predict the next unsigned raw
+    draw *x*, accounting for unrelated draws, and record the corpse. Expected: entry
+    *x* mod 3, exactly one raw draw and removal on the completion tick. Repeat with the
+    type's list empty and the same three entries in the general list; then with both lists
+    empty. Expected: the general list supplies the first variant's pick when the type's
+    list is empty; with both empty, no corpse and no corpse-pick draw. Any different pick,
+    extra raw draw or failure to remove falsifies the claim. Runs: ten kills per variant.
+  - (e) Type death animations. Named test rules give the soldier above a list with distinct
+    entries for kinds 0, 1 and 2. Kill it with kinds 1, 2 and an integer outside that list.
+    Expected: the indexed animation for 1 and 2, entry 0 for the outside kind, no body death
+    sequence and removal on the death tick. Repeat after marking the type not human:
+    the list still takes precedence over *die-1*. Any body death sequence, different list
+    entry or delayed removal falsifies this rule. Runs: three per variant.
 - **M11 (claim 19).** Screenshot a soldier standing on the ground, one standing on a bridge deck,
   and a jumpjet soldier hovering. Expected: the two standing soldiers show their own shadow, image
   frame *frame* + ⌊L/2⌋. The hovering one has the generic shadow on the ground below it, drawn as
   image frame 1 of the generic infantry-shadow sprite (matched against that sprite's image frames
   in the capture), and no body-sprite shadow. Falsified if either standing soldier shows no body-sprite shadow or a
   shadow image frame other than *frame* + ⌊L/2⌋, or if the hovering one shows a body-sprite
-  shadow, no generic shadow or a generic shadow image frame other than 1. Runs: one screenshot per case.
+  shadow, no generic shadow or a generic shadow image frame other than 1. Runs: one screenshot per case. Repeat the ground case with named test rules that suppress
+  the type's shadows: expected no body-sprite shadow, falsified by that shadow still drawing.
+  Runs: three screenshots with and without the flag.
 - **M12 (claim 12).** Use a jumpjet infantry type that does not allow jumpjet turning and whose
   weapon has a long delay between shots. Let a hovering unit of that type attack a vehicle that is
   driven in a circle around it, within range. Expected: between shots, the drawn facing group
@@ -1575,7 +1657,7 @@ whose …") means any stock type with that property; the property is a precondit
   - (a) Direction case and kind-value length. Variant 1 gives the *idle-a* entry the declared
     direction map south written in upper case. Variant 2 writes the same direction in lower case.
     Variant 3 writes it in upper case but gives the facing multiplier leading zeros, so that the
-    multiplier ends exactly at the 31st character of the value and the direction lies beyond it.
+    multiplier ends exactly at the 31st byte of the value and the direction lies beyond it.
     Place one idle unit per variant and watch its *idle-a* completions, each starting from a
     facing group other than 3. Record the facing group drawn just before and just after each
     completion. Expected: in variant 1 the group after every completion is 3 (map south). In
@@ -1583,25 +1665,35 @@ whose …") means any stock type with that property; the property is a precondit
     changes the group at a completion, or variant 1 does not show group 3. Runs: five *idle-a*
     completions per variant; idle attempts are random, so wait for them.
   - (b) Two cues. Give the *walk* entry a cue value of three pairs, at cue frames 1, 2 and 3, with
-    three different sounds, the whole value within 31 characters. Make the unit walk for five walk
+    three different sounds, the whole value within 31 bytes. Make the unit walk for five walk
     cycles. Expected: the first two sounds play once per cycle; the third never plays. Falsified
     if the third sound plays.
   - (c) Cue-value length. Variant 1 gives the *walk* entry a cue value of two pairs, at cue frames
-    1 and 3, with two different sounds, within 31 characters. Variant 2 is the same value with
+    1 and 3, with two different sounds, within 31 bytes. Variant 2 is the same value with
     commas inserted between the two pairs, so that the second pair begins after the 31st
-    character. Make a unit of each variant walk for five walk cycles. Expected: variant 1 plays
+    byte. Make a unit of each variant walk for five walk cycles. Expected: variant 1 plays
     both sounds once per cycle; variant 2 plays only the first. Falsified if variant 2 plays the
     second sound, or variant 1 does not. No cue sits at cue frame 0, which a sequence started by
     the movement rule skips on its start tick (claim 18).
   - (d) Unknown sound. Give the *walk* entry a cue value of three pairs at cue frames 1, 2 and 3,
     whose first pair names a sound that does not exist and whose other two pairs name two
-    different stock sounds, the whole value within 31 characters. Make the unit walk for five walk
+    different stock sounds, the whole value within 31 bytes. Make the unit walk for five walk
     cycles. Expected: the second and third sounds play once per cycle (the unknown pair is
     dropped and does not count towards the two); nothing plays at cue frame 1. Falsified if the
     third sound does not play, or a sound plays at cue frame 1.
-  - Runs: as stated per part; parts (b) to (d) involve no random draw.
-  - The reference to the sequence section is not tested separately: it is read by the same rule
-    as the kind and cue values.
+  - Runs: as stated per part; the cue checks of parts (b) to (d) take no random draw.
+  - (e) Sequence-section reference. Named test art supplies a 32-byte ASCII section name and two
+    sections: its 31-byte prefix gives distinctive *stand* image frames, while the full name
+    gives different ones. Place a stationary soldier using that reference. Expected: the prefix
+    section's frames. Control: a reference of exactly 31 bytes selects that same section.
+    Falsified by the full-name section's frames or by failure of the control. Runs: three per
+    variant. ASCII makes the byte count explicit; no decoded-character limit is assumed.
+
+**Cross-spec scenario alignment needed.** S-0202 scenarios R5(a) and R6(a) must count the
+behaviour-processing delay draws (S-0215 claims 6 and 24) as M9(b) does, and R5(a) must distinguish
+idle-timer expiry from the first eligible later processing. Their no-computer-player setup also
+needs a viable skirmish opponent and accounting for its unrelated draws, rather than assuming an
+empty global stream. These scenario corrections do not change S-0202's generator or F4's constant.
 
 ## Open questions
 

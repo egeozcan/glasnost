@@ -1,9 +1,9 @@
 ---
 id: Q-0212
 title: Which type identifier picks out the hard-coded cow type of S-0107 claim 14?
-status: open
+status: answered
 related: [S-0107]
-answered-by: []
+answered-by: [S-0107]
 ---
 
 ## Need
