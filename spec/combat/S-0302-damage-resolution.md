@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -177,19 +177,19 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      D13, D17 and D24 including the firer loaded into a transport, the infantry firer with a death
      sequence, the death weapon and, in D24 part b5, the cloaking firer; the wave's attacker through
      D24 part f; that the ore burst of claim 20 does not ignore defences through D28 part d's
-     comparison of two versus values; and that a wave hit does not ignore defences through D9 part b; the storm bolt's
+     comparison of two versus values, and its absent attacker and attacking house and unset
+     no-escape marker through D28 part f; and that a wave hit does not ignore defences through D9 part b; the storm bolt's
      attacking house through D24 part d, and its two markers through D24 parts d2 and d3; the
      trigger kill through S-0011's scenario T9 (claim 9) and D24 part c; countdown expiry through
      claim 16 and D13 parts e to h; the contact destruction
-     and the crash impact through S-0312's scenarios D11 and D12); `unmeasured` (the attacker, the attacking house and the no-escape
-     marker of the ore burst: no scenario reads who is credited for a hit on a vehicle next to the
-     burst, and the marker changes nothing a scenario can see there; a damaging animation's row:
-     no scenario of this spec observes its markers, attacker or house; a firer removed
+     and the crash impact through S-0312's scenarios D11 and D12; house elimination through
+     S-0414 claim 5 and its scenario V11); `unmeasured` (a damaging animation's row:
+     its hit metadata is not established, so no expected outcome can yet be supplied for a
+     discriminating test; a firer removed
      from the game in flight by some means other than a killing hit or a cloak: no such means is
-     identified, so no scenario can set it up; the markers, attacker and house of the elimination
-     of a house's remaining objects and of the destruction of a bridge section: no scenario of
-     this spec sets either up, since what triggers them is the subject of specs not yet written, so
-     those two rows are the believed values that those specs confirm or correct; the wave's
+     identified, so no scenario can set it up; the markers, attacker and house of bridge-section
+     destruction: the affected objects and the bridge-piece rules that deliver those hits are
+     not established, so no isolated test of those values is specified; the wave's
      attacking house column: a wave kill credits the attacker whether the wave carries its
      firer's house or none (claim 14), so a wave that carries its firer's house is not told apart
      from one that carries none)
@@ -198,11 +198,12 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      owner); medium (a
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
-     the trigger kill, the contact destruction, the crash impact and the wave); low (the storm bolt,
-     which the superweapon specs own; the ore burst's attacker, house and no-escape marker, which
-     follow from claim 20 having no source object and house; the damaging-animation row, which is
-     not traced; the elimination and bridge rows, which come from how
-     those sources deliver the damage and which their specs confirm; that the detonations of a
+     the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
+     no-escape marker, like other detonations; the elimination row, owned by S-0414 claim 5),
+     low (the storm bolt,
+     which the superweapon specs own; the ore burst's attacker and house, which follow from
+     claim 20 having no source object and house; the damaging-animation row, which is
+     not traced; the bridge row, which its owning spec must confirm; that the detonations of a
      firer that starts to cloak carry neither attacker nor house; that those of a firer loaded into
      a closed transport still carry it)
 
@@ -231,9 +232,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      multipliers and the order of truncation; D20 for each of the garrison, bunker and open-topped
      multipliers alone and for the sign rule; D15 part c for a firepower crate picked up while the
      projectile flies; D29 parts a and b for the veteran combat factor, and for the rule that the
-     firepower multipliers and the veteran combat factor leave a non-positive *D* unchanged); `unmeasured` (a promotion of the firer while
-     the projectile flies: no scenario of this spec times a promotion inside a flight, and the rule is the same as for the
-     crate, so it follows from it only by belief; the 0 carried by sonic-wave and
+     firepower multipliers and the veteran combat factor leave a non-positive *D* unchanged,
+     and D15 part d for a promotion during flight); `unmeasured` (the 0 carried by sonic-wave and
      fire-particle weapons, which is an amount the projectile carries; what such weapons observably
      deal is the wave's and the particles' own damage, which specs not yet written own, so no
      scenario of this spec can tell it; the combined result when a firer is in two or three of the
@@ -736,10 +736,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     other foundation cells (S-0303, claim 8): each of them that changes health by at least 1 credits
     the destruction again, so a multi-cell building can be credited once for every cell in the
     spread (the hits that the falloff or the versus value reduce to 0 do nothing, claim 8).
-    S-0303 claim 8 must qualify its statement that every remaining hit does nothing after a
-    lethal hit: a building kept alive at 1 health by a delayed kill remains eligible for those
-    hits. Its claim 9's alive, positive-health, on-map and in-play tests still apply. D13 part d
-    tests this exception. Quirk
+    S-0303 claim 8 includes this exception: a building kept alive at 1 health by a delayed
+    kill remains eligible for later hits of the same detonation. Its claim 9's alive,
+    positive-health, on-map and in-play tests still apply. D13 part d tests this exception. Quirk
     `quirks.delay_kill_credited_again` (default on, the original): on gives the repeated credit
     above, off ("fixed") credits a building already in a delayed-kill countdown no further
     destruction, though its countdown is still shortened.
@@ -794,11 +793,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       a countdown runs, and its parts c1, c2 and d for the repeated credit; parts e to h for
       expiry timing, its hit, credit, capture, sale, removal and cancellation; part i for
       behaviour, ordinary and animation-delayed firing, self-healing and repair before expiry
-      and the resulting health amount and ownerless shot; D24 for the credit); `unmeasured`
+      and the resulting health amount and ownerless shot; part j for healing and nonlethal
+      follow-up hits; D24 for the credit); `unmeasured`
       (the *post-mortem* result of the hits: it has no known observable, claim 12, so
-      no scenario tests it; healing and nonlethal hits during a delayed-kill countdown: D13
-      tests lethal follow-up hits only, so it does not test their lack of credit or timer changes.
-      Also unmeasured is the expiry hit's no-escape marker: this marker affects vehicle crew,
+      no scenario tests it; the expiry hit's no-escape marker: this marker affects vehicle crew,
       not the building target, so D13 cannot distinguish its values; credit to a separately
       recorded charge planter: D13 uses no planted charge and no charge-planting scenario is
       supplied here; removal other than sale before expiry: D13 f tests sale only, and no other
@@ -1083,9 +1081,11 @@ Observable consequences within one hit:
   minimum of 1 applies to the defended amount (F2) and not to the result of the versus value (F3):
   a hit of 1 against a versus value of 50 % does nothing, with or without armour bonuses (except on an undemolishable
   building, which loses 1 from every hit that no row of claim 8 stops, claim 7).
-- The falloff and the versus value are truncated separately (F3), so the result of an edge hit can
-  fall short of the exact product, in absolute value, by up to 1 + |*v*| health points: up to 2
-  for a versus value between −100 % and 100 %, and more for a larger one (up to 3.5 at 250 %).
+- The falloff and the versus value are truncated separately (F3). Considering these two
+  integer truncations alone, before the cap and without floating-point rounding error, the
+  difference from the untruncated product is less than 1 + |*v*| health points in absolute
+  value: less than 2 for a versus value between −100 % and 100 %, and less than 3.5 at 250 %.
+  F3's floating-point rounding, especially the narrowings for large amounts, can add further error.
 - The maximum damage limits the amount after the falloff and the versus value (F3).
 - Readiness loss happens for every hit that no stage 1 row of claim 8 stops, even when a row of
   stages 2 to 4 then stops it (claim 10), so a type immune to a warhead (radiation, psychic,
@@ -1246,8 +1246,9 @@ and g3) has one allied and one enemy bystander computer player instead, and "the
 is the enemy one. Every house has no difficulty or country multipliers other than 1.0 unless the
 scenario says otherwise (the test map sets the country factors and the difficulty rows'
 firepower to 1.0 where it matters). Any game speed. Every hit is a direct hit (distance 0)
-unless stated. No scenario depends on a random draw, except D11's and D22's choice of effect and
-D18; each runs 3 times and must give the same health values every time (D18 and D22 are statistical and
+unless stated. Random outcomes are used in D11's and D22's choice of effect, D18's fires and
+D28 part f's crew creation and health draws; the latter fixes escape chance to 1.0 and tests
+crew presence, not the drawn health. Each scenario runs 3 times and must give the same health values every time (D18 and D22 are statistical and
 say how). Parts d, d2 and d3 of D24 depend on where the bolts of a superweapon strike, which this
 spec does not own: each of their runs is checked against the part's own expectation, which is
 stated per destroyed vehicle, and the runs need not give equal values.
@@ -1345,7 +1346,7 @@ stated per destroyed vehicle, and the runs need not give equal values.
     rounding settings) and the yellow ratio 0.75: the effect appears on the hit to 700 (from
     800 to 700, *now yellow*), not on the hits to 1000 or 900, because a hit that ends exactly on the red threshold
     does not cross it, and the next hit starts on it. *Falsified if* the first run shows the effect only at 400 or later (a red
-    threshold fixed at half the strength, or taken from the yellow ratio, would give that), or at
+    threshold fixed at half the strength would give that), or at
     800; or if the second run shows it at 1000 (non-strict comparison) or 900.
   - (c) *Red takes precedence over yellow.* A test building type with a light source (S-0104), of
     strength 1000, is hit once by a hit of 600 (1000 to 400, which crosses half the strength, so
@@ -1466,6 +1467,15 @@ stated per destroyed vehicle, and the runs need not give equal values.
   credit after it, the due healing or repair is skipped, expiry uses the pre-healing health,
   or an expiry hit follows the completed removal. Repeat each alignment over three recorded seeds.
   These timing outcomes must not depend on the seed.
+  (j) *Healing and nonlethal damage during the countdown.* Use (e)'s one-cell building,
+  strength 100, ordinary demolition warhead and duration 300. After the initial lethal hit
+  at tick *t* leaves health 1, heal for 20 at *t* + 50, then hit for 5 with a delayed-kill
+  warhead at *t* + 100 whose direct-hit duration is 10. Record health, attacker experience,
+  both houses' counts and the expiry tick. *Expected:* health rises to 21 and falls to 16,
+  and neither follow-up registers a kill or changes the countdown; expiry still occurs in the
+  building's turn at *t* + 300 and delivers 16. *Falsified if* either follow-up adds credit,
+  damage starts a shorter countdown ending at *t* + 110, healing cancels expiry, or expiry's
+  delivered amount differs from 16. Void a run with any other hit, healing, repair or protection.
 - **D14 (claim 17).** A test map gives a stock flying infantry type (a jumpjet type) strength 1000, and
   a test warhead of infantry-death kind 9 with versus 250 % against its class and damage 50. Hit in
   the air: loss 2 (trunc(1 × 2.5)); standing at height 0: loss 125. With versus 100 %: loss 1 in the air.
@@ -1482,6 +1492,17 @@ stated per destroyed vehicle, and the runs need not give equal values.
   test vehicle and is then ordered onto a firepower crate that it reaches while the projectile
   flies. *Expected:* the loss is 10 (the shot damage is fixed at the shot); a shot fired after
   the pickup loses 15. *Falsified if* the first shot loses 15.
+  (d) *Promotion during flight.* Use a rookie trainable firer with the veteran firepower
+  bonus granted at the veteran rank and veteran combat factor 1.5. It fires the same slow
+  damage-10 projectile at a durable enemy target, then kills a second, separate enemy test
+  vehicle with a fast secondary weapon before that projectile lands. Give the two targets
+  different armour classes and configure versus values so that the firing checks permit only
+  the primary against the durable target and only the secondary against the promotion target
+  (S-0304 and S-0308). Set the second vehicle's worth so that this kill promotes the firer but does not reach the elite rank (S-0311).
+  Record the launch, promotion, impact and target health; void a run if promotion is not
+  strictly between launch and impact or another hit reaches the durable target.
+  *Expected:* the in-flight shot still deals 10, and a fresh shot after promotion deals 15.
+  *Falsified if* the in-flight shot deals 15 or the post-promotion control does not deal 15.
 - **D16 (claim 8, stage 1 rows).** Test types, each hit by D1's weapon at 100 % unless said
   otherwise. (a) A test building whose weapon, aimed at a unit next to it, has a spread that covers its own foundation, once with
   its self-damage flag on and once off: it loses health only with the flag on. (b) A test building
@@ -1757,6 +1778,25 @@ stated per destroyed vehicle, and the runs need not give equal values.
   tree loses health. *Falsified if* any of these differs, in particular a loss with the wood flag
   off in (a) or from the immune tree in (b), any credit in (c), no damage to the vehicle in (d), or
   a loss of 100 in (d) with the versus value of 50 %.
+  (f) *Ore-burst crew escape and absent credit (claim 1).* Repeat (d) with one computer-house
+  vehicle of strength 50, crewed, with no passenger capacity, no hijacker and no death weapon,
+  standing in the neighbouring cell. Set the game-wide crew escape chance to 1.0, provide a
+  valid crew type of strength at least 20, and leave room for infantry at the vehicle's cell.
+  Give the demolition warhead versus 100 %, edge percentage 100 % and spread 2 cells, with
+  no damaging secondary effects. A trainable human unit destroys the ore-spawning terrain
+  object using a wood-damaging weapon with no spread, so its own shot cannot hit the vehicle.
+  Record the tree's death, burst hit, vehicle death, crew creation, the firer's experience and
+  every house's kill count. *Expected:* the burst kills the vehicle, a crew unit is created
+  at its position (then scatters under S-0312 claim 13), and no object or house gains kill
+  credit. Thus the burst does not inherit the tree-killing unit or its house, and it does
+  not suppress crew escape. As a placement control, destroy an identical vehicle at the same
+  position by ordinary direct fire in a separate run: a crew must appear and the firing unit
+  and its house receive the normal credit. Repeat each run three times; void it if another
+  hit reaches the vehicle or crew, placement is blocked, or the control fails to produce a crew.
+  *Falsified if* a burst-killed vehicle produces no crew in a valid run, the tree-killing
+  firer gains experience, or any house's kill count rises from the burst kill. The read-only
+  event and state recorder is the tool; observe creation at the killing hit, not merely
+  whether a crew survives later ticks.
 
 - **D29 (claims 2 and 5: veteran factors, and the sign rule of the firing factors).** The test map's
   general section gives the veteran combat factor 1.5 and the veteran armour factor 2.0, and the
