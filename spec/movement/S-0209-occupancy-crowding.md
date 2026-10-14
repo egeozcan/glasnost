@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 23
+revision: 24
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -708,6 +708,16 @@ rank* and *elite weapon*), *n*
      listed there (claims 1 and 13). During that time the cell shows a taken side position and the
      walker's house with no listed occupant, so rows WR2 and WR3 apply to it as they would to a unit
      standing there.
+
+   *Slave field qualification.* S-0402 claim 26 owns the slave's field search. Its
+   candidate tests require this claim's infantry entry outcome to be *clear* and a
+   connection in the slave's own movement zone from its heading-point cell. A partly
+   occupied infantry cell can qualify when those tests pass:
+   another slave or unit is not a blanket occupancy refusal. This does not replace
+   S-0402 claim 26's own-cell tiberium-land shortcut, which bypasses the candidate
+   tests.
+   - Confidence: medium. Backing: `measurable` (S-0402 claim 26, scenario H21's scan
+     variants).
 
    *Reasons for the `unmeasured` backings of claims 4 and 5.*
    - U1 (tether link): the successful infantry factory or cloning-building release exchange gives
