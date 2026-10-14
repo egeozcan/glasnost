@@ -2,7 +2,7 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,11 +16,10 @@ supersedes: []
 
 ## Summary
 
-**Revision scope.** F8 adds all eight mixed-depth configurations of Q-0215 questions 1–6.
-Its arbitrary-section characterization remains open. Claim 35 corrects the top-down
-colour-height relation: every span's empty count follows its colours, with no special
-first-span exception (Q-0216). Its existing MS-19 output table is unchanged; MS-26's
-second row is corrected and a three-span discriminator is added.
+**Revision scope.** Q-0215 questions 1–6 are already answered by revision 10's F8.
+Question 7's arbitrary-section characterization is explicitly `unmeasured`, not an
+implied extrapolation from that table. MS-28 proposes larger mixed-tie discriminators
+and states what is still required to close that question.
 
 How a voxel model (a VXL model with its HVA animation) becomes pixels: the fixed viewing
 transform, how many facings each model part can show, how the body, turret and barrel are
@@ -390,23 +389,33 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 ### Rasterisation
 
-21. **Back-to-front inside a section.** Within a section, a voxel drawn later overwrites an
-    earlier one in the voxel buffer (also when its pixel value is 0, claim 19), and the drawing order runs from the section's farthest
-    bounding-box corner toward the nearest. The farthest corner is the one of the eight box
-    corners with the smallest view-space *z*; on an exact tie the first in this list is used: on
-    the bottom face (max x, max y), (max x, min y), (min x, min y), (min x, max y), then the same
-    four on the top face. Count each voxel's grid position from that corner, *n_x, n_y, n_z* steps
-    along the grid's x, y and z directions. The drawing order is ascending lexicographic order of
-    *(n_y, n_x, n_z)*. So a section is drawn as rows of columns, a row's columns in grid-x
-    order, and each column upward when the farthest corner is on the bottom face and downward
-    when it is on the top face. Outside the depth-buffered mode (claim 24), where several voxels
-    of one section land on the same pixel, the one with the greatest *(n_y, n_x, n_z)* shows.
-    In a well-formed file the runs of every column add up to exactly *Nz* cells, including the
-    empty cells above the column's top voxel. Columns that break this are covered by claim 36
-    (`quirks.voxel_topdown_column_origin`).
-    - Backing: `measurable` (MS-5) for overlap priority and direction on the supplied models.
-      The exact farthest-corner tie list is `unmeasured`: MS-5 has no controlled equality of
-      bounding-box corner depths, so it cannot distinguish the listed tie priority.
+21. **Pixel priority inside a section.** The section's farthest bounding-box corner is the
+    one of the eight box corners with the smallest view-space *z*. On an exact tie, the first
+    in this list is used: on the bottom face (max x, max y), (max x, min y), (min x, min y),
+    (min x, max y), then the same four on the top face. Count each voxel's grid position from
+    that corner as *n_x, n_y, n_z* integer grid steps along the three axes. Its priority tuple is
+    *(n_y, n_x, n_z)*, compared lexicographically: compare *n_y*, then *n_x* when *n_y* ties,
+    then *n_z* when both tie. These are exact integer comparisons, with no rounding.
+    - **Without depth buffering.** Of the section's voxels landing on one image pixel, the
+      greatest tuple supplies that pixel's palette index. A winning value of 0 makes the
+      pixel transparent even if a lower-priority voxel supplied a nonzero value (claim 19).
+    - **With depth buffering.** Claim 24's strict comparison and untested right-hand writes
+      determine coverage. At a common left pixel, equal nonzero comparison depths favour
+      the smallest tuple, provided the depth exceeds the initial stored depth and no
+      right-hand write interferes. An accepted right-hand write of a greater tuple can
+      replace a smaller tuple's contribution at that neighbouring pixel even when the
+      replaced depth is greater. Thus the painter winner rule is not the depth-mode tie rule.
+
+    These are coverage requirements, not a required traversal of rows, columns or voxels.
+    An implementation may organise its work differently if the resulting colours and depths
+    agree. A bottom-face farthest corner gives bottom-up grid positions; a top-face corner
+    gives top-down positions. In a well-formed file every column's runs add up to exactly
+    *Nz* cells, including the empty cells above its top voxel. Claim 36 covers columns that
+    break this (`quirks.voxel_topdown_column_origin`).
+    - Backing: `measurable` (MS-5 and MS-5c) for overlap priority and both positioning
+      directions on the supplied models; MS-5c isolates the within-section depth tie.
+      The exact farthest-corner tie list is `unmeasured`: neither scenario controls equality
+      of bounding-box corner depths, so neither distinguishes that tie priority.
     - Confidence: high
 
 22. **One pixel per voxel.** Outside the depth-buffered mode (claim 24), each voxel writes
@@ -442,8 +451,13 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     in the other section.
     - Backing: `measurable` (MS-5 for distinct depths; MS-5b and MS-25 for F8's tie configurations
       and the dependence on the full section sequence).
-      Mixed-depth tie configurations not listed in F8 remain open.
-    - Confidence: high
+      A general priority relation for mixed-depth ties outside F8 is `unmeasured`:
+      the listed examples do not distinguish all possible full-sequence relations, and
+      no arbitrary-section coverage characterization is established here. MS-28 is the
+      proposed discriminating investigation; this is a specification gap, not an
+      assertion that those pixels cannot be observed.
+    - Confidence: high for the stated priorities and input sufficiency; low for any
+      extrapolation beyond the covered configurations
 
 24. **Per-type depth buffering.** A type with the depth-buffer option draws differently in four
     ways. See claim 32 for a case where this mode is applied to types that do not have the option.
@@ -451,7 +465,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       configurations, equal comparison depths at a coincident pixel favour the section of
       highest overlap priority there: reversing the priorities makes that section contribute
       first, and the strict depth test retains it. F8 also lists the contributing order for
-      those configurations. Within a section the voxel priority of claim 21 is unchanged.
+      those configurations. Within-section coverage follows claim 21's depth-mode rules,
+      not its greatest-tuple painter winner.
     - **Depth test.** Each voxel-image pixel has an associated comparison depth, an integer
       from 0 to 255. These values specify which pixels show, not a required storage plane.
       The depth plane is not reset as a whole before each draw: at the start of a draw in this
@@ -1202,7 +1217,10 @@ without pixels at a particular overlap can still change which tied section wins 
 The section count and the number of intervening sections are already part of that full
 sequence, not extra inputs. Other mixed-depth configurations remain open; this table is
 not a complete characterization for arbitrary section counts (Q-0215 question 7).
-Backing: `measurable` (MS-25, MS-5b). Confidence: high.
+Backing: `measurable` (MS-25, MS-5b) for the table, all-equal case and input sufficiency.
+Backing: `unmeasured` for an arbitrary-count mixed-tie relation, for the reason in claim 23.
+Confidence: high for the stated results, low for extrapolation. MS-28 supplies proposed
+outside-table observations, not a general default priority.
 
 **F9. Turning at a turn rate (claim 6, Terms).** This is S-0206's turning rule (its claim 1 and F1), stated here for the barrel elevation. All quantities are integers. A facing turns from
 a start facing *ψ₀* toward a target facing *ψ₁* at turn rate *ω* (1 … 127). Let *Δ* be *ψ₁ − ψ₀* taken as the signed
@@ -2003,7 +2021,7 @@ S-0007's model-file lookup, not an INI default.
 
 | Input concept | File | Form | Default | Feeds |
 |---|---|---|---|---|
-| Section sequence and bounds | VXL model | ordered sections and single-precision bounds | none; required model data | full-sequence nearest-depth relations and F8 priorities, including Q-0215 questions 1–6 (claims 23, 24) |
+| Section sequence and bounds | VXL model | ordered sections and single-precision bounds | none; required model data | full-sequence nearest-depth relations and F8 priorities, including Q-0215 questions 1–6 (claims 23, 24); MS-28 investigates question 7, with no additional input or absent-key default |
 | Section normal mode and grid height | VXL model | integers in 0 … 255 | none; required model data | mode 0 selection and Nz (claim 35) |
 | Column value sequence and its start/end | VXL model | ordered values in 0 … 255, or an empty-column marker | none; required model data | colour-height relation, with top-down empty counts following each span's colours (Q-0216), and bounded-data warning (claims 35, 36) |
 | Per-section pose | HVA companion | frame-indexed transforms | file lookup and failure treatment in S-0007 | transformed bounds for F8 and own-image overlap in claim 39 |
@@ -2173,11 +2191,50 @@ used (glossary, *display path* and *measurement setup*).
     with nothing else on screen.
 - *Observable:* pixel crops.
 - *Expected:*
-  - an exact golden-image match, including the 1-pixel artefacts of `quirks.voxel_x_carry_into_y`
-    and the section order of claim 23 (the tie rule is tested on its own in MS-5b),
+  - an exact golden-image match, including the 1-pixel artefacts of `quirks.voxel_x_carry_into_y`,
+    claim 21's within-section pixel priority and claim 23's section priority (section ties
+    are tested separately in MS-5b),
   - the depth-option type shows 2-pixel-wide voxels.
-- *Falsified if:* there is a systematic one-pixel shift (carry rule wrong), or the overdraw
-  order between sections of different nearest depth differs from claim 23.
+- *Falsified if:* any repeated golden-image mismatch remains with the model and pose verified,
+  including a systematic one-pixel shift, a wrong within-section overlap winner, or coverage
+  between distinct-depth sections contrary to claim 23.
+
+**MS-5c Within-section pixel priority (claims 19, 21, 24).**
+- *Setup:* Common setup, speed index 2. One human-owned parked stock turretless vehicle
+  gets named test VXL/HVA models and an art database copy disabling part caching. A named
+  test-map override suppresses its shadow. No other voxel object is visible. Each model
+  has one well-formed section and exactly two occupied cells with distinct nontransparent
+  output colours X and Y. Choose bounds and HVA scale so F5 maps both to the same left
+  image pixel and, in depth mode, the same nonzero comparison depth. Check these conditions
+  separately for each mode, including the non-depth carry. The copy rectangle contains
+  both output pixels. There is no third voxel whose right-hand write can interfere.
+- *Fixtures:* Define the cells by distances from the farthest corner. Use three pairs:
+  X at (0, 1, 0) with Y at (1, 0, 1), X at (1, 0, 0) with Y at (0, 0, 1),
+  and X at (0, 0, 1) with Y at (0, 0, 0), in *(n_x, n_y, n_z)* coordinate order.
+  X has the greater priority tuple in every pair. These respectively discriminate y
+  precedence over x and z, x precedence over z, and z precedence at equal x/y.
+  Use valid normal indices and verify X and Y remain visually distinct after lighting.
+  Repeat with an upside-down HVA pose and cells selected to retain those far-corner
+  distances, so top-down positioning is exercised too.
+  In a separate depth-mode fixture, retain a greater tuple for X but tune the bounds and
+  pose so X's left pixel is immediately left of Y's left pixel, with X's nonzero comparison
+  depth smaller than Y's. X's left pixel must not be touched by Y. Its right-hand write
+  then probes replacement of Y's larger depth without a test at that neighbour.
+- *Procedure and observable:* Restart the program for every fixture, pose and mode.
+  Capture the first visible drawn frame losslessly and record the common pixel's colour.
+  Run once without the depth option and once with it. The fresh-program initial depth
+  is 0; no shadow or previous part draw can change it.
+- *Expected:* the common pixel shows X without depth buffering and Y with it. The
+  depth-mode right-hand pixel also shows Y. Repeat the non-depth fixtures with X's
+  lighting-table output changed to 0 by a named test table, leaving Y nonzero: the common
+  pixel is transparent, not Y. In the separate right-hand-write fixture, Y's left pixel
+  shows X despite Y's greater depth, while Y's right pixel retains Y. Golden-image checks
+  establish projection and placement.
+- *Falsified if:* a verified common pixel shows Y in the ordinary nontransparent run,
+  X in the equal-depth run, or Y in the zero-output run, or Y's left pixel retains Y in
+  the right-hand-write fixture. A golden-image mismatch in either
+  pose also falsifies the predicted positioning. Incorrect fixture coincidences, equal
+  visible colours or a missing first-frame capture make a run inconclusive, not a pass.
 
 **MS-5b Section tie order (claim 23, F8; `quirks.voxel_section_sort_ties`).** Stock models need
 not contain the one pattern in which F8 and a stable sort differ, so this scenario builds it.
@@ -3047,8 +3104,8 @@ area of the screen's next fresh draw.
   new game (starting units included) is discarded.
 - *Procedure:* capture both objects in successive drawn frames.
 - *Observable:* the pixels of both images, compared with golden images.
-- *Expected:* from the second drawn frame on every capture matches its golden image (in (f), from
-  the second drawn frame of each game). In particular:
+- *Expected:* from the second drawn frame on every capture matches its golden image.
+  Run (f) additionally tests B's first image in the new game, as specified below. In particular:
   - (a): A's image shows the streak's lowest part, up to the top edge of A's copy rectangle and
     no further. B's image shows its own voxel and the part of A's streak that lies outside A's
     widened rectangle, from the row above A's copy rectangle to the streak's top, at the voxel-buffer
@@ -3171,6 +3228,48 @@ rocking, the filled pixel is undarkened, matching the cache-disabled control. Co
 cached darkening with independently verified rocking and unchanged frame falsifies the
 unsettled-shadow freshness of claim 31.
 
+**MS-28, larger mixed-depth ties (claim 23, Q-0215 question 7).** This is an
+investigation of an `unmeasured` general relation, not a claim that a finite table
+settles every section count.
+- *Setup:* Common setup, speed index 2, one human-owned parked stock turretless vehicle
+  and one distant bystander computer player. Named test VXL/HVA files and an art database
+  copy give the vehicle five or six sections, disable part caching and suppress shadows.
+  All other data is stock; director and other mods are off. Use the pairwise and common
+  marker construction of MS-25, with different nontransparent colours for every section.
+  Bounds set exact finite nearest-depth equality groups independently of the markers.
+  In depth mode all left marker pixels have the same nonzero comparison depth, and
+  right-hand writes cannot reach another probe.
+- *Procedure and observable:* Restart the program for each model and mode. Capture one
+  paused lossless image in normal mode and one with the depth option. Record every pair
+  winner, not just the common-pixel winner. Repeat each model with unequal depth gaps
+  changed while preserving the relations. Repeat with sections outside one tested pair
+  retaining their bounds but contributing no pixel at that pair's probe.
+- *Proposed discriminator results:* Names are in file order; each priority is lowest to
+  highest. These are finite hypotheses for this investigation, not additions to F8's
+  binding coverage. At equal comparison depth, both modes should give each pair's pixel
+  to the section later in the listed priority, subject to the depth controls above.
+
+  | File order | Nearest-depth relation | Proposed painter priority | Proposed common-pixel winner, both modes |
+  |---|---|---|---|
+  | A, B, C, D, E | A = C > B = E > D | D, B, E, A, C | C |
+  | A, B, C, D, E | B = D > A = E > C | C, A, E, D, B | B |
+  | A, B, C, D, E, F | A = E > C = F > B = D | B, D, C, F, E, A | A |
+  | A, B, C, D, E, F | B = E > A = C > D = F | D, F, A, C, E, B | B |
+
+- *Expected and falsifying results:* The gap-change and absent-at-probe repeats should
+  preserve every pair winner. A verified contrary pair winner falsifies that row's
+  hypothesis; changed winners under either repeat falsify F8's input-sufficiency claim.
+  A stable file-order tie alternative disagrees in the second row's B/D pair and the
+  third row's A/E pair, so common-pixel captures alone must not replace pair probes.
+- *Closing question 7:* A complete observable priority relation over the full file
+  sequence and exact finite depth relations must be established separately and predict
+  F8, these probes and larger parts. Test its predictions on every equality/order pattern
+  for five sections, then on six-section patterns containing three equality groups and
+  on larger parts with intervening sections absent at probes. Preserve all captures as
+  discriminators for that relation. Agreement with finite captures supports it but does
+  not alone prove an arbitrary-count rule. No such general relation is asserted in this
+  revision, and no untested stable priority is substituted for the original default.
+
 ## Open questions
 
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
@@ -3207,9 +3306,11 @@ unsettled-shadow freshness of claim 31.
 - **Other section ties (Q-0215 question 7).** F8 answers Q-0210's configurations,
   Q-0215 questions 1–6 and all-equal parts of any size. The full file-order sequence and
   exact nearest-depth relations suffice to determine the original's result, but a complete
-  behavioural characterization for arbitrary mixed-depth ties remains open. The current
-  table does not license extrapolation or a stable tie rule. A general non-code-shaped
-  coverage relation is still needed.
+  behavioural characterization for arbitrary mixed-depth ties remains open and is
+  explicitly `unmeasured` (claim 23): finite examples cannot identify a unique general
+  relation. MS-28 gives outside-table pairwise discriminators and the settlement criterion.
+  The current table does not license extrapolation or a stable tie rule. Q-0215 is not
+  listed as fully answered in the front matter because this part remains open.
 
 ## Questions for the project lead
 
