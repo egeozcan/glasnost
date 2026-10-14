@@ -382,17 +382,6 @@ fn claim_22_directed_harvest_deploys() {
         .map(|o| o.id)
         .expect("the deployed master");
     until(&mut w, 1500, |w| w.houses[0].credits > credits).expect("income");
-    for o in w.objects.values() {
-        eprintln!(
-            "{:?} {:?} {} {:?} {:?} {:?}",
-            o.id,
-            o.kind,
-            o.type_index,
-            o.pos.cell(),
-            o.beh.current,
-            o.econ.group.as_ref().map(|g| g.state)
-        );
-    }
     let g = group(&w, b);
     assert_eq!(slaves::slaves_of(&w, b).len(), SLAVES as usize, "{g:?}");
 }

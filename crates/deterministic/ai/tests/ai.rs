@@ -334,3 +334,139 @@ fn a_broke_house_sells_a_building() {
     });
     assert!(!sold, "no sale while the economy runs");
 }
+
+/// The skirmish ruleset with slave miners for harvesters: SLAVE (an
+/// unarmed walker of storage 2, harvest rate 3), SMV (a slave-miner vehicle
+/// with three slaves, built at the war factory, deploying into SMB) and SMB
+/// (its 3 × 3 deployed form, not on the sidebar); MINR is no longer offered.
+/// Invented values.
+fn slave_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
+    use glasnost_rules::sim::{BuildingType, LocomotionClass, Locomotor, UnitType};
+    let mut r = fixture::ruleset();
+    let group = |e: &mut glasnost_rules::sim_econ::EconFields| {
+        e.enslaves = Some("SLAVE".into());
+        e.slaves_number = Some(3);
+        e.slave_regen_rate = Some(50);
+        e.slave_reload_rate = Some(40);
+    };
+    r.sim
+        .vehicles
+        .get_mut("MINR")
+        .expect("fixture harvester")
+        .owner = Some(vec!["Nowhere".into()]);
+    let mut slave = UnitType {
+        strength: Some(100),
+        speed: Some(6),
+        locomotion_class: Some(LocomotionClass::Foot),
+        locomotor: Some(Locomotor::Walk),
+        storage: Some(2),
+        sight: Some(4),
+        ..Default::default()
+    };
+    slave.econ.harvest_rate = Some(3);
+    r.sim.infantry.insert("SLAVE".into(), slave);
+    r.registries
+        .entry("infantry".into())
+        .or_default()
+        .push("SLAVE".into());
+    let mut smv = UnitType {
+        strength: Some(1000),
+        speed: Some(4),
+        rot: Some(6),
+        locomotion_class: Some(LocomotionClass::Wheel),
+        locomotor: Some(Locomotor::Drive),
+        tech_level: Some(1),
+        owner: Some(vec!["Alphaland".into(), "Betaland".into()]),
+        cost: Some(1500),
+        sight: Some(6),
+        deploys_into: Some("SMB".into()),
+        ..Default::default()
+    };
+    smv.econ.resource_gatherer = Some(true);
+    smv.econ.resource_destination = Some(true);
+    group(&mut smv.econ);
+    r.sim.vehicles.insert("SMV".into(), smv);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("SMV".into());
+    let mut smb = BuildingType {
+        strength: Some(1000),
+        foundation: Some([3, 3]),
+        undeploys_into: Some("SMV".into()),
+        ..Default::default()
+    };
+    smb.econ.sight = Some(6);
+    smb.econ.buildup = Some(true);
+    smb.econ.buildup_frames = Some(10);
+    group(&mut smb.econ);
+    r.sim.buildings.insert("SMB".into(), smb);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("SMB".into());
+    std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"))
+}
+
+// A side whose only gatherer is a slave miner builds one, sends it to a
+// field with a harvest order, and earns income from its slaves; the house
+// does not count as broke while they deliver; a lost one is rebuilt.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn a_slave_miner_side_earns_income() {
+    let mut g = Game::new(
+        slave_rules(),
+        &fixture::map(),
+        "synthetic-skirmish",
+        testkit::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let deployed = step_until(&mut g, 12_000, |w| {
+        (0..2).all(|h| !of(w, h, "SMB").is_empty())
+    });
+    assert!(
+        deployed,
+        "both houses deployed a slave miner by tick {}",
+        g.world.tick
+    );
+    let from = g.world.tick;
+    let mut last = [i32::MAX; 2];
+    let mut paid = [false; 2];
+    let mut slaves_out = [false; 2];
+    step_until(&mut g, from + 3000, |w| {
+        for h in 0..2u8 {
+            let i = usize::from(h);
+            let c = w.houses[i].credits;
+            paid[i] |= c > last[i];
+            last[i] = c;
+            slaves_out[i] |= !of(w, h, "SLAVE").is_empty();
+        }
+        paid.iter().all(|&p| p)
+    });
+    for h in 0..2 {
+        assert!(slaves_out[h], "house {h}'s slaves went out");
+        assert!(
+            paid[h],
+            "house {h} was paid by its slaves by tick {}",
+            g.world.tick
+        );
+        assert!(
+            of(&g.world, h as u8, "MINR").is_empty(),
+            "house {h} has no harvester"
+        );
+    }
+    assert!(
+        !g.world.objects.values().any(|o| o.econ.sale.is_some()),
+        "no sale while the slaves deliver"
+    );
+    // A lost slave miner is rebuilt and deployed again.
+    for id in of(&g.world, 0, "SMB") {
+        objects::remove(&mut g.world, id);
+    }
+    let lost = g.world.tick;
+    assert!(
+        step_until(&mut g, lost + 6000, |w| !of(w, 0, "SMB").is_empty()),
+        "the slave miner lost at tick {lost} was rebuilt and deployed"
+    );
+}

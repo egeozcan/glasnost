@@ -15,7 +15,9 @@
 //!    order's conditions and the cell test;
 //! 3. build another power plant whenever the drain reaches the output;
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
-//!    to harvest;
+//!    to harvest; a slave miner counts as a harvester (and, deployed, its
+//!    building too), needs no refinery, and is sent to harvest at the
+//!    nearest explored resource cell, the order a person gives it;
 //! 5. once the harvesters are kept, build army units round-robin, and when
 //!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
 //!    knowledge: the map's start waypoints), and once every start position
@@ -34,7 +36,7 @@
 
 use glasnost_map::CellXY;
 use glasnost_sim::econ::TypeRef;
-use glasnost_sim::econ::{deploy, placement, production, sell, shroud, tech};
+use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
@@ -187,13 +189,38 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             // aircraft).
             let moves = u.locomotor != Locomotor::None;
             match role {
-                Role::Harvester => u.harvester && moves,
-                Role::Army => u.primary.is_some() && !u.harvester && ground && moves,
+                Role::Harvester => (u.harvester || is_slave_miner(w, t)) && moves,
+                Role::Army => {
+                    u.primary.is_some() && !u.harvester && !is_slave_miner(w, t) && ground && moves
+                }
                 _ => false,
             }
         }
         _ => false,
     }
+}
+
+/// Whether type `t` is a slave miner: a vehicle that gathers with slaves and
+/// takes their loads itself (S-0402 claim 14 and Terms).
+pub(crate) fn is_slave_miner(w: &World, t: TypeRef) -> bool {
+    t.kind == Kind::Vehicle
+        && w.rules()
+            .econ
+            .harvest
+            .vehicles
+            .get(t.index as usize)
+            .is_some_and(|u| u.slave_miner)
+}
+
+/// Whether type `kind`/`index` is a vehicle that deploys into a
+/// construction yard (a slave miner deploys too, but into its own building).
+pub(crate) fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
+    deploy::deploys_into(w, kind, index).is_some_and(|b| {
+        w.rules()
+            .buildings
+            .get(b as usize)
+            .is_some_and(|b| b.factory == Some(FactoryKind::Building))
+    })
 }
 
 /// Whether an object is a construction yard (a factory of buildings).
@@ -333,6 +360,32 @@ impl Script {
     }
 
     /// The house's objects on the map that play `role`.
+    /// The house's deployed slave miners and other buildings with slaves
+    /// (S-0402 claim 19): economy, like its harvesters.
+    pub(crate) fn slave_buildings(&self, w: &World) -> Vec<ObjectId> {
+        self.own(w)
+            .into_iter()
+            .filter(|&id| {
+                w.obj(id).is_some_and(|o| o.kind == Kind::Building) && slaves::is_master(w, id)
+            })
+            .collect()
+    }
+
+    /// The nearest explored cell to `from` that holds a resource, the first
+    /// in cell order on equal distance: where a person sends a slave miner.
+    fn field_cell(&self, w: &World, from: CellXY) -> Option<CellXY> {
+        w.cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && shroud::explored(w, self.house, c)
+                    && resource::resource_at(w, c).is_some()
+            })
+            .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
     pub(crate) fn of_role(&self, w: &World, role: Role) -> Vec<ObjectId> {
         self.own(w)
             .into_iter()
@@ -371,9 +424,10 @@ impl Script {
         Some(t)
     }
 
-    /// Updates the economy watch and, when the house is broke (no income
-    /// for [`BROKE_PATIENCE`] ticks and too few credits for its cheapest army
-    /// unit), sells one building, as a person in its seat would, the
+    /// Updates the economy watch and, when the house is broke (no income:
+    /// no credits earned and no change in what its harvesters and its slaves
+    /// on the map carry, for [`BROKE_PATIENCE`] ticks; and too few credits
+    /// for its cheapest army unit), sells one building, as a person in its seat would, the
     /// costliest first. It keeps one factory per kind while the house has
     /// army units; a house with nothing left to fight with sells out, which
     /// ends its part in the game.
@@ -385,7 +439,13 @@ impl Script {
             .iter()
             .filter_map(|&id| w.obj(id)?.econ.harvest.as_ref())
             .map(|h| h.load.iter().map(|&b| i64::from(b)).sum::<i64>())
-            .sum();
+            .sum::<i64>()
+            + self
+                .own(w)
+                .iter()
+                .filter_map(|&id| w.obj(id)?.econ.slave.as_ref())
+                .map(|s| s.load.iter().map(|&b| i64::from(b)).sum::<i64>())
+                .sum::<i64>();
         let refund = self.watch.last_sale.is_some_and(|s| t - s < SALE_WINDOW);
         let income = loads != self.watch.loads || (credits > self.watch.credits && !refund);
         self.watch.credits = credits;
@@ -452,7 +512,7 @@ impl Script {
         for &id in &own {
             let Some(o) = w.obj(id) else { continue };
             if o.kind == Kind::Vehicle
-                && deploy::deploys_into(w, o.kind, o.type_index).is_some()
+                && deploys_into_yard(w, o.kind, o.type_index)
                 && !has_yard
                 && idle(w, id)
             {
@@ -503,31 +563,51 @@ impl Script {
         // 4. Harvesters.
         let harvesters = self.of_role(w, Role::Harvester);
         let refineries = self.of_role(w, Role::Refinery);
-        if !refineries.is_empty() {
-            // A harvester that rests (whatever destination it kept) or is
-            // idle is sent to harvest.
-            for &h in &harvesters {
-                let resting = w.obj(h).is_some_and(|o| {
-                    matches!(
-                        o.beh.current,
-                        None | Some(Behaviour::Guard)
-                            | Some(Behaviour::AreaGuard)
-                            | Some(Behaviour::Stop)
-                    )
-                });
-                if resting || idle(w, h) {
+        // Deployed slave miners count towards the harvesters kept.
+        let economy = harvesters.len() + self.slave_buildings(w).len();
+        for &h in &harvesters {
+            let Some(o) = w.obj(h) else { continue };
+            let resting = matches!(
+                o.beh.current,
+                None | Some(Behaviour::Guard) | Some(Behaviour::AreaGuard) | Some(Behaviour::Stop)
+            );
+            if is_slave_miner(w, tech::type_of(o)) {
+                // A resting slave miner whose slaves are home is sent to
+                // harvest at a field cell; it finds its site and deploys
+                // there itself (S-0402 claim 22).
+                if resting
+                    && slaves::at_rest(w, h)
+                    && let Some(c) = self.field_cell(w, o.pos.cell())
+                {
                     out.push(Order::Behaviour {
                         actor: h,
                         behaviour: Behaviour::Harvest,
                         attack_move: false,
                         target: None,
-                        dest: None,
+                        dest: Some(Target::Cell(c)),
                     });
                 }
+            } else if !refineries.is_empty() && (resting || idle(w, h)) {
+                // A harvester that rests (whatever destination it kept) or
+                // is idle is sent to harvest.
+                out.push(Order::Behaviour {
+                    actor: h,
+                    behaviour: Behaviour::Harvest,
+                    attack_move: false,
+                    target: None,
+                    dest: None,
+                });
             }
-            if harvesters.len() < self.plan.harvesters && !selling {
-                self.build(w, Role::Harvester, &mut out);
-            }
+        }
+        // A harvester is built once a refinery stands; a slave miner needs
+        // none.
+        let can_harvest = !refineries.is_empty()
+            || self
+                .candidates(w, Role::Harvester)
+                .first()
+                .is_some_and(|&t| is_slave_miner(w, t));
+        if can_harvest && economy < self.plan.harvesters && !selling {
+            self.build(w, Role::Harvester, &mut out);
         }
 
         // The army: one type round-robin per kind of factory, once the
@@ -536,7 +616,7 @@ impl Script {
         // the house has none).
         let vehicle_factory = Role::Factory(FactoryKind::Vehicle);
         let economy_first = !selling
-            && harvesters.len() < self.plan.harvesters
+            && economy < self.plan.harvesters
             && (!self.candidates(w, Role::Harvester).is_empty()
                 || (self.of_role(w, vehicle_factory).is_empty()
                     && !self.candidates(w, vehicle_factory).is_empty()));
