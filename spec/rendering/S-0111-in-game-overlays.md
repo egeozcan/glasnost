@@ -2,11 +2,11 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 6
-sources-class: [decomp]
+revision: 7
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -36,7 +36,7 @@ S-0108 (Formulas F3).
 |---|---|
 | overlay (in *overlay sprite*, *overlay image*, *overlay palette*) | Part of the status extras of this spec, and the sprites and palette of Import mapping that draw them. Not the glossary's *overlay*, the cell-level map object kind. |
 | status anchor | The screen pixel of an object's centre at its world height: its world pixel by the projection of S-0101 including the height lift, minus the view origin. Every displacement below is in screen pixels from it, *x* to the right and *y* downwards. |
-| projected displacement P(ξ, η, ζ) | The screen displacement that S-0101 F1 and F2 give when applied to the world displacement (ξ, η, ζ) leptons itself (not to an absolute position): P = (trunc((30ξ − 30η) / 256), trunc((15ξ + 15η) / 256) − *L*(ζ)), integers, truncated toward zero. A building overlay is placed at the anchor plus a projected displacement. This is not the same as projecting the absolute corner and subtracting the anchor's world pixel, which can differ by a pixel through the truncations. |
+| projected displacement P(ξ, η, ζ) | The screen displacement that S-0101 F1 and F2 give when applied to the world displacement (ξ, η, ζ) in leptons (not to an absolute position): P = (trunc((30ξ − 30η) / 256), trunc((15ξ + 15η) / 256) − *L*(ζ)), integers, truncated toward zero. A building overlay is placed at the anchor plus a projected displacement. This is not the same as projecting the absolute corner and subtracting the anchor's world pixel, which can differ by a pixel through the truncations. |
 | building box | For a building of foundation W × D cells (W along the map *x* axis, D along *y*): the box whose footprint is 256·W by 256·D leptons centred on the building's centre point, and which rises from the centre's height to *V* leptons above it. *V* is the building's art height field (Import mapping) times the height of one level, 104 leptons. With α = 128·W and β = 128·D (half the footprint, in leptons), its left corner lies (−α, β) leptons from the centre point and its top corner (−α, −β). |
 | health ratio *h* | Current health *H* divided by the type's full strength *S*, the quotient rounded toward zero to binary64, as in S-0108 F3 (the round-toward-zero mode, planned S-0205). |
 | yellow ratio, red ratio | The two game-wide condition ratios that S-0108 imports (Import mapping), binary64 values. |
@@ -204,11 +204,13 @@ S-0108 (Formulas F3).
     as well: they cover the rows where they overlap them, and the group number covers the self-heal
     marker where those two overlap. A building whose pip-scale kind is resource shows no pip scale at
     all: no row, no self-heal marker and no group number (`quirks.building_resource_pips_hidden`).
-    When the passengers do not fit their row (claim 12), the pip scale shows only the spawned-aircraft
-    and occupant rows: no passenger row, no self-heal marker and no group number
-    (`quirks.passenger_overflow_hides_pips`).
-    - Backing: `measurable` (scenarios OV6, OV7)
-    - Confidence: high for the rows, the covering, the passenger rule and both cut-offs
+    Filling or exceeding the passenger row length does not hide the passenger row, the self-heal
+    marker or the group number: claim 12 clips the passenger pips to the row, and claims 9, 16 and
+    17 still decide their ordinary visibility.
+    - Backing: `measurable` (scenarios OV6, OV7); overflow visibility is a departure tested against
+      this spec, not the original (scenario OV7-D)
+    - Confidence: high for the rows, the covering, the passenger rule and the resource cut-off,
+      high for the lead-decided overflow visibility
 
 12. **Passenger pips.** The row length *R* is the one that the type's pip-scale kind gives (Constants
     T2): the passenger capacity for the passengers kind, but 0 for the kind none, the ammunition
@@ -221,9 +223,11 @@ S-0108 (Formulas F3).
       binary64 under the round-toward-zero mode (planned S-0205). For sizes of 0
       or more this equals Σ trunc(*z*<sub>k</sub>), because that mode never rounds a sum up. For
       example, a first passenger of size −0.5 followed by one of size 2.5 gives *Z* = 1, not 2.
-    - **Too many.** If *Z* > *R*, there is no passenger row, and the pip scale shows only what claim
-      11 gives for passengers that do not fit.
-    - **Blocks.** Otherwise each passenger *k* covers a block of *b*<sub>k</sub> consecutive pips:
+    - **Row bounds.** Only pips with integer indices 0 ≤ *j* < *R* are drawn, whether *Z* is below,
+      equal to or above *R*. Thus *Z* > *R* clips the passenger blocks without suppressing the
+      self-heal marker or group number (departure); *R* = 0 gives no passenger pips, but those
+      markers remain eligible under their ordinary visibility rules.
+    - **Blocks.** Each passenger *k* covers a block of *b*<sub>k</sub> consecutive pips:
       *b*<sub>k</sub> = 1 + max(0, trunc(*z*<sub>k</sub> − 1)) for an infantry or vehicle passenger
       (*z*<sub>k</sub> − 1 rounded toward zero in binary64, then truncated, which gives the truncation
       of the exact value), and *b*<sub>k</sub> = 1 for any other passenger. The blocks are stacked
@@ -251,13 +255,15 @@ S-0108 (Formulas F3).
     - **Absorbing buildings.** In an absorbing building the row fills upwards from pip 0 instead, one
       pip per passenger, with the most recent passenger at pip 0 and the first one highest: an
       infantry passenger gives its pip colour, a vehicle image frame 4, anything else image frame 1.
-      The remaining pips show image frame 0. The row is drawn whatever the passengers' total size:
-      the "too many" rule above does not apply. If such a building
+      The remaining pips show image frame 0. Its one-pip-per-passenger layout replaces the
+      total-size block layout above. If such a building
       holds more passengers than *R*, the original's result is *unspecified*; our engine shows only
       the *R* most recent passengers.
     - Backing: `measurable` (scenario OV7)
-    - Confidence: high for the row length, the total-size test, the blocks, the image frames and the order.
+    - Confidence: high for the row length, total size, blocks, image frames and order.
       Medium for the gunner gap and the absorbing buildings
+    - Overflow clipping backing: departure, tested against this spec in OV7-D, not the original,
+      confidence high for the lead-decided rule
 
 13. **Mind-control pips.** The row has *M* pips, *M* being the damage of the type's primary weapon
     (the number of units it can control, the special-abilities specs). Counting from pip 0, as many
@@ -569,14 +575,12 @@ between two ticks shows the same state.
 - **The game-wide enemy-health flag does nothing.** The original reads it, but no overlay changes
   with its value. Our engine imports it and ignores it, with no switch, since there is no behaviour
   to reproduce.
-- **`quirks.passenger_overflow_hides_pips`** (default: on). When the passengers' total size exceeds
-  the passenger row length (claim 12), which happens for a type with passengers whose pip-scale kind
-  is not passengers, the pip scale shows only the spawned-aircraft and occupant rows: no passenger
-  pips, no self-heal marker, no group number. Off: the passenger row is laid out exactly as claim 12 gives for its
-  blocks (stacked downwards from pip *Z* − 1), but only pips 0 to *R* − 1 are drawn, so the
-  pips of the most recent passengers, which lie at *R* and above, are not shown; the self-heal marker
-  and group number are drawn as usual. The importer warns about a type with a
-  passenger capacity whose pip-scale kind is not passengers.
+- **Passenger row overflow** (departure, no switch). The original hides the passenger row,
+  self-heal marker and group number when the passengers' total size exceeds the row length, a
+  display-only bug whose departure is confirmed by the project lead. Claims 11 and 12 require
+  clipped passenger pips and ordinary marker visibility instead, without changing passenger
+  capacity or loading legality. The importer warns about a type with a passenger capacity whose
+  pip-scale kind is not passengers.
 - **Resource pips round half up per resource** (claim 14), so the row can show one pip more or one
   pip fewer than the whole load would round to. No switch: it is what the original shows.
 - **Building at health 0 shows green** (claim 5). No switch: no stable state shows it.
@@ -707,9 +711,9 @@ involved.
   order with infantry of different pip colours and, if one exists, a vehicle passenger of size 2.
   Expected: read from pip 0, the passengers in loading order, each one's colour pip (image frame 5
   for the vehicle) followed by its image-frame-3 pips, then empty pips; the colours of T1 and Import mapping. Then a
-  test map override section gives the transport type the pip-scale kind none. Expected: empty, it
-  shows its group number and no pips; with one passenger aboard, it shows neither pips nor the group
-  number. Then a test transport type with the gunner flag, the passengers pip-scale kind and a
+  test map override section gives the transport type the pip-scale kind none. Expected while empty:
+  its group number and no pips; the loaded departure case is tested separately in OV7-D.
+  Then a test transport type with the gunner flag, the passengers pip-scale kind and a
   passenger capacity of 3 (so *R* = 3), with two
   infantry aboard: expected pip 0 at its claim 10 place, then two empty pip places, then pips 1 and 2.
   Then an absorbing building of the player that absorbs infantry, entered by two infantry of
@@ -721,10 +725,24 @@ involved.
   section for the type, so the map layer is the only read without the key. One such infantry is
   loaded into the transport. Expected: its colour pip in image frame 2 (yellow), not 1. The same
   with `personblue` (11) in the loose copy: expected image frame 1. Falsified if the transport fill runs from
-  the last pip, the image frames differ, the group number stays with a passenger aboard under the
+  the last pip, the image frames differ, the empty transport loses its group number under the
   kind none, the gunner row has no gap or a gap of another width, the absorbing building shows the
   first passenger at pip 0, or the shifted pip keeps the base value (1 in the first test map, 11 in
   the second).
+- **OV7-D (claims 11, 12; departure conformance, not an original-game measurement).** Replay the
+  common tiny-map setup in our engine at game speed 3. Use a non-gunner transport in control group
+  1, its owner holding a unit-repair building, and three size-1 infantry passengers with distinct
+  pip colours. Named test-map overrides give the transport passenger capacity 3, the ammunition
+  pip-scale kind and ammunition capacity 2, hence *R* = 2. Select or hover the transport and capture
+  screenshots after loading 0, 1, 2 and 3 passengers in a known order. Expected: always two row
+  pips, filled in entry order then empty; at two passengers both pips remain visible, and at three
+  the first two passengers' colour pips remain while the third lies beyond the row and is clipped.
+  The self-heal marker and group digit remain visible in all four states. Repeat with the pip-scale
+  kind none (*R* = 0): no passenger pips at any load, but the marker and digit remain visible.
+  Deselect and move the pointer away: all pip-scale elements disappear. Repeat the hovered loaded
+  case with an unspied enemy transport: its passenger pips remain hidden under claim 9, regardless
+  of fullness. Record one screenshot per state; falsified by a missing in-row pip, any pip outside
+  the row, suppressed eligible markers, or pip-scale elements visible against claims 3 or 9.
 - **OV8 (claim 13).** A stock mind-controlling unit controlling 0, 1 and its maximum of units; then a
   stock unit whose type may control without limit, made to control more than its maximum, with test
   data setting the delay between overload damage pulses well above 10 ticks. Recorded per tick at
