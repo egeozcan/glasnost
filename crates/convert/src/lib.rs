@@ -237,6 +237,20 @@ async fn look_up_art(
     }
     // Second pass with the files' validity known.
     let (mut arts, notes) = art::lookup(&import.outcome, &art_doc, theater, &files, &options.art);
+    // spec: S-0108 claim 5 (the construction range is set when the build-up sprite is loaded: n = ⌊N_b / 2⌋ from its image-frame count)
+    for a in arts.values_mut() {
+        let Some(f) = a.building_sprites.get("buildup") else {
+            continue;
+        };
+        let Some(r) = vfs.resolve_bytes(f) else {
+            continue;
+        };
+        if let Ok(bytes) = vfs.read_resolved(&r).await
+            && let Ok(shp) = glasnost_fmt::shp::Shp::parse(&bytes)
+        {
+            a.buildup_frames = Some(i32::try_from(shp.frames.len()).unwrap_or(i32::MAX));
+        }
+    }
     // spec: S-0005 claim 13 (the loading archives are released before play)
     vfs.finish_loading();
     let in_play = |n: &[u8]| vfs.resolve_bytes(n).is_some();

@@ -37,6 +37,24 @@ pub fn tethered(w: &crate::world::World, id: crate::world::ObjectId) -> bool {
     release::tethered(w, id) || harvest::tethered(w, id)
 }
 
+/// Gives object `id` the destination `dest` (none clears it) and tells the
+/// movement rules at once: the destination-driven get-up of S-0107 claim
+/// 15 and the teleporting locomotor's taking of the destination, whose
+/// landing point and vehicle-present mark move in the same moment (S-0207
+/// claim 20 (a)). Every economy rule that sets a destination goes through
+/// here.
+pub fn assign_destination(
+    w: &mut crate::world::World,
+    id: ObjectId,
+    dest: Option<crate::world::Target>,
+) {
+    let Some(o) = w.obj_mut(id) else { return };
+    let before = o.dest;
+    o.dest = dest;
+    // spec: S-0207 claim 20 (a) (the locomotor takes the destination at once) and S-0107 claim 15
+    crate::infantry::destination_assigned(w, id, before);
+}
+
 /// A type of a production kind: infantry, vehicle, aircraft or building,
 /// with its registration index (what production orders name, S-0404 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 //! Deploying a vehicle into a building and packing it up again (S-0415),
 //! and the construction behaviour of a building that builds up (S-0108
-//! claim 5, S-0406 claims 14 and 15; request Q-0130 for what stays open).
+//! claim 5, S-0406 claims 14, 15, 17 and 18).
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -64,6 +64,10 @@ fn facing_of(d: i32) -> Facing {
     // spec: S-0415 claim 5 and Edge cases (D × 256, wrapping modulo 65536)
     (d.wrapping_mul(256)).rem_euclid(65536) as Facing
 }
+
+/// The facing a deployed building is inserted with (S-0415 claim 6).
+// spec: S-0415 Constants (building insertion facing 0, map north)
+const INSERTION_FACING: Facing = 0;
 
 /// Whether the redeploy setting is on (S-0415 Terms; the setup value of
 /// S-0412 claim 1, defaulting to the rules' default).
@@ -336,10 +340,8 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
     }
     // Leave the vehicle's cell before the building enters it.
     crate::objects::remove(w, id);
-    // spec: S-0415 claim 6 (the centre of the anchor at the surface height; construction begins; not a place order, S-0415 claim 7)
-    // The building's facing is S-0415's and not stated there (S-0406 claim 16, request Q-0220): interim, the deploy facing D × 256.
-    let d = deploy_facing(w, b);
-    crate::econ::placement::put_on_map_facing(w, bid, at, false, facing_of(d));
+    // spec: S-0415 claim 6 and Constants (the centre of the anchor at the surface height, inserted facing 0, not the vehicle's facing or D × 256; construction begins; not a place order, S-0415 claim 7)
+    crate::econ::placement::put_on_map_facing(w, bid, at, false, INSERTION_FACING);
     let yard = w.rules().buildings[b as usize]
         .raw
         .construction_yard
@@ -414,9 +416,8 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
         if let Some(ob) = w.obj_mut(vid) {
-            if let Some(spot) = o.guard_spot {
+            if o.guard_spot.is_some() {
                 // spec: S-0415 claim 10 (a guard spot: the vehicle's destination, with move)
-                ob.dest = Some(spot);
                 ob.beh.force(Behaviour::Move, tick, stale);
             } else {
                 ob.beh.force(Behaviour::Guard, tick, stale);
@@ -424,6 +425,10 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         }
         // spec: S-0415 claim 10 (the centre of the return cell, facing D × 256)
         crate::objects::place(w, vid, Pos::centre(c, z), facing_of(d));
+        if let Some(spot) = o.guard_spot {
+            // spec: S-0415 claim 10 and S-0207 claim 20 (a) (the destination given once the vehicle is on the map: a teleporter's mark moves at once)
+            super::assign_destination(w, vid, Some(spot));
+        }
         retarget(w, id, vid, false);
     } else {
         // spec: S-0415 claim 11 (the vehicle cannot be put on the map: the sale refund instead)
@@ -480,13 +485,18 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
         }
         return CONSTRUCTION_DELAY;
     };
-    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); a one-stage positive-delay range is open (S-0406 open question 6, request Q-0130): C + 1 as well
-    if tick.wrapping_sub(c) < crate::econ::sell::buildup_ticks(w, o.type_index).max(1) {
+    let never = w.rules().quirks.single_stage_buildup_never_completes;
+    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); claim 18 (a positive-delay range of one stage or fewer never hands over)
+    let Some(after) = crate::econ::sell::buildup_range(w, o.type_index).report_after(never) else {
+        return CONSTRUCTION_DELAY;
+    };
+    if tick.wrapping_sub(c) < after {
         return CONSTRUCTION_DELAY;
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.econ.construction.building_up = false;
         ob.econ.construction.first = None;
+        ob.econ.construction.entry = None;
         // spec: S-0406 claim 15 (guard queued, current at the second per-tick start of this tick, S-0215 claim 11; the target is kept)
         ob.beh.queue(Some(Behaviour::Guard));
         ob.beh.ready_mark = true;

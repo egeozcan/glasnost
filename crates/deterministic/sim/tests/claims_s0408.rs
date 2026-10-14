@@ -562,3 +562,48 @@ fn claim_14_repairable() {
     w.obj_mut(lock).unwrap().health = 100;
     assert!(!sell::repairable(&w, lock));
 }
+
+/// Sells `b` and returns (D, E): the build-down start and the tick the
+/// building leaves play.
+fn build_down_ticks(w: &mut World, b: ObjectId) -> (i32, i32) {
+    order(w, A, Order::Sell { actor: b });
+    let mut down = None;
+    for _ in 0..80 {
+        let t = w.tick;
+        step(w);
+        match w.obj(b) {
+            Some(o) => {
+                if let Some(sell::Stage::BuildDown(x)) = o.econ.sale.clone().map(|s| s.stage) {
+                    down = Some(x);
+                }
+            }
+            None => return (down.expect("build-down"), t),
+        }
+    }
+    panic!("not removed");
+}
+
+// spec: S-0408 claim 17, F4 and Constants (E = D + (n − 1) × d_b; a type that names a vehicle to pack into and has no guard spot also reports at stage 23, E = D + min(n − 1, 23) × d_b; a guard spot suppresses the early report)
+// spec: S-0108 claim 5 (60 image frames: n = 30, d_b = trunc(0.05 × 900 / 30) = 1)
+#[test]
+fn claim_17_early_report_at_stage_23() {
+    let mut r = rules();
+    let hut = r.sim.buildings.get_mut("HUT").unwrap();
+    hut.econ.buildup_frames = Some(60);
+    let mut w = game(&r);
+    let b = put(&mut w, "HUT", 0, c(0, 0));
+    let (d, e) = build_down_ticks(&mut w, b);
+    assert_eq!(e, d + 29, "no vehicle to pack into");
+
+    r.sim.buildings.get_mut("HUT").unwrap().undeploys_into = Some("CART".into());
+    let mut w = game(&r);
+    let b = put(&mut w, "HUT", 0, c(0, 0));
+    let (d, e) = build_down_ticks(&mut w, b);
+    assert_eq!(e, d + 23, "early report");
+
+    let mut w = game(&r);
+    let b = put(&mut w, "HUT", 0, c(0, 0));
+    w.obj_mut(b).unwrap().guard_spot = Some(glasnost_sim::world::Target::Cell(c(3, 3)));
+    let (d, e) = build_down_ticks(&mut w, b);
+    assert_eq!(e, d + 29, "a guard spot suppresses the early report");
+}

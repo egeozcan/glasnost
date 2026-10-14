@@ -147,8 +147,9 @@ pub fn sellable(w: &World, id: ObjectId) -> bool {
     // spec: S-0408 claim 3 (a) (a build-up sprite, construction completed, neither construction nor selling)
     let a = has_buildup(w, o.type_index)
         && !o.econ.construction.building_up
+        // spec: S-0406 claim 17 (the queued construction is seen while none is current)
         && !matches!(
-            o.beh.current,
+            crate::econ::placement::seen_behaviour(o),
             Some(Behaviour::Construction | Behaviour::Selling)
         );
     // spec: S-0408 claim 3 (b) (the firestorm-wall flag and the house's firestorm not active)
@@ -377,17 +378,53 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
 // spec: S-0408 Constants (selling processing delay: 1 tick, no draw)
 pub const SELLING_DELAY: i32 = 1;
 
-/// The ticks from the start of a build-up (or build-down) to its end
-/// (S-0108 claim 5, F1): (*n* − 1) × *d_b*, never below 0.
-pub fn buildup_ticks(w: &World, t: u32) -> i32 {
+/// The fewest stages of a range whose report falls on its last stage
+/// (S-0406 claims 15 and 18, S-0408 claim 17).
+// spec: S-0406 F6 and S-0408 F4 (n ≥ 2 stages)
+const MULTI_STAGE: i32 = 2;
+
+/// A building type's construction range (S-0108 claim 5): its stage count
+/// *n* and its stage delay *d_b* in ticks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Range {
+    /// The stage count *n*.
+    pub n: i32,
+    /// The stage delay *d_b*, in ticks.
+    pub delay: i32,
+}
+
+impl Range {
+    /// The ticks from the start of the range to the building turn whose
+    /// completion report a construction sees (S-0406 claims 15, 17 and 18,
+    /// F6 and F7); none when the range never reports completion.
+    pub fn report_after(self, never: bool) -> Option<i32> {
+        if self.delay <= 0 {
+            // spec: S-0406 claim 15 and F6 (a zero-delay range reports completion at the next building turn: H = C + 1)
+            Some(1)
+        } else if self.n >= MULTI_STAGE {
+            // spec: S-0406 claim 15, F6 and F7 (the report on the turn the stage lands on the last stage, (n − 1) × d_b)
+            Some((self.n - 1).saturating_mul(self.delay))
+        } else if never {
+            // spec: S-0406 claim 18 (quirks.single_stage_buildup_never_completes: a positive-delay range of one stage or fewer never reports completion)
+            None
+        } else {
+            // spec: S-0406 Edge cases (switch off: the report on the turn the stage first wraps, d_b ticks after the range starts)
+            Some(self.delay)
+        }
+    }
+}
+
+/// The construction range of building type `t` (S-0108 claim 5, F1).
+pub fn buildup_range(w: &World, t: u32) -> Range {
     let r = w.rules();
     let mode = r.mode;
+    // spec: S-0108 claim 5 (no build-up sprite: range a = 0, c = 1, d = 0)
+    let none = Range { n: 1, delay: 0 };
     let Some(b) = r.buildings.get(t as usize) else {
-        return 0;
+        return none;
     };
     if !b.raw.econ.buildup.unwrap_or(false) {
-        // spec: S-0108 claim 5 (no build-up sprite: range a = 0, c = 1, d = 0, finished at once)
-        return 0;
+        return none;
     }
     let n = if b.raw.gate.unwrap_or(false) {
         // spec: S-0108 claim 5 and Import mapping (a gate: n = G + 1, GateStages absent 9; S-0406 claim 15)
@@ -408,8 +445,15 @@ pub fn buildup_ticks(w: &World, t: u32) -> i32 {
             .div(F64::from_i64(i64::from(n), mode), mode)
             .to_i32_common()
     };
-    // spec: S-0108 claim 5 (finished (n − 1) × d_b ticks after the state began)
-    (n - 1).saturating_mul(db).max(0)
+    Range { n, delay: db }
+}
+
+/// The ticks from the start of a build-up (or build-down) to its last
+/// stage (S-0108 claim 5, F1): (*n* − 1) × *d_b*, never below 0.
+pub fn buildup_ticks(w: &World, t: u32) -> i32 {
+    let r = buildup_range(w, t);
+    // spec: S-0108 claim 5 (the last stage (n − 1) × d_b ticks after the state began)
+    (r.n - 1).saturating_mul(r.delay).max(0)
 }
 
 /// Whether any unit is docked with a building (S-0408 Terms): a harvester
@@ -503,8 +547,8 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
             set_stage(w, id, sale.packs, Stage::BuildDown(tick));
         }
         Stage::BuildDown(since) => {
-            // spec: S-0408 claim 6 (the first processing after the build-down has finished; S-0108 claim 5, request Q-0130)
-            if tick.wrapping_sub(since) < buildup_ticks(w, o.type_index) {
+            // spec: S-0408 claims 6 and 17 (the processing that sees the build-down's completion report pays and removes)
+            if tick.wrapping_sub(since) < builddown_ticks(w, id) {
                 return SELLING_DELAY;
             }
             finish(w, id, sale.packs);
@@ -512,6 +556,33 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
     }
     SELLING_DELAY
 }
+
+/// The ticks from the start *D* of a building's build-down to its
+/// completion report (S-0408 claim 17): E − D.
+fn builddown_ticks(w: &World, id: ObjectId) -> i32 {
+    let Some(o) = w.obj(id) else { return 0 };
+    let r = buildup_range(w, o.type_index);
+    if r.delay <= 0 {
+        // spec: S-0408 claim 17 (a zero-delay build-down reports at the next eligible building turn: E = D + 1)
+        return 1;
+    }
+    // spec: S-0408 claim 17 (the formulas cover at least 2 stages; a positive-delay range of one stage or fewer is open, request Q-0225: interim, the zero-delay report, E = D + 1)
+    if r.n < MULTI_STAGE {
+        return 1;
+    }
+    let mut stages = r.n - 1;
+    if crate::econ::deploy::undeploys_into(w, o.type_index).is_some() && o.guard_spot.is_none() {
+        // spec: S-0408 claim 17 and Constants (a type that names a vehicle to pack into, without a guard spot, also reports at stage 23; even when sold as an ordinary building)
+        stages = stages.min(EARLY_REPORT_STAGE);
+    }
+    // spec: S-0408 claim 17 and F4 (E = D + (n − 1) × d_b, on the tick the last stage is reached)
+    stages.saturating_mul(r.delay)
+}
+
+/// The build-down stage at which a packing-capable type without a guard
+/// spot reports completion early (S-0408 claim 17).
+// spec: S-0408 Constants (early completion stage 23)
+const EARLY_REPORT_STAGE: i32 = 23;
 
 fn set_stage(w: &mut World, id: ObjectId, packs: bool, stage: Stage) {
     if let Some(ob) = w.obj_mut(id) {

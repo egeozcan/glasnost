@@ -531,13 +531,9 @@ fn move_to(w: &mut World, unit: ObjectId, t: Target) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let tick = w.tick;
     let Some(o) = w.obj_mut(unit) else { return };
-    let before = o.dest;
-    o.dest = Some(t);
     o.beh.queue_and_start_at_once(Behaviour::Move, tick, stale);
-    if o.kind == Kind::Infantry {
-        // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
-        crate::infantry::destination_assigned(w, unit, before);
-    }
+    // spec: S-0107 claim 15 and S-0207 claim 20 (a) (the destination assigned: get-up, and a teleporter's mark moves at once)
+    super::assign_destination(w, unit, Some(t));
 }
 
 /// Whether a building's foundation covers cell `c` (S-0406 claim 2).
@@ -787,21 +783,46 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         direction(i64::from(ec.x - c.x), i64::from(ec.y - c.y), table),
         256,
     ) * 256) as Facing;
-    put(w, unit, p.x, p.y, dz, facing);
     let spot = rally(w, k);
     if let Some(o) = w.obj_mut(unit) {
-        // spec: S-0417 claim 10 (contact with K, and K's clearance to unload tethers the unit; the exchange takes no draw)
+        // spec: S-0417 claim 10 (before placement the released unit saves K's rally point as guard spot, or no spot without one)
+        o.guard_spot = spot;
+    }
+    // spec: S-0417 claim 10 (placement makes the unit fall back to rest at once: S-0215 claim 13's guard-spot row gives a rally point off its own cell as destination, queues move and clears the guard spot)
+    put(w, unit, p.x, p.y, dz, facing);
+    let Some(o) = w.obj(unit) else {
+        return Outcome::Failed;
+    };
+    let dest = o.dest;
+    let straight = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.jumpjet || u.raw.teleporter.unwrap_or(false));
+    match dest {
+        Some(d) if !straight => {
+            // spec: S-0417 claim 10 (a unit with a destination, neither jumpjet infantry nor marked as teleporting: the guard spot becomes the destination, move is queued, the destination becomes the exit cell; S-0404 claim 13)
+            if let Some(ob) = w.obj_mut(unit) {
+                ob.guard_spot = Some(d);
+                ob.beh.queue(Some(Behaviour::Move));
+            }
+            super::assign_destination(w, unit, Some(Target::Cell(exit)));
+        }
+        // spec: S-0417 claim 10 (a jumpjet or teleporting type heads straight for the rally point, with an empty guard spot)
+        Some(_) => {}
+        None => {
+            // Q-0120 (interim: with no rally point, or one in its own cell, the released infantry unit walks to its exit cell; S-0417 claim 10 and Open question 3 leave this case untraced)
+            w.note("Q-0120: a released infantry unit without a rally destination walks to its exit cell");
+            move_to(w, unit, Target::Cell(exit));
+        }
+    }
+    if let Some(o) = w.obj_mut(unit) {
+        // spec: S-0417 claim 10 (then K offers contact, and K's clearance to unload tethers the unit; the exchange takes no draw)
         o.contact = Some(k);
         o.econ.exit = Some(Exit {
             factory: k,
             tethered: true,
         });
-        // spec: S-0417 claim 10 (the released unit saves K's rally point as guard spot)
-        o.guard_spot = spot;
     }
-    // spec: S-0404 claim 13 (told by K to leave, it walks out to the exit cell)
-    // Q-0120 (interim: every released infantry unit walks to its exit cell; S-0417 claim 10 and Open question 3 leave the walk-out untraced)
-    move_to(w, unit, Target::Cell(exit));
     Outcome::Released
 }
 
@@ -863,6 +884,15 @@ pub fn aircraft(w: &mut World, k: ObjectId, unit: ObjectId, dock_free: bool) -> 
         // spec: S-0404 claim 13 and Constants (facing the game-wide pose direction × 256, S-0204 claim 10; absent 0)
         let facing = (pose.rem_euclid(256) * 256) as Facing;
         put(w, unit, c.x, c.y, 0, facing);
+        if let Some(o) = w.obj_mut(unit) {
+            // spec: S-0417 claim 11 (docked at K: K offers contact, then a tether request on the same tick; a type that must return to a dock refuses the tether; no draw)
+            o.contact = Some(k);
+            o.econ.exit = Some(Exit {
+                factory: k,
+                tethered: !bound,
+            });
+        }
+        w.note("S-0417 claim 11: a docked aircraft's tether ends when it leaves the ground (a seam: aircraft do not fly yet)");
         if !bound && let Some(t) = goal {
             // spec: S-0404 claim 13 (with a rally point, a type that need not return to a dock gets a move order to it)
             move_to(w, unit, t);
@@ -1004,6 +1034,26 @@ fn occupied(w: &World, c: CellXY, k: ObjectId) -> bool {
                 )
             })
     })
+}
+
+/// Idle apron clearing (S-0417 claim 13), in a processing of an unarmed
+/// building without the stupid-guard-mode flag in *guard*, *sticky* or
+/// *area guard*, before its delay draw; `first`: the first processing
+/// after the behaviour started.
+pub fn idle_apron(w: &mut World, k: ObjectId, first: bool) {
+    // spec: S-0417 claim 13 (a building whose type has the vehicle factory flag, naval or not)
+    if !vehicle_factory(w, k) {
+        return;
+    }
+    if first {
+        // spec: S-0417 claim 13 (the first processing after the behaviour starts returns the animation to idle and makes no apron test)
+        w.note("S-0417 claim 13: the factory's animation returns to idle (a seam: no animation state in the simulation)");
+        return;
+    }
+    // spec: S-0417 claim 13 (every later processing: claim 4's blocked test on E and its requests, E then the occupied neighbours; nothing else changes)
+    if let Some(e) = apron(w, k) {
+        clear_apron(w, k, e);
+    }
 }
 
 /// Apron clearing (S-0417 claim 4). Returns whether E is free.
@@ -1197,10 +1247,8 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
             } else {
                 e
             };
-            if let Some(ob) = w.obj_mut(u) {
-                // spec: S-0417 claim 5 (any other locomotor gets the destination and moves by its own locomotor's rules)
-                ob.dest = Some(Target::Cell(dest));
-            }
+            // spec: S-0417 claim 5 (any other locomotor gets the destination and moves by its own locomotor's rules; S-0207 claim 20 (a))
+            super::assign_destination(w, u, Some(Target::Cell(dest)));
         }
     }
     if let Some(d) = w.obj_mut(u).and_then(|o| o.drive.as_mut()) {
@@ -1337,10 +1385,8 @@ fn run_away(w: &mut World, id: ObjectId) {
     if let Some(gs) = o.guard_spot
         && o.dest != Some(gs)
     {
-        if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0417 claim 8 (the saved guard spot becomes the destination, without queueing a new move)
-            ob.dest = Some(gs);
-        }
+        // spec: S-0417 claim 8 (the saved guard spot becomes the destination, without queueing a new move; S-0207 claim 20 (a))
+        super::assign_destination(w, id, Some(gs));
         return;
     }
     if let Some(ob) = w.obj_mut(id) {

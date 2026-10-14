@@ -34,7 +34,7 @@ fn rules() -> Ruleset {
     let mut r = testkit::ruleset();
     let names = [
         "PLANT", "CONS", "DEF", "NODRAIN", "SPECIAL", "ENG", "ABS", "XTRA", "UP10", "UP20", "UPD5",
-        "CENTRE", "CENTRE2", "GAPPER", "SMALL", "WALLY", "GAPGEN",
+        "UPT20", "CENTRE", "CENTRE2", "GAPPER", "SMALL", "WALLY", "GAPGEN",
     ];
     r.registries.insert(
         "buildings".into(),
@@ -72,6 +72,10 @@ fn rules() -> Ruleset {
         u.econ.powers_up_building = Some("PLANT".into());
         s.buildings.insert(n.into(), u);
     }
+    let mut upt = building(100, 20);
+    upt.econ.powers_up_building = Some("PLANT".into());
+    upt.turret = Some(true);
+    s.buildings.insert("UPT20".into(), upt);
     let mut c = building(500, -10);
     c.powered = Some(true);
     c.econ.powers_unit = Some("DRONE".into());
@@ -161,7 +165,7 @@ fn claim_1_extra_output_only_for_absorbing() {
 }
 
 // spec: S-0405 claims 1 and 2, Terms (upgrades in the three positions count; W12)
-// spec: S-0408 claim 5 (no recorded upgrade counts at count 0; request Q-0224: interim, S-0408's gate)
+// spec: S-0405 claims 1 and 2, F1 and F2 (no recorded upgrade counts at count 0)
 #[test]
 fn claims_1_2_upgrades() {
     let r = rules();
@@ -704,4 +708,45 @@ fn sam_power_row_reads_low_power() {
     put(&mut w, "PLANT", 0, 4, 0);
     step(&mut w);
     assert!(!glasnost_sim::seams::sam_held_by_low_power(&w, d));
+}
+
+// spec: S-0405 Terms, claims 1 and 2 (W12 f: selling a turret upgrade resets the count to 0 and clears only its position; the lower recorded upgrade stays but adds no output or drain; the next sale sells the host, S-0408 claims 5 and 6)
+#[test]
+fn w12_f_turret_upgrade_sale() {
+    for (lower, before) in [("UP10", (150, 0)), ("UPD5", (140, 5))] {
+        let mut r = rules();
+        // A build-up sprite, so that a sell order sells (S-0408 claim 4).
+        r.sim.buildings.get_mut("PLANT").unwrap().econ.buildup = Some(true);
+        let mut w = game(&r);
+        let p = put(&mut w, "PLANT", 0, 0, 0);
+        let lo = w.rules().index_of(Kind::Building, lower).unwrap();
+        let upt = w.rules().index_of(Kind::Building, "UPT20").unwrap();
+        {
+            let b = &mut w.obj_mut(p).unwrap().econ.building;
+            b.upgrades = [Some(lo), Some(upt), None];
+            b.upgrade_count = 2;
+        }
+        assert_eq!(
+            (power::building_output(&w, p), power::building_drain(&w, p)),
+            before
+        );
+        order(&mut w, A, Order::Sell { actor: p });
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        let b = &w.obj(p).unwrap().econ.building;
+        assert_eq!(b.upgrade_count, 0);
+        assert_eq!(b.upgrades, [Some(lo), None, None]);
+        assert_eq!(
+            (power::building_output(&w, p), power::building_drain(&w, p)),
+            (120, 0)
+        );
+        order(&mut w, A, Order::Sell { actor: p });
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        let o = w.obj(p).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Selling));
+        assert_eq!(o.econ.building.upgrades, [Some(lo), None, None]);
+    }
 }

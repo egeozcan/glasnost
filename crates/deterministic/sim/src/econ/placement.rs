@@ -70,6 +70,11 @@ pub struct Construction {
     /// (S-0406 claim 14 and F6); none before it.
     #[serde(default)]
     pub first: Option<i32>,
+    /// The entry tick, from which the construction state's stage timing
+    /// counts until *C* (S-0406 claim 17); none for a building that did
+    /// not enter play under construction.
+    #[serde(default)]
+    pub entry: Option<i32>,
 }
 
 /// The placement fields of a building type (S-0406 Import mapping), with
@@ -676,7 +681,8 @@ pub fn put_on_map_facing(
     } else {
         // spec: S-0406 claim 1 and F4 (the centre of the cell, (256x + 128, 256y + 128), at the surface height)
         let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
-        begin_construction(w, id);
+        // A place order or a wall fill is placed; any other insertion is a deploy's (S-0415 claim 6).
+        begin_construction(w, id, !by_order);
         crate::objects::place_with(w, id, Pos::centre(cell, z), facing, by_order);
     }
     if by_order
@@ -688,14 +694,65 @@ pub fn put_on_map_facing(
     }
 }
 
-/// Starts a building's construction state (S-0108 claim 5): its behaviour
-/// becomes *construction* (S-0406 claim 1, S-0415 claim 6).
-pub fn begin_construction(w: &mut World, id: ObjectId) {
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+/// Starts a building's construction state at entry (S-0108 claim 5,
+/// S-0406 claims 1 and 17, S-0415 claim 6): no current behaviour and
+/// *construction* queued; a deploy (`deployed`) also sets the ready mark.
+pub fn begin_construction(w: &mut World, id: ObjectId, deployed: bool) {
     let t = w.tick;
+    // spec: S-0406 Edge cases (quirks.placed_buildup_twice off: a place order sets the ready mark at entry, as a deploy does)
+    let mark = deployed || !w.rules().quirks.placed_buildup_twice;
     if let Some(o) = w.obj_mut(id) {
-        o.beh.force(Behaviour::Construction, t, stale);
+        // spec: S-0406 claim 17 (at entry: no current behaviour and construction queued; stage 0, timed from the entry tick)
+        o.beh.current = None;
+        o.beh.queued = Some(Behaviour::Construction);
         o.econ.construction.building_up = true;
+        o.econ.construction.first = None;
+        o.econ.construction.entry = Some(t);
+        if mark {
+            // spec: S-0406 claim 17 (a deploy sets the ready mark when the building enters play)
+            o.beh.ready_mark = true;
+        }
+    }
+}
+
+/// The behaviour a rule sees when it asks for a building's behaviour
+/// (S-0406 claim 17): the current one, or the queued *construction* while
+/// none is current.
+pub fn seen_behaviour(o: &crate::world::Object) -> Option<Behaviour> {
+    match (o.beh.current, o.beh.queued) {
+        // spec: S-0406 claim 17 (a rule that asks for its behaviour while none is current sees the queued construction)
+        (None, Some(Behaviour::Construction)) => Some(Behaviour::Construction),
+        (cur, _) => cur,
+    }
+}
+
+/// Whether the first per-tick start of a building's turn is withheld
+/// (S-0406 claim 17): while its construction state lasts.
+pub fn first_start_withheld(w: &World, id: ObjectId) -> bool {
+    // spec: S-0406 claim 17 (the first start of a tick does not apply while the construction state lasts)
+    w.obj(id)
+        .is_some_and(|o| o.kind == Kind::Building && o.econ.construction.building_up)
+}
+
+/// The construction state's part of a building turn before its first
+/// per-tick start (S-0406 claims 17 and 18): until *construction* is
+/// current, the ready mark is set on the turn the build-up run from entry
+/// reports its last stage, or on any turn of a zero-delay range.
+pub fn construction_turn(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let c = &o.econ.construction;
+    if !c.building_up || c.first.is_some() || o.beh.current == Some(Behaviour::Construction) {
+        return;
+    }
+    let Some(entry) = c.entry else { return };
+    let never = w.rules().quirks.single_stage_buildup_never_completes;
+    let range = crate::econ::sell::buildup_range(w, o.type_index);
+    // spec: S-0406 claim 17 (a) and (b) (the mark on the turn the stage lands on the last stage, R = T + (n − 1) × d_b, or on any turn of a zero-delay range); claim 18 (never for a positive-delay range of one stage or fewer)
+    let due = range
+        .report_after(never)
+        .is_some_and(|a| w.tick.wrapping_sub(entry) >= a);
+    if due && let Some(ob) = w.obj_mut(id) {
+        ob.beh.ready_mark = true;
     }
 }
 

@@ -178,6 +178,10 @@ pub struct TypeArt {
     pub alt_icon: Option<Vec<u8>>,
     /// Translucent sprite.
     pub translucent: Option<Vec<u8>>,
+    /// The image-frame count *N_b* of the build-up sprite, read from the
+    /// file while the loading archives are mounted (S-0108 claim 5); none
+    /// when there is no build-up sprite or the file does not parse.
+    pub buildup_frames: Option<i32>,
     /// Notes on open or unusual cases.
     pub notes: Vec<String>,
 }
