@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236]
 supersedes: []
 ---
 
@@ -95,7 +95,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    applied outside any object's turn, the death effects occur at that same out-of-turn place in
    the tick, before the next hit of the same detonation. The table in State and ordering gives the observable precedence of the death effects and the order in which their random draws affect the scenario random stream. For example, a passenger killed by an exploding object is already dead when the death-weapon detonation's damage is dealt. A death weapon or bomb completes its detonation before the death proceeds to effects that follow it in the table. When the
    object leaves play is S-0203's claim 6; this spec adds when buildings, sinking vehicles and
-   crashing objects leave (claims 10, 15, 16 and 21).
+   crashing objects leave (claims 10, 15, 16 and 21). Death effects, draws and immediate deletion
+   of a never-placed production item killed by defeat or surrender remain open under Q-0193:
+   being off the map alone establishes neither their presence nor their absence. S-0414 claim 17
+   answers the existence-count part only, not those death rules.
    - Backing: `measurable` (scenario D1; S-0203 scenario O10 for out-of-turn damage)
    - Confidence: high for the order of the shared effects and of each kind's effects; medium for the
      relative order of rarely combined effects (Open questions)
@@ -308,7 +311,13 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 ### Aircraft and crashing
 
-16. **Aircraft deaths and crashes.** A killed aircraft takes the shared effects, then, when its type's explosion list is not empty, shows one entry of that list at its position, chosen by one list pick. What happens when the list is empty, including whether an animation appears or a draw is taken, is unknown. The aircraft then starts to crash if it is above the terrain; otherwise it leaves play at once. An object that starts to crash loses all
+16. **Aircraft deaths and crashes.** A killed aircraft takes the shared effects, then, when its
+    type's explosion list is not empty, shows one entry of that list at its position, chosen by
+    one list pick. When the list is empty, this aircraft-specific explosion creates no animation
+    and takes no draw: there is no fallback animation or fallback list. This rule is the same
+    in flight and on the ground. It does not suppress animations or draws from the shared death
+    effects, crash start or later impact. The aircraft then starts to crash if it is above the
+    terrain; otherwise it leaves play at once. An object that starts to crash loses all
     its passengers (credited to the attacker) and, unless it is infantry, takes three draws for its
     tumbling (one unit-interval value, one ranged draw over 0 to 1 that chooses the sense, one more
     unit-interval value). It then falls (locomotor specs). When it reaches the ground:
@@ -319,8 +328,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` (scenario D11)
-    - Confidence: medium for the impact rules; low for the double death weapon and for which objects
+    - Backing: `measurable` (scenario D11; variant f for an empty explosion list)
+    - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
+      empty list, and their independence from height; medium for the impact rules; low for the double death weapon and for which objects
       use this crash (aircraft and crashable jumpjet types are believed to)
 
 ### Buildings
@@ -637,6 +647,7 @@ otherwise. No measurement has been completed for this revision.
 
 | Claim or formula | Backing and reason for the part not covered by a scenario |
 |---|---|
+| Death rules for never-placed production items | Unresolved under Q-0193, not covered by the numbered death rules' backing. S-0414's off-map hit eligibility and existence counts establish neither effects, draws nor immediate deletion. No prediction for these outcomes is asserted here. |
 | 1, 19(d), 22 | `unmeasured` for resource spilling combined with other building death effects: no skirmish setup fills building storage. D1 and D14 test the effects their setups reach. |
 | 6 | `unmeasured` for multi-turret selection and the unplaced projectile's land-type, height and water tests: D6 tests ordinary/elite primary selection and debris position, not these tests, and no setup isolating them is supplied. |
 | 12 | `unmeasured` for bridge-deck escape height and placement: D9 supplies no bridge run, and its placement point remains for the bridge specs to establish. Bomb-mark rows inherit claim 11's backing. |
@@ -784,7 +795,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 6 | vehicle | crew (claim 13) | unit-interval value, crew type (F4), creation draw, health |
 | 7 | vehicle | crate (claim 14) | the crate's |
 | 8 | vehicle | crash, sinking or leaving play (claim 15); passengers still inside die at the start of a crash (claim 16) | crash: three |
-| 4 | aircraft | explosion animation, then crash or leaving play (claim 16) | list pick, crash: three |
+| 4 | aircraft | explosion animation only with a nonempty explosion list, then crash or leaving play (claim 16) | one list pick only with a nonempty list; crash: three |
 | 4 | building | contacts (claim 17), garrison out | the contacts' deaths |
 | 5 | building | claim 19 (a) to (h), with claim 23 inside (c), claim 22 inside (d), and claims 24 and 18 inside (g); claim 18's cells start after the cells claim 24 used | as listed |
 | 6 | building | rubble and crate, leaving play (claims 20, 21); for a type with the explodes flag or a building being sold, awaiting removal instead | the crate's (when it leaves now) |
@@ -887,7 +898,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | rules, type section, `DeathWeaponDamageModifier` | death-weapon damage factor *φ* (F3) | decimal (single) | 1.0 |
 | rules, weapon section, `Damage`, `Warhead`, `Bright` | *w*, warhead and brightness of the death weapon | integer, warhead name, boolean | weapon specs |
 | rules, type section, `Strength` | *H* (claim 2, F3) | integer | type specs |
-| rules, type section, `Explosion` | explosion list (claims 9, 16, 19) | animation-name list (items as claim 28) | empty |
+| rules, type section, `Explosion` | explosion list (claims 9, 16, 19); an aircraft's empty list gives no aircraft-specific explosion animation or list-pick draw, at any height (claim 16) | animation-name list (items as claim 28) | initially empty; absent or empty text keeps the list in force, while nonempty text consisting only of no-type items clears it (claim 28) |
 | rules, type section, `DestroyAnim` | destruction-animation list (claims 9, 19) | animation-name list (items as claim 28) | empty |
 | rules, infantry type section, `Cyborg` | cyborg type (claim 2) | boolean | no |
 | rules, warhead section, `CausesDelayKill`, `DelayKillFrames`, `DelayKillAtMax` | delay-kill flag, *F*, *A* (F6) | boolean, integer, decimal (held as a single) | no; 5 ticks; 1.0 (as S-0302 Import mapping, which owns them) |
@@ -1131,8 +1142,25 @@ death position and replay its list pick and three crash-start draws separately f
 draws; a missing or wrong animation, wrong position or different stream state falsifies that
 choice, count or order. Variant e: kill the aircraft on its pad at terrain
 height: it leaves play at the end of death effects without crash-start draws; delayed removal or
-those draws falsifies e. Variant b cannot run until a normal input or named-data setup that
-starts a living crash is established; it provides no measurable backing in this revision.
+those draws falsifies e. Variant f (Q-0236): use a named test-map override that clears the
+same aircraft type's explosion list with a no-type item, rather than empty text, which would
+keep a lower layer's list. Disable its debris and exploding properties, carry no passengers or
+bomb, and use an ordinary lethal weapon with no random impact effects. Give the type a distinct
+nonempty destruction-animation list to distinguish a fallback to it. Kill 30 aircraft in flight
+and 30 on a pad, confirming terrain height with the recorder for the grounded kills. Record
+created animation types, positions, height, removal and scenario-stream states immediately
+before the killing hit and after the death effects, separately from later crash impact.
+Expected: no aircraft-specific explosion animation and no fallback animation in either case,
+with no raw value consumed for the absent list pick. The flying case still takes its three
+crash-start draws; the grounded case takes none of those. Replay all remaining effects under
+their owning rules, rather than treating an entire death as necessarily draw-free. Repeat both
+heights with one explosion-list entry, then the two entries above: each nonempty list takes
+exactly one raw value for its list pick, even the one-entry list, before any crash-start draws.
+A fallback animation, an extra list-choice draw with the empty list, a missing pick draw with
+one entry, or a height-dependent list-choice rule falsifies f. A trace that cannot separate
+weapon impact, death effects and later crash impact is inconclusive. Variant b cannot run until
+a normal input or named-data setup that starts a living crash is established; it provides no
+measurable backing in this revision.
 
 **D12. Contacts of a destroyed building (claim 17).** *Setup:* a stock building type that produces
 vehicles, destroyed while a vehicle is leaving it; a stock building type that harvesters dock at,
@@ -1345,6 +1373,12 @@ Different retained entries, lengths or subsequent draw outcomes falsify these sy
 
 ## Open questions
 
+- Q-0193: which death effects, scoring or notifications and random draws a never-placed
+  production item takes when a defeat or surrender hit kills it, and whether its own death
+  immediately deletes it. These remain unestablished, not a draw-free-death rule. S-0414 claim
+  17 already answers the existence-count part of question 3. Production-line retention,
+  progress, completion, refund, release and placement, including survival of a factory without
+  later cancellation, remain for S-0404. Off-map hit eligibility does not answer these parts.
 - The unplaced default position of a death weapon's projectile (claim 6): believed to be the map
   origin, which would put its warhead debris at the map's corner and take the land type of that
   corner's cell. Scenario D6, variant d, would show it.
