@@ -7,12 +7,12 @@
 //! track, a naval factory's two processings, the tether of a released unit
 //! and its clear report, the run-away reply and the arrival fallback.
 //!
-//! What stays open (S-0404 and S-0417 Open questions, request Q-0120):
-//! the docking position of an aircraft and "a cell near" the factory, how
-//! many docking places an infantry factory has, the exact cell-entry test
-//! of the infantry exit search and the infantry walk-out. The interim rules
-//! for those parts are marked `Q-0120` below and listed in the interim
-//! table of `docs/development.md`, with those of requests Q-0221 to Q-0223.
+//! What stays open (S-0417 Open questions): the later walk-out of an
+//! infantry unit released without a rally destination (none is given),
+//! and the draws of putting a released unit on the map (none are taken).
+//! The interim rule of request Q-0295 (an infantry unit's cell-arrival
+//! update) is in `walk` and listed in the interim table of
+//! `docs/development.md`.
 //! The production and idle animations of a factory are not modelled
 //! (building animations are a seam), so they take no draws.
 
@@ -44,6 +44,31 @@ pub struct Exit {
     pub factory: ObjectId,
     /// The tether link with K (glossary *tether link*).
     pub tethered: bool,
+    /// The contact place of K it is in contact through, numbered from 0
+    /// (S-0417 claim 14, S-0404 claim 15).
+    #[serde(default)]
+    pub place: u32,
+}
+
+/// K's contact places *n* = max(*d*, 1), *d* the imported docking-place
+/// count (S-0417 claim 14).
+fn contact_places(w: &World, k: ObjectId) -> u32 {
+    // spec: S-0417 claim 14 and S-0404 Import mapping (NumberOfDocks, rules, absent 1; n = max(d, 1))
+    let d = building_rules(w, k).map_or(1, |b| b.raw.econ.number_of_docks.unwrap_or(1));
+    d.max(1) as u32
+}
+
+/// The first of K's places no unit is in contact through (S-0417 claim
+/// 14: a place is free while no unit is in contact through it); `limit`
+/// when every place below it is held.
+fn first_free_place(w: &World, k: ObjectId, limit: u32) -> u32 {
+    let held: std::collections::BTreeSet<u32> = w
+        .objects
+        .values()
+        .filter(|o| o.contact == Some(k))
+        .filter_map(|o| o.econ.exit.filter(|e| e.factory == k).map(|e| e.place))
+        .collect();
+    (0..limit).find(|i| !held.contains(i)).unwrap_or(limit)
 }
 
 // spec: S-0404 Constants (facing of an appearing vehicle, ground and naval factories: 16384, map east)
@@ -427,11 +452,11 @@ const THREE_BY_THREE: &[(i32, i32)] = &[
 /// cases, `quirks.foundation_exit_lists` off): the row below from left to
 /// right, corners included; the cells beside it from the bottom row
 /// upwards, left before right; the row above from left to right, corners
-/// included. A foundation without cells has an empty ring (interim,
-/// request Q-0195).
+/// included. A foundation without cells has an empty ring (S-0404 Edge
+/// cases, Q-0195).
 pub fn ring(fw: i32, fh: i32) -> Vec<(i32, i32)> {
     if fw <= 0 || fh <= 0 {
-        // Q-0195 (interim: a foundation without cells keeps its empty list with the switch off too)
+        // spec: S-0404 Edge cases (Q-0195: for the 0 × 0 word the exit list is empty with the switch off as well as on; no ring is inferred)
         return Vec::new();
     }
     let mut v = Vec::new();
@@ -597,12 +622,8 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
     };
     // spec: S-0404 claim 13 and Constants (it appears inside K facing 16384)
     crate::objects::place(w, unit, p, VEHICLE_FACING);
-    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    let tick = w.tick;
-    if let Some(o) = w.obj_mut(k) {
-        // spec: S-0404 claim 13 (K then starts unloading)
-        o.beh.force(Behaviour::Unload, tick, stale);
-    }
+    // spec: S-0417 claim 1 (K queues unloading; claim 2 governs when it becomes current)
+    queue_unload(w, k);
     let spot = rally(w, k);
     if let Some(o) = w.obj_mut(unit) {
         // spec: S-0417 claim 1 (a ground vehicle factory releases u into contact with K)
@@ -613,6 +634,7 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         o.econ.exit = Some(Exit {
             factory: k,
             tethered: true,
+            place: 0,
         });
     }
     Outcome::Released
@@ -638,12 +660,8 @@ fn holds_object(w: &World, c: CellXY) -> bool {
 fn naval_row(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
     let in_contact = w.objects.values().any(|o| o.contact == Some(k));
     if !in_contact {
-        let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-        let tick = w.tick;
-        if let Some(o) = w.obj_mut(k) {
-            // spec: S-0404 claim 13 (when K has no unit in contact, K starts unloading)
-            o.beh.force(Behaviour::Unload, tick, stale);
-        }
+        // spec: S-0417 claim 1 (a naval factory queues unloading only when it had no unit in contact)
+        queue_unload(w, k);
     }
     let c = w.reference_point(k);
     let cc = c.cell();
@@ -713,11 +731,10 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
     let Some(bt) = w.rules().buildings.get(b.type_index as usize).cloned() else {
         return Outcome::Failed;
     };
-    // Q-0120 (interim: an infantry factory or cloning building has one docking place)
-    let docks = 1;
-    let held = w.objects.values().filter(|o| o.contact == Some(k)).count();
-    if held >= docks {
-        // spec: S-0404 claim 13 (none of K's docking places is free: busy)
+    let places = contact_places(w, k);
+    let place = first_free_place(w, k, places);
+    if place >= places {
+        // spec: S-0404 claim 13 and S-0417 claim 14 (none of K's n contact places is free: busy)
         return Outcome::Busy;
     }
     let e = &bt.raw.econ;
@@ -741,10 +758,8 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         .into_iter()
         .map(|(a, bb)| CellXY::new(x0 + a, y0 + bb));
     let reference = crate::occupancy::reference_level(w, unit);
-    w.note("Q-0120: the infantry exit search's cell-entry test is the infantry entry outcome being clear");
     let legal = |w: &World, c: CellXY| {
-        // spec: S-0404 claim 13 (a legal map cell, S-0009 claim 1, which the unit could enter now, S-0209 and S-0211)
-        // Q-0120 (interim: could enter now is the infantry entry outcome of S-0209, which includes S-0211's test, being clear)
+        // spec: S-0404 claim 13 (a legal map cell, S-0009 claim 1, which the unit could enter now) and S-0417 claim 14 (it passes only on the free result of the unit's own cell-entry test, S-0209 and S-0211; results that only make a mover wait reject it)
         w.cells.footprint().is_legal(c)
             && crate::occupancy::infantry_outcome(w, unit, c, reference)
                 == crate::occupancy::Outcome::Clear
@@ -762,11 +777,7 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
     if copies && e.cloning != Some(true) {
         clone_copies(w, &b, unit);
     }
-    // spec: S-0404 claim 13 (the foundation cell next to the exit cell: each coordinate outside the foundation moved one cell back into it)
-    let inside = CellXY::new(
-        exit.x.clamp(x0, x0 + fw.max(1) - 1),
-        exit.y.clamp(y0, y0 + fh.max(1) - 1),
-    );
+    let inside = CellXY::new(toward(exit.x, x0, fw), toward(exit.y, y0, fh));
     let mut p = Pos::centre(inside, 0);
     let mut dz = 0;
     if i < door_count {
@@ -809,11 +820,8 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         }
         // spec: S-0417 claim 10 (a jumpjet or teleporting type heads straight for the rally point, with an empty guard spot)
         Some(_) => {}
-        None => {
-            // Q-0120 (interim: with no rally point, or one in its own cell, the released infantry unit walks to its exit cell; S-0417 claim 10 and Open question 3 leave this case untraced)
-            w.note("Q-0120: a released infantry unit without a rally destination walks to its exit cell");
-            move_to(w, unit, Target::Cell(exit));
-        }
+        // spec: S-0404 claim 13 and S-0417 claim 10 (no rally point, or one in its own cell: the release gives no destination; any later walk-out is S-0417 Open question 3)
+        None => {}
     }
     if let Some(o) = w.obj_mut(unit) {
         // spec: S-0417 claim 10 (then K offers contact, and K's clearance to unload tethers the unit; the exchange takes no draw)
@@ -821,9 +829,23 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         o.econ.exit = Some(Exit {
             factory: k,
             tethered: true,
+            place,
         });
     }
     Outcome::Released
+}
+
+/// One exit-cell coordinate adjusted one cell toward the foundation
+/// rectangle from `lo` of extent `n` (S-0404 claim 13).
+fn toward(v: i32, lo: i32, n: i32) -> i32 {
+    // spec: S-0404 claim 13 (at or above lo + n: reduced by 1; below lo: raised by 1; otherwise unchanged; integer cell operations, also for the 0 × 0 word)
+    if v >= lo + n {
+        v - 1
+    } else if v < lo {
+        v + 1
+    } else {
+        v
+    }
 }
 
 /// Claim 14: each cloning building of the house, in acquisition order,
@@ -853,7 +875,7 @@ fn clone_copies(w: &mut World, k: &crate::world::Object, unit: ObjectId) {
         })
         .collect();
     for cb in cloners {
-        // spec: S-0404 claim 14 (a new infantry unit of the same type for its owner: a newly created object, its creation draw, S-0202 claim 10)
+        // spec: S-0404 claim 14 (a new infantry unit of the same type for its owner: a newly created object, its creation draw, S-0202 claim 10; copies in cloning-building acquisition order, an earlier copy's placement draws before the next copy's creation draw)
         let copy = crate::objects::create(w, u.0, u.1, Some(owner));
         // spec: S-0404 claim 14 (released by claim 13's infantry row; nothing paid or refunded)
         if infantry(w, cb, copy, false) != Outcome::Released {
@@ -877,19 +899,18 @@ pub fn aircraft(w: &mut World, k: ObjectId, unit: ObjectId, dock_free: bool) -> 
     let bound = u.raw.econ.airport_bound.unwrap_or(false);
     let goal = rally(w, k);
     if dock_free {
-        // Q-0120 (interim: an aircraft's docking position is K's reference point)
-        w.note("Q-0120: an aircraft released onto a dock appears at its factory's reference point");
-        let c = w.reference_point(k);
+        let (p, place) = pad_position(w, k, unit);
         let pose = w.rules().econ.production.pose_dir;
         // spec: S-0404 claim 13 and Constants (facing the game-wide pose direction × 256, S-0204 claim 10; absent 0)
         let facing = (pose.rem_euclid(256) * 256) as Facing;
-        put(w, unit, c.x, c.y, 0, facing);
+        crate::objects::place(w, unit, p, facing);
         if let Some(o) = w.obj_mut(unit) {
             // spec: S-0417 claim 11 (docked at K: K offers contact, then a tether request on the same tick; a type that must return to a dock refuses the tether; no draw)
             o.contact = Some(k);
             o.econ.exit = Some(Exit {
                 factory: k,
                 tethered: !bound,
+                place,
             });
         }
         w.note("S-0417 claim 11: a docked aircraft's tether ends when it leaves the ground (a seam: aircraft do not fly yet)");
@@ -913,11 +934,96 @@ pub fn aircraft(w: &mut World, k: ObjectId, unit: ObjectId, dock_free: bool) -> 
     let p = Pos::centre(cell, 0);
     // spec: S-0404 claim 13 and Constants (that cell's centre, facing 0)
     put(w, unit, p.x, p.y, 0, EDGE_FACING);
-    // spec: S-0404 claim 13 (a move order to the rally point, otherwise to a cell near K)
-    // Q-0120 (interim: the cell near K is the cell of K's reference point)
-    let t = goal.unwrap_or(Target::Cell(b));
-    move_to(w, unit, t);
+    // spec: S-0417 claim 14 (with a rally point, move forced with it as destination; without one, the nearby-cell search's result around the cell of K's reference point, or no destination when it finds none; the search takes no draw)
+    let dest = match goal {
+        Some(t) => Some(t),
+        None => edge_nearby(w, unit, b).map(Target::Cell),
+    };
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let tick = w.tick;
+    if let Some(o) = w.obj_mut(unit) {
+        // spec: S-0417 claim 14 (the aircraft's move is forced)
+        o.beh.force(Behaviour::Move, tick, stale);
+    }
+    super::assign_destination(w, unit, dest);
     Outcome::Released
+}
+
+/// The nearby destination of an edge-entering aircraft without a rally
+/// point (S-0417 claim 14): S-0212 claim 25's search around `centre`.
+fn edge_nearby(w: &mut World, unit: ObjectId, centre: CellXY) -> Option<CellXY> {
+    let o = w.obj(unit)?.clone();
+    let u = w.rules().unit(o.kind, o.type_index)?.clone();
+    let deck = o.layer == Layer::Deck;
+    crate::regions::ensure(w);
+    let settings = crate::path::NearbySettings {
+        // spec: S-0417 claim 14 (the aircraft type's locomotion class, winged counted as track)
+        class: u.class.map(|k| match k {
+            glasnost_rules::sim::LocomotionClass::Winged => {
+                glasnost_rules::sim::LocomotionClass::Track
+            }
+            other => other,
+        }),
+        // spec: S-0417 claim 14 (its own movement zone; the reach region of the centre cell for that zone)
+        zone: u.zone,
+        reach: Some(crate::regions::reach_read(w, centre, u.zone, deck)),
+        // spec: S-0417 claim 14 (deck mode only on a bridge deck; no height condition, further test or reference cell)
+        deck,
+        height: false,
+        reference: None,
+        no_bridges: false,
+        no_overlay: false,
+    };
+    // spec: S-0417 claim 14 (the release tick selects among the preferred cells, S-0212 claim 25)
+    crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings))
+}
+
+/// The pad position of a docked aircraft (S-0404 claim 15) and the
+/// contact place it takes: *c*, K's foundation centre with its world
+/// height, plus the docking displacement of its place for a pad or
+/// repair building.
+fn pad_position(w: &World, k: ObjectId, unit: ObjectId) -> (Pos, u32) {
+    let c = w.reference_point(k);
+    let Some(b) = building_rules(w, k) else {
+        return (c, 0);
+    };
+    // spec: S-0404 Import mapping (NumberOfDocks, rules, absent 1)
+    let count = b.raw.econ.number_of_docks.unwrap_or(1);
+    let kept = w
+        .obj(unit)
+        .filter(|o| o.contact == Some(k))
+        .and_then(|o| o.econ.exit)
+        .filter(|e| e.factory == k)
+        .map(|e| e.place);
+    // spec: S-0404 claim 15 (an aircraft already in contact keeps that place; otherwise it takes the first empty place)
+    let place = kept.unwrap_or_else(|| first_free_place(w, k, count.max(1) as u32));
+    // spec: S-0404 Import mapping (Helipad, UnitRepair absent: no)
+    let pad = b.raw.helipad.unwrap_or(false) || b.raw.unit_repair.unwrap_or(false);
+    if !pad {
+        // spec: S-0404 claim 15 (without either flag: c)
+        return (c, place);
+    }
+    let offsets = b.raw.econ.docking_offsets.clone().unwrap_or_default();
+    let at = |i: usize| offsets.get(i).copied().unwrap_or([0; 3]); // spec: S-0404 Import mapping (new places start at 0, 0, 0)
+    let d = if count == 1 {
+        // spec: S-0404 claim 15 (a count of 1: the sole displacement, whatever the contact index)
+        Some(at(0))
+    } else if count <= 0 || place >= count as u32 {
+        // spec: S-0404 claim 15 (a count of 0, or a contact index outside the displacement count: c)
+        None
+    } else {
+        Some(at(place as usize))
+    };
+    let p = match d {
+        // spec: S-0404 claim 15 (c + d_i component by component, signed 32-bit wrapping, not rotated)
+        Some(d) => Pos::new(
+            c.x.wrapping_add(d[0]),
+            c.y.wrapping_add(d[1]),
+            c.z.wrapping_add(d[2]),
+        ),
+        None => c,
+    };
+    (p, place)
 }
 
 /// The stages of a factory's unloading (S-0417 table S1), kept in the
@@ -977,8 +1083,7 @@ pub fn apron(w: &World, k: ObjectId) -> Option<CellXY> {
     let bt = building_rules(w, k)?;
     let (fw, fh) = b.foundation;
     let refinery = bt.raw.foundation_refinery == Some(true);
-    // spec: S-0417 claim 3 (selection always uses the original lists)
-    // Q-0221 (interim: with quirks.foundation_exit_lists off the apron keeps the original list's E, S-0417 Open question 6)
+    // spec: S-0417 claim 3 and Edge cases (apron selection uses the original lists under either state of quirks.foundation_exit_lists)
     let list = exit_list(fw, fh, refinery, true);
     let short = w.rules().quirks.factory_apron_short_list; // spec: S-0417 Edge cases (quirks.factory_apron_short_list)
     // spec: S-0417 Constants (apron list position 11, counted from 1)
@@ -992,7 +1097,7 @@ pub fn apron(w: &World, k: ObjectId) -> Option<CellXY> {
                 (0, 0)
             }
         }
-        // Q-0221 (interim: switch off, the short list's last pair; (0, 0) for an empty list)
+        // spec: S-0417 Edge cases (the fixed alternative, switch off: the original short list's last pair, (0, 0) for an empty list)
         None => list.last().copied().unwrap_or((0, 0)),
     };
     let c = b.pos.cell();
@@ -1110,14 +1215,35 @@ fn move_door(w: &mut World, k: ObjectId, open: bool) {
     }
 }
 
+/// A release queues *unload* on K without a start (S-0417 claims 1 and
+/// 2): it becomes current at a per-tick start that finds the ready mark
+/// set. With `quirks.factory_unload_waits_ready_mark` off, queueing it also
+/// sets the mark.
+fn queue_unload(w: &mut World, k: ObjectId) {
+    let waits = w.rules().quirks.factory_unload_waits_ready_mark;
+    if let Some(o) = w.obj_mut(k) {
+        // spec: S-0417 claims 1 and 2 (unload queued at release, without a start; nothing in the release sets or clears the ready mark)
+        o.beh.queue(Some(Behaviour::Unload));
+        if !waits {
+            // spec: S-0417 Edge cases (quirks.factory_unload_waits_ready_mark off: queueing unload at release also sets the ready mark)
+            o.beh.ready_mark = true;
+        }
+    }
+}
+
 /// K falls back to rest at the end of its unloading: it queues *guard*
-/// (S-0417 claims 2 and 9; the production animation is not modelled).
+/// (S-0417 claims 2 and 9). The deferred request for the idle body state
+/// leaves the running idle range unchanged (S-0108 claim 6: the same
+/// state), as no production animation is modelled.
 fn end_unloading(w: &mut World, k: ObjectId) {
+    let waits = w.rules().quirks.factory_unload_waits_ready_mark;
     if let Some(b) = w.obj_mut(k) {
-        // spec: S-0417 claim 2 and table S1 (closing: queue guard; unloading ends when guard starts)
+        // spec: S-0417 claim 2 and table S1 (closing: queue guard without a start; guard becomes current at the first per-tick start that finds the ready mark set, Q-0222)
         b.beh.queue(Some(Behaviour::Guard));
-        // Q-0222 (interim: the processing that queues guard sets the ready mark, so guard starts at the second per-tick start of the same tick, as S-0406 claim 15 states for construction)
-        b.beh.ready_mark = true;
+        if !waits {
+            // spec: S-0417 Edge cases (quirks.factory_unload_waits_ready_mark off: the processing that queues guard also sets the ready mark)
+            b.beh.ready_mark = true;
+        }
     }
 }
 
@@ -1216,8 +1342,7 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         .map_or(L::Teleport, |x| x.type_locomotor());
     let Some(e) = apron(w, k) else { return };
     if !w.cells.footprint().is_legal(e) {
-        // Q-0221 (interim: an apron that is not a legal map cell refuses the exit instruction, and u reports clear at once, S-0417 Open questions 4 and 5)
-        w.note("Q-0221: a factory's exit apron is not a legal map cell; the released unit reports clear where it stands");
+        // spec: S-0417 Edge cases (an apron that is not a legal map cell: free; the exit instruction is refused, u stays where it appeared and reports clear at once, so K can close; claim 8's reply then applies; under both states of quirks.factory_apron_short_list)
         report(w, u);
         return;
     }
@@ -1316,8 +1441,10 @@ fn building_cell(w: &World, c: CellXY) -> bool {
 /// A unit's cell-arrival update (S-0417 claims 7, 8 and 10): the clear
 /// report of a tethered unit, a vehicle factory's run-away reply and the
 /// arrival fallback. A driving vehicle's arrival is reaching a track
-/// target; a walking unit's is its arrival tick (interim, request
-/// Q-0223).
+/// target, also when a further track follows in the same tick (S-0417
+/// claim 7, Q-0223; the chain-point update of a chaining vehicle never
+/// occurs, as curve chaining, S-0207 claim 8, is not modelled); a walking
+/// unit's is its arrival tick (interim, request Q-0295).
 pub fn arrival(w: &mut World, id: ObjectId) {
     if !tethered(w, id) {
         return;

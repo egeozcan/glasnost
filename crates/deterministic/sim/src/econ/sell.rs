@@ -550,7 +550,11 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
         }
         Stage::BuildDown(since) => {
             // spec: S-0408 claims 6 and 17 (the processing that sees the build-down's completion report pays and removes)
-            if tick.wrapping_sub(since) < builddown_ticks(w, id) {
+            // spec: S-0408 claim 17 (quirks.single_stage_buildup_never_completes: a range that never reports keeps the sale in build-down, with no refund or removal)
+            let Some(e) = builddown_ticks(w, id) else {
+                return SELLING_DELAY;
+            };
+            if tick.wrapping_sub(since) < e {
                 return SELLING_DELAY;
             }
             finish(w, id, sale.packs);
@@ -560,17 +564,18 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
 }
 
 /// The ticks from the start *D* of a building's build-down to its
-/// completion report (S-0408 claim 17): E − D.
-fn builddown_ticks(w: &World, id: ObjectId) -> i32 {
-    let Some(o) = w.obj(id) else { return 0 };
+/// completion report (S-0408 claim 17): E − D; none when the range never
+/// reports completion.
+fn builddown_ticks(w: &World, id: ObjectId) -> Option<i32> {
+    let o = w.obj(id)?;
     let r = buildup_range(w, o.type_index);
     if r.delay <= 0 {
-        // spec: S-0408 claim 17 (a zero-delay build-down reports at the next eligible building turn: E = D + 1)
-        return 1;
+        // spec: S-0408 claim 17 (a zero-delay build-down, one-stage ones included, reports at the next eligible building turn: E = D + 1)
+        return Some(1);
     }
-    // spec: S-0408 claim 17 (the formulas cover at least 2 stages; a positive-delay range of one stage or fewer is open, request Q-0225: interim, the zero-delay report, E = D + 1)
     if r.n < MULTI_STAGE {
-        return 1;
+        // spec: S-0408 claim 17 and Edge cases (quirks.single_stage_buildup_never_completes: a positive-delay range of 1 stage or fewer never reports, the stage-23 early report included; off: the report on the first wrap, E = D + d_b)
+        return r.report_after(w.rules().quirks.single_stage_buildup_never_completes);
     }
     let mut stages = r.n - 1;
     if crate::econ::deploy::undeploys_into(w, o.type_index).is_some() && o.guard_spot.is_none() {
@@ -578,7 +583,7 @@ fn builddown_ticks(w: &World, id: ObjectId) -> i32 {
         stages = stages.min(EARLY_REPORT_STAGE);
     }
     // spec: S-0408 claim 17 and F4 (E = D + (n − 1) × d_b, on the tick the last stage is reached)
-    stages.saturating_mul(r.delay)
+    Some(stages.saturating_mul(r.delay))
 }
 
 /// The build-down stage at which a packing-capable type without a guard

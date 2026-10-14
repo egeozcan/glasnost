@@ -2288,6 +2288,23 @@
           ],
           "default": null
         },
+        "docking_offsets": {
+          "description": "Buildings: the art `DockingOffset0`, `DockingOffset1`, … read below\nthe rules `NumberOfDocks` count, displacements in leptons (x, y,\nheight) from the foundation centre (S-0404 claim 15); a place\nwithout a key, or past the list, is (0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
         "door_first": {
           "description": "Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim\n13); absent: no.",
           "type": [
@@ -6113,12 +6130,17 @@
           "default": true
         },
         "factory_apron_short_list": {
-          "description": "A ground factory whose exit list has fewer than eleven entries takes\nthe original's special apron pairs; off: the list's last pair\n(interim, request Q-0221).",
+          "description": "A ground factory whose exit list has fewer than eleven entries takes\nthe original's special apron pairs; off: the list's last pair, (0, 0)\nfor an empty list.",
           "type": "boolean",
           "default": true
         },
         "factory_fixed_hover_exit": {
           "description": "A released vehicle that neither drives nor drives temporarily heads\nfor the fixed cell (x₀ + 4, y₀ + 1); off: the exit apron.",
+          "type": "boolean",
+          "default": true
+        },
+        "factory_unload_waits_ready_mark": {
+          "description": "A factory's release queues *unload* and its closing queues *guard*,\neach starting only at a per-tick start that finds the ready mark\nset; off: queueing either also sets the ready mark.",
           "type": "boolean",
           "default": true
         },
@@ -6224,6 +6246,11 @@
         },
         "ground_detonation_misses_aircraft": {
           "description": "Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "harvester_failed_step_off_origin": {
+          "description": "An idle harvester whose step-off search finds no cell gets the\noff-map destination cell (0, 0); off: its destination is cleared.",
           "type": "boolean",
           "default": true
         },

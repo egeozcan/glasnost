@@ -279,7 +279,7 @@ fn held_upgrades(w: &World, id: ObjectId) -> Vec<u32> {
         if o.econ.building.upgrade_count == 0 {
             return Vec::new();
         }
-        // spec: S-0405 Constants (3 upgrade positions count in power)
+        // spec: S-0405 Constants (3 upgrade positions count in power); S-0405 claims 1 and 2 (with a positive count every recorded position counts, those above the count included)
         o.econ.building.held().collect()
     })
 }

@@ -9,13 +9,10 @@
 //! and 17 and the slave miner's tests of claim 14 answer through
 //! `crate::seams`.
 //!
-//! Provisional rule (request Q-0194, listed in docs/development.md): an
-//! idle harvester whose step-off search finds no cell stays where it is.
-//!
 //! Seams: the building animations of claim 11 (no building animation is
-//! modelled, so none is ever playing and none delays the harvester), the
-//! second route to *unload* through a finished cell next to the refinery
-//! (claim 10; when it can occur is an open question of the spec), the
+//! modelled, so none is ever playing and none delays the harvester), a
+//! second-route arrival report to a building other than a dock-unload
+//! refinery (claim 10; the entry-exchange specs own it), the
 //! slave cycle of claim 14 (no slave is ever created, so a slave group is
 //! never at rest and the wake-up rule never holds in play; the rule itself
 //! is [`wake_rule`]), and the chrono miner's teleporting and its dropped
@@ -447,6 +444,15 @@ fn drive_to(w: &mut World, id: ObjectId, dest: Target) {
     super::assign_destination(w, id, Some(dest));
 }
 
+/// Clears a mobile unit's destination.
+fn drive_to_none(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        o.path.steps.clear();
+        o.path.retry_at = 0;
+    }
+    super::assign_destination(w, id, None);
+}
+
 fn zone(w: &World, id: ObjectId) -> Option<glasnost_rules::sim::MovementZone> {
     let o = w.obj(id)?;
     w.rules().unit(o.kind, o.type_index).map(|u| u.zone)
@@ -867,8 +873,13 @@ fn step_off_refinery(w: &mut World, id: ObjectId) {
     match crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings)) {
         Some(n) => drive_to(w, id, Target::Cell(n)),
         None => {
-            // Request Q-0194 (interim: no result, the harvester stays where it is)
-            w.note("Q-0194: an idle harvester's step-off search found no cell; it stays (interim)");
+            if w.rules().quirks.harvester_failed_step_off_origin {
+                // spec: S-0402 claim 13 and Edge cases (no result: the destination is nevertheless replaced by the off-map cell (0, 0), quirks.harvester_failed_step_off_origin; no draw, no retry)
+                drive_to(w, id, Target::Cell(CellXY::new(0, 0)));
+            } else {
+                // spec: S-0402 Edge cases (quirks.harvester_failed_step_off_origin off: the failure clears the destination)
+                drive_to_none(w, id);
+            }
         }
     }
 }
@@ -1092,7 +1103,6 @@ fn queueing_cell(w: &mut World, refinery: ObjectId) -> Option<CellXY> {
 /// contact with a dock-unload refinery, it asks to dock, and the first
 /// matching row of claim 10's table applies. Every processing is followed
 /// by the next after the standard delay of *enter*.
-// Q-0197 (interim: claim 10's second route, asking for unload on finishing entering a cell beside the refinery, is not implemented)
 pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return 1;
@@ -1159,6 +1169,61 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     }
     // spec: S-0402 claim 10 row 5 (still moving: tethered, nothing else) and the standard delay of enter
     standard(w, id)
+}
+
+/// The second route to unloading (S-0402 claim 10): a driving harvester
+/// has just reached its track target, its arrival position applied and the
+/// finished track cleared, before cell-centre crushing and any next track.
+/// A tethered harvester currently in *enter*, in contact with a building
+/// occupying the step-direction-0 neighbour of its arrival cell, reports
+/// arrival to it. A dock-unload refinery not in *selling* queues *unload*
+/// without a start; one in *selling* refuses, and the harvester receives a
+/// forced vehicle scatter request without a threat point, not move-anywhere.
+/// No draw, no processing, no new delay. A report to any other building
+/// belongs to that building's entry-exchange spec (a seam: none is modelled).
+pub fn track_arrival(w: &mut World, id: ObjectId) {
+    if !is_harvester(w, id) {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0402 claim 10 (second route: tethered, currently in enter, in contact with a building)
+    if o.beh.current != Some(Behaviour::Enter) || !tethered(w, id) {
+        return;
+    }
+    let Some(b) = o.contact else { return };
+    let c = o.pos.cell();
+    // spec: S-0402 claim 10 (the building occupies the neighbour in step direction 0, map north, of the arrival cell)
+    let (dx, dy) = crate::regions::STEPS[0];
+    let n = CellXY::new(c.x + dx, c.y + dy);
+    if !w.cells.list(n, Layer::Ground).contains(&b) {
+        return;
+    }
+    let docks = unit(w, id).map(|u| u.docks.clone()).unwrap_or_default();
+    let refinery = w
+        .obj(b)
+        .is_some_and(|x| x.kind == Kind::Building && docks.contains(&x.type_index));
+    // spec: S-0402 claim 10 (a dock-unload refinery; no facing, stopped or docking-cell test, and claim 8's acceptance test is not repeated)
+    if !refinery || !building(w, b).is_some_and(|x| x.dock_unload) {
+        return;
+    }
+    let selling = w
+        .obj(b)
+        .is_some_and(|x| x.beh.current == Some(Behaviour::Selling));
+    if selling {
+        // spec: S-0402 claim 10 (refused: a forced vehicle scatter request, S-0207 claim 16, without a threat point and not move-anywhere; no draw; contact, tether and behaviours kept)
+        crate::scatter::request(
+            w,
+            id,
+            crate::scatter::ScatterRequest {
+                threat: None,
+                forced: true,
+                anywhere: false,
+            },
+        );
+    } else if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0402 claim 10 (accepted: unload queued without an immediate start)
+        ob.beh.queue(Some(Behaviour::Unload));
+    }
 }
 
 /// Whether the body faces map east (S-0402 claim 11).
@@ -1356,9 +1421,9 @@ pub fn refinery_sold(w: &mut World, refinery: ObjectId) {
     let t = w.tick;
     for h in docked(w, refinery) {
         if in_unloading_state(w, h) {
-            // spec: S-0402 claim 11 (refinery sold: a harvester in the unloading state leaves it at once, scatters, queues harvest and starts it if ready, which it now is)
+            // spec: S-0402 claim 11 (refinery sold: a harvester in the unloading state leaves it at once, receives a forced vehicle scatter request without a threat point and not move-anywhere, queues harvest and starts it if ready, which it now is)
             leave_unloading(w, h);
-            scatter(w, h);
+            sale_scatter(w, h);
             let ready = crate::process::ready(w, h);
             if let Some(ob) = w.obj_mut(h) {
                 ob.beh
@@ -1368,37 +1433,31 @@ pub fn refinery_sold(w: &mut World, refinery: ObjectId) {
             .obj(h)
             .is_some_and(|o| o.beh.seen() == Some(Behaviour::Enter))
         {
-            // spec: S-0402 claim 11 (refinery sold: a harvester still in enter queues guard instead and scatters)
+            // spec: S-0402 claim 11 (refinery sold: a harvester still in enter queues guard instead and receives the same vehicle scatter request, subject to the usual refusals)
             if let Some(ob) = w.obj_mut(h) {
                 ob.beh.queue(Some(Behaviour::Guard));
             }
-            scatter(w, h);
+            sale_scatter(w, h);
         }
         // spec: S-0402 claim 11 (the sale then breaks off the contact)
         break_contact(w, h);
     }
 }
 
-/// A scatter without a threat point (S-0208 claim 13, S-0207 claim 16 for
-/// a vehicle): the destination becomes the cell of the nearby-cell search
-/// around the vehicle's scatter centre; behaviours unchanged, no draw.
-fn scatter(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    let class = w.rules().unit(o.kind, o.type_index).and_then(|u| u.class);
-    // spec: S-0207 claim 16 (the vehicle's scatter centre: its locomotor destination's cell, else its own)
-    let centre = crate::path::locomotor_destination(w, id).map_or(o.pos.cell(), |p| p.cell());
-    crate::regions::ensure(w);
-    // spec: S-0208 claim 13 (the nearby-cell search's cell in the scatter use; the unit moves there)
-    if let Some(c) = crate::path::nearby(
+/// The scatter a refinery's sale sends a docked harvester (S-0402 claim
+/// 11): a forced vehicle scatter request (S-0207 claim 16) without a
+/// threat point and not move-anywhere, with the usual refusals; no draw.
+fn sale_scatter(w: &mut World, id: ObjectId) {
+    // spec: S-0402 claim 11 (forced, no threat point, not move-anywhere)
+    crate::scatter::request(
         w,
-        centre,
-        crate::path::NearbyUse::Scatter {
-            class,
-            deck: o.layer == Layer::Deck,
+        id,
+        crate::scatter::ScatterRequest {
+            threat: None,
+            forced: true,
+            anywhere: false,
         },
-    ) {
-        drive_to(w, id, Target::Cell(c));
-    }
+    );
 }
 
 /// A building's grand opening (S-0402 claim 18): its free unit, if its

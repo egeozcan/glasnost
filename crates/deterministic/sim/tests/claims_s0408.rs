@@ -583,6 +583,73 @@ fn build_down_ticks(w: &mut World, b: ObjectId) -> (i32, i32) {
     panic!("not removed");
 }
 
+// spec: S-0408 claim 17, F4 and Edge cases (Q-0225: quirks.single_stage_buildup_never_completes on, a positive-delay range of 1 stage or fewer never reports, so the sale stays in build-down with no refund or removal, packing-capable types without a guard spot included; off, E = D + d_b; a one-stage zero-delay range completes at D + 1 in both states)
+// spec: S-0108 claim 5 (2 image frames: n = 1, d_b = trunc(0.05 × 900 / 1) = 45; 1 frame: n = 0, d_b = 1)
+#[test]
+fn claim_17_single_stage_build_down() {
+    for never in [true, false] {
+        for (frames, packs, off_after) in
+            [(2, false, 45), (1, false, 1), (2, true, 45), (1, true, 1)]
+        {
+            let mut r = rules();
+            r.globals.quirks.single_stage_buildup_never_completes = never;
+            let hut = r.sim.buildings.get_mut("HUT").unwrap();
+            hut.econ.buildup_frames = Some(frames);
+            if packs {
+                hut.undeploys_into = Some("CART".into());
+            }
+            let mut w = game(&r);
+            let b = put(&mut w, "HUT", 0, c(0, 0));
+            let credits = w.houses[0].credits;
+            order(&mut w, A, Order::Sell { actor: b });
+            let mut down = None;
+            let mut gone = None;
+            for _ in 0..110 {
+                let t = w.tick;
+                step(&mut w);
+                match w.obj(b) {
+                    Some(o) => {
+                        if let Some(sell::Stage::BuildDown(x)) =
+                            o.econ.sale.clone().map(|s| s.stage)
+                        {
+                            down = Some(x);
+                        }
+                    }
+                    None => {
+                        gone = Some(t);
+                        break;
+                    }
+                }
+            }
+            let d = down.expect("build-down");
+            if never {
+                assert_eq!(
+                    gone, None,
+                    "frames {frames}, packs {packs}: never completes"
+                );
+                assert_eq!(w.houses[0].credits, credits, "no refund");
+            } else {
+                assert_eq!(
+                    gone,
+                    Some(d + off_after),
+                    "frames {frames}, packs {packs}: off"
+                );
+            }
+        }
+    }
+    // A one-stage range with zero delay completes at D + 1 in both states.
+    for never in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.single_stage_buildup_never_completes = never;
+        r.sim.buildings.get_mut("HUT").unwrap().econ.buildup_frames = Some(2);
+        r.sim.general.economy.buildup_time = Some(glasnost_rules::sim::Decimal("0".into()));
+        let mut w = game(&r);
+        let b = put(&mut w, "HUT", 0, c(0, 0));
+        let (d, e) = build_down_ticks(&mut w, b);
+        assert_eq!(e, d + 1);
+    }
+}
+
 // spec: S-0408 claim 17, F4 and Constants (E = D + (n − 1) × d_b; a type that names a vehicle to pack into and has no guard spot also reports at stage 23, E = D + min(n − 1, 23) × d_b; a guard spot suppresses the early report)
 // spec: S-0108 claim 5 (60 image frames: n = 30, d_b = trunc(0.05 × 900 / 30) = 1)
 #[test]

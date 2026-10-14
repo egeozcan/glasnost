@@ -202,6 +202,18 @@ fn claim_1_factory_being_sold_cannot_make() {
     assert!(!place(&mut w, "HUT", c(0, 0)));
 }
 
+// spec: S-0406 claim 1 (revision 5: a factory building queued to be sold also counts as unable to make)
+#[test]
+fn claim_1_factory_queued_to_be_sold_cannot_make() {
+    let r = rules();
+    let mut w = game(&r);
+    let y = put(&mut w, "YARD", 0, c(-6, -6));
+    w.obj_mut(y).unwrap().beh.queued = Some(Behaviour::Selling);
+    assert!(!place(&mut w, "HUT", c(0, 0)));
+    w.obj_mut(y).unwrap().beh.queued = None;
+    assert!(place(&mut w, "HUT", c(0, 0)));
+}
+
 // spec: S-0406 claim 1 and F4 (placed at the centre of the named cell, (256x + 128, 256y + 128), at the surface height; construction begins)
 // spec: S-0108 claim 5 (the construction state begins)
 // spec: S-0406 claim 17 (at entry: no current behaviour and construction queued, which a rule asking for the behaviour sees)

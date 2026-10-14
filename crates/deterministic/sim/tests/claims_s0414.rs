@@ -754,6 +754,37 @@ fn claim_15_production_item_hit() {
     assert!(w.obj(p).is_none(), "deleted by the factory loss");
 }
 
+// spec: S-0414 claim 17 (Q-0193, the count part: a counted-building item that never entered the map still adds one to B at health 0 while its object exists; its deletion removes it; an infantry item adds nothing to the on-map counts, before or after its health drops to 0)
+#[test]
+fn claim_17_killed_item_counts() {
+    let s = production_scene();
+    let mut w = production_world(&s);
+    spawn(&mut w, Kind::Building, "YARD", 0, 4, 4);
+    spawn(&mut w, Kind::Building, "BARR", 0, 8, 8);
+    let base = victory::normal_sum(&w, A);
+    let shed = type_ref(&w, Kind::Building, "SHED");
+    glasnost_sim::econ::production::build(&mut w, A, shed);
+    let p = item_of(&w, shed).expect("item started");
+    glasnost_sim::econ::production::hold(&mut w, A, shed);
+    let gi = type_ref(&w, Kind::Infantry, "GI");
+    glasnost_sim::econ::production::build(&mut w, A, gi);
+    let q = item_of(&w, gi).expect("item started");
+    glasnost_sim::econ::production::hold(&mut w, A, gi);
+    assert_eq!(
+        victory::normal_sum(&w, A),
+        base + 1,
+        "the building item counts in B"
+    );
+    w.obj_mut(p).unwrap().health = 0;
+    w.obj_mut(q).unwrap().health = 0;
+    assert_eq!(victory::normal_sum(&w, A), base + 1, "still at health 0");
+    glasnost_sim::econ::production::cancel(&mut w, A, shed, false);
+    assert!(w.obj(p).is_none());
+    assert_eq!(victory::normal_sum(&w, A), base, "deletion removes it");
+    glasnost_sim::econ::production::cancel(&mut w, A, gi, false);
+    assert_eq!(victory::normal_sum(&w, A), base);
+}
+
 /// V11 part d: Alpha holds an ordinary-building item and, with `two`, a
 /// defence item; a factory of buildings is made after both, the old one
 /// leaves, two infantry follow. Returns the world and the infantry.

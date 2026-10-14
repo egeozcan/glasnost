@@ -278,6 +278,13 @@ pub struct EconFields {
     /// 10; values below 1 give 1); absent: 1.
     #[serde(default)]
     pub art_number_of_docks: Option<i32>,
+    /// Buildings: the art `DockingOffset0`, `DockingOffset1`, … read below
+    /// the rules `NumberOfDocks` count, displacements in leptons (x, y,
+    /// height) from the foundation centre (S-0404 claim 15); a place
+    /// without a key, or past the list, is (0, 0, 0).
+    // nocite: a list of integer triples, our format's shape
+    #[serde(default)]
+    pub docking_offsets: Option<Vec<[i32; 3]>>,
     /// Buildings: the art `QueueingCell`, the queueing shift in cells
     /// (S-0402 Terms, claim 9); absent: 0, 0.
     // nocite: a cell pair (x, y), our format's shape

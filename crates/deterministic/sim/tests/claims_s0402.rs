@@ -1214,3 +1214,158 @@ fn harvest_state_round_trip() {
         glasnost_sim::save::state_hash(&w)
     );
 }
+
+/// An idle harvester standing on REFN's cell (S-0402 claim 13), of type
+/// `name`, after one idle processing; returns the world and the harvester.
+fn idle_on_refinery(r: &glasnost_rules::schema::Ruleset, name: &str) -> (World, ObjectId) {
+    let mut w = game(r);
+    place_building(&mut w, "REFN", 0, refinery_cell());
+    let on = CellXY::new(refinery_cell().x + 1, refinery_cell().y + 1);
+    let h = place_vehicle(&mut w, name, 0, on, 0);
+    harvest_now(&mut w, h);
+    let start = w.obj(h).unwrap().beh.start_tick;
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        phase: Phase::Idle,
+        harvest_start: Some(start),
+        ..Default::default()
+    });
+    w.obj_mut(h).unwrap().dest = Some(Target::Cell(at(5, 5)));
+    harvest::process_harvest(&mut w, h);
+    (w, h)
+}
+
+// spec: S-0402 claim 13 and Edge cases (Q-0194: a failed step-off search replaces the destination with the off-map cell (0, 0), quirks.harvester_failed_step_off_origin; off, it clears it; both queue guard without a start, keep facing and contact, and take only the standard delay's draw)
+#[test]
+fn claim_13_failed_step_off() {
+    let mut r = ruleset();
+    // A harvester that floats: no land cell around the refinery qualifies.
+    let mut boat = harvester(CAPACITY);
+    boat.locomotion_class = Some(glasnost_rules::sim::LocomotionClass::Float);
+    boat.movement_zone = Some(glasnost_rules::sim::MovementZone::Water);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("BOATH".into());
+    r.sim.vehicles.insert("BOATH".into(), boat);
+    for row in r.sim.land_types.values_mut() {
+        row.float = dec("0");
+    }
+    let (ok, hk) = idle_on_refinery(&r, "HARV");
+    let Some(Target::Cell(d)) = ok.obj(hk).unwrap().dest else {
+        panic!("an ordinary step-off destination");
+    };
+    assert_ne!(d, CellXY::new(0, 0));
+    for on in [true, false] {
+        r.globals.quirks.harvester_failed_step_off_origin = on;
+        let (w, h) = idle_on_refinery(&r, "BOATH");
+        let o = w.obj(h).unwrap();
+        let want = on.then_some(Target::Cell(CellXY::new(0, 0)));
+        assert_eq!(o.dest, want, "quirk {on}");
+        assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::Harvest),
+            "guard queued without a start"
+        );
+        assert_eq!(w.body_facing(h), 0);
+        assert_eq!(o.contact, None);
+        // The search takes no draw, failed or not: the same stream as the
+        // ordinary step-off, which takes only the standard delay's draw.
+        assert_eq!(w.rng, ok.rng, "only the standard delay's draw");
+    }
+}
+
+/// A tethered harvester in *enter* holding contact with REFN, its next
+/// processing far off; returns it.
+fn tethered_enter(w: &mut World, refn: ObjectId, c: CellXY, facing: u16) -> ObjectId {
+    let h = place_vehicle(w, "HARV", 0, c, facing);
+    w.obj_mut(h).unwrap().contact = Some(refn);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        tethered: true,
+        ..Default::default()
+    });
+    w.obj_mut(refn).unwrap().econ.dock = Some(DockState { holders: vec![h] });
+    let t = w.tick;
+    let o = w.obj_mut(h).unwrap();
+    o.beh.force(Behaviour::Enter, t, true);
+    o.beh.expired = false;
+    o.beh.last = Some((t, 100_000));
+    h
+}
+
+// spec: S-0402 claim 10 (second route, Q-0197: reaching a track target in a cell whose step-direction-0 neighbour is the contacted refinery queues unload without a start, with no facing or stopped test, and also when the refinery is switched off; crossing into a cell mid-track does not)
+#[test]
+fn claim_10_second_route() {
+    let tl = refinery_cell();
+    // South of the foundation's middle column: its map-north neighbour is a REFN cell.
+    let arrive = CellXY::new(tl.x + 1, tl.y + 3);
+    for off in [false, true] {
+        let r = ruleset();
+        let mut w = game(&r);
+        let refn = place_building(&mut w, "REFN", 0, tl);
+        w.obj_mut(refn).unwrap().econ.building.switched_off = off;
+        let h = tethered_enter(&mut w, refn, CellXY::new(tl.x + 1, tl.y + 6), 0);
+        w.obj_mut(h).unwrap().dest = Some(Target::Cell(arrive));
+        let mut queued_at = None;
+        for _ in 0..200 {
+            testkit::run(&mut w, 1);
+            let o = w.obj(h).unwrap();
+            if o.beh.queued == Some(Behaviour::Unload) {
+                queued_at = Some(o.pos.cell());
+                // spec: S-0402 claim 10 (queued, not started; facing map north, not 16384)
+                assert_eq!(o.beh.current, Some(Behaviour::Enter));
+                assert_ne!(w.body_facing(h), 16384);
+                break;
+            }
+        }
+        assert_eq!(queued_at, Some(arrive), "switched off {off}");
+        assert_eq!(w.obj(h).unwrap().contact, Some(refn));
+    }
+    // Not in contact with the building to the north: no report.
+    let r = ruleset();
+    let mut w = game(&r);
+    let refn = place_building(&mut w, "REFN", 0, tl);
+    let h = tethered_enter(&mut w, refn, arrive, 0);
+    w.obj_mut(h).unwrap().contact = None;
+    harvest::track_arrival(&mut w, h);
+    assert_eq!(w.obj(h).unwrap().beh.queued, None);
+}
+
+// spec: S-0402 claim 10 (second route refused by a refinery in selling: a forced vehicle scatter request without a threat point and not move-anywhere, S-0207 claim 16; no draw; contact, tether and behaviours kept; a destination is kept)
+#[test]
+fn claim_10_second_route_refused() {
+    let tl = refinery_cell();
+    let arrive = CellXY::new(tl.x + 1, tl.y + 3);
+    for with_dest in [false, true] {
+        let r = ruleset();
+        let mut w = game(&r);
+        let refn = place_building(&mut w, "REFN", 0, tl);
+        let t = w.tick;
+        let b = w.obj_mut(refn).unwrap();
+        b.beh.current = Some(Behaviour::Selling);
+        b.beh.start_tick = t;
+        let h = tethered_enter(&mut w, refn, arrive, 0);
+        let far = Target::Cell(at(8, 8));
+        if with_dest {
+            w.obj_mut(h).unwrap().dest = Some(far);
+        }
+        let rng = w.rng.clone();
+        harvest::track_arrival(&mut w, h);
+        let o = w.obj(h).unwrap();
+        assert_eq!(w.rng, rng, "no draw");
+        assert_eq!(o.beh.current, Some(Behaviour::Enter));
+        assert_eq!(o.beh.queued, None);
+        assert_eq!(o.contact, Some(refn));
+        assert!(harvest::state_of(&w, h).tethered);
+        if with_dest {
+            assert_eq!(o.dest, Some(far), "a destination refuses the scatter");
+        } else {
+            let Some(Target::Cell(d)) = o.dest else {
+                panic!("the nearby-cell result around the arrival cell");
+            };
+            assert!((d.x - arrive.x).abs() <= 2 && (d.y - arrive.y).abs() <= 2);
+            assert_ne!(d, arrive);
+        }
+    }
+}

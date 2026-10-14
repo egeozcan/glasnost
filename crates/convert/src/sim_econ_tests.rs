@@ -278,6 +278,35 @@ fn weeder_and_the_dock_unload_warning() {
     );
 }
 
+// spec: S-0415 Edge cases and S-0406 Import mapping (a DeployFacing outside 0 … 255 gets an importer warning)
+#[test]
+fn deploy_facing_out_of_range_warning() {
+    let base = "[BuildingTypes]\n0=DFA\n1=DFB\n2=DFC\n[DFA]\nDeployFacing=256\n[DFB]\nDeployFacing=-1\n[DFC]\nDeployFacing=255\n";
+    let (s, w) = import(base, "");
+    assert_eq!(s.buildings["DFA"].econ.deploy_facing, Some(256));
+    let df: Vec<&String> = w.iter().filter(|m| m.contains("DeployFacing")).collect();
+    assert_eq!(df.len(), 2, "{w:?}");
+    assert!(df.iter().all(|m| !m.contains("DFC")), "{df:?}");
+}
+
+// spec: S-0404 claim 15 and Import mapping (DockingOffset0, 1, …: integer triples from the art section, read only below the rules NumberOfDocks, absent 1; a place without a key is 0, 0, 0)
+#[test]
+fn docking_offsets() {
+    let base = "[BuildingTypes]\n0=PADA\n1=PADB\n2=PADC\n[PADA]\nNumberOfDocks=3\n[PADB]\nPower=1\n[PADC]\nNumberOfDocks=0\n";
+    let art = "[PADA]\nDockingOffset0=1,2,3\nDockingOffset2=-4,5,6\nDockingOffset3=9,9,9\n\
+[PADB]\nDockingOffset0=7,8,9\nDockingOffset1=1,1,1\n[PADC]\nDockingOffset0=1,1,1\n";
+    let (s, _) = import(base, art);
+    assert_eq!(
+        s.buildings["PADA"].econ.docking_offsets,
+        Some(vec![[1, 2, 3], [0, 0, 0], [-4, 5, 6]])
+    );
+    assert_eq!(
+        s.buildings["PADB"].econ.docking_offsets,
+        Some(vec![[7, 8, 9]])
+    );
+    assert_eq!(s.buildings["PADC"].econ.docking_offsets, None);
+}
+
 // spec: S-0408 Edge cases (warnings for a non-turret upgrade with PowersUpToLevel 2 or 3 and for Upgrades above 3)
 #[test]
 fn upgrade_sale_warnings() {

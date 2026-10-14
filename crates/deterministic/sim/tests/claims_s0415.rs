@@ -587,6 +587,58 @@ fn claim_6_deployed_construction_times() {
     assert_eq!(h, Some(u + 1 + 36));
 }
 
+// spec: S-0406 claim 16 (PL13, Q-0220 question 3: a deploy facing outside 0 … 255 never permits deploy completion, since the rounded vehicle facing of S-0415 F1 cannot equal it; no building appears)
+#[test]
+fn claim_6_out_of_range_deploy_facing_never_deploys() {
+    for d in [-1, 256] {
+        let mut r = rules();
+        r.sim.buildings.get_mut("SHOP").unwrap().econ.deploy_facing = Some(d);
+        let mut w = game(&r);
+        let v = spawn_v(&mut w, "KIT", c(0, 0), 0);
+        order(&mut w, Order::Deploy { actor: v });
+        assert_eq!(
+            until(&mut w, 200, |w| w.obj(v).is_none()),
+            None,
+            "deploy facing {d}"
+        );
+        assert!(buildings(&w).is_empty());
+    }
+}
+
+// spec: S-0415 claim 6 (D16: the building enters at the end of the update order in the deploy tick T and the vehicle's removal counts for quirks.update_order_removal_skip: directly after the vehicle it loses its turn in T, U = T + 1 and C = T + 2; with another object between them, U = T and C = T + 1; with the switch off U = T in both)
+#[test]
+fn claim_6_first_turn_after_deploy() {
+    for skip in [true, false] {
+        for between in [false, true] {
+            let mut r = rules();
+            r.globals.quirks.update_order_removal_skip = skip;
+            let mut w = game(&r);
+            let v = spawn_v(&mut w, "KIT", c(0, 0), facing_d());
+            let other =
+                between.then(|| testkit::spawn(&mut w, Kind::Building, "SHOP", 0, c(-8, -8), 0));
+            order(&mut w, Order::Deploy { actor: v });
+            let mut t_deploy = None;
+            for _ in 0..30 {
+                let t = w.tick;
+                step(&mut w);
+                if w.obj(v).is_none() {
+                    t_deploy = Some(t);
+                    break;
+                }
+            }
+            let t = t_deploy.expect("deployed");
+            let b = buildings(&w)
+                .into_iter()
+                .find(|&b| Some(b) != other)
+                .unwrap();
+            let (u, cc, _) = deployed_ticks(&mut w, b, 10);
+            let expect = if skip && !between { t + 1 } else { t };
+            assert_eq!(u, expect, "skip {skip}, between {between}");
+            assert_eq!(cc, Some(expect + 1), "skip {skip}, between {between}");
+        }
+    }
+}
+
 // spec: S-0406 claim 18 (a deployed building with a positive-delay one-stage range makes construction current but never hands over)
 #[test]
 fn claim_6_deployed_single_stage_never_completes() {

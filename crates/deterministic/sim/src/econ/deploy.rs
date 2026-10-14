@@ -59,9 +59,10 @@ pub fn deploy_facing(w: &World, t: u32) -> i32 {
 }
 
 /// The facing *D* × 256 (S-0415 claims 5 and 10), reduced modulo 65536
-/// (S-0415 Edge cases, working hypothesis for values outside 0 … 255).
+/// for every *D* (claim 5; for the packed-up vehicle of claim 10 a working
+/// hypothesis, S-0415 Open question 4).
 fn facing_of(d: i32) -> Facing {
-    // spec: S-0415 claim 5 and Edge cases (D × 256, wrapping modulo 65536)
+    // spec: S-0415 claim 5 and Edge cases (the turn target (D × 256) mod 65536 for every integer D, exact)
     (d.wrapping_mul(256)).rem_euclid(65536) as Facing
 }
 

@@ -73,7 +73,7 @@ fn claim_3_apron() {
     assert_eq!(release::apron(&w, k), Some(CellXY::new(tl.x, tl.y - 1)));
 }
 
-// spec: S-0417 Edge cases (quirks.factory_apron_short_list: (32767, 32767) for 2 × 1 and 1 × 2, wrapped; (0, 0) for 1 × 1, giving (x0 − 1, y0)) and Q-0221 (interim: switch off, the last pair)
+// spec: S-0417 Edge cases (quirks.factory_apron_short_list: (32767, 32767) for 2 × 1 and 1 × 2, wrapped; (0, 0) for 1 × 1, giving (x0 − 1, y0)) and the fixed alternative (switch off: the last pair)
 #[test]
 fn edge_short_list_pairs() {
     let wrap = |v: i32| i32::from(v as i16);
@@ -142,12 +142,17 @@ fn claim_2_stages() {
     let k = building(&mut w, "VF", 0, 0, 0);
     let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
     assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
-    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+    // spec: S-0417 claims 1 and 2 (unload queued at release, current at the next per-tick start that finds the ready mark: the default range's delay 0 sets it every building turn)
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Guard));
+    assert_eq!(w.obj(k).unwrap().beh.queued, Some(Behaviour::Unload));
     assert_eq!(w.obj(tank).unwrap().contact, Some(k));
     assert!(release::tethered(&w, tank));
-    let mut processings = 0;
-    let mut sent = None;
+    let before = w.obj(k).unwrap().beh.last;
+    step(&mut w);
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
     let mut last = w.obj(k).unwrap().beh.last;
+    let mut processings = i32::from(last != before);
+    let mut sent = None;
     let mut report = None;
     for _ in 0..600 {
         step(&mut w);
@@ -328,7 +333,7 @@ fn claim_8_run_away() {
 #[test]
 fn claim_10_infantry() {
     let mut w = game(&ruleset());
-    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let (k, _) = barracks_with_rally(&mut w);
     let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
     assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
     assert!(release::tethered(&w, grunt));
@@ -470,17 +475,61 @@ fn claim_10_teleporting_infantry_goes_straight() {
     assert!(release::tethered(&w, grunt));
 }
 
-// spec: S-0417 claim 10 (no rally point: the release gives no destination of its own) and Q-0120 (interim: the unit walks to its exit cell)
+// spec: S-0417 claim 10 and S-0404 claim 13 (no rally point, or one in the unit's own cell: the release gives no destination; contact and tether)
 #[test]
-fn claim_10_no_rally_interim_walk_out() {
-    let mut w = game(&ruleset());
-    let k = building(&mut w, "BARRACKS", 0, 0, 0);
-    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
-    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
-    let o = w.obj(grunt).unwrap();
-    assert_eq!(o.guard_spot, None);
-    assert!(matches!(o.dest, Some(Target::Cell(_))));
-    assert_eq!(o.beh.current, Some(Behaviour::Move));
+fn claim_10_no_rally_no_destination() {
+    for own_cell in [false, true] {
+        let mut w = game(&ruleset());
+        let k = building(&mut w, "BARRACKS", 0, 0, 0);
+        let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+        if own_cell {
+            // The rally point is the cell the unit is about to appear in:
+            // release once in a scratch world to learn it.
+            let mut scratch = w.clone();
+            assert_eq!(release::release(&mut scratch, k, grunt), Outcome::Released);
+            let c = scratch.obj(grunt).unwrap().pos.cell();
+            w.obj_mut(k).unwrap().guard_spot = Some(Target::Cell(c));
+        }
+        assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+        let o = w.obj(grunt).unwrap();
+        // spec: S-0417 claim 10 (the saved guard spot is K's rally point, if any; the guard-spot row gives no destination for the own cell)
+        assert_eq!(
+            o.guard_spot,
+            w.obj(k).unwrap().guard_spot,
+            "own cell {own_cell}"
+        );
+        assert_eq!(o.dest, None, "own cell {own_cell}");
+        // spec: S-0417 claim 10 (no move is queued; the unit rests in guard)
+        assert_ne!(o.beh.seen(), Some(Behaviour::Move), "own cell {own_cell}");
+        assert_eq!(o.contact, Some(k));
+        assert!(release::tethered(&w, grunt));
+    }
+}
+
+// spec: S-0417 claim 14 (an infantry factory has n = max(d, 1) contact places; while each is held, a further release is busy)
+#[test]
+fn claim_14_infantry_contact_places() {
+    for (docks, released) in [(None, 1), (Some(0), 1), (Some(2), 2)] {
+        let mut r = ruleset();
+        r.sim
+            .buildings
+            .get_mut("BARRACKS")
+            .unwrap()
+            .econ
+            .number_of_docks = docks;
+        let mut w = game(&r);
+        let (k, _) = barracks_with_rally(&mut w);
+        let mut n = 0;
+        for _ in 0..3 {
+            let g = new_unit(&mut w, Kind::Infantry, "GRUNT");
+            match release::release(&mut w, k, g) {
+                Outcome::Released => n += 1,
+                Outcome::Busy => break,
+                other => panic!("docks {docks:?}: {other:?}"),
+            }
+        }
+        assert_eq!(n, released, "docks {docks:?}");
+    }
 }
 
 // spec: S-0417 claim 11 (U12: docked at K, contact and a tether request on the same tick; a type that need not return to a dock is tethered, one that must return refuses; contact in both cases)
@@ -555,5 +604,135 @@ fn claim_13_no_clearing() {
 fn testkit_run(w: &mut World, n: i32) {
     for _ in 0..n {
         step(w);
+    }
+}
+
+/// VF with idle body range `idle` (S-0108 Import mapping, `AnimIdle`).
+fn with_idle(idle: [i32; 3], waits: bool) -> Ruleset {
+    let mut r = ruleset_with([3, 2]);
+    r.sim.buildings.get_mut("VF").unwrap().econ.anim_idle = Some(idle);
+    r.globals.quirks.factory_unload_waits_ready_mark = waits;
+    r
+}
+
+// spec: S-0417 claim 2 and Edge cases (quirks.factory_unload_waits_ready_mark: a positive-delay range of one stage never sets the ready mark, so the queued unload never becomes current and the vehicle stays in contact at its appear point; off, queueing unload sets the mark and it starts at the next per-tick start)
+#[test]
+fn claim_2_unload_waits_ready_mark() {
+    for waits in [true, false] {
+        let mut w = game(&with_idle([0, 1, 5], waits));
+        let k = building(&mut w, "VF", 0, 0, 0);
+        step(&mut w);
+        w.obj_mut(k).unwrap().beh.ready_mark = false;
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        let at = w.obj(tank).unwrap().pos;
+        assert_eq!(w.obj(k).unwrap().beh.ready_mark, !waits);
+        step(&mut w);
+        if waits {
+            for _ in 0..100 {
+                step(&mut w);
+            }
+            let o = w.obj(k).unwrap();
+            assert_eq!(o.beh.current, Some(Behaviour::Guard));
+            assert_eq!(o.beh.queued, Some(Behaviour::Unload));
+            assert_eq!(w.obj(tank).unwrap().contact, Some(k));
+            assert_eq!(w.obj(tank).unwrap().pos, at);
+        } else {
+            assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+        }
+    }
+}
+
+// spec: S-0417 claim 2 (Q-0222: closing queues guard without a start; a zero-delay body range sets the mark every building turn, so guard becomes current at the second per-tick start of the closing tick, the tick of the processing that queued it)
+#[test]
+fn claim_2_guard_starts_at_the_second_start() {
+    let mut w = game(&with_idle([0, 1, 0], true));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    let mut started = false;
+    for _ in 0..600 {
+        step(&mut w);
+        let o = w.obj(k).unwrap();
+        if o.beh.current == Some(Behaviour::Unload) {
+            started = true;
+        }
+        if started && o.beh.current == Some(Behaviour::Guard) {
+            let (processed, _) = o.beh.last.expect("a processing");
+            assert_eq!(
+                o.beh.start_tick, processed,
+                "guard starts in the closing tick"
+            );
+            assert_eq!(o.beh.queued, None);
+            return;
+        }
+    }
+    panic!("guard never started");
+}
+
+// spec: S-0417 claim 2 and Edge cases (quirks.factory_unload_waits_ready_mark: once unload is current, a range that never sets the mark never lets the queued guard start; off, the closing processing sets it)
+#[test]
+fn claim_2_guard_waits_ready_mark() {
+    for waits in [true, false] {
+        let mut w = game(&with_idle([0, 1, 5], waits));
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        // The mark left by construction starts the unloading.
+        w.obj_mut(k).unwrap().beh.ready_mark = true;
+        let mut queued_guard = false;
+        for _ in 0..600 {
+            step(&mut w);
+            let o = w.obj(k).unwrap();
+            queued_guard |= o.beh.queued == Some(Behaviour::Guard);
+            if o.beh.current == Some(Behaviour::Guard) {
+                break;
+            }
+        }
+        let o = w.obj(k).unwrap();
+        if waits {
+            assert!(queued_guard);
+            assert_eq!(o.beh.current, Some(Behaviour::Unload));
+            assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+        } else {
+            assert_eq!(o.beh.current, Some(Behaviour::Guard));
+        }
+    }
+}
+
+// spec: S-0417 Edge cases (an apron that is not a legal map cell, here the 2 × 1 word's (32767, 32767) pair: the apron counts as free, the exit instruction is refused, u stays where it appeared and reports clear at once, so K closes; under both states of quirks.factory_apron_short_list)
+#[test]
+fn edge_illegal_apron() {
+    for short in [true, false] {
+        let mut r = ruleset_with([2, 1]);
+        r.globals.quirks.factory_apron_short_list = short;
+        let mut w = game(&r);
+        let k = building(&mut w, "VF", 0, 0, 0);
+        let illegal = !w.cells.footprint().is_legal(release::apron(&w, k).unwrap());
+        assert_eq!(
+            illegal, short,
+            "the last pair of the 2 x 1 list is a legal cell"
+        );
+        if !illegal {
+            continue;
+        }
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        let at = w.obj(tank).unwrap().pos;
+        let mut cleared = false;
+        for _ in 0..200 {
+            step(&mut w);
+            if w.obj(tank).unwrap().contact.is_none() {
+                cleared = true;
+                break;
+            }
+        }
+        assert!(cleared, "the clear report");
+        assert_eq!(
+            w.obj(tank).unwrap().pos.cell(),
+            at.cell(),
+            "u stays where it appeared"
+        );
+        assert!(!release::tethered(&w, tank));
     }
 }

@@ -759,6 +759,11 @@ pub struct Quirks {
     // spec: S-0402 claim 8
     #[serde(default = "on")]
     pub refinery_distance_wraps: bool,
+    /// An idle harvester whose step-off search finds no cell gets the
+    /// off-map destination cell (0, 0); off: its destination is cleared.
+    // spec: S-0402 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub harvester_failed_step_off_origin: bool,
     /// A load period of 0 keeps the harvester loading for good after its first bale.
     // spec: S-0402 claim 5
     #[serde(default = "on")]
@@ -1012,8 +1017,8 @@ pub struct Quirks {
     #[serde(default = "on")]
     pub packup_sound_on_sale: bool,
     /// A ground factory whose exit list has fewer than eleven entries takes
-    /// the original's special apron pairs; off: the list's last pair
-    /// (interim, request Q-0221).
+    /// the original's special apron pairs; off: the list's last pair, (0, 0)
+    /// for an empty list.
     // spec: S-0417 Edge cases
     #[serde(default = "on")]
     pub factory_apron_short_list: bool,
@@ -1022,6 +1027,12 @@ pub struct Quirks {
     // spec: S-0417 Edge cases; S-0417 claim 5
     #[serde(default = "on")]
     pub factory_fixed_hover_exit: bool,
+    /// A factory's release queues *unload* and its closing queues *guard*,
+    /// each starting only at a per-tick start that finds the ready mark
+    /// set; off: queueing either also sets the ready mark.
+    // spec: S-0417 claims 3 and 6 and Edge cases
+    #[serde(default = "on")]
+    pub factory_unload_waits_ready_mark: bool,
     /// A sidebar item tied with existing items on every key goes before
     /// them (the newest first); off: after them.
     // spec: S-0004 claim 11; S-0407 claim 17 and Edge cases
@@ -1249,6 +1260,7 @@ impl Default for Quirks {
             resource_timers_carry_over: true,
             thinning_hits_waypoint_only: true,
             refinery_distance_wraps: true,
+            harvester_failed_step_off_origin: true,
             zero_load_period_stalls: true,
             unload_without_contact_stalls: true,
             slave_kick_delay_wraps: true,
@@ -1314,6 +1326,7 @@ impl Default for Quirks {
             packup_sound_on_sale: true,
             factory_apron_short_list: true,
             factory_fixed_hover_exit: true,
+            factory_unload_waits_ready_mark: true,
             sidebar_tie_newest_first: true,
             sidebar_both_flags_rank: true,
             initial_ammo_above_capacity: true,
@@ -1763,6 +1776,10 @@ impl Quirks {
                 self.thinning_hits_waypoint_only,
             ),
             ("refinery_distance_wraps", self.refinery_distance_wraps),
+            (
+                "harvester_failed_step_off_origin",
+                self.harvester_failed_step_off_origin,
+            ),
             ("zero_load_period_stalls", self.zero_load_period_stalls),
             (
                 "unload_without_contact_stalls",
@@ -1915,6 +1932,10 @@ impl Quirks {
             ("packup_sound_on_sale", self.packup_sound_on_sale),
             ("factory_apron_short_list", self.factory_apron_short_list),
             ("factory_fixed_hover_exit", self.factory_fixed_hover_exit),
+            (
+                "factory_unload_waits_ready_mark",
+                self.factory_unload_waits_ready_mark,
+            ),
             ("sidebar_tie_newest_first", self.sidebar_tie_newest_first),
             ("sidebar_both_flags_rank", self.sidebar_both_flags_rank),
             (

@@ -521,8 +521,8 @@ pub fn factory_count(w: &World, house: HouseId, t: TypeRef) -> i32 {
                 // spec: S-0403 claim 6 (naval and ground vehicle factories counted apart; every other kind counts all its factories)
                 t.kind != Kind::Vehicle || br.naval == naval_item
             } else {
-                // spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off: only factories that could make the item with the tech-tree rules allowing it, power and docks ignored)
-                tech::could_make(w, b, t, true)
+                // spec: S-0403 Edge cases (quirks.multiple_factory_counts_all off: only factories that could make the item in S-0404's sense, power and docks ignored: not sold or queued to be sold, owner-country overlap, naval or ground kind and the build-limit answer with its production allowance, not the full tech-tree test)
+                tech::could_make_limit_only(w, b, t)
             }
         })
         .count() as i32
@@ -609,7 +609,7 @@ fn bonus_product(w: &World, house: HouseId, factor: usize) -> F64 {
             .get(o.type_index as usize)
             .and_then(|p| p.bonus);
         if let Some(beta) = bonus {
-            // spec: S-0404 F1 (b = RZ₂₄(… RZ₂₄(RZ₂₄(1 × β₁) × β₂) … × βⱼ))
+            // spec: S-0404 F1 (b = ρ₂₄(… ρ₂₄(ρ₂₄(1 × β₁) × β₂) … × βⱼ); ρ₂₄ is RZ₂₄ with quirks.chop_rounding on, RN₂₄ off, through the rules rounding mode)
             b = b.mul(beta[factor], mode).to_f32(mode).to_f64();
         }
     }
@@ -642,11 +642,11 @@ pub fn cost_factors(w: &World, house: HouseId, t: TypeRef) -> (F64, F64) {
     }
 }
 
-/// trunc(RZ₅₃(RZ₅₃(C × b) × a)) for a cost and a type's kind (S-0404 F1).
+/// trunc(ρ₅₃(ρ₅₃(C × b) × a)) for a cost and a type's kind (S-0404 F1).
 fn base_price(w: &World, house: HouseId, cost: i32, lk: LineKind) -> i32 {
     let mode = w.rules().mode;
     let (a, b) = factors_of(w, house, lk);
-    // spec: S-0404 F1 (P = trunc(RZ₅₃(RZ₅₃(C × b) × a)))
+    // spec: S-0404 F1 (P = trunc(ρ₅₃(ρ₅₃(C × b) × a)); ρ₅₃ is RZ₅₃ with quirks.chop_rounding on, RN₅₃ off; trunc toward zero either way)
     F64::from_i64(i64::from(cost), mode)
         .mul(b, mode)
         .mul(a, mode)
@@ -838,7 +838,7 @@ fn factories(w: &World, house: HouseId, f: impl Fn(&Object) -> bool) -> Vec<Obje
 /// `forced`): its object is created (one creation draw, claim 11).
 fn start_item(w: &mut World, li: usize, t: TypeRef, forced: bool) {
     let house = w.econ.lines.lines[li].house;
-    // spec: S-0404 claim 11 (starting an item creates its object: one creation draw)
+    // spec: S-0404 claim 11 (starting an item creates its object: one creation draw, taken at the start's causing action, so same-tick starts draw in order of application, no value reserved ahead)
     let object = crate::objects::create(w, t.kind, t.index, Some(house));
     let p = price(w, house, t);
     let r = period(w, house, t);
@@ -1140,7 +1140,7 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
 /// marked primary, else the last the house acquired.
 pub fn releasing_building(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
     // spec: S-0404 Terms (could release: switched on, could make without the tech-tree rule) and S-0411 claim 14 (not a factory queued to be sold)
-    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t, false);
+    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t);
     let mut cands = factories(w, house, |b| {
         base(b) && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     });
@@ -1297,7 +1297,7 @@ pub fn factory_removed(w: &mut World, house: HouseId, b: ObjectId) {
             && l.kind.factory_kind() == kind
             && let Some(t) = l.item.as_ref().map(|i| i.t)
             // spec: S-0404 claim 8 and Terms (a factory building being sold or queued to be sold counts in no test)
-            && factories(w, house, |x| x.id != b && tech::could_make(w, x, t, false)).is_empty()
+            && factories(w, house, |x| x.id != b && tech::could_make(w, x, t)).is_empty()
         {
             // spec: S-0404 claim 8 (removed for good: no other factory could make the item: cancelled as after a cancel)
             cancel_item(w, li);

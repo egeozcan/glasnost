@@ -1073,7 +1073,7 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
         ob.path.steps.clear();
     }
     if ended {
-        // spec: S-0417 claims 7 and 8 (a tethered vehicle's cell-arrival update; request Q-0223: reaching a track target)
+        // spec: S-0417 claims 7 and 8 (a driving vehicle's cell-arrival update: reaching a track target, also when a further track follows in the same tick, Q-0223)
         crate::econ::release::arrival(w, id);
     }
     ended
@@ -1167,6 +1167,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
+            // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
+            crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);
             return true;
         }

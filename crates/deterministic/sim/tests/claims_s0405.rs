@@ -750,3 +750,58 @@ fn w12_f_turret_upgrade_sale() {
         assert_eq!(o.econ.building.upgrades, [Some(lo), None, None]);
     }
 }
+
+// spec: S-0405 claims 1 and 2 (W12 g, Q-0224: with a positive upgrade count every recorded position contributes, including positions numbered above the count; the count is a gate, not a limit)
+#[test]
+fn w12_g_positions_above_the_count_contribute() {
+    // PLANT makes 120 here (W12's P makes 100).
+    for (middle, after) in [("UP20", (170, 0)), ("UPD5", (150, 5))] {
+        let mut r = rules();
+        r.sim.buildings.get_mut("PLANT").unwrap().econ.buildup = Some(true);
+        r.sim.buildings.get_mut("PLANT").unwrap().econ.upgrades = Some(3);
+        r.registries
+            .get_mut("buildings")
+            .unwrap()
+            .extend(["UPT0".to_string(), "UP30".to_string()]);
+        let mut upt0 = building(100, 0);
+        upt0.econ.powers_up_building = Some("PLANT".into());
+        upt0.turret = Some(true);
+        r.sim.buildings.insert("UPT0".into(), upt0);
+        let mut up30 = building(100, 30);
+        up30.econ.powers_up_building = Some("PLANT".into());
+        r.sim.buildings.insert("UP30".into(), up30);
+        let mut w = game(&r);
+        let p = put(&mut w, "PLANT", 0, 0, 0);
+        let ix = |w: &World, n: &str| w.rules().index_of(Kind::Building, n).unwrap();
+        let (lo, mid, top, rep) = (
+            ix(&w, "UP10"),
+            ix(&w, middle),
+            ix(&w, "UPT0"),
+            ix(&w, "UP30"),
+        );
+        {
+            let b = &mut w.obj_mut(p).unwrap().econ.building;
+            b.upgrades = [Some(lo), Some(mid), Some(top)];
+            b.upgrade_count = 3;
+        }
+        order(&mut w, A, Order::Sell { actor: p });
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        let b = &w.obj(p).unwrap().econ.building;
+        assert_eq!(b.upgrade_count, 0);
+        assert_eq!(b.upgrades, [Some(lo), Some(mid), None]);
+        assert_eq!(
+            (power::building_output(&w, p), power::building_drain(&w, p)),
+            (120, 0)
+        );
+        glasnost_sim::econ::placement::add_upgrade(&mut w, p, rep);
+        let b = &w.obj(p).unwrap().econ.building;
+        assert_eq!(b.upgrade_count, 1);
+        assert_eq!(b.upgrades, [Some(rep), Some(mid), None]);
+        assert_eq!(
+            (power::building_output(&w, p), power::building_drain(&w, p)),
+            after
+        );
+    }
+}
