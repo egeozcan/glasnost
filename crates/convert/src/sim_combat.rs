@@ -1189,7 +1189,7 @@ impl Builder<'_> {
     }
 
     /// A boolean art key (S-0003 claim 2).
-    fn art_bool(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Option<bool> {
+    pub(super) fn art_bool(&self, kind: Kind, index: usize, t: &TypeRec, k: &str) -> Option<bool> {
         self.art_values(kind, index, t, k)
             .iter()
             .fold(None, |held, (v, _)| value::boolean(v).or(held))
@@ -1204,10 +1204,23 @@ impl Builder<'_> {
         t: &TypeRec,
         k: &str,
     ) -> Option<[i32; N]> {
+        self.art_tuple_from(kind, index, t, k, [0; N])
+    }
+
+    /// [`Self::art_tuple`] with `initial` as the value held before any
+    /// data is read.
+    pub(super) fn art_tuple_from<const N: usize>(
+        &mut self,
+        kind: Kind,
+        index: usize,
+        t: &TypeRec,
+        k: &str,
+        initial: [i32; N],
+    ) -> Option<[i32; N]> {
         let mut held: Option<[i32; N]> = None;
         for (v, line) in self.art_values(kind, index, t, k) {
             // spec: S-0003 claim 9 (unread components take the value in force's, our engine; the importer warns)
-            let (out, unread) = value::int_tuple_or::<N>(&v, held.unwrap_or([0; N]));
+            let (out, unread) = value::int_tuple_or::<N>(&v, held.unwrap_or(initial));
             if unread {
                 self.art_warn(line, format!(
                     "{} {} art {k} {:?} has fewer than {N} readable integers; the others keep the value in force (S-0003 claim 9)",

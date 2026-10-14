@@ -68,12 +68,13 @@ pub enum Sound {
     UnitSold,
 }
 
-/// Creates an animation: its creation draws (S-0202 claim 10) and a
-/// presentation event. Animations are not placed in the update order: where
+/// Creates an animation with no loop delay: its creation draws and its
+/// start event's draws, as for one created during loading (S-0202 claims
+/// 10 and 15), and a presentation event. Animations are not placed in the update order: where
 /// a shot's or a death's animations stand in it is not established (S-0203
 /// claim 2, `unmeasured`).
 pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
-    crate::load::anim_creation_draws(w, name);
+    crate::load::anim_created_at(w, name, Some((pos.x, pos.y, pos.z)));
     w.effects.push(Effect::Anim {
         name: name.to_owned(),
         pos,

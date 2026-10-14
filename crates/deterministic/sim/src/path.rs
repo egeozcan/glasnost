@@ -1847,7 +1847,7 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     // area exactly when it stands inside it (S-0212 claim 14).
     let entered = inside;
     // spec: S-0212 claim 14 (the corridor-disabling state: entered, and a train or in retreat; no unit is a loaner or a team member yet)
-    let disabling = entered && (u.train || o.beh.current == Some(Behaviour::Retreat));
+    let disabling = entered && (u.train || o.beh.seen() == Some(Behaviour::Retreat));
     // spec: S-0212 claim 6 (the gate is skipped for a unit outside the usable area, and in the corridor-disabling state for a legal destination outside it)
     let gate_skipped =
         !inside || (disabling && w.cells.cell(goal).is_some() && !w.cells.usable(goal));

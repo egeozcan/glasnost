@@ -2146,6 +2146,20 @@
           ],
           "default": null
         },
+        "anim_idle": {
+          "description": "Buildings: the art `AnimIdle`, the *idle* body range `start, count,\ndelay` (S-0108 claims 2 and 6, Import mapping; S-0215 claim 11's\nbody-range ready mark); absent: 0, 1, 0.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
         "art_number_of_docks": {
           "description": "Buildings: the art `NumberOfDocks`, dock slots (S-0402 Terms, claim\n10; values below 1 give 1); absent: 1.",
           "type": [
@@ -2431,6 +2445,14 @@
         },
         "nominal": {
           "description": "Infantry: `Nominal` (S-0414 Terms, *nominal survivor*); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "normalized": {
+          "description": "Buildings: the art `Normalized`, the game-speed normalisation mark\nof the body ranges (S-0108 claim 6, Import mapping); absent: false.",
           "type": [
             "boolean",
             "null"
@@ -5794,6 +5816,11 @@
         },
         "building_smudge_discarded_draws": {
           "description": "A destroyed building takes up to two ranged draws whose results are not used.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_wrap_normalisation": {
+          "description": "A building body range's speed normalisation follows two rules: an immediate entry needs the art's normalised mark and excludes construction; a deferred entry and every wrap ignore the mark and cover construction and idle only.",
           "type": "boolean",
           "default": true
         },

@@ -97,36 +97,67 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
     infantry::destination_assigned(w, id, before);
 }
 
-/// The close-range shortcut's outcome (S-0307 claim 22 b): the movement is
-/// sent to the standing position `p` in the attacker's own cell, its
-/// destination becomes cell `c` and the target is kept. A walker takes `p`
-/// as its walking target and reserves it; any other actor only gets the
-/// destination (interim, request Q-0237).
+/// The close-range shortcut's outcome (S-0307 claim 22 b; S-0208 claim
+/// 21): the destination becomes cell `c`, the cell of the target's
+/// reference point, and the target is kept. An ordinary walking infantry
+/// unit is given an immediate walking target in its own cell, chosen again
+/// with the selected point `p` as the desired point and its own entry
+/// released. Any other actor only gets the destination (interim, request
+/// Q-0237).
 fn shortcut(w: &mut World, id: ObjectId, p: Pos, c: glasnost_map::CellXY) {
+    use crate::world::Layer;
     let Some(o) = w.obj(id).cloned() else { return };
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0307 claim 22 (b) (the destination becomes the cell of T; the target is kept)
+        // spec: S-0307 claim 22 (b) and S-0208 claim 21 (the destination becomes the cell of the target's reference point; the target is kept)
         ob.dest = Some(Target::Cell(c));
+        // spec: S-0208 claim 21 (it walks to its walking target without an intervening path step into a neighbouring cell)
+        if o.walk.is_some() {
+            ob.path.steps.clear();
+        }
     }
     let Some(walk) = o.walk.as_ref() else { return };
     let q = w.rules().quirks;
     let oq = crate::objects::occ_quirks(w);
-    // spec: S-0307 claim 22 (b) (the movement is sent directly to P) and S-0209 claim 1 (the old entry cleared, the new one marked at once)
+    let own = o.pos.cell();
+    // spec: S-0208 claim 21 (for the second choice the old reservation is released, so its own entry does not count as taken) and S-0209 claim 1
     if let Some(old) = walk.target {
         w.cells.clear_infantry(old.cell(), o.layer, id, oq);
     }
-    w.cells.clear_infantry(o.pos.cell(), o.layer, id, oq);
-    let (u, v) = (p.x.rem_euclid(256), p.y.rem_euclid(256)); // spec: S-0204 claim 2 (the position within the cell)
+    w.cells.clear_infantry(own, o.layer, id, oq);
+    if let Some(s) = w.obj_mut(id).and_then(|ob| ob.walk.as_mut()) {
+        s.target = None;
+    }
+    // spec: S-0208 claim 21 (deck occupancy and the deck standing height when the cell carries a high bridge and the height exceeds the surface height at P by more than 312, strict; ground occupancy otherwise)
+    let deck =
+        w.high_bridge(own) && o.pos.z > w.surface_at(p.x, p.y).wrapping_add(DECK_CHOICE_ABOVE);
+    let layer = if deck { Layer::Deck } else { Layer::Ground };
+    // spec: S-0208 claims 3, 4 and 21 (the walking target chosen again with P as the desired point)
+    let class = crate::walk::position_class(p.x.rem_euclid(256), p.y.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within the cell)
+    let mission = crate::walk::mission_target_in(w, id, own);
+    // spec: S-0208 claim 21 (no position: no immediate walking target, not a transfer to the ground)
+    let Some(pos) = crate::walk::choose_position(w, own, layer, class, mission) else {
+        return;
+    };
+    let (u, v) = crate::walk::standing_point(pos);
+    let (x, y) = (256 * own.x + u, 256 * own.y + v); // spec: S-0208 table P (a standing position within the cell)
+    // spec: S-0208 claims 1 and 21 (the surface height there, the deck standing-position height 416 above on the deck)
+    let z = w.surface_at(x, y) + if deck { 416 } else { 0 };
+    // spec: S-0208 claims 3 and 21 (the chosen walking target is reserved)
     let mark = crate::walk::position_class(u, v, q.top_position_counts_as_centre);
     if let Some(h) = o.owner {
-        w.cells.mark_infantry(p.cell(), o.layer, mark, id, h);
+        w.cells.mark_infantry(own, layer, mark, id, h);
     }
-    let standing = crate::walk::position_class(u, v, false);
     if let Some(s) = w.obj_mut(id).and_then(|ob| ob.walk.as_mut()) {
-        s.target = Some(p);
-        s.standing = standing;
+        s.target = Some(Pos::new(x, y, z));
+        s.standing = pos;
     }
 }
+
+/// The deck-occupancy margin of the second position choice (S-0208 claim
+/// 21): the walker's height must exceed the surface height at *P* by more
+/// than this many leptons.
+// spec: S-0208 claim 21 (more than 312 leptons, a strict integer comparison)
+const DECK_CHOICE_ABOVE: i32 = 312;
 
 /// Whether a vehicle's approach step is replaced by a crushing approach of
 /// S-0210 claim 11 (S-0215 claim 37 h):
@@ -249,7 +280,7 @@ pub fn step(w: &mut World, id: ObjectId) {
         // spec: S-0215 claim 37 (d) (may approach: the can-approach property, and not draining, in a bunker or an open-topped passenger, all seams)
         let may = u.is_none_or(|u| u.raw.can_approach_target.unwrap_or(true));
         // spec: S-0215 claim 37 (d) (the keep-or-drop table by current behaviour, may approach and owner)
-        let keep = match o.beh.current {
+        let keep = match o.beh.seen() {
             Some(Behaviour::Sticky) => false,
             Some(Behaviour::Attack) => true,
             Some(Behaviour::AreaGuard) => may || human,

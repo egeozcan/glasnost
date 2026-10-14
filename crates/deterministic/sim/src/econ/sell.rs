@@ -217,13 +217,15 @@ fn sell_building(w: &mut World, id: ObjectId) {
         // spec: S-0408 claim 4 (no build-up sprite otherwise: nothing happens)
         return;
     }
-    if o.beh.current == Some(Behaviour::Selling) {
+    if o.beh.seen() == Some(Behaviour::Selling) {
         // spec: S-0408 claim 4 (a second sell order changes nothing)
         return;
     }
     // spec: S-0213 claim 12 (a building whose type undeploys into a vehicle packs up under its conditions)
     let packs = crate::econ::deploy::packs_up(w, id);
     let tick = w.tick;
+    // spec: S-0108 claims 4 and 6 (a sale runs the construction range: the idle body is left)
+    crate::econ::body::leave_idle(w, id);
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0408 claim 4 (the building's behaviour becomes selling)
         ob.beh.force(Behaviour::Selling, tick, stale);

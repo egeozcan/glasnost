@@ -208,7 +208,7 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
         }
     }
     // spec: S-0215 claim 18 (only while the current behaviour has the retaliate property)
-    let cur = o.beh.current;
+    let cur = o.beh.seen();
     if !cur.is_some_and(|b| rules.behaviour(b).retaliate) {
         return;
     }
@@ -460,8 +460,7 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
         SearchKind::MapWide => 0,
     };
     // spec: S-0309 F1 (a healer for acquisition in guard: R = 512)
-    if crate::combat::weapon::healer_for_acquisition(w, a)
-        && o.beh.current == Some(Behaviour::Guard)
+    if crate::combat::weapon::healer_for_acquisition(w, a) && o.beh.seen() == Some(Behaviour::Guard)
     {
         big_r = 512;
     }
@@ -595,7 +594,7 @@ fn candidate(
     if !w.cells.usable(to.pos.cell()) {
         return false;
     }
-    if to.beh.current.is_some_and(|b| r.behaviour(b).no_threat) {
+    if to.beh.seen().is_some_and(|b| r.behaviour(b).no_threat) {
         return false;
     }
     if w.height_above_surface(t) < -20 {
@@ -920,7 +919,7 @@ pub fn search(
     crate::regions::ensure(w);
     let ao = w.obj(a).cloned()?;
     // spec: S-0215 claim 33 and S-0309 claim 4 (every search restarts the targeting timer: N + U(0, 2), its first draw)
-    let n = if ao.beh.current == Some(Behaviour::AreaGuard) {
+    let n = if ao.beh.seen() == Some(Behaviour::AreaGuard) {
         rules.general.guard_area_targeting_delay
     } else {
         rules.general.normal_targeting_delay
@@ -1209,7 +1208,7 @@ fn opportunity_gate(w: &World, a: ObjectId) -> bool {
     if u.is_some_and(|u| u.opportunity_fire) {
         return true;
     }
-    match o.beh.current {
+    match o.beh.seen() {
         Some(Behaviour::Move) => {
             // spec: S-0309 claim 3 (move, arrived, a balloon-hover type or a vehicle that deploys in place)
             let arrived = matches!(o.dest, Some(Target::Cell(c)) if c == o.pos.cell());
@@ -1250,7 +1249,7 @@ pub fn per_tick(w: &mut World, a: ObjectId) {
     }
     // spec: S-0215 claim 33 (move, harvest or guard; buildings search in guard)
     let listed = matches!(
-        o.beh.current,
+        o.beh.seen(),
         Some(Behaviour::Move | Behaviour::Harvest | Behaviour::Guard)
     );
     if !listed || !may_search_passively(w, a) || !opportunity_gate(w, a) {

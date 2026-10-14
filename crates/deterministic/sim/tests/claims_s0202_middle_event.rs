@@ -296,17 +296,34 @@ fn claim_15_crater_before_the_data_stream() {
     assert_eq!(stage(&w, at(3, 0)), Some(8));
 }
 
-/// spec: S-0202 claim 15 (the composition covers animations created during loading) and S-0109 claim 13: an animation created in play takes only its creation draws, its start event's middle-event draws being noted
+/// spec: S-0202 claim 15 (an animation created during play with no loop delay and μ = 0 takes the same middle-event draws, in the same order, as one created during loading; its creator does not change that rule)
 #[test]
-fn in_play_creation_takes_no_middle_event_draw() {
+fn in_play_creation_takes_the_loading_composition() {
     let mut r = ruleset();
-    particle(&mut r, "P", ParticleType::default());
+    particle(
+        &mut r,
+        "P",
+        ParticleType {
+            behaves_like: Some("smoke".into()),
+            ..Default::default()
+        },
+    );
     anim(&mut r, "A", puff("P", 2));
+    let (loaded, before) = draws(&r, "A", 0);
+    let mut expect = before.clone();
+    for _ in 0..4 {
+        let _ = expect.raw();
+    }
+    assert_eq!(loaded.rng, expect);
+    // The same type made by a weapon's or a death's animation in play.
     let mut w = game(&r);
-    let before = w.rng.clone();
-    glasnost_sim::load::anim_creation_draws(&mut w, "A");
-    assert_eq!(w.rng, before);
-    assert!(w.notes.iter().any(|n| {
-        n.starts_with("S-0109 claim 13 (interim, request Q-0217): the start-event draws of an animation created in play")
-    }));
+    let start = w.rng.clone();
+    let (x, y, z) = centre(at(0, 0), 0);
+    glasnost_sim::combat::effects::anim(&mut w, "A", glasnost_sim::world::Pos::new(x, y, z));
+    let mut expect = start;
+    for _ in 0..4 {
+        let _ = expect.raw();
+    }
+    assert_eq!(w.rng, expect);
+    assert!(!w.notes.iter().any(|n| n.contains("Q-0217")));
 }

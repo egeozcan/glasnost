@@ -72,7 +72,7 @@ pub fn last_round(w: &mut World, id: ObjectId) {
     if fearless && !rules.quirks.fraidycat_ammo_panic_ignores_fearless {
         return;
     }
-    let cur = o.beh.current;
+    let cur = o.beh.seen();
     if let Some(ob) = w.obj_mut(id) {
         if let Some(st) = ob.infantry.as_mut() {
             st.fear = 300; // spec: S-0315 claim 2 (fear set to 300)

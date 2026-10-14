@@ -299,7 +299,7 @@ fn after_shot(w: &mut World, firer: ObjectId, weapon: crate::combat::data::Weapo
     };
     // spec: S-0309 claim 20 (a distributed-fire object firing outside attack (a building: in any behaviour) adds the target to its list and drops it)
     if distributed
-        && (o.kind == Kind::Building || o.beh.current != Some(crate::rules::Behaviour::Attack))
+        && (o.kind == Kind::Building || o.beh.seen() != Some(crate::rules::Behaviour::Attack))
         && let Some(Target::Object(x)) = o.target
         && let Some(ob) = w.obj_mut(firer)
     {

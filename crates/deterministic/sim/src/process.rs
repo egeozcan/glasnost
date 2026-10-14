@@ -418,6 +418,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         // spec: S-0406 claim 17 (the construction state sets the ready mark on a building turn)
         crate::econ::placement::construction_turn(w, id);
+        // spec: S-0215 claim 11 (the body range of a building without a turret sets the ready mark)
+        crate::econ::body::turn(w, id);
     }
     // spec: S-0215 claim 11 (the per-tick start of infantry, vehicles and buildings); S-0406 claim 17 (no first start while the construction state lasts)
     let ready_now = ready(w, id) && !crate::econ::placement::first_start_withheld(w, id);
@@ -496,7 +498,7 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
     let Some(ob) = w.obj_mut(id) else { return };
     let Some(mem) = ob.attack_move else { return };
     // spec: S-0309 claim 23 (b) (resumed when engaged or in guard; otherwise the memory is removed, with its engaged mark)
-    if !(ob.combat.engaged || ob.beh.current == Some(Behaviour::Guard)) {
+    if !(ob.combat.engaged || ob.beh.seen() == Some(Behaviour::Guard)) {
         ob.attack_move = None;
         ob.combat.engaged = false; // spec: S-0309 claim 23 (c) (removing the memory ends the engaged mark)
         return;
