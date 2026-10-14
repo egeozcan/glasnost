@@ -1011,6 +1011,10 @@ pub struct Quirks {
     // spec: S-0409 claim 14; S-0110
     #[serde(default = "on")]
     pub shroud_point_cell_wrap: bool,
+    /// An odd negative height count in the shroud point test reads the cell pair one cell toward map north-west (k = (u + 3)/2); off: k = (u + 1)/2 for every odd u. No effect while the renderer's shroud_on_flat_grid is off, which the simulation never models.
+    // spec: S-0110 claim 8, Edge cases
+    #[serde(default = "on")]
+    pub shroud_negative_odd_pair: bool,
     /// Only the first qualifying radar building decides whether the house has radar.
     // spec: S-0410 claim 1; S-0405 claim 12; S-0409
     #[serde(default = "on")]
@@ -1423,6 +1427,7 @@ impl Default for Quirks {
             spy_satellite_first_building_decides: true,
             defeat_reveal_keeps_pending: true,
             shroud_point_cell_wrap: true,
+            shroud_negative_odd_pair: true,
             radar_first_building_decides: true,
             overlay_list_position_rules: true,
             radar_pixel_cell_shift: true,
@@ -2059,6 +2064,7 @@ impl Quirks {
                 self.defeat_reveal_keeps_pending,
             ),
             ("shroud_point_cell_wrap", self.shroud_point_cell_wrap),
+            ("shroud_negative_odd_pair", self.shroud_negative_odd_pair),
             (
                 "radar_first_building_decides",
                 self.radar_first_building_decides,

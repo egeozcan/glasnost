@@ -582,6 +582,83 @@ fn point_test() {
     assert!(shroud::point_shrouded(&w, A, Pos::centre(c(12, 12), 0)));
 }
 
+/// Whether the wrench of SH10 shows: the point test on the centre of a
+/// cell c at height `z`, with the explored states of c − 1, c and c + 1
+/// given and every other cell not explored.
+fn sh10_shown(z: i32, states: [bool; 3], negative_odd_pair: bool) -> bool {
+    let cell = CellXY::new(20, 20);
+    let explored = |q: CellXY| {
+        (-1..=1).any(|j| states[(j + 1) as usize] && q == CellXY::new(cell.x + j, cell.y + j))
+    };
+    let (a, b) = shroud::point_candidates(Pos::centre(cell, z), negative_odd_pair);
+    explored(a) || b.is_some_and(explored)
+}
+
+// spec: S-0110 claim 8 and scenario SH10 (negative heights: u = trunc(Z / 104); odd u < 0 reads the pair k = (u + 3)/2)
+#[test]
+fn point_test_negative_heights_sh10() {
+    let (t, f) = (true, false);
+    // Level −1, −103 leptons: u = 0, the cell itself.
+    assert!(sh10_shown(-103, [f, t, f], true));
+    assert!(!sh10_shown(-103, [t, f, t], true));
+    // Level −2, −207 leptons: u = −1, the cell and its north-west neighbour.
+    assert!(
+        !sh10_shown(-207, [f, f, t], true),
+        "c + 1 is not a candidate"
+    );
+    assert!(sh10_shown(-207, [t, f, t], true));
+    assert!(sh10_shown(-207, [f, t, f], true));
+    // Level −3, −311 leptons: u = −2 (truncated toward zero), the south-east neighbour.
+    assert!(!sh10_shown(-311, [f, t, f], true));
+    assert!(sh10_shown(-311, [f, t, t], true));
+}
+
+// spec: S-0110 claim 8, Edge cases and SH10 (quirks.shroud_negative_odd_pair off: k = (u + 1)/2 for every odd u)
+#[test]
+fn point_test_negative_odd_pair_off() {
+    let (t, f) = (true, false);
+    // SH10's first −2 row replayed with the switch off: the wrench shows.
+    assert!(sh10_shown(-207, [f, f, t], false));
+    assert!(!sh10_shown(-207, [t, f, f], false));
+    // Even counts and non-negative heights do not change.
+    for z in [-103, -311, 0, 104, 208, 500] {
+        for m in 0..8u8 {
+            let st = [m & 1 != 0, m & 2 != 0, m & 4 != 0];
+            assert_eq!(sh10_shown(z, st, true), sh10_shown(z, st, false), "z {z}");
+        }
+    }
+    // Odd positive u keeps (u + 1)/2 with the switch on: c − 1 and c at 104 leptons.
+    assert!(sh10_shown(104, [t, f, f], true));
+    assert!(!sh10_shown(104, [f, f, t], true));
+}
+
+// spec: S-0110 claim 8, Edge cases (point_shrouded reads quirks.shroud_negative_odd_pair)
+#[test]
+fn point_shrouded_reads_the_pair_switch() {
+    // A cell q on the explored area's north-west edge: q + 1 explored, q and q − 1 not.
+    let find = |w: &World| {
+        (1..12)
+            .map(|d| c(-d, -d))
+            .find(|&q| {
+                shroud::explored(w, A, CellXY::new(q.x + 1, q.y + 1))
+                    && !shroud::explored(w, A, q)
+                    && !shroud::explored(w, A, CellXY::new(q.x - 1, q.y - 1))
+            })
+            .expect("an edge cell")
+    };
+    let mut w = game(&rules());
+    spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+    let q = find(&w);
+    let p = Pos::centre(q, -207);
+    assert!(shroud::point_shrouded(&w, A, p));
+    let mut r = rules();
+    r.globals.quirks.shroud_negative_odd_pair = false;
+    let mut w = game(&r);
+    spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+    assert_eq!(find(&w), q);
+    assert!(!shroud::point_shrouded(&w, A, p));
+}
+
 fn clear_marks(w: &mut World) {
     for st in w.econ.shroud.houses.iter_mut().flatten() {
         st.discovered.clear();

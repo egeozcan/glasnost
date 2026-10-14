@@ -6803,6 +6803,11 @@
           "type": "boolean",
           "default": true
         },
+        "shroud_negative_odd_pair": {
+          "description": "An odd negative height count in the shroud point test reads the cell pair one cell toward map north-west (k = (u + 3)/2); off: k = (u + 1)/2 for every odd u. No effect while the renderer's shroud_on_flat_grid is off, which the simulation never models.",
+          "type": "boolean",
+          "default": true
+        },
         "shroud_point_cell_wrap": {
           "description": "A cell coordinate outside 0 … 511 is read as another cell by gap fields and the shroud point test.",
           "type": "boolean",

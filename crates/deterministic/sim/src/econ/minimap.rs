@@ -420,19 +420,12 @@ fn in_friendly_gap(
         return false;
     }
     let p = ground_centre(w, c);
-    let z = p.z.max(0) / 104; // spec: S-0110 claim 8 (whole height levels, 104 leptons each)
-    let (cx, cy) = (p.x / 256, p.y / 256); // spec: S-0110 claim 8 (cell = trunc(X / 256), trunc(Y / 256))
-    let inside = |n: i32| {
-        w.cells
-            .idx(CellXY::new(cx - n, cy - n))
-            .is_some_and(|i| cells.contains(&(i as u32)))
-    };
+    // spec: S-0410 claim 6, S-0110 claim 8 (the point test's candidate cells, quirks.shroud_negative_odd_pair)
+    let (a, b) =
+        crate::econ::shroud::point_candidates(p, w.rules().quirks.shroud_negative_odd_pair);
+    let inside = |c: CellXY| w.cells.idx(c).is_some_and(|i| cells.contains(&(i as u32)));
     // spec: S-0410 claim 6 (for odd z the gap test needs both candidate cells in a friendly gap field)
-    if z % 2 == 0 {
-        inside(z / 2)
-    } else {
-        inside((z + 1) / 2) && inside((z - 1) / 2)
-    }
+    inside(a) && b.is_none_or(inside)
 }
 
 fn type_flag(

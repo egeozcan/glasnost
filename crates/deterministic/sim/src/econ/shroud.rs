@@ -646,18 +646,38 @@ pub fn discovered(w: &World, house: HouseId, id: ObjectId) -> bool {
     hs(w, house).is_none_or(|s| s.discovered.contains(&id))
 }
 
-/// Whether a world point is shrouded for a house (S-0110 claim 8, with
-/// `quirks.shroud_point_cell_wrap`).
-pub fn point_shrouded(w: &World, house: HouseId, p: Pos) -> bool {
-    let u = p.z.max(0) / LEVEL; // spec: S-0110 claim 8 (u = ⌊Z / 104⌋, Z ≥ 0)
+/// The candidate cells of S-0110 claim 8's point test for a world point,
+/// before legality and wrap: one cell for an even height count, two for an
+/// odd one. `negative_odd_pair` is `quirks.shroud_negative_odd_pair`. The
+/// test always follows the height-0 grid (`quirks.shroud_on_flat_grid` on),
+/// so the pair switch always applies here.
+pub fn point_candidates(p: Pos, negative_odd_pair: bool) -> (CellXY, Option<CellXY>) {
+    let u = p.z / LEVEL; // spec: S-0110 claim 8 (u = trunc(Z / 104), heights below 0 included)
     let (cx, cy) = (p.x / 256, p.y / 256); // spec: S-0110 claim 8 (trunc(X / 256), trunc(Y / 256))
-    let cand = |n: i32| candidate_explored(w, house, cx - n, cy - n);
-    // spec: S-0110 claim 8 (even u: one candidate; odd u: shrouded when neither of two is explored)
+    let at = |n: i32| CellXY::new(cx - n, cy - n);
+    // spec: S-0110 claim 8 (even or odd u; a negative odd u leaves the remainder −1, not 0)
     if u % 2 == 0 {
-        !cand(u / 2)
-    } else {
-        !cand((u + 1) / 2) && !cand((u - 1) / 2)
+        // spec: S-0110 claim 8 (even u: the one cell (c_x − u/2, c_y − u/2), exact for negative u too)
+        return (at(u / 2), None);
     }
+    let k = if u < 0 && negative_odd_pair {
+        // spec: S-0110 claim 8, Edge cases (odd u < 0: k = (u + 3)/2, quirks.shroud_negative_odd_pair)
+        (u + 3) / 2
+    } else {
+        // spec: S-0110 claim 8, Edge cases (odd u > 0, or the switch off: k = (u + 1)/2)
+        (u + 1) / 2
+    };
+    // spec: S-0110 claim 8 (odd u: cells (c_x − k, c_y − k) and (c_x − k + 1, c_y − k + 1))
+    (at(k), Some(at(k - 1)))
+}
+
+/// Whether a world point is shrouded for a house (S-0110 claim 8, with
+/// `quirks.shroud_point_cell_wrap` and `quirks.shroud_negative_odd_pair`).
+pub fn point_shrouded(w: &World, house: HouseId, p: Pos) -> bool {
+    let (a, b) = point_candidates(p, w.rules().quirks.shroud_negative_odd_pair);
+    let cand = |c: CellXY| candidate_explored(w, house, c.x, c.y);
+    // spec: S-0110 claim 8 (even u: one candidate; odd u: shrouded when neither of two is explored)
+    !cand(a) && !b.is_some_and(cand)
 }
 
 /// A candidate cell of the point test (S-0110 claim 8, Edge cases).

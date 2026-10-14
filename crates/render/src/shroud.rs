@@ -53,7 +53,8 @@ pub struct ShroudQuirks {
     /// on the height-0 grid. Off: each canvas is placed at its cell's top
     /// corner at the cell's own terrain height. The switch also governs
     /// claim 8's point test, which is the simulation's
-    /// (`econ::shroud::point_shrouded`) and keeps the on state there.
+    /// (`econ::shroud::point_shrouded`) and keeps the on state there, so
+    /// the simulation's `quirks.shroud_negative_odd_pair` always applies.
     pub shroud_on_flat_grid: bool,
 }
 
