@@ -213,7 +213,6 @@ mod notes {
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
     pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20; S-0102 claim 32 and F8) is not implemented in the map viewer";
-    pub const SLOT_ANIM_TILED_PALETTE: &str = "tiled slot animation copies take the palette row of S-0103 claim 8 like any animation: the tiled palette exception that S-0109 refers to is not stated by S-0103 (Q-0480)";
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
@@ -2235,7 +2234,6 @@ impl Builder<'_> {
             };
             // spec: S-0109 claim 27 (a tiled type draws a stack of copies of its current image frame)
             let (image_point, stack) = if t.tiled {
-                self.note(notes::SLOT_ANIM_TILED_PALETTE);
                 self.tiled_placement(&sprite, p, v)
             } else {
                 (point, None)
@@ -2263,7 +2261,7 @@ impl Builder<'_> {
                     },
                     Paint::Lit(row),
                     Group::Buildings,
-                    translucent || t.tiled,
+                    translucent,
                     Some(object),
                 )
             {
@@ -2355,22 +2353,29 @@ impl Builder<'_> {
     }
 
     /// The shade row of a building's slot animation of type `t` (S-0103
-    /// claim 8 rows 3 to 5): `hsv` and `u` are its building's colour
-    /// definition and brightness, `cell` the animation's cell.
+    /// claim 8 rows 3 to 5 and its tiled copies): `hsv` and `u` are its
+    /// building's colour definition and brightness, `cell` the animation's
+    /// cell.
     fn anim_row(&mut self, t: &slots::AnimType, hsv: [u8; 3], u: i32, cell: CellXY) -> Shade {
-        if t.cell_drawer {
-            // spec: S-0103 claim 8 row 3 (the owner's 53-shade palette at the building's U, or 1000
-            // with the normal-light flag)
-            return self.house_row(
-                hsv,
-                if t.normal_light {
-                    NEUTRAL_BRIGHTNESS
-                } else {
-                    u
-                },
-            );
+        // The brightness of the selected row.
+        let b = if t.normal_light {
+            // spec: S-0103 claim 8 (the normal-light flag: brightness 1000, tiled copies included)
+            NEUTRAL_BRIGHTNESS
+        } else if t.cell_drawer {
+            // spec: S-0103 claim 8 row 3 (a building's own animation: the building's brightness U)
+            u
+        } else {
+            // spec: S-0103 claim 8 rows 4 and 5, S-0104 claim 13 (its cell's unscaled ground level)
+            self.p
+                .lights
+                .get(cell)
+                .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+        };
+        if t.cell_drawer && !t.tiled {
+            // spec: S-0103 claim 8 row 3 (the owner's 53-shade palette)
+            return self.house_row(hsv, b);
         }
-        if t.alt_palette {
+        if t.alt_palette && !t.tiled {
             let (base, n) = match self.p.rows.alt {
                 Some(r) => r,
                 None => {
@@ -2407,16 +2412,8 @@ impl Builder<'_> {
                 (base, t.len())
             }
         };
-        // spec: S-0103 claim 8 row 5, S-0104 claim 13 (its cell's unscaled ground level; 1000 with
-        // the normal-light flag)
-        let b = if t.normal_light {
-            NEUTRAL_BRIGHTNESS
-        } else {
-            self.p
-                .lights
-                .get(cell)
-                .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
-        };
+        // spec: S-0103 claim 8 row 5, and its tiled copies (the anim palette whatever row the type
+        // would select, at that row's brightness)
         Shade::new(base, n, b)
     }
 

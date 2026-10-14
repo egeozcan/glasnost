@@ -1354,10 +1354,48 @@ fn slot_animation_tiled_copies() {
         assert_eq!(stack.copies(0), (255 - h / 2) / h + 2);
         let ys: Vec<i32> = it.copies(0).map(|c| c.y).take(3).collect();
         assert_eq!(ys, [it.y, it.y - h, it.y - 2 * h]);
-        // Q-0480: the tiled palette exception is open; the item is marked.
-        assert!(it.provisional);
-        assert!(b.notes.iter().any(|n| n.contains("Q-0480")));
+        assert!(!it.provisional);
     }
+}
+
+/// spec: S-0103 claim 8 (tiled copies all use the anim palette, even when the ordinary selection is
+/// the owner's or the alternative palette, and keep the selected brightness: an own animation's
+/// building brightness, the cell's unscaled ground level for an alternative-palette type, 1000
+/// with the normal-light flag)
+#[test]
+fn slot_animation_tiled_palette() {
+    let lit = |i: &Item| match i.paint {
+        Paint::Lit(s) => s,
+        p => panic!("not lit: {p:?}"),
+    };
+    let sprite = || shp((20, 20), 6, (2, 2), (9, 9));
+    // Drawn with its building (row 3 when untiled): the owner's table at the building's brightness.
+    let (b, items) = one_slot("", sprite());
+    let body = lit(&items_of(&b, "building")[0]);
+    assert_eq!(lit(&items[0]), body);
+    // Tiled: the anim palette's 53 rows, not the house table, at the building's brightness.
+    let (b, items) = one_slot("Tiled=yes\n", sprite());
+    let body = lit(&items_of(&b, "building")[0]);
+    let tiled = lit(&items[0]);
+    assert_eq!((tiled.rows, tiled.rho), (53, body.rho));
+    assert_ne!(tiled.base, body.base);
+    // The same anim table as an untiled type of row 5.
+    let (_, row5) = one_slot("ShouldUseCellDrawer=no\n", sprite());
+    let row5 = lit(&row5[0]);
+    assert_eq!(tiled.rows, row5.rows);
+    // An alternative-palette type (row 4, one shade row untiled) tiled: the anim table at its
+    // cell's unscaled ground level, as the row-5 type there.
+    let (_, alt) = one_slot("ShouldUseCellDrawer=no\nAltPalette=yes\n", sprite());
+    assert_eq!(lit(&alt[0]).rows, 1);
+    let (_, alt) = one_slot(
+        "ShouldUseCellDrawer=no\nAltPalette=yes\nTiled=yes\n",
+        sprite(),
+    );
+    assert_eq!((lit(&alt[0]).rows, lit(&alt[0]).rho), (53, row5.rho));
+    // The normal-light flag: brightness 1000 for the copies too.
+    let (_, normal) = one_slot("Tiled=yes\nUseNormalLight=yes\n", sprite());
+    let neutral = glasnost_render::compose::Shade::new(0, 53, 1000).rho;
+    assert_eq!((lit(&normal[0]).rows, lit(&normal[0]).rho), (53, neutral));
 }
 
 /// spec: S-0109 claim 27 (a zero-height first rectangle: one copy at (pₓ, pᵧ + v) and a warning
