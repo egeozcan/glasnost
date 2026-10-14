@@ -1,9 +1,9 @@
 ---
 id: Q-0197
 title: When a driving harvester "finishes entering" a cell, and how it scatters on a refusal (second route to unload)
-status: open
+status: answered
 related: [S-0402, S-0207, S-0208, S-0210]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

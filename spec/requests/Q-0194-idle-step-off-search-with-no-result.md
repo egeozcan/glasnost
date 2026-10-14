@@ -1,9 +1,9 @@
 ---
 id: Q-0194
 title: What an idle harvester does when its step-off search finds no cell
-status: open
+status: answered
 related: [S-0402, S-0212]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

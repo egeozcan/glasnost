@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197]
 supersedes: []
 ---
 
@@ -339,15 +339,46 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     holds at the first processing after the turn has ended; claim 11's facing range then holds at
     once. A refinery that is not a dock-unload refinery agrees to contact but never directs the
     harvester: the harvester stays in *enter*, processed at every standard delay, until something
-    else ends it (Edge cases). While the harvester drives, a tethered harvester in *enter* that
-    finishes entering a cell whose neighbour in step direction 0 holds its refinery also asks for
-    *unload* as in row 4; when the refinery refuses, the harvester scatters (S-0208, claim 13).
+    else ends it (Edge cases).
+
+    **Second route to unloading.** In the tick in which a driving harvester reaches its track
+    target, a tethered harvester currently in *enter*, in contact with a building that occupies
+    the neighbour in step direction 0 (map north) of its arrival cell, reports arrival to that
+    building. Merely crossing into a cell during a track does not count. The intermediate cell
+    of a two-cell curve does not count, nor does changing curves before the track target is reached.
+    The arrival position has already been applied and the finished track cleared. The report's
+    result is visible before any next track begins in that tick (S-0207 claim 12), and before
+    the cell-centre crushing of S-0210 claims 3 and 8. The cell-boundary crush-slowdown effects
+    of S-0210 claim 9 can therefore have occurred earlier, while the track was still running.
+
+    For a dock-unload refinery without another building-type entry exchange taking precedence,
+    the report queues *unload* without an immediate start, unless the refinery is currently in
+    *selling*. This route requires neither facing exactly 16384 nor a stopped locomotor, nor
+    being on the docking cell of Terms. It does not repeat claim 8's acceptance test: switching
+    the refinery off after contact forms does not by itself refuse this report. Starting the
+    queued *unload* still follows S-0215's start rules, and claim 11 still turns a harvester
+    that is not facing map east before unloading starts. Building types that also absorb,
+    repair, reload or otherwise take units inside belong to their entry-exchange specs, not
+    to this refinery-only result.
+
+    If the arrival report is refused, the harvester receives a vehicle scatter request
+    (S-0207 claim 16), forced, without a threat point, and not move-anywhere. Neither the
+    arrival report nor that scatter request takes a random draw: in particular there is no
+    infantry direction draw. The usual vehicle refusals still apply, so a harvester with a
+    destination keeps it and does not scatter. An accepting harvester takes the nearby-cell
+    search result around its own arrival cell, since its track has ended; if that search finds
+    no cell it gets no new destination. This refusal rule does not break contact or the tether,
+    change the current *enter* behaviour or queue a behaviour. Other arrival effects and the
+    refinery's sale can independently change those states. No behaviour processing or new
+    standard delay is caused by this report.
     - Backing: `measurable` (scenario H4 parts a and d for one-at-a-time, the power switch and
       low power, part g for the construction state and for being sold, part h for being erased,
-      H10 for the docking cell, the approach, the turn, the delays and the start of *unload*)
+      H10 for the docking cell, the approach, the turn, the delays and the start of *unload*,
+      H14 for the second route, its ordering, refusal request, retained state and draw count)
     - Confidence: medium; high for the docking cell at (3, 1) from the top-left cell; low
-      for being erased, for the refinery that is not a dock-unload refinery and for the second
-      route through a finished cell
+      for being erased and for the refinery that is not a dock-unload refinery; high for the
+      second route's track-completion event, the absence of facing and stopped tests and its
+      scatter-request options; medium for its ordering and retained state
 
 11. **Unloading.** A harvester counts as facing map east when its facing *f* (glossary) satisfies
     16256 ≤ *f* ≤ 16511. "The neighbouring cell" is the cell in step direction 6 (map west) of the
@@ -394,10 +425,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
     *Refinery sold while unloading.* At the first processing of a sale of the refinery, the refinery
     tells every unit docked with it to leave (S-0408, claim 6). A harvester in the unloading state leaves it at
-    once, scatters (S-0208, claim 13), queues *harvest* and starts it if it is ready to change
+    once, receives a forced vehicle scatter request without a threat point and not move-anywhere
+    (S-0207 claim 16), queues *harvest* and starts it if it is ready to change
     (it now is), keeping the part of its load that has not been paid; the sale then breaks off the
     contact. A harvester still in *enter* at that moment (tethered on or towards the docking cell)
-    queues *guard* instead and scatters.
+    queues *guard* instead and receives the same kind of vehicle scatter request, subject to
+    the usual refusals (a turning body or an existing destination can prevent movement).
 
     *Contact lost otherwise while unloading.* When the refinery leaves play without a sale (it is
     destroyed, for example) or otherwise breaks off contact with no run-away, the next processing
@@ -471,8 +504,17 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     movement zone is its type's own; the reach region is that of the centre cell for that zone,
     read for the deck when the harvester is on a bridge deck; deck mode when the harvester is on a
     bridge deck; no height condition; no further test; no reference cell, so the result is the
-    preferred cell at position (*N* mod *n*) of S-0212 claim 25. What a search with no result does
-    here is not determined (Open questions). In *guard*, the outcomes are:
+    preferred cell at position (*N* mod *n*) of S-0212 claim 25. When there is no result,
+    its destination is nevertheless replaced: it becomes the off-map cell (0, 0), not the
+    building, its current cell, or another search result (`quirks.harvester_failed_step_off_origin`,
+    Edge cases). The search takes no random draws, including on failure. It still queues
+    *guard* without an immediate start, and the next processing is scheduled with the standard
+    delay of the current *harvest* behaviour, taking its one ranged draw (S-0215 claim 6).
+    The failed search and this destination assignment do not themselves change body facing,
+    contact or tether. The house's no-field record was already set when it went idle and
+    is not changed by the step-off result. Subsequent movement and behaviour processing follow
+    their ordinary rules; the failed search is not retried by this idle processing.
+    In *guard*, the outcomes are:
 
     | Owner/rule condition | Outcome of this claim's guard rule |
     |---|---|
@@ -487,9 +529,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     later appear. Our AI gets the resuming behaviour by ordering idle harvesters to harvest. In our
     engine, the neutral and special houses retain the original computer-controlled rule.
     - Backing: `measurable` (scenario H5; its parts C and D for the no-field record; H11 part d for
-      the step-off search)
-    - Confidence: high for the guard results; medium for the 105-tick idle interval, for the
-      record never being cleared and for the step-off search settings
+      the step-off search; H11 part e for failure, the destination replacement, the queued
+      behaviour, retained state and draws)
+    - Confidence: high for the guard results and the failed step-off destination, queueing and
+      draw rules; medium for the 105-tick idle interval, for the record never being cleared,
+      for the step-off search settings and for the retained state
 
 ### Variants
 
@@ -765,7 +809,7 @@ For unloading, see F2.
 | returning | normal choice within too-far distance, accepted | contact; → requesting | standard delay |
 | returning | otherwise | waiting choice: stay, or drive to the queueing cell (claim 9) | standard delay |
 | requesting | — | queues *enter* | 1 tick |
-| idle | — | moves off the cell of a refinery-flag building; queues *guard* | standard delay |
+| idle | — | attempts to move off a refinery-flag or weed-flag building's cell; destination (0, 0) if that search fails; queues *guard* | standard delay of *harvest* |
 
 **Docking** (claim 10, which has the full table): at each processing of *enter*, one standard
 delay apart: refused and not tethered → break off contact, rest; not on the docking cell →
@@ -782,14 +826,21 @@ breaks off contact at once (S-0213); the next processing takes the first row and
 
 **Ordering.** Load steps, unloading payments and slave deliveries all happen in the harvester's
 (or slave's) turn, in the turn pass (S-0203, row 5); a payment in tick *n* is seen by production in
-tick *n* (S-0203, claim 8). A harvester takes no draws of its own except the standard delays and
-those of the behaviours it falls back to. A bale taken from a cell changes the cell at once (S-0401).
+tick *n* (S-0203, claim 8). The idle step-off and the second-route arrival report take no draws of their own. Their
+standard-delay processings, when due, still draw normally. Scatters use the vehicle rules of
+S-0207 claim 16, never the infantry direction draw of S-0208. A bale taken from a cell changes the cell at once (S-0401).
 When two harvesters load from the same cell during one tick, the later turn observes the cell
 after the earlier turn's take, as required by S-0203's update order. This spec does not otherwise
 select which harvester takes the earlier turn.
 
 ## Edge cases and quirks
 
+- **Failed idle step-off aims off-map** (claim 13).
+  `quirks.harvester_failed_step_off_origin` (default: original) replaces the destination with
+  off-map cell (0, 0) when no step-off cell qualifies. It does not preserve a previous
+  destination or mean no destination. With the switch off, that failure clears the destination
+  instead. Both settings queue *guard*, use the same standard delay and take the same draws.
+  Neither performs another search. No importer warning: occupancy, not bad data, causes this.
 - **Capacity 0** (claim 1, bad data, importer warning). The fill ratio is 0 / 0, which is not a
   number. Such a harvester counts as not full when it seeks and when it makes a load step, and as
   full in the check after a failed load step. So the harvester seeks, goes to
@@ -841,7 +892,7 @@ select which harvester takes the earlier turn.
 - `quirks.chop_rounding` (S-0205) covers F3.
 - `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8),
   `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
-  are this spec's own switches.
+  together with `quirks.harvester_failed_step_off_origin` (claim 13), are this spec's own switches.
 
 ## Import mapping
 
@@ -867,7 +918,9 @@ select which harvester takes the earlier turn.
 | Rules, `[General]`, `AIVirtualPurifiers` | virtual purifiers per difficulty index, original only, and for the neutral and special houses (entry 2, claim 12) | list of integers | empty list (original: undefined result; engine: 0 virtual purifiers, departure, importer warning; claim 12) |
 | Rules, building type section, `OrePurifier` | ore-purifier flag (Terms) | boolean | no |
 | Rules, building type section, `Refinery` | refinery flag: the refinery-flag building rules of claims 3, 11, 13 and 17 (the idle step-off, the unloading animation and the harvester's wait for it, the chrono miner's guard rule) | boolean | no |
-| Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): the refinery directs a harvester to its docking cell | boolean | no |
+| Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): directs a harvester to its docking cell, and queues unloading on an accepted track-completion report | boolean | no |
+| Rules, mobile type section, `SpeedType`, `MovementZone` | locomotion class and movement zone used by the idle step-off (claim 13); scatter uses the vehicle search settings of S-0207 claim 16 | vocabulary forms owned by S-0211 | S-0211 |
+| No data key | failed step-off destination (0, 0), track-completion report timing, facing-independent arrival acceptance and forced, no-threat-point, not-move-anywhere scatter options (claims 10, 13) | engine behaviour, not imported fields | fixed rules of claims 10 and 13 |
 | Rules, building type section, `Weeder` | weed-flag building: the idle step-off of claim 13 (and the weeders' docking, Edge cases) | boolean | no |
 | Rules, building type section, `FreeUnit` | free unit (Terms, claim 18; S-0408 owns the field's cost uses) | vehicle type name | none |
 | Rules, country section, `IncomeMult` | income factor *M* (claim 12) | decimal, single | 1.0 |
@@ -1231,13 +1284,15 @@ is wrong). *Runs:* 3.
 - *Expected:* the harvester drives forwards to the cell (*x*₀ + 3, *y*₀ + 1) from the refinery's
   top-left cell, for both foundation sizes; on that cell it turns on the spot until its facing is
   exactly 16384; *unload* becomes current after the first processing of *enter* that sees it on the
-  cell, facing 16384 and not moving; the processings of *enter* are spaced by values the standard
+  cell, facing 16384 and not moving, unless the separately recorded track-completion route
+  of H14 queued it earlier; the processings of *enter* are spaced by values the standard
   delay of *enter* allows (S-0215, claim 6). The run without the dock-unload flag: the harvester stays
   in *enter* for 3000 ticks and is never paid. Repeat from several approach sides (the harvester
   starting north, south, east and west of the refinery): the arrival facing varies, the final facing
   does not, and the harvester never reverses onto the cell.
 - *Falsified if:* another docking cell, a cell that depends on the foundation size, a reversing
-  approach, *unload* before the turn has ended, or a final facing other than 16384; in the last run,
+  approach, *unload* before the turn has ended through the processing route (the second route
+  is distinguished by H14), or a final facing other than 16384; in the last run,
   a payment.
 - *Runs:* 2 per approach side and foundation size, 1 without the flag.
 
@@ -1259,7 +1314,24 @@ is wrong). *Runs:* 3.
 - *Falsified if:* part a gives another cell; part b picks a cell that is not the nearest qualifying
   one to the top-left cell, or an occupied cell; part c leaves the harvester standing; part d always
   picks the same cell across start ticks, or a cell the prediction rules out.
-- *Runs:* 1 per blocking step in b, 2 for each of a and c, 5 start ticks for d.
+- *Part e (Q-0194, failed idle step-off):* no resources, an ordinary non-teleporting harvester
+  standing on a refinery-flag building's cell, and an owned dock-type building still present.
+  Block every cell through the largest search radius of S-0212 claim 25 with walls or
+  stationary units. Use the recorder to confirm that no cell qualifies; the harvester must
+  enter idle normally, without setting its state externally. Record its destination, current
+  and queued behaviours, body facing, contact, tether, no-field record, next-processing tick
+  and random-stream state immediately before and after the processing 105 ticks later.
+  Expected: destination cell (0, 0), *guard* queued, *harvest* still current until the ordinary
+  start rule runs, and the next-processing interval equal to the standard delay of *harvest*.
+  Exactly its delay draw occurs; no search draw. Facing, contact and tether are unchanged by
+  this processing; the no-field record remains set. No cell can be reached while blocked.
+  A preserved or absent destination, a retry search, no queued *guard*, a different delay or
+  an additional draw falsifies this. Repeat with one qualifying cell freed to distinguish
+  the failure from an ordinary step-off. On our engine only, the quirk off expects no
+  destination instead, with all the other outcomes unchanged.
+- *Runs:* 1 per blocking step in b, 2 for each of a and c, 5 start ticks for d; 3 blocked and
+  3 freed runs for e. Use game-speed index 2, 800 × 600, director and mods off for e,
+  with only its purpose-made map and any named override sections active.
 
 **H12. Contact lost and orders while unloading (claim 11).**
 - *Setup:* a human house with one refinery and two full harvesters, the second waiting at the
@@ -1306,6 +1378,46 @@ is wrong). *Runs:* 3.
   refund or another amount in part d.
 - *Runs:* 1 for each part and run.
 
+**H14. Track-completion route to unloading (claim 10; Q-0197).**
+- *Setup:* H10's human house and ordinary driving harvester, game-speed index 2 at 800 × 600,
+  director and mods off. A named test map/art variant gives the refinery a rectangular
+  foundation 3 cells along map x and 1 along map y, retains its dock-unload flag and has no
+  absorbing, repair or reload flags. The cell immediately map west of its docking cell is
+  then immediately map south of a refinery foundation cell. Lengthen the *enter* standard
+  delay in named test data to separate driving from behaviour processing. Use a neighbouring
+  ground vehicle factory's apron-clearing request (S-0417) to move a tethered harvester from
+  the docking cell onto that southern neighbouring cell before its next *enter* processing.
+  Vary the clearing tick and blockers to obtain the needed scatter destination. No orders
+  or recorder writes may manufacture a tether. Record whether this actually preserves
+  contact and tether.
+- *Procedure:* record straight approaches and a two-cell curved approach returning to a cell
+  with the contacted refinery map north. Compare the tick of crossing into each cell with
+  the tick of reaching the track target. Repeat with the refinery switched off after the
+  tether forms, and with scripted sale input near arrival. Vary timing until the sale run
+  records *selling* at arrival while contact, tether and *enter* still hold. Runs without
+  those preconditions are inconclusive for refusal, not evidence of acceptance.
+- *Observable:* per movement event, position, track target, facing, destination, current and
+  queued behaviours, contact, tether, refinery behaviour and power switch, and stream state.
+  Also record cell-centre crushing if a crushable overlay can be placed in the arrival cell,
+  and whether a next track begins in that same tick.
+- *Expected:* the report queues *unload* at track completion, never merely at the boundary or
+  the intermediate cell of a two-cell curve. It can queue with facing other than 16384 and
+  while movement continues, and queues while the refinery is switched off. No arrival draw
+  or new processing delay occurs. The queued result precedes cell-centre crushing and any
+  next track. A refusal from a refinery in *selling* sends the forced, no-threat-point,
+  not-move-anywhere vehicle request: zero draws and no behaviour queued by that request,
+  contact and tether retained by the refusal rule. A still-present destination refuses the
+  scatter; with no destination and the other vehicle gates passed, the destination is the
+  nearby-cell result around the arrival cell. Observe before independent sale or later
+  arrival effects release contact or alter behaviour.
+- *Falsified if:* a report at a boundary or intermediate cell, an arrival draw, a facing or
+  stopped requirement, refusal solely from the power switch, changed contact or behaviour
+  from the refusal itself, or a scatter replacing an existing destination. A run that never
+  forms the required tethered approach cannot decide the route; record it as inconclusive.
+- *Runs:* 3 qualifying runs per approach and power-switch variant; 3 qualifying sale/refusal
+  runs, separating destination-present and destination-absent cases when reachable. Use a
+  read-only recorder and scripted input; no harness modification is authorised here.
+
 ## Open questions
 
 - Whether *return* is ever given to a harvester in a skirmish (claim 2); scenario H9 logs it.
@@ -1320,16 +1432,17 @@ is wrong). *Runs:* 3.
   No observable effect is known, and scenario H1 would show one as a difference in its balance or
   timing runs.
 - Weeders and the harvester truce are out of scope (Edge cases).
-- What an idle harvester does when the step-off search has no result (claim 13).
-- The second route to *unload* through a finished cell next to the refinery (claim 10): when it can
-  occur in a skirmish; confidence low.
+- Whether H14 can reliably arrange every refusal precondition before the sale independently
+  releases contact. The arrival event, acceptance and scatter rules are specified in claim 10.
+  Reachability of the rare destination-absent refusal is not yet measured.
 - What a refinery that is not a dock-unload refinery does with a harvester in contact (claim 10,
   Edge cases); confidence low.
 - That a pre-placed building gets no free unit rests on S-0009 claim 40 (claim 18).
 
 ## Questions for the project lead
 
-None. The four quirk switches of this spec (`quirks.refinery_distance_wraps`,
+None. The five quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
+`quirks.refinery_distance_wraps`,
 `quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
 `quirks.unload_without_contact_stalls`, each default original) follow the project's quirk
 convention.
