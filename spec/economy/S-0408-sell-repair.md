@@ -2,13 +2,13 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0130, Q-0131, Q-0225, Q-0284]
+requests: [Q-0130, Q-0131, Q-0225, Q-0282, Q-0284]
 supersedes: []
 ---
 
@@ -99,7 +99,10 @@ house state, on or off). In addition:
    where *C* is *T*'s adjusted cost (claim 2) and *a*, *b* are the factors for *T*'s kind as they
    stand at that moment (Formulas F1). The refund does not depend on the object's health, on its
    veterancy, or on the price the house paid for it: a house whose cost-bonus buildings changed since
-   the purchase is refunded at the new factors. With a refund override the refund percentage and
+   the purchase is refunded at the new factors. The refund is added directly to the seller's
+   credit balance (S-0404 claim 4), not to house resource storage. Production's recorded start
+   price and cancellation refunds (S-0404 claims 3 and 7) do not replace this sale formula.
+   With a refund override the refund percentage and
    the cost-bonus product play no part. A free unit that cannot be placed pays this same refund
    with *r* = 1, as S-0402 claim 18 gives: *P* without an override, or the override form otherwise.
    - *Computer-controlled houses in the original.* The original applies the refund percentage only
@@ -292,7 +295,10 @@ house state, on or off). In addition:
     unit (Formulas F3), where *w* is the resource type's value per bale (S-0401) and *i* the country's
     income factor (S-0402, claim 12). A fraction of a unit is lost with the building, unpaid. The
     types are paid in the building's storage order, which shows only when the balance is negative
-    (F3). The house's own storage (glossary, *available credits*) does not change.
+    (F3). These payments go directly into the house's credit balance, not into its resource
+    storage. The house's own storage (S-0404 claim 4; glossary, *available credits*) does not
+    change. S-0404 owns available credits and spending; this claim owns only the sale payment,
+    using S-0402's country income factor.
     In ordinary play a building's storage stays empty, because harvested resources are paid
     straight into the house's balance (S-0402, claim 12), so this rule matters only when something
     else fills a building's storage; no such path is known in a skirmish.
@@ -435,6 +441,20 @@ house state, on or off). In addition:
     - Backing: `measurable` (scenario S10; S3 parts c and d for no-sprite orders)
     - Confidence: high (same-tick report, restart, ordinary and early completion); medium
       (gate and theater ranges, zero-delay completion and ranges that never report)
+
+### Sell and repair click messages
+
+18. **No transient sell/repair refusal text (Q-0282).** A click offering *no-sell* or
+    *no-repair* adds no battlefield text message. The refused action remains cursor feedback,
+    not a timed notice. An accepted building-sale, wall-sale or repair-switch click likewise
+    adds no text message of its own. A wall-sale order that applies but removes nothing
+    (claim 12) does not add refusal text either. Audio, sale effects and the repair indicator
+    remain governed by the existing claims and their owning specs; they do not imply a text
+    notice. Thus these clicks have no message text, position, list capacity or expiry timer,
+    and pausing has no sell/repair-message timer to stop. This does not suppress an independent
+    message from a trigger or another game rule.
+    - Backing: `measurable` (scenario S12)
+    - Confidence: high
 
 ## Formulas
 
@@ -917,6 +937,29 @@ tick number. Any game speed.
   an otherwise eligible wall cell, a covered or non-own wall receives a wall-sale order,
   the post-issue cover change alone prevents an already-issued wall sale, or the building
   control gives a wall-sale order instead of an object sale.
+
+**S12: sell/repair clicks do not add text (claim 18, Q-0282).**
+- *Setup:* tiny flat skirmish map, stock data, director and mods off, speed index 2,
+  800 × 600, one distant bystander computer player kept outside the observed patch.
+  Place own completed sellable buildings, an own damaged repairable building, a full-health
+  building, enemy buildings, own walls and empty cells. For an application-refused wall
+  sale only, use a named test-map override making its builder unsellable (S8 part b).
+  No message-generating triggers or superweapon effects during the test.
+- *Procedure:* clear selection. Hover and click each target in sell mode and then repair
+  mode, recording the action offered. Include accepted building and wall sales, a repair
+  switch, refused clicks on full-health and enemy buildings and empty cells, and the
+  application-refused wall sale. Repeat each three times in fresh games or after restoring
+  the test objects. Capture from before each click through 180 ticks afterward, and open
+  and close the options menu in a separate repetition. Void a run if the bystander acts in
+  the patch or is defeated.
+- *Observable:* tick-labelled screen captures, cursor action, order issuance/application,
+  sale or repair state, and any new battlefield text. Scripted input and a read-only
+  recorder may establish the application-refused wall case.
+- *Expected:* accepted actions retain their specified effects; every listed click adds zero
+  text messages, including the wall order that leaves the wall in place. No refusal text
+  appears before, during or after the pause.
+- *Falsified if:* a listed click itself adds any battlefield text message. Record its event
+  and duration rather than treating an independently generated message as a click notice.
 
 ## Open questions
 

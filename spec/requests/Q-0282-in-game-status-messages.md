@@ -3,7 +3,7 @@ id: Q-0282
 title: Which text messages does the game screen show, and for how long?
 status: answered
 related: [S-0411, S-0406, S-0408, S-0213]
-answered-by: [S-0411, S-0213]
+answered-by: [S-0411, S-0213, S-0408]
 ---
 
 ## Need
