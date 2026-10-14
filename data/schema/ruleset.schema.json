@@ -6909,6 +6909,11 @@
           "type": "boolean",
           "default": true
         },
+        "smudge_footprints_beyond_map_edge": {
+          "description": "A smudge footprint cell beyond the map edge is tested as a\nplaceholder cell that holds nothing and has the theater's first tile\ntype; off: a footprint beyond the map edge does not fit.",
+          "type": "boolean",
+          "default": true
+        },
         "sound_order_startup_draw": {
           "description": "Immediate-mode random ordering with no attack sample takes and discards one startup ordering draw; off: no discarded draw.",
           "type": "boolean",

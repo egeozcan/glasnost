@@ -556,6 +556,7 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
         let _scorch = w.rng.percent() < 50; // spec: S-0312 Constants (smudge choice 50 percent)
         // spec: S-0312 claim 26 (the smudge choice, large form: with n fitting candidates one draw R(0, n − 1); n = 0 takes no draw and places nothing)
         w.note("S-0312 claim 26: smudge types, the smudges of cells and the morphable flag of tilesets are not modelled, so no smudge type fits: n = 0, no draw and no smudge");
+        // spec: S-0312 Edge cases (quirks.smudge_footprints_beyond_map_edge is not consulted while no smudge type fits; it decides only footprint cells beyond the map edge)
     }
     // spec: S-0312 claim 19 (b) (each foundation cell: nearby point raw value, delay R(0, 3), list pick)
     if !tc.explosion.is_empty() {
