@@ -605,8 +605,10 @@ mod tests {
         assert!(!tab_lit(23, 29, false));
         assert!(tab_lit(23, 39, false));
         // The drawn tab follows the flash state.
-        let mut m = HudModel::default();
-        m.flash_extra = true;
+        let mut m = HudModel {
+            flash_extra: true,
+            ..HudModel::default()
+        };
         m.tabs[0] = TabView {
             count: 1,
             waiting: true,
