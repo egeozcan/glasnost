@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 19
+revision: 20
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -31,12 +31,11 @@ facing), S-0205 (number domains), S-0207 (ground vehicle movement), S-0208 (infa
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0213 (human
 orders), S-0214 (order targeting rules) and S-0215 (behaviours) are approved specs of the index in
 `spec/README.md`. Claim, formula, table and row labels cited from them are those of the revisions
-that index lists, except S-0208 and S-0212, which are cited at revisions 13 and 16, revised in the
-same batch as this revision to agree with claim 5. Their claim, table and row labels are unchanged
-from the revisions the index lists. This revision of the spec is signed off together with glossary
-revision 10, revised in the same batch.
+that index lists, except S-0207 claim 20, cited at revision 14 in this correction batch.
+Hand off that revision and this one together for the teleporting-vehicle reservation lifecycle
+and shared quirk. S-0208 and S-0212 use their current correction-batch texts where revised.
 
-The glossary cited is glossary revision 10. Its terms are used as defined
+The glossary cited is the current approved glossary. Its terms are used as defined
 there, in particular *cell*, *lepton*, *tick*, *infantry*, *vehicle*, *building*, *aircraft*,
 *overlay*, *house*, *human-controlled*, *bridge deck*, *scatter*, *disguise*, *height level*,
 *locomotor*, *recorder*, *computer-controlled* and *movement zone*. Three of the terms this spec
@@ -383,8 +382,9 @@ rank* and *elite weapon*), *n*
    - *Clearing the house.* When a mark is cleared, the infantry house goes back to none only when
      none of the three side positions is taken afterwards, by an infantry unit or by a terrain
      object's mark. Otherwise it stays as it was.
-   - *Vehicles.* A vehicle sets the vehicle-present flag of the cell layer its position is in. When it
-     starts a movement step into a neighbouring cell, it also sets that cell's flag at once, before
+   - *Vehicles.* A vehicle sets the vehicle-present flag of the cell layer its position is in.
+     Ordinary ground movement has the reservations below; teleporting movement has the separate
+     lifecycle described next. When it starts a movement step into a neighbouring cell, it also sets that cell's flag at once, before
      its position is in it. When the step is a two-cell curve (S-0207 claim 7), it sets the flag of
      both cells of the curve at once. A vehicle that drives on tracks clears a flag at three
      moments, each time in the cell layer of its position at that moment:
@@ -402,6 +402,20 @@ rank* and *elite weapon*), *n*
      occupant rows of claims 4 and 5 (row VP1 for the vehicle itself) still see it. Moving into a
      new cell during a track clears nothing. When hovering vehicles, ships and walking vehicles
      clear their flags is not established (Open questions).
+   - *Teleporting vehicles.* S-0207 claim 20 a and e owns their reservation lifecycle.
+     Fixing a landing point reserves its ground record, even for a high-bridge cell and even
+     when the nearby search uses deck mode. Replacing a remembered landing point clears that
+     point's ground reservation, including after a completed jump. Before any landing point
+     has been remembered, clearing uses the vehicle's actual position and height.
+     A jump onto a high bridge lists the vehicle on the deck and marks the deck record,
+     without clearing or transferring the ground reservation: immediately after an uninterrupted
+     landing both records have the vehicle-present flag. A later accepted destination clears
+     the remembered ground reservation and reserves the new landing cell's ground record.
+     The old deck mark stays until the next jump removes the vehicle from that cell.
+     The ground reservation is not a listed ground occupant, and reservation layer need not
+     match listing layer. This uses the shared `quirks.teleport_vehicle_ground_reservation`
+     (Edge cases). These are pointers with S-0207 claim 20's medium confidence and
+     `measurable` backing (its scenario D22, run 13), not additional driving release rules.
    - *Buildings.* A building sets the building-present flag of its foundation cells.
    - *Terrain objects.* A terrain object marks the side positions that its type's side-position
      pattern (Terms) gives, in the ground layer of its cell. It never sets the infantry house, and it
@@ -781,6 +795,17 @@ rank* and *elite weapon*), *n*
    listed there (claim 4, last consequence), and through a stale or forgotten infantry house (Edge
    cases) in a cell that holds only allied infantry that counts as moving. Scenario C26 uses the
    first.
+
+   **Teleport reservation consequence.** Before a teleporting vehicle jumps to an otherwise
+   empty high-bridge cell over level ground, an approaching ground vehicle reads the ground
+   reservation and gets *moving blocker* from row VR5. A vehicle approaching on the deck reads
+   the unmarked deck record and gets *clear* from row VR4. These consequences require no other
+   terrain restriction, occupant, reservation or exception to decide the outcome. After deck
+   placement both records are marked as claim 1 describes; the deck's listed vehicle also
+   counts through the occupant table. Reservation lifecycle belongs to S-0207 claim 20,
+   while this claim retains ownership of the entry outcomes.
+   - Backing: `measurable` (S-0207 scenario D22, run 13)
+   - Confidence: medium
 
    Consequences for infantry in the cell:
    - Allied infantry that does not count as moving gives *stationary friendly* through its own row,
@@ -1185,6 +1210,13 @@ Ordering stated as consequences:
   (`quirks.crush_slowdown_ground_layer`). The switch `quirks.crusher_entry_ground_layer` (default:
   the original) selects it. With it off, the row looks at the first vehicle listed in the cell
   layer that counts. Scenario C22 (c) distinguishes the two.
+- **`quirks.teleport_vehicle_ground_reservation`** (shared with S-0207 claim 20 a and e).
+  Default original: reserve ground for a vehicle's high-bridge teleport landing and keep that
+  reservation through deck placement, which also marks deck. Replacement clears the remembered
+  ground reservation; departure clears the actual deck mark. Off: reserve and clear the eventual
+  landing layer (deck on a high bridge, ground elsewhere), with no separate ground reservation
+  beneath a deck landing. S-0207 owns the lifecycle and the alternative; claims 1 and 5 here
+  own their occupancy and entry-outcome consequences.
 - **Rounding.** The rounding mode is S-0205's (claim 5, switch `quirks.chop_rounding`), and this
   spec defines no switch of its own for it. The conversions to integers in F1 and F2 truncate toward
   zero in either setting (S-0205 claim 7). The switch reaches F1 only through √̃, for sums of
@@ -2234,6 +2266,13 @@ outcome for the cell is *clear* or *cloaked blocker*, and row GC11 *no-move* oth
     cell by a row before GC9, the part cannot decide,
   - (b) the cursor over *Y* is no-move while the cursor over *Y*′ is no-move too. If the cursor over
     *Y*′ is move, or no point of *Y* is free of *M*'s picture, the part cannot decide.
+
+**Teleporting-vehicle companion measurement (claims 1 and 5).** S-0207 scenario D22,
+run 13 supplies the setup, procedure, recorder, repeats and falsification controls for the
+pending ground reservation, ground/deck entry probes, two-record placement, replacement clearing
+and next-jump deck clearing. Its pre-jump probes qualify only when the recorder captures that
+interval; ordinary input alone does not establish a delay before the jump. No measurement has
+been run for these claims.
 
 **Scenario C22: cell layers at a high bridge (Terms *cell layer*, claims 4 and 5 parts 4a and 5a,
 Edge cases).**
