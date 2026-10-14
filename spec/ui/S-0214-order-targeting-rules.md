@@ -2,11 +2,11 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452]
 supersedes: []
@@ -546,10 +546,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     additional unsynchronised draws under S-0701; these are separate from choosing the response.
     Selection's enslaved and deactivated lists (claim 12; S-0701 claim 17) do not replace an
     order's response list.
-    The marker at a move target is likewise created once per click, by the first object of the
-    selection, and only for the action *move* (not for *no-move*, which also orders a move, claim
-    11; low). The
-    original gives both for the local player's own clicks only. In our engine both are drawing and
+    Claim 30 owns the move-target marker: its eligible clicks, single-marker group feedback,
+    position and height. The original gives both kinds of feedback for the local player's own clicks only. In our engine both are drawing and
     sound only: they take no part in game state and make no draw from the scenario random stream
     (any response-choice and playback draws use the unsynchronised stream, as above), and an
     AI house's orders give neither (a design rule of ours: the original has no AI input path to
@@ -565,7 +563,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       extension of S-0202's state recorder that S-0010's scenario V2 part B uses), counts the raw
       values a click takes and compares the chosen response with the mapping of Formulas F5.
     - Confidence: high for one acknowledgement per click, medium for the draw and for the first
-      object being the one that decides, low for the marker being made only for *move*
+      object being the one that decides; marker eligibility and height are claim 30's
 
 15. **Objects that get no order.** An infantry unit, vehicle or aircraft that is berserk, or that
     is melee-linked while its type lacks the keep-acting flag, gets no order from any click on an
@@ -865,6 +863,47 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenario T21; S-0701 claim 17 for response ownership and silence)
     - Confidence: high for ordinary and on-screen type-expansion order; medium for whole-map
       creation order
+
+30. **Move-target marker.** A person's battlefield cell click shows one move-target marker
+    when the first selected object is a mobile actor that handles the click with action *move*.
+    This includes a force-move click whose action is *move*, and a move click converted into
+    *attack-move to a place* by claim 5. The same rule holds for a group: later selected objects
+    never add markers, and never supply one when the first object supplies none. Infantry,
+    vehicles and aircraft use this rule; a building's rally-point or guard-spot click does not
+    create this marker. A *no-move* click gives no marker even when claim 11 finds a nearby move
+    destination. Clicks on objects do not create it, including a move towards an object and
+    *attack-move on a target*. Attack, force-fire, enter, harvest, deploy and selection clicks
+    do not create it merely because the resulting behaviour may involve movement.
+
+    The marker appears as click feedback, not on arrival or when the order is applied. It marks
+    the input cell, not any nearby destination subsequently chosen by claim 11; its appearance
+    does not promise that an order can be queued or that the destination can be reached. An
+    accepted cell click in route mode uses the same feedback rule, even though claim 3 adds
+    route points rather than issuing an immediate order. A click refused before command
+    dispatch creates no marker.
+
+    Its fixed world position is the clicked cell's centre, not the precise point within the
+    cell at which the pointer was released. For integer cell coordinates (*x*, *y*), its
+    horizontal position is (256*x* + 128, 256*y* + 128) leptons, using exact integer arithmetic
+    with no rounding. Its world height is the terrain surface height at that centre
+    (S-0106 claim 2), plus 416 leptons for an intact high-bridge deck cell. Thus a click on
+    the deck shows the marker at deck height, never beneath it; the actor's own height and
+    current cell layer do not set the marker height. The original adds the deck lift only
+    on cells carrying the deck-entry mark of S-0212 claim 10, so an unmarked deck cell can
+    show the marker at terrain height instead; this drawing-only defect is corrected without
+    a quirk switch.
+
+    Only the screen of the person who clicked shows it, never an allied or enemy house's
+    orders or an AI house's orders. Claim 14's drawing-only and no-scenario-draw rule applies.
+    The marker uses the imported move-feedback animation, starts unattached at that position
+    with no requested loop delay and repeat factor 1, and stays there while it plays.
+    Animation playback and image placement remain S-0109 claims 1, 5, 7, 16 and 26's,
+    subject to claim 14's drawing-only restriction; animation effects cannot change game state.
+    - Backing: `measurable` (Scenario T22, with T2 for first-object suppression); the AI-house
+      and corrected unmarked-deck rules are design decisions tested on our engine, not claims
+      that the original reproduces them
+    - Confidence: high for cell-centre placement, action eligibility and single group feedback,
+      medium for the original's unmarked-deck manifestation pending T22
 
 ## Formulas
 
@@ -1605,6 +1644,7 @@ Ordering consequences:
 | Object type `Immune` | immune target (rows I27, V6, AC5, AC9, B8) | boolean (S-0003) | no |
 | Object type `LegalTarget` | legal target (claim 6 (a), attackable cell) | boolean (S-0003) | yes |
 | Object type `Bombable` | accepts bombs (row I19) | boolean (S-0003) | yes |
+| Rules `[General]`, `MoveFlash` | move-feedback animation of claim 30 | animation type name, registered under S-0004 claim 13 | none initially; a missing or empty later-layer value keeps the current reference (S-0006) |
 | Rules `[General]`, `EngineerCaptureLevel` | *c* of row I7 | decimal or percent (S-0003), stored in single precision | 1.0 (a health ratio of 1) |
 | Rules `[General]` `AttackCursorOnDisguise` | attack cursor on disguised units (claim 6) | boolean (S-0003) | no |
 | Rules, combat-damage section, `CanDetonateTimeBomb`, `CanDetonateDeathBomb` | row G3 | boolean (S-0003) | no (both keys) |
@@ -2472,6 +2512,45 @@ an already-selected object, or speech from a later ordinary-box addition falsifi
 corresponding rule. A type drag that merely retains interleaved candidate order across
 types, uses creation order for the on-screen expansion, uses drawing order map-wide,
 or gives a selection response falsifies its corresponding type-expansion rule.
+
+**Scenario T22: move-target marker clicks and bridge height (claim 30).**
+- *Setup:* a tiny purpose-made skirmish map with open flat ground, a slope, elevated flat
+  ground and an intact high bridge with accessible deck cells across its width. Use stock
+  types and art, one human player and one enemy bystander computer player, game-speed index 2,
+  800 × 600, director and mods off. The observed area contains the bridge and these ground
+  patches, own infantry, a tank, an aircraft, a rally-capable factory and a harmless target
+  object. Keep combat away from the observed area. Capture tick-labelled video and use a
+  read-only recorder for the resolved input cell, marker world position, actor order and
+  route points. Use scripted mouse/keyboard input where useful; no harness changes are assumed.
+- *Procedure:* select the tank alone and click two visibly separated pixels that resolve to
+  the same empty cell, allowing each marker to finish before the next click. Repeat on the
+  elevated flat patch, slope and every transverse row of the intact deck, clicking the deck
+  rather than a visible point beneath it. Repeat ordinary cell moves with infantry and
+  aircraft, then a mixed mobile group. Test force-move and Ctrl+Shift attack-move onto empty
+  cells, and a route-mode cell click. Contrast a blocked-cell *no-move*, ordinary attack,
+  force-fire, an object-directed move, an object-directed attack-move, an enter click and
+  a factory rally click. Repeat T2's first-object-refusal case. Finally observe the named
+  bystander's unit moving in a separate controlled run, without issuing a local move click.
+- *Observable:* marker count and first visible tick per click, fixed world position, resolved
+  input cell versus final destination, and the presence or absence of immediate orders and
+  route points. Repeat each case three times. Discard a click that picks a different cell or
+  object than intended, and apply the bystander void rule to all other runs.
+- *Expected:* one marker for each eligible first-object cell move, including attack-move to a
+  place and route feedback, regardless of group size; none in the contrasted cases. Two
+  pixels in the same cell yield identical marker positions. Position equals the cell centre
+  at its terrain surface height, with the deck lift on marked deck rows in the original.
+  Record separately whether an unmarked row leaves the original's marker at terrain height:
+  our engine must instead use deck height for every intact deck cell. S-0109 claim 26's
+  imported vertical draw shift can move image pixels without changing the recorded world
+  position, so pixel placement alone does not establish a wrong world height. Route feedback
+  accompanies added points, not an immediate order. Bystander moves give no marker.
+- *Falsified if:* an eligible click gives no marker, a contrasted click gives one, a group
+  creates multiple markers, two clicks within the same cell produce different world positions,
+  or the original's marked-deck marker lacks its deck lift. A deck-height original marker on
+  an unmarked row falsifies the stated original defect, not our corrected deck-height rule.
+  On our engine any intact-deck marker at terrain height fails the correction. Lack of a
+  known way to obtain a particular object-directed move is inconclusive for that sub-test,
+  not evidence that all object clicks create markers.
 
 ## Open questions
 
