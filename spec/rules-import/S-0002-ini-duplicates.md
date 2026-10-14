@@ -2,13 +2,13 @@
 id: S-0002
 title: INI duplicates and name resolution
 topic: rules-import
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-14
 measurements: []
-requests: [Q-0004]
+requests: [Q-0004, Q-0183]
 supersedes: []
 ---
 
@@ -21,6 +21,10 @@ twice; how two different names can collide; how type lists behave with repeated 
 values; and what happens when a second file is layered onto an already-loaded document, including
 which occurrence of a repeated name wins afterwards. The
 lexical rules (what counts as a section, key and value) are S-0001.
+
+Implementation scope is skirmish. Network games and campaigns are out of scope. Existing
+campaign material below identifies a diagnostic route for the general document rules, not a
+requirement to implement campaigns.
 
 ## Terms
 
@@ -266,6 +270,25 @@ S-0001):
       D8 to D10 test, since their test files hold no rules sections.)
     - Confidence: high
 
+13. **A missed lookup forgets an earlier winner only when it orders the table.** With the
+    default quirk settings, a lookup in a non-empty, not-ordered name table that finds nothing
+    leaves the table ordered and explicitly discards any previously remembered occurrence.
+    It does not merely leave the earlier occurrence remembered without remembering a new one.
+    A later lookup of that earlier name uses the bisection, so a duplicate can now resolve to a
+    different occurrence. The same rule applies to keys and section names.
+    - A miss in an already ordered table keeps its remembered occurrence, if any.
+    - A lookup whose name hash equals the remembered occurrence's hash is a hit, even if its
+      spelling differs. It returns that occurrence without ordering the table or forgetting it.
+    - A lookup in an empty table changes nothing. A successful lookup that orders a table
+      remembers the occurrence it finds instead of the previous one.
+    - These are clarifications of the existing state table, not an additional quirk or a
+      departure. The non-default name-comparison rule remains the one in Edge cases and quirks.
+    - Backing: `measurable` (D11 for forgetting after a miss; D10 for the remembered-hit
+      shortcut and forgetting peaks; D8 for successful lookups after ordering). The ordered-miss and empty-table distinctions are
+      `unmeasured`: keeping or dropping a remembered occurrence in an unchanged ordered table
+      gives the same winner, and an empty table has no occurrence to return
+    - Confidence: high
+
 ## Formulas
 
 ### Name hash
@@ -420,7 +443,7 @@ name hash of the name looked up (Formulas):
 | Ordered, and no remembered occurrence with hash *t* | Lookup, where the bisection over the working order *x* finds an occurrence | Returns that occurrence, which becomes the remembered one |
 | Ordered, and no remembered occurrence with hash *t* | Lookup, where the bisection over *x* finds nothing | Finds nothing. Nothing changes: a remembered occurrence, if any, stays |
 | Not ordered, and no remembered occurrence with hash *t* | Lookup, where the bisection over Sort(*x*, 0, *N* − 1) finds an occurrence | The working order becomes Sort(*x*, 0, *N* − 1) and the table is ordered. Returns that occurrence, which becomes the remembered one |
-| Not ordered, and no remembered occurrence with hash *t* | Lookup, where the bisection over Sort(*x*, 0, *N* − 1) finds nothing | The working order becomes Sort(*x*, 0, *N* − 1) and the table is ordered. Finds nothing, and nothing is remembered |
+| Not ordered, and no remembered occurrence with hash *t* | Lookup, where the bisection over Sort(*x*, 0, *N* − 1) finds nothing | The working order becomes Sort(*x*, 0, *N* − 1) and the table is ordered. Finds nothing and forgets any previously remembered occurrence (claim 13) |
 | Holds exactly its peak count, and that count is a forgetting peak (Constants) | An occurrence is added (by a fresh load, or as a layered load's new entry or new section) | The table forgets its remembered occurrence, and its new number of occurrences becomes its peak count. The new occurrence goes at the end of the working order, and the table is not ordered |
 | Any other state | An occurrence is added (as above) | The new occurrence goes at the end of the working order, and the table is not ordered. If the table now holds more occurrences than its peak count, that number becomes its peak count. The remembered occurrence, if any, stays |
 | Any | A layered load replaces an occurrence | The occurrence that the line's lookup returned leaves the working order. The others keep their relative order. The table stays ordered if it was, and forgets its remembered occurrence. The new entry is then added as in the two rows above |
@@ -505,6 +528,7 @@ Two consequences, stated as results:
 | D-l | Test file for D9 and D10: a loose file named as in row D-h, holding two sections named like the first Allied mission's section, the first with the single line `Briefing=` X, the second with the single line `Briefing=` Y. Variant (b) of D9 adds a section `[Filler8]` with the single line `Filler=1` after the two, variant (c) adds it before them | *h*(`Filler8`) = 1645288982. No section of the file is one the rules reading looks up, so D9 and D10 test the original's rule, not claim 12's departure |
 | D-m | Loose copy for D10: the shipped mission information file, with the first Allied mission's section moved unchanged to the end, followed by a new last section `[Filler999]` with the single line `Filler=1`. Variant (d) of D10 adds an empty section header `[Filler998]`, with no line under it, immediately before the moved section | Found before the shipped file (S-0005), as row D-j. *h*(`Filler999`) = 1330041197 |
 | D-n | Filler sections for D10: `[Filler0]`, `[Filler1]`, … in that order, each with the single line `Filler=1`, placed in row D-l's test file before its two sections. Variant (b) uses as many as make the table of section names hold 39 sections just before the loose copy's last section is added; variants (c) and (d) use one more, so that the table holds 40 at that point | The number of filler sections follows from the number of sections of the mission information file. No section is ever removed, so the table's peak count is its number of sections. In (c) the table holds 40, a forgetting peak (Constants), so the addition makes the table forget its remembered occurrence. In (b) it holds 39, which is not one |
+| D-o | D11 loose mission information file: only the first Allied mission's section with `Briefing=` Z, followed in variant (b) by `[Filler0]` with `Filler=1`, and in variant (c) by that section and then `[Filler1]` with `Filler=1` | All values are text, with a line feed after every line. X and Y in the earlier file are D8's briefing labels; Z is the first mission's own briefing label. Missing briefing uses no label. The filler sections are initially absent, create no game setting, and have signed name hashes −1429695458 and −1277975201. This is named diagnostic data, not a new campaign import requirement |
 
 ## Measurement scenarios
 
@@ -696,6 +720,27 @@ one run per variant is enough, and a second run only guards against operator err
     forgetting peak before the loose copy's lines were remembered, and nothing later made the table
     forget).
   - Deterministic: one run per variant is enough.
+
+- **D11 (a missed lookup in a not-ordered table; claim 13, Q-0183).**
+  - Setup: the earlier file of row D-l with exactly the two mission sections and no filler
+    sections, plus the loose mission information file of row D-o. Variant (a) has no filler
+    section in the later file; (b) adds its first filler section only; (c) adds both. Use the
+    measurement setup, director and mods off, any game speed, no engine add-ons. This retains
+    D10's original-game diagnostic route only; campaign implementation remains deferred.
+  - Procedure: start the first Allied mission, open its briefing, and capture the text as in
+    D8. One run per variant suffices because no random choice affects the result. Remove both
+    named test files afterwards. No bench change is required; manual input or scripted input
+    and a screen capture suffice.
+  - Observable: which of X, Y and Z is displayed as the briefing.
+  - Expected: Z in (a) and (b), Y in (c). The load writes Z into the initially winning first
+    copy. In (b) the first filler's addition leaves that copy remembered and the table not
+    ordered. In (c) the second filler's absent-name lookup orders the table and forgets that
+    copy; after its addition, the final mission lookup finds the second copy, which still
+    holds Y. There are only four section occurrences, below the first positive forgetting
+    peak, so growth does not explain the forgetting.
+  - Falsified by: Z in (c) with Z in both controls, supporting retention across the missed
+    lookup; any other result also contradicts the predicted name-table behaviour. Y in (b)
+    would already contradict retention after addition, so (c) alone is not a sufficient test.
 
 ## Open questions
 

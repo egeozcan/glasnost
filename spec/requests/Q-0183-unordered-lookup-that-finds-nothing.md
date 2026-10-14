@@ -1,9 +1,9 @@
 ---
 id: Q-0183
 title: Does a lookup that sorts an unordered name table and finds nothing forget the remembered occurrence?
-status: open
+status: answered
 related: [S-0002]
-answered-by: []
+answered-by: [S-0002]
 ---
 
 ## Need
