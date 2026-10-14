@@ -578,9 +578,11 @@ impl HouseShroud {
         !was
     }
 
-    /// S1 row 6, area reveal: row 1 followed by row 2.
+    /// S1 row 6, area reveal: k₁ from k as row 1 gives, k₂ from k₁ as row
+    /// 2 gives, k′ = min(k₂, G); the pending mark as rows 1 and 2 change it.
     fn area_reveal(&mut self, i: usize) -> bool {
-        // spec: S-0409 S1 row 6 (area reveal: as row 1 followed by row 2)
+        // spec: S-0409 S1 row 6 (r10: k₁ = −1 when k = 1, else k − 1; k₂ = 1 when k₁ = −1, else k₁ + 1; k′ = min(k₂, G), G unchanged)
+        // spec: S-0409 claims 12 and 17 (a cell inside a hostile gap field is marked pending unless a sight of the house covers it; outside, the cells stay explored)
         let became = self.add_sight(i);
         self.remove_sight(i);
         // spec: S-0409 S1 row 6 (area reveal: explored, seen and marked surrounded)

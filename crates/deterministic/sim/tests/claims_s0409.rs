@@ -540,6 +540,39 @@ fn claim_17_area_reveal() {
     assert!(!shroud::explored(&w, B, c(3, 0)));
 }
 
+// spec: S-0409 S1 row 6 (r10, area reveal: k₁ = −1 when k = 1, else k − 1; k₂ = 1 when k₁ = −1, else k₁ + 1; k′ = min(k₂, G), G unchanged; explored, seen and marked surrounded)
+// spec: S-0409 claim 17 (inside a hostile gap field the cell is marked pending unless a sight of the house covers it)
+#[test]
+fn s1_row_6_area_reveal_counts() {
+    let mut w = game(&rules());
+    spawn(&mut w, Kind::Building, "GAP", 1, 0, 0);
+    let _eye = spawn(&mut w, Kind::Vehicle, "EYE1", 0, -1, 0);
+    step(&mut w);
+    step(&mut w);
+    // (k, G) = (1, 1): inside the field, no sight of A.
+    assert_eq!(shroud::counts(&w, A, c(2, 0)), Some((1, 1)));
+    // (k, G) = (−1, 1): inside the field, under A's sight.
+    assert_eq!(shroud::counts(&w, A, c(-1, 0)), Some((-1, 1)));
+    // (k, G) = (1, 0): never seen, far from the field and from any sight.
+    assert_eq!(shroud::counts(&w, A, c(12, 12)), Some((1, 0)));
+    assert!(!shroud::explored(&w, A, c(12, 12)));
+    for p in [c(2, 0), c(-1, 0), c(12, 12)] {
+        shroud::area_reveal(&mut w, A, Pos::centre(p, 0), 1);
+    }
+    // k = 1: k₁ = −1, k₂ = 1, k′ = min(1, 1) = 1; marked pending.
+    assert_eq!(shroud::counts(&w, A, c(2, 0)), Some((1, 1)));
+    assert!(shroud::explored(&w, A, c(2, 0)));
+    assert!(shroud::seen(&w, A, c(2, 0)));
+    assert!(shroud::pending(&w, A, c(2, 0)));
+    // k = −1: k₁ = −2, k₂ = −1, k′ = −1; not pending.
+    assert_eq!(shroud::counts(&w, A, c(-1, 0)), Some((-1, 1)));
+    assert!(!shroud::pending(&w, A, c(-1, 0)));
+    // k = 1, G = 0: k₁ = −1, k₂ = 1, k′ = min(1, 0) = 0; explored and kept.
+    assert_eq!(shroud::counts(&w, A, c(12, 12)), Some((0, 0)));
+    assert!(shroud::explored(&w, A, c(12, 12)));
+    assert!(!shroud::pending(&w, A, c(12, 12)));
+}
+
 // spec: S-0409 claim 18 (regrowth: pending cells go at the regrowth step; sight-explored cells do not regrow)
 #[test]
 fn claim_18_regrowth() {

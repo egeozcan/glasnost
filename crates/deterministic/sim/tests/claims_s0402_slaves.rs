@@ -129,12 +129,7 @@ fn game_on(r: &Ruleset, ore: &[(CellXY, u8, u8)], civilian: bool) -> World {
 }
 
 /// As [`game_on`], with the map's trigger data `t`.
-fn game_with_triggers(
-    r: &Ruleset,
-    ore: &[(CellXY, u8, u8)],
-    civilian: bool,
-    t: Triggers,
-) -> World {
+fn game_with_triggers(r: &Ruleset, ore: &[(CellXY, u8, u8)], civilian: bool, t: Triggers) -> World {
     let mut map = testkit::empty_map(SIZE);
     map.triggers = t;
     for &(c, o, d) in ore {
