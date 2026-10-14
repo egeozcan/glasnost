@@ -11,7 +11,12 @@
 //! `GLASNOST_LIVE_INFANTRY=1` only maps with infantry, and
 //! `GLASNOST_LIVE_TURRETS=1` only maps with turreted vehicles (whose owner's
 //! turreted vehicles are then ordered). A 640 × 400 close-up of the first
-//! ordered unit is written during the move.
+//! ordered unit is written during the move. The move target is an open
+//! cell near 6 cells right and 4 down of the first unit (`open_target`).
+//! `GLASNOST_LIVE_INDEX=i,j,…`
+//! runs only the maps at those indices of the found list, and
+//! `GLASNOST_LIVE_OUT` names a folder under `local-lane/` instead of
+//! `screens`.
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -51,6 +56,63 @@ fn files(dir: &std::path::Path) -> Vec<PickedFile> {
         out.push(PickedFile { path: name, source });
     }
     out
+}
+
+/// The output folder under `local-lane/` (`GLASNOST_LIVE_OUT`, default
+/// `screens`).
+fn out_dir() -> std::path::PathBuf {
+    let sub = std::env::var("GLASNOST_LIVE_OUT").unwrap_or_else(|_| "screens".into());
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../local-lane")
+        .join(sub);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// Whether map index `n` is wanted (`GLASNOST_LIVE_INDEX`, every map when
+/// unset).
+fn index_wanted(n: usize) -> bool {
+    std::env::var("GLASNOST_LIVE_INDEX").map_or(true, |v| {
+        v.split(',')
+            .filter_map(|x| x.trim().parse::<usize>().ok())
+            .any(|i| i == n)
+    })
+}
+
+/// A move target near 6 cells right and 4 down of `from` (the lane's own
+/// choice): the first cell, ring by ring, that is usable, has the
+/// passability category of `from`, and whose 3 × 3 block and the cells
+/// that are drawn in front of it hold no object, so the moved unit is
+/// neither stopped short nor hidden behind trees or buildings.
+fn open_target(w: &glasnost_sim::world::World, from: glasnost_map::CellXY) -> glasnost_map::CellXY {
+    use glasnost_map::CellXY;
+    use glasnost_sim::world::Layer;
+    let base = CellXY::new(from.x + 6, from.y + 4);
+    let category = w.cells.category(from);
+    let open = |c: CellXY| {
+        (-1..=2).all(|dx| {
+            (-1..=2).all(|dy| {
+                let n = CellXY::new(c.x + dx, c.y + dy);
+                w.cells.usable(n)
+                    && w.cells.category(n) == category
+                    && w.cells.list(n, Layer::Ground).is_empty()
+            })
+        })
+    };
+    for r in 0..8i32 {
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if dx.abs().max(dy.abs()) != r {
+                    continue;
+                }
+                let c = CellXY::new(base.x + dx, base.y + dy);
+                if open(c) {
+                    return c;
+                }
+            }
+        }
+    }
+    base
 }
 
 fn env_num(name: &str, default: usize) -> usize {
@@ -105,8 +167,7 @@ fn live_maps_move_and_draw() {
     let filter = std::env::var("GLASNOST_LIVE_FILTER")
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/screens");
-    std::fs::create_dir_all(&out_dir).unwrap();
+    let out_dir = out_dir();
     pollster::block_on(async {
         let mut vfs = Vfs::default();
         vfs.mount_install(files(std::path::Path::new(&dir))).await;
@@ -118,7 +179,9 @@ fn live_maps_move_and_draw() {
             if done >= want {
                 break;
             }
-            if !filter.is_empty() && !m.name.to_ascii_lowercase().contains(&filter) {
+            if !index_wanted(n)
+                || (!filter.is_empty() && !m.name.to_ascii_lowercase().contains(&filter))
+            {
                 continue;
             }
             let bytes = vfs.read(&m.file).await.unwrap();
@@ -208,7 +271,7 @@ fn live_maps_move_and_draw() {
                 live.click(house, &mut selection, ClickOn::Object(id), mods);
             }
             let first = live.world.obj(own[0]).unwrap().pos.cell();
-            let target = glasnost_map::CellXY::new(first.x + 6, first.y + 4);
+            let target = open_target(&live.world, first);
             let report = live.click(
                 house,
                 &mut selection,
@@ -380,8 +443,7 @@ fn live_maps_fight_and_draw() {
     let filter = std::env::var("GLASNOST_LIVE_FILTER")
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/screens");
-    std::fs::create_dir_all(&out_dir).unwrap();
+    let out_dir = out_dir();
     pollster::block_on(async {
         let mut vfs = Vfs::default();
         vfs.mount_install(files(std::path::Path::new(&dir))).await;
@@ -395,7 +457,9 @@ fn live_maps_fight_and_draw() {
             if done >= want {
                 break;
             }
-            if !filter.is_empty() && !m.name.to_ascii_lowercase().contains(&filter) {
+            if !index_wanted(n)
+                || (!filter.is_empty() && !m.name.to_ascii_lowercase().contains(&filter))
+            {
                 continue;
             }
             let bytes = vfs.read(&m.file).await.unwrap();
