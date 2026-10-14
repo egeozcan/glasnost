@@ -2,7 +2,7 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -485,7 +485,9 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     that house covers it. Which houses it is made for is the ordering spec's. In the original, S-0011 claims
     26 and 36 reveal only for the local player. Our engine applies those reveals to every
     player house, human or AI, observers included, as their documented departure under claim 1.
-    Claim 26 skips houses whose whole-map-revealed mark is set, whereas claim 36 does not.
+    S-0011 claim 26 skips each house whose whole-map-revealed mark is set, whereas its
+    claim 36's drop-zone reveal does not. This exception is tested separately for each house,
+    not against the local player's mark for all houses.
     The all-player-house scope is a design rule, not an observation of the original
     - Backing: `measurable` (scenario V14 for the expiry inside a hostile field and the permanence
       outside; the area and the centre are S-0011's scenarios T16 and T21, which observe the disc
@@ -1294,8 +1296,12 @@ listed under edge cases. The passive-country rule, sight boundaries and power-in
 satellite behaviour are fixed compatibility rules, not optional quirks; their classification
 above changes no behaviour or quirk default.
 
-Trigger reveals in the original are local-player-only. Approved S-0011 claims 26 and 36
-separately state our engine's all-player-house departure; claim 17 here now makes that
-attribution explicit. S-0110's current draft carries the non-legal-cell exception and its
-claim-21 persistence qualification. Confirm these agreements together at hand-off; no
-human-only trigger reveal in our engine or ownership-only discovery rule is intended.
+Trigger reveals in the original are local-player-only. S-0011 claims 26 and 36 separately
+state our engine's all-player-house departure, including observers; claim 17 here agrees,
+with the whole-map-revealed exception tested per house for the waypoint reveal only.
+S-0003 claim 14's trigger-name exceptions agree with S-0011 claims 5 and 21 and do not
+restrict reveal recipients. At joint sign-off, confirm these exceptions and reveal scope
+against the S-0003, S-0011 and S-0409 versions being handed off together. S-0110's current
+draft carries the non-legal-cell exception and its claim-21 persistence qualification.
+Confirm that agreement too. No human-only trigger reveal in our engine or ownership-only
+discovery rule is intended.
