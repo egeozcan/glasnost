@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213]
 supersedes: []
 ---
 
@@ -49,7 +49,7 @@ screen rows.
 | bib | The building's bib sprite (glossary): an optional flat sprite that a building's art can name, drawn on the ground under and around the building. It is drawn except while the building is in the construction state (so never during build-up or selling) and while a gate is opening or closing (claim 13; S-0108, claims 4 and 7). |
 | deploying sprite, roof-deploying sprite | Optional sprites (glossary) that a building's art can name. While the building is unloading, one of them is drawn in place of its body sprite (claim 13). |
 | under-door sprites | The under-door sprite and the under-roof-door sprite (glossary): optional flat sprites that a building's art can name, drawn under the opening door while the building is unloading. |
-| door sprite | An optional flat sprite that a building's art can name, drawn while the building is unloading and its door is opening, open or closing. |
+| door sprite | An optional flat sprite that a building's art can name, drawn throughout unloading, including while its door is closed, opening, open or closing (S-0108, claim 23). |
 | slot animation | An animation that a building keeps in one of its slots (S-0108). It is an animation object of its own, created at the building but not attached to it (claim 17). A building's turret drawn as a sprite is one. |
 | turret slot depth adjustment | The depth adjustment of a building type's turret slot (Import mapping). It is the depth adjustment of the turret slot animation (claim 17) and also of a voxel turret (claim 13). |
 | voxel shadow | The flat shadow image that a vehicle or aircraft drawn as a voxel model casts (S-0105, claims 29 to 31). |
@@ -567,15 +567,23 @@ screen rows.
       fixed row.
 
     Where an aircraft's shadow and its own body overlap and both pass the depth test, the body is
-    shown undarkened: the shadow never paints over its own aircraft. For a vehicle it is not settled
-    whether its shadow paints over its own body where they overlap (Open questions).
-    - Backing: `measurable` (scenario D23). The bias value itself is tested only relative to the
+    shown undarkened: the shadow never paints over its own aircraft. For vehicles, a freshly made
+    shadow excludes non-transparent pixels of the completed body, turret and barrel image,
+    independently of their scene-depth acceptance (S-0105, claim 39). Thus qualifying own-image
+    overlaps are undarkened on flat ground, on slopes and for hovering vehicles. This is not an
+    unconditional shadow-before-body rule: a reused shadow retains its earlier own-image exclusions
+    and can darken current own-image pixels that filled an earlier hole, or leave a gap where an
+    earlier part pixel has disappeared. S-0105 claim 39 owns those exclusions and their reuse,
+    including `quirks.voxel_shadow_cached_cutouts` (default original; off: exclude the current
+    completed part image on every appearance).
+    - Backing: `measurable` (scenario D23, including D23 (d) for Q-0213). The bias value itself is tested only relative to the
       body's (both use *U*); whether an aircraft's body shows over its own shadow is `unmeasured`, because an
       aircraft's shadow and its own body overlap only when it is on or very near the ground, where
       the shadow point is not settled.
     - Confidence: high for the drawing inside the object's own drawing (and so its layer and list
-      place), the reader-only test, the bias *U* and the upright profile; medium for an aircraft's
-      body showing over its own shadow
+      place), the reader-only test, the bias *U*, the upright profile and the fresh vehicle
+      own-image exclusions and their retention; medium for visible vehicle overlap and for an
+      aircraft's body showing over its own shadow
 
 ### Placement of sprite images
 
@@ -1288,7 +1296,9 @@ building's key. Between two units, the one later in the list is drawn on top whe
 | art, vehicle image | `WalkFrames`, `FiringFrames` | walking and firing frame counts *F*<sub>w</sub>, *F*<sub>f</sub> (claim 22) | integer, image frames | 12; 0 |
 | art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death); no stock file sets them (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer: counts and start frames in image frames, *R*<sub>d</sub> in ticks per image frame | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
 | rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
-| rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21) | boolean | no |
+| rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21), or the voxel shadow (claim 18; S-0105 claim 31) | boolean | no |
+| art, vehicle image | `DisableShadowCache`, `DisableVoxelCache` | reuse controls for D23 (d); full mapping and defaults owned by S-0105 | boolean | S-0105 Import mapping |
+| none | none | vehicle own-image exclusion has no ordering key (claim 18); S-0105 claim 39 owns the cached-cutout quirk and model inputs | not applicable | fresh own-image exclusions; retain exclusions on reuse |
 | rules, vehicle type | `SmallVisceroid`, `LargeVisceroid` | either one suppresses the own shadow of a vehicle drawn as a sprite (claim 21) | boolean | no |
 | rules, vehicle type | `TooBigToFitUnderBridge` | the *U* − 18 flat row near a bridge (claim 13) | boolean | no |
 | rules, vehicle type | `Turret` | the turret path of a vehicle drawn as a sprite (claim 22); also a default of `Facings` | boolean | no |
@@ -1726,6 +1736,18 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     drawing. Falsified if the shadow is cut along a row that stays fixed while the vehicle moves
     (the result of the flat profile, as for the infantry shadow in D8).
 
+  - (d) Own vehicle image (Q-0213). Use S-0105 MS-27's named test model, cache controls and
+    no-shadow comparison at speed index 2, with one bystander computer player outside the observed
+    area. Capture each matching pose twice on flat ground, on a ramp and for a hovering vehicle
+    resting and rocking. Expected: with fresh shadows, every qualifying own-body overlap pixel
+    equals the no-shadow control, and qualifying footprint pixels outside the own image darken.
+    With shadow reuse, a newly filled body pixel can darken and an earlier exclusion can persist
+    as a gap, including sharing between same-type objects. Repeat the two frame orders after
+    program restart as MS-27 specifies. Darkened own pixels in the fresh runs, a reversal on
+    slopes or hovering, or loss of retained exclusions with verified reuse falsifies the claim.
+    Changed keys or invalidated caches void the reuse comparison. The full frame and rocking
+    controls, turret/barrel inclusion and freshness rules are owned by S-0105 claim 39 and MS-27.
+
 - **D24, centred placement (claim 19).** Setup: a flat map at level 0 with a stock building, a
   stock infantry unit standing alone in a cell (its position from the standing-position rules of
   S-0208) and a stock tree. Prefer sprites whose canvas width or height is odd. For each, read from
@@ -2095,8 +2117,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   this spec.
 - **Shadow point of voxel models:** where the shadow draw point of a vehicle or aircraft lies (claim 18), in
   particular how high an airborne unit's shadow is drawn, is given by its movement type and has not
-  been determined; nor has whether a vehicle's shadow paints over its own body where they overlap.
-  This spec owns the drawing order and depth of the shadow; the point itself depends on the
+  been determined. Vehicle own-image overlap is settled by S-0105 claim 39 and claim 18 here:
+  fresh exclusions leave own pixels undarkened, but retained cached exclusions can differ from
+  the current image. This spec owns the drawing order and scene depth of the shadow; the point itself depends on the
   movement types (S-0106 and the movement specs).
 
 - **Situational unit term *s*:** besides the ordinary −1, these cases are known but only partly
