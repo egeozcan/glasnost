@@ -2,7 +2,7 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -310,8 +310,10 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     a sight of *H* reaches again before that tick stays explored only if it was already explored
     and marked surrounded when the sight arrived (S1 row 1); claim 15 gives the exception after
     a whole-map re-cover. So a cell left by
-    sight inside a hostile gap field stays visible for 1 to 120 ticks, depending on when it was
-    left.
+    sight inside a hostile gap field stays visible for 1 to 120 ticks when regrowth is off,
+    depending on when it was left. When regrowth is due in the same tick, claim 18's combined
+    result applies, including at tick 0: the sweep does not remove a pending cell from that
+    regrowth step's affected set.
     - Backing: `measurable` (scenario V8, the recorder logs the tick numbers; the place of the
       sweep before the turn pass by scenario V13 part C, which needs a sight added on a sweep tick,
       the only case where the order shows: see `quirks.recover_keeps_pending`)
@@ -456,8 +458,9 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
 
     A plain reveal adds no sight, so by claim 12 the newly
     explored cells are marked pending (their count is 1 if no sight of *H* has ever covered them)
-    and become unexplored again at the next re-cover sweep: the attacker is glimpsed for 1 to 120
-    ticks (Edge cases, `quirks.fire_reveal_expires`). With the lobby shroud setting off (claim 3)
+    and become unexplored again at the next re-cover sweep: with regrowth off, the attacker is
+    glimpsed for 1 to 120 ticks (Edge cases, `quirks.fire_reveal_expires`). Regrowth can consume
+    the pending mark earlier (claim 18). With the lobby shroud setting off (claim 3)
     every cell is explored with count 1. An undiscovered firer could therefore mark its reveal
     pending and produce shroud in a game that started without it. However, an ordinary ground
     firer created after game start is already discovered on placement (claim 20), even if no
@@ -488,7 +491,7 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     S-0011 claim 26 skips each house whose whole-map-revealed mark is set, whereas its
     claim 36's drop-zone reveal does not. This exception is tested separately for each house,
     not against the local player's mark for all houses.
-    The all-player-house scope is a design rule, not an observation of the original
+    The all-player-house scope is a design rule, not an observation of the original.
     - Backing: `measurable` (scenario V14 for the expiry inside a hostile field and the permanence
       outside; the area and the centre are S-0011's scenarios T16 and T21, which observe the disc
       and its centre but not the expiry)
@@ -508,6 +511,18 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     Seen states are unchanged except that the sights make their cells seen. The sights' resulting
     count changes are those of uncounted sight (Edge cases, `quirks.uncounted_sight`), not an
     extra lasting counted sight. No internal ordering of cell updates is required.
+
+    When a regrowth step and a re-cover sweep are due in the same tick, including tick 0,
+    regrowth has its effect before the sweep. A cell pending before that regrowth step is
+    therefore affected even on a sweep tick: if explored, it loses exploration and clears its
+    neighbours' surrounded marks as above, except where the restoring sights protect them.
+    The sweep does not undo that neighbour effect. With no restoring sight, the pending cell
+    is unexplored after the tick, and its neighbours that remain explored with their marks
+    cleared become eligible for the next regrowth step. Running the sweep first would instead
+    consume the pending mark without this erosion of the neighbours; that is not the required
+    result. If regrowth
+    restores exploration under a qualifying sight and clears the pending mark, the same-tick
+    sweep does not re-cover that cell merely because it was pending before regrowth.
     Consequences. A cell explored by a sight or a plain reveal is always marked surrounded,
     whatever its neighbours, so a step affects no cell while no cell holds a pending mark and
     no cell was explored by a reveal that leaves the mark clear (some trigger reveals outside
@@ -526,10 +541,16 @@ height lift *L(z)* is S-0101's (Formulas F2). In addition:
     - Backing: `measurable` (scenario V11, with a named test copy of the rules: parts A and B that
       sight-explored cells do not regrow, part C that pending cells go at the regrowth step and
       that the ring follows one step later each; part D the shroud-off consequence; part E the
-      zero-rate and non-positive-period cases); the re-application of the sights as uncounted
-      sights is `unmeasured` (its effect is a count one lower on the rim cells, seen only through
-      the interleaving of V13 part A, which does not use regrowth)
-    - Confidence: low
+      zero-rate and non-positive-period cases; part F for the combined result on a sweep tick).
+      A pending-cell collision specifically at tick 0 is `unmeasured`: no scenario here
+      establishes a pending cell before tick 0's periodic work; its result follows the same
+      coincident-tick rule. Restoration under sight on a coincident tick is also `unmeasured`
+      here: part F excludes restoring sights, so it tests the neighbour erosion only.
+      The re-application of the sights as uncounted sights is `unmeasured` (its effect is a
+      count one lower on the rim cells, seen only through the interleaving of V13 part A,
+      which does not use regrowth)
+    - Confidence: low for the regrowth-state consequences; high for regrowth preceding a
+      coincident sweep
 
 19. **Fog of war is off in a skirmish.** In a skirmish fog of war is always off (S-0412, claim 1):
     starting a skirmish from the lobby always turns the fog setting off, whatever it was before,
@@ -739,7 +760,10 @@ pending only when the last one leaves. Row 5 with an active spy satellite on a c
 covers makes *k* more negative than the number of sights, so that cell then needs one more removal
 before it can become pending; this lasts until the next whole-map re-cover or spy-satellite reveal (Edge cases).
 
-**Ordering.** The re-cover sweep comes before the turn pass of its tick (claim 13). Sights are added
+**Ordering.** The re-cover sweep comes before the turn pass of its tick (claim 13). On a tick
+when regrowth is also due, including tick 0, claim 18's regrowth result precedes that sweep:
+previously pending explored cells can start neighbour erosion rather than having their marks
+consumed before regrowth can affect them (V11 F). Sights are added
 and removed in the turn of the object concerned (claim 8). A gap field starts or stops when its
 generator enters or leaves operation or enters or leaves the map (claim 11); for buildings the
 in-operation test is S-0405's (claims 8 and 9). An accepted power-off order also stops the field
@@ -787,7 +811,8 @@ Entries labelled fixed rules below are not optional corrections. Only entries na
   a cell's count one step too low (State and ordering); the next whole-map re-cover resets it.
 - **`quirks.fire_reveal_expires`** (default on). The reveal on fire is a plain reveal, and plain
   reveals of cells never covered by a sight of *H* are undone by the next re-cover sweep, so the
-  attacker's area is shown for 1 to 120 ticks, depending on the tick number. Off: the reveal on
+  attacker's area is shown for 1 to 120 ticks with regrowth off, depending on the tick number.
+  Regrowth may re-cover it sooner (claim 18). Off: the reveal on
   fire behaves like an area reveal (S1 row 6, area reveal) and is permanent outside hostile gap fields.
   Inside them it follows claim 17.
 - **Fixed spy-satellite rule (not an optional quirk).** Claim 15 deliberately does not use
@@ -918,7 +943,8 @@ belongs to S-0214.
 
 **Common setup.** The glossary's *measurement setup*, a skirmish with one human player and one
 bystander computer player (glossary) on a purpose-made map of one theater, flat ground at level 0 unless stated, fog of
-war off, any game speed. Explored cells are read from screenshots (S-0110 claims 1 and 2; the test
+war off, regrowth off unless a part enables it, any game speed. The director and mods are off,
+except for each scenario's explicitly named test data. Explored cells are read from screenshots (S-0110 claims 1 and 2; the test
 shroud sprite of S-0110's scenarios may be used so that each cell's state can be read from its own
 diamond). Tick numbers come from a *recorder* that reads the number of ticks run. The test map's
 override section gives the test types their fields (named test data). One valid run per case
@@ -1158,6 +1184,29 @@ mean an allied and an enemy bystander computer player.
   the first border ring disappears at tick 0 and another ring at each following tick.
   Falsified if rate 0 erodes the map, either non-positive period waits between rings, or a
   ring disappears sooner than one tick after its predecessor.
+  Part F (coincident regrowth and sweep, claims 13 and 18): use the 90-tick regrowth period,
+  lobby shroud on, no satellite or whole-map operation. A human scout first explores a flat
+  interior patch and stays with its centre and all eight neighbours under its sight. Create
+  the scout after tick 200 to exclude start-of-play uncounted sight. A map trigger then
+  creates a powered enemy gap generator centred on that cell, with gap radius 0
+  in named test data, so only the centre is in the hostile field and the scout prevents its
+  immediate covering. After tick 270, scripted input moves the scout away so that the centre
+  and all eight neighbours lose its sight before tick 360; aim for departure near tick 330.
+  Keep every sight away afterwards, with no further reveals or field changes and no other
+  source of regrowth near the patch. Record the departure tick; void the run if the scout
+  has not left all nine sampled cells after tick 270 and before tick 360, another hostile
+  field reaches the patch, or a sight returns before tick 450.
+  Observable: tick-labelled screenshots of the centre and its eight neighbours through tick
+  450. Expected: the centre becomes unexplored at tick 360, when both periodic events are
+  due; all eight neighbours remain explored then but become unexplored at tick 450, one
+  regrowth step later. The sweep at tick 360 must not prevent that next ring. Falsified if
+  the centre survives tick 360, any neighbour disappears before tick 450, or any neighbour
+  stays explored at tick 450. In a fresh control run with regrowth off, repeat the departure:
+  the centre still becomes unexplored at tick 360, but its neighbours stay explored through
+  tick 450. One valid run per setting, any game speed. This distinguishes the collision's
+  neighbour effect, not an intermediate image within tick 360 or a pending-cell setup at tick 0.
+  Early loss of the centre after a valid departure, or a different control outcome, also
+  falsifies the prediction rather than voiding the run.
 - **V12 (claim 19).** Named test copy of the rules: lobby fog default on, fog rate 0.1 game
   minutes. A human unit explores an area and walks away. Expected: fog of war is off in the
   skirmish: cells left by sight stay drawn as explored ground (no fog pieces of S-0110) however
@@ -1301,7 +1350,11 @@ state our engine's all-player-house departure, including observers; claim 17 her
 with the whole-map-revealed exception tested per house for the waypoint reveal only.
 S-0003 claim 14's trigger-name exceptions agree with S-0011 claims 5 and 21 and do not
 restrict reveal recipients. At joint sign-off, confirm these exceptions and reveal scope
-against the S-0003, S-0011 and S-0409 versions being handed off together. S-0110's current
+against the S-0003, S-0011 and S-0409 versions being handed off together. In particular,
+S-0011 revision 13 claims 26 and 36 and S-0409 revision 8 claim 17 agree on all player
+houses, observers included, and the waypoint-only per-house mark exception. Confirm these
+paired revisions at hand-off. Animation start effects and random-draw composition remain
+owned by the companion specs; they add no restriction on reveal recipients. S-0110's current
 draft carries the non-legal-cell exception and its claim-21 persistence qualification.
 Confirm that agreement too. No human-only trigger reveal in our engine or ownership-only
 discovery rule is intended.
