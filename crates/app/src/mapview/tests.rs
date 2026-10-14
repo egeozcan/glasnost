@@ -1542,6 +1542,41 @@ fn slot_animation_tiled_palette() {
     assert_eq!((lit(&normal[0]).rows, lit(&normal[0]).rho), (53, neutral));
 }
 
+/// spec: S-0103 claim 8 (an untiled row-4 animation has only one shade row, so the normal-light
+/// flag cannot change its pixels)
+#[test]
+fn untiled_alt_palette_ignores_normal_light() {
+    use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
+    use glasnost_render::scene::{Filter, View};
+    let sprite = || shp((20, 20), 6, (2, 2), (9, 9));
+    let (plain_b, plain) = one_slot("ShouldUseCellDrawer=no\nAltPalette=yes\n", sprite());
+    let (normal_b, normal) = one_slot(
+        "ShouldUseCellDrawer=no\nAltPalette=yes\nUseNormalLight=yes\n",
+        sprite(),
+    );
+    let it = plain[0];
+    assert!(matches!(it.paint, Paint::Lit(s) if s.rows == 1));
+    let view = View {
+        origin: (it.x - 4, it.y - 4),
+        size: (12, 12),
+        reference: DEPTH_REFERENCE,
+    };
+    // Every light-alpha value over the drawing: the single row is taken whatever the brightness.
+    let alpha: Vec<u8> = (0..144).map(|i| (i * 7 % 256) as u8).collect();
+    let draw = |b: &Built| {
+        b.scene
+            .compose_lit(
+                &view,
+                &Filter::default(),
+                &ComposeQuirks::default(),
+                Some(alpha.clone()),
+            )
+            .to_rgba()
+    };
+    assert_eq!((normal[0].x, normal[0].y), (it.x, it.y));
+    assert_eq!(draw(&plain_b), draw(&normal_b));
+}
+
 /// spec: S-0109 claim 27 (a zero-height first rectangle: one copy at (pₓ, pᵧ + v) and a warning
 /// naming the sprite, our engine's safe departure)
 #[test]
