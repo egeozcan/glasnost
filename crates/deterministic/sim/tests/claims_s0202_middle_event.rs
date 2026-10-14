@@ -257,3 +257,56 @@ fn tile_animation_position() {
     // dx = −3, dy = 1: a · −1 = −4.27 and a · 5 = 21.33.
     assert_eq!(tile_anim_position(c, 0, -3, 1), (892, 1429, 0));
 }
+
+/// spec: S-0202 claim 15 (a crater from a tile animation that an overlay placement's recalculation starts acts before the overlay data stream: it empties the resource then present, and the data stream writes the cell's data without restoring the removed overlay type) and S-0010 claim 19
+#[test]
+fn claim_15_crater_before_the_data_stream() {
+    use glasnost_map::NO_OVERLAY;
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_sim::testkit;
+    let mut r = ruleset();
+    anim(
+        &mut r,
+        "PIT",
+        AnimationType {
+            middle_frame: Some(0),
+            crater: Some(true),
+            ..Default::default()
+        },
+    );
+    let mut cat = (*testkit::catalogue()).clone();
+    cat.tiles[1].anim = Some(TileAnim {
+        name: "PIT".into(),
+        attaches_to: 0,
+        ..TileAnim::default()
+    });
+    let mut map = testkit::empty_map(SIZE);
+    for (c, tile) in [(at(0, 0), 1), (at(3, 0), 0)] {
+        let cell = map.cells.get_mut(c).unwrap();
+        cell.tile = tile;
+        cell.overlay = 0;
+        cell.overlay_data = 8;
+    }
+    assert!(map.has_overlay_data);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-test"));
+    let w = glasnost_sim::load::new_game(rules, &map, std::sync::Arc::new(cat), &testkit::setup(5))
+        .unwrap();
+    let pit = w.cells.cell(at(0, 0)).unwrap();
+    assert_eq!((pit.overlay, pit.overlay_data), (NO_OVERLAY, 8));
+    assert_eq!(stage(&w, at(3, 0)), Some(8));
+}
+
+/// spec: S-0202 claim 15 (the composition covers animations created during loading) and S-0109 claim 13: an animation created in play takes only its creation draws, its start event's middle-event draws being noted
+#[test]
+fn in_play_creation_takes_no_middle_event_draw() {
+    let mut r = ruleset();
+    particle(&mut r, "P", ParticleType::default());
+    anim(&mut r, "A", puff("P", 2));
+    let mut w = game(&r);
+    let before = w.rng.clone();
+    glasnost_sim::load::anim_creation_draws(&mut w, "A");
+    assert_eq!(w.rng, before);
+    assert!(w.notes.iter().any(|n| {
+        n.starts_with("S-0109 claim 13: the start-event draws of an animation created in play")
+    }));
+}

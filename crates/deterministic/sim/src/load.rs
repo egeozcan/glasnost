@@ -160,32 +160,28 @@ fn tile_anim_due(
     Some(anim.clone())
 }
 
-/// The creation draws of an animation created with no loop delay whose
-/// position the caller does not give (a resource glint, a warp or a combat
-/// animation): see [`anim_created_at`]. Its immediate middle event takes
-/// its particle draws; its scorch-or-crater part, which tests the position,
-/// and its chain reaction are noted and take no draw.
+/// The creation draws of an animation created in play with no loop delay
+/// (a warp or a combat animation): the creation draws of S-0202 claim 10
+/// (see [`anim_created_at`]). Its start event takes no draw: S-0202 claim
+/// 15 composes the immediate middle event's draws only for animations
+/// created during loading, and the particle and smudge specs give none for
+/// play, so a type whose start event has effects leaves a note.
 pub fn anim_creation_draws(w: &mut World, name: &str) {
-    anim_created_at(w, name, None);
-}
-
-/// The creation draws of an animation created with no loop delay at the
-/// world position `at` (S-0202 claim 10, *Animation creation draws*): the
-/// stage-delay draw of S-0109 claim 3 when its range holds more than one
-/// value, then a bouncing type's three raw values and three ranged draws
-/// over −65535 … 65535, then the start event (S-0109 claim 13): the
-/// immediate middle event when μ = 0 (S-0109 claim 14, S-0202 claim 15,
-/// [`middle_event`]), then the resource chain reaction. A chain reaction on
-/// a cell holding no resource takes no draw (S-0202 claim 10); one on a
-/// resource cell is S-0401 claim 20's, the economy topic's seam, and is not
-/// taken. An animation type the rules do not list has no fields (S-0004
-/// claim 3) and takes no draw.
-pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
     let rules = w.rules_arc();
     let Some(a) = rules.animation(name) else {
         return;
     };
-    let q = rules.quirks;
+    creation_draws(w, a);
+    let middle =
+        a.mu == Some(0) && (a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater);
+    if middle || a.chain_reaction {
+        w.note("S-0109 claim 13: the start-event draws of an animation created in play (its immediate middle event's particles and smudges, S-0202 claim 15 covering loading only; a chain reaction on a resource cell, S-0401 claim 20) are not taken");
+    }
+}
+
+/// The creation draws of S-0202 claim 10 before the start event.
+fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
+    let q = w.rules().quirks;
     let (d1, d2) = a.random_delay;
     if d1 != d2 {
         // spec: S-0109 claim 3 (one ranged draw over [d₁′, d₂′] when d₁′ ≠ d₂′)
@@ -201,6 +197,28 @@ pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
             let _ = w.rng.ranged(-65535, 65535, q.ranged_draw_half_span);
         }
     }
+}
+
+/// The creation draws of an animation created during loading with no loop
+/// delay at the world position `at` (S-0202 claim 10, *Animation creation
+/// draws*; `None` for a resource glint, S-0202 claim 14, whose position no
+/// spec gives, so its middle event takes its particle draws and notes the
+/// scorch-or-crater part): the
+/// stage-delay draw of S-0109 claim 3 when its range holds more than one
+/// value, then a bouncing type's three raw values and three ranged draws
+/// over −65535 … 65535, then the start event (S-0109 claim 13): the
+/// immediate middle event when μ = 0 (S-0109 claim 14, S-0202 claim 15,
+/// [`middle_event`]), then the resource chain reaction. A chain reaction on
+/// a cell holding no resource takes no draw (S-0202 claim 10); one on a
+/// resource cell is S-0401 claim 20's, the economy topic's seam, and is not
+/// taken. An animation type the rules do not list has no fields (S-0004
+/// claim 3) and takes no draw.
+pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
+    let rules = w.rules_arc();
+    let Some(a) = rules.animation(name) else {
+        return;
+    };
+    creation_draws(w, a);
     let effects = a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater;
     match a.mu {
         // spec: S-0109 claim 13 (the start event produces the middle event at once when μ = 0)
@@ -326,7 +344,8 @@ pub fn resource_glints(w: &mut World, order: &[CellXY]) {
         // spec: S-0202 claim 14 (the choice R(0, f − 1); claims 4 and 5 for its bounds)
         if w.rng.ranged(0, top, q.ranged_draw_half_span) == 0 {
             // spec: S-0202 claim 14 (a zero result creates the glint at once, with claim 10's creation draws)
-            anim_creation_draws(w, &glint);
+            // spec: S-0202 claim 14 (the glint takes all applicable creation and start-event draws of claim 10)
+            anim_created_at(w, &glint, None);
         }
     }
 }
