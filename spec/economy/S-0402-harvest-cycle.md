@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371]
 supersedes: []
 ---
 
@@ -245,6 +245,21 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    - Backing: `measurable` (scenario H3)
    - Confidence: high
 
+3a. **Harvesting from a docking cell (Q-0371).** For an ordinary, non-teleporting
+    harvester, standing on a refinery's docking cell adds no exception to claim 3's
+    seeking rules. A harvest order can give it a field destination while another
+    harvester holds that refinery's dock. Dock ownership is not a prerequisite for
+    leaving this cell to harvest, and the harvest rules do not replace that destination
+    with *guard* merely because the departure cell is a docking cell. Whether movement
+    can find and follow the route, or drops the destination after failure, belongs to
+    S-0212 and S-0215, not to a special harvest retry timer. If it remains in seeking
+    with no destination or remembered cell, claim 3's search applies at its next
+    processing, with that claim's interval; if movement has ended *harvest*, this
+    does not itself resume it. Claim 13 governs rest and the original's computer-only
+    resumption rule.
+    - Backing: `measurable` (H20)
+    - Confidence: high for the absence of a docking-cell exception in the harvest rules
+
 ### Refineries
 
 8. **Choosing a refinery.** A harvester chooses among the buildings its owner owns that are of one
@@ -383,6 +398,26 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       for being erased and for the refinery that is not a dock-unload refinery; high for the
       second route's track-completion event, the absence of facing and stopped tests and its
       scatter-request options; medium for its ordering and retained state
+
+10a. **A blocked docking cell does not expire the reservation (Q-0371).** Holding
+    contact reserves a dock slot, not exclusive occupancy of the docking cell.
+    The docking exchange of claim 10 directs the contacting harvester, not an
+    unrelated friendly harvester standing on that cell. It does not request that
+    blocker to scatter. While the refinery continues accepting the contacting
+    harvester, failure to reach the cell does not by itself release contact,
+    send it to a queueing cell or select another refinery. There is no elapsed-tick
+    limit in this docking rule: claim 10 row 2 keeps offering the same docking
+    destination at each *enter* processing. Other movement, orders, loss of contact
+    and refusal rules can still end or change this situation.
+
+    A harvester resting there without contact does not unload merely by occupying
+    the cell; claims 10 and 11 still require contact. This spec supplies no automatic
+    eviction of that resting harvester. General occupancy and scatter rules remain
+    separate, and a vehicle factory's apron clearing is S-0417 claim 13, not a
+    refinery-wide docking rule.
+    - Backing: `measurable` (H20)
+    - Confidence: high for the docking exchange, retained reservation and absence of
+      a docking timeout; medium for the resting-occupant case pending movement tests
 
 11. **Unloading.** A harvester counts as facing map east when its facing *f* (glossary) satisfies
     16256 ≤ *f* ≤ 16511. "The neighbouring cell" is the cell in step direction 6 (map west) of the
@@ -810,8 +845,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     current house under claim 14, not the delivering slave's house.
 
     Deploying and packing up transfer the master relationship without recreating these
-    slaves (S-0415 claims 6 and 10). Destruction and true sale are separate cases, owned
-    by S-0312 and S-0408; this claim does not treat loss of the master as capture.
+    slaves (S-0415 claims 6 and 10). Ordinary killing-hit outcomes are S-0312 claim 30.
+    true-sale slave fate is S-0408 claim 10a. Neither is capture of a surviving master.
+    Erasure without a killing hit, environmental sinking and other destruction paths
+    remain unresolved here, as does the exact sale-cleanup tick. Capture and
+    mind-control-return variants retain H17's ownership measurement.
     - Backing: `measurable` (scenario H17)
     - Confidence: medium; capture does not imply propagation, but hidden-slave and
       mind-control-return variants need the same ownership test
@@ -1122,6 +1160,7 @@ select which harvester takes the earlier turn.
 | Rules, building type section, `Refinery` | refinery flag: the refinery-flag building rules of claims 3, 11, 13 and 17 (the idle step-off, the unloading animation and the harvester's wait for it, the chrono miner's guard rule) | boolean | no |
 | Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): directs a harvester to its docking cell, and queues unloading on an accepted track-completion report | boolean | no |
 | Rules, mobile type section, `SpeedType`, `MovementZone` | locomotion class and movement zone used by the idle step-off (claim 13); scatter uses the vehicle search settings of S-0207 claim 16 | vocabulary forms owned by S-0211 | S-0211 |
+| No data key | no docking-cell exception to harvest seeking, no docking-exchange eviction of an unrelated occupant and no docking-reservation timeout (claims 3a, 10a) | engine behaviour, not imported settings | fixed; processing rates are those of claims 3 and 10 |
 | No data key | failed step-off destination (0, 0), track-completion report timing, facing-independent arrival acceptance and forced, no-threat-point, not-move-anywhere scatter options (claims 10, 13) | engine behaviour, not imported fields | fixed rules of claims 10 and 13 |
 | Rules, building type section, `Weeder` | weed-flag building: the idle step-off of claim 13 (and the weeders' docking, Edge cases) | boolean | no |
 | Rules, building type section, `FreeUnit` | free unit (Terms, claim 18; S-0408 owns the field's cost uses) | vehicle type name | none |
@@ -1752,6 +1791,29 @@ is wrong). *Runs:* 3.
   read-only tick-labelled recorder. This scenario proposes observation only, not a
   change to the harness or the original.
 
+**H20. Friendly harvester on the docking cell (claims 3a and 10a; Q-0371).**
+- *Setup:* tiny flat skirmish map, stock refinery and two ordinary harvesters of one
+  human house, reachable ore field, speed index 2, remote bystander; director and
+  mods off. Keep the test refinery powered on. Use the normal measurement setup.
+- *Procedure:* while B unloads, move A to the docking cell and stop it after B leaves.
+  Order B to enter the refinery again. Record for 2000 ticks, then give A a harvest
+  order. Repeat three times; repeat with the field reachable only past the refinery,
+  and with a second available refinery. A computer-owner run records the original's
+  own orders separately rather than assuming human input reaches that owner.
+- *Observable:* both units' cells, current and queued behaviours, destinations,
+  contact and tether, dock occupancy, and any movement or scatter request, tick by tick.
+- *Expected:* merely occupying the cell does not give A contact or unloading. B's
+  docking exchanges keep directing B to that cell without a docking timeout,
+  alternative-refinery choice or a request to scatter A. A's harvest seeking can
+  select the reachable ore destination despite B's reservation. Any later route
+  failure is logged separately from the harvest destination assignment.
+- *Falsified if:* the docking exchange evicts A, expires B's reservation because
+  time passed, queues B elsewhere or chooses another refinery, or harvest seeking
+  refuses A's field destination solely because it starts on the docking cell.
+- *Tool:* scripted input with video and a read-only tick/state recorder. Movement
+  owners must determine whether A can stay there and the route-failure retry timing.
+  this scenario does not assume that every movement failure leaves *harvest* current.
+
 ## Open questions
 
 - Whether *return* is ever given to a harvester in a skirmish (claim 2); scenario H9 logs it.
@@ -1759,8 +1821,17 @@ is wrong). *Runs:* 3.
   counting, emergence, ownership retention, directed harvesting, sites and successful relocation,
   claim 25 explicitly records the remaining unmeasured failure outcomes and immediate vehicle
   destination, with H19 to settle them. These are unresolved, not assumed to be stay-in-place.
-  Destruction integration remains S-0312's and true-sale integration S-0408's; deployment and
-  packing-up preservation already belong to S-0415 claims 6 and 10.
+  Ordinary killing-hit integration is S-0312 claim 30; true-sale slave fate is S-0408
+  claim 10a, whose exact cleanup tick remains open. Erasure, environmental sinking
+  and other destruction paths remain unresolved. Surviving-master capture and
+  mind-control return are claim 23, pending H17. Deployment and packing-up
+  preservation already belong to S-0415 claims 6 and 10.
+- Q-0371 is answered here for harvest and docking rules by claims 3a and 10a.
+  Claims 3, 9, 10 and 13 already supplied phase intervals, queueing and rest.
+  Whether a non-contact harvester can reach and persist on the docking cell,
+  general step-aside requests and their destinations, and movement route-failure
+  outcomes and retry timing remain with the movement specs. S-0417 claim 13's
+  factory-apron clearing must not be assumed to apply to every refinery.
 - The exact tick of the first bale (19 ticks) and the "+ 1" of the load period depend on the order of
   the counter increase and the processing within a turn (claim 5); scenario H1 settles both.
 - Further refusals in a refinery's answer to a contact request for harvesters, and whether a

@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -44,8 +44,7 @@ reservation, remembered-point clearing, bridge placement marks and shared
 and S-0215 claim 10's jump-time target-loss and reversion contract with those companions.
 Retain S-0207 claim 20 e and S-0209 claim 1's aircraft reservation lifecycle and shared
 `quirks.teleport_aircraft_ground_reservation` alongside the vehicle contract above.
-The approved index already records revision 26; at hand-off update it to this revision 27.
-The requested revision 25 to 26 update has already been applied.
+At hand-off update the approved index to match this draft.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
 and absence of additional search draws. S-0215 claim 38 and F11–F12 supply the upstream
 centre geometry, base-record refresh, no-base usable-area correction and radius-then-direction
@@ -611,9 +610,7 @@ Terms specific to this spec:
     - Confidence: high
 
 12. **Expansion order, limits and failure.**
-    - Ordering key: the next pair expanded is one with the smallest *f* among the pending pairs, those
-      recorded (claim 11) and not yet expanded. Among several pending pairs with exactly the same
-      *f*, the one recorded first is expanded first (claim 12a, departure D7).
+    - Route-selection result: among pending pairs with the smallest *f*, a tie is resolved in favour of the pair recorded first (claim 12a, departure D7). This fixes the route consequences of a tie; it does not require an implementation to expand or store entries in any particular internal order.
     - Expansion limit: a search expands at most 65527 pairs. A search that reaches the limit fails.
     - A search that reaches the destination after exactly 10000 expansions also fails
       (`quirks.path_search_10000_failure`). The count includes the end of claim 15: a search that
@@ -1472,14 +1469,21 @@ Terms specific to this spec:
     in the scan order (`quirks.nearby_centre_twice`): if it qualifies, it is collected twice and
     counts twice towards the limit of 24 collected cells.
 
-    The search examines single cells. Each use of the search fixes a centre, a locomotion class, a
+    The uses in table T5 examine single cells. S-0402 claim 24 owns the additional
+    slave-miner deployment-site use: candidates are rectangular footprints, not single
+    cells. It supplies the footprint qualification, caller settings and destination shift
+    after selection; the ring order, visibility preference, collection limit and
+    reference-cell distance tie rule below still apply. Do not apply T5's single-cell
+    qualification literally to that use.
+
+    Each single-cell use of the search fixes a centre, a locomotion class, a
     movement zone and whether the use is in **deck mode**, and optionally a reach region, the height
     condition, the further test, a no-overlay condition and a reference cell. A use may also
     exclude bridge cells. Deck mode has the three effects given below:
     a bridge cell's reach region is read for its deck, a bridge-cell centre's level includes the
     deck (claim 24's switch aside, below), and the ring cut-off of the collection is the first ring that contains any collected
     cell rather than the first that contains one passing the visibility test. Table T5
-    lists every user and what each use fixes. Its cell/object order rows apply only
+    lists the single-cell users and what each use fixes. Its cell/object order rows apply only
     when S-0214 claim 11 selects a search: that claim's direct-destination cases bypass
     this search, even when the clicked cell is occupied. A free mover's *no-move*
     search on a cell or object has no reach-region restriction, including inside the
@@ -1491,7 +1495,7 @@ Terms specific to this spec:
     *amphibious-crusher* and *amphibious-destroyer* map to *amphibious*; *infantry* and
     *infantry-destroyer* map to *infantry*; the others map to themselves.
 
-    **T5. Users of the nearby-cell search.** "Search layer" is the ordered unit's own (claim 7).
+    **T5. Single-cell users of the nearby-cell search.** "Search layer" is the ordered unit's own (claim 7).
     "Own zone" is the movement zone of the ordered unit's type.
 
     | User | Centre | Locomotion class | Movement zone | Reach region | In deck mode when | Height condition | Further test | Reference cell |
@@ -1611,7 +1615,8 @@ Terms specific to this spec:
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
       final nearby search after give-up (P26), for base-record-refresh parameters
       (S-0215 B37, with P26's refresh comparison), and for both free-unit searches and the no-overlay
-      condition (S-0402 scenario H13 parts b and c), for the ordinary approach-failure parameters
+      condition (S-0402 scenario H13 parts b and c), for the rectangular deployment-site
+      use delegated to S-0402 claim 24 (its scenario H18), for the ordinary approach-failure parameters
       and centre after candidate trials, including close-range failure (S-0307 scenarios RG12,
       RG17 and RG23 f), for the infantry teleport fallback parameters (S-0208 scenario W11), for the teleporting
       landing parameters on flat ground (S-0207 scenario D22 run 3), for its omitted

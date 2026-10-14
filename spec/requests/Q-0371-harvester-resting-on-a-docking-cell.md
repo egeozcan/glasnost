@@ -1,9 +1,9 @@
 ---
 id: Q-0371
 title: A harvester at rest on a refinery's docking cell while another holds the dock
-status: open
+status: answered
 related: [S-0402, S-0417, S-0212, S-0215]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

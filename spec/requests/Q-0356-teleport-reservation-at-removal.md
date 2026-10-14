@@ -3,7 +3,7 @@ id: Q-0356
 title: Which teleport reservations a vehicle, or an aircraft with a pending destination, clears when it is removed
 status: answered
 related: [S-0207, S-0209]
-answered-by: [S-0207]
+answered-by: [S-0207, S-0209]
 ---
 
 ## Need
