@@ -2,7 +2,7 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
