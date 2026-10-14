@@ -3,7 +3,7 @@ id: Q-0181
 title: How a unit with the teleporting locomotor moves (chrono miner, types without a locomotor field)
 status: answered
 related: [S-0207, S-0215, S-0402, S-0212]
-answered-by: [S-0208]
+answered-by: [S-0208, S-0207]
 ---
 
 ## Need

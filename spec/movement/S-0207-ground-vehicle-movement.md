@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181]
 supersedes: []
 ---
 
@@ -70,7 +70,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 
   - claim 19 and scenario D21 cover vehicles with driving, ship and hovering locomotors,
   - claim 20 and scenario D22 cover every object, of any kind, that moves with the teleporting
-    locomotor (the landing point of an infantry unit is left open).
+    locomotor (S-0208 claims 19–20 own infantry landing-point choice and placement clearing).
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -793,7 +793,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       move-anywhere, so a vehicle accepts them even when it has a destination.
     - The scatter off a building of S-0215 claim 28 and the scatter from damage of S-0215 claim 19
       are forced and have no threat point, so they follow the first case above.
-    - Factory apron clearing (S-0417 claim 4) sends forced, move-anywhere requests to every
+    - Factory apron clearing during unloading or while idle (S-0417 claims 4 and 13) sends forced, move-anywhere requests to every
       object listed in the selected ground layers, including moving receivers. In the exit apron
       cell the request has no threat point: an accepting vehicle takes no draw, uses the
       nearby-cell search above and does not queue a behaviour. In an occupied apron neighbour
@@ -815,21 +815,21 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       threat-point case and its direction draw, part f for case d, part g for case f; scenario D17
       part a for a move-anywhere request, part c for the refusal in *sticky*; D18 part h for case
       h; D18 part i for the vehicle scatter centre cell on a track and at rest; D18 part j for
-      factory clearing, including case j and moving receivers; S-0417 U5 for the two clearing
+      factory clearing, including case j and moving receivers; S-0417 U5 and U11 for the unloading and idle senders of the two clearing
       request kinds). `unmeasured` for these parts, each for the reason given:
       - case c: every sender of a request to a vehicle whose options are known sends a forced one
-        (S-0209 claim 12, S-0215 claims 19 and 28, S-0417 claim 4, claim 15 here), so no setup is known that sends
+        (S-0209 claim 12, S-0215 claims 19 and 28, S-0417 claims 4 and 13, claim 15 here), so no setup is known that sends
         a vehicle a request that is not forced.
       - case g: which effects switch a locomotor off belongs to specs not yet written, so no setup
         can yet be defined.
       - case i: no setup is known that times a threat-point request to a vehicle unloading
         passengers while it passes the earlier refusals.
       - the draw over 1 to 4: both identified threat-point senders, the bunker rule of S-0215
-        claim 17 and factory apron-neighbour clearing of S-0417 claim 4, send forced requests.
+        claim 17 and factory apron-neighbour clearing of S-0417 claims 4 and 13, send forced requests.
         Neither reaches this non-forced acceptance draw
     - Confidence: medium for cases a to f, h and i, for the search without a draw and for the
       behaviours left unchanged, and for the threat-point case and its draws (read; known senders
-      are S-0215 claim 17 and S-0417 claim 4). Low for cases g and j. High for the vehicle
+      are S-0215 claim 17 and S-0417 claims 4 and 13). Low for cases g and j. High for the vehicle
       scatter centre cell of a drive vehicle (the heading point was read wherever it is set and
       cleared); medium for the tunnel exit; the heading point of the ship and hovering locomotors is
       their specs'
@@ -982,8 +982,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       order sets one, S-0215), the locomotor takes it at once. It drops the destination and does
       nothing, when the object is disabled by an electromagnetic pulse, is under a paralysing
       effect, is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
-      **landing point** *L* at once (part b). The vehicle-present mark of the occupancy record
-      (S-0209) moves at once from the cell of the object's old point to the cell of *L*. The old
+      **landing point** *L* at once (parts b and c). For a non-infantry object, the vehicle-present
+      mark of the occupancy record (S-0209) moves at once from the cell of the object's old point
+      to the cell of *L*. Infantry instead reserve the chosen standing position (S-0208 claim 19). The old
       point is the previous *L* when an earlier destination had fixed one that was not yet jumped
       to, and otherwise the object's own position. The object stays listed in its old cell until the
       jump. From then until the jump it counts as moving (S-0212 claim 27), and the point it
@@ -1006,9 +1007,13 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       object is held in place by a superweapon teleport's after-effect, or the search gives no
       cell. Then, when *L* is still the object's own position or no *L* was ever fixed, no jump
       happens and the destination is removed.
-    - (c) **The landing point of an infantry unit.** It differs: a standing position inside the
-      cell is chosen, and a nearby-cell search follows a refusal only for an object destination.
-      Its details are open (Open questions); S-0208 is their owner.
+    - (c) **The landing point of an infantry unit.** S-0208 claim 19 owns the standing-position
+      choice, entry test, bridge distinctions and nearby search after refusal, which is available
+      only for an object destination. Its position choices can take scenario-stream draws.
+      S-0208 claim 20 owns placement-time clearing: when placement's fall-back to rest supplies
+      a destination, a conditional forced, move-anywhere request to the destination cell's ground
+      occupants precedes position choice. This is not owner-dependent and is not sent by an
+      ordinary later move merely because the mover is infantry.
     - (d) **When it jumps.** It jumps on its first movement update after *L* is fixed. A vehicle's
       behaviour is processed before its locomotor in its update (S-0203), so a destination set by
       its behaviour in its update is jumped to in that same tick. When an order makes the
@@ -1016,18 +1021,24 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       erased* because of its own move. When *L* equals its own position, it does not jump, and the
       destination is removed.
     - (e) **What the jump does.** All of this happens in the tick of the jump. Every object that
-      has it as its target drops it, and every projectile aimed at it loses its target, so a shot
-      already in flight towards it misses (the same effect as becoming untargetable, S-0215 claim
-      10). A warp animation plays at the old point, then the departure sound at the old point.
-      The object is removed from its old cell's listing, takes position *L*, and is listed in *L*'s
-      cell. On a high-bridge cell it is put on the deck: its height is *H* + 416 leptons there,
-      and *H* elsewhere. Its facing does not change, and it stays in the ground layer. The arrival
-      sound plays at *L*. Entering *L*'s cell has the effects of a vehicle reaching a track target
-      in a new cell; the specs of those effects own them. It collects a crate lying on *L*'s cell
-      (claim 13 and the crate specs). It stops moving and its destination is removed, so its
-      behaviour falls back to rest (S-0215 claim 13). A second warp animation plays at *L*. A
-      parasite inside it is thrown out (the combat specs own how). Its type's departure and arrival
-      sounds override the game-wide ones.
+      has it as its target drops it, except an attacker whose erasing weapon remains locked onto
+      the living target (S-0215 claim 10). When an override is in effect and that exception does
+      not hold, the attacker reverts on the jump tick: it drops the jumping object if that object
+      remains its target, but keeps a different target restored by the revert (S-0215 claim 10).
+      Every projectile aimed at the jumping object loses its target, so a shot already in flight
+      towards it misses (the same effect as becoming untargetable). A warp animation plays at the
+      old point, then the departure sound at the old point. The object is removed from its old
+      cell's listing, takes position *L*, and is listed in *L*'s cell. On a high-bridge cell its
+      cell layer is the bridge deck and its height is *H* + 416 leptons; elsewhere its cell layer
+      is ground and its height is *H*. This actual landing height can differ from the infantry
+      position-choice height (S-0208 claim 19). Its facing does not change. The arrival sound
+      plays at *L*. Entering *L*'s cell has the arrival effects of the object's own kind: for a
+      vehicle these are the effects of reaching a track target in a new cell, not a rule imposed
+      on infantry or aircraft. The respective movement and combat specs own those effects.
+      Crate collection is governed by claim 13 and the crate specs. It stops moving and its
+      destination is removed, so its behaviour falls back to rest (S-0215 claim 13). A second
+      warp animation plays at *L*. A parasite inside it is thrown out (the combat specs own how).
+      Its type's departure and arrival sounds override the game-wide ones.
     - (f) **Phasing in.** At the jump the object starts *phasing in* (S-0214 Terms; *materialising*
       in S-0301) for *D* ticks, *D* from F9. An object whose type has the harvester flag of a
       vehicle type does not phase in at all. While phasing in:
@@ -1038,10 +1049,14 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       - its behaviour is still processed (S-0215 claim 2).
 
       Phasing in ends on the first tick *t* after the jump tick *t*₀ for which *t* − *t*₀ ≥ *D*:
-      for *D* ≤ 0 that is *t*₀ + 1. Then, if the object has no target, and its targeting timer
-      (S-0309) has more than 10 ticks left, the timer is set to one ranged draw from the scenario
-      random stream over 4 to 8 ticks. The teleport case of S-0309 claim 1's search then runs, and
-      when that sets no target, the object falls back to its idle behaviour (S-0215 owns which).
+      for *D* ≤ 0 that is *t*₀ + 1. Only when the object has no target, it attempts the teleport
+      search of S-0309 claim 1. Before that attempt, if its targeting timer has more than 10
+      integer ticks left, one ranged draw from the scenario random stream over 4 to 8 ticks,
+      both included, replaces the timer. That conditional draw does not require the search gates
+      to pass. A search allowed by S-0309 claims 2 and 3 then takes its own normal timer draw
+      (S-0309 claim 4), replacing that temporary timer value. When the attempt sets no target,
+      including when the gates refuse a search, the object falls back to its idle behaviour
+      (S-0215 owns which). With a target, neither attempt nor conditional draw happens.
       A harvester-flag object, which does not phase in, has no such end.
     - (g) **Successive jumps.** There is no delay of its own between jumps apart from phasing in.
       After a jump the destination is gone, so a further jump needs a new destination from its
@@ -1053,8 +1068,13 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       that moves rarely gets a chance to move in between. A destination given while the object is
       phasing in is dropped. Whether a behaviour that chases a moving target gives a new
       destination after the jump is S-0215's.
-    - (i) **Random draws.** The jump itself takes none. The landing search depends on the tick
-      number, not on a draw. The only draw is the one at the end of phasing in in part f.
+    - (i) **Random draws.** The jump itself takes none. Nearby landing searches depend on the
+      tick number, not on a draw. Infantry position choices and placement-clearing recipients can
+      take draws as S-0208 claims 19–20 specify, with recipients' draws before position choice.
+      At phasing-in end, part f's conditional 4-to-8-tick draw precedes the normal search-timer
+      draw when both occur. Depending on target, remaining timer and search gates, both draws,
+      only either draw, or neither can occur. Any candidate-dependent search draws belong to
+      S-0309.
     - (j) **Other queries.** A request to turn the body turns it at the turn rate of S-0206, as for
       other locomotors. Crushing, damage and visibility rules are not changed by the jump or by
       phasing in, except for the target loss in part e.
@@ -1062,14 +1082,18 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       harvester exception, run 2 also for part g, run 3 for the occupied destination, run 4 for
       cliffs and islands, run 5 for D against distance and each rules field, run 6 for an order
       dropped while phasing in and for part h, run 7 for the draw at the end of phasing in and for
-      part i, run 8 for a shot in flight, run 9 for part j). Part c is open.
-      `unmeasured`: the occupancy mark moving before the jump, because the jump follows within the
-      same or the next movement update and no observable falls between them.
+      part i, run 8 for a shot in flight, run 9 for part j; S-0208 W11 for part c and infantry
+      reservations, landing draws and placement clearing; S-0215 B18 d for ordinary target-loss
+      and revert). `unmeasured`: the occupancy mark moving before the jump, because the jump
+      follows within the same or the next movement update and no observable falls between them. Also
+      the live erasing-lock exception, because no stock setup establishes a retained lock at a
+      locomotor jump (S-0215 claim 10).
     - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
       (the search's choices were read, and the asked level of the entry outcome is not settled,
       Open questions), for part a's list of disabling states, for part d's same-tick consequence and
-      for part h's consequences; low for
-      part j's statement that nothing else changes, and for part c
+      for part h's consequences; part c inherits S-0208 claims 19–20's confidence, high for
+      position choice and draws and medium for search choices, bridge consequences and placement
+      conditions; low for part j's statement that nothing else changes
 
 ## Formulas
 
@@ -1573,11 +1597,11 @@ of the first group.
 | holding a path found on this tick | repeated check: cloaked blocker or blocked | gives up the move |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
-| teleporting, idle | destination given, not disabled, not being erased, not phasing in | landing point *L* fixed at once, occupancy mark moved to *L*'s cell (claim 20 a, b) |
-| teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: targets and projectiles lose it, it is listed in *L*'s cell at *L*, crate collected, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
+| teleporting, idle | destination given, not disabled, not being erased, not phasing in | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
+| teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's live-lock and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
 | teleporting, *L* fixed | its next movement update, *L* equals its position or none was fixed | destination removed, no jump (claim 20 b, d) |
 | phasing in | destination given | dropped (claim 20 a) |
-| phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; with no target and more than 10 ticks on the targeting timer, one draw over 4 to 8 resets it; S-0309's teleport search, else its idle behaviour (claim 20 f) |
+| phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; only with no target, conditional timer shortening then gated teleport search, whose normal timer draw replaces the shortening when both occur; idle fallback when no target is set (claim 20 f) |
 
 A change of speed fraction takes effect in the progress of the same tick (claim 10).
 
@@ -2287,7 +2311,10 @@ cell before *X*.
     one draw over 0 to 2, no draw over 1 to 4, and *move* queued, with destinations given by
     claim 16. For case j, use a turreted vehicle in that neighbour, with a destination and a
     target making its turret turn but not its body. Time production completion by scripted
-    input so a clearing request arrives in that state. Expect refusal, no destination change
+    input so a clearing request arrives in that state. A simpler alternative uses the same
+    factory idle, without production, as S-0417 claim 13 and U11 specify: wait past its first
+    guard processing and time the recipient state to a later apron-clearing processing.
+    Expect refusal, no destination change
     and no scatter draw; a control with the turret steady accepts when no other refusal holds.
     Separately time a request while a drive vehicle with a destination crosses E or its
     neighbour on a track. When accepted, expect the new destination to be selected around
@@ -2466,11 +2493,18 @@ cell before *X*.
   - Run 6 (orders while phasing in). Scripted input gives *T* a move order on the second tick of
     its phasing in. *Expected:* the order is lost: no jump during or after phasing in until a new
     order is given after it ends.
-  - Run 7 (draw at the end). *T* without a target, ordered to jump at varied ticks so that its
-    targeting timer, read by the recorder at the end tick of phasing in, shows more than 10 ticks in
-    some runs and 10 or fewer in others; the runs are classified by that reading. *Expected:* in the
-    first class exactly one draw from the scenario random stream at the end tick, setting the timer
-    to a value from 4 to 8; none in the second class.
+  - Run 7 (draws at the end). *T* without a target, ordered to jump at varied ticks so that its
+    targeting timer immediately before phasing-in completion has more than 10 ticks left in
+    some runs and 10 or fewer in others; classify using the preceding tick's recorder reading
+    and the elapsed tick. Run both classes with the opportunity-search gates passing, then with
+    a named test type whose passive-acquire flag is off to refuse that search. Keep enemies
+    outside the search area to exclude candidate-dependent draws. *Expected:* above 10 ticks,
+    one conditional scenario-stream draw over 4 to 8, then the normal S-0309 claim 4 timer draw
+    if the gates pass; that normal draw replaces the temporary timer. At most 10 ticks, only
+    the normal draw if the gates pass. With the gates refusing, only the conditional draw above
+    10, and neither at most 10. Also record a qualifying retained-target run if reachable:
+    neither completion draw nor search is expected; a run without a retained target is
+    inconclusive for that control. Compare S-0309 A1 f.
   - Run 8 (shot in flight). An enemy unit fires a slow projectile at *T*; *T* is ordered to jump
     while the projectile is in flight. *Expected:* the attacker loses *T* as its target on the jump
     tick and the projectile does not hit *T*.
@@ -2504,12 +2538,9 @@ cell before *X*.
 - The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
 - The heading point (Terms) of the ship, hovering and other locomotors, which decides a vehicle
   scatter centre cell for such vehicles (claim 16), was not read; their specs should give it.
-- The landing point of an infantry unit with the teleporting locomotor (claim 20 c) was read at low
-  confidence only. It appears to pick a standing position in the destination cell, to choose
-  differently for capture-like behaviours whose destination is an object, to fall back to a
-  nearby-cell search only for an object destination, and, for some owners, to send the cell's
-  occupants a forced, move-anywhere scatter request first. S-0208 should settle it; it is the open
-  part of Q-0181.
+- Whether a live erasing-weapon lock can coexist with a teleporting locomotor jump (claim 20 e)
+  is not established by a stock setup. The conditional exception follows S-0215 claim 10.
+  reachability belongs to the erasing-weapon rules.
 - At which height level the entry outcome of claim 20 b is asked for the destination cell (the
   ground or a bridge deck) was not settled.
 - What claim 20 b does when the destination cell lies in no reach region of the object's movement
