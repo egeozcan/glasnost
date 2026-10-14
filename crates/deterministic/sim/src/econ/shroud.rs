@@ -194,10 +194,14 @@ fn level(w: &World, c: CellXY) -> i32 {
     w.cells.cell(c).map_or(0, |x| i32::from(x.level))
 }
 
-/// The object height lift *L(z)* of S-0101 F2.
+/// The object height lift *L(z)* that S-0409 F2 takes from S-0101 F2, in
+/// the floating-point form S-0101 F2 gave before its revision 8. S-0101 now
+/// draws with an exact lift as a drawing departure; whether the sight
+/// centre (game state) follows it is open (Q-0460), so this keeps the
+/// previous form meanwhile.
 pub fn height_lift(z: i32, mode: Rounding) -> i32 {
-    let k = nearest_double("0.14350360082660085"); // spec: S-0101 F2 (k pixels per lepton)
-    // spec: S-0101 F2 (L(z) = trunc(rz(rz(rz(z·k) + [z ≥ 728]) + 0.5)))
+    let k = nearest_double("0.14350360082660085"); // spec: S-0101 F2 before revision 8 (k pixels per lepton), kept for S-0409 F2 until Q-0460
+    // spec: S-0101 F2 before revision 8 (L(z) = trunc(rz(rz(rz(z·k) + [z ≥ 728]) + 0.5))), until Q-0460
     let step = i64::from(z >= 728);
     F64::from_i64(i64::from(z), mode)
         .mul(k, mode)

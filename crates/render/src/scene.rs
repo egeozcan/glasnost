@@ -315,7 +315,7 @@ mod tests {
             provisional: false,
             object: Some(7),
         });
-        let c = Frame::reset_reference(0);
+        let c = compose::DEPTH_REFERENCE;
         let a = s.compose(
             &View {
                 origin: (0, 0),

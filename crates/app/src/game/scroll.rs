@@ -1,5 +1,6 @@
 //! Edge and arrow-key scrolling of the battlefield view (S-0101 claims 12
-//! to 15, F9).
+//! to 15, F9), and the displacement of right-drag scrolling (claim 16,
+//! F10), which is not wired to input until S-0214 claim 27's gesture is.
 //!
 //! Scrolling is presentation state: it moves the view centre only, once per
 //! unfrozen game cycle, and never reaches the simulation.
@@ -208,6 +209,103 @@ impl EdgeScroll {
     }
 }
 
+/// The edge region of right-drag scrolling, pixels (S-0101 F10, strict
+/// comparisons).
+const DRAG_EDGE_REGION: i32 = 10; // spec: S-0101 Constants (drag edge region)
+
+/// The least outward displacement before the boost (S-0101 F10).
+const DRAG_MIN_OUTWARD: i32 = 5; // spec: S-0101 Constants (drag minimum outward displacement)
+
+/// The outward boost of right-drag scrolling (S-0101 F10).
+const DRAG_EDGE_BOOST: i32 = 4; // spec: S-0101 Constants (drag edge boost)
+
+/// A right-drag scrolling method (S-0101 claim 16).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DragMethod {
+    /// Method 0: the pointer stays displaced; scrolls toward the
+    /// displacement.
+    Hold,
+    /// Method 1: the same direction; the pointer returns to the anchor.
+    Recentre,
+    /// Method 2: the opposite direction; the pointer returns to the anchor.
+    Reversed,
+}
+
+/// What one unfrozen cycle of right-drag scrolling requests (S-0101 claim
+/// 16, F10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DragRequest {
+    /// The requested displacement of the view centre, pixels, before F5.
+    pub displacement: (i32, i32),
+    /// Whether the pointer returns to the anchor (methods 1 and 2, when the
+    /// two magnitudes sum to more than 0), even if F5 then blocks the move.
+    pub recentre: bool,
+}
+
+/// The right-drag request of one unfrozen cycle (S-0101 claim 16, F10):
+/// `anchor` and `pointer` are view pixels, `client` the full client size
+/// (*B*, *C*), `r` the scroll index 0 … 6. Activation, the anchor and the
+/// release are S-0214 claim 27's; this is not wired to input yet.
+pub fn drag_request(
+    anchor: (i32, i32),
+    pointer: (i32, i32),
+    client: (i32, i32),
+    r: i32,
+    method: DragMethod,
+) -> DragRequest {
+    let rz = Rounding::TowardZero;
+    let (b, c) = client;
+    // spec: S-0101 F10 (a zero difference becomes −1 at bₓ = 0 or +1 at bₓ ≥ B − 1; vertically −1 at
+    // bᵧ = 0 or +1 at bᵧ ≥ C)
+    let substitute = |delta: i32, at: i32, far: i32| match delta {
+        0 if at == 0 => -1,
+        0 if at >= far => 1,
+        d => d,
+    };
+    let dx = substitute(pointer.0 - anchor.0, anchor.0, b - 1);
+    let dy = substitute(pointer.1 - anchor.1, anchor.1, c);
+    // spec: S-0101 F10 (e = −4·max(5, |δ|) for b < 10 and δ < 0; 4·max(5, δ) for b > N − 10 and δ > 0;
+    // else δ; exact integers)
+    let boost = |delta: i32, at: i32, n: i32| {
+        if at < DRAG_EDGE_REGION && delta < 0 {
+            -DRAG_EDGE_BOOST * DRAG_MIN_OUTWARD.max(delta.abs())
+        } else if at > n - DRAG_EDGE_REGION && delta > 0 {
+            DRAG_EDGE_BOOST * DRAG_MIN_OUTWARD.max(delta)
+        } else {
+            delta
+        }
+    };
+    let ex = boost(dx, anchor.0, b);
+    let ey = boost(dy, anchor.1, c);
+    // spec: S-0101 F10 (K = 1 for method 0, 12 for methods 1 and 2)
+    let k = match method {
+        DragMethod::Hold => 1,
+        DragMethod::Recentre | DragMethod::Reversed => 12,
+    };
+    // spec: S-0101 F10 (g = rz_d(K / (r + 1)))
+    let g = dbl(k).div(dbl(i64::from(r) + 1), rz);
+    // spec: S-0101 F10 (magnitude |trunc₀(rz_d(e·g))|; direction the sign of e, opposite for
+    // method 2; a zero component requests zero)
+    let sign = match method {
+        DragMethod::Reversed => -1,
+        DragMethod::Hold | DragMethod::Recentre => 1,
+    };
+    let axis = |e: i32| -> i32 {
+        let m = dbl(i64::from(e))
+            .mul(g, rz)
+            .trunc_i128()
+            .map_or(0, |v| v.unsigned_abs().min(i32::MAX as u128) as i32);
+        sign * e.signum() * m
+    };
+    let displacement = (axis(ex), axis(ey));
+    // spec: S-0101 F10 (methods 1 and 2 recentre when the two magnitudes sum to more than 0, before F5)
+    let recentre = method != DragMethod::Hold && (displacement.0 != 0 || displacement.1 != 0);
+    DragRequest {
+        displacement,
+        recentre,
+    }
+}
+
 /// The arrow-key request of one unfrozen cycle (S-0101 claim 14): 21 pixels
 /// per held arrow along its axis; opposed arrows cancel. `held` is left,
 /// right, up, down.
@@ -379,5 +477,85 @@ mod tests {
         assert_eq!(arrows([false, true, false, false]), (21, 0));
         assert_eq!(arrows([true, false, true, false]), (-21, -21));
         assert_eq!(arrows([true, true, false, true]), (0, 21));
+    }
+
+    /// spec: S-0101 claim 16, F10 (g = rz(K/(r + 1)), magnitude |trunc₀(rz(e·g))|, K = 1 or 12,
+    /// rounding toward zero at each step)
+    #[test]
+    fn claim_16_drag_magnitude() {
+        let client = (800, 600);
+        let anchor = (400, 300);
+        let req = |dx: i32, r: i32, m: DragMethod| {
+            drag_request(anchor, (400 + dx, 300), client, r, m).displacement
+        };
+        // 12/7 rounds down, so 7 × g falls just short of 12.
+        assert_eq!(req(7, 6, DragMethod::Recentre), (11, 0));
+        // 12/5 = 2.4 is not a double; rounded down, 5 × g falls short of 12.
+        assert_eq!(req(5, 4, DragMethod::Recentre), (11, 0));
+        // Method 0: K = 1; 1/3 rounded down, times 3, truncates to 0.
+        assert_eq!(req(3, 2, DragMethod::Hold), (0, 0));
+        assert_eq!(req(30, 0, DragMethod::Hold), (30, 0));
+        // Negative differences keep their sign.
+        assert_eq!(req(-7, 6, DragMethod::Recentre), (-11, 0));
+        // Diagonals keep their separate full components.
+        assert_eq!(
+            drag_request(anchor, (410, 290), client, 0, DragMethod::Recentre).displacement,
+            (120, -120)
+        );
+    }
+
+    /// spec: S-0101 claim 16, F10 (method 2 reverses the direction; methods 1 and 2 recentre when
+    /// a magnitude is positive, method 0 never)
+    #[test]
+    fn claim_16_drag_methods() {
+        let client = (800, 600);
+        let anchor = (400, 300);
+        let at = |p: (i32, i32), m| drag_request(anchor, p, client, 0, m);
+        let hold = at((420, 300), DragMethod::Hold);
+        assert_eq!(hold.displacement, (20, 0));
+        assert!(!hold.recentre);
+        let one = at((420, 300), DragMethod::Recentre);
+        assert_eq!(one.displacement, (240, 0));
+        assert!(one.recentre);
+        let two = at((420, 300), DragMethod::Reversed);
+        assert_eq!(two.displacement, (-240, 0));
+        assert!(two.recentre);
+        // Nothing requested: no recentring.
+        let still = at(anchor, DragMethod::Recentre);
+        assert_eq!(still.displacement, (0, 0));
+        assert!(!still.recentre);
+        // A one-pixel difference at r = 6 still requests 1 (trunc₀(−12/7)) and recentres.
+        let small = drag_request(anchor, (400, 299), client, 6, DragMethod::Recentre);
+        assert_eq!(small.displacement, (0, -1));
+        assert!(small.recentre);
+    }
+
+    /// spec: S-0101 F10 (zero differences at the anchor's edges become ∓1; outward components near
+    /// the edges get the minimum 5 and the fourfold boost; strict comparisons)
+    #[test]
+    fn claim_16_drag_edges() {
+        let client = (800, 600);
+        let d = |a: (i32, i32), p: (i32, i32)| {
+            drag_request(a, p, client, 0, DragMethod::Hold).displacement
+        };
+        // Anchor at column 0, no horizontal difference: −1, boosted to −4 × 5.
+        assert_eq!(d((0, 300), (0, 300)), (-20, 0));
+        // Anchor at column B − 1: +1, boosted to 4 × 5.
+        assert_eq!(d((799, 300), (799, 300)), (20, 0));
+        // Anchor at row 0: −1, boosted; at row C − 1 (below C) the zero stays zero.
+        assert_eq!(d((400, 0), (400, 0)), (0, -20));
+        assert_eq!(d((400, 599), (400, 599)), (0, 0));
+        // Anchor at row C (reachable only in principle): +1, boosted.
+        assert_eq!(d((400, 600), (400, 600)), (0, 20));
+        // Outward differences above 5 keep their size, times 4.
+        assert_eq!(d((5, 300), (-3, 300)), (-32, 0));
+        // b < 10 is strict: at column 10 no boost.
+        assert_eq!(d((10, 300), (8, 300)), (-2, 0));
+        assert_eq!(d((9, 300), (7, 300)), (-20, 0));
+        // b > N − 10 is strict: column 790 no boost, 791 boosted.
+        assert_eq!(d((790, 300), (792, 300)), (2, 0));
+        assert_eq!(d((791, 300), (793, 300)), (20, 0));
+        // An inward difference near an edge is not boosted.
+        assert_eq!(d((5, 300), (8, 300)), (3, 0));
     }
 }

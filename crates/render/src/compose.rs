@@ -18,9 +18,9 @@ use glasnost_fmt::image::{IndexedImage, Rgb8};
 /// Depth clear value (S-0102 Constants).
 pub const DEPTH_CLEAR: u16 = 65535; // spec: S-0102 Constants (depth clear value)
 
-/// Depth of the view's top row in the first drawn frame after a reset of
-/// *C* (S-0102 F1).
-pub const DEPTH_REFERENCE_START: i32 = 32768; // spec: S-0102 Constants (depth reference start)
+/// The depth reference *C*: one value for the whole game, whatever the
+/// view, scrolls, jumps and redraws (S-0102 F1, a departure).
+pub const DEPTH_REFERENCE: i32 = 32768; // spec: S-0102 F1, Constants (fixed depth reference)
 
 /// Tile depth row shift (S-0102 F3).
 pub const TILE_DEPTH_SHIFT: i32 = 30; // spec: S-0102 Constants (tile depth row shift)
@@ -199,50 +199,33 @@ pub struct Drawing<'a> {
 }
 
 /// Compositing switches of S-0102 implemented here.
+///
+/// The fixed depth reference and the unclipped profile rectangle of F1
+/// and F2 are departures without switches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ComposeQuirks {
-    /// `quirks.upright_depth_anchor_after_clip`: the upright profile is
-    /// anchored at the last visible row (F2 note).
-    pub upright_depth_anchor_after_clip: bool,
     /// `quirks.cell_pass_shadows_write_depth` (claim 27): a shadow drawn as
     /// a writer (the cell pass's shadows) stores its depth where it darkens;
     /// off: every shadow darkens without storing depth.
     pub cell_pass_shadows_write_depth: bool,
-    /// `quirks.depth_reference_reset_on_jump` (F1): the depth reference *C*
-    /// is reset at every view jump and when the depth buffer is created
-    /// ([`Frame::reference_at_reset`]). Off: one *C* = 32768 for the whole
-    /// game, whatever the view.
-    pub depth_reference_reset_on_jump: bool,
 }
 
 impl Default for ComposeQuirks {
     fn default() -> Self {
         // spec: S-0102 Edge cases and quirks (default: on)
         Self {
-            upright_depth_anchor_after_clip: true,
             cell_pass_shadows_write_depth: true,
-            depth_reference_reset_on_jump: true,
         }
     }
 }
 
 impl ComposeQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 3] {
-        [
-            (
-                "upright_depth_anchor_after_clip",
-                self.upright_depth_anchor_after_clip,
-            ),
-            (
-                "cell_pass_shadows_write_depth",
-                self.cell_pass_shadows_write_depth,
-            ),
-            (
-                "depth_reference_reset_on_jump",
-                self.depth_reference_reset_on_jump,
-            ),
-        ]
+    pub fn named(&self) -> [(&'static str, bool); 1] {
+        [(
+            "cell_pass_shadows_write_depth",
+            self.cell_pass_shadows_write_depth,
+        )]
     }
 }
 
@@ -298,26 +281,6 @@ impl Frame {
         }
     }
 
-    /// *C* after a reset with world row `top_row` at the view's top (F1:
-    /// C = 32768 + w_top).
-    pub fn reset_reference(top_row: i32) -> i32 {
-        // spec: S-0102 F1 (at a reset, C = 32768 + w_top)
-        DEPTH_REFERENCE_START + top_row
-    }
-
-    /// *C* at a view jump or at the creation of the depth buffer, with
-    /// world row `top_row` at the view's top: [`Frame::reset_reference`],
-    /// or with `quirks.depth_reference_reset_on_jump` off the one *C* of
-    /// the whole game.
-    pub fn reference_at_reset(top_row: i32, q: &ComposeQuirks) -> i32 {
-        if q.depth_reference_reset_on_jump {
-            Self::reset_reference(top_row)
-        } else {
-            // spec: S-0102 Edge cases (quirks.depth_reference_reset_on_jump off: one C for the whole game, C = 32768)
-            DEPTH_REFERENCE_START
-        }
-    }
-
     /// Screen-row depth d(r) of view row `r` (F1), in 0 … 65535.
     pub fn row_depth(&self, r: i32) -> i32 {
         // spec: S-0102 F1 (d = (C − w) mod 65536)
@@ -335,14 +298,8 @@ impl Frame {
         if x0 >= x1 || y0 >= y1 {
             return;
         }
-        // The drawing rectangle after clipping (F2: r₀ and r₁).
-        let (r0, r1_own) = (y0, y1 - 1);
-        // spec: S-0102 F2 note (quirks.upright_depth_anchor_after_clip: anchor at the last visible row)
-        let r1 = if q.upright_depth_anchor_after_clip {
-            r1_own
-        } else {
-            d.y + h - 1
-        };
+        // spec: S-0102 F2 (r₀ and r₁ are the drawing rectangle before clipping; clipping removes pixels only)
+        let (r0, r1) = (d.y, d.y + h - 1);
         let first_row = match d.paint {
             Paint::Row(i) | Paint::Diamond(i) => rows.get(i),
             Paint::Lit(s) | Paint::LitDiamond(s) => rows.get(s.base as usize),
@@ -522,43 +479,32 @@ mod tests {
         }
     }
 
-    /// spec: S-0102 F1 (depth decreases by 1 per row down; C = 32768 + w_top)
+    /// spec: S-0102 F1 (d = (C − w) mod 65536: depth decreases by 1 per row down)
     #[test]
     fn row_depth() {
-        let c = Frame::reset_reference(100);
-        let f = Frame::new(4, 4, 100, c);
-        assert_eq!(f.row_depth(0), 32768);
-        assert_eq!(f.row_depth(3), 32765);
+        let f = Frame::new(4, 4, 100, DEPTH_REFERENCE);
+        assert_eq!(f.row_depth(0), 32668);
+        assert_eq!(f.row_depth(3), 32665);
     }
 
-    /// spec: S-0102 F1, Edge cases (quirks.depth_reference_reset_on_jump)
+    /// spec: S-0102 F1 (C = 32768 throughout the game, independent of the view; a departure)
     #[test]
-    fn depth_reference_switch() {
-        let on = ComposeQuirks::default();
-        let off = ComposeQuirks {
-            depth_reference_reset_on_jump: false,
-            ..on
-        };
-        // World row 500 seen from two view positions after a jump.
-        let depth_of_row_500 = |top: i32, q: &ComposeQuirks| {
-            Frame::new(1, 1, top, Frame::reference_at_reset(top, q)).row_depth(500 - top)
-        };
-        // On: C is reset, so the view's top row always has depth 32768 and a
-        // world row's depth depends on where the view jumped to.
-        assert_eq!(Frame::reference_at_reset(100, &on), 32868);
-        assert_eq!(depth_of_row_500(100, &on), 32368);
-        assert_eq!(depth_of_row_500(300, &on), 32568);
-        // Off: one C = 32768, so a world row's depth depends on the row only.
-        assert_eq!(Frame::reference_at_reset(100, &off), 32768);
-        assert_eq!(depth_of_row_500(100, &off), 32268);
-        assert_eq!(depth_of_row_500(300, &off), 32268);
+    fn depth_reference_is_fixed() {
+        assert_eq!(DEPTH_REFERENCE, 32768);
+        // World row 500 seen from views whose top rows differ, as after a
+        // scroll or a jump: its depth depends on the world row only.
+        let depth_of_row_500 =
+            |top: i32| Frame::new(1, 1, top, DEPTH_REFERENCE).row_depth(500 - top);
+        assert_eq!(depth_of_row_500(0), 32268);
+        assert_eq!(depth_of_row_500(100), 32268);
+        assert_eq!(depth_of_row_500(300), 32268);
     }
 
     /// spec: S-0102 claims 9, 10 (tiles ≤, writers and readers <; readers store nothing)
     #[test]
     fn depth_tests() {
         let q = ComposeQuirks::default();
-        let mut f = Frame::new(2, 1, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(2, 1, 0, DEPTH_REFERENCE);
         let a = img(1, 1, 1);
         let flat = |x| Drawing {
             image: &a,
@@ -605,7 +551,7 @@ mod tests {
     #[test]
     fn upright_profile() {
         let q = ComposeQuirks::default();
-        let mut f = Frame::new(1, 7, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(1, 7, 0, DEPTH_REFERENCE);
         let a = img(1, 7, 1);
         let d = Drawing {
             image: &a,
@@ -625,7 +571,7 @@ mod tests {
     #[test]
     fn slope_profile() {
         let q = ComposeQuirks::default();
-        let mut f = Frame::new(1, 4, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(1, 4, 0, DEPTH_REFERENCE);
         let a = img(1, 4, 1);
         let d = Drawing {
             image: &a,
@@ -640,40 +586,46 @@ mod tests {
         assert_eq!(f.depth, vec![32766, 32766, 32765, 32764]);
     }
 
-    /// spec: S-0102 F2 note (quirks.upright_depth_anchor_after_clip)
+    /// spec: S-0102 F2 (r₀ and r₁ are the rectangle before clipping; clipping removes pixels only)
     #[test]
-    fn upright_anchor_after_clip() {
+    fn clipping_keeps_profile_depth() {
+        let q = ComposeQuirks::default();
         let a = img(1, 6, 1);
-        let d = Drawing {
+        let at = |y: i32, profile_kind: Profile| Drawing {
             image: &a,
             x: 0,
-            y: 0,
+            y,
             test: DepthTest::Writer,
-            depth: profile(Profile::Upright, 0),
+            depth: profile(profile_kind, 0),
             paint: Paint::Row(0),
         };
-        let mut on = Frame::new(1, 3, 0, Frame::reset_reference(0));
-        on.draw(&d, &rows(), &ComposeQuirks::default());
-        // Anchored at view row 2: Q(32766) = 32766.
-        assert_eq!(on.depth[2], 32766);
-        let mut off = Frame::new(1, 3, 0, Frame::reset_reference(0));
-        off.draw(
-            &d,
-            &rows(),
-            &ComposeQuirks {
-                upright_depth_anchor_after_clip: false,
-                ..ComposeQuirks::default()
-            },
-        );
-        // Anchored at the image's own row 5: Q(32763) − ⌊3 / 3⌋ at row 2.
-        assert_eq!(off.depth[2], 32762);
+        for kind in [Profile::Upright, Profile::Slope, Profile::Flat] {
+            // The whole image inside a tall view, and the same image at the
+            // same world rows seen through views that clip its bottom and its
+            // top: every surviving pixel keeps its depth.
+            let mut full = Frame::new(1, 10, 0, DEPTH_REFERENCE);
+            full.draw(&at(2, kind), &rows(), &q);
+            let mut bottom = Frame::new(1, 5, 0, DEPTH_REFERENCE);
+            bottom.draw(&at(2, kind), &rows(), &q);
+            assert_eq!(bottom.depth[2..5], full.depth[2..5], "{kind:?} bottom clip");
+            // The view starts at world row 4: the image's world rows 2 and 3
+            // are cut off at the top.
+            let mut top = Frame::new(1, 6, 4, DEPTH_REFERENCE);
+            top.draw(&at(-2, kind), &rows(), &q);
+            assert_eq!(top.depth[0..4], full.depth[4..8], "{kind:?} top clip");
+        }
+        // Upright, anchored at the image's own last row 7 (not the last
+        // visible row 4): Q(32761) − ⌊(7 − 4) / 3⌋.
+        let mut bottom = Frame::new(1, 5, 0, DEPTH_REFERENCE);
+        bottom.draw(&at(2, Profile::Upright), &rows(), &q);
+        assert_eq!(bottom.depth[4], 32760 - 1);
     }
 
     /// spec: S-0102 F2 (with a companion image every row uses the anchor value, minus the image)
     #[test]
     fn companion_depth() {
         let q = ComposeQuirks::default();
-        let mut f = Frame::new(1, 3, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(1, 3, 0, DEPTH_REFERENCE);
         let a = img(1, 3, 1);
         let comp = SignedImage {
             width: 1,
@@ -734,7 +686,7 @@ mod tests {
             },
             paint: Paint::Shadow,
         };
-        let mut f = Frame::new(1, 1, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
         f.color[0] = 0xFFFF;
         // A terrain-object shadow (−3), then a building shadow (−4): darkened twice.
         f.draw(&shadow(-3, DepthTest::Writer), &rows(), &q);
@@ -746,9 +698,8 @@ mod tests {
         // quirks.cell_pass_shadows_write_depth off: overlapping shadows always darken again.
         let off = ComposeQuirks {
             cell_pass_shadows_write_depth: false,
-            ..q
         };
-        let mut g = Frame::new(1, 1, 0, Frame::reset_reference(0));
+        let mut g = Frame::new(1, 1, 0, DEPTH_REFERENCE);
         g.color[0] = 0xFFFF;
         for _ in 0..3 {
             g.draw(&shadow(-4, DepthTest::Writer), &rows(), &off);
@@ -775,7 +726,7 @@ mod tests {
             paint,
         };
         let fresh = || {
-            let mut f = Frame::new(1, 1, 0, Frame::reset_reference(0));
+            let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
             f.color[0] = 0xFFFF;
             f
         };
@@ -821,7 +772,7 @@ mod tests {
         assert!(!(0..60).any(|c| in_diamond(c, 29)));
         let q = ComposeQuirks::default();
         let img = IndexedImage::new(60, 30, vec![0; 1800]).unwrap();
-        let mut f = Frame::new(60, 30, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(60, 30, 0, DEPTH_REFERENCE);
         let d = Drawing {
             image: &img,
             x: 0,
@@ -843,7 +794,7 @@ mod tests {
     fn ignore_depth() {
         let q = ComposeQuirks::default();
         let img = IndexedImage::new(1, 1, vec![3]).unwrap();
-        let mut f = Frame::new(1, 1, 0, Frame::reset_reference(0));
+        let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
         f.depth[0] = 0;
         let d = Drawing {
             image: &img,

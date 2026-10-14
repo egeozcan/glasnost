@@ -36,8 +36,8 @@ use glasnost_render::overlay::{
 };
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
-    LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, cell_centre, cell_top, height_lift,
-    project_lifted, screen_to_ground,
+    LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
+    screen_to_ground,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
@@ -1366,11 +1366,7 @@ impl Builder<'_> {
             let depth_level = if deck { level + DECK_LEVELS } else { level };
             // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types;
             // quirks.overlay_lift_exact_levels)
-            let lift = overlay_depth_lift(
-                depth_level,
-                &ViewQuirks::default(),
-                &ProjectionQuirks::default(),
-            );
+            let lift = overlay_depth_lift(depth_level, &ViewQuirks::default());
             let bias = if flat || flags.wall || rock || flags.tiberium {
                 -2 - lift
             } else {
@@ -1437,8 +1433,7 @@ impl Builder<'_> {
             // spec: S-0102 claim 13 (an overlay's shadow: −2 − 15 × ℓ_s with ℓ_s the cell's level alone,
             // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
             // (every overlay kind); S-0102 Edge cases (quirks.overlay_lift_exact_levels covers overlay shadows)
-            let shadow_bias = -2
-                - overlay_depth_lift(level, &ViewQuirks::default(), &ProjectionQuirks::default());
+            let shadow_bias = -2 - overlay_depth_lift(level, &ViewQuirks::default());
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -1931,8 +1926,8 @@ impl Builder<'_> {
             k.saturating_add(i32::from(damaged))
         };
         let n_i = i32::try_from(n).unwrap_or(i32::MAX);
-        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋), quirks.building_frame_clamp_to_shadow)
-        let body_frame = drawn_body_frame(f, n_i, &ViewQuirks::default());
+        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋ − 1); with no body frames nothing is drawn)
+        let body_frame = drawn_body_frame(f, n_i);
         // spec: S-0108 claim 3, F2 (an index below 0 or at or past N draws nothing)
         let frame_of = |x: i32| usize::try_from(x).ok().filter(|&x| x < n);
         let normal_z = self
