@@ -6,7 +6,26 @@ An open-source reimplementation of the game engine for **Command & Conquer: Yuri
 
 ## Status
 
-**Milestone M1 (formats and import), in progress.** M0 (workspace, determinism, citation and "no stock numbers" checks, CI, synthetic ruleset, renderer demo) is done. The file-format parsers, the virtual file system over your install and a first asset viewer exist; the INI reader, rules import and converter wait for their behaviour specs. There is no game yet. The first goal is skirmish against our own AI with the Allied, Soviet and Yuri factions, with the mechanics replicated closely. Multiplayer comes once the mechanics are right. The simulation is deterministic and lockstep-ready from the start.
+**Milestone M5 (first playable game) is done.** You can play a 1v1 skirmish against our own computer opponent on stock multiplayer maps, natively and in the browser. A game runs from the main menu through skirmish setup (map, sides, countries, colours, starting credits and units) to the end screen and back. It has:
+
+- the economy: ore and gems, harvesting, refineries and power;
+- base building: production queues, placement, selling and repair, and the tech tree;
+- movement, pathfinding and combat for ground units and buildings;
+- shroud and radar;
+- the multiplayer subset of map triggers;
+- victory and defeat.
+
+Sound effects and announcements are read from your files and play through WebAudio on the web.
+
+The opponent plays every faction the setup offers. It uses only the orders a person could give and sees only its own shroud. The in-game sidebar and HUD have a layout of our own; the cameos, cursors and other art come from your files.
+
+The simulation is deterministic: integers only and one seeded random stream. Native and WebAssembly builds produce identical state hashes, and saves restore the same hash. Behaviour is implemented only from the specs in `spec/`. Where a spec is missing, a request is filed in `spec/requests/` and the interim rule is listed in `docs/development.md`.
+
+**Not there yet (M6 and later):**
+- aircraft, naval units, garrisons, bridges and superweapons;
+- the Yuri faction's slave-miner economy;
+- animation playback;
+- multiplayer over the network.
 
 ## You need your own copy of the game
 
@@ -17,10 +36,12 @@ This repository contains **no EA game assets**: no graphics, sounds, maps, rules
 Rust is pinned in `rust-toolchain.toml` (rustup installs it on first use).
 
 ```sh
+cargo run --release -p glasnost-platform-native -- --game --game-dir <your install>   # the game (menu, skirmish)
 cargo run -p glasnost-platform-native   # native renderer demo (Vulkan/Metal/DX12/GL)
 cargo run -p glasnost-platform-native -- --viewer --game-dir <your install>   # asset viewer
 cargo xtask web --serve                 # web demo at http://127.0.0.1:8000/ (needs wasm-bindgen-cli, see docs/web.md);
-                                        # add ?mode=viewer for the asset viewer and pick your install folder
+                                        # add ?mode=game for the game or ?mode=viewer for the asset viewer,
+                                        # then pick your install folder
 cargo test --workspace                  # tests
 cargo xtask check                       # dependency rule, determinism, citations, no stock numbers
 ```
