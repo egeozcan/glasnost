@@ -458,9 +458,9 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
             p.target = (!airborne).then_some(Target::Cell(o.pos.cell()));
         }
     }
-    // spec: S-0207 claim 20 (e) (a warp animation at the old point; its creation draws as S-0202 claim 10 gives them: interim, request Q-0232; the sounds take no draw)
+    // spec: S-0207 claim 20 (e) (a warp animation at the old point; its creation and start-event draws as S-0202 claims 10 and 15 give them for an animation created in play: interim, request Q-0232; the sounds take no draw)
     if let Some(warp) = r.warp_out.clone() {
-        crate::load::anim_creation_draws(w, &warp);
+        crate::load::anim_created_at(w, &warp, Some((o.pos.x, o.pos.y, o.pos.z)));
     }
     let old = o.pos.cell();
     let new = l.cell();
@@ -489,7 +489,7 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     crate::crush::entered_cell(w, id, new);
     // spec: S-0207 claim 20 (e) (a second warp animation at L; crates and parasites have no state in our engine)
     if let Some(warp) = r.warp_out.clone() {
-        crate::load::anim_creation_draws(w, &warp);
+        crate::load::anim_created_at(w, &warp, Some((l.x, l.y, z)));
     }
     let harvester = r.unit(o.kind, o.type_index).is_some_and(|u| u.harvester);
     // spec: S-0207 claim 20 (f) and F9 (a harvester-flag type does not phase in)
