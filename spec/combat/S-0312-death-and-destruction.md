@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268]
 supersedes: []
 ---
 
@@ -575,8 +575,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 26. **Which smudge type a destruction leaves.** Claim 19 (a) and the smudge steps of claim 19 (g)
     choose a smudge type of a given kind (crater or scorch mark) for an anchor cell (the cell of the
     point they give) as follows. Animation-specific smudge selection is owned by S-0202
-    claim 15, including its size-dependent candidate preferences; the destruction forms below
-    remain unchanged.
+    claim 15, including during-play creation and its size-dependent candidate preferences.
+    The destruction forms below remain unchanged.
     - *No smudge at one cell.* When the anchor cell is the map cell with both coordinates 0, nothing
       is placed and no draw is taken.
     - *Fit.* A smudge type of the kind fits at the anchor cell when the anchor cell lies on the map
@@ -639,6 +639,58 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       which file input cannot reach after S-0001's shorter physical-line limit
     - Confidence: high
 
+### Destruction and map triggers
+
+29. **A killing hit raises the object's tag before death debris.** For a tagged infantry unit,
+    vehicle, aircraft or building, the destruction raises of S-0011 claim 19 happen within the
+    killing hit after health reaches 0, before this spec's debris, exploding-passenger deaths,
+    death weapon, attached bomb and kind-specific effects. Any actions that fire complete at
+    that point, including their immediate effects and random draws; they are not queued until
+    removal or until the end of the tick. Raises themselves add no random draw. Effects of the
+    incoming detonation that S-0303 places before this hit still precede these raises; effects
+    it places after the hit follow the hit's death effects. In particular, death debris is not
+    the same ordering milestone as incoming-warhead debris.
+
+    For infantry, aircraft and buildings, a known attacker gives three raises with codes
+    outside S-0011's subset before the destroyed-by-anything raise. Without an attacker those
+    three are absent, but destroyed-by-anything still occurs. If the object still carries the
+    tag, one further raise with a code outside that subset follows. S-0011 owns each raise's
+    evaluation, latches, actions and tag detachment; a raise that detaches the tag prevents
+    subsequent raises of that tag from this object. Import mapping gives the codes in order.
+
+    Vehicles normally have an additional earlier group: one attacker-dependent raise outside
+    the subset, destroyed-by-anything, and its following outside-subset raise. The common group
+    described above follows it, still before debris. Thus a repeating destroyed-by-anything
+    trigger can fire more often for a vehicle than for infantry; later outside-subset raises
+    also fire it through its latch. This extra group is absent when the vehicle remembers a
+    hijacker type and any trigger definition in its tag has the tag-carries-over flag. The
+    common group remains. When the hit instead credits an explicitly supplied attacking house
+    different from the known attacker's house, or supplies a house without an attacker, only
+    the common group occurs, with its three preliminary raises enabled by that supplied house.
+    With `quirks.vehicle_destruction_extra_raises` off, only the common
+    group occurs for every vehicle. S-0011 claim 19 and T7 need the corresponding
+    vehicle-multiplicity refinement in the same revision round: their two-firing expectation
+    describes the common group alone, not a normal vehicle with the extra group.
+
+    **Deferred deaths.** A cyborg's crippling hit does not reach health 0 after its reprieve
+    and makes no destruction raise. A delayed-kill building does reach 0 before the reprieve:
+    its destruction raises occur on that initial lethal hit, before its health is restored to
+    1 and the countdown is kept or started. A later expiry hit that reaches 0 raises any tag
+    still attached again before its death effects. The same early moment applies to a killed
+    vessel that goes on to sink and an aircraft that goes on to crash; neither waits for
+    sinking or impact to make this killing-hit raise.
+
+    **Infantry still showing death.** Starting an infantry death sequence does not by itself
+    detach a tag. If S-0011's evaluation has not detached or deleted it, the infantry remains
+    a carrier until removal or an independent tag-detachment event. It is nevertheless no
+    longer a present object for S-0011 claims 24 and 27. Completion of its death sequence and
+    final removal make no new destroyed-by-anything raise. A tag's own polls and raises from
+    other carriers remain S-0011's, not additional death raises from this infantry.
+    - Backing: `measurable` (scenario D20; S-0011 T7 for evaluation and latches)
+    - Confidence: high for the before-debris timing, vehicle extra group, deferred-death
+      timing and absence of a final infantry-removal raise; medium for retained infantry
+      carrier status and the hijacker/tag-carries-over combination
+
 ### Backing boundaries
 
 These qualifications narrow the numbered claims' backing; a scenario for a neighbouring case
@@ -648,6 +700,7 @@ otherwise. No measurement has been completed for this revision.
 | Claim or formula | Backing and reason for the part not covered by a scenario |
 |---|---|
 | Death rules for never-placed production items | Unresolved under Q-0193, not covered by the numbered death rules' backing. S-0414's off-map hit eligibility and existence counts establish neither effects, draws nor immediate deletion. No prediction for these outcomes is asserted here. |
+| 29 | `unmeasured` for separately supplied attacking-house attribution and interruption by a destruction-trigger action that removes the raising object during these raises: no isolated safe fixture is established here. D20 uses actions that leave the dying object alone. Q-0193's never-placed production items remain outside this claim. |
 | 1, 19(d), 22 | `unmeasured` for resource spilling combined with other building death effects: no skirmish setup fills building storage. D1 and D14 test the effects their setups reach. |
 | 6 | `unmeasured` for multi-turret selection and the unplaced projectile's land-type, height and water tests: D6 tests ordinary/elite primary selection and debris position, not these tests, and no setup isolating them is supplied. |
 | 12 | `unmeasured` for bridge-deck escape height and placement: D9 supplies no bridge run, and its placement point remains for the bridge specs to establish. Bomb-mark rows inherit claim 11's backing. |
@@ -786,6 +839,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 |---|---|---|---|
 | 0 | infantry | cyborg crippling replaces death (claim 2) | none |
 | 0 | building | delayed death replaces death (claim 3) | none |
+| before 1 | tagged infantry, vehicle, aircraft, building | destruction raises and all actions they fire (claim 29); the initial lethal hit of a delayed-death building has these raises before its reprieve | only the actions' and their effects' draws |
 | 1 | all | debris (claim 4, F1); skipped for a bomb-marked vehicle low over water (claim 11) | F1 |
 | 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water (claim 11) | the detonation's |
 | 3 | all | attached bomb (claim 7) | the bomb's |
@@ -815,6 +869,11 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | awaiting removal | its own turn, still in play, not erased, no pulse effect | leaves play and its cells before the second round; removal completes and rubble and crate are placed in the same turn (claim 21) |
 
 ## Edge cases and quirks
+
+- **`quirks.vehicle_destruction_extra_raises`** (default: on, the original). Claim 29's extra
+  vehicle group precedes the common destruction raises, so a repeating latched trigger can
+  fire more times at a vehicle death. Off: omit that extra group, leaving only the common
+  group; this changes any draws taken by the omitted firings' actions.
 
 - **`quirks.crash_death_weapon_twice`** (default: on, the original). An exploding aircraft fires its
   death weapon at death and again at the impact of its crash (claim 16). Off: it fires only at the
@@ -888,6 +947,10 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| map object tag field, map `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | attached tag and its evaluations in claim 29 | S-0011 Import mapping, including its object tag reference matching | no matching tag: no destruction raises |
+| map `[Events]`, event code 48 | destroyed-by-anything raise (claim 29) | integer event code; unused event value, as S-0011 claim 19 | no such event: no destroyed-by-anything condition, but other events and latches still evaluate |
+| destruction raise codes (engine constants, not a configurable list) | common group and extra vehicle group (claim 29) | common group with known attacker: 6, 4, 7, 48, 29; without: 48, 29. Extra vehicle group with known attacker: 7, 48, 29; without: 48, 29. Each requires the tag still attached and, for the common group, the object not removed by a preceding action | not applicable |
+| map `[Triggers]`, eighth comma-separated value | tag-carries-over flag (claim 29) | decimal-prefix integer, nonzero sets the flag; a tag has it when any definition in its chain does | initially false; omission or zero leaves the flag as it is |
 | rules, type section, `MaxDebris`, `MinDebris` | *X*, *Y* (F1) | integer | 0, 0 |
 | rules, type section, `DebrisTypes`, `DebrisMaximums` | voxel debris types and maxima (F1) | voxel-animation list, 127-byte text limit (S-0003 claim 19); decimal-prefix integer list, 511-byte reader limit (S-0003 claim 20); independently paired as claim 28 | empty |
 | rules, type section, `DebrisAnims` | debris animations (F1) | animation-name list (items as claim 28) | empty |
@@ -1029,8 +1092,7 @@ flag carrying two infantry units, each with its own attached trigger whose actio
 after that unit's death, sets the same map variable to a different value; the variable's final
 value shows which passenger's trigger ran last, and the same with a passenger carrying a passenger.
 *Expected:* the holder's first passenger's trigger runs before the second's, and a passenger's own
-passengers' before its own; *falsified if* the order differs. (If triggers do not run at once, the
-order of their queued actions shows the same thing; S-0011 owns which.)
+passengers' before its own; *falsified if* the order differs. Claim 29 fixes these firings inside each passenger's death, before the transport's death weapon.
 
 **D6. Death weapon (claim 6).** *Setup:* (a) a test vehicle with the explodes flag, a death weapon
 of damage 100 and damage factor 1.5, killed beside a target with versus 100 %, no other damage
@@ -1370,6 +1432,57 @@ registered names with and without that space, as S-0003 scenario V7 tests untrim
 Expected: absent and empty keys retain the lower list, all-no-type items clear it, names with
 spaces follow the literal item, and list lengths are those after truncation and omission.
 Different retained entries, lengths or subsequent draw outcomes falsify these syntax cases.
+
+**D20. Destruction-trigger timing and retained infantry carriers (claim 29; Q-0268 parts 2
+and 3).** Use the common measurement setup at speed 6 with the director and mods off.
+The observed area is within 10 cells of the test objects and action waypoint cells. Named test-map
+objects carry tags whose one-time destroyed-by-anything action starts a distinguishable
+animation at a remote waypoint. Choose a named test animation with known scenario-stream
+creation draws, and give the dying types distinct sprite debris, a death weapon, and a
+kind-specific death animation. Kill tagged infantry, a vehicle, an aircraft and a building
+with ordinary lethal hits. Record and replay the stream state, animation creations, health,
+passenger deaths and removal, separating incoming-weapon effects from death effects. The
+trigger animation's immediate draws and effects must precede the dying object's debris and
+all remaining death effects. A later action, or action draws after death-debris draws,
+falsifies the timing; an unresolved within-hit trace is inconclusive. Repeat without a known
+attacker using the destruction action of a separate map trigger: destroyed-by-anything still
+fires before debris. Run 30 kills per kind and variant.
+
+*Repeating groups:* attach a repeating tag with a single destroyed-by-anything event and an
+explosion-at-a-waypoint action aimed at an isolated durable neutral building. Use S-0011's
+calibrated counter protocol: a constant positive health loss per firing, enough health to
+survive the run, no healing or repair, and no unrelated damage. Divide the recorded health
+loss by the calibrated single-firing loss using exact integer arithmetic, before any later
+poll. Give each trigger an owner country no house plays, avoiding owner-house raises. Fresh tags and full-health objects ensure no earlier latch. With the
+original's persistent latch, a normal vehicle killed by a known attacker gives seven firings
+within the killing hit, compared with two for infantry, aircraft and buildings; without an
+attacker the vehicle gives four and the other kinds two. Each action's effects and draws
+precede death debris. A different count or position in the replay falsifies the groups.
+On our engine with the new extra-raise quirk off, the vehicle gives two. Repeat the original's
+vehicle case after takeover by a vehicle thief, first with the tag-carries-over flag clear and
+then set on one definition in its chain: the flag-clear case retains the extra group, the
+flag-set case gives only the common group's two firings. Record the remembered hijacker type
+before killing; absence of that state makes this variant inconclusive.
+
+*Deferred deaths:* repeat with a cyborg killed while initially not prone, a tagged building
+eligible for delayed death and a named delay-kill warhead, a sinking vessel, and an aircraft
+shot down in flight. A one-time tag fires on the building's initial lethal hit, on the vessel's
+killing hit and on the aircraft's killing hit, not first at expiry, sinking completion or
+impact. The cyborg's reprieve fires nothing; a later lethal hit while prone fires normally.
+Use a repeating building tag and the calibrated counter action to verify a second common destruction
+group at countdown expiry if the tag is still attached, recording later poll firings
+separately. Any reversed moment falsifies these cases.
+
+*Retained infantry:* pre-place two infantry sharing an all-carriers tag with the same single
+event and calibrated counter action. Give the first a long positive-count death sequence through named test
+art. Kill it, then kill the second before the first sequence completes. The first raise
+satisfies but detaches only the first carrier, with no counter health loss; the second death now fires the
+action once. In a separate run, use a repeating tag shared by the two infantry. It stays attached to the first while that unit plays death; record attachment read-only,
+and distinguish later polls from destruction raises. No fresh
+destruction group occurs at sequence completion. Loss of the repeating tag just on starting
+death or an extra removal-time destruction raise falsifies the claim. S-0011 owns the exclusion from present-object actions; retaining
+the tag must not make change-owner act on dying infantry. Perform five runs of each carrier
+variant. Q-0268 part 1 is owned by the movement specs, not by this death scenario.
 
 ## Open questions
 
