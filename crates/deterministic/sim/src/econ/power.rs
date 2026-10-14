@@ -449,6 +449,7 @@ pub fn meter_base(w: &World, house: HouseId) -> i32 {
 /// bands (*n* > 1), scale `b` and totals `o` and `d`: the occupied capacity
 /// *A* and the supplied, near-shortage and further-shortage extents in
 /// bands, as doubles before any quantisation.
+// spec: S-0405 F4 (three extents: supplied, near shortage, further shortage)
 pub fn meter(b: i32, o: i32, d: i32, n: i32, mode: Rounding) -> (i32, [F64; 3]) {
     let f = |x: i64| F64::from_i64(x, mode);
     // spec: S-0405 F4 (q = trunc(RZ₅₃(RZ₅₃(400 / RZ₅₃(B + 400)) × N)); Constants: meter scale constant 400)
@@ -460,7 +461,7 @@ pub fn meter(b: i32, o: i32, d: i32, n: i32, mode: Rounding) -> (i32, [F64; 3]) 
     let a = n - (n - 1).min(q.max(0));
     // spec: S-0405 F4 (U = max(0, D − O), V = min(U, 100), W = U − V, T = max(O, D)); Constants: near-shortage interval 100
     let u = (i64::from(d) - i64::from(o)).max(0);
-    let v = u.min(100);
+    let v = u.min(100); // spec: S-0405 Constants (near-shortage interval 100)
     let wv = u - v;
     let t = i64::from(o.max(d));
     if t <= 0 {
