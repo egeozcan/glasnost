@@ -2,7 +2,7 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -846,6 +846,14 @@ whether the vehicle's destination changes.
   including its citation to this spec's Terms rather than to claim 2 for input timing. Check the
   compatible definitions and claims in the latest same-batch revisions at sign-off, not against
   an earlier batch's revision list.
+- **Tick-order boundaries, for sign-off.** The current S-0203 rows 1 and 4 retain trigger
+  polling and the chrono-flash step: an action from row 1 takes its first step in that tick,
+  while an action after row 4 first steps in the next tick. Its claim 7 still places orders
+  after the turn pass and before the next tick's turns; claim 9 still counts timings against
+  the tick number, not turns. These agree with claims 6, 11 and 14 and F4 here, and with
+  S-0213 claim 1's input and order boundaries. Reconfirm those labels and boundaries in
+  the actual revisions handed off together. Production-start draw assignment belongs to
+  S-0202, S-0203 and S-0404; it changes none of these pacing or chrono-flash rules.
 - **Companion pointers in S-0011, for sign-off.** The current S-0011 companion table after I4
   points here for the pause and chrono-flash actions, the no-effect skirmish radar-movie actions,
   and T1 part C's win-action fixture assumption. These pointers agree with this revision's
