@@ -305,7 +305,6 @@ Provisional rules of M5a, each tied to a request:
 | `econ::release::ring` | with `quirks.foundation_exit_lists` off, a foundation without cells (0 × 0) has an empty exit list, as with the switch on | Q-0195 |
 | `econ::tech::recheck` (full tab) | S-0004 claim 11's 76-item cap is not applied: every offered type gets an icon and stays in the taken-up set | Q-0196 |
 | `econ::tech::recheck` | when one recheck adds several types, they are inserted one by one in the taken-up set's order (kind, then type index) | Q-0191 |
-| `load::new_game` | the secret-lab draws come before the game-start pass's tile-animation draws (S-0202 claim 14), not last as S-0412 claim 14 says | Q-0192 |
 | `econ::deploy::process_construction`, `econ::sell::process_selling` | construction is processed every tick (no draw) and ends at the first processing with tick − start ≥ (*n* − 1) × *d_b*, the building then forced to *guard*; a sale's build-down ends the same way; gates and theater-flag buildings use ⌊*N_b* / 2⌋ | Q-0130 |
 | `econ::sell::sell_upgrade` | the upgrade count drops by 1, not below 0, whatever raised it | Q-0131 |
 | `econ::deploy::can_stand` | a packed-up vehicle is refused only by a cell that is not usable or whose ground record shows a building or a vehicle | Q-0132 |
