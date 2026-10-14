@@ -888,6 +888,7 @@ impl Session {
         d.image(MAP_IMAGE, m);
         let view = self.view();
         let f = self.loaded.map.footprint;
+        // spec: S-0101 claim 8 (black bands over the battlefield image, taking precedence over S-0110's cover and light; overlays, the cursor, messages and the sidebar drawn after may appear over them)
         for r in outside_local_area(m, view.origin, local_area_rect(f.width, f.local)) {
             d.fill(r, [0, 0, 0, 255]);
         }
@@ -1125,34 +1126,37 @@ async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<TypeRef, IndexedImag
 }
 
 /// The parts of the battlefield rectangle `m`, showing world pixels from
-/// `origin`, that lie outside the local area's world-pixel rectangle
-/// `local` (x, y, width, height). Only an oversized view (S-0101 claim 8's
-/// centring) has any: F5 keeps every other view inside the local area. The
-/// original never shows them; our engine draws them black (interim, Q-0570,
-/// docs/development.md), as it draws the world past the map.
+/// `origin`, that S-0101 claim 8 makes black: on each oversized axis, the
+/// pixels beyond that axis's interval of the local area's world-pixel
+/// rectangle `local` (x, y, width, height). The bands of both axes form a
+/// union, so the corners are covered when both are oversized.
 fn outside_local_area(m: Rect, origin: (i32, i32), local: (i32, i32, i32, i32)) -> Vec<Rect> {
     let (lx, ly, lw, lh) = local;
-    // The local area on the screen, cut to the battlefield.
-    let x0 = (lx - origin.0 + m.x).clamp(m.x, m.right());
-    let x1 = (lx + lw - origin.0 + m.x).clamp(m.x, m.right());
-    let y0 = (ly - origin.1 + m.y).clamp(m.y, m.bottom());
-    let y1 = (ly + lh - origin.1 + m.y).clamp(m.y, m.bottom());
-    [
-        Rect::new(m.x, m.y, x0 - m.x, m.h),
-        Rect::new(x1, m.y, m.right() - x1, m.h),
-        Rect::new(x0, m.y, x1 - x0, y0 - m.y),
-        Rect::new(x0, y1, x1 - x0, m.bottom() - y1),
-    ]
-    .into_iter()
-    .filter(|r| r.w > 0 && r.h > 0)
-    .collect()
+    let mut out = Vec::new();
+    // spec: S-0101 F5 (an axis is oversized when M < m: 60·V_w < W horizontally, 30·V_h + 135 < H vertically) and claim 8 (non-oversized axes gain no clipping)
+    if lw < m.w {
+        // spec: S-0101 claim 8, F5 (left inclusive, right exclusive)
+        let x0 = (lx - origin.0 + m.x).clamp(m.x, m.right());
+        let x1 = (lx + lw - origin.0 + m.x).clamp(m.x, m.right());
+        out.push(Rect::new(m.x, m.y, x0 - m.x, m.h));
+        out.push(Rect::new(x1, m.y, m.right() - x1, m.h));
+    }
+    if lh < m.h {
+        // spec: S-0101 claim 8, F5 (top inclusive, bottom exclusive; the rectangle is not shifted to the oversized centre)
+        let y0 = (ly - origin.1 + m.y).clamp(m.y, m.bottom());
+        let y1 = (ly + lh - origin.1 + m.y).clamp(m.y, m.bottom());
+        out.push(Rect::new(m.x, m.y, m.w, y0 - m.y));
+        out.push(Rect::new(m.x, y1, m.w, m.bottom() - y1));
+    }
+    out.retain(|r| r.w > 0 && r.h > 0);
+    out
 }
 
 #[cfg(test)]
 mod local_area_tests {
     use super::*;
 
-    // spec: S-0101 F5 (a limited view that is not oversized lies inside the local area: nothing is masked) and claim 8 (an oversized view centred on it: the margins on both sides are masked)
+    // spec: S-0101 F5 (a limited view that is not oversized lies inside the local area: nothing is masked) and claim 8 (an oversized view centred on it: the margins on both sides are black)
     #[test]
     fn only_an_oversized_view_has_margins() {
         let m = Rect::new(0, 0, 640, 400);
@@ -1165,5 +1169,42 @@ mod local_area_tests {
             margins,
             vec![Rect::new(0, 0, 220, 400), Rect::new(1780, 0, 220, 400)]
         );
+    }
+
+    // spec: S-0101 claim 8 (left and top inclusive, right and bottom exclusive: the first pixel outside each interval is black, the last inside is not)
+    #[test]
+    fn the_band_boundaries_follow_the_rectangle() {
+        let local = (-780, 495, 1560, 795);
+        let wide = Rect::new(10, 20, 2000, 400);
+        let bands = outside_local_area(wide, (-1000, 600), local);
+        let black = |x: i32, y: i32| bands.iter().any(|r| r.contains(Point { x, y }));
+        // world column c is at screen x = c + 1000 + 10
+        let screen = |c: i32| c + 1010;
+        assert!(black(screen(-781), 100));
+        assert!(!black(screen(-780), 100));
+        assert!(!black(screen(-780 + 1560 - 1), 100));
+        assert!(black(screen(-780 + 1560), 100));
+    }
+
+    // spec: S-0101 claim 8 (with both axes oversized the black region is the union of the horizontal and vertical bands, corners included; non-oversized axes gain no clipping)
+    #[test]
+    fn both_axes_give_the_union_and_one_axis_clips_only_itself() {
+        let local = (-780, 495, 1560, 795);
+        let big = Rect::new(0, 0, 2000, 1000);
+        let bands = outside_local_area(big, (-1000, 400), local);
+        let black = |x: i32, y: i32| bands.iter().any(|r| r.contains(Point { x, y }));
+        // world (x, y) is at screen (x + 1000, y − 400)
+        assert!(black(0, 0), "top-left corner");
+        assert!(black(1999, 999), "bottom-right corner");
+        assert!(black(1000 - 780, 495 - 400 - 1), "just above the rectangle");
+        assert!(
+            !black(1000 - 780, 495 - 400),
+            "the rectangle's top-left pixel"
+        );
+        assert!(black(1000, 495 + 795 - 400), "just below the rectangle");
+        // Wide but not tall: a view hanging past the rectangle's top is not clipped vertically.
+        let wide = Rect::new(0, 0, 2000, 400);
+        let bands = outside_local_area(wide, (-1000, 400), local);
+        assert!(bands.iter().all(|r| r.h == 400), "{bands:?}");
     }
 }
