@@ -1,5 +1,5 @@
 //! Claim tests for S-0406 (building placement) and the construction state
-//! it begins (S-0108 claim 5, request Q-0130) on synthetic data: invented
+//! it begins (S-0108 claim 5, S-0406 claims 14 to 18) on synthetic data: invented
 //! building, overlay and vehicle types, no stock values. Houses Alpha (0,
 //! Alphaland) and Beta (1, Betaland) of the testkit's sandbox game, not
 //! allied.
