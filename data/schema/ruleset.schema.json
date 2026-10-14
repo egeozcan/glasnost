@@ -2201,6 +2201,14 @@
           ],
           "default": null
         },
+        "considered_aircraft": {
+          "description": "Units: `ConsideredAircraft`, the counts-as-aircraft flag of the\nsidebar order (S-0004 claim 11 rule 3); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "defenses_cost_bonus": {
           "description": "Buildings: `DefensesCostBonus`, the cost bonus *β* for defences, a single (S-0404 claim 2); absent: 1.0.",
           "anyOf": [

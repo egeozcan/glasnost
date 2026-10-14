@@ -290,3 +290,14 @@ NODBarracks=no\nYuriBarracks=yes\n[HUTB]\nCloning=yes\nExitCoord=5\n[AudioVisual
     );
     assert_eq!(s.general.economy.pose_dir, Some(96));
 }
+
+// spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
+#[test]
+fn considered_aircraft_flag() {
+    let base = "[VehicleTypes]\n0=CARA\n1=CARB\n[AircraftTypes]\n0=PLANEA\n[CARA]\nConsideredAircraft=yes\n\
+[CARB]\nNaval=no\n[PLANEA]\nConsideredAircraft=no\n";
+    let (s, _) = import(base, "");
+    assert_eq!(s.vehicles["CARA"].econ.considered_aircraft, Some(true));
+    assert_eq!(s.vehicles["CARB"].econ.considered_aircraft, None);
+    assert_eq!(s.aircraft["PLANEA"].econ.considered_aircraft, Some(false));
+}

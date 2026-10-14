@@ -143,8 +143,7 @@ pub struct TypeTech {
     pub upgrade: bool,
     /// The sidebar tab, 0 to 3 for the first to fourth (S-0004 claim 11).
     pub tab: u8,
-    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3). Not imported
-    /// yet: always no (interim Q-0123).
+    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3).
     pub considered_aircraft: bool,
     /// The naval flag (S-0004 claim 11 rule 3).
     pub naval: bool,
@@ -278,6 +277,8 @@ impl Rules {
                         tab,
                         // spec: S-0004 Import mapping (naval = Naval; absent: no)
                         naval: u.combat.naval.unwrap_or(false),
+                        // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft; absent: no)
+                        considered_aircraft: u.econ.considered_aircraft.unwrap_or(false),
                         ..Default::default()
                     };
                     econ_fields(&u.econ, &mut t);
@@ -891,6 +892,7 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     for tab in hh.icons.iter_mut() {
         tab.retain(|i| !gone.contains(&i.t));
     }
+    // Q-0196 (interim: S-0004 claim 11's 76-item cap is not applied; every offered type is shown)
     for (icon, key) in added {
         let tab = &mut hh.icons[usize::from(key.tab)];
         // spec: S-0004 claim 11 (an item already shown is not added twice)
@@ -985,7 +987,7 @@ fn sorts_before(
     match a.cmp(&b) {
         std::cmp::Ordering::Less => true,
         std::cmp::Ordering::Greater => false,
-        // Q-0123 (interim: display names are not imported, so they compare equal)
+        // Seam: display names (S-0004 claim 11 rule 6) are text the simulation does not import yet, so they compare equal.
         // spec: S-0004 claim 11 rule 6 (equal names: the newly added item first; quirks.sidebar_tie_newest_first)
         std::cmp::Ordering::Equal => tie_newest_first,
     }

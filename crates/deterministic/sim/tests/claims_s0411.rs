@@ -563,6 +563,56 @@ fn claim_9_release_tick() {
     assert!(w.obj(obj).unwrap().on_map);
 }
 
+// spec: S-0411 claim 9 (S7 third run: a failed infantry release cancels the done item with S-0404 claim 6's refund at the automatic order's application boundary; clearing the exit later releases nothing and gives no retry)
+// spec: S-0411 claim 8 (the ready label while the unit item is done, until the place order releases or cancels it)
+#[test]
+fn claim_9_failed_release_cancels() {
+    let mut r = ruleset();
+    r.sim.infantry.get_mut("GRUNT").unwrap().cost = Some(50);
+    let mut w = game(&r);
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let tl = w.obj(k).unwrap().pos.cell();
+    // Every candidate exit cell of S-0404 claim 13 blocked.
+    let huts: Vec<ObjectId> = glasnost_sim::econ::release::exit_list(2, 2, false, true)
+        .into_iter()
+        .map(|(a, b)| {
+            glasnost_sim::testkit::spawn(
+                &mut w,
+                Kind::Building,
+                "HUT",
+                0,
+                glasnost_map::CellXY::new(tl.x + a, tl.y + b),
+                0,
+            )
+        })
+        .collect();
+    ready(&mut w);
+    set_credits(&mut w, 0, 1_000_000);
+    let grunt = t(&w, Kind::Infantry, "GRUNT");
+    assert!(issue(&mut w, 0, Order::Build { what: grunt }));
+    step(&mut w);
+    let obj = item(&w, 0, grunt).unwrap().object;
+    let done = run_to_done(&mut w, 0, grunt, 200).expect("done");
+    assert_eq!(w.tick, done + 1);
+    assert!(sidebar::icon_state(&w, H, grunt).unwrap().ready);
+    assert_eq!(credits(&w, 0), 1_000_000 - 50);
+    // The automatic place order of tick done + 1 is applied at its end.
+    step(&mut w);
+    assert!(item(&w, 0, grunt).is_none());
+    assert!(sidebar::icon_state(&w, H, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+    assert!(w.obj(obj).is_none_or(|o| !o.on_map));
+    for h in huts {
+        objects::remove(&mut w, h);
+    }
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(item(&w, 0, grunt).is_none());
+    assert!(w.obj(obj).is_none_or(|o| !o.on_map));
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
 // spec: S-0004 claim 11 (rules 3 to 6: category rank, then tech level, then cost when added; a full tie puts the newest first under quirks.sidebar_tie_newest_first)
 // spec: S-0411 claim 13 (the icon order is kept for every player house)
 #[test]
@@ -601,6 +651,30 @@ fn claim_13_icon_order() {
         let pos = |x| icons.iter().position(|y| *y == x).unwrap();
         assert!(pos(grunt) < pos(jeep));
     }
+}
+
+// spec: S-0004 claim 11 rule 3 (a vehicle that counts as aircraft ranks air, 1: after ground, before naval, ahead of a lower cost)
+// spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft)
+#[test]
+fn claim_13_icon_order_counts_as_aircraft() {
+    let mut r = ruleset();
+    r.sim
+        .vehicles
+        .get_mut("JEEP")
+        .unwrap()
+        .econ
+        .considered_aircraft = Some(true);
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    building(&mut w, "NAVYARD", 0, 6, 0);
+    ready(&mut w);
+    let v = |n| t(&w, Kind::Vehicle, n);
+    let (jeep, tank, boat) = (v("JEEP"), v("TANK"), v("BOAT"));
+    let vehicles: Vec<TypeRef> = sidebar::icons(&w, H)
+        .into_iter()
+        .filter(|x| x.kind == Kind::Vehicle)
+        .collect();
+    assert_eq!(vehicles, vec![tank, jeep, boat]);
 }
 
 fn two_tab_rules() -> Ruleset {

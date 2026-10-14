@@ -102,6 +102,10 @@ pub struct EconFields {
     /// Vehicles: `PoweredUnit` (S-0405 claim 13); absent: no.
     #[serde(default)]
     pub powered_unit: Option<bool>,
+    /// Units: `ConsideredAircraft`, the counts-as-aircraft flag of the
+    /// sidebar order (S-0004 claim 11 rule 3); absent: no.
+    #[serde(default)]
+    pub considered_aircraft: Option<bool>,
     /// Aircraft: `AirportBound` (S-0407 claim 16); absent: no.
     #[serde(default)]
     pub airport_bound: Option<bool>,
