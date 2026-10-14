@@ -267,6 +267,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         }
         Kind::Aircraft => {
             let tc = type_combat(w, id).cloned().unwrap_or_default();
+            // An empty list shows nothing and takes no draw (unknown in S-0312 claim 16; interim, request Q-0236).
             if !tc.explosion.is_empty() {
                 // spec: S-0312 claim 16 (one list pick from the explosion list)
                 let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;

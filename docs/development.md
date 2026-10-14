@@ -310,6 +310,7 @@ Provisional rules of M5a, each tied to a request:
 | `econ::deploy` (completion) | a deployed building faces *D* × 256 | Q-0220 |
 | `econ::harvest` (the idle step-off) | when the step-off search of S-0402 claim 13 gives no cell, the harvester stays where it is, with no destination, and still queues *guard* (no draw) | Q-0194 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
+| `combat::death` (aircraft) | a killed aircraft whose type has an empty explosion list shows no animation and takes no draw (S-0312 claim 16 leaves it unknown) | Q-0236 |
 
 ## Tests
 
