@@ -519,3 +519,16 @@ fn claim_10_teleporter_mark_moves_at_once() {
     assert_eq!(w.obj(v).unwrap().dest, Some(spot));
     assert_eq!(glasnost_sim::teleport::mark_cell(&w, v), Some(c(6, 6)));
 }
+
+// spec: S-0415 claim 6 and Constants (D15: the deployed building is inserted facing 0, body and turret, whatever the deploy facing and the vehicle's facing)
+#[test]
+fn claim_6_insertion_facing() {
+    let mut w = game(&rules());
+    let v = spawn_v(&mut w, "KIT", c(0, 0), facing_d());
+    order(&mut w, Order::Deploy { actor: v });
+    until(&mut w, 30, |w| w.obj(v).is_none()).expect("deployed");
+    let b = w.obj(buildings(&w)[0]).unwrap();
+    assert_ne!(facing_d(), 0);
+    assert_eq!(b.body.value(w.tick), 0);
+    assert_eq!(b.turret.value(w.tick), 0);
+}

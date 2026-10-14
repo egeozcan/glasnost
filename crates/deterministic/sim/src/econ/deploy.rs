@@ -65,6 +65,10 @@ fn facing_of(d: i32) -> Facing {
     (d.wrapping_mul(256)).rem_euclid(65536) as Facing
 }
 
+/// The facing a deployed building is inserted with (S-0415 claim 6).
+// spec: S-0415 Constants (building insertion facing 0, map north)
+const INSERTION_FACING: Facing = 0;
+
 /// Whether the redeploy setting is on (S-0415 Terms; the setup value of
 /// S-0412 claim 1, defaulting to the rules' default).
 pub fn redeploys(w: &World) -> bool {
@@ -336,10 +340,8 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> bool {
     }
     // Leave the vehicle's cell before the building enters it.
     crate::objects::remove(w, id);
-    // spec: S-0415 claim 6 (the centre of the anchor at the surface height; construction begins; not a place order, S-0415 claim 7)
-    // The building's facing is S-0415's and not stated there (S-0406 claim 16, request Q-0220): interim, the deploy facing D × 256.
-    let d = deploy_facing(w, b);
-    crate::econ::placement::put_on_map_facing(w, bid, at, false, facing_of(d));
+    // spec: S-0415 claim 6 and Constants (the centre of the anchor at the surface height, inserted facing 0, not the vehicle's facing or D × 256; construction begins; not a place order, S-0415 claim 7)
+    crate::econ::placement::put_on_map_facing(w, bid, at, false, INSERTION_FACING);
     let yard = w.rules().buildings[b as usize]
         .raw
         .construction_yard
