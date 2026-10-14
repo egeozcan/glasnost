@@ -158,7 +158,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `layer_change_on_events_only` | S-0102 claim 4 | render layer membership is not modelled (the moments of claim 4 may be simulation state) |
 | `remembered_animation_in_cell_pass` | S-0102 claim 16 | no fog, so no remembered animations |
 | `slot_values_replace_animation_adjustments` | S-0102 claim 17 | building slot animations are not drawn |
-| `deploy_animation_neutral_brightness` | S-0103 claim 8 | deploy and undeploy animations are not drawn |
 | `parachute_brightness_fixed` | S-0103 claim 8 | parachutes are not drawn |
 | `zero_rate_freezes_ambient` | S-0104 claim 4 | the ambient fade's timing is not modelled (render::light::ambient_step takes one step) |
 | `dominator_rate_thousandths` | S-0104 claim 4 | no dominator effect and no fade timing |

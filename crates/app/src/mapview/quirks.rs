@@ -200,10 +200,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     // S-0103
     (
-        "deploy_animation_neutral_brightness",
-        "S-0103 claim 8: deploy and undeploy animations are not drawn",
-    ),
-    (
         "parachute_brightness_fixed",
         "S-0103 claim 8: parachutes are not drawn",
     ),
