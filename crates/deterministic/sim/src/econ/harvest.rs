@@ -12,11 +12,11 @@
 //! Seams: the building animations of claim 11 (no building animation is
 //! modelled, so none is ever playing and none delays the harvester), a
 //! second-route arrival report to a building other than a dock-unload
-//! refinery (claim 10; the entry-exchange specs own it), the
-//! slave cycle of claim 14 (no slave is ever created, so a slave group is
-//! never at rest and the wake-up rule never holds in play; the rule itself
-//! is [`wake_rule`]), and the chrono miner's teleporting and its dropped
-//! destinations of claim 17 (no teleport locomotor exists).
+//! refinery (claim 10; the entry-exchange specs own it), and the chrono
+//! miner's teleporting and its dropped destinations of claim 17 (no teleport
+//! locomotor exists). The slave cycle of claim 14 and the slave groups of
+//! claims 19 to 25 are `crate::econ::slaves`; the wake-up rule is
+//! [`wake_rule`].
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
