@@ -872,15 +872,18 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     // spec: S-0407 claim 17 and S-0411 claim 15 (admission order: kinds in the acquisition order of their earliest still-owned qualifying factory, then increasing registration index)
     candidates.sort_by_cached_key(|t| (admission_rank(w, house, t.kind), t.kind, t.index));
     // spec: S-0411 claim 15 (capacity is judged before the removals of the recheck: every icon present at its start occupies a place; each tab of each player house separately)
-    let mut used: [usize; 4] = std::array::from_fn(|i| h.econ.tech.icons[i].len());
+    let mut used: Vec<usize> = h.econ.tech.icons.iter().map(Vec::len).collect();
     for t in candidates {
-        let tab = usize::from(tt(w, t).map_or(0, |f| f.tab)).min(3);
+        let tab = usize::from(tt(w, t).map_or(0, |f| f.tab));
+        let Some(slot) = used.get_mut(tab) else {
+            continue;
+        };
         // spec: S-0004 claim 11 and Constants (a tab holds at most 76 items; a candidate for a full tab is suppressed: no icon, not in the set) and S-0411 claim 15
-        if used[tab] >= TAB_CAPACITY {
+        if *slot >= TAB_CAPACITY {
             continue;
         }
         // spec: S-0411 claim 15 (an admitted candidate occupies a place against later candidates even when claim 1 (b) removes it in the same recheck)
-        used[tab] += 1;
+        *slot += 1;
         // spec: S-0407 claim 1 (b) (a factory could make it)
         if factory_condition(w, house, t) {
             after.insert(t);
