@@ -94,12 +94,23 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
 
 /// The turret target rows of S-0206 claim 9 for a vehicle with a target,
 /// after its firing step; `facing_error` is the step's answer. Returns the
-/// target facing to give, if any.
+/// target facing of the row that wins, if any.
 pub fn turret_target(w: &World, id: ObjectId, facing_error: bool) -> Option<u16> {
-    let o = w.obj(id)?;
-    let t = o.target?;
+    turret_target_rows(w, id, facing_error).last().copied()
+}
+
+/// The target facings of the turret target rows that apply in this tick
+/// (S-0206 claim 9), in F5's numbering: from the lowest row of the table
+/// to the highest, so the last one is the target at the end of the tick
+/// unless the spin row applies too.
+pub fn turret_target_rows(w: &World, id: ObjectId, facing_error: bool) -> Vec<u16> {
+    let mut rows = Vec::new();
+    let Some(o) = w.obj(id) else { return rows };
+    let Some(t) = o.target else { return rows };
     let r = w.rules();
-    let u = r.unit(o.kind, o.type_index)?;
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return rows;
+    };
     let tick = w.tick;
     // spec: S-0206 Terms (the turret weapon: the numbered weapon at the weapon number, else the primary)
     let tw = if u.combat.multi_weapon {
@@ -107,22 +118,22 @@ pub fn turret_target(w: &World, id: ObjectId, facing_error: bool) -> Option<u16>
     } else {
         slot_weapon(w, id, 0)
     };
-    let was_turning = o.turret.turning(tick.wrapping_sub(1));
+    // spec: S-0206 claim 9 (a spinning turret never counts as turning for the target rows)
+    let was_turning = !u.turret_spins && o.turret.turning(tick.wrapping_sub(1));
     let d = dir(w, w.reference_point(id), t);
     let omni = tw.is_some_and(|x| r.combat.weapon(x).omni_fire);
+    // spec: S-0206 claim 9 and F5 (the facing-error row is the lowest of the rows that can apply together)
+    if facing_error {
+        rows.push(d);
+    }
     // spec: S-0206 claim 9 (a target, not turning at the end of the previous tick, a turret weapon that is not omni-fire: the direction of the target; turret-locked weapons are not imported)
     if !was_turning && tw.is_some() && !omni {
-        return Some(d);
+        rows.push(d);
+    } else if !facing_error && !r.quirks.turret_reaim_after_turn && tw.is_some() && !omni {
+        // spec: S-0206 claim 9 (otherwise no change, quirks.turret_reaim_after_turn off: the direction of the target)
+        rows.push(d);
     }
-    // spec: S-0206 claim 9 (the facing-error row)
-    if facing_error {
-        return Some(d);
-    }
-    // spec: S-0206 claim 9 (otherwise no change, quirks.turret_reaim_after_turn)
-    if !r.quirks.turret_reaim_after_turn && tw.is_some() && !omni {
-        return Some(d);
-    }
-    None
+    rows
 }
 
 /// Infantry firing (S-0107 claim 11), after the unit's sequence rules of

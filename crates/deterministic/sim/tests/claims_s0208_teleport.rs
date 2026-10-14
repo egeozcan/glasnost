@@ -252,3 +252,62 @@ fn claim_19_object_destination_searches_nearby() {
     );
     assert_eq!(w.obj(id).unwrap().dest, Some(Target::Object(cart)));
 }
+
+// spec: S-0208 claim 19 (a replacement destination clears the earlier reservation first; refused, it restores the entry at the present position and the unit does not jump, Q-0235)
+#[test]
+fn claim_19_refused_replacement_restores_the_present_entry() {
+    let mut s = scene();
+    let a = cell(0, -6);
+    let b = cell(6, 0);
+    for sub in 2..=4 {
+        s.place_infantry(0, "STANDER", b, sub);
+    }
+    let (mut w, id) = start(&s);
+    let from = w.obj(id).unwrap().pos;
+    order_move(&mut w, id, a);
+    run(&mut w, 1);
+    let reserved = |w: &World| (2..=4).any(|p| taken(w, a, p));
+    assert!(reserved(&w), "the landing position at A is reserved");
+    assert!(!taken(&w, cell(0, 0), position::CENTRE));
+    // The destination is replaced before the jump's movement update.
+    w.obj_mut(id).unwrap().dest = Some(Target::Cell(b));
+    run(&mut w, 1);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.pos, from, "no jump");
+    assert_eq!(o.dest, None);
+    assert!(!reserved(&w), "the earlier reservation is cleared");
+    assert!(
+        taken(&w, cell(0, 0), position::CENTRE),
+        "the present entry is restored"
+    );
+}
+
+// spec: S-0208 claim 19 (a ground-height departure onto a high-bridge cell chooses and reserves with the ground record; at the jump the unit is listed on the deck with deck height, S-0207 claim 20 e; the reservation then follows the deck listing: interim, request Q-0311)
+#[test]
+fn claim_19_low_departure_onto_a_high_bridge() {
+    let (mut w, id) = start(&scene());
+    let to = cell(0, -6);
+    let i = w.cells.idx(to).expect("cell");
+    w.cells.deck[i] = true;
+    w.cells.deck_entry[i] = true;
+    w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+    let deck_taken = |w: &World, p: u8| w.cells.occ(to, Layer::Deck).is_some_and(|r| r.taken(p));
+    order_move(&mut w, id, to);
+    run(&mut w, 1);
+    let ground = (2..=4).filter(|&p| taken(&w, to, p)).count();
+    let deck = (2..=4).filter(|&p| deck_taken(&w, p)).count();
+    assert_eq!(
+        (ground, deck),
+        (1, 0),
+        "the reservation is in the ground record"
+    );
+    run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == to);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.layer, Layer::Deck);
+    let p = Pos::centre(to, 0);
+    assert_eq!(o.pos.z, w.surface_at(p.x, p.y) + 416);
+    assert!(w.cells.list(to, Layer::Deck).contains(&id));
+    let ground = (2..=4).filter(|&p| taken(&w, to, p)).count();
+    let deck = (2..=4).filter(|&p| deck_taken(&w, p)).count();
+    assert_eq!((ground, deck), (0, 1));
+}

@@ -2203,6 +2203,41 @@ fn area_guard_processing_searches() {
     assert_eq!(w.obj(a).unwrap().beh.last, Some((t, 1)));
 }
 
+// spec: S-0215 claim 26 (a guard spot taken as the own cell already qualifies for the table in that processing: the actor searches around it at once; a target found ends the processing with 1 tick and no delay draw; Q-0231)
+#[test]
+fn area_guard_own_cell_spot_searches_on_first_processing() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::AreaGuard);
+    w.obj_mut(a).unwrap().guard_spot = None;
+    expire(&mut w, a);
+    let b = veh(&mut w, "T0", 1, 8, 0);
+    let t = w.tick;
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.guard_spot, Some(Target::Cell(at(0, 0))));
+    assert_eq!(target(&w, a), obj(b));
+    assert_eq!(w.obj(a).unwrap().beh.last, Some((t, 1)));
+}
+
+// spec: S-0215 claim 26 (a newly taken own-cell guard spot whose search finds nothing: the search restarts the targeting timer and the processing takes the ordinary delay; Q-0231)
+#[test]
+fn area_guard_own_cell_spot_search_finds_nothing() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    set_beh(&mut w, a, Behaviour::AreaGuard);
+    w.obj_mut(a).unwrap().guard_spot = None;
+    expire(&mut w, a);
+    let t = w.tick;
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.guard_spot, Some(Target::Cell(at(0, 0))));
+    assert_eq!(o.target, None);
+    assert!(o.targeting_timer > t, "{}", o.targeting_timer);
+    let (_, d) = o.beh.last.unwrap();
+    assert!(d > 1, "{d}");
+}
+
 // spec: S-0215 claim 26 (the leash holds and it may not search: drops any target and takes the guard spot as destination)
 #[test]
 fn area_guard_leash_drops_target_without_search() {

@@ -307,7 +307,7 @@ fn f9_phasing_in_delay() {
     assert_eq!(delay(0, true, 3, 0), 3);
 }
 
-// spec: S-0417 claim 5 (a teleporting vehicle temporarily receives driving locomotion: it takes no landing point and does not jump) and S-0215 claim 13 row 1 (it gets its own locomotor back; interim: with no landing point fixed and its mark on its own cell, request Q-0233)
+// spec: S-0417 claim 5 (a teleporting vehicle temporarily receives driving locomotion: it takes no landing point and does not jump), S-0215 claim 13 row 1 (it gets its own locomotor back) and S-0207 claim 21 (destinations while driving fix no landing point and move no reservation; an empty suspended state stays empty and the first destination after restoration jumps)
 #[test]
 fn temporary_drive_then_own_locomotor_back() {
     let s = scene(false);
@@ -345,6 +345,38 @@ fn temporary_drive_then_own_locomotor_back() {
     assert!(marked(&w, to) && !marked(&w, here));
     run(&mut w, 1);
     assert_eq!(w.obj(id).unwrap().pos, centre(&w, to));
+}
+
+// spec: S-0207 claim 21 (restoration retains a fixed landing point, a pending jump and a phasing-in state with its original expiry, and moves no occupancy mark)
+#[test]
+fn claim_21_restoration_retains_the_teleporting_state() {
+    let s = scene(false);
+    let (mut w, id) = start(&s);
+    let here = w.obj(id).unwrap().pos.cell();
+    let l = cell(6, -3);
+    // A suspended teleporting state with a pending jump to L and a
+    // phasing in from an earlier jump; its reservation is on L.
+    glasnost_sim::drive::release_claims(&mut w, id);
+    w.cells.claim_vehicle(l, Layer::Ground, true);
+    let st = teleport::TeleportState {
+        landing: Some(centre(&w, l)),
+        for_dest: Some(Target::Cell(l)),
+        mark: Some(l),
+        phasing: Some((w.tick, 50)),
+        mark_layer: Layer::Ground,
+    };
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.teleport = Some(st.clone());
+        o.drive = Some(glasnost_sim::drive::DriveState::new());
+        o.econ.temporary_drive = true;
+    }
+    assert!(glasnost_sim::econ::release::restore_locomotor(&mut w, id));
+    let o = w.obj(id).unwrap();
+    assert!(o.drive.is_none());
+    assert_eq!(o.teleport.as_ref(), Some(&st));
+    assert!(marked(&w, l));
+    assert!(!marked(&w, here));
 }
 
 /// The end tick of phasing in of an armed teleporting cart whose
@@ -471,4 +503,97 @@ fn claim_20_vehicle_landing_on_a_high_bridge() {
     assert!(w.cells.list(dc, Layer::Deck).contains(&id));
     assert!(!w.cells.list(dc, Layer::Ground).contains(&id));
     assert!(deck_mark(&w) && !marked(&w, dc));
+}
+
+/// Whether the object-present flag of cell `c`'s record in layer `l` is set.
+fn present(w: &World, c: CellXY, l: Layer) -> bool {
+    w.cells.occ(c, l).is_some_and(|o| o.others > 0)
+}
+
+// spec: S-0207 claim 20 (an aircraft with the teleporting locomotor moves by it) and (a) (its reservation is the object-present flag of the landing cell's ground record) and (e) (it lands at H or, on a high-bridge cell, H + 416; interim for the deck landing's ground reservation, request Q-0310)
+#[test]
+fn claim_20_aircraft_moves_its_object_present_mark() {
+    for high in [false, true] {
+        let mut s = Scene::new();
+        let mut t = unit_type(WHEEL, 6, 5);
+        t.locomotor = Some(Locomotor::Teleport);
+        s.aircraft("FLASH", t);
+        s.place_aircraft(0, "FLASH", cell(0, 0), 64);
+        let mut w = s.build();
+        open_orders(&mut w);
+        let id = objects_of(&w, Kind::Aircraft)[0];
+        let here = w.obj(id).unwrap().pos.cell();
+        let dc = cell(0, -6);
+        if high {
+            let i = w.cells.idx(dc).expect("cell");
+            w.cells.deck[i] = true;
+            w.cells.deck_entry[i] = true;
+            w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+        }
+        assert!(present(&w, here, Layer::Ground));
+        order_move(&mut w, id, dc);
+        run(&mut w, 1);
+        assert!(present(&w, dc, Layer::Ground), "high {high}");
+        assert!(!present(&w, here, Layer::Ground), "high {high}");
+        run(&mut w, 1);
+        let o = w.obj(id).unwrap();
+        let ground = centre(&w, dc);
+        let z = if high { ground.z + 416 } else { ground.z };
+        assert_eq!(o.pos, Pos::new(ground.x, ground.y, z), "high {high}");
+        let layer = if high { Layer::Deck } else { Layer::Ground };
+        assert_eq!(o.layer, layer);
+        assert!(present(&w, dc, layer));
+        if high {
+            assert!(!present(&w, dc, Layer::Ground));
+        }
+        // Removal clears the mark where it is.
+        glasnost_sim::objects::remove(&mut w, id);
+        assert!(!present(&w, dc, layer));
+    }
+}
+
+// spec: S-0207 claim 20 (a) (an aircraft removed before its jump clears the reservation on its landing cell, not its own cell's)
+#[test]
+fn claim_20_aircraft_removed_before_the_jump() {
+    let mut s = Scene::new();
+    let mut t = unit_type(WHEEL, 6, 5);
+    t.locomotor = Some(Locomotor::Teleport);
+    s.aircraft("FLASH", t);
+    s.place_aircraft(0, "FLASH", cell(0, 0), 64);
+    s.place_aircraft(0, "FLASH", cell(0, 1), 64);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let id = objects_of(&w, Kind::Aircraft)[0];
+    let dc = cell(0, -6);
+    order_move(&mut w, id, dc);
+    run(&mut w, 1);
+    assert!(present(&w, dc, Layer::Ground));
+    glasnost_sim::objects::remove(&mut w, id);
+    assert!(!present(&w, dc, Layer::Ground));
+    assert!(present(&w, cell(0, 1), Layer::Ground));
+}
+
+// spec: S-0207 claim 20 (b) (on a high-bridge destination a vehicle asks the entry test at the cell's level plus 4, whatever its own height: an occupied deck refuses and the search lands it elsewhere; an empty deck over an occupied ground record accepts)
+#[test]
+fn claim_20_high_bridge_entry_is_asked_at_deck_level() {
+    for deck_taken in [true, false] {
+        let s = scene(false);
+        let (mut w, id) = start(&s);
+        let dc = cell(0, -6);
+        let i = w.cells.idx(dc).expect("cell");
+        w.cells.deck[i] = true;
+        w.cells.deck_entry[i] = true;
+        w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
+        let taken = if deck_taken {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        };
+        w.cells.claim_vehicle(dc, taken, true);
+        order_move(&mut w, id, dc);
+        run(&mut w, 1);
+        let l = w.obj(id).unwrap().teleport.as_ref().and_then(|t| t.landing);
+        let l = l.expect("a landing point");
+        assert_eq!(l.cell() == dc, !deck_taken, "deck taken {deck_taken}");
+    }
 }

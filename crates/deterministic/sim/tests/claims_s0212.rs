@@ -2282,8 +2282,31 @@ fn search_failure_of_a_neutral_unit_queues_area_guard() {
         }
         path::failed(&mut w, id, Search::SearchFailed, false);
         let o = w.obj(id).unwrap();
-        // The house's new destination is not given (request Q-0238).
+        // The house's centre choice is open in S-0215 (interim, request Q-0312).
         assert_eq!(o.dest, None);
         assert_eq!(o.beh.queued, Some(want), "human {human}");
+        assert_ne!(o.beh.current, Some(Behaviour::Move));
     }
+}
+
+// spec: S-0212 claim 23a and T5 (the house-selected destination is a nearby-cell result around the centre: track, normal, the reach region of the unit's ground cell, no deck mode; the search takes no draw)
+#[test]
+fn give_up_destination_is_a_nearby_cell() {
+    let mut s = scene();
+    s.place_unit(0, CAR, cell(0, 0), 64);
+    s.place_unit(0, CAR, cell(5, 0), 64);
+    let mut w = s.build();
+    let id = vehicles(&w)[0];
+    let rng = w.rng.clone();
+    // A clear centre is its own result.
+    assert_eq!(
+        path::give_up_destination(&mut w, id, cell(3, 3)),
+        Some(cell(3, 3))
+    );
+    // An occupied centre gives a nearby cell, not the centre itself.
+    let c = path::give_up_destination(&mut w, id, cell(5, 0)).unwrap();
+    assert_ne!(c, cell(5, 0));
+    let o5 = cell(5, 0);
+    assert!((c.x - o5.x).abs().max((c.y - o5.y).abs()) <= 1, "{c:?}");
+    assert_eq!(w.rng, rng);
 }

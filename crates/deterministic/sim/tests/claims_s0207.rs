@@ -269,6 +269,26 @@ fn track_costs_and_leftover_kept_at_rest() {
     assert!(end.budget > 0);
 }
 
+// spec: S-0207 claim 3 and Edge cases (`quirks.drive_leftover_kept_at_rest`: on, the leftover is kept at rest; off, it is cleared when the vehicle comes to rest)
+#[test]
+fn leftover_kept_at_rest_quirk() {
+    let rest_budget = |keep: bool| {
+        let mut s = scene(car(WHEEL, 10, false), 0);
+        s.ruleset.globals.quirks.drive_leftover_kept_at_rest = keep;
+        let (mut w, id) = start(&s, &[N, N]);
+        first_moving_tick(&mut w, id);
+        let mut n = 0;
+        while w.obj(id).is_some_and(|o| o.dest.is_some()) {
+            step(&mut w, id);
+            n += 1;
+            assert!(n < 100);
+        }
+        snap(&w, id).budget
+    };
+    assert!(rest_budget(true) > 0);
+    assert_eq!(rest_budget(false), 0);
+}
+
 // ---------------------------------------------------------------------------
 // Position between points
 

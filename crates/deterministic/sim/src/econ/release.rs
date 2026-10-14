@@ -1228,7 +1228,14 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         L::Tunnel | L::Teleport => {
             if w.obj(u).is_some_and(|o| o.drive.is_none()) {
                 // Its own cell claim is handed to the driving state's claims.
-                crate::drive::release_claims(w, u);
+                // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
+                let pending = w
+                    .obj(u)
+                    .and_then(|o| o.teleport.as_ref())
+                    .is_some_and(|t| t.mark.is_some());
+                if !pending {
+                    crate::drive::release_claims(w, u);
+                }
                 if let Some(ob) = w.obj_mut(u) {
                     ob.drive = Some(crate::drive::DriveState::new());
                     ob.econ.temporary_drive = true;
@@ -1276,13 +1283,13 @@ pub fn restore_locomotor(w: &mut World, id: ObjectId) -> bool {
     // spec: S-0215 claim 13 row 1 (it gets its own locomotor back)
     o.drive = None;
     o.econ.temporary_drive = false;
-    // spec: S-0215 claim 13 row 1 and S-0207 claim 20 (a) (the teleporting locomotor given back holds no landing point and no phasing in; its mark is on the own cell: interim, request Q-0233)
-    if let Some(t) = o.teleport.as_mut() {
-        *t = crate::teleport::TeleportState::default();
-    }
+    // spec: S-0207 claim 21 (restoration makes no new, empty teleporting state: a fixed landing point, a pending jump and a phasing-in state with its original expiry are retained)
+    let pending = o.teleport.as_ref().is_some_and(|t| t.mark.is_some());
     let (c, l) = (o.pos.cell(), o.layer);
-    // spec: S-0209 claim 1 (a vehicle without the driving locomotor sets the vehicle-present flag of its cell, as at placement)
-    w.cells.claim_vehicle(c, l, true);
+    // spec: S-0207 claim 21 (no occupancy mark is moved merely by restoration: a retained reservation stays where it is) and S-0209 claim 1 (otherwise a vehicle without the driving locomotor holds the vehicle-present flag of its cell)
+    if !pending {
+        w.cells.claim_vehicle(c, l, true);
+    }
     true
 }
 

@@ -2038,6 +2038,30 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     Search::Found
 }
 
+/// The final nearby-cell search of the house-selected destination after
+/// give-up (S-0212 claim 23a, table T5) around `centre`. It takes no draw.
+pub fn give_up_destination(w: &mut World, id: ObjectId, centre: CellXY) -> Option<CellXY> {
+    let ground = w.obj(id)?.pos.cell();
+    regions::ensure(w);
+    // spec: S-0212 claim 23a and T5 (the reach region of the unit's ground cell for normal)
+    let reach = regions::reach_read(w, ground, MovementZone::Normal, false);
+    nearby(
+        w,
+        centre,
+        // spec: S-0212 T5 (house-selected destination after give-up: track, normal, never in deck mode, no height condition, no further test, no reference cell)
+        NearbyUse::Settings(NearbySettings {
+            class: Some(LocomotionClass::Track),
+            zone: MovementZone::Normal,
+            reach: Some(reach),
+            deck: false,
+            height: false,
+            reference: None,
+            no_bridges: false,
+            no_overlay: false,
+        }),
+    )
+}
+
 /// What follows a failed path computation (S-0212 claims 21 and 23).
 /// `repath`: the computation was a re-path for a blocked step.
 pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
@@ -2076,6 +2100,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
             } else {
                 Behaviour::AreaGuard
             };
+            let gives_up = !near || off_deck;
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
                 // spec: S-0212 claim 23 (the unit stops and the retry delay R starts)
@@ -2083,12 +2108,19 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 if drive {
                     ob.dest = None;
                 }
-                if !near || off_deck {
-                    // spec: S-0212 claim 23 row 2 (it gives up: its destination is cleared and it queues guard or area guard)
+                if gives_up {
+                    // spec: S-0212 claim 23 row 2 and claim 23a (it gives up: its destination is cleared and it queues guard or area guard only, neither move nor a forced start)
                     ob.dest = None;
                     ob.beh.queue(Some(give_up));
-                    // The house's new destination for a neutral or special house's unit is
-                    // not given (interim, request Q-0238).
+                }
+            }
+            if gives_up && !human {
+                // spec: S-0212 claim 23a (a neutral or special house's unit gets the house-selected destination on the same tick: a nearby-cell result around the house's centre)
+                if let Some(c) = crate::seams::give_up_centre(w, id) {
+                    let dest = give_up_destination(w, id, c);
+                    if let Some(ob) = w.obj_mut(id) {
+                        ob.dest = dest.map(Target::Cell);
+                    }
                 }
             }
         }

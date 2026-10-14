@@ -6052,6 +6052,11 @@
           "type": "boolean",
           "default": true
         },
+        "drive_leftover_kept_at_rest": {
+          "description": "A vehicle that comes to rest keeps its leftover progress budget for its next move; off: the budget is cleared at rest.",
+          "type": "boolean",
+          "default": true
+        },
         "drive_nearest_from_top_corner": {
           "description": "The nearest object of the look at a new path's first cell is measured from the cell's top corner; off: from its centre.",
           "type": "boolean",

@@ -139,7 +139,7 @@ pub fn release_claims(w: &mut World, id: ObjectId) {
         Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => {
             // spec: S-0207 claim 20 (a) (a teleporting vehicle's mark is on the cell of its landing point until the jump)
             match o.teleport.as_ref().and_then(|t| t.mark) {
-                Some(c) => (vec![c], Layer::Ground),
+                Some(c) => (vec![c], crate::teleport::landing_layer(w, c)),
                 None => (vec![o.pos.cell()], o.layer),
             }
         }
@@ -1353,10 +1353,15 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
         let here = w.obj(id).map(|o| o.pos.cell());
         goal.is_none() || goal == here
     };
+    let keeps = w.rules().quirks.drive_leftover_kept_at_rest;
     if let Some(ob) = w.obj_mut(id) {
         if let Some(d) = ob.drive.as_mut() {
-            // spec: S-0207 claim 11 (a vehicle at rest has ρ = 0; it keeps its leftover budget)
+            // spec: S-0207 claim 11 (a vehicle at rest has ρ = 0)
             d.rho = F64::ZERO;
+            // spec: S-0207 claim 3 and Edge cases (a vehicle that comes to rest keeps its leftover budget; quirks.drive_leftover_kept_at_rest off: cleared)
+            if !keeps {
+                d.budget = 0;
+            }
         }
         if at_goal {
             ob.dest = None;

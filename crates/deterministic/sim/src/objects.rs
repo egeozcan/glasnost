@@ -286,7 +286,13 @@ pub fn remove(w: &mut World, id: ObjectId) {
         }
         Kind::Aircraft => {
             w.cells.leave(cell, o.layer, id);
-            if let Some(rec) = w.cells.occ_mut(cell, o.layer) {
+            // spec: S-0207 claim 20 (a) (a teleporting aircraft's object-present mark is on its landing point's cell until the jump)
+            let (mc, ml) = if o.teleport.is_some() {
+                crate::teleport::aircraft_mark(w, id)
+            } else {
+                (cell, o.layer)
+            };
+            if let Some(rec) = w.cells.occ_mut(mc, ml) {
                 rec.others = rec.others.saturating_sub(1);
             }
         }

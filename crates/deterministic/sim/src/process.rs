@@ -973,7 +973,16 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     if o.kind == Kind::Vehicle && crate::seams::slave_group_at_rest(w, id) {
         crate::seams::wake_slaves(w, id);
     }
-    // spec: S-0215 claim 26 (the leash and search table for a guard spot held when the processing began; a spot first taken in this processing does none of the table: interim, request Q-0231)
+    let mut o = o;
+    if o.guard_spot.is_none() && o.beh.queued.is_none() {
+        // spec: S-0215 claim 26 (no guard spot and nothing queued: takes its own cell; a spot so taken already qualifies for the table in this processing, Q-0231)
+        let spot = Target::Cell(o.pos.cell());
+        o.guard_spot = Some(spot);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.guard_spot = Some(spot);
+        }
+    }
+    // spec: S-0215 claim 26 (the leash and search table for an actor with a guard spot)
     if let Some(gs) = o.guard_spot {
         let gp = match gs {
             Target::Object(x) => w.reference_point(x),
@@ -1046,14 +1055,8 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
             crate::approach::step(w, id);
         }
     }
-    let Some(o) = w.obj(id).cloned() else {
+    if w.obj(id).is_none() {
         return NO_RULE_DELAY;
-    };
-    if o.guard_spot.is_none() && o.beh.queued.is_none() {
-        // spec: S-0215 claim 26 (no guard spot and nothing queued: takes its own cell)
-        if let Some(ob) = w.obj_mut(id) {
-            ob.guard_spot = Some(Target::Cell(o.pos.cell()));
-        }
     }
     let dr = rate_delay(w, id);
     // spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 1 for every kind but aircraft)
