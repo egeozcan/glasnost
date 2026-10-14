@@ -95,9 +95,9 @@ pub struct VoxelQuirks {
     /// x carries add 1/256 pixel to y. Off: independent components.
     pub voxel_x_carry_into_y: bool,
     /// `quirks.voxel_section_sort_ties` (claim 23, F8): sections with equal
-    /// nearest depth need not keep file order; F8 binds two tie rows, and
-    /// other ties follow an interim exchange order (Q-0210). Off: stable
-    /// order.
+    /// nearest depth need not keep file order; F8 fixes six tie rows and
+    /// every all-equal part, and other mixed ties follow an interim
+    /// exchange order (Q-0215). Off: stable order.
     pub voxel_section_sort_ties: bool,
     /// `quirks.voxel_depth_double_width` (claim 24): depth-buffered voxels
     /// are two pixels wide. Off: one pixel.
@@ -1839,10 +1839,10 @@ fn wrap(v: i64) -> u64 {
 /// The sections of a part from lowest to highest overlap priority (claim
 /// 23, F8): `depths[s]` is the nearest view-space depth of section `s`
 /// (file order); the result lists sections in drawing order. Distinct
-/// depths ascend and F8's two tie rows hold. Other equal-depth
-/// configurations are open in S-0105; the exchange order used for them is
-/// an interim rule (Q-0210). With `quirks.voxel_section_sort_ties` off, a
-/// stable ascending sort.
+/// depths ascend, F8's six tie rows hold and a part whose sections all
+/// share one depth keeps file order. Other mixed-depth ties are open in
+/// S-0105; the exchange order used for them is an interim rule (Q-0215).
+/// With `quirks.voxel_section_sort_ties` off, a stable ascending sort.
 pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
     let mut pi: Vec<usize> = (0..depths.len()).collect();
     if !quirks.voxel_section_sort_ties {
@@ -1852,8 +1852,8 @@ pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
         pi.sort_by(|&a, &b| (depths[a] + 0.0).total_cmp(&(depths[b] + 0.0)));
         return pi;
     }
-    // spec: S-0105 F8 (distinct depths ascend; the tie rows A, B → A, B and A, B, C with
-    // z(A) = z(B) > z(C) → C, B, A); other ties: interim exchange order (Q-0210)
+    // spec: S-0105 F8 (distinct depths ascend; the six tie rows and all-equal parts in file
+    // order give the painter priorities of its table); other mixed ties: interim (Q-0215)
     for t in 0..pi.len() {
         let mut chain = vec![t];
         let mut min = depths[pi[t]];
@@ -1998,7 +1998,8 @@ fn draw_model_into(
         .collect();
     let mut order = section_order(&near, quirks);
     if depth_buffered {
-        // spec: S-0105 claim 24 (exactly the reverse of the claim 23 order)
+        // spec: S-0105 claim 24, F8 (the depth-mode contributing order is exactly the reverse
+        // of the painter priority)
         order.reverse();
     }
     for s in order {
@@ -3669,10 +3670,35 @@ mod tests {
         assert_eq!(section_order(&[2.0, 2.0], &stable), [0, 1]);
         // F8: exact comparisons, so −0 and +0 tie.
         assert_eq!(section_order(&[0.0, -0.0], &stable), [0, 1]);
-        // Distinct depths always ascend (F8); the order among the other ties is interim (Q-0210).
+        // Distinct depths always ascend (F8); the order among other mixed ties is interim (Q-0215).
         let d = [5.0, 1.0, 4.0, 1.0, 3.0, 9.0, 2.0, 2.0];
         let o = section_order(&d, &q());
         assert!(o.windows(2).all(|w| d[w[0]] <= d[w[1]]));
+    }
+
+    /// spec: S-0105 claims 23 and 24, Formulas F8 (every row of the overlap-priority table:
+    /// painter priority, and the depth-mode contributing order as its reverse; an all-equal
+    /// part of any size in file order)
+    #[test]
+    fn section_order_f8_table() {
+        let rows: [(&[f32], &[usize], &[usize]); 6] = [
+            (&[2.0, 2.0], &[0, 1], &[1, 0]),
+            (&[2.0, 2.0, 1.0], &[2, 1, 0], &[0, 1, 2]),
+            (&[2.0, 2.0, 2.0], &[0, 1, 2], &[2, 1, 0]),
+            (&[2.0, 2.0, 2.0, 2.0], &[0, 1, 2, 3], &[3, 2, 1, 0]),
+            (&[2.0, 2.0, 1.0, 1.0], &[2, 3, 0, 1], &[1, 0, 3, 2]),
+            (&[1.0, 2.0, 2.0], &[0, 1, 2], &[2, 1, 0]),
+        ];
+        for (depths, painter, depth_mode) in rows {
+            let mut o = section_order(depths, &q());
+            assert_eq!(o, painter, "{depths:?}");
+            o.reverse();
+            assert_eq!(o, depth_mode, "{depths:?}");
+        }
+        for n in 1..9 {
+            let all: Vec<usize> = (0..n).collect();
+            assert_eq!(section_order(&vec![7.0; n], &q()), all);
+        }
     }
 
     /// spec: S-0105 claim 23 (the section with the farthest nearest point
