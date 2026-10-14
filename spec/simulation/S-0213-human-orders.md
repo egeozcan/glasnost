@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -241,7 +241,12 @@ Terms).
    "the resulting behaviour" in table T3 means that order's behaviour. Every destination
    assignment uses S-0107 claim 15's repeated-current-nonempty-destination get-up rule
    (claim 21 here), regardless of the behaviour named by the order.
-   - Backing: `measurable` (Scenario O3) for parts d, e, f (step 7 for its passenger clause) and
+   Generic slave recall in table T3 part (h) excludes buildings, including a deployed
+   slave miner, and excludes a resulting *attack* behaviour even for a mobile master.
+   A building's separate packing-time recall is S-0402 claim 28's, not an effect of
+   applying an ordinary behaviour order here.
+   - Backing: `measurable` (Scenario O4 part ii b for these recall exclusions,
+     Scenario O3) for parts d, e, f (step 7 for its passenger clause) and
      the guard-spot part of g, and `measurable` (Scenario O4) for parts a and h and for the
      contact break of part b at a building of the unloading kind (Scenario O4, part iii, with a
      named test rules file). Keeping a tethered actor's link at a building that is not of the
@@ -395,6 +400,8 @@ Terms).
    | A harvester whose behaviour is *harvest* or *return* | It gets the behaviour *guard* at once |
    | A vehicle that controls slave units, whatever its behaviour | Its slaves are sent back to guard it |
 
+   The slave-recall row applies only to vehicles: a stop order to a deployed slave-miner
+   building does not itself recall its slaves (Scenario O4 part ii b).
    An object whose behaviour has no target and no destination left falls back to rest by the
    rules of S-0215.
    - Interim rule for our engine, where the original is not settled (Open questions): the
@@ -1010,7 +1017,7 @@ applies. "The resulting behaviour" is the order's behaviour, or for an attack-mo
 | (e) | *Area guard*, mobile actor | Target: nothing. Destination and guard spot: both the order's target (an object or a cell). Destination assignment uses S-0107 claim 15 (claim 21 here). The order's destination is not used. The queued destinations are kept |
 | (f) | Any other behaviour, or *area guard* to a building | Target: the order's target. Destination: the order's destination. Destination assignment uses S-0107 claim 15 (claim 21 here). Either may be nothing. An open-topped transport (a type whose passengers can fire out of it) gives the same target to its passengers when the target is not nothing |
 | (g) | As (f), and the actor is a mobile actor | It also forgets its guard spot and its queued destinations |
-| (h) | The actor controls slave units (a slave-miner harvester, which works with its slaves) and the resulting behaviour is not *attack* | Its slaves are sent back to guard it |
+| (h) | The actor is a mobile actor controlling slave units (a slave-miner harvester, which works with its slaves) and the resulting behaviour is not *attack* | Its slaves are sent back to guard it |
 
 Destination assignments in table T3 parts (e) and (f), including assignments that repeat the
 current destination, use claim 21 and S-0107 claim 15. They must not be interpreted as an
@@ -1240,6 +1247,23 @@ applied: a cue is not proof that an order passed its application checks.
   click that gives no acknowledgement made no order (the
   building refused, S-0214) and is not counted; if no repeat after contact makes an order, the
   part is inconclusive.
+
+**Scenario O4 part ii b: recall exclusions (claims 5 and 8).**
+- *Setup:* the preamble's flat stock-data skirmish map, speed 6, director and mods off.
+  Use a human-owned mobile slave miner and, in a separate run, a deployed slave-miner
+  building, each with slaves outside mining. Place a durable enemy target in the master's
+  weapon range, unable to damage it during observation.
+- *Procedure:* from fresh working states, order each master to attack the target. In a
+  separate deployed-master attempt, press stop. Repeat three valid attempts per case.
+  Record the master's target and current/queued behaviour and its slaves' behaviours at
+  each tick boundary. Compare no-order controls, and void attempts overlapping conversion,
+  a group-state transition or another cause of slave recall. Input must actually issue the
+  tested order, as shown by its target change or acknowledgement, or the attempt is inconclusive.
+- *Expected:* neither master's attack order recalls the slaves at application. The building's
+  stop likewise has no order-time slave recall. The mobile non-attack control in O4 ii
+  recalls them. Later group-update or packing effects remain S-0402 claims 21 to 28's.
+- *Falsified if:* a valid tested attack order, or the deployed master's stop, itself sends
+  the mining slaves back to guard at its application boundary.
 
 **Scenario O5: stop, scatter, guard keys (claims 8, 9, 18).**
 - *Setup:* one armed vehicle, one harvester working an ore field, one unarmed vehicle that is not
