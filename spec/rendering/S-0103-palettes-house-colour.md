@@ -2,13 +2,13 @@
 id: S-0103
 title: Palettes and house colour
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0214, Q-0280, Q-0275]
+requests: [Q-0214, Q-0280, Q-0275, Q-0416, Q-0417]
 supersedes: []
 ---
 
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-This spec covers skirmish rendering; network games and campaigns are out of scope. It describes how the palette files become palettes, how a colour definition becomes the 16-entry house-colour ramp, which colour definition each house shows, and which palette each kind of drawn object uses. It also says which palette indices keep their colour under coloured light, and gives the fixed colours of the skirmish setup screen's colour swatches. How a palette is shaded by light into rows of hi-colour pixels is in S-0104 (lighting). This spec only names the inputs to that shading.
+This spec covers skirmish rendering and the colour import needed to inspect map-defined owners without skirmish reassignment; network games and campaign gameplay are out of scope. It describes how the palette files become palettes, how a colour definition becomes the 16-entry house-colour ramp, which colour definition each house shows, and which palette each kind of drawn object uses. It also says which palette indices keep their colour under coloured light, and gives the fixed colours of the skirmish setup screen's colour swatches. How a palette is shaded by light into rows of hi-colour pixels is in S-0104 (lighting). This spec only names the inputs to that shading.
 
 ## Terms
 
@@ -29,6 +29,7 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
 - **Anim palette.** The palette for animations that use neither the tile palette nor a house-colour palette. It is the same in every theater (claim 1).
 - **Icon palette.** The dedicated palette for sidebar build icons, loaded at program start and unchanged during the session (claim 13).
 - **Colour definition.** A named colour given as three bytes (H, S, V): hue, saturation, value. The hue runs 0–255 over the full circle, so 0 and 255 are both red.
+- **House display RGB.** The display-precision RGB sample of a house's colour used as an input to radar drawing (claim 15), not the definition's stored HSV triple or a setup-screen swatch.
 - **Definition position.** Colour definitions are numbered from 0 in the order the game creates them in each game: the entries of the base rules' colour section in their order, then each new name that a later rules layer adds, in order. A later layer's entry whose name already exists creates nothing (claim 5). A line with an empty value is no entry at all (S-0001, claim 11), so it creates no definition and takes no position: the definitions after it each move one position lower. The **first colour definition** is the one at position 0.
 - **Remap range.** Palette indices 16–31. A house-colour palette replaces exactly these entries.
 - **House-colour palette.** The unit palette with the remap range replaced by the ramp of one colour definition.
@@ -162,6 +163,18 @@ Glossary terms used here include *palette*, *theater*, *house*, *house colour*, 
     - Backing: `measurable` (PL for conversion, transparency, independence, session lifetime and missing-file failure; S-0411 S11 for the mask). The existence of every unused shade row is `unmeasured`: sidebar states covered here show the middle row and a separate mask, not those rows.
     - Confidence: high
 
+14. **Imported colour of a map-defined owner (Q-0416).** For map inspection without skirmish reassignment, a house inherits its country's imported colour definition. Its own map section can replace that choice by naming a colour definition. Both selectors are names, compared without regard to letter case, not lobby slots or numeric definition positions. Only the first 31 characters of a selector are used. An absent or empty house selector keeps the inherited choice; an unknown name also keeps it, rather than selecting a new fallback colour. A country's absent selector keeps the value from an earlier rules layer; with no earlier value, its colour is the first definition, position 0. An unknown country selector likewise keeps the value in force. A numeric-looking selector is a name, not an index.
+    - The selected definition supplies the house-colour ramp of claim 6 to both units and buildings under claim 8's palette rules. There is no cycling of lobby colours according to the order in which map objects first mention their owners.
+    - This is colour import only, not a rule to create additional houses in a skirmish. S-0009 claim 27 still owns which owners survive skirmish loading, and claim 10 here still determines the colours of the resulting skirmish houses. S-0413 claim 5 already covers the country's field in a skirmish; it does not supply this map-house override rule.
+    - Backing: `measurable` (PM, an isolated import probe rather than a campaign-play acceptance test)
+    - Confidence: high for inheritance, name lookup and defaults; medium for the resulting map-owner pixels before measurement
+
+15. **House display RGB supplied to radar (colour-definition part of Q-0417).** A house's display RGB is sampled from palette index 16, the brightest entry of its selected definition's ramp, in row 26 of that definition's 53-shade palette when the house's colour is set up. It is not the three stored HSV bytes read as RGB, and is not a direct conversion of the unmodified HSV definition. The unit palette's file colours do not enter this sample: index 16 has already been replaced by the ramp.
+    - With ordinary initial white tint, each ramp component *u* becomes max(0, *u* − 1), then receives claim 9's 16-bit step. To express this packed sample as an 8-bit RGB triple, widen each channel with zeros in its discarded low bits (Formulas). No extra multiplication by 4 applies. The subtraction belongs to shade-table conversion, not to HSV conversion.
+    - The sample is fixed at house-colour setup. Later battlefield brightness, global-effect tint and trigger tint changes do not resample it. S-0410 claim 8 owns which house supplies a shown object's colour, including disguise, and whether it is shown at all; its drawing rules consume this sample. A house's sample itself has no building-versus-unit variant.
+    - Backing: `measurable` (PN)
+    - Confidence: high
+
 ## Formulas
 
 All arithmetic is on integers unless stated otherwise. "÷" is integer division truncating toward zero; every dividend below is non-negative, so it is also the floor. "mod" gives a non-negative remainder.
@@ -213,6 +226,14 @@ The hue scale is 255 per full circle, divided into six sectors of 42.5. H = 255 
 **16-bit step** (claim 9): in the 5-6-5 layout, red₅ = ⌊R / 8⌋, green₆ = ⌊G / 4⌋, blue₅ = ⌊B / 8⌋ for the 8-bit shaded components R, G, B. In the 5-5-5 layout green₅ = ⌊G / 8⌋ instead. Exact integer arithmetic.
 
 **Icon shade table** (claim 13). For converted 8-bit component *u* and row *j* = 0 … 52, the component before packing is min(255, ⌊*u* · *F_j* / 65536⌋), where *F_j* = ⌊131072 · *j* / 52⌋. Exact integer arithmetic, no floating-point operations. At *j* = 26, *F_j* = 65536 and the component is exactly *u*. Pack with the 16-bit step above. Index 0 is not painted.
+
+**House display RGB** (claim 15). For an 8-bit ramp component *u*, ordinary initial white tint and a display channel of *k* bits:
+
+> *a* = ⌊max(0, *u* − 1) / 2^(8 − *k*)⌋
+>
+> display RGB component = *a* · 2^(8 − *k*)
+
+Exact non-negative integer arithmetic. Use *k* = 5, 6, 5 for red, green, blue in 5-6-5, or 5 for all three in 5-5-5. Packing the widened component again preserves *a* exactly; it does not apply another subtraction. For any non-white tint already present at colour setup, sample row 26 using S-0104 claim 6 instead; the widening rule is unchanged.
 
 ## Constants
 
@@ -285,6 +306,9 @@ The lobby swatch's RGB and flat fill (claims 11 and 12) have no data-file select
 | fixed asset `CAMEO.PAL` | no INI selector | 768-byte palette file, components as in claim 1; resolution by S-0005 at program start | dedicated sidebar icon palette (claim 13), not the general overlay palette | original crashes at program start; our engine uses an all-black palette with transparent index 0 and an importer warning |
 | rules `[Colors]` | each key | name = key, compared ignoring case; value as in claim 4 | one colour definition at the next definition position, if the name is new (claims 4–6 and 10); never the setup swatch RGB or fill (claims 11 and 12) | missing integers = 0; a line with an empty value creates no definition (S-0001, claim 11) |
 | rules `[Colors]` | `LightGrey` | name, ignoring case | the definition both non-player houses of a skirmish show (claim 10) | engine constant name |
+| rules layers, country's section | `Color` | colour-definition name, case-insensitive, first 31 characters, not a number | inherited map-owner colour (claim 14); skirmish country-field uses remain S-0413 claim 5's | keep earlier value; initially definition position 0; unknown name also keeps earlier value |
+| map, house's section named by `[Houses]` | `Color` | colour-definition name, same lookup as the country selector | replace inherited country colour for that map-defined house (claim 14), not skirmish lobby assignment | absent, empty or unknown name keeps inherited country colour |
+| colour definition selected for a house | no separate radar key | ramp index 16, shade row 26, packed then widened by claim 15 | house display RGB supplied to S-0410 claim 8 | no independent radar-colour default; use the selected house definition |
 | art, building entry | `TerrainPalette` | boolean | building uses the tile palette (claim 8) | no |
 | art, animation entry | `AltPalette` | boolean | alternative palette (claim 8, row 4) | no |
 | art, animation entry | `IsVeins` | boolean | vein animation (claim 8, row 1) | no |
@@ -506,7 +530,25 @@ Every scenario that reads pixels shares these rules:
 - *Runs:* one six-theater session plus its palette-replacement game, one restarted replacement-palette game, and one missing-file startup.
 - *Falsified if:* any sampled pixel disagrees with the formula, index 0 paints, a battlefield or owner change changes colours, the palette changes within a session, a restart fails to use the replacement, or the original successfully begins a skirmish with the palette genuinely absent. Failure to expose the named test entry or remove every resolving copy makes that part inconclusive.
 
+**PM: map-owner colour inheritance and name lookup (claim 14).**
+- *Setup:* a tiny purpose-made single-player map used solely to expose map-house import, with separated visible stock infantry and buildings of each test house, test lighting, game speed index 2 and 800×600. No campaign progression or campaign gameplay rule is tested. Director and unrelated mods are off. Named test data: a loose base-rules copy giving three test countries distinct existing colour-definition names, and test map house sections selecting those countries. Give one house a different valid definition name, one the same name in mixed case, one an unknown name, one no selector and one an empty selector. Add a country with no colour selector in any layer and one with an unknown selector in every layer. Preserve a valid first definition and every name used by the test.
+- *Procedure:* load the isolated test map directly through the original's single-player map entry path; record identified sprite remap pixels once import completes. Repeat with a second loose rules copy that changes the inherited country selector, without changing house selectors. For the 31-character limit, add a named colour with exactly 31 characters and give a house that name followed by additional characters. For numeric parsing, use an undefined numeric-looking name as another house selector.
+- *Observable:* top bits of identified remap pixels, compared with claim 6's ramps under test lighting. Record the resolved owner of every subject. One run per rules-copy variant suffices.
+- *Expected:* the explicit and mixed-case houses use their named definition; unknown, empty, absent and undefined numeric selectors inherit their country's definition and follow the country change in the repeat. Countries with no successful selection use position 0. The long selector selects the definition matching its first 31 characters. Infantry and buildings match the same selected ramp, subject to claim 8's palette exceptions.
+- *Falsified if:* a selector is treated as an index, a bad name picks a different fallback, inheritance fails, case changes the selected name, truncation differs, or a sampled pixel follows another ramp. If no direct map-entry harness is available, propose one to the user; do not patch the executable or treat a skirmish that discards these houses as a test of inheritance. This probe is outside the skirmish suite and does not establish campaign support.
+
+**PN: house display RGB, not raw HSV or an unshaded ramp (claim 15).**
+- *Setup:* the common skirmish setup with functioning radar, explored separated objects of the local player and a retained opponent, and test lighting. Use a named loose base-rules copy setting the definition selected by the local player's lobby slot to invented HSV (0, 255, 255); leave definition names and positions unchanged. Include an ordinary building, infantry and vehicle, with no disguise, no combat flashing and no overlapping radar pixels. Select a 5-6-5 display path. A map trigger later starts a storm and another changes a tint channel; keep the subjects alive and radar available, using the map's forced radar setting if necessary.
+- *Procedure:* capture identified radar object pixels after listing stabilises, then during the storm and after the tint action. Repeat once with a second named rules copy using (170, 128, 200). Remove the test files afterwards.
+- *Observable:* radar pixel channel top bits, plus battlefield remap pixels to confirm that the intended definition was loaded. Sample interior building pixels and isolated non-building pixels. Two games suffice.
+- *Expected:* brightest ramp entries are (250, 58, 58) and (120, 120, 196) respectively (claim 6). At ordinary initial white tint their radar samples in 5-6-5 are (31, 14, 7) and (14, 29, 24) in packed channel units, or zero-widened RGB (248, 56, 56) and (112, 116, 192). Buildings and other subjects of one house show the same sample when S-0410's ordinary house-colour rule applies. Later storm and tint changes leave those radar samples unchanged, although battlefield pixels change. There is no second neutral-light subtraction at radar packing.
+- *Falsified if:* any sample follows raw HSV, direct HSV-to-RGB without the ramp adjustment, another ramp index, an unshaded ramp, a setup swatch, a later tint, or a different rule for one object kind. Failure to expose a stable, unflashed shown object makes that sample inconclusive. S-0410 owns the visibility and object-kind drawing tests, not this colour-definition conversion.
+
 ## Open questions
+
+Q-0416's colour-selection and import questions are answered by claim 14. S-0009 claim 27 and S-0412 claims 1 and 7 already determine skirmish owner retention and lobby assignment; those rules do not assign colours to map-defined owners outside skirmish. Campaign gameplay remains out of scope.
+
+Q-0417's colour-definition conversion is answered by claim 15. S-0410 claim 8 must consume this display RGB rather than describing the stored definition triple as RGB; object-kind equality and the radar's actual drawing remain that spec's responsibility.
 
 Q-0275's palette conversion and missing-palette behaviour are resolved by claim 13. S-0411 claim 16 owns its image-frame, darkening-mask and placement answers; together the two specs answer the request.
 
@@ -522,4 +564,4 @@ Q-0214 is resolved by claim 8: S-0112 claims 1–3 own the established overlay, 
 - **Projectiles by parachute.** What makes a projectile come down by parachute, and whether stock play ever does, is not established. Until a way is known, the projectile exception of claim 8 cannot be measured. What happens when the rules name no parachute animation (the "not established" defaults in Import mapping) is not established either.
 - **Disguise.** An object whose disguise is in effect against the local player (glossary, *disguise*) may be drawn in the disguise house's colour. That belongs with the disguise rules and is not claimed here.
 - **Types with their own palette.** A type may be drawn with a palette of its own, recoloured per house. Whether stock data uses this, and which key selects it, is open.
-- **Houses defined by a map.** How houses defined by a map (campaign-style maps) choose their colour is outside this spec's skirmish scope.
+- **Invalid colour registries.** Claim 14 assumes at least the inherited colour definition exists. Colour selection when the rules supply no definitions, or otherwise lack a referenced inherited definition, remains unspecified here; an unknown selector in an otherwise valid registry is not this case and keeps the inherited definition.

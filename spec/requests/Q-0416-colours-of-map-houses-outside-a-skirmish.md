@@ -1,9 +1,9 @@
 ---
 id: Q-0416
 title: House colours of map-defined houses outside a skirmish
-status: open
+status: answered
 related: [S-0103, S-0009, S-0412, S-0413]
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need

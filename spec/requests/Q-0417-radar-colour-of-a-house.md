@@ -1,9 +1,9 @@
 ---
 id: Q-0417
 title: Radar colour of a house: which 8-bit triple of its colour definition
-status: open
+status: answered
 related: [S-0410, S-0103]
-answered-by: []
+answered-by: [S-0103]
 ---
 
 ## Need
