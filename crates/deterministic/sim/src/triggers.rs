@@ -13,9 +13,10 @@
 //! reveal around a waypoint, and the presentation-only actions as
 //! [`Effect::Trigger`]. The actions that hand over to specs or parts of the
 //! engine that do not exist yet are recognised and leave a note (seams); so
-//! do the carrier raises (entered-by, destroyed-by-anything, bridge
-//! destroyed), whose moments belong to the movement, combat and bridge
-//! topics (Q-0268).
+//! does the bridge-destroyed raise. The carrier raises of a unit's arrival
+//! ([`cell_entered`], S-0207 and S-0208 claim 22) and of a killing hit
+//! ([`destruction_raises`], S-0312 claim 29) are entry points that the
+//! movement and combat code call at the moments their specs give.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -525,8 +526,7 @@ pub fn raise(w: &mut World, tag: u32, r: Raise) {
         }
         let (satisfied, entered, mut inst) = evaluate(w, inst, repeat, &r);
         if satisfied {
-            // spec: S-0011 claim 15 (satisfied, and the tag repeating or an entered-by event judged true: re-armed at the current tick)
-            // Q-0269 (interim: the re-arming draws before the actions)
+            // spec: S-0011 claim 15 (satisfied, and the tag repeating or an entered-by event judged true: re-armed at the current tick, all its draws before any action of this instance; an effective self-enable action arms it again and its length replaces this one)
             if repeat == 2 || entered {
                 arm(w, &mut inst);
             }
@@ -574,6 +574,72 @@ pub fn raise(w: &mut World, tag: u32, r: Raise) {
         detach(w, tag, c);
     }
     w.triggers.raising.remove(&tag);
+}
+
+/// The raise of a cell's tag when a unit arrives in the cell (S-0011
+/// claim 18), at the arrival moment of S-0207 and S-0208 claim 22. The
+/// caller leaves out ground passage under a high bridge, where only units
+/// on the deck raise the tag (claim 18).
+pub fn cell_entered(w: &mut World, unit: ObjectId, cell: (i16, i16)) {
+    let Some(&tag) = w.triggers.cells.get(&cell) else {
+        // spec: S-0207 Import mapping (no arrival raise without a cell tag)
+        return;
+    };
+    // spec: S-0011 claim 18 (entered-by code, the arriving object as causing object)
+    raise(
+        w,
+        tag,
+        Raise {
+            code: Some(ENTERED_BY),
+            causer: Some(unit),
+            carrier: Some(Carrier::Cell(cell)),
+        },
+    );
+}
+
+/// The destruction raises of a killing hit on a tagged object (S-0011
+/// claim 19, S-0312 claim 29). The caller makes them after health reaches
+/// 0 and before the death debris, and says whether the hit has a known
+/// attacker and whether the vehicle's extra group applies (a vehicle, with
+/// `quirks.vehicle_destruction_extra_raises` on and no hijacker exception).
+pub fn destruction_raises(w: &mut World, victim: ObjectId, attacker: bool, extra_group: bool) {
+    // The raise codes in order, each with whether it needs a known attacker.
+    // spec: S-0312 Import mapping (extra vehicle group: 7 with a known attacker, then 48, 29)
+    const EXTRA: [(i32, bool); 3] = [(7, true), (DESTROYED_BY, false), (29, false)];
+    // spec: S-0312 Import mapping (common group: 6, 4, 7 with a known attacker, then 48, 29)
+    const COMMON: [(i32, bool); 5] = [
+        (6, true),
+        (4, true),
+        (7, true),
+        (DESTROYED_BY, false),
+        (29, false),
+    ];
+    let extra: &[(i32, bool)] = if extra_group { &EXTRA } else { &[] };
+    for (common, group) in [(false, extra), (true, &COMMON[..])] {
+        for &(code, needs_attacker) in group {
+            if needs_attacker && !attacker {
+                continue;
+            }
+            // spec: S-0312 Import mapping (each raise requires the tag still attached and, for the common group, the object not removed by a preceding action)
+            if common && w.obj(victim).is_none() {
+                return;
+            }
+            let Some(&tag) = w.triggers.objects.get(&victim) else {
+                // spec: S-0312 claim 29 (a raise that detaches the tag prevents the later raises of that tag from this object)
+                return;
+            };
+            // spec: S-0011 claim 19 (the dying object as causing object; the raises take no draw)
+            raise(
+                w,
+                tag,
+                Raise {
+                    code: Some(code),
+                    causer: Some(victim),
+                    carrier: Some(Carrier::Object(victim)),
+                },
+            );
+        }
+    }
 }
 
 /// The raising carrier loses the tag (S-0011 State and ordering).
