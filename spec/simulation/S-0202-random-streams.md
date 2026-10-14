@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -362,6 +362,15 @@ original's recording modes are retained as deferred context, not implementation 
         an unmeasured design rule, not an original computer-production finding.
         Simultaneous completion does not create a separate batch of replacement starts:
         the later release or place action causes any queued successor's start.
+      - *Packing up a slave miner.* S-0402 claim 19a owns the temporary hidden-slave
+        creations: the return vehicle and its new hidden slaves take their creation draws
+        before vehicle placement and before removal releases or destroys the building's
+        old slaves, on success and refusal alike. Success destroys the temporary slaves
+        before transferring the old working group, without undoing their draws. Refusal
+        retains the new group under S-0415 claim 11's default quirk. With
+        `quirks.failed_packup_keeps_vehicle` off, refusal removes the already-created
+        vehicle and new group; their creation draws still occur. This alternative is
+        our engine's rule, not an additional oracle outcome.
       - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
         happens at a time the spec of that feature fixes, and the creation draw comes with it.
     - **Lightning sound choice.** Each lightning strike takes one raw value, read as
@@ -542,6 +551,7 @@ original's recording modes are retained as deferred context, not implementation 
       | Creation-derived report value: low-bit reduction and fixed normal report selection | `measurable` (S-0701 F2), high confidence |
       | Our engine retains, saves, restores and hashes the report value and exposes it to presentation without another draw | `unmeasured` design contract (Q-0327), high confidence; this is a requirement of our engine, not an oracle claim |
       | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
+      | Pack-up vehicle and temporary hidden-slave creation draws precede placement and old-group removal, including successful placement | `measurable` (S-0402 H24), high confidence; retaining these draws with the failed-pack-up quirk off is an `unmeasured` design rule |
       | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
       | Lightning sound choice: stream, count, guards and position within a strike | `measurable` (S-0701 F6); high confidence for stream/count/order, medium for the same-point guard |
       | Pre-placed objects: an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
