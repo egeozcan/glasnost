@@ -2,7 +2,7 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
