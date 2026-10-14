@@ -896,6 +896,43 @@ impl Builder<'_> {
         decimal_times_at_least(&text, 900, n)
     }
 
+    /// The docking displacements of S-0404 claim 15: `DockingOffset`*i*
+    /// for each *i* below the rules `NumberOfDocks` count (absent 1) that an
+    /// image section gives, as a list up to the highest such *i*; a place
+    /// without a key starts at (0, 0, 0). None when no such key is given.
+    fn docking_offsets(&mut self, index: usize, t: &TypeRec) -> Option<Vec<[i32; 3]>> {
+        let kind = Kind::Buildings;
+        // spec: S-0404 Import mapping (NumberOfDocks, rules: an integer, absent 1)
+        let n = fold(t.keys.get(&b"NumberOfDocks"[..]), None, |v, _| value::integer(v)).unwrap_or(1);
+        const PREFIX: &[u8] = b"DockingOffset";
+        let mut found: std::collections::BTreeSet<i32> = std::collections::BTreeSet::new();
+        for image in self.images(kind, index, t) {
+            let Some(s) = self.art_section(&image) else { continue };
+            for e in s.entries() {
+                let k = &e.key;
+                if k.len() <= PREFIX.len() || !k[..PREFIX.len()].eq_ignore_ascii_case(PREFIX) {
+                    continue;
+                }
+                let digits = &k[PREFIX.len()..];
+                if let Some(i) = std::str::from_utf8(digits).ok().and_then(|d| d.parse::<i32>().ok())
+                    && i.to_string().as_bytes() == digits
+                    && i < n
+                {
+                    found.insert(i);
+                }
+            }
+        }
+        let last = *found.last()?;
+        let mut out = vec![[0; 3]; last as usize + 1];
+        for i in found {
+            // spec: S-0404 Import mapping (DockingOffset i: an integer triple; keep the value in force; new places start at (0, 0, 0))
+            if let Some(v) = self.art_tuple::<3>(kind, index, t, &format!("DockingOffset{i}")) {
+                out[i as usize] = v;
+            }
+        }
+        Some(out)
+    }
+
     /// The art fields of a building type's image section (S-0402 Import
     /// mapping).
     fn building_art_econ(&mut self, econ: &mut Rec, index: usize, t: &TypeRec) {
@@ -903,6 +940,17 @@ impl Builder<'_> {
         // spec: S-0402 Import mapping (art NumberOfDocks: an integer)
         if let Some(v) = self.art_int(kind, index, t, "NumberOfDocks") {
             econ.put("art_number_of_docks", int_node(v));
+        }
+        // spec: S-0404 claim 15 and Import mapping (DockingOffset0, 1, …: integer triples, only indices below the rules NumberOfDocks count, absent 1, are read)
+        if let Some(v) = self.docking_offsets(index, t) {
+            econ.put(
+                "docking_offsets",
+                jsonc::array(
+                    v.iter()
+                        .map(|d| jsonc::array(d.iter().map(|&x| int_node(x)).collect()))
+                        .collect(),
+                ),
+            );
         }
         // spec: S-0402 Import mapping (art QueueingCell: two integers, cells)
         if let Some(v) = self.art_tuple::<2>(kind, index, t, "QueueingCell") {

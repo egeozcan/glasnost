@@ -2288,6 +2288,23 @@
           ],
           "default": null
         },
+        "docking_offsets": {
+          "description": "Buildings: the art `DockingOffset0`, `DockingOffset1`, … read below\nthe rules `NumberOfDocks` count, displacements in leptons (x, y,\nheight) from the foundation centre (S-0404 claim 15); a place\nwithout a key, or past the list, is (0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
         "door_first": {
           "description": "Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim\n13); absent: no.",
           "type": [

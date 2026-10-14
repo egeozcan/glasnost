@@ -1073,7 +1073,7 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
         ob.path.steps.clear();
     }
     if ended {
-        // spec: S-0417 claims 7 and 8 (a tethered vehicle's cell-arrival update; request Q-0223: reaching a track target)
+        // spec: S-0417 claims 7 and 8 (a driving vehicle's cell-arrival update: reaching a track target, also when a further track follows in the same tick, Q-0223)
         crate::econ::release::arrival(w, id);
     }
     ended

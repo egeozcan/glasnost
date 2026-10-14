@@ -333,7 +333,7 @@ fn claim_8_run_away() {
 #[test]
 fn claim_10_infantry() {
     let mut w = game(&ruleset());
-    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let (k, _) = barracks_with_rally(&mut w);
     let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
     assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
     assert!(release::tethered(&w, grunt));
@@ -475,17 +475,52 @@ fn claim_10_teleporting_infantry_goes_straight() {
     assert!(release::tethered(&w, grunt));
 }
 
-// spec: S-0417 claim 10 (no rally point: the release gives no destination of its own) and Q-0120 (interim: the unit walks to its exit cell)
+// spec: S-0417 claim 10 and S-0404 claim 13 (no rally point, or one in the unit's own cell: the release gives no destination; contact and tether)
 #[test]
-fn claim_10_no_rally_interim_walk_out() {
-    let mut w = game(&ruleset());
-    let k = building(&mut w, "BARRACKS", 0, 0, 0);
-    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
-    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
-    let o = w.obj(grunt).unwrap();
-    assert_eq!(o.guard_spot, None);
-    assert!(matches!(o.dest, Some(Target::Cell(_))));
-    assert_eq!(o.beh.current, Some(Behaviour::Move));
+fn claim_10_no_rally_no_destination() {
+    for own_cell in [false, true] {
+        let mut w = game(&ruleset());
+        let k = building(&mut w, "BARRACKS", 0, 0, 0);
+        let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+        if own_cell {
+            // The rally point is the cell the unit is about to appear in:
+            // release once in a scratch world to learn it.
+            let mut scratch = w.clone();
+            assert_eq!(release::release(&mut scratch, k, grunt), Outcome::Released);
+            let c = scratch.obj(grunt).unwrap().pos.cell();
+            w.obj_mut(k).unwrap().guard_spot = Some(Target::Cell(c));
+        }
+        assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+        let o = w.obj(grunt).unwrap();
+        // spec: S-0417 claim 10 (the saved guard spot is K's rally point, if any; the guard-spot row gives no destination for the own cell)
+        assert_eq!(o.guard_spot, w.obj(k).unwrap().guard_spot, "own cell {own_cell}");
+        assert_eq!(o.dest, None, "own cell {own_cell}");
+        // spec: S-0417 claim 10 (no move is queued; the unit rests in guard)
+        assert_ne!(o.beh.seen(), Some(Behaviour::Move), "own cell {own_cell}");
+        assert_eq!(o.contact, Some(k));
+        assert!(release::tethered(&w, grunt));
+    }
+}
+
+// spec: S-0417 claim 14 (an infantry factory has n = max(d, 1) contact places; while each is held, a further release is busy)
+#[test]
+fn claim_14_infantry_contact_places() {
+    for (docks, released) in [(None, 1), (Some(0), 1), (Some(2), 2)] {
+        let mut r = ruleset();
+        r.sim.buildings.get_mut("BARRACKS").unwrap().econ.number_of_docks = docks;
+        let mut w = game(&r);
+        let (k, _) = barracks_with_rally(&mut w);
+        let mut n = 0;
+        for _ in 0..3 {
+            let g = new_unit(&mut w, Kind::Infantry, "GRUNT");
+            match release::release(&mut w, k, g) {
+                Outcome::Released => n += 1,
+                Outcome::Busy => break,
+                other => panic!("docks {docks:?}: {other:?}"),
+            }
+        }
+        assert_eq!(n, released, "docks {docks:?}");
+    }
 }
 
 // spec: S-0417 claim 11 (U12: docked at K, contact and a tether request on the same tick; a type that need not return to a dock is tethered, one that must return refuses; contact in both cases)
