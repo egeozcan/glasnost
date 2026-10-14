@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -19,12 +19,13 @@ supersedes: []
 A house's production lines: the price of an item, how it is paid step by step, waiting for money,
 hold, cancel and refunds, the queue, completion, and how factory buildings appearing, leaving or
 losing power affect the lines. Step length is S-0403, clicks are S-0411 and the credits display is
-S-0416; skirmish only, network games and campaigns are out of scope.
+S-0416; factory unloading and qualified post-contact destinations are S-0417. Skirmish only,
+network games and campaigns are out of scope.
 
-**Paired revisions.** S-0407 revision 6 separates the issue of claim 9's cancellation orders
+**Paired revisions.** S-0407 revision 7 separates the issue of claim 9's cancellation orders
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test and keeps claim 10's application-time limit test on queued starts
-(S-0407, claims 13 and 16). S-0411 revision 7 specifies cancellation with refund at the
+(S-0407, claims 13 and 16). S-0411 revision 8 specifies cancellation with refund at the
 place-order application boundary for a busy or failed unit release, without retry; no eligible
 factory leaves the item done (claims 7 and 13 below). Its claim 14 states the continued steps
 and payments while a factory is being sold or queued to be sold. The relevant factory-eligibility
@@ -93,10 +94,11 @@ addition:
   off: it only slows production (S-0403, claim 5). Only building types that drain power, or that
   need power to work, can be switched off.
 - **Unloading, guard.** The behaviours of that name (S-0215, Terms) as a building's current
-  behaviour; a factory building is *unloading* while it lets a released unit out.
-- **Exit cell, exit displacement.** The cell a released unit leaves the factory building towards
-  (claim 13), and a building type's displacement of the point where a released unit appears, in
-  leptons (Import mapping).
+  behaviour; S-0417 owns factory unloading.
+- **Exit cell, exit displacement.** The cell selected by claim 13's release search, and a building
+  type's displacement of the point where a released unit appears, in leptons (Import mapping).
+  An infantry exit cell is not a guaranteed initial movement destination (S-0417 claim 10).
+  The ground vehicle's exit apron cell is a distinct term owned by S-0417.
 - **Barracks door kind.** One of three building-type flags (Import mapping) that give an infantry
   factory a door cell tried first as its exit cell (claim 13).
 - **Cloning building.** A building whose type has the cloning flag (claim 14).
@@ -394,9 +396,7 @@ addition:
     queued type (claims 6, 7 and 10) and when claim 8 does. A queued type that is only added to the
     queue, or dropped from it, creates nothing and takes no draw (claim 10). Nothing else of a
     line's life takes a draw: no step, payment, refusal, retry, hold, resume, cancel, refund,
-    completion or deletion of the item's object, and no line's own update. The order of the lines
-    in claim 1 therefore matters only for money (S-0203, claims 1 and 8 keep the lines' place in the
-    tick). The release of a done unit is claim 13's (its draws are listed there), and the
+    completion or deletion of the item's object, and no line's own update. The order among lines in claim 1 determines payment priority. When multiple lines start items in the same tick, the assignment of successive scenario-stream values to those item creations is not established by this claim or by P11. S-0203 claim 1 requires the production specs to state the observable draw order; this simultaneous-start case remains open pending a measurement. The release of a done unit is claim 13's (its draws are listed there), and the
     placement of a done building belongs to the placement specs.
     - Backing: `measurable` (scenario P11, with the random-state recorder)
     - Confidence: high (the creation draw at a start, S-0202); medium (that nothing else of the
@@ -422,9 +422,9 @@ addition:
 
     | Kind of *K* | Result and where the unit appears |
     |---|---|
-    | Ground vehicle factory (vehicle factory flag, not naval) | When *K*'s current behaviour is *unloading* (it is still letting out an earlier vehicle), the release passes to the first other building of the house, in acquisition order, of the same building type whose current behaviour is guard; that building releases the unit by this row and its result is the result. Its power switch and claim 7's conditions are not judged. With no such building the result is *busy*. Otherwise the unit appears inside *K* at its *exit point*: *K*'s position (the centre of its top-left cell) plus the type's exit displacement (three integers in leptons), or *c* when the displacement is (0, 0, 0). It faces 16384 (map east). *K* then starts unloading, which takes the unit out; the unit keeps *K*'s rally point (S-0213, claim 20) as its later destination. Result *released*. |
-    | Naval vehicle factory | When *K* has no unit in contact, *K* starts unloading. With a rally point, take the 8-direction *e* = the direction from *c* to the rally point rounded to 8 steps, and step from *c*'s cell in direction *e* (S-0204, claim 9) until the first cell not covered by *K*. That cell is the exit cell when it is water (S-0211), holds no unit, infantry, aircraft or building, and is usable (S-0009, claim 4). Otherwise, or with no rally point, the exit cell is the nearby-cell search of S-0212 (claim 25) around *c*'s cell for the unit's movement kind. The unit appears at the exit cell's centre facing 16384 and, with a rally point, gets a move order to it. Result *released*. |
-    | Infantry factory, and cloning building (claim 14) | When none of *K*'s docking places is free (each is in contact with a unit), the result is *busy*. Otherwise the exit cell is the first of the candidates below that is a legal map cell (S-0009, claim 1) which the unit could enter now (S-0209 and S-0211); with none, *failed*. Candidates: first, for a type with a barracks door kind, its door cell: (*x*₀ + 1, *y*₀ + 2) for the first kind, (*x*₀ + 2, *y*₀ + 2) for the second, (*x*₀ + 2, *y*₀ + 1) for the third, tried in that order when a type has several kinds; then the cells of the foundation's exit list (Constants), each (*x*₀ + *a*, *y*₀ + *b*), in list order. No other cell is tried: a foundation with an empty list (0 × 0) gives *failed*, and no cell toward the rally point is preferred. The unit appears at the centre of the foundation cell next to the exit cell: each coordinate of the exit cell that lies outside the foundation is moved one cell back into it. When the exit cell is the door cell of a door kind the type has, the type's exit displacement is added. Its facing is the direction from *c* to the exit cell's centre, rounded to 256 steps. It keeps *K*'s rally point as its later destination, is told by *K* to leave and walks out to the exit cell. Result *released*. |
+    | Ground vehicle factory (vehicle factory flag, not naval) | When *K*'s current behaviour is *unloading* (it is still letting out an earlier vehicle), the release passes to the first other building of the house, in acquisition order, of the same building type whose current behaviour is guard; that building releases the unit by this row and its result is the result. Its power switch and claim 7's conditions are not judged. With no such building the result is *busy*. Otherwise the unit appears inside *K* at its *exit point*: *K*'s position (the centre of its top-left cell) plus the type's exit displacement (three integers in leptons), or *c* when the displacement is (0, 0, 0). It faces 16384 (map east). *K* then starts unloading under S-0417 claims 2 to 8; the unit saves *K*'s rally point (S-0213, claim 20) as its guard spot, with the post-contact destination governed by S-0417 claim 8. Result *released*. |
+    | Naval vehicle factory | When *K* has no unit in contact, *K* starts unloading under S-0417 claim 9, which commands no exit movement on the released ship. With a rally point, take the 8-direction *e* = the direction from *c* to the rally point rounded to 8 steps, and step from *c*'s cell in direction *e* (S-0204, claim 9) until the first cell not covered by *K*. That cell is the exit cell when it is water (S-0211), holds no unit, infantry, aircraft or building, and is usable (S-0009, claim 4). Otherwise, or with no rally point, the exit cell is the nearby-cell search of S-0212 (claim 25) around *c*'s cell for the unit's movement kind. The unit appears at the exit cell's centre facing 16384 and, with a rally point, gets a move order to it. Result *released*. |
+    | Infantry factory, and cloning building (claim 14) | When none of *K*'s docking places is free (each is in contact with a unit), the result is *busy*. Otherwise the exit cell is the first of the candidates below that is a legal map cell (S-0009, claim 1) which the unit could enter now (S-0209 and S-0211); with none, *failed*. Candidates: first, for a type with a barracks door kind, its door cell: (*x*₀ + 1, *y*₀ + 2) for the first kind, (*x*₀ + 2, *y*₀ + 2) for the second, (*x*₀ + 2, *y*₀ + 1) for the third, tried in that order when a type has several kinds; then the cells of the foundation's exit list (Constants), each (*x*₀ + *a*, *y*₀ + *b*), in list order. No other cell is tried: a foundation with an empty list (0 × 0) gives *failed*, and no cell toward the rally point is preferred. The unit appears at the centre of the foundation cell next to the exit cell: each coordinate of the exit cell that lies outside the foundation is moved one cell back into it. When the exit cell is the door cell of a door kind the type has, the type's exit displacement is added. Its facing is the direction from *c* to the exit cell's centre, rounded to 256 steps. It saves *K*'s rally point as guard spot; contact, tether and subsequent destinations follow S-0417 claim 10. That claim gives the exit-cell destination only when the just-placed unit already has a destination and its type is neither jumpjet infantry nor marked as teleporting. How initial placement supplies that destination remains open: no universal first walk to the exit cell or no-rally walk-out is promised. Result *released*. |
     | Aircraft factory | When *K* has a docking place that is empty or already in contact with this aircraft, the aircraft appears docked at *K*'s docking position, facing the game-wide pose direction (Import mapping) × 256 units. With a rally point, a type that need not return to a dock gets a move order to it. Result *released*. Otherwise a type that must return to a dock (S-0407, Import mapping) gives *failed*. Any other aircraft enters from the edge of the local area (S-0009, claim 4: (*L*ₓ, *L*ᵧ, *L*w, *L*h) and map width *M*). Let *Q* = (*L*ₓ + *L*ᵧ + 1, *M* − *L*ₓ + *L*ᵧ), and let (*b*ₓ, *b*ᵧ) be *c*'s cell. Define the start cell *S* by these cases:
 
 | Condition | Start cell *S* |
@@ -435,18 +435,23 @@ addition:
 One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*S*ₓ + *r*, *S*ᵧ + *r*), just outside the left or the right edge of the local area. The aircraft appears at that cell's centre facing 0 and gets a move order: to the rally point, otherwise to a cell near *K*, or with no destination when there is none. Result *released*. |
 
     Our engine reproduces each foundation's exit list exactly (`quirks.foundation_exit_lists`,
-    Edge cases). How *K*'s unloading takes a ground vehicle out, where an infantry unit or a
-    vehicle goes after leaving, and which cell "a cell near *K*" is for an aircraft are not
-    established here (Open questions). Nothing of a release is retried: claim 7 cancels a busy or
-    failed item at once.
+    Edge cases). Ground and naval unloading, doors, exit movement and qualified post-contact
+    destinations belong to S-0417. Infantry initial placement and no-rally walk-out remain open
+    there (claim 10 and Open question 3). The infantry exit-search entry test and contact-place
+    count, aircraft docking position and the aircraft's "cell near *K*" remain open here.
+    Q-0120 is therefore only partially supplied by these two specs. Nothing of a release is
+    retried: claim 7 cancels a busy or failed item at once.
 
     **Random draws of a release.** The edge entry of an aircraft takes one ranged draw over
     0 … *L*h (none when *L*h = 0, S-0202 claim 4). Each copy made by claim 14 is a newly created
     object and takes its creation draw (S-0202, claim 10). Whether putting a unit on the map, the
-    nearby-cell search or the leaving movement takes further draws is not established. The
+    nearby-cell search takes further draws is not established here. S-0417 claim 12 owns
+    unloading and post-contact draw consequences, not initial placement's draws. The
     original's computer-controlled houses take one more draw in some releases, through their own
     build planning (claim 12); our engine has no such draw.
-    - Backing: `measurable` (scenario P12, parts a to h; the draws with the random-state recorder)
+    - Backing: `measurable` (scenario P12, parts a to h; the draws with the random-state recorder).
+      Unloading and post-contact rules inherit S-0417's backing, including its `unmeasured`
+      initial-destination branch (the initial movement setup is untraced).
     - Confidence: medium (the results, the hand-off between vehicle factories, the appearance
       points and facings, the exit lists, the aircraft edge entry and its draw); low (the door
       cells and the exact cell-entry test of the exit search, the busy test of an infantry factory)
@@ -454,8 +459,7 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
 14. **Cloning buildings copy released infantry.** When an infantry factory building that is not
     itself a cloning building releases a unit by claim 13 and has found its exit cell, each
     cloning building the house owns, in the order the house acquired them, gets a new infantry
-    unit of the same type for its owner and releases it by claim 13's infantry row. The copies are
-    made before the original unit is put on the map, so they are made even when that then fails.
+    unit of the same type for its owner and releases it by claim 13's infantry row. If the original release has found an exit cell, each eligible cloning building receives its copy even when the original unit does not appear. The required observable ordering and any effect of copy placement order on scenario-stream draw assignment are not established here.
     No copy is made when the original's release is busy or finds no exit cell. A copy whose release
     is busy or failed does not appear; nothing is paid or refunded for copies. A cloning building
     never causes copies itself.
@@ -1033,17 +1037,17 @@ Test data only; stock building types keep their own exit data.
   vessel: it appears at the nearby-cell search's cell instead. Falsified if: another cell.
 - (d) Infantry factory, 2 × 2 foundation, no door kind, rally point set. Fill the exit list's
   cells in turn with test vehicles. Expected: the infantry appears in the foundation cell next to
-  the first free listed cell, facing its rounded direction, and walks out to that cell. With
-  every listed cell blocked, the item is cancelled with a refund. Falsified if: another exit order
-  or a kept item.
+  the first free listed cell, facing its rounded direction. With every listed cell blocked,
+  the item is cancelled with a refund. Falsified if: another selected exit cell, appear point or
+  facing, or a kept item when all candidates are blocked. Record initial destination and
+  subsequent movement separately under S-0417 U10: walking to the exit cell is not a universal
+  expectation, and its initial-destination branch remains exploratory.
 - (e) Door kinds: a test infantry factory with each door kind in turn and an exit displacement.
   Expected: the door cell is used first and the displacement is added only there.
 - (f) Busy infantry factory: two infantry items that finish in consecutive ticks on one infantry
   factory. Expected: the second is refunded while the first is still in contact with the
   building. Low confidence: if the second appears instead, the busy test of claim 13 is wrong.
-- (g) Cloning: the house owns two cloning buildings. One infantry released. Expected: two copies,
-  one at each cloning building, in acquisition order, then the original; the recorder shows one
-  creation draw per copy. Falsified if: other counts.
+- (g) Cloning: the house owns two cloning buildings. One infantry released. Expected: two copies, one at each cloning building, with the copy at the earlier-acquired cloning building appearing no later than the copy at the later-acquired cloning building; the original also appears. The recorder shows one creation draw per copy. Falsified if the copy count differs, either copy is associated with the wrong acquisition order, the original's outcome differs from claim 14, or the recorder shows a different creation-draw count.
 - (h) Aircraft: an aircraft factory with every docking place taken, a type that need not return
   to a dock, factory in the left half of a local area with *L*h ≥ 2. Expected: the aircraft
   appears on the cell column just outside the left edge, at the row the recorded ranged draw
@@ -1053,10 +1057,11 @@ Test data only; stock building types keep their own exit data.
 
 ## Open questions
 
-1. Q-0120, parts left open (claim 13): how a ground vehicle factory's unloading takes the vehicle
-   out, how long it lasts and where the vehicle goes after it; where an infantry unit goes after
-   reaching its exit cell, with and without a rally point; the cell near the factory that an
-   aircraft entering from the edge flies to; an aircraft's docking position; the exact cell-entry
-   test of the infantry exit search and how many docking places an infantry factory has; and
-   whether putting a unit on the map or its leaving movement takes random draws. The leaving
-   movement belongs to the movement and structures specs; no spec owns it yet.
+1. Q-0120 remains partial (claim 13). S-0417 owns ground and naval unloading, its duration,
+   exit movement and qualified post-contact destinations. Infantry initial placement destination
+   and no-rally walk-out remain S-0417 Open question 3, not a universal walk to the exit cell.
+   Still open here: the cell near the factory that an aircraft entering from the edge flies to,
+   an aircraft's docking position, the exact cell-entry test of the infantry exit search and how
+   many docking places an infantry factory has; and additional draws from initial map placement
+   or the release's nearby-cell search. S-0417 claim 12 supplies unloading's draw consequences.
+   Its other unresolved branches and aircraft tether timing stay open there.
