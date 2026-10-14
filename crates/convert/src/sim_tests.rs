@@ -885,10 +885,7 @@ fn auto_deploy_delay_items() {
     assert_eq!(read("5, ,40"), Some(vec![5, 0, 40]));
     assert_eq!(read("5,4294967336,90"), Some(vec![5, 40, 90]));
     // The text-limit control: the second item lies beyond byte 127.
-    assert_eq!(
-        read(&format!("5{}40", ",".repeat(130))),
-        Some(vec![5, 40])
-    );
+    assert_eq!(read(&format!("5{}40", ",".repeat(130))), Some(vec![5, 40]));
     // Layer retention: absent and empty keep the held list; a readable list replaces it.
     let layered = |map: &str| {
         let (s, w) = sim("[General]\nAIAutoDeployFrameDelay=5,40,90\n", map, "");
@@ -905,7 +902,10 @@ fn auto_deploy_delay_items() {
     );
     // The entry-count warning counts the same items.
     let (_, w) = sim(
-        &format!("[General]\nAIAutoDeployFrameDelay=5{}40,7\n", ",".repeat(130)),
+        &format!(
+            "[General]\nAIAutoDeployFrameDelay=5{}40,7\n",
+            ",".repeat(130)
+        ),
         "",
         "",
     );
