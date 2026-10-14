@@ -552,7 +552,7 @@ pub fn display_suppressed(w: &World, id: ObjectId) -> bool {
         return o.teleport.as_ref().is_some_and(|t| t.landing.is_some());
     }
     // spec: S-0402 claim 5a (a ground driver: an active track with positive current speed; a destination
-    // alone does not suppress it). Open in Q-0580 question 5: "current speed" is read as the speed fraction ρ
+    // alone does not suppress it). Open in Q-0590: "current speed" is read as the speed fraction ρ
     // of S-0207 Terms above 0, not the truncated step s of S-0207 claim 2. Erasing (also suppressing) is not modelled: no erasing weapon yet.
     o.drive
         .as_ref()

@@ -7,7 +7,7 @@
 use std::sync::OnceLock;
 
 use glasnost_num::geom::n_step;
-use glasnost_num::{F64, Rounding, bigmath};
+use glasnost_num::{F64, Rounding, trig};
 use glasnost_sim::econ::harvest;
 use glasnost_sim::world::{ObjectId, World};
 
@@ -42,7 +42,7 @@ pub fn frame(q: u32, t: i32, nu: i32) -> i64 {
         + (i64::from(t) + i64::from(nu)).rem_euclid(FRAMES_PER_FACING)
 }
 
-/// The offsets RZ₅₃(30 × sin θ) and RZ₅₃(30 × cos θ) of F8 for 8-step
+/// The offsets RZ₅₃(30 × cosT θ) and RZ₅₃(30 × sinT θ) of F8 for 8-step
 /// facing `q`, with `quirks.table_direction` on (`table`) or off.
 pub fn offset(q: u32, table: bool) -> (F64, F64) {
     static TABLES: OnceLock<[[(F64, F64); 8]; 2]> = OnceLock::new();
@@ -60,7 +60,7 @@ pub fn offset(q: u32, table: bool) -> (F64, F64) {
 
 /// [`offset`], computed.
 fn compute_offset(q: u32, table: bool) -> (F64, F64) {
-    // spec: S-0402 F8 (the original's floating-point round-toward-zero mode for every step)
+    // spec: S-0402 F8 (products and sums round toward zero)
     let rz = Rounding::TowardZero;
     // spec: S-0402 F8 (f̂: 8192q reduced to the signed facing range −32768 … 32767)
     let f = 8192 * i64::from(q);
@@ -72,17 +72,17 @@ fn compute_offset(q: u32, table: bool) -> (F64, F64) {
         // spec: S-0402 F8 (`quirks.table_direction` off: 16384 and the binary64 value nearest −2π / 65536)
         F64::from_i64(fh - 16384, rz).mul(glasnost_sim::consts::WALK_C, rz)
     };
-    // spec: S-0402 F8 (sin and cos rounded toward zero). Open in Q-0580 question 1: F8 writes
-    // plain sin and cos, but S-0205 claim 6 and the sibling formulas use table sines; we follow F8's
-    // literal text. The readings differ by one lepton at some facings (e.g. switch on q = 2, off q = 0).
-    let (s, c) = bigmath::sin_cos(theta, rz).unwrap_or((F64::ZERO, F64::ZERO));
+    // spec: S-0402 F8 (the table sine and cosine of S-0105 F1 required by S-0205 claim 6, with the table's
+    // negative-angle quirk; single-precision results widened exactly)
+    let (c, s) = (trig::cos_t(theta, rz), trig::sin_t(theta, rz));
     let d = F64::from_i64(DISPLACEMENT, rz);
-    (d.mul(s, rz), d.mul(c, rz))
+    // spec: S-0402 F8 (the cosine contributes to X and the sine to Y)
+    (d.mul(c, rz), d.mul(s, rz))
 }
 
 /// The anchor of F8 for a vehicle at `pos` (leptons) with 8-step facing
-/// `q`: Xₐ = trunc(RZ₅₃(X + RZ₅₃(30 sin θ))), Yₐ = trunc(RZ₅₃(Y − RZ₅₃(30
-/// cos θ))), Zₐ = Z.
+/// `q`: Xₐ = trunc(RZ₅₃(X + RZ₅₃(30 cosT θ))), Yₐ = trunc(RZ₅₃(Y −
+/// RZ₅₃(30 sinT θ))), Zₐ = Z.
 pub fn anchor(pos: (i32, i32, i32), q: u32, table: bool) -> (i32, i32, i32) {
     let rz = Rounding::TowardZero;
     let (dx, dy) = offset(q, table);
@@ -156,76 +156,63 @@ mod tests {
         assert_eq!(frame(4, 20, 1), frame(4, 21, 0));
     }
 
-    /// The expected (Xₐ − X, Yₐ − Y) per 8-step facing at a position with
-    /// both coordinates well above 30, derived by hand from F8: e.g. for
-    /// q = 0 with the switch off θ is the double nearest π/2 from below, so
-    /// sin θ rounds toward zero to 1 − 2⁻⁵³ (X + 29) and cos θ is a tiny
-    /// positive value (Y − 1); with the switch on, q = 2 gives θ = c, a tiny
-    /// negative angle (X − 1).
-    const EXPECTED_ON: [(i32, i32); 8] = [
-        (29, -1),
-        (21, -22),
-        (-1, -30),
-        (-22, -22),
-        (-30, -1),
-        (-22, 21),
-        (0, 29),
-        (21, 21),
-    ];
-    const EXPECTED_OFF: [(i32, i32); 8] = [
-        (29, -1),
-        (21, -22),
-        (0, -30),
-        (-22, -22),
-        (-30, 0),
-        (-22, 21),
-        (0, 29),
-        (21, 21),
-    ];
-
-    // spec: S-0402 F8 (anchor per 8-step facing with `quirks.table_direction` on: 16383 and c nearest −2π / 65534)
+    // spec: S-0402 F8 (X + 30 × cosT θ, Y − 30 × sinT θ in round-toward-zero doubles: the same arithmetic as
+    // S-0208 F3's step with s = 30 from facing 8192q), for both `quirks.table_direction` values
     #[test]
-    fn f8_anchor_table_direction_on() {
-        let (x, y, z) = (3000, 2000, 104);
-        for (q, (dx, dy)) in EXPECTED_ON.iter().enumerate() {
-            assert_eq!(
-                anchor((x, y, z), q as u32, true),
-                (x + dx, y + dy, z),
-                "q {q}"
+    fn f8_anchor_is_the_table_step_of_30_leptons() {
+        let rz = Rounding::TowardZero;
+        for table in [true, false] {
+            for (x, y, z) in [(3000, 2000, 104), (40, 31, 0), (25_611, 9_999, 416)] {
+                for q in 0..8 {
+                    let (sx, sy) =
+                        glasnost_sim::walk::step_point(x, y, (8192 * q) as u16, 30, table, rz);
+                    assert_eq!(anchor((x, y, z), q, table), (sx, sy, z), "q {q} {table}");
+                }
+            }
+        }
+    }
+
+    // spec: S-0402 F8 (the cosine contributes to X and the sine to Y: facing 16384, map east (S-0402
+    // Constants), moves the anchor 30 leptons along +X or just short of it, not along Y)
+    #[test]
+    fn f8_cosine_on_x_and_sine_on_y() {
+        let (x, y) = (3000, 2000);
+        for table in [true, false] {
+            let (ax, ay, _) = anchor((x, y, 0), 2, table);
+            assert!((29..=30).contains(&(ax - x)), "{table}: {ax}");
+            assert!((ay - y).abs() <= 1, "{table}: {ay}");
+            // The opposite facing goes the other way along X.
+            let (bx, by, _) = anchor((x, y, 0), 6, table);
+            assert!((-30..=-29).contains(&(bx - x)), "{table}: {bx}");
+            assert!((by - y).abs() <= 1, "{table}: {by}");
+            // Facing 0 moves along Y, not X.
+            let (cx, cy, _) = anchor((x, y, 0), 0, table);
+            assert!(
+                (cx - x).abs() <= 1 && (cy - y).abs() >= 29,
+                "{table}: {cx} {cy}"
             );
         }
     }
 
-    // spec: S-0402 F8 (`quirks.table_direction` off: 16384 and the double nearest −2π / 65536)
+    // spec: S-0402 F8 (the table sine and cosine, not exact ones: every offset is 30 times a table value)
     #[test]
-    fn f8_anchor_table_direction_off() {
-        let (x, y, z) = (3000, 2000, 0);
-        for (q, (dx, dy)) in EXPECTED_OFF.iter().enumerate() {
-            assert_eq!(
-                anchor((x, y, z), q as u32, false),
-                (x + dx, y + dy, z),
-                "q {q}"
-            );
+    fn f8_offsets_use_the_table_values() {
+        let rz = Rounding::TowardZero;
+        let d = F64::from_i64(30, rz);
+        for table in [true, false] {
+            for q in 0..8u32 {
+                let f = 8192 * i64::from(q);
+                let fh = if f <= 32767 { f } else { f - 65536 };
+                let theta = if table {
+                    F64::from_i64(fh - 16383, rz).mul(glasnost_sim::consts::WALK_C2, rz)
+                } else {
+                    F64::from_i64(fh - 16384, rz).mul(glasnost_sim::consts::WALK_C, rz)
+                };
+                let (dx, dy) = offset(q, table);
+                assert!(dx.eq_num(d.mul(trig::cos_t(theta, rz), rz)), "q {q}");
+                assert!(dy.eq_num(d.mul(trig::sin_t(theta, rz), rz)), "q {q}");
+            }
         }
-    }
-
-    // spec: S-0402 F8 (round toward zero: a tiny negative offset takes a whole coordinate to the integer below,
-    // where round-to-nearest would keep it)
-    #[test]
-    fn f8_anchor_near_zero_components_round_toward_zero() {
-        // Switch off, q = 0: 30 × cos θ is a tiny positive double, so Y − it rounds below Y.
-        let (_, dy) = offset(0, false);
-        assert!(dy.gt(F64::ZERO));
-        assert!(dy.lt(F64::from_parts(false, 1, -40, Rounding::TowardZero)));
-        // 30 × sin θ rounds toward zero below 30.
-        let (dx, _) = offset(0, false);
-        assert!(dx.lt(F64::from_i64(30, Rounding::TowardZero)));
-        // Switch on, q = 2: θ = c is negative, so the X offset is a small negative value.
-        let (dx, _) = offset(2, true);
-        assert!(dx.is_sign_negative() && dx.gt(F64::from_i64(-1, Rounding::TowardZero)));
-        // Switch off, q = 2: θ = −0, the X offset is a zero.
-        let (dx, _) = offset(2, false);
-        assert!(dx.eq_num(F64::ZERO));
     }
 
     /// A game with one loading vehicle harvester (type HARVX, invented)
@@ -271,15 +258,10 @@ mod tests {
         let table = w.rules().quirks.table_direction;
         let o = w.obj(id).unwrap();
         let pos = (o.pos.x, o.pos.y, o.pos.z);
-        let (dx, dy) = if table {
-            EXPECTED_ON[2]
-        } else {
-            EXPECTED_OFF[2]
-        };
         let h = of(&w, id, 4).expect("shown");
         // 16384 is 8-step facing 2.
         assert_eq!(h.frame as i64, frame(2, w.tick, 4));
-        assert_eq!(h.anchor, (pos.0 + dx, pos.1 + dy, pos.2));
+        assert_eq!(h.anchor, anchor(pos, 2, table));
     }
 
     // spec: S-0402 claim 5a (suppressed while the body turns; on stopping its frame follows F8 at the current

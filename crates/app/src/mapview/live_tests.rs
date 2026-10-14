@@ -228,7 +228,8 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
 
 /// spec: S-0402 claim 5a and F8 (the fixed harvesting sprite: its F8 image
 /// frame centred on the projected anchor, composited before (under) the
-/// vehicle's body, with the anim palette and no house-colour remap; a
+/// vehicle's body and shadow, with the anim palette and no house-colour remap at
+/// the vehicle's brightness, flat at U − 2 without writing depth (S-0102 claim 13); a
 /// missing file draws nothing)
 #[test]
 fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
@@ -246,7 +247,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
     let pos = (2 * 256 + 128, 3 * 256 + 128, 0);
-    let anchor = (pos.0 + 21, pos.1 - 22, pos.2);
+    let anchor = (pos.0 + 21, pos.1 - 22, pos.2); // any anchor: the painter centres on the one it is given
     let car = |harvesting| Mobile {
         kind: Kind::Vehicles,
         idx: 0,
@@ -316,7 +317,18 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         .find(|i| i.paint != Paint::Shadow)
         .unwrap();
     assert_ne!(lit(harv).base, lit(body).base);
-    assert!(harv.provisional);
+    // spec: S-0402 claim 5a (the vehicle's brightness, S-0104 claim 13: the same as its body's)
+    assert_eq!(lit(harv).rho, lit(body).rho);
+    // spec: S-0102 claim 13 (flat, no companion, a reader that writes no depth; no longer provisional)
+    assert!(matches!(
+        harv.depth,
+        ItemDepth::Profile {
+            profile: Profile::Flat,
+            companion: None,
+            ..
+        }
+    ));
+    assert!(!harv.provisional);
 }
 
 /// A live game on the simulation's synthetic scenario (its map has no art,

@@ -2974,12 +2974,10 @@ impl Builder<'_> {
             };
             let row = self.house_row(hsv, ground + extra);
             let body = self.vehicle_items(m, point, u, row);
-            // spec: S-0402 claim 5a (the harvesting image is drawn under the body). Open in Q-0580
-            // question 4: its place relative to the voxel shadow; we composite it before all of the
-            // vehicle's items, shadow included.
+            // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
             let mut items: Vec<Item> = m
                 .harvesting
-                .and_then(|h| self.harvesting_item(m, h, u, ground))
+                .and_then(|h| self.harvesting_item(m, h, u, ground + extra))
                 .into_iter()
                 .collect();
             items.extend(body);
@@ -2995,44 +2993,38 @@ impl Builder<'_> {
 
     /// A loading vehicle harvester's harvesting image (S-0402 claim 5a,
     /// F8): the fixed harvesting sprite's frame centred on the projected
-    /// anchor, drawn with the anim palette and no house-colour remap. A
-    /// missing file or image frame draws nothing.
-    ///
-    /// Neither the depth row (S-0102 claim 13) nor the brightness of this
-    /// image is specified: our engine gives it the depth row of a vehicle
-    /// drawn as a sprite (*U* − 2, upright, a reader) and the anim palette's
-    /// row-5 brightness, its cell's unscaled ground level (S-0103 claim 8),
-    /// and marks it provisional.
+    /// anchor, drawn with the anim palette and no house-colour remap at the
+    /// vehicle's brightness `light`, depth-tested flat at the vehicle's
+    /// *U* − 2 without writing depth (S-0102 claim 13). A missing file or
+    /// image frame draws nothing.
     fn harvesting_item(
         &mut self,
         m: &Mobile,
         h: super::harvesting::Harvesting,
         u: i32,
-        ground: i32,
+        light: i32,
     ) -> Option<Item> {
         // spec: S-0402 claim 5a, Import mapping (the fixed game asset OREGATH.SHP, by its file name)
         self.assets.get(super::harvesting::SPRITE_FILE)?;
-        // spec: S-0402 F8 (project the anchor by S-0101 claim 1 and centre the image there)
+        // spec: S-0402 F8 (project the anchor by S-0101 claim 1 and centre the image there); S-0102 claim 13 (the canvas centred at the displaced point)
         let at = project_lifted(h.anchor.0, h.anchor.1, h.anchor.2);
-        // spec: S-0402 claim 5a (the animation palette, no house-colour remap); S-0103 claim 8 row 5
-        // (its brightness, the cell's unscaled ground level). Open in Q-0580 question 2: the
-        // brightness of this image is not specified; our choice.
-        let row = self.anim_palette_row(ground);
+        // spec: S-0402 claim 5a (the animation palette, no house-colour remap, at the vehicle's brightness of S-0104 claim 13); S-0103 claim 8 row 5
+        let row = self.anim_palette_row(light);
         self.place_sprite(
             super::harvesting::SPRITE_FILE,
             h.frame,
             at,
+            // spec: S-0102 claim 13 (vehicle harvesting sprite: passes only where strictly nearer, never writes depth)
             DepthTest::Reader,
-            // Open in Q-0580 question 3 (no S-0102 claim 13 row): our choice is the row of a
-            // vehicle drawn as a sprite, U − 2, upright, a reader, marked provisional.
+            // spec: S-0102 claim 13 (vehicle harvesting sprite: flat, the vehicle's U − 2, no companion)
             ItemDepth::Profile {
-                profile: Profile::Upright,
+                profile: Profile::Flat,
                 bias: u - 2,
                 companion: None,
             },
             Paint::Lit(row),
             Group::Vehicles,
-            true,
+            false,
             Some(m.object),
         )
     }
