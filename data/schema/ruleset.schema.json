@@ -6308,6 +6308,11 @@
           "type": "boolean",
           "default": true
         },
+        "placed_buildup_twice": {
+          "description": "A placed building's build-up runs once before *construction* becomes current and again after (off: the place order sets the ready mark at entry, as a deploy does).",
+          "type": "boolean",
+          "default": true
+        },
         "placement_shroud_at_cursor": {
           "description": "A person's placement click takes the shroud result from when the cursor entered the cell.",
           "type": "boolean",
@@ -6535,6 +6540,11 @@
         },
         "sight_centre_off_map": {
           "description": "A sight whose centre is not a legal cell reveals nothing.",
+          "type": "boolean",
+          "default": true
+        },
+        "single_stage_buildup_never_completes": {
+          "description": "A positive-delay construction range of one stage or fewer never reports completion (off: it reports d_b ticks after the range starts).",
           "type": "boolean",
           "default": true
         },
