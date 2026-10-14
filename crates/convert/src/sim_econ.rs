@@ -592,6 +592,14 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Bool,
         "S-0414",
     ),
+    (
+        "reveal_trigger_radius",
+        GENERAL,
+        "RevealTriggerRadius",
+        Int,
+        "S-0011",
+    ),
+    ("ai_difficulty", DIALOG, "AIDifficulty", Int, "S-0011"),
 ];
 
 /// The coverage rows of the keys this module converts: (category, key,

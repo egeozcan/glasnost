@@ -200,6 +200,7 @@ pub fn map() -> Map {
         objects,
         cell_tags: BTreeMap::new(),
         fill_draws: 0,
+        triggers: Default::default(),
     }
 }
 
@@ -510,6 +511,7 @@ pub fn empty_map(size: i32) -> Map {
         objects: Objects::default(),
         cell_tags: BTreeMap::new(),
         fill_draws: 0,
+        triggers: Default::default(),
     }
 }
 
