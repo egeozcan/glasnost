@@ -652,7 +652,7 @@ fn claim_12_upgrade() {
     let o = w.obj(hut).unwrap();
     assert_eq!(o.econ.building.upgrade_count, 1);
     assert_eq!(o.health, 400);
-    assert_eq!(o.econ.building.upgrades, vec![ty(&w, "UPG")]);
+    assert_eq!(o.econ.building.upgrades, [Some(ty(&w, "UPG")), None, None]);
     glasnost_sim::tick::step(&mut w);
     assert_eq!(power::totals(&w, A).0, 25);
     // The type's upgrade count is 1: no more room.
@@ -670,7 +670,7 @@ fn claim_12_level_field() {
     assert!(place(&mut w, "LVL2", c(0, 0)));
     let o = w.obj(hut).unwrap();
     assert_eq!(o.econ.building.upgrade_count, 1);
-    assert_eq!(o.econ.building.upgrades.len(), 1);
+    assert_eq!(o.econ.building.upgrades, [Some(ty(&w, "LVL2")), None, None]);
 }
 
 // spec: S-0406 claim 12 (an upgrade order that names such a building passes claim 4 whatever its ring holds; claim 5 still asked)

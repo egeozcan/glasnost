@@ -706,7 +706,7 @@ fn upgrade_met(w: &World, house: HouseId, u: u32) -> bool {
                 && !being_sold(o)
                 && !queued_to_be_sold(o)
         });
-    let holds = |o: &Object| o.econ.building.upgrades.contains(&u);
+    let holds = |o: &Object| o.econ.building.held().any(|x| x == u);
     if w.rules().quirks.upgrade_prerequisite_last_building {
         // spec: S-0407 claim 8 (c) (only the most recently acquired eligible building decides)
         eligible.last().is_some_and(holds)

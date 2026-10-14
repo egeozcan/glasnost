@@ -861,7 +861,7 @@ pub fn add_upgrade(w: &mut World, b: ObjectId, u: u32) {
         ob.health = strength;
         // spec: S-0406 F5 (recorded in position c′ when 1 ≤ c′ ≤ 3; otherwise nothing, departure)
         if (1..=3).contains(&c2) {
-            ob.econ.building.upgrades.push(u);
+            ob.econ.building.upgrades[(c2 - 1) as usize] = Some(u);
         }
     }
     if let Some(h) = owner {

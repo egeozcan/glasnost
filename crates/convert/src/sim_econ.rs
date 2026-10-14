@@ -713,6 +713,7 @@ impl Builder<'_> {
                     );
                 }
                 self.building_art_econ(&mut econ, index, t);
+                self.upgrade_sale_warnings(t);
                 if let Some(word) = self.factory_kind(t) {
                     rec.put("factory", jsonc::string(word.to_string()));
                 }
@@ -763,6 +764,37 @@ impl Builder<'_> {
             ));
         }
         held
+    }
+
+    /// The importer warnings of S-0408 Edge cases: a non-turret upgrade
+    /// with a level field of 2 or 3, and a target upgrade limit above 3,
+    /// can leave an upgrade sale at an empty position.
+    fn upgrade_sale_warnings(&mut self, t: &TypeRec) {
+        let int = |k: &[u8]| {
+            fold(t.keys.get(k), None, |v, e| {
+                value::integer(v).map(|n| (n, e.layer, e.line))
+            })
+        };
+        let turret = fold(t.keys.get(&b"Turret"[..]), None, |v, _| value::boolean(v));
+        if let Some((n, layer, line)) = int(b"PowersUpToLevel")
+            && (2..=3).contains(&n)
+            && turret != Some(true)
+        {
+            // spec: S-0408 Edge cases (the importer warns about a non-turret level-field upgrade above 1)
+            self.warn(layer, line, format!(
+                "buildings {} PowersUpToLevel={n} without Turret: selling it leaves a positive upgrade count at an empty position (S-0408 claim 5 and Edge cases)",
+                show(&t.name)
+            ));
+        }
+        if let Some((n, layer, line)) = int(b"Upgrades")
+            && n > 3
+        {
+            // spec: S-0408 Edge cases (the importer warns about target limits above 3)
+            self.warn(layer, line, format!(
+                "buildings {} Upgrades={n} is above the 3 upgrade positions: a sale above 3 finds no position (S-0406 claim 12, S-0408 Edge cases)",
+                show(&t.name)
+            ));
+        }
     }
 
     /// The importer warning of S-0402 Edge cases: a building type in a

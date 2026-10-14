@@ -925,7 +925,7 @@ fn claim_9_switch_off_next_tick() {
     building(&mut w, "BARRACKS", 0, 0, 0);
     let hut = building(&mut w, "HUT", 0, 6, 6);
     let upg = t(&w, Kind::Building, "UPG").index;
-    w.obj_mut(hut).unwrap().econ.building.upgrades.push(upg);
+    w.obj_mut(hut).unwrap().econ.building.upgrades[0] = Some(upg);
     glasnost_sim::econ::tech::recheck_due(&mut w, HouseId(0));
     ready(&mut w);
     rich(&mut w);

@@ -273,6 +273,20 @@ fn weeder_and_the_dock_unload_warning() {
     );
 }
 
+// spec: S-0408 Edge cases (warnings for a non-turret upgrade with PowersUpToLevel 2 or 3 and for Upgrades above 3)
+#[test]
+fn upgrade_sale_warnings() {
+    let base = "[BuildingTypes]\n0=TOPA\n1=TOPB\n2=TOPC\n3=BASE\n[TOPA]\nPowersUpToLevel=3\n\
+[TOPB]\nPowersUpToLevel=2\nTurret=yes\n[TOPC]\nPowersUpToLevel=1\n[BASE]\nUpgrades=4\n";
+    let (_, w) = import(base, "");
+    let lv: Vec<&String> = w.iter().filter(|m| m.contains("PowersUpToLevel")).collect();
+    assert_eq!(lv.len(), 1, "{w:?}");
+    assert!(lv[0].contains("TOPA"), "{lv:?}");
+    let up: Vec<&String> = w.iter().filter(|m| m.contains("Upgrades=")).collect();
+    assert_eq!(up.len(), 1, "{w:?}");
+    assert!(up[0].contains("BASE"), "{up:?}");
+}
+
 // spec: S-0404 Import mapping (ExitCoord an integer triple in leptons; GDIBarracks, NODBarracks, YuriBarracks and Cloning booleans; [AudioVisual] PoseDir an integer)
 #[test]
 fn exit_displacement_doors_cloning_and_pose_direction() {
