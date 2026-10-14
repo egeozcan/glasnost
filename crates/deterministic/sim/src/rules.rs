@@ -417,9 +417,9 @@ pub struct AnimRules {
     pub bouncing: bool,
     /// Its start event can take draws that are not taken yet: a resource
     /// chain reaction (S-0401 claim 20, the economy topic's seam) or the
-    /// middle event's particles and smudges (S-0109 claim 14, request
-    /// Q-0182). The importer carries no image-frame counts, so μ (S-0109
-    /// claim 25) is not known and every type with one of the effects counts.
+    /// middle event's particles and smudges (S-0109 claim 14, S-0202 claim
+    /// 15). The importer carries no image-frame counts, so μ (S-0109 claim
+    /// 25) is not known and every type with one of the effects counts.
     pub start_effects: bool,
 }
 

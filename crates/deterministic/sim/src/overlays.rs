@@ -181,7 +181,7 @@ fn place_overlay(w: &mut World, c: CellXY, o: u8) {
 /// leptons along +x and +y (the top corner of cell (x + 2, y + 2), where its
 /// chain reaction acts), at the surface height of the overlay cell's centre
 /// (S-0202 claim 10, S-0009 claim 12). The start event's draws are those of
-/// `load::anim_creation_draws` (request Q-0182).
+/// `load::anim_creation_draws`.
 fn cell_animation(w: &mut World, o: u8) {
     let Some(name) = w
         .rules()
