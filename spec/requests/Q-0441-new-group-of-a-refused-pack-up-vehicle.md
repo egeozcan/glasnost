@@ -1,9 +1,9 @@
 ---
 id: Q-0441
 title: When the retained vehicle of a failed pack-up creates its new slave group
-status: open
+status: answered
 related: [S-0415, S-0402, S-0312, S-0202]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

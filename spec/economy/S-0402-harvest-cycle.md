@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442]
 supersedes: []
 ---
 
@@ -761,6 +761,28 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Confidence: high for creation, count, ownership, hidden state and no payment,
       medium for the creation-source and draw controls
 
+19a. **Pack-up creation draws precede old-group release (Q-0441).** A pack-up
+    creates the return vehicle and its own initial hidden slaves under claim 19 before
+    attempting vehicle placement, on both success and refusal. Each new slave takes
+    its ordinary creation draw. The building's old group still exists at this time.
+    These creations therefore precede any destruction or release of the old slaves
+    caused by removing the building.
+
+    Successful placement preserves the old working group, but destroys and removes
+    the vehicle's newly created hidden slaves before transferring that old group.
+    The discarded slaves' creation draws are not undone. Their removal follows
+    S-0312 claim 31's hidden-slave destruction notifications, not ordinary death
+    effects or attacker credit. This is not a second lasting working group.
+    Refused placement skips transfer and retains the new hidden group under
+    S-0415 claim 11's default quirk; removing the building ends only its old group.
+    With `quirks.failed_packup_keeps_vehicle` off, the already-created vehicle and its new group
+    are removed on refusal: their creation draws still occur, rather than being
+    suppressed in advance. This alternative is our engine's rule, not another
+    outcome observable in the original.
+    - Backing: `measurable` (H24 for original creation and removal ordering)
+    - Confidence: high for creation before placement and old-group removal,
+      medium for temporary-slave destruction notifications
+
 20. **Created is not factory-built (Q-0270 part 2).** Initial slaves, their emergence and
     replacement slaves do not raise their type's ever-built count or the end-screen built total.
     They are not factory releases (S-0407 claim 10 and S-0414 claim 20 already distinguish
@@ -788,15 +810,15 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     It seeks a free infantry standing position there. If none exists, or placement fails, the
     slave stays ready inside until a later update, not on a neighbouring cell. On successful
     emergence its target is the master and it starts the resource-search part of claim 14.
-    Ready slaves are offered places in reverse slave-place order: when only one fits,
-    the ready slave in the latest initial place emerges first. Replacements keep their places. Emergence takes no new object-creation draw.
+    When only one place accepts an emerging slave, the slave in the latest initial place emerges first. Replacements keep their places. Emergence takes no new object-creation draw.
     The desired emergence point is the offered cell's centre, at its terrain surface height.
     The standing-position choice is S-0208 claim 3's centre-class row, not its
     occupant-ignoring slave-return rule in claim 4. Thus, unless the vehicle-present or
     object-present refusal applies, each ready slave's offer takes one ranged scenario draw
     over 0 to 3, even when all side positions are taken and no position is found. The draw
     selects the corresponding row of S-0208 table O; the first free side position in that
-    row wins. The centre and top positions are never selected. Offers and their draws follow
+    row wins. The centre and top positions are never selected. When multiple ready slaves
+    are offered places at one update, their observable offers and associated draws occur in
     reverse slave-place order. Every successful emergence starts with facing 0 (map north),
     independent of the master's facing; subsequent walking can turn the slave. A vehicle master that still occupies the offered cell
     can therefore block emergence. There is no draw when the initial occupancy refusal
@@ -939,14 +961,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Confidence: high for zero-cell comparison inputs and strict comparison; medium for
       conversion-to-movement timing and later group-update interaction
 
-26. **Slave work is paced by two clocks (Q-0412).** At each group update, slaves receive
-    their group-state effects in slave-place order, earliest first. Every place with an
-    expired loss timer gets a replacement attempt, not just one place per update. Reload
-    completions, returning deliveries, and outside slaves' searches and transitions use
-    this same order; they are not separate whole-group passes. A delivery in an earlier
-    place therefore precedes replacement creation in a later place. These effects precede
-    the master's field, travel, deployment or relocation decision. Replacement creation
-    draws follow place order; later emergence offers follow reverse place order (claim 21).
+26. **Slave work is paced by two clocks (Q-0412).** At a group update, each slave place whose loss timer has expired receives a replacement attempt; the attempt is not limited to one place per update. When effects for several places are due in the same update, the observable effects occur in increasing slave-place order: reload completions, returning deliveries, and outside slaves' searches and transitions all follow that order rather than being grouped into separate passes. Thus a delivery from an earlier place is observed before replacement creation for a later place. These effects are observed before the master's field, travel, deployment or relocation decision. Replacement-creation draws are observed in increasing place order; emergence offers and their draws are observed in reverse place order (claim 21).
 
     Seeking, checking resource-cell arrival, detecting a full or exhausted load, and
     accepting delivery are group-update effects. A slave actually loading in *harvest*
@@ -1001,6 +1016,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     |---|---|
     | At rest, building currently in *construction* or *selling* | Remains at rest; no field check or emergence. |
     | At rest, building in neither behaviour | Enters checking the field; no check or emergence in this update. |
+    | Field seeking, building | Uses the long scan and site search of claim 22. Failure puts the group at rest and records this tick as last-rest. Success offers the site as a building destination under its ordinary destination rules, queues *move* without an immediate start, and enters travelling. No emergence or field-check transition occurs in this update. |
+    | Travelling or retrying deployment, building | Enters at rest and records this tick as last-rest, without field search, deployment attempt or emergence. |
     | Working, building still in its construction state | Remains working; no check or emergence. |
     | Working, building outside its construction state | Enters checking the field; no check or emergence in this update. |
     | Checking the field, building | Field and relocation rule; emergence unless packing is requested. This state has no further construction or selling exclusion. |
@@ -1012,7 +1029,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     failed conversion reaches removal. S-0415 claims 6 and 10 own successful group
     transfer and the failed-conversion boundary; this claim does not apply the true-sale
     result to every failed pack-up.
-    - Backing: `measurable` (H22)
+    Field seeking is therefore not equivalent to travelling after manual deployment.
+    When its site search succeeds, the next update normally sees travelling and puts
+    the building's group at rest; a subsequent eligible update enters checking the
+    field, and only a later update checks it. Construction or selling does not
+    suppress the field-seeking or retrying rows themselves. A selling building can
+    refuse the destination and queued behaviour under its ordinary rules without
+    preventing the group's change to travelling.
+    - Backing: `measurable` (H22, H25)
     - Confidence: high for absence of a group-wide pause and the state gates; medium for
       busy-state delivery and reachable selling-state variants
 
@@ -1029,14 +1053,25 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     this rule does nothing to the group. Automatic relocation remembers the building's
     own cell and therefore skips this additional site search.
 
+    **One remembered destination (Q-0442).** The automatic old-cell memory of
+    claim 25 and the building's guard spot read by S-0415 claim 9 and S-0408
+    claim 17 are the same destination, not independent memories. Automatic
+    relocation replaces any earlier guard spot with the old top-left cell.
+    A later move or harvest order that changes that guard spot replaces the
+    automatic cell in turn. Claim 28's site rule reads whichever destination
+    is then present, with no automatic-over-manual priority. A later sell order
+    does not itself clear this destination: subject to the other pack-up
+    conditions of S-0415 claim 9, it packs towards the retained old cell rather
+    than becoming a true sale merely because that cell was remembered automatically.
+
     Manual packing does not always recall and enter field seeking: it does so when the
     group is packing. A group still checking the field instead becomes at rest when its
     update sees a vehicle, records that update as last-rest and does not recall by that
     transition. An at-rest group stays at rest. Subsequent wake-up is claim 14's; inherited
     destination and *move* are S-0415 claim 10's. Travelling arrival does not deploy at
     once: the attempt is at a due group update seeing no destination (claim 22).
-    - Backing: `measurable` (H23)
-    - Confidence: high for site-rule gates, group transitions and group-update deployment,
+    - Backing: `measurable` (H23, H25)
+    - Confidence: high for shared destination, site-rule gates, group transitions and group-update deployment,
       medium for manual packing scenarios and remembered-destination handover
 
 ## Formulas
@@ -1294,6 +1329,7 @@ select which harvester takes the earlier turn.
 | No data key | initial last-rest tick 0, hidden initial state, 10-tick group period and 30-tick failed-deploy wait (claims 19, 21, 22); emergence position draw (claim 21), existing-slave ownership retention (claim 23), footprint search and axis shifts (claim 24) | engine constants and behaviour | fixed |
 | Art, building type section, `Foundation` | site-search rectangle width and height (claim 24), from the deployed or deploys-into type | foundation form owned by S-0406 | S-0406 |
 | No data key | missing relocation comparison points, emergence and retry after failed improvement, immediate automatic-pack-up destination (claim 25); slave-place ordering, map-north emergence, two-clock work and busy-state gates (claims 21, 26, 27); directed harvest processing and manual packing gates (claims 22, 28) | engine behaviour, not imported settings | fixed, with claim 25's quirk alternative |
+| No data key | temporary pack-up slave creation and draw order (claim 19a), field-seeking and retrying building transitions (claim 27), shared automatic memory and guard spot (claim 28) | engine behaviour, not imported settings | fixed; failed-vehicle retention alternative is S-0415 claim 11's quirk |
 | Rules, infantry type section, `HarvestRate` | loading-processing interval *h*, not the seeking or delivery group-update interval (claims 14, 26) | integer, ticks | 1 |
 | Rules, `[General]`, `HarvesterLoadRate` | load step period *L* (claim 5) | integer, ticks | 2 |
 | Rules, `[General]`, `HarvesterDumpRate` | dump rate *D* (claim 11) | decimal (S-0003), game minutes | the double nearest 0.016 |
@@ -2065,8 +2101,55 @@ is wrong). *Runs:* 3.
 - *Runs/tool:* 3 per order/packing variant, scripted input and read-only tick and stream
   recorder. Factory release supplies destination-free harvest without an injected order.
 
+**H24. Temporary pack-up slaves and draw order (claim 19a).**
+- *Setup:* a tiny stock-data skirmish map, game speed 2, director and mods off,
+  with a human-owned deployed slave miner and one bystander computer player
+  kept outside the observed area. Use a control with a free return cell and
+  a second run with that cell blocked. Include old slaves both inside and outside.
+- *Procedure:* pack up once per run; repeat three times per case. Use a read-only
+  state and random-stream recorder across the conversion tick, recording new
+  infantry creation, their on-map status, old slave ownership, losses and
+  destruction notifications through the read-only recorder. Compare end-screen
+  losses with a control that performs no pack-up.
+- *Expected:* the return vehicle creates its type's initial count of hidden slaves
+  before placement in both cases, each with its creation draw. On success these
+  temporary slaves are destroyed before old-group transfer; on refusal they remain
+  with the hidden vehicle, and their creations precede old-group release. No old
+  slave is recreated on successful transfer. The discarded temporary slaves count
+  as losses and receive common destruction notifications. Missing temporary
+  creations, absent losses or notifications, undone draws or old-group release
+  preceding those creations falsifies the claim.
+  The quirk-off result is an engine conformance test, not an oracle measurement.
+
+**H25. Deployment-state boundaries and shared guard spot (claims 27, 28).**
+- *Setup:* a tiny purpose-made stock-data skirmish map at speed 2, director and
+  mods off, human-owned slave miners and one distant bystander computer player.
+  Provide one distant field with a valid deployment site and a separate exhausted
+  field that induces automatic relocation. Observe only these miners and slaves.
+- *Procedure:* with scripted input and a read-only state recorder, manually deploy
+  while field seeking and while retrying deployment. Record three runs of each,
+  including group states, last-rest ticks, destinations, behaviours and emergence
+  at each due group update. Repeat the seeking case with no acceptable field/site.
+  Separately request automatic relocation after first giving a different manual
+  guard spot, then sell during build-down. In a control give a new move destination
+  after automatic relocation but before conversion, when the order is accepted.
+- *Expected:* seeking with a site enters travelling, then at rest at the next
+  update; seeking failure and a retrying building enter at rest directly and
+  record that update's tick. Neither transition emits ready slaves. Ordinary later
+  at-rest/checking rules resume as claim 27 states. Automatic relocation replaces
+  the earlier manual guard spot with the old top-left cell; a later accepted
+  destination replaces that cell. A sell order alone retains it, and successful
+  packing gives the vehicle that destination. Immediate checking from seeking or
+  retrying, emergence in those transitions, independent destination memories or
+  automatic memory overriding a later accepted order falsifies the claims.
+
 ## Open questions
 
+- Q-0441's creation and draw ordering is claim 19a; S-0415 claim 11 owns
+  refused-vehicle retention and its quirk. Q-0442's deployed state boundaries and
+  shared remembered destination are claims 27 and 28. Q-0440 belongs to S-0408
+  claim 10a, applying the common slave teardown of S-0312 claims 30 and 31.
+  This spec does not duplicate that sale-owned claim.
 - Q-0412 is answered for this spec's scope: claims 21 and 26 already cover replacement
   count and order, emergence facing, the two clocks, slave field qualification and
   deployed scan centre and qualification (questions 2, 3 and 5–7). Claim 26 now
