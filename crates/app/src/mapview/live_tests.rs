@@ -6,17 +6,20 @@
 use glasnost_convert::kinds::Kind;
 use glasnost_convert::map::{DecodeContext, decode};
 use glasnost_ini::{Document, Quirks};
-use glasnost_render::compose::Paint;
+use glasnost_render::compose::{DepthTest, Paint, Profile};
 use glasnost_render::palette::{PaletteQuirks, PaletteState};
 use glasnost_render::projection::project_lifted;
-use glasnost_render::scene::Scene;
+use glasnost_render::scene::{ItemDepth, Scene};
 use glasnost_sim::targeting::{ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target};
 use glasnost_sim::{save, testkit};
 
-use super::build::{InfantryFrame, Inputs, Mobile, Options, build_parts, infantry_frame};
+use super::build::{
+    InfantryFrame, Inputs, LiveBuilding, Mobile, Options, build_parts, infantry_frame,
+};
 use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
-use super::tests::{context, scene_map_text};
+use super::tests::{context, scene_map_text, shp};
+use super::unload::{DoorView, Unloading};
 
 /// spec: S-0201 claims 2, 4 and 5 (16 × s ms at s = 1 … 6, 8 ms at index 0)
 #[test]
@@ -616,4 +619,234 @@ fn right_click_on_an_enemy_orders_an_attack() {
         live.world.obj(cart).unwrap().target,
         Some(Target::Object(walker))
     );
+}
+
+/// The test context's building HUTX given the unloading sprites of S-0108
+/// claims 22 and 23 named in `roles` (roles as the importer names them),
+/// each placed at its own frame x so the drawn sprite can be told apart;
+/// the door sprite has 8 image frames, the under-door sprites 2.
+fn unloading_context(
+    roles: &[&'static str],
+) -> (
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    super::build::Assets,
+) {
+    let (mut import, catalogue, mut assets) = context();
+    let hut = import.arts.get_mut(&(Kind::Buildings, 0)).unwrap();
+    for &(role, file, frames, x) in &[
+        ("deploying", "hutxdep.shp", 4, 7),
+        ("roof_deploying", "hutxroof.shp", 4, 8),
+        ("under_door", "hutxud.shp", 2, 5),
+        ("under_roof_door", "hutxurd.shp", 2, 4),
+        ("door", "hutxdoor.shp", 8, 3),
+    ] {
+        if roles.contains(&role) {
+            hut.building_sprites.insert(role, file.as_bytes().to_vec());
+            assets.insert(file.as_bytes(), shp((40, 30), frames, (4, 4), (x, 8)));
+        }
+    }
+    (import, catalogue, assets)
+}
+
+/// Each item the live painter draws for HUTX at cell (2, 2), height 0,
+/// with `unloading`: (frame x on its canvas, depth test, profile, bias,
+/// first pixel).
+fn unloading_items(
+    roles: &[&'static str],
+    unloading: Option<Unloading>,
+) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
+    let (import, catalogue, assets) = unloading_context(roles);
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene: Scene = built.scene;
+    let cell = glasnost_map::CellXY::new(2, 2);
+    let (drawn, _) = painter.buildings(
+        &inputs,
+        &mut scene,
+        &[LiveBuilding {
+            idx: 0,
+            cell,
+            owner: b"Neutral".to_vec(),
+            health: (256, 256),
+            facing: 0,
+            object: sim_code(ObjectId(5)),
+            unloading,
+        }],
+    );
+    // spec: S-0108 claim 8 (centred on the foundation's top corner; canvas 40 wide)
+    let (ax, _) = project_lifted(256 * cell.x, 256 * cell.y, 0);
+    drawn[0]
+        .iter()
+        .map(|i| {
+            let (profile, bias) = match i.depth {
+                ItemDepth::Profile { profile, bias, .. } => (profile, bias),
+                ItemDepth::Tile { .. } => panic!("not a profile item"),
+            };
+            (
+                i.x - (ax - 20),
+                i.test,
+                profile,
+                bias,
+                scene.images[i.image as usize].pixels()[0],
+            )
+        })
+        .collect()
+}
+
+const UNLOAD_ROLES: [&str; 5] = [
+    "deploying",
+    "roof_deploying",
+    "under_door",
+    "under_roof_door",
+    "door",
+];
+
+fn unloading_with(roof: bool, door: DoorView) -> Option<Unloading> {
+    Some(Unloading { roof, door })
+}
+
+/// spec: S-0108 claims 22 and 23 (outside unloading the body sprite and no unloading, under-door
+/// or door image), S-0102 claim 13 (body −L(z) − 2 + the normal depth adjustment)
+#[test]
+fn no_unloading_images_outside_unloading() {
+    let items = unloading_items(&UNLOAD_ROLES, None);
+    // Body (frame x 6), shadow and bib only.
+    assert_eq!(items.len(), 3, "{items:?}");
+    assert_eq!(items[0], (6, DepthTest::Writer, Profile::Upright, -2, 2));
+    assert!(items.iter().all(|i| i.0 == 6));
+}
+
+/// spec: S-0108 claim 22 (an unmarked unit: the deploying sprite replaces the body, frame f with
+/// the claim 3 clamp, and its shadow; the under-door sprite, frame 0 undamaged), claim 23 (the door
+/// image with D = 0: frame 0, at the claim 8 anchor), S-0102 claim 13 (deploying −L(z) − 22,
+/// upright, writes; under-door −L(z) − 2, flat, writes; door −L(z) − 7, flat, no depth write),
+/// claim 16 (body, shadow, bib, under-door)
+#[test]
+fn deploying_under_door_and_door_while_unloading() {
+    let items = unloading_items(&UNLOAD_ROLES, unloading_with(false, DoorView::Closed));
+    assert_eq!(items.len(), 5, "{items:?}");
+    // Deploying sprite (frame x 7), idle frame 1 (pixel 2); its shadow 1 + 2 = 3 (pixel 4).
+    assert_eq!(items[0], (7, DepthTest::Writer, Profile::Upright, -22, 2));
+    assert_eq!(items[1], (7, DepthTest::Writer, Profile::Flat, -4, 4));
+    // The bib keeps its own sprite.
+    assert_eq!(items[2], (6, DepthTest::Writer, Profile::Flat, -3, 2));
+    // Under-door sprite (x 5), frame 0.
+    assert_eq!(items[3], (5, DepthTest::Writer, Profile::Flat, -2, 1));
+    // Door sprite (x 3) in the object pass, frame 0.
+    assert_eq!(items[4], (3, DepthTest::Reader, Profile::Flat, -7, 1));
+}
+
+/// spec: S-0108 claim 22 (a jumpjet or balloon-hover unit: the roof-deploying and under-roof-door
+/// sprites), claim 23 (the door image whatever the unit), S-0102 claim 13 (roof-deploying
+/// −L(z) − 42)
+#[test]
+fn roof_deploying_while_unloading_a_marked_unit() {
+    let items = unloading_items(&UNLOAD_ROLES, unloading_with(true, DoorView::Open));
+    assert_eq!(items.len(), 5, "{items:?}");
+    assert_eq!(items[0], (8, DepthTest::Writer, Profile::Upright, -42, 2));
+    assert_eq!(items[3], (4, DepthTest::Writer, Profile::Flat, -2, 1));
+    assert_eq!(items[4], (3, DepthTest::Reader, Profile::Flat, -7, 1));
+}
+
+/// spec: S-0108 claim 22 and Edge cases (quirks.roof_unload_no_fallback, on by default: a marked
+/// unit from a building without roof sprites keeps the body sprite with its normal depth adjustment
+/// and draws no under-door image, though the ordinary ones exist), claim 23 (the door image stays)
+#[test]
+fn roof_unload_without_roof_sprites_has_no_fallback() {
+    let roles = ["deploying", "under_door", "door"];
+    let items = unloading_items(&roles, unloading_with(true, DoorView::Closed));
+    assert_eq!(items.len(), 4, "{items:?}");
+    assert_eq!(items[0], (6, DepthTest::Writer, Profile::Upright, -2, 2));
+    assert_eq!(items[3], (3, DepthTest::Reader, Profile::Flat, -7, 1));
+}
+
+/// spec: S-0108 claim 23 (the door image in every door state of the unload, closed included;
+/// absent without a door sprite), F8 (D = 0, the Import mapping's absent-key default, Q-0540:
+/// frame 0 in every state)
+#[test]
+fn door_image_in_every_door_state() {
+    for door in [
+        DoorView::Closed,
+        DoorView::Opening { m: 3, r: 1 },
+        DoorView::Open,
+        DoorView::Closing { m: 3, r: 2 },
+    ] {
+        let items = unloading_items(&UNLOAD_ROLES, unloading_with(false, door));
+        let doors: Vec<_> = items.iter().filter(|i| i.0 == 3).collect();
+        assert_eq!(
+            doors,
+            [&(3, DepthTest::Reader, Profile::Flat, -7, 1)],
+            "{door:?}"
+        );
+    }
+    let roles = ["deploying", "under_door"];
+    let items = unloading_items(&roles, unloading_with(false, DoorView::Open));
+    assert!(items.iter().all(|i| i.0 != 3));
+}
+
+/// spec: S-0417 Terms (unloading: the building's current behaviour is unload, a queued one is not),
+/// claim 2 (the unit in contact is the one released); S-0108 claim 22, Import mapping (`JumpJet` of
+/// the unloaded unit's type selects the roof variants); F8 (M and r from the door's movement)
+#[test]
+fn live_unloading_state_of_a_building() {
+    use glasnost_sim::behaviour::Door;
+    use glasnost_sim::rules::Behaviour;
+    let (mut live, _) = synthetic_live();
+    let k = own_mobile(&live, 0);
+    let u = own_mobile(&live, 1);
+    let tick = live.world.tick;
+    {
+        let o = live.world.obj_mut(k).unwrap();
+        o.beh.current = None;
+        o.beh.queued = Some(Behaviour::Unload);
+        o.beh.gate.door = Door::Opening {
+            since: tick - 2,
+            ticks: 5,
+        };
+    }
+    live.world.obj_mut(u).unwrap().contact = Some(k);
+    let o = live.world.obj(k).unwrap().clone();
+    // Queued only: not unloading.
+    assert_eq!(live.unloading_of(&o), None);
+    live.world.obj_mut(k).unwrap().beh.current = Some(Behaviour::Unload);
+    let o = live.world.obj(k).unwrap().clone();
+    // The picture shows the last tick that ran (S-0201 claim 6).
+    let shown = (tick - 1).max(0);
+    let r = (5 - (shown - (tick - 2))).clamp(0, 5);
+    assert_eq!(
+        live.unloading_of(&o),
+        unloading_with(false, DoorView::Opening { m: 5, r })
+    );
+    // The unit in contact is marked jumpjet: the roof variants.
+    let (kind, t) = {
+        let uo = live.world.obj(u).unwrap();
+        (uo.kind, uo.type_index as usize)
+    };
+    let rules = std::sync::Arc::make_mut(&mut live.rules);
+    match kind {
+        glasnost_sim::rules::Kind::Infantry => rules.infantry[t].jumpjet = true,
+        _ => rules.vehicles[t].jumpjet = true,
+    }
+    assert!(live.unloading_of(&o).is_some_and(|x| x.roof));
 }

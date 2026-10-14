@@ -1107,6 +1107,45 @@ mod tests {
         assert_eq!(b, None);
     }
 
+    /// spec: S-0108 Import mapping (`DoorAnim`, `DeployingAnim`, `RoofDeployingAnim`,
+    /// `UnderDoorAnim`, `UnderRoofDoorAnim`: the door and unloading sprites, absent none);
+    /// S-0007 claim 11 (each name ‖ .shp)
+    #[test]
+    fn building_unloading_and_door_sprites() {
+        let rules = "[BuildingTypes]\n1=ZF\n[ZF]\nX=1\n";
+        let art = "[ZF]\nDeployingAnim=ZFDEP\nRoofDeployingAnim=ZFROOF\nUnderDoorAnim=ZFUD\n\
+                   UnderRoofDoorAnim=ZFURD\nDoorAnim=ZFDOOR\n";
+        let f = files(&[
+            "ZF.shp",
+            "ZFDEP.shp",
+            "ZFROOF.shp",
+            "ZFUD.shp",
+            "ZFURD.shp",
+            "ZFDOOR.shp",
+        ]);
+        let (o, a) = run(&[(rules, Role::Base)], art, Theater::Temperate, &f);
+        let p = get(&o, &a, Kind::Buildings, "ZF");
+        let role = |r: &str| {
+            p.building_sprites
+                .get(r)
+                .map(|v| String::from_utf8_lossy(v).into_owned())
+        };
+        assert_eq!(role("deploying").as_deref(), Some("ZFDEP.shp"));
+        assert_eq!(role("roof_deploying").as_deref(), Some("ZFROOF.shp"));
+        assert_eq!(role("under_door").as_deref(), Some("ZFUD.shp"));
+        assert_eq!(role("under_roof_door").as_deref(), Some("ZFURD.shp"));
+        assert_eq!(role("door").as_deref(), Some("ZFDOOR.shp"));
+        // Absent keys: no sprite.
+        let (o, a) = run(
+            &[(rules, Role::Base)],
+            "[ZF]\nX=1\n",
+            Theater::Temperate,
+            &f,
+        );
+        let p = get(&o, &a, Kind::Buildings, "ZF");
+        assert!(p.building_sprites.is_empty(), "{:?}", p.building_sprites);
+    }
+
     /// spec: S-0007 claim 13 (terrain objects and smudges use the type name at the refresh)
     #[test]
     fn terrain_and_smudges() {

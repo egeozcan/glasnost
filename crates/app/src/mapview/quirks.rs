@@ -238,7 +238,7 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "roof_unload_no_fallback",
-        "S-0108 claim 22: units do not unload from buildings",
+        "S-0108 claim 22: the default (no fallback) is drawn; the off branch is in mapview::unload but has no switch field yet",
     ),
     (
         "theater_refresh_buildup_range",

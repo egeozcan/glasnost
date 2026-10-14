@@ -26,15 +26,16 @@ use glasnost_render::scene::{Item, Scene};
 use glasnost_render::voxel;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::orders::{self, Order};
-use glasnost_sim::rules::{Kind as SimKind, SimRules};
+use glasnost_sim::rules::{Behaviour, Kind as SimKind, SimRules};
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
-use glasnost_sim::world::{GameSetup, HouseId, Layer, ObjectId, World};
+use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 
 use super::build::{
     Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter, find_type,
     rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
+use super::unload::{self, Unloading};
 
 /// The flag that marks an [`glasnost_render::scene::Item::object`] code as
 /// a simulation object ID (the low 31 bits); codes without it index the
@@ -668,6 +669,29 @@ impl Live {
         self.ground.update(&members);
     }
 
+    /// The unloading state of building `o`, while it unloads a unit
+    /// (S-0108 claims 22 and 23).
+    pub(super) fn unloading_of(&self, o: &Object) -> Option<Unloading> {
+        // spec: S-0417 Terms (unloading: K's current behaviour is unload; a queued one is not yet)
+        if o.beh.current != Some(Behaviour::Unload) {
+            return None;
+        }
+        // spec: S-0417 claim 2 (the unit being released is the one in contact with K); S-0108
+        // claim 22, Import mapping (JumpJet, BalloonHover of the unloaded unit's type, absent false;
+        // no unit in contact counts as unmarked)
+        let roof = self
+            .world
+            .objects
+            .values()
+            .find(|u| u.contact == Some(o.id))
+            .and_then(|u| self.rules.unit(u.kind, u.type_index))
+            .is_some_and(|t| t.jumpjet || t.raw.balloon_hover.unwrap_or(false));
+        Some(Unloading {
+            roof,
+            door: unload::door_view(o.beh.gate.door, self.shown_tick()),
+        })
+    }
+
     /// The tick whose updates the picture shows: the last one that ran
     /// (S-0201 claim 6).
     fn shown_tick(&self) -> i32 {
@@ -821,6 +845,7 @@ impl Live {
                     health: (o.health, strength),
                     facing: o.turret.value(self.world.tick),
                     object: sim_code(o.id),
+                    unloading: self.unloading_of(o),
                 })
             })
             .collect();

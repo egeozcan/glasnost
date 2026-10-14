@@ -18,3 +18,4 @@ pub mod sidebar;
 pub mod slots;
 #[cfg(test)]
 mod tests;
+pub mod unload;
