@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580]
 supersedes: []
 ---
 
@@ -234,13 +234,20 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
      19 ticks, which depend on the one-tick lag of the counter; medium for the period of 0 and the
      negative periods (scenario H1, variant c)
 
-5a. **The vehicle's harvesting display (Q-0550).** A vehicle harvester shows a separate
+5a. **The vehicle's harvesting display (Q-0550, Q-0580).** A vehicle harvester shows a separate
     harvesting sprite while loading, subject to the visibility conditions below. It is the
     same fixed game-wide sprite for every harvester type and every resource kind, including
     ore and gems. Neither the vehicle's rules nor its art names a harvesting animation.
     This is an extra image drawn with the animation palette, centred at the projected point
-    of F8 and composited before the vehicle's body. Parts of it can therefore be covered by
-    the body. It has no house-colour remap. It is not a separately existing animation:
+    of F8 and composited before both the vehicle's shadow and its body. A passing shadow
+    pixel can darken it, and the body can cover it. It has no house-colour remap.
+    Its brightness is the vehicle's brightness in per-mille, using S-0104 claim 13's
+    vehicle rule: the unscaled ground light of the vehicle's cell plus the extra unit
+    light, with that rule's bridge-deck addition or shadowed-cell penalty where applicable.
+    The displaced anchor does not select a different cell for lighting. This is not
+    full brightness and is not an animation-type lighting option. Depth compositing
+    belongs to S-0102 claim 13, not to the playback rules of an animation.
+    It is not a separately existing animation:
     S-0109 claim 1's animation stage and its playback fields do not pace it, and it takes
     no random draws. Its image frame is given by F8, with eight facing groups of 15 frames
     each, advancing every tick and repeating after 15 ticks when the vehicle's
@@ -280,7 +287,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     not substitute for this field-loading display.
     - Backing: `measurable` (H26)
     - Confidence: high for the fixed sprite, frame selection, phase boundaries and no
-      loading-specific body change; medium for placement and visibility boundaries
+      loading-specific body change, table trigonometry, brightness and order before the
+      shadow; medium for placement and visibility boundaries
 
 6. **When the harvester is full.** When a load step fails because the harvester is full (or
    because its capacity is 0, Edge cases), it runs the ring search with the short scan range and remembers the result (or forgets any remembered
@@ -1292,12 +1300,15 @@ For the anchor, let (*X*, *Y*, *Z*) be the vehicle's world position in integer l
 and let *f̂* be 8192*q* reduced to the signed facing range −32768 to 32767. Then
 
 > θ = RZ₅₃((*f̂* − 16383) × *c*), where *c* is the binary64 value nearest −2π / 65534,
-> *X*ₐ = trunc(RZ₅₃(*X* + RZ₅₃(30 × sin θ))),
-> *Y*ₐ = trunc(RZ₅₃(*Y* − RZ₅₃(30 × cos θ))), and *Z*ₐ = *Z*.
+> *X*ₐ = trunc(RZ₅₃(*X* + RZ₅₃(30 × cosT θ))),
+> *Y*ₐ = trunc(RZ₅₃(*Y* − RZ₅₃(30 × sinT θ))), and *Z*ₐ = *Z*.
 
 The angle is in radians, the 30 in leptons, and both coordinate conversions truncate
-toward zero. Trigonometric results and the products and sums use the original's
-floating-point round-toward-zero mode, not integer lookup distances. Project
+toward zero. Here sinT and cosT are the table sine and cosine required by S-0205
+claim 6, including the table's negative-angle quirk; they are not exact mathematical
+sines and cosines or library evaluations. Table results are single-precision values
+widened exactly for the double-precision products and sums, which round toward zero.
+The cosine contributes to *X* and the sine to *Y*, not the reverse. Project
 (*X*ₐ, *Y*ₐ, *Z*ₐ) by S-0101 claim 1 and centre the harvesting image there.
 S-0204 claim 8's `quirks.table_direction` covers this reverse short-angle scale too:
 with it off, replace 16383 by 16384 and *c* by the binary64 value nearest −2π / 65536.
@@ -1463,6 +1474,8 @@ select which harvester takes the earlier turn.
 | Rules, vehicle type section, `Harvester` | harvester (Terms); eligibility for the vehicle harvesting sprite (claim 5a) | boolean | no |
 | Fixed game asset `OREGATH.SHP` | vehicle harvesting sprite of claim 5a; loaded by its fixed filename, not by a rules or art animation name | sprite file; ordinary asset precedence of S-0005 claim 1 | no alternate harvesting asset is selected |
 | No data key | harvesting-display phase and movement gates, frame selection, 15-tick stationary repetition and 30-lepton anchor displacement (claim 5a, F8) | engine behaviour and constants; no per-type or per-resource animation setting | fixed |
+| Rules, `[AudioVisual]`, `ExtraUnitLight` | harvesting sprite uses the same extra brightness as its vehicle (claim 5a) | decimal converted to integer per-mille; S-0104 claim 13 owns the vehicle light rule and its cell/bridge inputs | 0 per-mille |
+| No data key | harvesting sprite precedes the vehicle's shadow and body; table sine and cosine select its anchor (claim 5a, F8) | engine drawing rules; no animation-type lighting or playback setting | fixed |
 | No harvesting-specific body key | loading keeps the ordinary vehicle image and frame rules (claim 5a) | existing vehicle art and model imports; S-0105 claim 16 owns voxel frames | no extra loading image |
 | Rules, vehicle type section, `Weeder` | weeder (Edge cases) | boolean | no |
 | Rules, type section, `Storage` | harvester capacity *C* (claim 1); slave capacity, including distinct zero and negative treatments (claim 26) | signed integer, bales; negative slave values are retained under the default quirk | 0 |
@@ -2344,7 +2357,7 @@ is wrong). *Runs:* 3.
   that variant; its backing remains `unmeasured`, with the unreachable overlap
   recorded as the reason.
 
-**H26. Vehicle harvesting display (claim 5a, F8; Q-0550).**
+**H26. Vehicle harvesting display (claim 5a, F8; Q-0550, Q-0580).**
 - *Setup:* a small, level purpose-made skirmish map with a human-owned ordinary miner,
   a chrono miner and a slave miner, their appropriate unloading buildings and separate
   ore and gem fields. Keep the observed vehicles free of attackers. Use stock data,
@@ -2380,7 +2393,28 @@ is wrong). *Runs:* 3.
   claim 1, and every frame against 15(7 − *q*) + ((*t* + *ν*) mod 15).
   The changed load period must change the bale times but not this frame rule. A
   different facing group, repeat length, phase or anchor falsifies F8. The named sprite
-  also separates absence from ordinary body occlusion.
+  also separates absence from ordinary body occlusion. Record integer lepton positions
+  and compare all eight centres against table and exact trigonometry predictions,
+  as well as against the reversed sine/cosine assignment. Where one-lepton differences
+  project to the same pixel, repeat at other within-cell positions until the predicted
+  screen centres differ. Agreement only with the exact or reversed form falsifies F8.
+- *Brightness control:* on the same stock-data map include a lit field and an unlit
+  field; capture the same harvesting frame and facing on each. Compare visible
+  sprite colours with animation-palette reference images at the vehicle brightness
+  predicted by S-0104 claim 13, not the anchor cell's scaled light. In a separate
+  named map-data control change only the extra unit brightness, then restore it.
+  The sprite must follow that addition like the vehicle. Unchanged full-brightness
+  pixels, or agreement only with bare cell light when the addition is nonzero,
+  falsify the claim. No tint or house remap should be added to the animation palette.
+- *Shadow-order control:* retain stock vehicle art and use a named copy of the
+  harvesting sprite with a broad opaque, uniformly coloured patch extending beyond
+  the body into its shadow footprint. Capture a stationary loading vehicle with a
+  visible shadow at each facing. Compare pixels outside the body but inside the
+  shadow footprint with the same patch outside the footprint. Pixels that pass the
+  shadow's ordinary depth test must be darkened as in S-0102 claim 26. A patch
+  covering those shadow pixels without darkening falsifies the before-shadow order.
+  Restore the original sprite after the control; this changes test art only, not
+  the shadow rules or the miner's gameplay.
 - *Suppression controls:* in separate runs, give the loading miner a movement order,
   target it with an erasing weapon, and record a chrono miner's journey. The extra
   image is absent in the conditions of claim 5a and can resume when those conditions
@@ -2398,7 +2432,13 @@ is wrong). *Runs:* 3.
 - Q-0550 is answered by claim 5a, F8 and H26. S-0111 claim 14 already covered load
   pips. The fixed harvesting sprite is not an animation instance, so its frame cycle
   does not require a new S-0109 playback claim.
-- Cross-spec changes to confirm: none identified against the current approved revisions. S-0215 claim 4 already covers the reachable 450-tick no-op building *move* described in claim 27a and cites H25. S-0415 claim 9 already recognizes that claim 27a's site offer can supply a guard spot, including with lobby redeploy off; pack-up legality remains S-0213 claim 12's, unchanged here.
+- Q-0580 questions 1, 2 and 4 are answered by claim 5a, corrected F8 and H26.
+  S-0205 claim 6 already required table trigonometry before the request; the prior
+  F8 omitted that precision rule and also reversed its coordinate contributions.
+  Question 3 belongs to S-0102 claim 13: its harvesting-sprite depth row must be added.
+- Cross-spec changes to confirm: S-0102 claim 13 needs the harvesting-sprite depth
+  row (flat profile, unit depth adjustment minus 2, depth test without depth write,
+  draw point at F8's anchor). S-0215 claim 4 already covers the reachable 450-tick no-op building *move* described in claim 27a and cites H25. S-0415 claim 9 already recognizes that claim 27a's site offer can supply a guard spot, including with lobby redeploy off; pack-up legality remains S-0213 claim 12's, unchanged here.
 - Q-0500 is answered by claim 27a. Claim 28 and S-0415 claims 9 and 10
   already identify the shared guard spot and its packing consequences.
   S-0215 claims 7 and 11 already fix queue refusal and building starts.

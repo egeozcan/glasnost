@@ -1,9 +1,9 @@
 ---
 id: Q-0580
 title: The harvesting sprite's sine, light, depth and order against the shadow
-status: open
+status: answered
 related: [S-0402, S-0205, S-0105, S-0208, S-0102, S-0109]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
