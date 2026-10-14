@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -61,7 +61,7 @@ vehicle's movement is heading to (S-0207). In addition:
   that lets construction yards be packed up again". It is one of S-0213's pack-up conditions for
   a construction yard and does not matter for any other packing building.
 - **Refusal announcement.** The stock spoken announcement that the deploy cannot be done there
-  (Import mapping, last row). It is spoken only to the local player.
+  (Import mapping). It is spoken only to the local player.
 
 ## Behaviour
 
@@ -71,22 +71,20 @@ vehicle's movement is heading to (S-0207). In addition:
    claim 10). Each processing of *unload* by a deploying vehicle makes at most one deploy attempt (claims 2 and
    5), and the processing ends with the standard delay of S-0215 (claim 6: the *unload* rate delay plus one draw
    over 0 … 2 from the scenario random stream), whatever the attempt's outcome. The first attempt is
-   made at the first processing after the order applies. A deploying vehicle in *hunt* also seeks a
+   made at the first processing after the order applies at which the vehicle is still (claim 2).
+   A deploying vehicle in *hunt* also seeks a
    spot and deploys (S-0215, claim 27); the attempt itself then follows claims 3 to 6.
-   The *unload* of a vehicle follows this spec only when no other *unload* rule takes precedence.
-   The first rank whose condition holds decides what *unload* does:
-
-   | Rank | Condition | What *unload* does |
-   |---|---|---|
-   | 1 | the vehicle is not bunkered and its type has a passenger capacity above 0 | unloads its passengers (the transport rules) |
-   | 2 | its type has the deploy-fire flag and not the simple-deployer flag | fires its deploy weapon (S-0215) |
-   | 3 | its type has the harvester or the weeder flag | follows the harvesting rules (S-0402) |
-   | 4 | its type deploys into a building | a deploy attempt (this spec) |
-
-   A type that deploys into a building and has one of the properties of ranks 1 to 3 therefore
-   never deploys through *unload*. The importer warns about such types.
-   - Backing: `measurable` (scenarios D1 and D9); the bunkered condition of rank 1 is `unmeasured`
-     (scenario D9, Not covered). The delay draw at the processing that completes a deploy is
+   A vehicle's *unload* follows this spec only when no higher-priority unload behaviour applies.
+   A vehicle that is not bunkered unloads passengers when its type has passenger capacity above
+   zero. Otherwise, a type with the deploy-fire flag and without the simple-deployer flag fires
+   its deploy weapon (S-0215). Otherwise, a type with the harvester or weeder flag follows the
+   harvesting rules (S-0402). Only when none of these conditions applies does a type that deploys
+   into a building make a deploy attempt. A deploying type meeting any of these higher-priority
+   conditions therefore does not deploy through *unload*. The importer warns about such types.
+   - Backing: `measurable` (scenarios D1 and D9); the bunkered condition is `unmeasured`
+     (scenario D9, Not covered). Precedence between two higher-priority rules applying together
+     is `unmeasured`: D9 isolates each rule, not their overlapping combinations.
+     The delay draw at the processing that completes a deploy is
      `unmeasured`: the vehicle is removed in that tick, so its processing timer cannot be read, and
      the bystander's draws keep the draw log from attributing the draw to it (Measurement scenarios)
    - Confidence: high (attempts at each processing); medium (the first-processing timing); low (the
@@ -106,9 +104,12 @@ vehicle's movement is heading to (S-0207). In addition:
      destination is `unmeasured`: it needs a vehicle that has a destination and is still at the first
      processing after the order, and no scripted input is known that leaves a vehicle in that state
      (a vehicle given a destination starts to move; Open question 1). The rule that a moving
-     vehicle makes no attempt is `measurable` (D2 part m).
+     vehicle makes no attempt is `measurable` (D2 part m). The queued-behaviour takeover while moving
+     is `unmeasured`: D2 part m has no established input that leaves a different behaviour queued
+     without replacing *unload* before that processing.
    - Confidence: medium (the attempt, the failures); low (the moving rule, which part m can show only
-     when a deploy order leaves a moving vehicle's destination in place)
+     when a vehicle is still moving at its first processing, despite the deploy order clearing
+     its destination under S-0213 claim 10)
 
 3. **The anchor and the cell test.** The deploy anchor is the deploying vehicle's cell when the building's
    foundation is at most 2 cells along map *x* and at most 2 along map *y*; otherwise it is the cell
@@ -139,7 +140,9 @@ vehicle's movement is heading to (S-0207). In addition:
    - Backing: `measurable` (scenario D2: parts a and b for the refusal, part e for the
      sound; part j for the *hunt* of a bystander's vehicle after a refused deploy; part k for the
      *hunt* after a first attempt without deploy readiness). The *hunt* after a failed first attempt
-     for a destination is `unmeasured` for the reason given in claim 2.
+     for a destination is `unmeasured` for the reason given in claim 2. The neutral and special
+     houses' *hunt* is `unmeasured`: D2 tests only player houses, and no scenario here establishes
+     a trigger-driven deploying vehicle of either non-player house.
    - Confidence: high (the refusal and the sound); medium (*guard*); medium (the *hunt* of the
      original's computer-controlled houses); low (the same for the neutral and special houses, which
      no scenario covers: no map of the measurement setup gives them a deploying vehicle)
@@ -159,7 +162,7 @@ vehicle's movement is heading to (S-0207). In addition:
    | no destination, deploy readiness, cell test passes, rounded facing = *D* | the deploy completes (claim 6); when the building cannot be put on the map, nothing changes and the next processing is judged by this table again (claim 6) |
 
    So a destination abandons the turn even when the vehicle lacks deploy readiness or stands where
-   the cell test would fail, and a vehicle without deploy readiness is never refused. Only a
+   the cell test would fail. During a turn, a vehicle without deploy readiness is never refused. Only a
    destination abandons a turn. A refusal ends it too, with the announcement where claim 4 gives
    one.
    After an abandoned turn, at its next *unload* processing the vehicle makes no further attempt: its
@@ -168,16 +171,26 @@ vehicle's movement is heading to (S-0207). In addition:
    until it is given another order (Open question 2).
    - Backing: `measurable` (scenario D1; scenario D2, part f: (1) for the lost readiness, (2) for
      the destination and what follows the abandonment, which can be told apart from a mere pause
-     of the attempts because the vehicle stands elsewhere afterwards)
+     of the attempts because the vehicle stands elsewhere afterwards); D2 part n for cell-test
+     refusal during a turn. The precedence of a destination over simultaneous lost readiness or
+     failed cell test is `unmeasured`: no scenario here holds both conditions at a processing.
+     Taking over a queued behaviour after abandonment is `unmeasured`: no established input
+     leaves it queued without replacing the current *unload* first; D2 f2 tests the no-queue case.
+     Recovery after lost readiness is `unmeasured` if D2 f1 cannot arrange parasite removal:
+     an attachment that lasts to the end only tests that deployment remains paused.
    - Confidence: high (the turn, the target facing); medium (the abandonment by a
      destination); low (what follows an abandoned turn; the continuing turn after a lost readiness)
 
-6. **Completion.** When the cell test passes and the rounded facing equals *D*, the deploy completes
-   in that attempt:
+6. **Completion.** With deploy readiness and no destination, a passed cell test and rounded facing
+   equal to *D* allow completion in that attempt, provided the building can be put on the map
+   under the placement test described below:
    - a building of the deploys-into type, owned by the deploying vehicle's house, is put on the map at the
      centre of the anchor, (256*x* + 128, 256*y* + 128) leptons, standing on the ground layer at height 0
      above the terrain of that cell, and its behaviour becomes *construction*: its construction state
-     begins (S-0108). A cell that holds a bridge overlay never passes the cell test (S-0406,
+     begins (S-0108). Its insertion facing is 0 facing units (map north), not the vehicle's
+     body facing or *D* × 256. Construction processing and the handover after build-up follow
+     S-0406 claims 14 and 15, including retention of the inherited target across that handover.
+     A cell that holds a bridge overlay never passes the cell test (S-0406,
      claim 3 c), so no building is put on a bridge deck. A cell that a high bridge only marks, with
      no overlay in it, passes only for a water-bound type (S-0406, claim 3 d); the building is then
      still put on the ground layer at height 0 (low confidence; scenario D12, part b),
@@ -191,27 +204,34 @@ vehicle's movement is heading to (S-0207). In addition:
    - the building's own target becomes the deploying vehicle's target, if it had one,
    - the deploying vehicle type's deploy sound plays at the deploying vehicle's position (S-0107, Import mapping) and the
      deploying vehicle is removed in the same tick.
-   The building is put on the map only if the anchor also passes S-0406's cell test as it applies to
-   a placement by the deploying vehicle's house. That test, too, ignores the deploying vehicle itself
-   and asks for no adjacency, shroud or tech-tree condition. The only input known for which it differs
-   from the cell test of claim 3 is a wall with no wall owner in a foundation cell of a type that has a
-   wall exception: claim 3's test lets it through, and the placement, which asks that the wall's owner
-   be the deploying house, is expected to refuse it. When the building cannot be put on the map, no
-   building appears and the vehicle stays as it was. When this happens in a first attempt, its
-   *unload* ends with *guard* queued and no announcement (claim 2). In a later attempt no behaviour is
-   queued, and the vehicle attempts again at its next processing.
-   - Backing: `measurable` (scenarios D1, D3 and D4 for the completion; D12 part a for the
+   The building is put on the map only if every foundation cell passes S-0406's cell test as it
+   applies to a placement by the deploying vehicle's house. That test, too, ignores the deploying
+   vehicle itself and asks for no adjacency, shroud or tech-tree condition. The only input known
+   for which it differs from the cell test of claim 3 is a wall with no wall owner in a foundation
+   cell of a type that has a wall exception: claim 3's test lets it through, and the placement,
+   which asks that the wall's owner be the deploying house, is expected to refuse it. When the
+   building cannot be put on the map, no building appears and the vehicle stays as it was. When
+   this happens in a first attempt, its *unload* ends with *guard* queued and no announcement
+   (claim 2). In a later attempt no behaviour is queued, and the vehicle attempts again at its next
+   processing.
+   - Backing: `measurable` (scenarios D1, D3 and D4 for the completion; D15 for insertion facing,
+     S-0406 scenario PL11 for construction processing and handover; D12 part a for the
      position within the cell, the height and the layer, part b for the water-bound case; scenario D2,
-     part g for the failure in a first attempt, part l for the failure in a later attempt and the retry)
-   - Confidence: high (building, cell, construction state, health, removal); medium (the position
+     part g for the failure in a first attempt, part l for the failure in a later attempt and the retry).
+     D12 part b is conditional: if no vehicle can stand on the marked cell, the water-bound case
+     is `unmeasured` because its starting state cannot be arranged.
+   - Confidence: high (building, cell, insertion facing, construction state, health, removal).
+     Construction processing and handover retain S-0406's confidences; medium (the position
      within the cell and the layer, the take-overs, the retargeting, the placement height); low (the
      water-bound case; the failure after a passed cell test, including what it asks beyond the wall
      owner)
 
 7. **What a deployed building counts as.** The new building counts for its house from the tick of
    completion as any building put on the map: as a prerequisite and a factory (S-0407, claims 1 and
-   8), for adjacency (S-0406, claim 4) and for power (S-0405). The deploying vehicle stops counting for its house when it is removed, so a
-   build limit on the vehicle type is free again from that tick (S-0407, claim 9). The building does
+   8), for adjacency (S-0406, claim 4) and for power (S-0405). The deploying vehicle leaves its
+   house's owned count when removed, if its type was eligible for that count (S-0407, Terms).
+   A positive build limit on the vehicle type is free again from that tick when this makes its
+   owned count fall below the limit (S-0407, claim 9). The building does
    not raise its type's ever-built count (S-0407, claim 10).
    - Backing: `measurable` (scenario D5, parts a to d); the ever-built sentence is `unmeasured`: no
      negative build limit takes effect on a building type in the original (S-0407, claim 10), so
@@ -258,8 +278,13 @@ vehicle's movement is heading to (S-0207). In addition:
    (`quirks.packup_release_by_guard_spot`).
    - Backing: `measurable` (scenario D6 for the sequence, refund and sounds, and for the no-release
      case of a building with a guard spot; D11 for a type with no pack-up sound; scenarios D7 and
-     D10 for the release of a building without a guard spot and the sound of a sold building). Two
-     parts are `unmeasured`.
+     D10 for the release of survivors from a building without a guard spot and the sound of a sold
+     building). The following parts are `unmeasured`.
+     - Passenger and garrison release or suppression: D6 and D7 carry neither, so those runs cannot
+       distinguish these releases from survivor release.
+     - Sound ownership: all sounding buildings in D6, D10 and D11 belong to the local player.
+       these runs cannot establish positional deploy sound for another owner or suppression of
+       its pack-up sound.
      - The second judging: no scripted input is known that makes one of S-0213's conditions fail
        between the order and the end of the build-down. The one candidate is mind control, and it is
        not usable: no spec shows that a mind-control weapon can take over a building, so even a
@@ -283,16 +308,19 @@ vehicle's movement is heading to (S-0207). In addition:
     to the pack-up). For a deploy facing outside 0 … 255 the vehicle's facing is not established
     (Open question 4; scenario D13).
     - Backing: `measurable` (scenarios D6, including its slave-master part, and D7; D13 for a
-      deploy facing outside 0 … 255)
+      deploy facing outside 0 … 255; D6's 2 × 2 variant and position recorder for the small
+      foundation and cell-centre cases)
     - Confidence: high (position, facing, health, the move); medium (the take-overs); low (the
       facing for a deploy facing outside 0 … 255)
 
 11. **A failed pack-up.** When the vehicle cannot be put on the map at its return cell (claim 12),
     the house receives the building's sale refund instead
     and the building is still removed. The house goes on owning a vehicle of the undeploys-into type
-    that is never on the map, and that vehicle counts in the house's owned count for build limits
-    (S-0407, claim 9) (`quirks.failed_packup_keeps_vehicle`). For victory and defeat (S-0414 claims 2
-    to 4) it counts from the tick the build-down finishes, but it is never on the map. So with the
+    that is never on the map (`quirks.failed_packup_keeps_vehicle`). It counts toward the house's
+    owned count for build limits only when its type is marked neither insignificant nor not scored
+    (S-0407, Owned count definition and claim 9). For victory and defeat (S-0414 claims 2 to 4),
+    its existence counts from the tick the build-down finishes under the short-game test's
+    eligibility rules, but it never enters the on-map vehicle count. So with the
     short-game setting on it keeps its house alive when its type is among the first three base units
     (for example a construction-yard vehicle type that the rules list there), unless the type is marked
     insignificant or not scored; with the setting off it does not count (the count used with the
@@ -321,7 +349,7 @@ vehicle's movement is heading to (S-0207). In addition:
     | own or allied vehicle standing there | refused |
     | enemy vehicle that the new vehicle cannot crush | refused, whether cloaked or visible |
     | own or allied infantry standing there, even one unit in one standing position | refused |
-    | enemy infantry, all crushable by the new vehicle, with no vehicle-present flag | accepted |
+    | visible enemy infantry, all crushable by the new vehicle, with no vehicle-present flag | accepted |
     | enemy infantry that the new vehicle cannot crush | refused |
     | tree or another ordinary terrain object not crushable by the new vehicle | refused, even when its weapon can damage that object |
     | wall the vehicle cannot crush | refused, even when its weapon can damage walls |
@@ -341,7 +369,11 @@ vehicle's movement is heading to (S-0207). In addition:
     The refund was already covered by claim 11 here. This claim supplies the missing connection
     between those outcomes and pack-up placement, and the absence of an alternative placement.
     - Backing: `measurable` (scenario D14); special entry-outcome cases retain the backings and
-      open questions of S-0209 and S-0211 rather than gaining new claims here
+      open questions of S-0209 and S-0211 rather than gaining new claims here. The lack of inherited
+      experience and destination in the admission test is `unmeasured`: D14 uses ordinary entry
+      cases, none of which distinguishes a newly created vehicle from one already holding that
+      experience or destination. Moving reservations and special entry outcomes not isolated by
+      D14 retain their owners' backing; no confirming pack-up run is proposed for them here.
     - Confidence: high (only *clear* accepts, the packing building does not block, no alternative
       cell or retry); medium (the listed consequences, pending D14)
 
@@ -350,7 +382,7 @@ vehicle's movement is heading to (S-0207). In addition:
 > **F1. Rounded body facing.** For a body facing *f* (0 … 65535), the rounded facing is
 > *q* = ⌊(*f* + 128) / 256⌋ mod 256: *f* / 256 rounded half up, then reduced modulo 256.
 > Integers. This is S-0204's 256-step facing (Formulas F4, *n* = 256). The deploy completes when
-> *q* = *D*.
+> *q* = *D*, provided the other conditions of claims 2, 5 and 6 hold.
 
 > **F2. Health handed over.** *h* = max(1, trunc(RZ₅₃(*r* × *S*))), where *r* = health ÷ strength of
 > the object that is replaced, computed in double precision as S-0214 gives it (Formulas F2), and *S* is the
@@ -372,19 +404,20 @@ vehicle's movement is heading to (S-0207). In addition:
 | Anchor step | (−1, −1) | cells | claim 3 |
 | Return step | (+1, +1) | cells | claim 10 |
 | Placement height | 0 | leptons above the terrain of the anchor cell | claim 6 |
+| Building insertion facing | 0 | facing units | claim 6, map north; not the deploy facing |
 
 ## State and ordering
 
 | Vehicle state | Event (at an *unload* processing) | Result |
 |---|---|---|
 | moving, no turn begun | processing | no attempt; *unload* goes on, unless a queued behaviour other than *unload* takes over |
-| first attempt, without deploy readiness or with a destination | attempt | fails: *guard* queued, no announcement |
-| first attempt, ready, still | cell test fails | refusal (claim 4): *guard* queued, announcement |
-| first attempt, ready, still | cell test passes, rounded facing ≠ *D* | turn towards *D* × 256 (claim 5) |
-| first attempt, ready, still | cell test passes, rounded facing = *D* | completion (claim 6) without turning |
-| first attempt, ready, still | cell test passes, rounded facing = *D*, but the building cannot be put on the map | no building; vehicle as it was; *unload* ends with *guard* queued, no announcement (claims 2 and 6) |
+| first attempt, still, without deploy readiness or with a destination | attempt | fails: *guard* queued, no announcement |
+| first attempt, ready, still, no destination | cell test fails | refusal (claim 4): *guard* queued, announcement |
+| first attempt, ready, still, no destination | cell test passes, rounded facing ≠ *D* | turn towards *D* × 256 (claim 5) |
+| first attempt, ready, still, no destination | cell test passes, rounded facing = *D*, placement succeeds | completion (claim 6) without turning |
+| first attempt, ready, still, no destination | cell test passes, rounded facing = *D*, but the building cannot be put on the map | no building; vehicle as it was; *unload* ends with *guard* queued, no announcement (claims 2 and 6) |
 | turning, no destination, ready | cell test passes, rounded facing ≠ *D* | the turn goes on; it is not restarted (claim 5) |
-| turning, no destination, ready | cell test passes, rounded facing = *D* | completion (claim 6): building in play, deploying vehicle removed |
+| turning, no destination, ready | cell test passes, rounded facing = *D*, placement succeeds | completion (claim 6): building in play, deploying vehicle removed |
 | turning, no destination, ready | cell test passes, rounded facing = *D*, but the building cannot be put on the map | no building; vehicle as it was; no behaviour queued; attempts again at its next processing (claim 6; low confidence) |
 | turning | has a destination (moving included) | abandoned turn; at the next processing no attempt, the queued behaviour (if any) becomes current, otherwise *unload* stays and does nothing (claim 5) |
 | turning, no destination | attempt, without deploy readiness | the attempt fails, nothing else changes; the turn goes on and the next processing attempts again (claim 5; low confidence) |
@@ -400,8 +433,10 @@ vehicle's movement is heading to (S-0207). In addition:
 | selling | build-down finished, S-0213's conditions no longer hold | sold as an ordinary building, with the sale refund (claim 9) |
 
 Observable consequences: the deployed building and the removal of the deploying vehicle happen in the same
-tick; so do the vehicle's appearance and the building's removal. A deploying vehicle that already faces *D*
-and stands on a valid anchor completes at its first *unload* processing, without turning.
+tick; so do the vehicle's appearance and the building's removal. A still deploying vehicle that already
+faces *D*, has deploy readiness and no destination, and passes both placement tests completes at its
+first *unload* processing, without turning. The vehicle state table uses the human-controlled rules.
+Claim 4 gives the original's *hunt* replacement for non-human-controlled owners.
 
 ## Edge cases and quirks
 
@@ -455,8 +490,9 @@ and stands on a valid anchor completes at its first *unload* processing, without
 
 ## Measurement scenarios
 
-Measurement setup (glossary); a tiny purpose-made skirmish map, one human house and one bystander
-computer player (glossary), named test rules files in the map's override sections, scripted input,
+Measurement setup (glossary): game speed index 2, 800 × 600 pixels, director and mods off.
+a tiny purpose-made skirmish map, one human house and one bystander computer player (glossary),
+named test rules files in the map's override sections, scripted input,
 and a recorder (glossary) logging per tick each object's type, owner, cell, body facing, health and
 behaviour, plus the local player's sounds and, where a scenario says so, a named object's processing
 timer (S-0215, Terms: a read of the game's state, as the recorder of the glossary allows), an
@@ -476,14 +512,19 @@ are repetitions that guard against void runs.
 - Runs: 12 per variant, each with a different random seed (the delay between processings is random,
   claim 1). The recorder logs the vehicle's processing timer per tick. A tick on which the timer
   has just been set to a new positive value is a processing tick of the vehicle (S-0215, claim 2).
+  At completion the removed vehicle's reset timer is unavailable: establish that processing was
+  due from its last countdown and the processing gates of S-0215 claim 2, rather than requiring
+  a reset reading. Record the first opportunity after *unload* becomes current in the same way.
 - Observable: the tick the building appears; the vehicle's facing per tick; the vehicle's processing
   ticks; the local player's sounds.
 - Expected: (a) the facing never changes and the building appears at a processing tick, the first one
-  after the order applies; (b) the vehicle turns to *D* × 256 and the building appears at the first
-  processing tick at or after the tick the turn ends; in both the deploy sound plays in the tick the
-  building appears. In (b) no processing tick between the order and the end of the turn produces a
-  building.
-- Falsified if: (b) deploys without turning, or (a) waits for a turn, or the building appears at a
+  after the order applies; (b) the vehicle turns towards *D* × 256 and the building appears at
+  the first processing tick at which its body facing rounds to *D* by F1. It need not reach the
+  exact target facing before being replaced. In both, the deploy sound plays in the tick the
+  building appears. In (b) no processing with a rounded body facing different from *D* produces
+  a building. Every nonterminal processing sets the standard *unload* rate delay plus an integer
+  from 0 through 2 ticks; completion's delay draw remains unmeasured as claim 1 states.
+- Falsified if: a nonterminal delay lies outside that range, or (b) deploys without turning, or (a) waits for a turn, or the building appears at a
   tick that is not a processing tick, or (for the medium-confidence timing) the first attempt of (a)
   is at a later processing than the first after the order. A run in which the timer cannot be read
   is void.
@@ -509,8 +550,9 @@ are repetitions that guard against void runs.
   deploy readiness, S-0214, Terms, *disabled*); if no hold that ends can be set up, the hold
   lasts to the end of the run and only the first half of the expectation is recorded. (2) A
   scatter request is made during the turn (it gains a destination and moves to another cell); this
-  is run with a queued behaviour present and with none, 5 processings of the vehicle's behaviour
-  being recorded after it has stopped.
+  is run with no queued behaviour, with 5 processings of the vehicle's behaviour recorded after
+  it has stopped. Log the queued behaviour to confirm that it remains empty; the queued-behaviour
+  branch is not tested here (claim 5).
 - Part g (a wall with no owner): the test building is a wall-tower test type (S-0406, claim 8) with
   a 3 × 3 foundation, and the cell (*x* + 1, *y* + 1) holds a map-placed wall overlay that has no wall
   owner (S-0210, claim 14); `quirks.deploy_refuses_own_walls` at its default (on).
@@ -523,16 +565,24 @@ are repetitions that guard against void runs.
   the deploying vehicle a named object of the bystander computer player, which a test trigger gives
   the *unload* behaviour at a known tick. A run in which the computer player gives that vehicle another
   behaviour before the attempt is void.
-- Part k (no deploy readiness at the first attempt): a parasite is attached by a test trigger in the
-  tick of the deploy order, before the first processing, to a vehicle that faces *D* on a valid anchor:
-  (1) a vehicle of the human house, (2) the bystander's named vehicle of part j.
+- Part k (no deploy readiness at the first attempt): a named parasite is already attached to a
+  vehicle facing *D* on a valid anchor. A named map script gives it *unload*, rather than relying
+  on a deploy input that might refuse it for lost readiness: (1) a vehicle of the human house,
+  (2) the bystander's named vehicle of part j. Record that the parasite remains attached, there
+  is no destination and *unload* is processed; otherwise the run is not applicable.
 - Part m (a moving vehicle at the first attempt): the part a setup (3 × 3 building, no tree, facing
   equal to *D*), but a move order to a cell 8 cells away is given one tick before the deploy order.
-  If the deploy order stops the vehicle at once, the run says nothing about the rule and is
-  recorded as such.
+  The deploy order clears its destination (S-0213 claim 10). If the vehicle is no longer moving
+  at the first processing, the run says nothing about the moving rule and is recorded as such.
+  Otherwise record movement and queued behaviour at each processing; the prediction below
+  applies only while no other behaviour is queued.
 - Part l (a failed placement during a turn): the part g setup (the unowned wall at
   (*x* + 1, *y* + 1)) with the vehicle facing away from *D*, so that the turn begins first; a test trigger
-  removes the wall 8 processings after the turn has ended.
+  removes the wall 8 processings after the body has reached its target facing.
+- Part n (cell failure during a turn): the part a vehicle faces away from *D* on clear ground.
+  After the turn begins but before a later processing, a named trigger places a tree in the
+  foundation. Record that the tree is present, readiness still holds and no destination exists
+  at that processing; otherwise the run is not applicable.
 - Observable: whether and when the building appears and its top-left cell, and the refusal
   announcement. Also the vehicle's behaviour after a refusal. In part f, its behaviour at each of the
   next 5 processings, where it stands, and whether and where a building appears. In part m, the tick
@@ -540,7 +590,8 @@ are repetitions that guard against void runs.
   vehicle's behaviour afterwards. In part i, whether the building appears. In part j, the
   bystander vehicle's behaviour per tick after the attempt. In part k, whether the building appears,
   the announcement and the behaviour per tick. In part l, the behaviour at each processing after the
-  turn has ended, and whether and when the building appears.
+  body has reached its target facing, and whether and when the building appears. Part n records
+  the announcement, queued and current behaviour and any building appearance.
 - Expected: part a: the trees at (*x* + 1, *y* + 1) and (*x* − 1, *y* − 1) refuse, the tree at
   (*x* + 2, *y* + 2) succeeds with top-left (*x* − 1, *y* − 1); part b: (*x* + 1, *y* + 1)
   refuses, (*x* − 1, *y* − 1) succeeds with top-left (*x*, *y*); part c: distance to the base never
@@ -549,16 +600,20 @@ are repetitions that guard against void runs.
   f: (1) no building and no announcement while the hold lasts, the behaviour stays *unload*, and the
   building appears at the first processing after the hold ends; (2) the vehicle moves away, no
   building appears (neither during the move nor after it has stopped, at its new cell), and no
-  announcement plays; with a queued behaviour it becomes current at the next processing after
-  the abandonment; without one the vehicle's behaviour stays *unload* with no change of anything
-  else (the hypothesis of claim 5); part m: no building while the vehicle moves, and the building
-  appears at the first processing after it has stopped (at its new cell, which is the anchor); part g: no building and no announcement, the vehicle in *guard*
+  announcement plays; without a queued behaviour the vehicle stays in *unload*, making no
+  further deploy attempt (the hypothesis of claim 5). Part m: no building at a processing while
+  the vehicle moves; when it becomes still with no destination, readiness and both cell tests
+  passing, it deploys at its next processing at the anchor given by claim 3, not necessarily at
+  the distant cell of the superseded move order; part g: no building and no announcement, the vehicle in *guard*
   (the hypothesis of claim 6); part h: refused with the announcement; in part i the vehicle
   deploys; in part j: the vehicle is in *hunt* after the attempt, not in *guard*; part k: (1) no building, no
   announcement, *guard* current by the next processing, (2) *hunt*; part l: no building, no
   announcement, the behaviour is *unload* at each of the processings with nothing queued, and the building
-  appears at the first processing after the wall is removed.
-- Falsified if: the anchor differs or distance matters; a refusal moves the vehicle; in part f (1) the building never appears after the hold ends, or the behaviour leaves
+  appears at the first processing after the wall is removed. Part n: refusal announcement,
+  *guard* queued and current by the next processing, no building.
+- Falsified if: any part differs from its stated expectation, including an absent or extra
+  announcement, a changed deploy outcome or a different queued or current behaviour. In particular,
+  the anchor differs or distance matters; a refusal moves the vehicle; in part f (1) the building never appears after the hold ends, or the behaviour leaves
   *unload* during the hold (the turn is then abandoned by a lost readiness, against claim 5); in
   part f (2) a building appears after the vehicle has stopped (the destination then only pauses the
   attempts, against claim 5) or, with no queued behaviour, the behaviour at the next processings is
@@ -567,7 +622,8 @@ are repetitions that guard against void runs.
   the vehicle rests in *guard*; in part k an announcement plays or the human vehicle's behaviour never
   becomes *guard*, or the bystander's does not become *hunt*; in part l the behaviour becomes *guard*
   or another behaviour while the wall stands, or the building does not appear after the wall is
-  removed. The behaviour recorded per tick after a refusal also settles Open question 3.
+  removed; in part n the tree fails to cause refusal, or attempts continue after refusal.
+  The behaviour recorded per tick after a refusal also settles Open question 3.
 
 **D3. Health handed over.**
 - Setup: a test deploying vehicle with strength 300 at 101 hit points deploying into a test building
@@ -576,13 +632,16 @@ are repetitions that guard against void runs.
 - Runs: 1 per vehicle (deterministic), observed area as above.
 - Observable: the building's hit points in the completion tick (recorder).
 - Expected: 336 (trunc of 336.66…) and 1 (trunc of 0.166…, raised to 1).
-- Falsified if: 337 or 0.
+- Falsified if: either health value differs from its expectation, including 337 or 0.
 
 **D4. Take-overs and retargeting.**
 - Setup: a selected, veteran deploying vehicle in a control group, carrying a test trigger attached
   to it that fires on the destruction of its object, targeted by an enemy tank and an enemy vehicle
   thief (both named objects of the bystander, which the void rule allows) and holding a target of its
-  own; it deploys into a construction yard. A second run with a slave-master test vehicle that has two
+  own; a named map script gives it *unload*, without a deploy order, so that S-0213 claim 10 does
+  not clear its own target before the attempt. It deploys into a construction yard. Record that
+  the target remains present immediately before completion, or void that target-transfer subtest.
+  A second run with a slave-master test vehicle that has two
   slaves (S-0215) deploying into a non-yard building.
 - Runs: 3 per setup (the outcome does not depend on the random stream; the repetitions guard against
   void runs); observed area: the 15 × 15 cells around the vehicle, with the tank and the thief placed
@@ -620,50 +679,77 @@ are repetitions that guard against void runs.
   (S-0213, claim 20), which gives it its guard spot and issues the sell order; the two clicks are on
   different cells. Part (c): the non-yard test building of D4's second run (deployed from the
   slave-master vehicle with two slaves), packed up by a move click in the same way. Credits are
-  recorded.
+  recorded. Repeat *Y*₁ with a 2 × 2 foundation as well as its ordinary larger foundation,
+  to distinguish both return-cell cases of F3. Record the returned position in leptons and verify
+  the cell centre, not just its cell. Use D7's positive-survivor overrides for the no-release test.
 - Runs: 1 per yard and 3 for part (c), with a different random seed per run; observed area: the
   15 × 15 cells around the building.
 - Observable: the tick the build-down ends and the vehicle appears; its cell, facing, health,
   behaviour, selection, experience, group and target of the tank; credits; survivors; the local
   player's sounds with their ticks; in part (c) the slaves' owner and master.
-- Expected: each vehicle appears in the build-down's last tick at the cell its deploying vehicle
+- Expected: each vehicle appears at the first selling processing that sees the build-down
+  completion report (S-0408 claims 16 and 17), at the cell its deploying vehicle
   stood on, facing *D* × 256, moving to the clicked cell; *Y*₁'s vehicle has 600 hit points (ratio 1),
   is selected, veteran, in the group and targeted by the tank; *Y*₂'s has 199 (trunc of 199.8, F2); no
   credits; no survivors from any of them (each has a guard spot); the deploy sound at the first
   processing of the sale, the pack-up sound at the start of the build-down and no sell sound; in
   part (c) the slaves belong to the vehicle and have it as their master.
-- Falsified if: a refund appears, survivors come out, or the cell, facing, health (200 for *Y*₂) or a
-  take-over differs, or a sound is missing or extra.
+  Destroy *Y*₁'s returned vehicle later and record its destruction trigger: it must fire then,
+  not on the yard's removal.
+- Falsified if: appearance or removal timing differs, a refund appears, survivors come out,
+  or the cell, facing, health (200 for *Y*₂) or a
+  take-over differs, or a sound is missing, extra or at another tick, or the destruction trigger
+  fires on the yard's removal or fails to fire on the returned vehicle's destruction.
 
 **D7. Release rule.**
 - Setup: a test building type that undeploys into a vehicle, is not a construction yard and has a
   3 × 3 foundation (so the sell mode offers *sell* on it, S-0214), sold through the sell mode
   without a prior move click, so that it has no guard spot; one run with the redeploy setting on and
   one with it off. A garrison or passengers are not needed: the survivors of the sale are observed.
+  Named test overrides make the sale-survivor attempt count positive under S-0408 claim 7,
+  and all surrounding standing positions are clear. Give the build-down a long positive duration,
+  record the survivors when released and move them away using scripted input before completion.
+  Void the admission subtest if a survivor still occupies the return cell at completion.
+  Use the same positive-survivor setup for
+  D6's suppression controls, so that observing no survivors is not a zero-attempt result.
   (The state of a construction yard that has a guard spot and fails another condition cannot be set
   up, claim 9; D6 covers the case of a packing building that has a guard spot, and S-0213's
   scenario O15 the sale of a yard that has none.)
 - Runs: 3 per setting, observed area: the 15 × 15 cells around the building.
 - Observable: infantry created at the sale; the vehicle at the end of the build-down; credits.
-- Expected: survivors come out before the build-down, the vehicle appears and no refund is paid, in
+- Expected: survivors come out before the build-down, the vehicle appears when the selling
+  processing sees its completion report (S-0408 claim 17), and no refund is paid, in
   both settings (the quirk's default).
 - Falsified if: no survivors, no vehicle, or a refund is paid.
 
 **D8. Failed pack-up.**
-- Setup: a packing construction yard (packed up by a move click, the redeploy setting on) whose
-  return cell is made unenterable just before the build-down ends (a test trigger places a building
-  there); a second run where the build limit of the vehicle type is 1.
-- Runs: 3 per setup; observed area: the 15 × 15 cells around the yard.
-- Observable: credits; whether the vehicle type stays at its limit afterwards (S-0407).
-- Expected: the sale refund is paid; the vehicle type stays at its limit (the unplaced vehicle
-  counts).
-- Falsified if: no refund, or the limit is free again.
-- Variant (S-0414 claims 2 and 4): the house has nothing else left, its construction-yard vehicle
-  type is at the first base-unit position; 1 run per setting. Expected: defeat is not declared with
-  the short-game setting on and is declared with it off. Falsified if: the reverse.
-- Variants for the marks (claim 11): the same, short-game setting on, with the vehicle type marked
-  (a) insignificant, (b) not scored; 1 run each. Expected: defeat is declared in both. Falsified
-  if the house survives.
+- Setup: a map-placed packing construction yard, packed up by a move click with the redeploy
+  setting on. Its return vehicle type has never entered the map for the tested house.
+  A named enemy blocker makes the return cell unenterable at completion (D14's zero-foundation
+  test building may be used to leave the cell available before completion). Record that the blocker
+  is present; otherwise void the run. The blocker belongs to the bystander, not the tested house.
+  For the build-limit test, named map overrides give the return vehicle a build limit of 1, and
+  the house keeps a qualifying vehicle factory and all other requirements for that type. It owns
+  no other vehicle of the return type and has no production item of that type. Run with neither
+  mark, with the insignificant mark, and with the not-scored mark.
+- Runs: 3 per mark variant; observed area: the 15 × 15 cells around the packing building.
+- Observable: the building's removal tick, credits delta, any vehicle appearance, and whether a
+  new build of the return type can be ordered after completion (S-0407).
+- Expected: the sale refund is paid, the building disappears and no vehicle appears. With neither
+  mark the retained off-map vehicle keeps the type at its limit. With either mark it is excluded
+  from the owned count, and a new build can be ordered.
+- Falsified if: the refund differs from S-0408's sale refund, the building remains or a vehicle
+  appears, or either build-limit result differs from its expectation.
+- Survival variants (S-0414 claims 2 and 4): use the same refusal setup, but remove every other
+  object of the tested house before completion, without leaving a production item or nominal
+  survivor contribution. Its return type is at the first base-unit position. Do not retain the
+  build-limit test's factory. Run once per short-game setting with neither mark and once per
+  setting with each mark. Record the house's defeat at its first house update after completion
+  and for 30 ticks afterwards. Expected: with neither mark, short game preserves the house and
+  normal game defeats it; with either mark, both settings defeat it. The off-map vehicle has
+  never entered the map, so the not-scored on-map vehicle quirk adds nothing here. Falsified if:
+  any defeat result differs. Read the credits delta at completion before defeat destroys the
+  house's remaining objects.
 
 **D9. Other unload rules first.**
 - Setup: test vehicle types that deploy into a test building, each with one of these: (a) a
@@ -673,8 +759,9 @@ are repetitions that guard against void runs.
 - Observable: whether the building appears after a deploy order.
 - Expected: (a) to (d) do not deploy; (e) deploys.
 - Falsified if: any of (a) to (d) deploys, or (e) does not.
-- Not covered: the bunkered condition of rank 1. No scripted input is known that gives a deploy order
-  to a bunkered vehicle, so that part of claim 1's rank 1 is `unmeasured`.
+- Not covered: the bunkered exception to passenger unloading. No scripted input is known that gives
+  a deploy order to a bunkered vehicle, so that part of claim 1 is `unmeasured`. D9 also does not
+  distinguish which unload behaviour wins when two of the higher-priority rules apply together.
 
 **D10. Pack-up sound on a sale.**
 - Setup: (a) a construction-yard test type with a pack-up sound, the redeploy setting off; a sell
@@ -682,9 +769,10 @@ are repetitions that guard against void runs.
   without a pack-up sound.
 - Runs: 3 per part, observed area: the 15 × 15 cells around the yard.
 - Observable: the local player's sounds with their ticks.
-- Expected: (a) the sell sound plays at the sale's start and the pack-up sound at the start of the
-  build-down (the default of `quirks.packup_sound_on_sale`); (b) only the sell sound.
-- Falsified if: in (a) only the sell sound plays; in (b) any other sound plays.
+- Expected: (a) the sell sound and the pack-up sound both play at the start of the build-down
+  (S-0408 claim 6 and the default of `quirks.packup_sound_on_sale`); (b) only the sell sound,
+  also at the start of the build-down.
+- Falsified if: any expected sound is missing, extra or plays at another tick.
 
 **D11. A packing building whose type has no pack-up sound.**
 - Setup: the D6 yard type without a pack-up sound but with a deploy sound, deployed from its vehicle,
@@ -694,7 +782,7 @@ are repetitions that guard against void runs.
 - Observable: the local player's sounds with their ticks.
 - Expected: the deploy sound at the first processing of the sale and no other sound from the sale's
   start to the vehicle's appearance (no sell sound, no pack-up sound).
-- Falsified if: the sell sound plays.
+- Falsified if: the deploy sound is missing or mistimed, or any other sale sound plays.
 
 **D12. Position, height and layer of the deployed building.**
 - Setup: the recorder also logs each object's position in leptons, its height above the terrain of
@@ -709,9 +797,9 @@ are repetitions that guard against void runs.
 - Expected: part a: position (256*x* + 128, 256*y* + 128) for the anchor cell (*x*, *y*), height 0, ground
   layer. Part b (low confidence): the building appears on the ground layer, at height 0 above the
   terrain of its cell.
-- Falsified if: the position is not the cell centre or the height is not 0 or the layer is not the
-  ground layer in part a; in part b, if the layer is the bridge-deck layer or the height is that of
-  the bridge.
+- Falsified if: the building fails to appear despite the recorded placement conditions, the
+  position is not the anchor cell centre, the height is not 0, or the layer is not the ground layer
+  in either part. An inability to arrange part b's starting state is not a falsification.
 
 **D13. A deploy facing outside 0 … 255.**
 - Setup: a test building type with deploy facing 300 (and a second with deploy facing −5) that a
@@ -722,10 +810,11 @@ are repetitions that guard against void runs.
 - Runs: 3 per facing.
 - Observable: whether a building ever appears; the vehicle's body facing per tick for 30 processings
   after the order; the facing of the vehicle that appears at the pack-up.
-- Expected (low confidence): no building appears, the vehicle turns at every attempt and its facing
+- Expected (low confidence): no building appears, the vehicle keeps the same turn target and its facing
   settles at 300 × 256 mod 65536 = 11264 (and 65536 − 1280 = 64256 for −5); the vehicle that appears
   at the pack-up has that facing.
-- Falsified if: a building appears, or the settled facing differs. The facings that are found settle
+- Falsified if: a building appears, the settled facing differs, or the packed-up vehicle's facing
+  differs from the predicted reduction. The facings that are found settle
   Open question 4.
 
 **D14. Return-cell refusal and no alternative cell (Q-0132).**
@@ -739,12 +828,18 @@ are repetitions that guard against void runs.
   locomotion class where a pair below needs it. The bystander owns only the named enemy test
   occupants in the observed area and is otherwise kept away as in the common setup.
 - Procedure: pack up by a move click to a distant clear cell. In separate runs arrange that the
-  return cell at completion contains (a) an own standing vehicle, (b) an enemy noncrushable vehicle,
-  (c) one own standing infantry unit, (d) three own standing infantry units, (e) one or three
-  enemy crushable infantry units, with a crusher and a noncrusher return type, (f) a tree,
+  return cell at completion contains (a) an own standing vehicle, with an allied-standing-vehicle
+  variant, (b) an enemy noncrushable vehicle, visible and cloaked in separate variants,
+  (c) one own standing infantry unit, with an allied-infantry variant, (d) three own standing
+  infantry units, (e) one or three
+  visible enemy crushable infantry units, with a crusher and a noncrusher return type,
+  (f) an uncrushable tree,
   (g) an uncrushable wall, (h) a crushable wall under an allied owner and under an enemy owner,
   with a crusher return type, (i) ore, and (j) water, with a wheeled return type whose water
-  multiplier is zero. Include an empty clear-ground control. Put the contents there by the test
+  multiplier is zero. In the tree and uncrushable-wall cases use a weapon able to damage the
+  obstacle, demonstrating that weapon damage does not make admission pass. For allied-occupant
+  variants the bystander's lobby team matches the human's; use an enemy team for enemy variants.
+  Include an empty clear-ground control. Put the contents there by the test
   map or a test trigger before completion; record their actual state rather than assuming the
   trigger succeeded. For water and ore, use the zero-size test building. In the water case,
   repeat with an amphibious class whose water multiplier is positive. Keep the vehicle's weapons,
@@ -767,6 +862,20 @@ are repetitions that guard against void runs.
   the refund, a refused vehicle appears in a neighbouring cell or later, or the packing building
   itself prevents the clear-ground control. Record unexpected occupant damage separately: this
   scenario tests admission, not the later crushing effects owned by S-0210.
+
+**D15. Building insertion facing.**
+- Setup: the common measurement setup, game speed index 2, director and mods off. Named map
+  overrides give an ordinary, non-gate deployed building deploy facing 64 and then 192 in separate
+  variants. The deploying vehicle begins already at the required facing on clear ground, with
+  no target; no enemy is in range of the building.
+- Procedure: issue a deploy order and record the vehicle's last body facing and the building's
+  body facing in its appearance tick, before any later aiming.
+- Runs: 3 valid runs per variant, observed area as in the common setup.
+- Observable: vehicle and building body facings in facing units, with the appearance tick.
+- Expected: the vehicle finishes facing 16384 or 49152, respectively, but the building is inserted
+  at facing 0 in both variants. Packing up still uses *D* × 256 as claim 10 specifies.
+- Falsified if: either inserted building has any facing other than 0, including inheritance of
+  the vehicle facing or a result that changes with the deploy-facing field. Construction timing is measured separately by S-0406 PL11.
 
 ## Open questions
 
