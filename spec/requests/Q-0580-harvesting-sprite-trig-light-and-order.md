@@ -9,8 +9,7 @@ answered-by: []
 ## Need
 
 S-0402 claim 5a and F8 (r20, answering Q-0550) give the vehicle harvester's harvesting sprite.
-Our engine draws it (`mapview::harvesting`, `mapview::build`). Four points of drawing it are
-open.
+Our engine draws it (`mapview::harvesting`, `mapview::build`). Five points are open.
 
 1. **Sine.** F8 writes θ = RZ₅₃((*f̂* − 16383) × *c*) and then plain sin θ and cos θ, "in the
    original's floating-point round-toward-zero mode, not integer lookup distances". S-0205 claim 6
@@ -26,6 +25,9 @@ open.
    against the terrain and other objects, and at what depth, is open.
 4. **Order against the shadow.** "Composited before the vehicle's body": is it also before the
    vehicle's shadow, or between the shadow and the body?
+5. **Current speed.** Claim 5a suppresses the sprite for a ground driver with "an active track with
+   positive current speed". S-0207 has a speed fraction ρ (Terms) and a per-tick step
+   s = trunc(s₂ × ρ), which is 0 while ρ is small but positive.
 
 ## Questions
 
@@ -36,6 +38,8 @@ open.
 3. Is the sprite depth-tested, and if so at what depth (for instance the vehicle's own depth, or
    its anchor's)? Can terrain or a neighbouring object in front of the harvester cover it?
 4. Is the sprite drawn before or after the vehicle's shadow?
+5. Is "positive current speed" a speed fraction ρ above 0, or a positive per-tick step s? Is the
+   sprite shown on a tick where the harvester is on a track with ρ > 0 but s = 0?
 
 ## Possible observation
 
@@ -48,7 +52,8 @@ sprite.
 ## Current workaround
 
 1. The exact sine and cosine, each rounded once toward zero (`glasnost_num::bigmath::sin_cos`),
-   following F8's text; marked AMBIGUOUS in `mapview::harvesting::compute_offset`.
+   following F8's text; noted in `mapview::harvesting::compute_offset`.
 2. The cell's unscaled ground light.
 3. Drawn upright at the vehicle's depth less 2, depth-tested, marked provisional.
 4. Before every item of the vehicle, its shadow included.
+5. ρ > 0 on an active track suppresses it (`glasnost_sim::econ::harvest::display_shown`).
