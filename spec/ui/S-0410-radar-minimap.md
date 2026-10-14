@@ -2,13 +2,13 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0110, Q-0112, Q-0277, Q-0331, Q-0417]
+requests: [Q-0110, Q-0112, Q-0277, Q-0331, Q-0417, Q-0480]
 supersedes: []
 ---
 
@@ -242,10 +242,18 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    inverse of the radar point mapping, in floating point, and rounded to the nearest cell.
    "Shrouded" and "lies in a friendly gap field" are tested with the projection of S-0110's point
    test (claim 8) on the point at the cell's centre (cell centre in *X* and *Y*) and at the cell
-   surface height at its centre (S-0106, claims 2 and 3): when *z*, the number of whole height levels
-   of that point (Terms), is odd,
-   the gap test needs both candidate cells to lie in a friendly gap field, while the shroud test is
-   the point test (shrouded when neither is explored). Because the gap
+   surface height at its centre (S-0106, claims 2 and 3), including heights below 0. Both tests
+   use the same candidate cells of S-0110 claim 8, with no clamp of a negative height to 0.
+   Write *z* = trunc(*Z* / 104), a signed integer quotient truncated toward zero, with *Z* in
+   leptons. For even *z*, the one candidate decides each test. For odd *z*, the gap test needs
+   both candidate cells to lie in friendly gap fields, while the shroud test is shrouded when
+   neither is explored. The fields covering the two cells need not be the same field.
+   In particular, for odd *z* < 0 and the cell shown at the pixel (*x*, *y*), the candidates are
+   (*x* − *k*, *y* − *k*) and (*x* − *k* + 1, *y* − *k* + 1), where *k* = (*z* + 3)/2,
+   exact integer arithmetic. Both tests share `quirks.shroud_negative_odd_pair` of S-0110
+   claim 8 (default on). Off: *k* = (*z* + 1)/2 for every odd *z*, with even counts unchanged.
+   The direct-cell alternative of S-0110 claim 8 under `quirks.shroud_on_flat_grid` takes
+   precedence over that pair choice in both tests. Because the gap
    test comes first, a friendly gap field shows darkened terrain even over cells that
    are shrouded for *H*. The cell shown at a pixel need not be the cell whose point colour
    contributes to the pixel: at scale 1 the right-hand point of cell (*x*, *y*) shows cell
@@ -255,12 +263,14 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    the original does not appear to guard against it, and its result is not established. Our engine
    treats such a cell as not shrouded and in no gap field, so the pixel shows its terrain colour
    (a choice of this spec, low confidence, scenario R3 part F).
-   - Backing: `measurable` (scenario R4, including part F for the surface-height projection,
-     R3 part A for the pixel-to-cell shift, R3 part F for an unusable cell). Centre heights
-     below 0 are `unmeasured` and their radar point-test result is not specified here:
-     S-0110 claim 8 covers non-negative heights, and no radar scenario arranges a negative one
-   - Confidence: high for the order of precedence, black shroud and object colours; medium for the
-     gap darkening and the pixel-to-cell rounding and shift, and low
+   - Backing: `measurable` (scenario R4, including part F for the surface-height projection
+     and part G for negative-height shroud and friendly-gap tests, R3 part A for the
+     pixel-to-cell shift, R3 part F for an unusable cell). S-0110 claim 8 owns the point-test
+     formula for both signs. The non-default candidate choices are engine requirements,
+     not observations of the original
+   - Confidence: high for the order of precedence, black shroud, object colours and the shared
+     signed-height candidates and both-cell gap requirement; medium for their negative-height
+     screen consequence, the gap darkening and the pixel-to-cell rounding and shift, and low
      for the cell tests at an unusable cell
 
 7. **Which objects are shown.** Only radar objects (Terms) can be listed: a tree, an overlay, a
@@ -763,6 +773,11 @@ any intervening tick during a freeze.
   object be tested on the cell it stands on: F4 puts an object at the centre of cell (*x*, *y*) on
   point row *v* + 1, so with the switch off that object is tested on cell (*x*, *y* + 1) instead
   of (*x* + 1, *y* + 1).
+- **Shared negative-height pair choice** (claim 6). S-0110 claim 8 owns
+  `quirks.shroud_negative_odd_pair` (default on). Radar shroud and friendly-gap tests share
+  its original and alternative candidate pairs, including the precedence of the direct-cell
+  test under `quirks.shroud_on_flat_grid` off. This is not a separate radar switch.
+  Backing and confidence are claim 6's; R4 G tests the radar consequences.
 - **Insignificant neutral objects.** Insignificant objects of passive countries are hidden unless
   radar-visible (claim 7); this is the original's design and needs no switch.
 - **Campaign-only behaviour** (out of scope): in a campaign mission the original also requires some
@@ -775,6 +790,8 @@ any intervening tick during a freeze.
 |---|---|---|---|
 | Rules, `[Colors]`, each definition entry | house display RGB consumed by claim 8, via S-0103 claims 4–6, 10 and 15 | up to three decimal integers, stored modulo 256 as hue, saturation and value; name lookup and lobby selection as S-0103 | missing components are 0; an empty entry creates no definition, not a separate radar fallback |
 | Selected house colour definition | common colour of buildings, infantry, vehicles and aircraft (claim 8) | S-0103 claim 15's setup-time display RGB, packed by Terms *radar colour*; no separate radar selector | no independent radar-colour default; use the house's selected definition |
+| Map terrain height and tile slope shape, S-0009 claim 7 and S-0010 claim 6 | cell-centre surface height for both radar tests (claim 6) | signed integer height level and imported slope shape; surface height in integer leptons under S-0106 claims 2 and 3 | inherited from those specs; no separate radar-height key or default |
+| Friendly gap-field coverage, S-0409 claim 11 | whether each candidate is covered for claim 6 | coverage of each cell by at least one friendly field; same signed-height candidates as S-0110 claim 8 | no coverage without a friendly field; no separate radar-gap key |
 | Rules, building type section, `Radar` | radar flag (claim 1) | boolean | no |
 | Map, `[Basic]`, `FreeRadar` | free radar (claim 1) | boolean | no |
 | Rules, infantry, vehicle, aircraft or building type section, `RadarInvisible` | radar-invisible (claim 7) | boolean | no |
@@ -806,7 +823,11 @@ by S-0409, separately from the object's owner, position and sight fields.
 Colour-definition parsing and selection inherit S-0103 claims 4, 5 and 10's backing.
 there is no additional building or nonbuilding colour import. R14 tests their shared consumption.
 
-Except for the colour-definition rows delegated to S-0103 and the three zoom fields tested by R13 B, the absent-key defaults in this table
+The height and coverage rows inherit their owning specs' import mappings, backing and
+confidence; R4 F and G test radar consumption. The shared pair switch is an engine option,
+not a data-file key, and adds no imported default.
+
+Except for those delegated rows, the colour-definition rows delegated to S-0103 and the three zoom fields tested by R13 B, the absent-key defaults in this table
 are `unmeasured` here: the scenarios use supplied data
 rather than removing each key independently. Confidence: medium. The foundation vocabulary,
 parsing and its defaults inherit S-0108's backing rather than claiming a separate radar test.
@@ -930,6 +951,43 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   unlike a flat level-2 cell; a level-2 edge centre is half a level higher but still has *z* = 2.
   Falsified by any pixel disagreeing with claim 6 for its recorded states, especially a valley
   pixel using the level-2 single candidate. Unreached combinations remain unmeasured.
+  Part G (negative heights; Q-0480): named test maps with flat test ground at levels −1,
+  −2 and −3, no bridge, radar available and no radar objects at the observed pixels.
+  Keep non-black terrain whose halved radar colour is also non-black. Select a pixel whose
+  F3 cell is *c*, recording that cell and its centre height rather than inferring it from
+  terrain artwork. Let *c* + *j* mean the cell (*c*<sub>x</sub> + *j*, *c*<sub>y</sub> + *j*).
+  Move scouts and place, move or switch powered own gap generators to reach the states below.
+  Use separate runs if needed, with a read-only recorder for exploration and friendly coverage
+  of *c* − 1, *c* and *c* + 1. Capture after the radar pixel refreshes. One valid run per row,
+  with both shared point-test switches on in our engine. The original supplies their default
+  behaviour. No recorder may write a state. An unreached row is inconclusive.
+
+  | Centre height and quotient *z* | Explored cells among the three | Friendly-covered cells among the three | Expected radar pixel |
+  |---|---|---|---|
+  | −103 leptons, 0 | *c* only | none | ordinary terrain |
+  | −103 leptons, 0 | *c* + 1 only | *c* only | darkened terrain |
+  | −207 leptons, −1 | *c* + 1 only | none | black |
+  | −207 leptons, −1 | *c* + 1 only | *c* − 1 only | black |
+  | −207 leptons, −1 | *c* + 1 only | *c* only | black |
+  | −207 leptons, −1 | *c* + 1 only | *c* − 1 and *c* | darkened terrain |
+  | −207 leptons, −1 | *c* − 1 only | none | ordinary terrain |
+  | −207 leptons, −1 | *c* only | none | ordinary terrain |
+  | −311 leptons, −2 | *c* only | none | black |
+  | −311 leptons, −2 | *c* + 1 only | none | ordinary terrain |
+  | −311 leptons, −2 | *c* only | *c* only | black |
+  | −311 leptons, −2 | *c* only | *c* + 1 only | darkened terrain |
+
+  Any differing pixel in a valid row falsifies claim 6. The −207-lepton rows distinguish
+  the odd-negative pair and the requirement for both cells to have coverage, including
+  darkening over shroud. Repeat its both-covered row with separate friendly fields supplying
+  the two cells, expecting the same darkened terrain. The −103 and −311 controls distinguish
+  truncation toward zero from floor and rule out a radar-only clamp to height 0.
+  Replay the −207-lepton both-covered row on our engine with the flat-grid switch on and
+  `quirks.shroud_negative_odd_pair` off: expected ordinary terrain, because *c* + 1 is explored
+  but not friendly-covered. With the pair switch on and the flat-grid switch off, expected
+  darkened terrain from *c* alone. These replays test our alternatives, not the oracle.
+  S-0110 claim 8 also provides a no-field radar sub-test in SH10. No row confirms every
+  possible negative height or a boundary candidate outside the legal map.
 - **R5 (claims 7 and 8).** Test map with two computer players besides the human: *E*₁ (the
   bystander, an enemy) and *E*₂ (a second computer player, an enemy at the start and allied to the
   human later where a part says so); part G adds a third, *E*₃. The houses have house colours that
@@ -1240,6 +1298,12 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   independently tests the definition-to-RGB conversion.
 
 ## Open questions
+
+Q-0480 is answered jointly: S-0110 claim 8 already owns the shroud candidates for both
+height signs; claim 6 here explicitly applies them to radar shroud and friendly-gap tests,
+requires coverage of both odd-height candidates and replaces the obsolete non-negative-only
+backing. R4 G proposes the negative-height observations. No requested part remains open
+within skirmish scope; none of these observations has yet been run.
 
 Q-0417 is answered jointly: S-0103 claim 15 owns the RGB derivation; claim 8 here owns
 its radar consumption and equality between buildings and other radar-object kinds. Neither

@@ -2,13 +2,13 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0279, Q-0450]
+requests: [Q-0279, Q-0450, Q-0460]
 supersedes: []
 ---
 
@@ -73,6 +73,8 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    - Confidence: high
 3. **Object height lift.** An object at integer world height *z* leptons is drawn *L(z)* pixels
    above its ground projection, using the exact rational scale and rounding in F2.
+   This is the drawing lift only; it does not change simulation sight centres, which use
+   the distinct floating-point simulation lift defined by S-0409 claim 5 and F2.
    This is a departure confirmed by the project lead: the original's floating-point scale,
    height-dependent correction and truncation visibly misalign objects with whole-level terrain.
    - Backing: `measurable` (M2; departure portions tested against this spec, not the original)
@@ -355,13 +357,15 @@ its top corner (the corner topmost on the screen), world position (256x, 256y), 
 (30(x − y), 15(x + y)). Cell corners and cell centres give numerators that are whole multiples of
 256, so their projections have no fractional part to truncate.
 
-**F2. Object height lift** (*z* in leptons, a signed integer; output in pixels):
+**F2. Object drawing height lift** (*z* in leptons, a signed integer; output in pixels):
 
 > *L(z)* = ⌊15·*z*/104 + ½⌋ = ⌊(30·*z* + 104)/208⌋
 
 Exact rational arithmetic, rounded to the nearest integer with ties towards positive infinity,
 including negative heights. There is no floating-point rounding site in this departure.
 For every integer level *h*, *L*(104·*h*) = 15·*h*.
+This formula applies only to drawing, not to the simulation lift for sight centres
+(S-0409 claim 5 and F2); that lift retains the original floating-point arithmetic.
 Check values: *L*(−104) = −15, *L*(−4) = −1, *L*(0) = 0, *L*(400) = 58,
 *L*(416) = 60, *L*(1000) = 144, *L*(2080) = 300, *L*(3500) = 505.
 
@@ -628,6 +632,7 @@ part of the request that was cut off.
 | map file, `[Map]` | `Size` = left, top, width, height | map size. Only the width *M<sub>w</sub>* enters F5 | four integers | as in S-0009 |
 | map file, `[Map]` | `LocalSize` = left, top, width, height | local area *V<sub>x</sub>*, *V<sub>y</sub>*, *V<sub>w</sub>*, *V<sub>h</sub>* in F5 | four integers | as in S-0009 |
 | map file, cell data | cell height | height level of each cell (terrain lift, cursor probe) | integer per cell | 0 |
+| No user key | none | exact object drawing lift (claim 3, F2); simulation sight-centre lift is separately defined by S-0409 claim 5 and F2 | engine arithmetic, not imported data | drawing always uses F2 |
 | settings file, options section | scroll-speed control | scroll index *r* | integer, ordinary control range 0 … 6, fastest … slowest | 3 |
 | rules, `[AudioVisual]` | `ScrollMultiplier` | edge-scroll multiplier μ | floating-point number or percent, as S-0003 | 1.0; later layers retain the value in force |
 | settings file, options section | scrolling-method preference | right-drag method (claim 16, F10) | integer: 0 continuous, 1 same-direction recentered, 2 reverse-direction recentered | 0 |
@@ -720,6 +725,16 @@ A second run otherwise serves to rule out a reading mistake.
     Expected lifts are respectively −8, −7, −7, −1, 0, 7, 8 and 8 pixels. A different
     displacement falsifies F2, including its negative rounding and positive-infinity tie rule.
     One run; this is a design-rule test, not an original-game measurement.
+  - (g) Drawing versus sight-centre lift (Q-0460, claim 3). Use S-0409 claim 5's
+    scenario V5 part E: fresh skirmishes with a stationary sight source on broad level-19
+    and level-20 plateaus, with height blocking and sight bonuses suppressed as that
+    scenario specifies. On our engine also record a fixed image feature relative to its
+    cell's tile and compare with the same type and facing at level 0. Expected: unchanged
+    image-to-tile placement at both levels under drawing F2, but the explored footprint
+    uses S-0409 claim 5's simulation centre, shifted nine cells north-west at both levels.
+    An image displacement falsifies drawing F2; a ten-cell centre shift at level 20
+    falsifies the separation from simulation. One run per level; original-game sight
+    observations and their controls remain those of S-0409, not a drawing conformance test.
 - **M3 — view position and scroll limits** (claims 7, 8).
   - (a) Normal case. Setup: a purpose-made map whose local area is smaller than the map size on all
     sides and larger than the view. Scroll hard to each of the four edges and take a screenshot.

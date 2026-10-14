@@ -2,13 +2,13 @@
 id: S-0001
 title: INI lexical rules
 topic: rules-import
-revision: 3
-sources-class: [decomp]
+revision: 4
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-09
+approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0478]
 supersedes: []
 ---
 
@@ -20,6 +20,7 @@ How the original turns the bytes of a rules, art or map document into sections a
 splitting, line length, section headers, comments, whitespace trimming (including a trimming defect),
 empty values, and case sensitivity. How several entries with the same name are resolved is
 S-0002; how a value's text is turned into a number, flag or list is S-0003.
+Implementation scope is skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -102,7 +103,10 @@ release's unmodified data files.
    A line starting with `[` that has no `]` is not a header. It is handled as an ordinary line by
    claims 8 and 9: it is ignored unless it contains `=`, in which case it is an entry whose key starts
    with `[` (`[x=5` in a section gives key "[x", value "5").
-   - Backing: `measurable` (scenario L5)
+   - Backing: `measurable` (scenario L5) for header recognition and its effect on the current
+     section. The exact stored name of an empty or punctuation-bearing section and the exact key
+     stored from a malformed header are `unmeasured`: L5 observes the cost lookup, not an enumeration
+     of these names, and no stock consumer of those particular names is identified here.
    - Confidence: high
 
 7. **Lines before the first header** belong to no section and are ignored.
@@ -146,23 +150,32 @@ release's unmodified data files.
       Formulas. The entry from the key example, with a trailing `;` comment, is read correctly.
 
     Quirk `quirks.ini_trim_defect`.
-    - Backing: `measurable` (scenario L7)
+    - Backing: `measurable` (scenario L7) for the key and integer-value effects. Text-value
+      re-trimming inherits S-0003 claim 1's backing. That no stock input triggers the defect is
+      `unmeasured`: it is a property of the input files, not an outcome isolated by L7.
     - Confidence: high
 
 11. **Empty keys and empty values.** If the key or the value is empty after trimming, the line
     creates no entry. `key=`, `key=   ` and `key= ; note` all behave exactly as if the line were
     absent: the field gets whatever a missing key gives it (see *absent-key default*, *rules layer*
     and *reset on override*). They do not set an
-    empty string or zero. Stock rules data has about two hundred such lines.
-    - Backing: `measurable` (scenario L8)
+    empty string or zero. This is a key-independent lexical rule: there are no exceptions for
+    particular keys, including the country name-prefix key (Import mapping I5). A later field read
+    may reset an omitted field when its section exists (S-0006 claim 5), but an empty written value
+    still supplies no entry and cannot request a different result from omission. Stock rules data
+    has about two hundred such lines.
+    - Backing: `measurable` (scenario L8; L9d tests the name-prefix key's lexical treatment)
     - Confidence: high
 
 12. **Empty sections do not exist.** A section that ends up with no entries (none written, or all
     dropped by claims 9 and 11) does not exist once the load is complete. Asking whether it exists gives
     "no", exactly as for a section never written. In particular, an empty section never competes with
     a non-empty section of the same name in the same file: lookups always reach the non-empty one,
-    whichever of the two comes first (duplicate sections are S-0002).
-    - Backing: `measurable` (scenario L9)
+    whichever of the two comes first (duplicate sections are S-0002). A country section containing
+    only an empty name-prefix line is therefore absent, not a section that resets or clears a field.
+    - Backing: `measurable` for section absence (scenario L9); `unmeasured` for the country-prefix
+      field consequence, which follows S-0006 claims 2 and 3 but has no known play observable
+      (S-0413 claim 4)
     - Confidence: high
 
 13. **Case sensitivity.** Section names (as claim 6 gives them, untrimmed) and keys (as trimmed by
@@ -174,15 +187,23 @@ release's unmodified data files.
     `key` is not found as `Key`). Stock data contains keys whose case differs from the spelling the original reads, and
     those entries have no effect (Import mapping). Type names used as *values* are matched without
     regard to case; that is S-0003.
-    - Backing: `measurable` (scenario L10). The hash exception is S-0002 claim 3, measured by its
-      scenario D4.
+    - Backing: `measurable` (scenario L10). The hash exception inherits S-0002 claim 3's
+      `measurable` backing (its scenario D4); no measurement record is claimed here. The stock-file
+      collision and misspelling observations are `unmeasured`: they are properties of the input
+      files and the names read, not outcomes isolated by L10.
     - Confidence: high
 
-14. **No count limits, and file order.** There is no fixed maximum number of sections per document
-    or entries per section; only available memory limits them. Entry order (the order an enumeration
-    of a section's keys returns, and the order in which S-0002's duplicate rule sees a section's
-    entries) is file order. The same holds for the order of a document's non-empty sections.
-    - Backing: `measurable` (scenario L12)
+14. **Counts and file order.** There is no fixed maximum number of sections per document
+    or entries per section; only available memory limits them. In particular, a document with
+    5000 filler sections followed by the test section, and 5000 filler entries followed by the test
+    entry in that section, accepts the test entry (5001 sections and 5001 entries respectively).
+    Entry order (the order an enumeration of a section's keys returns, and the order in which
+    S-0002's duplicate rule sees a section's entries) is file order. The same holds for the order of
+    a document's non-empty sections.
+    - Backing: `measurable` for the stated finite counts (L12a) and duplicate-resolution order
+      (L12b, L12c and S-0002 claim 2's scenario D2). The absence of any fixed count maximum is
+      `unmeasured`: no finite input can distinguish no limit from a larger untested limit.
+      Enumeration order inherits S-0002 claim 4's backing (its scenario D3).
     - Confidence: high
 
 ## Formulas
@@ -249,7 +270,8 @@ Line classification during a fresh load. "Current section" starts as *none*.
 - `quirks.ini_trim_defect` (YR default: on). Trimming keeps *K* trailing whitespace bytes as given in
   Formulas. Off: trimming removes all leading and trailing whitespace. Only text with deep
   indentation is affected; stock data never triggers it.
-- Byte-order mark: not a quirk switch. With the mark the first header is lost (claim 1).
+- Byte-order mark: not a quirk switch. With the mark directly before the first header on the
+  same line, that header is lost (claim 1).
 - CR-only line endings: not a quirk switch. The whole file is one line (cut at 511 bytes) with no line
   feed after it, so nothing loads (claims 2, 3 and 5).
 
@@ -272,6 +294,13 @@ following. A warning never changes the imported result, which stays the one the 
 
 Duplicate sections and duplicate keys also warn; that warning belongs to S-0002.
 
+The warnings and switch-off results are design requirements, `unmeasured` in the original,
+which supplies neither these warnings nor these alternatives. Confidence: high. Engine acceptance
+checks use L1a/L1b for the mark warning, L2b/L2c for the stray-CR warning, L10a for the case warning,
+L7a/L7d for the trim warning, and L4a for the final-line warning. The corresponding unchanged control
+inputs must not produce those warnings. With the final-line switch off L4a must give *V*; with the
+trim switch off L7a must give *V* and L7d/L7f must give 31 credits. Any other result fails the check.
+
 ## Import mapping
 
 These rules apply to every INI-format input: the rules, art, AI, sound and speech files, game-mode
@@ -285,6 +314,7 @@ Stock data that the rules above affect:
 | I2 | Rules file: `JumpJetAccel` and `JumpJetTurnRate` (the original spells both with a lower-case "j" in "jet"), `Maxdebris` (the original reads `MaxDebris`) | These entries have no effect (claim 13) |
 | I3 | Sound file: `Fshift`, `Vshift`, `volume` (the original reads `FShift`, `VShift`, `Volume`) | These entries have no effect (claim 13) |
 | I4 | About 210 rules lines, 230 speech lines, 30 sound lines and 3 art lines have an empty value (`Key=`) | Each behaves as if absent (claim 11) |
+| I5 | `Prefix` in a country's rules section, including `Prefix=`, `Prefix=   ` and `Prefix= ; note` | Empty after trimming: no entry, exactly as omission, with no key-specific exception. Alone it creates no section (claims 11 and 12). Nonempty text and the absent-key field default belong to S-0413 claim 4 |
 
 Row I2 and I3 were found by comparing stock keys with the key spellings the original looks up. The
 list may be incomplete for keys whose spelling the original builds at run time.
@@ -293,26 +323,35 @@ The measurement scenarios below write the infantry cost field under its rules ke
 called the *cost key* there. The filler names they use (`Filler1`, `Filler2` and so on) are not
 keys the original reads.
 
+The stock-file facts in I1 to I4, including the approximate counts, are `unmeasured` (confidence:
+high): they describe the supplied files, not a gameplay result isolated by these scenarios. Their
+lexical consequences inherit claims 5, 11 and 13's backing.
+
 ## Measurement scenarios
 
 **Common setup.**
 - *Install and data:* the measurement setup of the glossary, that is an unmodified install with no
   loose override files and no engine add-ons, using stock data only.
 - *Map:* a tiny purpose-made two-player multiplayer map, played as a skirmish against one computer
-  house. Its INI part carries an override section for one buildable infantry type of the player's
-  side, the *test type*. The section is named exactly as the test type is spelled in the rules file.
-  Any game speed.
-- *Test line:* the cost key (Import mapping), `=`, and a value *V*: a whole number of credits in
+  house, kept away from the player's base and test buildings under the glossary's bystander
+  computer player void rule. Director and mods are off. Its INI part carries an override section
+  for one buildable infantry type of the player's side, the *test type*. The section is named
+  exactly as the test type is spelled in the rules file. Select a country and type whose sidebar
+  price equals its cost field, confirmed by a normal test-line control. Any game speed.
+- *Test line:* the cost key (Import mapping), `=`, and a value *V*: a positive whole number of credits in
   integer form (S-0003) that differs from the test type's stock cost. Unless a row says otherwise,
   the override section holds the test line and nothing else, and every line ends with a line feed.
   The numbers in the rows (123, 150, 1Fh and so on) are examples. Replace any that equals the test
   type's stock cost.
+- *Procedure and tool:* start the named map variant as a skirmish, make the test type available
+  through the normal build prerequisites, and hover its sidebar icon. Record the displayed cost
+  manually or with a screen capture. No change to a harness is required.
 - *Observable:* the test type's cost in credits, as the sidebar shows it once the player's house can
   build the test type. "Stock" in
   the table means the stock cost, so the test line was not seen. "*V*" means it was seen.
-- *Runs:* reading a file is deterministic and uses no random draws, so each row needs **one run**.
-  Each row uses its own map variant and needs its own game start, so a whole scenario costs one
-  skirmish start per row.
+- *Runs:* reading a file is deterministic and uses no random draws, so each map variant needs
+  **one run** and its own game start. A row with multiple variants needs one start per variant.
+  Otherwise it needs one start.
 - *Falsifier:* in every row, any cost other than the expected one falsifies the claim. The last column
   names the result that the most likely misreading would give.
 
@@ -322,6 +361,9 @@ Spaces are written as · where their number matters.
 |---|---|---|---|---|
 | L1a | 1 | The file starts with the 3-byte UTF-8 byte-order mark, directly followed by the override section's header (the override section is the first section of the file) | stock | *V* |
 | L1b | 1 | As L1a, but a full comment line `; test` comes between the mark and the header | *V* | stock |
+| L1c | 1 | Prefix the cost key with one byte of value 128 to 255; one variant for each byte | stock in all 128 runs (the extra byte is part of the key, not whitespace) | *V* in any run |
+| L1d | 1 | Prefix the integer value *V* with one byte of value 128 to 255; one variant for each byte | 0 credits in all 128 runs (the retained byte prevents an initial decimal number, S-0003 claim 3) | *V* in any run |
+| L1e | 1 | As L1a, but a line feed immediately follows the mark, leaving the header on the next line | *V* | stock |
 | L2a | 2 | Every line of the file ends with CR LF | *V* | stock |
 | L2b | 2 | The value is written as `12`, one CR byte, `3` | 123 | 12 or stock |
 | L2c | 2 | The header and the test line are separated by a CR byte alone (no line feed between them) | stock (one header line; the text after `]` is ignored) | *V* |
@@ -331,6 +373,9 @@ Spaces are written as · where their number matters.
 | L3c | 3 | Directly before the test line, a filler line `Filler1=` followed by 600 digits | *V* (the next line is read normally) | stock |
 | L3d | 3 | The header is indented by 509 − *N* spaces, where *N* is the length of the test type's name in bytes, so its `]` is byte 511 of the line | *V* | stock |
 | L3e | 3 | As L3d with one more space of indentation, so the `]` is byte 512 | stock | *V* |
+| L3f | 2, 3 | As L3d, with 20 CR bytes inserted among the indentation spaces | *V* (CR bytes do not count) | stock |
+| L3g | 3 | The cost key, `=`, then enough leading zero digits that the following `1Fh` ends at byte 511 | 31 | 1 or stock |
+| L3h | 3 | As L3g, with one extra leading zero so the suffix `h` is byte 512 | 1 (the retained value ends in `1F`, read as decimal) | 31 |
 | L4a | 5 | The override section is the last section, and the test line is the last bytes of the file, with no line feed after it | stock | *V* |
 | L4b | 5 | As L4a, with a line feed after the test line | *V* | stock |
 | L5a | 6 | The header is written with a space after `[` and before `]` | stock | *V* |
@@ -340,8 +385,9 @@ Spaces are written as · where their number matters.
 | L5e | 6 | A line `[]` between the header and the test line | stock (the test line now belongs to the section with the empty name) | *V* |
 | L5f | 6 | Between the header and the test line, a line made of `[`, the cost key, `=` and 150, with no `]` | *V* | stock (the line ended the section) or 150 |
 | L5g | 7 | The test line is moved above every section header of the file | stock | *V* |
-| L6a | 8 | The value is followed directly by `;123` | *V* | *V* with 123 appended, or stock |
+| L6a | 8 | The value is written as `1Fh;123` | 31 | 1 (comment retained, so the hexadecimal suffix is no longer final) or stock |
 | L6b | 8 | The test line starts with `;` | stock | *V* |
+| L6c | 8, 11 | The value is written as `;1Fh` | stock (the value before the comment is empty) | 0 or 31 |
 | L7a | 10 | The test line is indented by 5 spaces, with one space between the cost key and `=` (claim 10's key example) | stock | *V* |
 | L7b | 10 | As L7a, with `··; note` appended | *V* | stock |
 | L7c | 10 | As L7a, indented by 4 spaces instead | *V* | stock |
@@ -354,6 +400,7 @@ Spaces are written as · where their number matters.
 | L9a | 12 | Two sections named after the test type: first an empty copy, whose header is followed only by L8a's line, then the normal override section with the test line | *V* | stock |
 | L9b | 12 | As L9a, with the two copies in the opposite order | *V* | stock |
 | L9c | 12 | L9a and L9b again, with the empty copy holding no lines at all | *V* in both | stock in either |
+| L9d | 11, 12 | L9a and L9b again, but the empty copy holds only the country name-prefix key (I5), `=` and, in separate variants, no text, three spaces, or a space and a comment | *V* in all six runs: lexical treatment does not depend on whether a key belongs to the section's type | stock in any run |
 | L10a | 13 | The cost key written all in lower case | stock | *V* |
 | L10b | 13 | The section name written all in upper case (pick a test type whose name contains a lower-case letter) | stock | *V* |
 | L11a | 9 | The test line is the cost key, `=`, 150, `=`, 45 | 150 (the value `150=45` is read in integer form up to the `=`, S-0003) | stock (split at the last `=`) or 45 |
@@ -374,14 +421,26 @@ Why some rows can falsify their claim:
   not share a hash with the test type's name.
 - **L12a.** The names `Filler1` to `Filler10000` were checked against S-0002's name hash: none shares
   a hash with the cost key, nor with another filler name. Before running, also check that none shares
-  a hash with the test type's name. The original reads no filler key. A fixed limit below 5000 sections
-  or 5000 entries per section would make the test line unreachable and show the stock cost. The run
-  cannot prove that there is no limit at all. It bounds any limit from below.
+  a hash with the test type's name. The original reads no filler key. There are 5001 sections before
+  any other required map sections are counted, and 5001 entries in the test section. A limit that
+  discards the test section or its last entry would show the stock cost; a refusal to load also
+  falsifies the finite-count prediction. The run cannot prove that there is no limit at all. It
+  bounds any limit from below.
 - **L12b and L12c.** These are S-0002's fixture 1 and its mirror. The duplicate rule sees only name
   hashes and the entry order. Both lines have the same hash, so the winning position is the same in
   both rows, and the winning value follows the order in the file. The same value winning in both rows
   would mean that entry order is not file order. File order of sections is used by S-0002 scenario
   D2's prediction, which tests it.
+
+## Cross-spec hand-off
+
+Q-0478's lexical questions were already answered by claims 11 and 12: an empty value creates no
+entry for any key, and an entryless section is absent. This revision makes the country-prefix
+case explicit. S-0006 claims 2, 3 and 5 already distinguish an absent section from an omitted
+field in an existing section. S-0413 claims 1 and 4 and its Import mapping must remove their
+contradictory empty-prefix exception and require the same result as omission: keep the held
+prefix. No other key needs a lexical exception. Prefix field parsing and its default remain
+owned by S-0413 claim 4.
 
 ## Open questions
 

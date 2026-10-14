@@ -2,13 +2,13 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0480]
 supersedes: []
 ---
 
@@ -191,9 +191,14 @@ S-0111 (claim 19).
    these candidate cells. S-0410 claim 6 applies this point test at that cell's centre, at its
    surface height (S-0106 claims 2 and 3). Thus (*c*<sub>x</sub>, *c*<sub>y</sub>) here is the
    cell from F3, and *u* comes from that centre's height in leptons, not necessarily its terrain
-   height level. S-0410 calls this count *z* and uses *u* for a radar column. Its radar scenarios
-   R3 and R4 own the pixel mapping and its shroud consequence.
-   - Backing: `measurable` for cell-centre heights used by SH6, SH8 (including SH8 Q2) and SH10,
+   height level. S-0410 calls this count *z* and uses *u* for a radar column. This is the same
+   point test for centre heights of both signs, including the odd-negative pair and
+   `quirks.shroud_negative_odd_pair`; there is no radar-only clamp to height 0.
+   The direct-cell alternative under `quirks.shroud_on_flat_grid` also applies.
+   S-0410 claim 6 owns the friendly-gap test and pixel-colour precedence, not this spec.
+   Its radar scenarios R3 and R4 own the pixel mapping and its shroud consequence.
+   - Backing: `measurable` for cell-centre heights used by SH6, SH8 (including SH8 Q2) and SH10
+     (including its radar sub-test),
      `unmeasured` for arbitrary off-centre points and other fractional height levels, since these
      wrench scenarios test only the named cell-centre heights and no controllable observable for
      the remaining inputs is identified. The non-default pair is an engine requirement tested
@@ -401,6 +406,7 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
 | file `SHROUD.SHP` (resolved by S-0005) | shroud sprite, image frames 0 … 46 (claim 3) | sprite | no shroud pieces drawn; the importer warns |
 | file `FOG.SHP` (resolved by S-0005) | fog sprite, image frames 0 … 46 (claims 3, 4) | sprite | no pieces drawn with fog of war on; the importer warns |
 | fog-of-war setting (S-0409 claim 19; S-0412 claim 1) | conditional rules of claims 3 and 4 | boolean | always off in skirmish, regardless of lobby defaults or map data |
+| map terrain height (S-0009 claim 7), with the terrain surface of S-0106 claims 2 and 3 | centre height in claim 8, including for radar | signed integer height level; surface height in integer leptons | supplied by those owning specs; no separate radar height setting |
 
 A missing sprite is bad data: the original draws no cover from it. Our engine does the same and the
 importer warns. An image frame index that the sprite does not have draws nothing.
@@ -713,6 +719,23 @@ appears several times; that is harmless, since each check below is made within o
     `quirks.shroud_on_flat_grid` on and `quirks.shroud_negative_odd_pair` off: expected wrench
     shown. That replay tests the specified alternative, not the original. This scenario does
     not confirm every negative quotient or arbitrary off-centre input.
+  - **Radar sub-test (claim 8; Q-0480 question 1).** Use the same flat negative-level maps,
+    with the local player's radar available. Observe an empty cell *c*, with no radar object
+    at its tested pixel and no friendly gap field over any candidate. Select a radar pixel
+    whose initial cell is *c* under S-0410 claim 6; do not infer that cell from artwork alone.
+    A read-only recorder records that cell, its centre height and the candidates' explored
+    states. Use scout movement as above to reach each row of SH10's table, replacing wrench
+    presence by whether that radar pixel is non-black. Keep terrain with a non-black reference
+    radar colour, and the test shroud sprite for reading explored states on the battlefield.
+    One valid run per row; the same retry limit applies. Void a row if the initial cell,
+    states, empty-pixel or no-friendly-field conditions are not met. Capture radar pixels
+    after they have refreshed, not during a pending radar redraw.
+    Expected: the pixel is black exactly in the table's 'not shown' rows and shows its
+    ordinary terrain colour in the 'shown' rows. In particular, at −207 leptons with only
+    *c* + 1 explored it stays black. Falsified if any valid row differs. On our engine,
+    replay that row with the flat-grid switch on and the negative-pair switch off:
+    expected ordinary terrain colour. Friendly-gap darkening is a separate S-0410 claim 6
+    test and is not inferred from this no-field run.
 
 ## Open questions
 
@@ -739,10 +762,14 @@ appears several times; that is harmless, since each check below is made within o
 - S-0101 owns projection and the 15-pixel terrain lift; S-0106 owns centre surface height.
   SH6 and SH8 use flat non-negative cells so their centre heights really are whole levels.
   SH10 uses S-0106 claim 3's negative centre heights. Claim 8 here owns the point test for
-  both signs and the odd-negative pair switch. S-0111 claim 19 supplies the wrench observable:
-  its companion revision must replace its duplicate negative-height extension with a pointer to
-  claim 8 here and remove its ownership-transfer open question. Hand off these revisions together.
-  S-0410 claim 6 and F3 supply radar's initial cell, not the candidate cells of this spec.
+  both signs and the odd-negative pair switch. S-0111 claim 19 supplies the wrench observable
+  and already points here for both signs, without a duplicate negative-height formula.
+  S-0410 claim 6 supplies radar's initial cell, not the candidate cells of this spec.
+  Q-0480 question 1 is answered by claim 8 for both signs. Questions 2 and 3 belong to
+  S-0410 claim 6: its friendly-gap test must use the same candidates, including the
+  odd-negative pair and its switch, and its obsolete non-negative-only backing must be
+  replaced with this pointer and a negative-height radar scenario. This request remains
+  jointly dependent on that companion change.
 - Claims 5 and 6 here own battlefield cover and glow updates; S-0104's Terms and claim 15
   agree and own the shade-row formula, including its final cap. This is not an additional
   lighting channel or a departure from the original. Claim 6 supplies the battlefield glow

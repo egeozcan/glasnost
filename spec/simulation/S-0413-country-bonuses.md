@@ -2,13 +2,13 @@
 id: S-0413
 title: Country bonuses (what each country field does, which spec owns it, and the fields with no effect)
 topic: simulation
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0478]
 supersedes: []
 ---
 
@@ -46,10 +46,12 @@ with the glossary's build *progress*). In addition:
 1. **Every country field and its owner.** The original reads the fields below from a country's
    section, each by the layering rules of S-0006. A field that a rules layer omits keeps the value
    in force (S-0006 claim 3); the absent-key default (Import mapping, last column, and Constants)
-   applies only when no layer gives it. Two fields are exceptions. The parent-country field
-   returns to the country's own name in every layer that has the country's section and omits it.
-   The name prefix is read as given: a prefix key with an empty value gives an empty prefix, where
-   the glossary's rule for a key with an empty value would keep the value in force (claim 4).
+   applies only when no layer gives it. The parent-country field is an exception:
+   it returns to the country's own name in every layer that has the country's section and omits it
+   (S-0006 claim 5). Empty values create no entries for any key (S-0001 claim 11).
+   In particular, an empty name-prefix line behaves exactly as omission and keeps the held prefix
+   (claim 4). A country section containing only such a line is absent (S-0001 claim 12), so
+   it changes no country field and triggers no parent-country reset (S-0006 claims 2 and 3).
 
    | Field (by role) | Effect in play | Owner |
    |---|---|---|
@@ -132,16 +134,17 @@ with the glossary's build *progress*). In addition:
    first one or three characters, with any whitespace at the ends of the kept characters removed,
    and the original gives no message. Our importer cuts the same way and gives an importer warning
    for a longer value. The parent-country field keeps its first 24 characters, also without a
-   message. An empty prefix value gives an empty prefix (the second exception of claim 1), and
-   an empty suffix value is ignored and keeps the value in force. The absent-key defaults are in
-   the Import mapping.
+   message. An empty value for either affix creates no entry and keeps the value in force, exactly as omission. With no earlier prefix value, the prefix remains the character A; with no earlier suffix value, the suffix remains empty. A section containing only empty-valued lines is absent and changes neither field. These are applications of S-0001 claims 11 and 12 and S-0006 claims 2 and 3, not key-specific lexical exceptions. The absent-key defaults are in the Import mapping.
    - Backing: `measurable` (S-0412 scenario K11 part a for explicit-country filtering; scenario
      C3 part a for what the listing flag does to the two displays); `unmeasured` for the absence of any effect on game state, for the listing flag as
      for the other four (a claim about the absence of any effect; each topic that could use them
      would state it; a comparison of game state between two runs of the original needs the same
      seed, which the measurement setup cannot set), and for the cutting of the prefix, the suffix
-     and the parent-country field, the empty-prefix and empty-suffix rules, and their defaults
-     (a field with no observable effect cannot show what was kept). Importer warnings are also
+     and the parent-country field, the retained prefix and suffix values, and their defaults
+     (a field with no observable effect cannot show what was kept). The lexical absence of empty
+     entries and entryless sections inherits S-0001 claims 11 and 12's backing; its scenario L9d
+     tests the name-prefix key without depending on a prefix display. C4 supplies an engine import
+     acceptance check for the field consequences, not an oracle measurement. Importer warnings are also
      `unmeasured` in the original: they are design requirements of our engine, not original
      messages. An engine import check must warn for an invented two-character prefix or
      four-character suffix, retain only the stated characters, and not warn for a prefix or
@@ -149,7 +152,7 @@ with the glossary's build *progress*). In addition:
    - Confidence: high for the listing flag's explicit-country filtering; medium for what it does
      to the displays; low that the listing flag
      and the other four have no effect on game state; medium for the cutting of the prefix and
-     suffix, the 24-character cut and the empty-prefix rule
+     suffix and the 24-character cut; high for empty-line omission and prefix retention
 
 5. **The country's colour field.** In a skirmish the field decides no game state: player-house
    colours come from the lobby colour slots through S-0103 claim 10. Alliance messages
@@ -299,8 +302,9 @@ mappings of S-0404, S-0403 and S-0402; the per-kind armour keys in S-0302; the v
 S-0311; the passive flag in S-0009; the wall-owner flag in S-0210.
 
 Every country field keeps the value in force when a rules layer omits it (S-0006 claim 3), except
-the parent-country field, which resets as claim 1 describes. The name-prefix field differs for an
-empty value: an empty value is not ignored (claim 1).
+the parent-country field, which resets as claim 1 describes. Empty values create no entry for
+any key (S-0001 claim 11). In particular, `Prefix=`, `Prefix=   ` and `Prefix= ; note`
+keep the held prefix; alone they create no country section (S-0001 claim 12).
 The last column is the absent-key default, the value when no layer gives the key.
 
 | Key | Concept | Parse form | Absent-key default |
@@ -315,7 +319,7 @@ The last column is the absent-key default, the value when no layer gives the key
 | `Multiplay` | multiplayer listing flag (claim 4) | boolean | off |
 | `Color` | country colour field (claim 5) | name of a colour definition, matched without regard to letter case; an unknown name keeps the value in force | the colour definition at position 0 |
 | `ParentCountry` | parent country, no effect (claim 4) | country name, at most 24 characters kept | the country's own name, also in every layer that has the country's section but omits the key |
-| `Prefix` | name prefix, no effect (claim 4) | string; the first character is kept; an empty value gives an empty prefix | the character A |
+| `Prefix` | name prefix, no effect (claim 4) | string; the first character is kept; an empty value creates no entry and keeps the held prefix | the character A |
 | `Suffix` | name suffix, no effect (claim 4) | string; the first three characters are kept; an empty value is ignored | empty |
 | `SmartAI` | smart-computer flag, no effect (claim 4) | boolean | off |
 
@@ -400,7 +404,18 @@ unit), per run.
   the issuing human house's displayed colour. A match to position 2 or 10 falsifies the fixed
   presentation rule.
 
+**C4: empty name-affix importer acceptance check (claim 4, Q-0478).**
+This is an engine import test, not a measurement of the original: no known play display uses
+these fields. Use invented country names and an earlier rules layer giving prefix Z and suffix XYZ. Apply a later layer in separate variants: a nonempty country section omitting both affixes; the same section with an empty prefix value, a three-space prefix value, or a prefix value consisting only of whitespace and a comment; and a section containing only each of those three empty prefix entries. Spell the entries as Import mapping specifies and terminate every line with a line feed. Inspect the imported country fields after layering. All seven variants must retain prefix Z and suffix XYZ; the last three must supply no section. Repeat without earlier affix entries: every variant must retain prefix A and an empty suffix. A cleared or replaced prefix, changed suffix, or retained entryless section fails the check. For an oracle test of the lexical part alone, use S-0001 scenario L9d, whose observable is a sidebar price, not a prefix field.
+
 ## Cross-spec hand-off
+
+**Q-0478 correction.** S-0001 claims 11 and 12 already answered the lexical questions:
+empty values have no key-specific exceptions, and a prefix-only empty section is absent.
+S-0006 claims 2, 3 and 5 already give section absence, ordinary retention and the separate
+parent-country reset. Claims 1 and 4 here and Import mapping now remove the contradictory
+empty-prefix exception: empty prefix lines retain the held prefix. No part of Q-0478 remains
+open; the lack of a gameplay observable limits backing, not the import rule.
 
 **Presentation-policy replacement within S-0413.** Claim 5 and Edge cases apply the project
 lead's 2026-10-14 policy for obvious presentation-only defects, also stated in the template:

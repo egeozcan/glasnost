@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1416,11 +1416,12 @@ building that can cloak), it sets them in the test map's override section, which
 
 - Q-0418 questions 1 to 4 are answered by claims 10, 26 and 27. S-0108 claim 10
   already supplies the building-slot world position, and S-0102 claim 19 already
-  supplies canvas centring. Question 5's exact packed-pixel blending remains for
-  S-0102's compositing rules; claims 20 and 21 here choose the code only, and
-  S-0103 claim 9 already supplies the pixel layouts, not the blending formula.
-  The tiled depth progression and tiled palette exception must be confirmed with
-  S-0102 claim 13 and S-0103 claim 8 at joint hand-off (companion changes recorded).
+  supplies canvas centring. Question 5's exact packed-pixel blending is answered by
+  S-0102 claim 32 and Formulas F8; claims 20 and 21 here choose the code only, and
+  S-0103 claim 9 supplies the pixel layouts. S-0102 claim 13 already specifies
+  corrected tiled depth and records the original drawing-only defect without a
+  quirk switch. Confirm these pointers and S-0103 claim 8's tiled palette exception
+  at joint hand-off.
 - Q-0046 is answered across specs. Claim 25 answers Q2c, including animations created during
   map loading. Claim 14 answers Q2b's event gates, height condition and scorch-or-crater choice.
   S-0202 claim 15 and R14 complete the downstream particle creation draws, smudge candidate
