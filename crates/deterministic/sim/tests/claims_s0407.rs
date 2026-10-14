@@ -318,6 +318,55 @@ fn claim_8_prerequisites() {
     assert!(!a(&w, "NEEDS_GHOST"));
 }
 
+// spec: S-0407 claim 8 (d) (quirks.prerequisite_names_dropped off: an unrecognised name remains an unmet entry; valid entries still count)
+#[test]
+fn claim_8d_dropped_names_switch_off() {
+    for dropped in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.prerequisite_names_dropped = dropped;
+        add_infantry(&mut r, "DROPPED", |u| {
+            u.econ.prerequisite = Some(vec!["TANK".into(), "NOSUCH".into()])
+        });
+        add_infantry(&mut r, "VALID", |u| u.econ.prerequisite = Some(vec![]));
+        let w = game(&r);
+        let a = |n| tech::answer(&w, H, t(&w, Kind::Infantry, n)) == Answer::Allowed;
+        assert!(a("VALID"));
+        assert_eq!(a("DROPPED"), dropped);
+    }
+}
+
+// spec: S-0407 claim 7 (superweapons off: a disableable first superweapon refuses; quirks.superweapon_setting_tests_first_only off: the second field refuses too; the tech-lab list exempts)
+#[test]
+fn claim_7_superweapon_fields() {
+    for first_only in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.superweapon_setting_tests_first_only = first_only;
+        r.sim.general.economy.super_weapons_allowed = Some(false);
+        r.sim.superweapons.insert(
+            "BLAST".into(),
+            glasnost_rules::sim_econ::SuperweaponType {
+                disableable_from_shell: Some(true),
+                ..Default::default()
+            },
+        );
+        add_building(&mut r, "PLAIN", plain(100));
+        let mut one = plain(100);
+        one.econ.super_weapon = Some("BLAST".into());
+        add_building(&mut r, "SW1", one);
+        let mut two = plain(100);
+        two.econ.super_weapon2 = Some("BLAST".into());
+        add_building(&mut r, "SW2", two.clone());
+        add_building(&mut r, "LAB2", two);
+        r.sim.general.economy.build_tech = Some(vec!["LAB2".into()]);
+        let w = game(&r);
+        let ans = |n| tech::answer(&w, H, t(&w, Kind::Building, n));
+        let plain_answer = ans("PLAIN");
+        assert_ne!(ans("SW1"), plain_answer);
+        assert_eq!(ans("SW2") == plain_answer, first_only);
+        assert_eq!(ans("LAB2"), plain_answer);
+    }
+}
+
 // spec: S-0407 claim 8 (b) (the refinery group is also met by the refinery-alternative vehicle)
 #[test]
 fn claim_8_refinery_alternative() {
