@@ -14,7 +14,7 @@ use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Country, Decimal, LocomotionClass, Locomotor, UnitType, WarheadType};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::econ::slaves::{self, GroupState, SlaveGroup, SlavePhase};
-use glasnost_sim::econ::{TypeRef, tech};
+use glasnost_sim::econ::{TypeRef, stats, tech};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
@@ -185,6 +185,7 @@ fn claims_19_to_21_initial_group() {
     let mut w = game_on(&r, &[], false);
     testkit::run(&mut w, 3);
     let credits = w.houses[0].credits;
+    let built = stats::built_total(&w, HouseId(0));
     let a = w.rng.taken();
     place_vehicle(&mut w, "HARV", 0, at(-8, 5), 0);
     let plain = w.rng.taken() - a;
@@ -204,7 +205,37 @@ fn claims_19_to_21_initial_group() {
         assert_eq!(slaves::master_of(&w, s.id), Some(m));
     }
     assert_eq!(tech::ever_built(&w, HouseId(0), slave_type(&w)), 0);
+    // spec: S-0402 claim 20 and S-0414 claim 20 (no end-screen built total)
+    assert_eq!(stats::built_total(&w, HouseId(0)), built);
+    // spec: S-0402 claim 20 and S-0407 claim 9 (ordinary ownership counts: being inside does not make a slave uncreated)
+    assert_eq!(tech::owned_count(&w, HouseId(0), slave_type(&w)), SLAVES);
     assert_eq!(w.houses[0].credits, credits);
+}
+
+// spec: S-0402 claim 20 and S-0414 claim 21 (a slave's later kill and loss count as any object's)
+#[test]
+fn claim_20_slave_kill_and_loss() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let attacker = place_vehicle(&mut w, "HARV", 1, at(-8, -8), 0);
+    let b = working_building(&mut w);
+    let s = on_map(&w, b)[0];
+    let (lost, kills) = (
+        stats::of(&w, HouseId(0)).losses,
+        stats::of(&w, HouseId(1)).kills,
+    );
+    let hit = Hit {
+        amount: 100_000,
+        warhead: None,
+        distance: 0,
+        attacker: Some(attacker),
+        house: None,
+        ignore_defences: true,
+        no_escape: false,
+    };
+    damage::apply(&mut w, s, hit);
+    assert_eq!(stats::of(&w, HouseId(0)).losses, lost + 1);
+    assert_eq!(stats::of(&w, HouseId(1)).kills, kills + 1);
 }
 
 // spec: S-0402 claim 19 (a count of 0 or less creates no slave)
