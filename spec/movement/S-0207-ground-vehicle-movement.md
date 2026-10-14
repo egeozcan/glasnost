@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268]
 supersedes: []
 ---
 
@@ -24,7 +24,7 @@ answers a scatter request (claim 16), while where a vehicle may go (S-0211), whi
 (S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16, 19, 20 and 21) are
 left to other specs. Claim 20 states how an object with the teleporting locomotor moves on its
 own: where it lands, what the jump does and how long it then phases in. Claim 21 covers
-its retained state after temporary driving. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
+its retained state after temporary driving. Claim 22 fixes cell-tag arrival timing for driving vehicles and own-locomotor teleports. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
 that approaches a target stops once the target is in range, and what happens to its destination. This spec covers skirmish. Network games and campaigns are out of scope.
 
@@ -73,7 +73,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   - claim 20 and scenario D22 cover every object, of any kind, that moves with the teleporting
     locomotor (S-0208 claims 19–20 own infantry landing-point choice and placement clearing),
   - claim 21 and scenario D23 cover teleporting vehicles whose own movement is temporarily
-    replaced by driving.
+    replaced by driving,
+  - claim 22 and D24 cover driving vehicles and own-locomotor teleports of any kind.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -1102,6 +1103,21 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       ground record. S-0209 owns the entry outcomes obtained from either record; the
       ground reservation itself is not a listed ground occupant. This is
       `quirks.teleport_vehicle_ground_reservation` (below).
+      **Aircraft bridge marks (Q-0310).** An aircraft likewise keeps its ground
+      object-present reservation when deck placement sets the deck object-present flag.
+      Immediately after an uninterrupted bridge landing both records have that flag,
+      although only the deck lists the aircraft. Its next accepted destination clears
+      the remembered ground reservation; the old deck flag clears when the next jump
+      removes it. If instead it is destroyed and removed while still standing there,
+      removal clears the deck flag but not the remembered ground reservation: the
+      ground flag remains after the aircraft has left play. These flags are not
+      reference counts; other objects marking or clearing the same flag can overwrite
+      that result (S-0209 claim 1). This is
+      `quirks.teleport_aircraft_ground_reservation` (below). The retained ground flag
+      is not a ground-listed aircraft and does not create a vehicle-present flag.
+      S-0209 owns the resulting entry outcomes and infantry standing-position refusal,
+      which are distinct tests; a retained object-present flag alone must not be
+      treated as a listed aircraft below the bridge.
       This actual landing height can differ from the infantry
       position-choice height (S-0208 claim 19). Its facing does not change. The arrival sound
       plays at *L*. Entering *L*'s cell has the arrival effects of the object's own kind: for a
@@ -1163,7 +1179,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       reservations, landing draws and placement clearing; S-0215 B18 d for ordinary target-loss
       and revert; runs 10 to 12 for the entry-test level, absent reach restriction, aircraft
       mark and landing, and animation creation draws; run 13 for Q-0240's vehicle
-      reservation layers, replacement clearing and post-jump marks). `unmeasured`:
+      reservation layers, replacement clearing and post-jump marks; run 14 for Q-0310's
+      aircraft two-record landing, next destination and destruction cleanup). `unmeasured`:
       the live erasing-lock exception, because no stock setup establishes a retained lock at a
       locomotor jump (S-0215 claim 10). Also `unmeasured` are part a's disabling states other
       than phasing in, part b's superweapon hold, part e's parasite expulsion, and part j's
@@ -1173,7 +1190,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       `measurable` through D22 run 1's presentation controls
     - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
       (including the entry-test level and the search without a reach restriction), for the
-      aircraft reservation and landing rules, and for Q-0240's vehicle ground reservation,
+      aircraft reservation and landing rules, including Q-0310's clearing and retained
+      ground flag after removal, and for Q-0240's vehicle ground reservation,
       retained-point clearing and two-record post-jump result; for part a's list of disabling states, for part d's same-tick consequence and
       for part h's consequences; part c inherits S-0208 claims 19–20's confidence, high for
       position choice and draws and medium for search choices, bridge consequences and placement
@@ -1205,6 +1223,36 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       assertion that a factory-produced vehicle starts in either state.
     - Confidence: high for retention at restoration and no teleport destination handling
       during driving; medium for the ordinary factory consequence
+
+22. **Cell-tag arrival timing (Q-0268 part 1).** A driving vehicle's cell-arrival
+    update (claim 12) raises the current cell's entered-by tag as S-0011 claim 18
+    specifies. Reaching a track target is sufficient: the vehicle need not stop, and
+    may begin its next track later in the same tick. Reserving a step's cells,
+    crossing a cell boundary mid-track and turning in place do not themselves raise
+    the arrival tag. An ordinary two-cell curve therefore does not raise the tag of
+    its first cell merely by passing through it. A passive vehicle's chain-point
+    arrival update uses the cell it actually occupies at that point, not the still
+    unreached track target.
+
+    For a vehicle, arrival reporting to a contacted building and cell-centre crushing
+    precede the entered-by raise. Consequently trigger actions observe their completed
+    effects, and no arrival raise is promised if those effects already removed the
+    vehicle. High-bridge ground passage is excluded by S-0011 claim 18's deck-only
+    condition; occupancy reservation below a deck is not arrival on the deck.
+
+    An own-locomotor teleport of any object kind has its arrival update in the jump
+    tick, after position, height and landing-layer listing have changed (claim 20 e),
+    not when its landing point is reserved and not when phasing in ends. It raises
+    the landing cell's entered-by tag under the same S-0011 eligibility rules.
+    Cells between departure and landing receive no arrival update. For a teleporting
+    vehicle, the tag's actions occur after its arrival reporting and crushing, but
+    before jump-time crate collection, destination removal and the landing warp
+    animation. Ordinary infantry walking timing belongs to S-0208, not this claim.
+    - Backing: `measurable` (D24 for straight and curved driving, teleport, bridge
+      and passive chain-point cases). Exact ordering against building reports and
+      crushing uses D24 with S-0402 H14 and S-0210's crushing fixtures. Record their
+      effects and the tag's variable action in the same arrival tick
+    - Confidence: medium
 
 ## Formulas
 
@@ -1782,6 +1830,15 @@ its new destination from that tick.
   flag off (*q* = 0) and gives an importer warning. This is a departure (bad data), with no switch.
 - **A teleporting object ignores terrain between its position and its landing point** (claim 20 b).
   It can reach cells that no path reaches. This is original behaviour, not a bug, and has no switch.
+- **`quirks.teleport_aircraft_ground_reservation`** (claim 20 a, e; proposed).
+  Default original: reserve ground at terrain height, retain that mark through deck
+  placement, clear the remembered ground mark on the next accepted destination, and
+  clear only actual deck occupancy on removal without a replacement destination.
+  Thus destruction on deck can leave a ground object-present flag. Off: reserve only
+  the eventual landing layer, clear that reservation when replacing it, and clear
+  the aircraft's landing-layer mark on removal, leaving no separate ground mark.
+  Shared with S-0209; D22 run 14 tests the default.
+
 - **`quirks.teleport_vehicle_ground_reservation`** (claim 20 a, e; proposed).
   Default (original): a teleporting vehicle reserves the ground record even for a high-bridge
   landing, remembers that terrain-height point for later reservation clearing, and keeps the
@@ -1854,6 +1911,8 @@ superweapon specs, not claim 20.
 
 | No data key | non-infantry entry-test level, unrestricted reach comparison for a destination in no region, kind-specific reservation and landing (claim 20) | engine behaviour, not imported fields | fixed rules of claim 20 |
 | No data key | vehicle reservation and clearing layer, retained landing point and two-record bridge landing (claim 20 a, e; Q-0240) | runtime occupancy behaviour; deck-mode search does not select the reservation record | fixed engine rules; original behaviour by default under `quirks.teleport_vehicle_ground_reservation` |
+| No data key | aircraft ground reservation, deck placement and removal clearing (claim 20 e; Q-0310) | runtime occupancy behaviour, no imported value | original by default under `quirks.teleport_aircraft_ground_reservation` |
+| Map cell tags and entered-by events | arrival-trigger eligibility and actions (claim 22) | import forms and absent defaults belong to S-0011; movement adds no field | no arrival raise without a cell tag |
 | No data key | retained teleporting state and no teleport destination handling during temporary driving (claim 21) | runtime state, not imported fields | a newly created teleporting object has no pending jump and no phasing in |
 
 Animation type fields governing creation draws are imported by S-0109 and S-0202,
@@ -2675,8 +2734,8 @@ cell before *X*.
     on flat ground, deck listing and height *H* + 416 on the bridge. An aircraft may land
     in an occupied destination because its entry outcome is clear. A flight-height landing,
     vehicle-present reservation, or a different listing layer falsifies this part. Also
-    record whether a ground reservation remains beneath the bridge after deck placement,
-    that cleanup result is an open question, not a pass criterion.
+    record both object-present flags after deck placement: both remain set in an
+    otherwise empty cell. Run 14 isolates their later clearing.
   - Run 12 (jump-tick animation draws, Q-0232). Repeat run 1, isolating other actors and
     recording animation creation ticks and the scenario stream. Compute the applicable
     S-0202 claim 10 draws from the imported warp-animation type. As a discriminating
@@ -2710,6 +2769,24 @@ cell before *X*.
     times. A deck-only pre-jump reservation, clearing the remembered reservation from deck,
     or a ground mark disappearing solely on deck placement falsifies claim 20's layer rule.
     Without a captured pre-jump interval, that part is inconclusive, not a pass.
+  - Run 14 (aircraft bridge cleanup, Q-0310). Repeat run 11 at game speed index 2
+    on a high bridge over traversable flat ground, with a human house and one bystander
+    computer player kept away, director and mods off. The named test map supplies an
+    aircraft type with teleporting locomotion; all other data are stock. Observe only
+    the bridge, departure and landing cells; void unrelated bystander interference or
+    its defeat. Use the read-only recorder for both occupancy records, listings, height,
+    remembered landing point and tick. In an otherwise empty landing cell expect ground
+    object-present at destination fixation and both ground and deck object-present after
+    landing, with deck listing only. After phasing in, order a distant clear ground cell:
+    expect the old ground flag cleared when the destination is accepted and the old deck
+    flag cleared on departure. In a separate run destroy the aircraft while it remains on
+    the deck, using a weapon without occupant-producing effects: at removal expect deck
+    clear but ground still marked. Keep all other objects out of that cell throughout.
+    Repeat each branch three times. A transferred ground flag, a deck flag retained after
+    removal, or ground clearing solely because of destruction falsifies the claim.
+    Probe the ground below with an ordinary non-crushing drive vehicle and, separately,
+    an infantry unit. Record entry outcomes separately from standing-position choice.
+    compare against S-0209's tables, not against a fictitious ground-listed aircraft.
 - *Runs:* 3 each, run 3's main case at three different tick numbers; run 7 until each class has at
   least 3 runs.
 - *Falsified if:* a turn or a wait precedes the jump, the jump comes a tick later than stated, the
@@ -2744,7 +2821,39 @@ cell before *X*.
   driving in that state. No such event is established. Do not fabricate one through memory
   writes; these conditional rules remain unmeasured.
 
+**D24: cell-tag arrival timing (claim 22; Q-0268 part 1).**
+- *Setup:* a tiny named test map, human house and one bystander computer player kept
+  away, game speed index 2, stock data, director and mods off. Give selected cells
+  independent one-time entered-by tags with an any-house event and an observable
+  variable-setting action (S-0011). Use an ordinary drive vehicle and a chrono miner.
+  Named type data may supply a non-harvester teleporter for the phasing-in control,
+  and D9 control 1's passive vehicle with acceleration off for a chained curve.
+  Observe the lane, bridge and landing cells; void unrelated interference or defeat.
+- *Procedure:* drive through a tagged straight-track target without stopping. Repeat
+  with tags on both cells of a two-cell curve. Teleport onto a tagged cell, with an
+  intermediate tagged cell between departure and landing. Repeat below and on a high
+  bridge. For a chained curve, tag the cell occupied at the chain-point transition
+  separately from the unreached target. Record position, track completion, arrival
+  reports, variable changes and
+  phasing-in state by tick. Run each case three times.
+- *Expected:* a straight target raises on its completion tick despite continued travel,
+  not on earlier boundary crossing or reservation. An ordinary two-cell curve raises
+  at its final target only, not merely for crossing its first cell. A teleport raises
+  at landing in the jump tick, before phasing in ends, never for intermediate cells.
+  Under a high bridge no entered-by raise occurs. Deck arrival does raise it.
+  A chained curve raises for the actual chain-point cell at its transition, not
+  for the unreached target merely because it is the track target.
+  A raise on reservation, mid-track boundary crossing, stopping only, an intermediate
+  teleport cell, or phasing-in completion instead of landing falsifies the claim.
+
 ## Cross-spec changes to confirm
+
+- Q-0310: S-0209 must add claim 20 e's aircraft reservation lifecycle, share
+  `quirks.teleport_aircraft_ground_reservation`, and distinguish entry outcomes from
+  infantry standing-position refusal for the isolated object-present flag below the
+  bridge. Its claim 1's former unmeasured justification no longer covers this fixture.
+- Q-0268 part 1: S-0011 claim 18 should cite claim 22 here for driving and teleporting
+  arrival timing; ordinary infantry walking remains S-0208's responsibility.
 
 - Q-0240: hand off this revision with S-0209's matching claim 1 pointer and claim 5
   reservation consequences. Claim 20 a/e here owns the teleporting vehicle's ground
@@ -2783,9 +2892,6 @@ cell before *X*.
 - Whether any stock setup gives a vehicle a pending teleport or a phasing-in state before
   temporary driving begins (claim 21). Factory exit establishes the ordinary case, not those
   conditional states.
-- Whether an aircraft's ground-layer landing reservation on a high-bridge cell persists
-  after its deck-layer placement (claim 20 a, e). The two marking heights differ; the
-  complete cleanup interaction is not settled here.
 - Whether an object of a type without a locomotor field that is not infantry, landing by claim 20
   on a cell where it cannot exist, starts sinking (see the sinking question above) was not traced, and
   claim 20 b's search normally avoids such cells.
