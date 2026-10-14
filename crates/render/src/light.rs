@@ -223,6 +223,16 @@ impl DetailLevel {
         }
     }
 
+    /// The level as a number: 0, 1 or 2 (S-0104 Terms).
+    pub fn number(self) -> i32 {
+        // spec: S-0104 Terms (detail levels 0, 1 and 2)
+        match self {
+            DetailLevel::Low => 0,
+            DetailLevel::Medium => 1,
+            DetailLevel::High => 2,
+        }
+    }
+
     /// The level of a settings-file value: above 2 becomes 2, below 0
     /// becomes 0 (S-0104 Import mapping, `DetailLevel`).
     pub fn from_settings(value: i32) -> Self {

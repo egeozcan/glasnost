@@ -179,6 +179,16 @@ pub fn limit_centre(
     )
 }
 
+/// F6: the ground position (X, Y) in leptons under world pixel
+/// (q_x, q_y), in exact integer arithmetic (equal to the original's value
+/// with the round-toward-zero mode on).
+pub fn screen_to_ground(qx: i32, qy: i32) -> (i32, i32) {
+    // spec: S-0101 F6 (X = trunc₀(a·(q_x + 2q_y)), Y = trunc₀(a·(2q_y − q_x)), a = 4 473 959 / 1 048 576)
+    let a = |u: i64| (4_473_959 * u / 1_048_576) as i32;
+    let (qx, qy) = (i64::from(qx), i64::from(qy));
+    (a(qx + 2 * qy), a(2 * qy - qx))
+}
+
 /// F7: the flat-ground cell under world pixel (q_x, q_y).
 pub fn flat_cell(qx: i32, qy: i32) -> (i32, i32) {
     // spec: S-0101 F7 (trunc₀((q_x + 2q_y) / 60), trunc₀((2q_y − q_x) / 60))
@@ -277,6 +287,20 @@ mod tests {
         let big = m + 60 * 26 - 3000;
         assert_eq!(limit_centre((m - 1, y_min), wide, 30, local, &q).0, m);
         assert_eq!(limit_centre((m, y_min), wide, 30, local, &q).0, big);
+    }
+
+    /// spec: S-0101 F6 (exact rational arithmetic, truncation toward zero)
+    #[test]
+    fn screen_to_ground_truncates_toward_zero() {
+        assert_eq!(screen_to_ground(0, 0), (0, 0));
+        // u = 60: 4 473 959 · 60 / 1 048 576 = 256.002, truncated to 256
+        assert_eq!(screen_to_ground(0, 30), (256, 256));
+        // u = ±30: ±128.001, both toward zero
+        assert_eq!(screen_to_ground(30, 0), (128, -128));
+        assert_eq!(screen_to_ground(-30, 0), (-128, 128));
+        // u = 1 and −1: ±4.27, toward zero
+        assert_eq!(screen_to_ground(1, 0), (4, -4));
+        assert_eq!(screen_to_ground(30, 15), (256, 0));
     }
 
     /// spec: S-0101 F7 (the top corner and upper edges belong to the cell)
