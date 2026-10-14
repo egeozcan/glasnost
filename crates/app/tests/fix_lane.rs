@@ -638,3 +638,82 @@ fn infantry_on_a_bridge_deck() {
     }
     shots.save(&mut c, "bridge-deck-standing");
 }
+
+/// Item 2: the battlefield mouse controls of S-0214 through the client's
+/// own input: a left click selects and a left click orders (claim 26), a
+/// right click clears the selection (claim 26), and a right drag scrolls
+/// the view and keeps the selection (claim 27).
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn mouse_controls() {
+    let Some((mut c, _shots)) = start((1280, 800)) else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let mut clock = 0i64;
+    ticks(&mut c, &mut clock, 5);
+    let s = c.session.as_ref().unwrap();
+    let local = s.play.local;
+    let (mcv, at) = s
+        .play
+        .world()
+        .objects
+        .values()
+        .find(|o| o.owner == Some(local) && o.kind == Kind::Vehicle && o.on_map)
+        .map(|o| (o.id, o.pos.cell()))
+        .expect("a base unit");
+    look_at(&mut c, at);
+    ticks(&mut c, &mut clock, 1);
+    // Left click on the unit: selected.
+    let on = point_of(&mut c, None, Some(mcv)).expect("the unit is on screen");
+    click_at(&mut c, Button::Left, on);
+    let sel = c.session.as_ref().unwrap().play.selection.clone();
+    println!("left click on the unit: selection {sel:?}");
+    assert_eq!(sel, vec![mcv]);
+    // Left click on open ground: a move order.
+    let to = CellXY::new(at.x + 3, at.y + 2);
+    let p = point_of(&mut c, Some(to), None).expect("the cell is on screen");
+    click_at(&mut c, Button::Left, p);
+    ticks(&mut c, &mut clock, 2);
+    let dest = c
+        .session
+        .as_ref()
+        .unwrap()
+        .play
+        .world()
+        .obj(mcv)
+        .unwrap()
+        .dest;
+    println!("left click on ground: destination {dest:?}");
+    assert!(dest.is_some(), "the left click ordered a move");
+    // Right drag: the view scrolls, the selection stays, no order.
+    let s = c.session.as_ref().unwrap();
+    let before = s.view().origin;
+    let m = s.map_rect();
+    let a = Point::new(m.x + m.w / 2, m.y + m.h / 2);
+    let _ = c.frame();
+    c.pointer_moved(a);
+    c.pointer_down(Button::Right, a);
+    let b = Point::new(a.x + 200, a.y + 120);
+    c.pointer_moved(b);
+    ticks(&mut c, &mut clock, 10);
+    c.pointer_up(Button::Right, b, Modifiers::default());
+    let s = c.session.as_ref().unwrap();
+    let after = s.view().origin;
+    println!(
+        "right drag: view origin {before:?} -> {after:?}, selection {:?}",
+        s.play.selection
+    );
+    assert_ne!(before, after, "the right drag scrolled");
+    assert_eq!(
+        s.play.selection,
+        vec![mcv],
+        "the right drag kept the selection"
+    );
+    // Right click without a drag: the selection is cleared.
+    let p = Point::new(m.x + m.w / 3, m.y + m.h / 3);
+    click_at(&mut c, Button::Right, p);
+    let s = c.session.as_ref().unwrap();
+    println!("right click: selection {:?}", s.play.selection);
+    assert!(s.play.selection.is_empty(), "the right click cleared it");
+}

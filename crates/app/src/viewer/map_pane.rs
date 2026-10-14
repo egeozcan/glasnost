@@ -3,13 +3,13 @@
 //! `rules explain`; with a live sandbox game, the game's pacing controls,
 //! the controlled house, selection and orders.
 //!
-//! Mouse and keys in the view, with a live game: a left click on an object
-//! selects it through the input rules (with shift, force-select, it toggles
-//! the object in the selection); a left click on the ground clears the
-//! selection. A right click on a cell or object gives the selection's orders
-//! through the same rules (shift: force-select, ctrl: force-fire, alt:
-//! force-move). S, X, G and D are stop, scatter, guard and deploy, and C is
-//! the house's cheer (S-0213 table T2). Dragging and the arrow keys scroll.
+//! Mouse and keys in the view, with a live game (S-0214 claim 26): a left
+//! click on a cell or object selects or gives the selection's orders, as the
+//! input rules decide (shift: force-select, ctrl: force-fire, alt:
+//! force-move); a right click clears the selection. S, X, G and D are stop,
+//! scatter, guard and deploy, and C is the house's cheer (S-0213 table T2).
+//! Dragging with either button and the arrow keys scroll (the viewer's own;
+//! the game client follows S-0214 claim 27).
 //!
 //! The battlefield is drawn by the GPU map pass (`glasnost_render::map_gpu`)
 //! into a texture the shell gives this pane each frame, or on the CPU by the
@@ -967,28 +967,15 @@ impl MapPane {
                     shown.placing = None;
                     self.status = "Placement stopped.".into();
                 }
-            } else if r.clicked() {
-                match target {
-                    Some(on @ ClickOn::Object(_)) => {
-                        // A left click selects: without force-select it acts
-                        // as if nothing were selected, so it never orders.
-                        let mut sel = if mods.force_select {
-                            std::mem::take(&mut shown.selection)
-                        } else {
-                            Vec::new()
-                        };
-                        let rep = live.click(house, &mut sel, on, mods);
-                        shown.selection = sel;
-                        report = Some(rep);
-                    }
-                    _ => shown.selection.clear(),
-                }
-            }
-            if placing.is_none()
-                && r.secondary_clicked()
+            } else if r.clicked()
                 && let Some(on) = target
             {
+                // spec: S-0214 claim 26 (a left release selects or gives the selection's orders, as the input rules decide)
                 report = Some(live.click(house, &mut shown.selection, on, mods));
+            }
+            if placing.is_none() && r.secondary_clicked() {
+                // spec: S-0214 claim 26 (a right release that was not a scroll drag clears the selection)
+                shown.selection.clear();
             }
             if r.hovered() && !ui.ctx().egui_wants_keyboard_input() {
                 let keys = [

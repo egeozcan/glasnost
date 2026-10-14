@@ -416,7 +416,7 @@ fn live_maps_move_and_draw() {
 /// Combat run: on each map, the closest pair of an armed unit and an enemy
 /// unit of two houses that are not allied; up to 8 armed units of
 /// the first house near it are selected through the input rules and ordered
-/// to attack the enemy with a right click. The game runs
+/// to attack the enemy with a click through the input rules. The game runs
 /// `GLASNOST_COMBAT_TICKS` ticks (default 360) and views are written before
 /// the order, at the first visible projectile, 8 ticks later and at the end,
 /// as `local-lane/screens/combat-<map index>-<tick>.png`, with the attackers
