@@ -1,9 +1,9 @@
 ---
 id: Q-0225
 title: When does the sale of a building with a positive-delay range of one stage or fewer finish?
-status: open
+status: answered
 related: [S-0408, S-0406, S-0108]
-answered-by: []
+answered-by: [S-0408]
 ---
 
 ## Need
