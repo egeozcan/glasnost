@@ -178,6 +178,34 @@ fn unit_econ_fields_are_converted() {
     assert_eq!(truck.econ.powered_unit, Some(true));
 }
 
+// spec: S-0413 claim 4 (a two-character prefix and a four-character suffix keep one and three
+// characters, trimmed, with a warning each; values within their limits give none; an empty suffix
+// keeps the value in force. The empty-prefix rule conflicts with S-0001 claim 11: Q-0478)
+#[test]
+fn country_prefix_and_suffix_cut() {
+    let base = "[Countries]\n0=Ruritania\n1=Freedonia\n2=Sylvania\n\
+                [Ruritania]\nPrefix=BC\nSuffix=Ru xZ\n\
+                [Freedonia]\nPrefix=F\nSuffix=Fre\n\
+                [Sylvania]\nPrefix=S\nSuffix=Syl\n";
+    let map = "[Sylvania]\nPrefix=\nSuffix=\n";
+    let (s, w) = import_full(base, map, ART);
+    let r = &s.countries["Ruritania"].econ;
+    assert_eq!(r.prefix.as_deref(), Some("B"));
+    assert_eq!(r.suffix.as_deref(), Some("Ru"));
+    let f = &s.countries["Freedonia"].econ;
+    assert_eq!(
+        (f.prefix.as_deref(), f.suffix.as_deref()),
+        (Some("F"), Some("Fre"))
+    );
+    let y = &s.countries["Sylvania"].econ;
+    assert_eq!(
+        (y.prefix.as_deref(), y.suffix.as_deref()),
+        (Some("S"), Some("Syl"))
+    );
+    let cut: Vec<_> = w.iter().filter(|m| m.contains("S-0413 claim 4")).collect();
+    assert_eq!(cut.len(), 2, "{cut:?}");
+}
+
 // spec: S-0402 Import mapping, S-0404 Import mapping, S-0413 claims 2 and 4 and Import mapping
 #[test]
 fn country_econ_fields_and_no_effect_warning() {

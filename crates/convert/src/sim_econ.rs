@@ -1088,7 +1088,13 @@ impl Builder<'_> {
     /// The `econ` record of a country.
     pub(super) fn country_econ(&mut self, rec: &mut Rec, t: &TypeRec) {
         let mut econ = Rec::default();
-        self.efields(&mut econ, t, Kind::Countries, COUNTRY_ECON);
+        let rows: Vec<Row> = COUNTRY_ECON
+            .iter()
+            .filter(|r| !matches!(r.1, "Prefix" | "Suffix"))
+            .copied()
+            .collect();
+        self.efields(&mut econ, t, Kind::Countries, &rows);
+        self.name_affixes(&mut econ, t);
         if !econ.0.is_empty() {
             rec.put("econ", econ.node());
         }
@@ -1103,6 +1109,41 @@ impl Builder<'_> {
                         show(&v)
                     ));
                 }
+            }
+        }
+    }
+
+    /// A country's name prefix and suffix (S-0413 claim 4): a longer value
+    /// keeps its first one or three characters, trimmed at the ends, with
+    /// an importer warning. An empty value creates no entry (S-0001 claim
+    /// 11), so it keeps the value in force; claim 1's empty-prefix rule
+    /// conflicts with that (Q-0478).
+    fn name_affixes(&mut self, econ: &mut Rec, t: &TypeRec) {
+        const PREFIX_LEN: usize = 1; // spec: S-0413 Constants (prefix characters kept: 1)
+        const SUFFIX_LEN: usize = 3; // spec: S-0413 Constants (suffix characters kept: 3)
+        let name = format!("countries {}", show(&t.name));
+        for (field, k, n) in [
+            ("prefix", "Prefix", PREFIX_LEN),
+            ("suffix", "Suffix", SUFFIX_LEN),
+        ] {
+            let Some(state) = t.keys.get(k.as_bytes()) else {
+                continue;
+            };
+            let mut held: Option<Vec<u8>> = None;
+            for e in &state.history {
+                let What::Set(v) = &e.what else { continue };
+                if v.len() > n {
+                    // spec: S-0413 claim 4 (our importer warns for a longer value)
+                    self.warn(e.layer, e.line, format!(
+                        "{name} {k} {:?}: only the first {n} character(s) are kept (S-0413 claim 4)",
+                        show(v)
+                    ));
+                }
+                // spec: S-0413 claim 4 (the first one or three characters, whitespace at their ends removed)
+                held = Some(v[..v.len().min(n)].trim_ascii().to_vec());
+            }
+            if let Some(v) = held {
+                econ.put(field, jsonc::string(encode(&v)));
             }
         }
     }

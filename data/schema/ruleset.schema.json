@@ -5808,11 +5808,6 @@
           "type": "boolean",
           "default": true
         },
-        "alliance_message_slot_colour": {
-          "description": "Alliance messages take the colour of the country's colour field rewritten by the lobby slot.",
-          "type": "boolean",
-          "default": true
-        },
         "announcement_volume_ignored": {
           "description": "An announcement's volume key has no effect; off: the volume (a fraction, default 1) scales it.",
           "type": "boolean",
