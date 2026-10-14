@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0471]
 supersedes: []
 ---
 
@@ -825,6 +825,9 @@ involved.
 
 ## Cross-spec consistency
 
+- Q-0471 is fully answered by claim 12 and Import mapping: the former
+  `quirks.pip_colour_default_shift` is withdrawn. Pip-value retention is mandatory, not a
+  rendering option; OV7-R checks the corrected result. S-0003 claim 16 and S-0006 claim 5 agree.
 - Hand off with S-0003 claim 16 and S-0006 claim 5 aligned to claim 12's fixed pip-value retention,
   initial image frames 1 and 7, and no pip-default switch. OV7 observes the original bug.
   OV7-R checks the correction in our engine.

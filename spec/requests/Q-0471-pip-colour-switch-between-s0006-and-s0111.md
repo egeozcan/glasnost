@@ -1,9 +1,9 @@
 ---
 id: Q-0471
 title: Is the infantry pip-colour omission shift a quirk switch or a fixed departure?
-status: open
+status: answered
 related: [S-0003, S-0006, S-0111]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
