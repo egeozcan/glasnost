@@ -44,6 +44,8 @@ pub enum Target {
     MapPack,
     /// Content sniffing.
     Sniff,
+    /// Game bitmap font: every glyph's mask and the fallback.
+    Fnt,
 }
 
 /// Every target, in a fixed order.
@@ -63,6 +65,7 @@ pub const ALL: &[Target] = &[
     Target::Lcw,
     Target::MapPack,
     Target::Sniff,
+    Target::Fnt,
 ];
 
 /// Runs `target` over `data`, discarding results.
@@ -176,6 +179,15 @@ pub fn run(target: Target, data: &[u8]) {
         Target::Sniff => {
             let _ = crate::sniff::sniff(data, data.len() as u64);
             let _ = crate::sniff::sniff(data, u64::MAX);
+        }
+        Target::Fnt => {
+            if let Ok(f) = crate::fnt::Font::parse(data) {
+                for j in 0..f.count() {
+                    let _ = f.mask(j);
+                }
+                let _ = f.fallback();
+                let _ = f.write();
+            }
         }
     }
 }

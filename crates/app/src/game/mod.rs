@@ -9,6 +9,7 @@
 //! - [`paint`]: draw lists to 2D-batch quads.
 //! - [`client`]: the screens, pacing, sound and input without a window.
 //! - [`install`]: the install's rules, maps and samples for the menus.
+//! - [`status_font`]: the game bitmap font for status text.
 
 pub mod band;
 pub mod client;
@@ -18,6 +19,7 @@ pub mod paint;
 pub mod play;
 pub mod scroll;
 pub mod session;
+pub mod status_font;
 pub mod window;
 
 pub use window::{GameOptions, GpuDraw, run_game};

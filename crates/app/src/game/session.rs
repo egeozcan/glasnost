@@ -31,7 +31,6 @@ use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::geom::{Point, Rect};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
 use glasnost_ui::modes::{self, Mode};
-use glasnost_ui::status;
 use glasnost_ui::widget::Targets;
 use glasnost_vfs::{FileRef, Vfs};
 
@@ -40,6 +39,7 @@ use super::cursor::{self, Offer};
 use super::paint::Painter;
 use super::play::{Button, Play, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
+use super::status_font;
 use crate::mapview::build::{self, GameMode, Inputs, Options};
 use crate::mapview::cover;
 use crate::mapview::live::{self, Live};
@@ -55,7 +55,6 @@ pub const RADAR_IMAGE: u32 = 2;
 const CURSOR_SPRITE: u32 = 900;
 /// First sprite id of the sidebar icons.
 const ICON_SPRITES: u32 = 1000;
-
 /// The 64-bit FNV-1a hash of a map file: the map's name in replays, so
 /// that no map is named by its title (our own identifier).
 pub fn content_hash(bytes: &[u8]) -> String {
@@ -116,6 +115,9 @@ pub struct Session {
     cursor_art: Option<CursorArt>,
     /// The cursor palette's painter row, once registered.
     cursor_row: Option<u32>,
+    /// The status glyphs' painter row (index 1 the foreground), once
+    /// registered.
+    status_row: Option<u32>,
     /// The cursor's animation (S-0214 claim 22).
     animator: cursor::Animator,
     /// The cursor frame drawn this frame and its hot spot.
@@ -172,6 +174,7 @@ impl Session {
         .await;
         let icons = read_icons(vfs, &loaded).await;
         let cursor_art = read_cursor(vfs).await;
+        let status_font = status_font::read(vfs).await;
         // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
         let icon_file = loaded
             .assets
@@ -257,6 +260,7 @@ impl Session {
             drag_refused: None,
             cursor_art,
             cursor_row: None,
+            status_row: None,
             animator: cursor::Animator::default(),
             cursor_shown: None,
             mods: Modifiers::default(),
@@ -266,6 +270,11 @@ impl Session {
             problems: Vec::new(),
         };
         problems.append(&mut s.loaded.problems);
+        match status_font {
+            Ok(f) => s.play.status_font = Some(f),
+            // spec: S-0213 Import mapping (a missing font: our engine reports a missing-asset diagnostic and omits the text)
+            Err(e) => problems.push(e),
+        }
         s.problems = problems;
         s.set_centre(start.unwrap_or((0, 0)));
         // spec: S-0213 claim 25 (the status width budget after game start)
@@ -773,6 +782,14 @@ impl Session {
         Some((offer, shrouded))
     }
 
+    /// Registers the game-font glyphs the status lines draw with the
+    /// painter ([`status_font::register`]).
+    pub fn update_status_glyphs(&mut self, painter: &mut Painter) {
+        if let Some(font) = self.play.status_font.as_ref() {
+            status_font::register(painter, font, &self.play.messages, &mut self.status_row);
+        }
+    }
+
     /// Chooses the battlefield cursor for this frame (S-0214 claims 21 and
     /// 22) and registers its frames with the painter. Without the cursor
     /// image, outside the battlefield, with the options menu open or while
@@ -931,20 +948,8 @@ impl Session {
                 colour::ACCENT,
             );
         }
-        // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
-        // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0501)
-        let mut y = m.y;
-        for msg in &self.play.messages {
-            let wdt = msg
-                .text
-                .encode_utf16()
-                .fold(0, |x, c| status::advance(x, c, &status::our_glyph_width))
-                + 4;
-            d.fill(Rect::new(m.x + 1, y, wdt, 13), [0, 0, 0, 150]);
-            for (dx, run) in status::runs(&msg.text, status::our_glyph_width) {
-                d.text(m.x + 3 + dx, y + 2, run, colour::TEXT, m);
-            }
-            y += 19;
+        if let Some(font) = &self.play.status_font {
+            status_font::draw(&mut d, font, &self.play.messages, m);
         }
         if let Some(f) = &self.play.failed {
             d.fill(Rect::new(m.x, m.bottom() - 16, m.w, 16), [0, 0, 0, 200]);

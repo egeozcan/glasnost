@@ -2,12 +2,10 @@
 //! display (S-0213 claim 25, Line splitting and font).
 //!
 //! The splitter works on the text's 16-bit units and asks a glyph-width
-//! provider for each character's width. The original measures with the
-//! imported game bitmap font; our engine has no reader for that file yet
-//! (Q-0501), so the client passes [`our_glyph_width`], our own font's
-//! widths, in the meantime.
-
-use crate::font;
+//! provider for each character's width: the client passes the imported game
+//! bitmap font's widths (S-0014; a missing unit takes the generated
+//! fallback's width). Lines stay 16-bit units, so a unit is never replaced
+//! or merged with its neighbour before it selects its glyph.
 
 /// The most text characters (16-bit units) a status line holds.
 // spec: S-0213 claim 25 (a line contains at most 111 text characters, counted in the string table's 16-bit text units)
@@ -26,6 +24,8 @@ pub const START_MARGIN: i32 = 22;
 // spec: S-0213 claim 25 (after an in-game change of the battlefield view's dimensions, the new width minus 16 pixels)
 pub const RESIZED_MARGIN: i32 = 16;
 
+// spec: S-0213 claim 25 (the zero text unit ends the text rather than selecting a glyph)
+const END: u16 = 0;
 const TAB: u16 = 9;
 const LF: u16 = 10;
 const CR: u16 = 13;
@@ -35,9 +35,9 @@ const SEPARATOR_MAX: u16 = 32;
 /// The lines a status text makes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Split {
-    /// The stored lines, in order. A line ended by an explicit break keeps
-    /// that character.
-    pub lines: Vec<String>,
+    /// The stored lines as 16-bit text units, in order. A line ended by an
+    /// explicit break keeps that character.
+    pub lines: Vec<Vec<u16>>,
     /// Whether a remainder was left out because its first character could
     /// not fit the budget (S-0213 Edge cases, *Unfittable status text*).
     pub unfittable: bool,
@@ -50,23 +50,24 @@ pub fn advance(x: i32, c: u16, glyph_width: &impl Fn(u16) -> i32) -> i32 {
     match c {
         // spec: S-0213 claim 25 (a tab advances to the next multiple of 64 pixels from the line origin)
         TAB => (x.div_euclid(TAB_STOP) + 1) * TAB_STOP,
-        // Interim (Q-0501, question 5): an explicit break has no advance.
+        // spec: S-0213 claim 25 (an explicit carriage return or line feed has no horizontal advance; Q-0501 question 5)
         CR | LF => x,
         // spec: S-0213 claim 25 (the glyph's width and one extra pixel of advance, integer pixels)
         _ => x + glyph_width(c) + EXTRA_ADVANCE,
     }
 }
 
-/// Splits `text` into status lines within `budget` pixels (S-0213 claim
-/// 25): explicit breaks, the 111-character cap, word-boundary breaks at a
-/// width overflow, and continuations without their leading control
-/// characters.
-pub fn split(text: &str, budget: i32, glyph_width: impl Fn(u16) -> i32) -> Split {
-    let units: Vec<u16> = text.encode_utf16().collect();
+/// Splits the 16-bit text `text` into status lines within `budget` pixels
+/// (S-0213 claim 25): the text ends at its first zero unit; explicit
+/// breaks, the 111-character cap, word-boundary breaks at a width
+/// overflow, and continuations without their leading control characters.
+pub fn split(text: &[u16], budget: i32, glyph_width: impl Fn(u16) -> i32) -> Split {
+    // spec: S-0213 claim 25 (the zero text unit ends the text)
+    let units = &text[..text.iter().position(|&u| u == END).unwrap_or(text.len())];
     let mut out = Split::default();
     // spec: S-0213 claim 25 (an empty imported message adds one blank stored line)
     if units.is_empty() {
-        out.lines.push(String::new());
+        out.lines.push(Vec::new());
         return out;
     }
     let mut i = 0;
@@ -81,13 +82,13 @@ pub fn split(text: &str, budget: i32, glyph_width: impl Fn(u16) -> i32) -> Split
         if i >= units.len() {
             break;
         }
-        let end = line_end(&units, i, budget, &glyph_width);
+        let end = line_end(units, i, budget, &glyph_width);
         if end == i {
             // spec: S-0213 Edge cases (Unfittable status text: our engine omits the remainder and reports a warning)
             out.unfittable = true;
             break;
         }
-        out.lines.push(String::from_utf16_lossy(&units[i..end]));
+        out.lines.push(units[i..end].to_vec());
         i = end;
         first = false;
     }
@@ -125,35 +126,32 @@ fn line_end(units: &[u16], start: usize, budget: i32, glyph_width: &impl Fn(u16)
     j
 }
 
-/// A glyph's width in our own font: the mask width, a space 2 pixels, `?`
-/// for a character the font lacks. Interim provider until the game font can
-/// be read (Q-0501).
-pub fn our_glyph_width(c: u16) -> i32 {
-    let ch = char::from_u32(u32::from(c)).unwrap_or('?');
-    font::advance(ch) - font::SPACING
-}
-
-/// The drawn pieces of a stored line: runs of printable text with their
-/// pen offsets from the line origin. Tabs move the pen to the next stop;
-/// other control characters (an ending break) draw nothing.
-pub fn runs(line: &str, glyph_width: impl Fn(u16) -> i32) -> Vec<(i32, String)> {
-    let mut out: Vec<(i32, String)> = Vec::new();
+/// The drawn characters of a stored line with their pen offsets from the
+/// line origin (S-0213 claim 25): tabs move the pen to the next stop,
+/// carriage returns and line feeds draw nothing and do not move it, every
+/// other unit draws its glyph (or the fallback) and advances. The text ends
+/// at a zero unit.
+pub fn glyphs(line: &[u16], glyph_width: impl Fn(u16) -> i32) -> Vec<(i32, u16)> {
+    let mut out = Vec::new();
     let mut x = 0;
-    let mut run: Option<(i32, Vec<u16>)> = None;
-    for c in line.encode_utf16() {
-        if c < SEPARATOR_MAX {
-            if let Some((rx, r)) = run.take() {
-                out.push((rx, String::from_utf16_lossy(&r)));
-            }
-        } else {
-            run.get_or_insert_with(|| (x, Vec::new())).1.push(c);
+    for &c in line {
+        match c {
+            // spec: S-0213 claim 25 (the zero text unit ends the text)
+            END => break,
+            // spec: S-0213 claim 25 (tabs and explicit breaks use their special rules rather than mapped glyph metrics; breaks draw no glyph)
+            TAB | CR | LF => {}
+            _ => out.push((x, c)),
         }
         x = advance(x, c, &glyph_width);
     }
-    if let Some((rx, r)) = run {
-        out.push((rx, String::from_utf16_lossy(&r)));
-    }
     out
+}
+
+/// The pen position after the whole of `line` (S-0213 claim 25).
+pub fn width(line: &[u16], glyph_width: impl Fn(u16) -> i32) -> i32 {
+    line.iter()
+        .take_while(|&&c| c != END)
+        .fold(0, |x, &c| advance(x, c, &glyph_width))
 }
 
 #[cfg(test)]
@@ -170,10 +168,17 @@ mod tests {
         }
     }
 
+    fn u(text: &str) -> Vec<u16> {
+        text.encode_utf16().collect()
+    }
+
     fn lines(text: &str, budget: i32) -> Vec<String> {
-        let s = split(text, budget, w);
+        let s = split(&u(text), budget, w);
         assert!(!s.unfittable, "{text:?}");
         s.lines
+            .iter()
+            .map(|l| String::from_utf16(l).unwrap())
+            .collect()
     }
 
     // spec: S-0213 claim 25 (glyph width plus one pixel per character, including the last; the width limit is inclusive)
@@ -221,14 +226,17 @@ mod tests {
     fn claim_25_character_cap() {
         let narrow = |_: u16| 0;
         let text = "a ".repeat(56); // 112 units
-        let s = split(&text, 10_000, narrow);
+        let s = split(&u(&text), 10_000, narrow);
         assert_eq!(s.lines.len(), 2);
-        assert_eq!(s.lines[0].encode_utf16().count(), 111);
-        assert_eq!(s.lines[1], " ");
-        // A character outside the basic plane takes two units.
-        let wide = format!("{}\u{1F600}", "a".repeat(110));
+        assert_eq!(s.lines[0].len(), 111);
+        assert_eq!(s.lines[1], u(" "));
+        // A character outside the basic plane takes two units; the cut
+        // keeps each unit as it is (no replacement character).
+        let wide = u(&format!("{}\u{1F600}", "a".repeat(110)));
         let s = split(&wide, 10_000, narrow);
-        assert_eq!(s.lines[0].encode_utf16().count(), 111);
+        assert_eq!(s.lines[0].len(), 111);
+        assert_eq!(s.lines[0][110], wide[110]);
+        assert_eq!(s.lines[1], [wide[111]]);
     }
 
     // spec: S-0213 claim 25 (an explicit CR or LF ends a line after it; continuation characters 1 to 31 are skipped, so CR LF is one break and repeated breaks add no empty lines; spaces are kept)
@@ -250,10 +258,10 @@ mod tests {
     // spec: S-0213 Edge cases (Unfittable status text: the remainder is omitted and reported)
     #[test]
     fn unfittable_remainder_is_omitted() {
-        let s = split("aW", 6, w);
-        assert_eq!(s.lines, ["a"]);
+        let s = split(&u("aW"), 6, w);
+        assert_eq!(s.lines, [u("a")]);
         assert!(s.unfittable);
-        let s = split("W", 6, w);
+        let s = split(&u("W"), 6, w);
         assert!(s.lines.is_empty());
         assert!(s.unfittable);
     }
@@ -262,15 +270,27 @@ mod tests {
     #[test]
     fn claim_25_widths_come_from_the_provider() {
         assert_eq!(lines("abcd", 20), ["abcd"]);
-        let s = split("abcd", 20, |_| 5);
-        assert_eq!(s.lines, ["abc", "d"]);
+        let s = split(&u("abcd"), 20, |_| 5);
+        assert_eq!(s.lines, [u("abc"), u("d")]);
     }
 
+    // spec: S-0213 claim 25 (the zero text unit ends the text)
     #[test]
-    fn runs_follow_tabs_and_skip_breaks() {
+    fn claim_25_zero_unit_ends_the_text() {
+        assert_eq!(lines("ab\0cd", 100), ["ab"]);
+        assert_eq!(lines("\0cd", 100), [""]);
+        assert_eq!(glyphs(&u("a\0b"), w), [(0, 97)]);
+        assert_eq!(width(&u("a\0b"), w), 5);
+    }
+
+    // spec: S-0213 claim 25 (tabs go to the next stop and breaks draw nothing without advance; other units, control characters included, draw their glyph)
+    #[test]
+    fn claim_25_drawn_glyphs() {
         assert_eq!(
-            runs("ab\tc\r", w),
-            [(0, "ab".to_owned()), (64, "c".to_owned())]
+            glyphs(&u("ab\tc\u{1}d\r"), w),
+            [(0, 97), (5, 98), (64, 99), (69, 1), (74, 100)]
         );
+        assert_eq!(width(&u("ab\tc\r"), w), 69);
+        assert_eq!(glyphs(&u("a\r\nb"), w), [(0, 97), (5, 98)]);
     }
 }
