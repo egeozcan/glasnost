@@ -841,7 +841,9 @@ impl Builder<'_> {
     /// a deploy facing outside 0 … 255 never lets a vehicle deploy into the
     /// type.
     fn deploy_facing_warning(&mut self, t: &TypeRec) {
-        let d = fold(t.keys.get(&b"DeployFacing"[..]), None, |v, _| value::integer(v));
+        let d = fold(t.keys.get(&b"DeployFacing"[..]), None, |v, _| {
+            value::integer(v)
+        });
         // spec: S-0415 Edge cases and S-0406 claim 16 (a deploy facing outside 0 … 255 prevents deployment; the importer warns)
         if let Some(d) = d.filter(|d| !(0..=255).contains(d)) {
             self.warn(0, 0, format!(
@@ -903,18 +905,25 @@ impl Builder<'_> {
     fn docking_offsets(&mut self, index: usize, t: &TypeRec) -> Option<Vec<[i32; 3]>> {
         let kind = Kind::Buildings;
         // spec: S-0404 Import mapping (NumberOfDocks, rules: an integer, absent 1)
-        let n = fold(t.keys.get(&b"NumberOfDocks"[..]), None, |v, _| value::integer(v)).unwrap_or(1);
+        let n = fold(t.keys.get(&b"NumberOfDocks"[..]), None, |v, _| {
+            value::integer(v)
+        })
+        .unwrap_or(1);
         const PREFIX: &[u8] = b"DockingOffset";
         let mut found: std::collections::BTreeSet<i32> = std::collections::BTreeSet::new();
         for image in self.images(kind, index, t) {
-            let Some(s) = self.art_section(&image) else { continue };
+            let Some(s) = self.art_section(&image) else {
+                continue;
+            };
             for e in s.entries() {
                 let k = &e.key;
                 if k.len() <= PREFIX.len() || !k[..PREFIX.len()].eq_ignore_ascii_case(PREFIX) {
                     continue;
                 }
                 let digits = &k[PREFIX.len()..];
-                if let Some(i) = std::str::from_utf8(digits).ok().and_then(|d| d.parse::<i32>().ok())
+                if let Some(i) = std::str::from_utf8(digits)
+                    .ok()
+                    .and_then(|d| d.parse::<i32>().ok())
                     && i.to_string().as_bytes() == digits
                     && i < n
                 {

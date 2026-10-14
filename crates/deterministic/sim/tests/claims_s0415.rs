@@ -596,7 +596,11 @@ fn claim_6_out_of_range_deploy_facing_never_deploys() {
         let mut w = game(&r);
         let v = spawn_v(&mut w, "KIT", c(0, 0), 0);
         order(&mut w, Order::Deploy { actor: v });
-        assert_eq!(until(&mut w, 200, |w| w.obj(v).is_none()), None, "deploy facing {d}");
+        assert_eq!(
+            until(&mut w, 200, |w| w.obj(v).is_none()),
+            None,
+            "deploy facing {d}"
+        );
         assert!(buildings(&w).is_empty());
     }
 }
@@ -610,9 +614,8 @@ fn claim_6_first_turn_after_deploy() {
             r.globals.quirks.update_order_removal_skip = skip;
             let mut w = game(&r);
             let v = spawn_v(&mut w, "KIT", c(0, 0), facing_d());
-            let other = between.then(|| {
-                testkit::spawn(&mut w, Kind::Building, "SHOP", 0, c(-8, -8), 0)
-            });
+            let other =
+                between.then(|| testkit::spawn(&mut w, Kind::Building, "SHOP", 0, c(-8, -8), 0));
             order(&mut w, Order::Deploy { actor: v });
             let mut t_deploy = None;
             for _ in 0..30 {

@@ -588,7 +588,9 @@ fn build_down_ticks(w: &mut World, b: ObjectId) -> (i32, i32) {
 #[test]
 fn claim_17_single_stage_build_down() {
     for never in [true, false] {
-        for (frames, packs, off_after) in [(2, false, 45), (1, false, 1), (2, true, 45), (1, true, 1)] {
+        for (frames, packs, off_after) in
+            [(2, false, 45), (1, false, 1), (2, true, 45), (1, true, 1)]
+        {
             let mut r = rules();
             r.globals.quirks.single_stage_buildup_never_completes = never;
             let hut = r.sim.buildings.get_mut("HUT").unwrap();
@@ -621,10 +623,17 @@ fn claim_17_single_stage_build_down() {
             }
             let d = down.expect("build-down");
             if never {
-                assert_eq!(gone, None, "frames {frames}, packs {packs}: never completes");
+                assert_eq!(
+                    gone, None,
+                    "frames {frames}, packs {packs}: never completes"
+                );
                 assert_eq!(w.houses[0].credits, credits, "no refund");
             } else {
-                assert_eq!(gone, Some(d + off_after), "frames {frames}, packs {packs}: off");
+                assert_eq!(
+                    gone,
+                    Some(d + off_after),
+                    "frames {frames}, packs {packs}: off"
+                );
             }
         }
     }

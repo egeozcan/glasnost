@@ -493,7 +493,11 @@ fn claim_10_no_rally_no_destination() {
         assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
         let o = w.obj(grunt).unwrap();
         // spec: S-0417 claim 10 (the saved guard spot is K's rally point, if any; the guard-spot row gives no destination for the own cell)
-        assert_eq!(o.guard_spot, w.obj(k).unwrap().guard_spot, "own cell {own_cell}");
+        assert_eq!(
+            o.guard_spot,
+            w.obj(k).unwrap().guard_spot,
+            "own cell {own_cell}"
+        );
         assert_eq!(o.dest, None, "own cell {own_cell}");
         // spec: S-0417 claim 10 (no move is queued; the unit rests in guard)
         assert_ne!(o.beh.seen(), Some(Behaviour::Move), "own cell {own_cell}");
@@ -507,7 +511,12 @@ fn claim_10_no_rally_no_destination() {
 fn claim_14_infantry_contact_places() {
     for (docks, released) in [(None, 1), (Some(0), 1), (Some(2), 2)] {
         let mut r = ruleset();
-        r.sim.buildings.get_mut("BARRACKS").unwrap().econ.number_of_docks = docks;
+        r.sim
+            .buildings
+            .get_mut("BARRACKS")
+            .unwrap()
+            .econ
+            .number_of_docks = docks;
         let mut w = game(&r);
         let (k, _) = barracks_with_rally(&mut w);
         let mut n = 0;
@@ -650,7 +659,10 @@ fn claim_2_guard_starts_at_the_second_start() {
         }
         if started && o.beh.current == Some(Behaviour::Guard) {
             let (processed, _) = o.beh.last.expect("a processing");
-            assert_eq!(o.beh.start_tick, processed, "guard starts in the closing tick");
+            assert_eq!(
+                o.beh.start_tick, processed,
+                "guard starts in the closing tick"
+            );
             assert_eq!(o.beh.queued, None);
             return;
         }
@@ -688,7 +700,6 @@ fn claim_2_guard_waits_ready_mark() {
     }
 }
 
-
 // spec: S-0417 Edge cases (an apron that is not a legal map cell, here the 2 × 1 word's (32767, 32767) pair: the apron counts as free, the exit instruction is refused, u stays where it appeared and reports clear at once, so K closes; under both states of quirks.factory_apron_short_list)
 #[test]
 fn edge_illegal_apron() {
@@ -698,7 +709,10 @@ fn edge_illegal_apron() {
         let mut w = game(&r);
         let k = building(&mut w, "VF", 0, 0, 0);
         let illegal = !w.cells.footprint().is_legal(release::apron(&w, k).unwrap());
-        assert_eq!(illegal, short, "the last pair of the 2 x 1 list is a legal cell");
+        assert_eq!(
+            illegal, short,
+            "the last pair of the 2 x 1 list is a legal cell"
+        );
         if !illegal {
             continue;
         }
@@ -714,7 +728,11 @@ fn edge_illegal_apron() {
             }
         }
         assert!(cleared, "the clear report");
-        assert_eq!(w.obj(tank).unwrap().pos.cell(), at.cell(), "u stays where it appeared");
+        assert_eq!(
+            w.obj(tank).unwrap().pos.cell(),
+            at.cell(),
+            "u stays where it appeared"
+        );
         assert!(!release::tethered(&w, tank));
     }
 }

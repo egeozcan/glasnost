@@ -300,7 +300,10 @@ fn docking_offsets() {
         s.buildings["PADA"].econ.docking_offsets,
         Some(vec![[1, 2, 3], [0, 0, 0], [-4, 5, 6]])
     );
-    assert_eq!(s.buildings["PADB"].econ.docking_offsets, Some(vec![[7, 8, 9]]));
+    assert_eq!(
+        s.buildings["PADB"].econ.docking_offsets,
+        Some(vec![[7, 8, 9]])
+    );
     assert_eq!(s.buildings["PADC"].econ.docking_offsets, None);
 }
 

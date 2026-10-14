@@ -770,7 +770,11 @@ fn claim_17_killed_item_counts() {
     glasnost_sim::econ::production::build(&mut w, A, gi);
     let q = item_of(&w, gi).expect("item started");
     glasnost_sim::econ::production::hold(&mut w, A, gi);
-    assert_eq!(victory::normal_sum(&w, A), base + 1, "the building item counts in B");
+    assert_eq!(
+        victory::normal_sum(&w, A),
+        base + 1,
+        "the building item counts in B"
+    );
     w.obj_mut(p).unwrap().health = 0;
     w.obj_mut(q).unwrap().health = 0;
     assert_eq!(victory::normal_sum(&w, A), base + 1, "still at health 0");

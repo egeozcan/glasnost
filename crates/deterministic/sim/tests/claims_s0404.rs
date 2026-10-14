@@ -1155,7 +1155,11 @@ fn claim_11_creation_draws_in_application_order() {
         set_credits(&mut w, 0, 1_000_000);
         let grunt = t(&w, Kind::Infantry, "GRUNT");
         let tank = t(&w, Kind::Vehicle, "TANK");
-        let order = if grunt_first { [grunt, tank] } else { [tank, grunt] };
+        let order = if grunt_first {
+            [grunt, tank]
+        } else {
+            [tank, grunt]
+        };
         for what in order {
             assert!(issue(&mut w, 0, Order::Build { what }));
         }
@@ -1402,7 +1406,7 @@ fn claim_13_door_cells() {
         }
         let mut w = game(&r);
         let k = building(&mut w, "BARRACKS", 0, 0, 0);
-    far_rally(&mut w, k);
+        far_rally(&mut w, k);
         let tl = top_left(&w, k);
         let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
         assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
@@ -1414,7 +1418,7 @@ fn claim_13_door_cells() {
         // With the door cell blocked, the list's first cell, without the displacement.
         let mut w = game(&r);
         let k = building(&mut w, "BARRACKS", 0, 0, 0);
-    far_rally(&mut w, k);
+        far_rally(&mut w, k);
         spawn_at(&mut w, Kind::Building, "HUT", exit);
         let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
         assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
@@ -1429,7 +1433,11 @@ fn claim_13_door_cells() {
 fn claim_13_door_release_without_foundation_cells() {
     for exact in [true, false] {
         assert!(release::ring(0, 0).is_empty());
-        for (door, cell, at) in [(0, (1, 2), (0, 1)), (1, (2, 2), (1, 1)), (2, (2, 1), (1, 0))] {
+        for (door, cell, at) in [
+            (0, (1, 2), (0, 1)),
+            (1, (2, 2), (1, 1)),
+            (2, (2, 1), (1, 0)),
+        ] {
             let mut r = ruleset();
             r.globals.quirks.foundation_exit_lists = exact;
             let b = r.sim.buildings.get_mut("BARRACKS").unwrap();
@@ -1443,16 +1451,29 @@ fn claim_13_door_release_without_foundation_cells() {
             let k = building(&mut w, "BARRACKS", 0, 0, 0);
             let tl = top_left(&w, k);
             let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
-            assert_eq!(release::release(&mut w, k, grunt), Outcome::Released, "door {door}");
+            assert_eq!(
+                release::release(&mut w, k, grunt),
+                Outcome::Released,
+                "door {door}"
+            );
             let p = Pos::centre(CellXY::new(tl.x + at.0, tl.y + at.1), 0);
             let o = w.obj(grunt).unwrap();
             assert_eq!((o.pos.x, o.pos.y), (p.x, p.y), "door {door} exact {exact}");
             // The door cell blocked: no list cell to fall back on.
             let mut w = game(&r);
             let k = building(&mut w, "BARRACKS", 0, 0, 0);
-            spawn_at(&mut w, Kind::Building, "HUT", CellXY::new(tl.x + cell.0, tl.y + cell.1));
+            spawn_at(
+                &mut w,
+                Kind::Building,
+                "HUT",
+                CellXY::new(tl.x + cell.0, tl.y + cell.1),
+            );
             let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
-            assert_eq!(release::release(&mut w, k, grunt), Outcome::Failed, "door {door} exact {exact}");
+            assert_eq!(
+                release::release(&mut w, k, grunt),
+                Outcome::Failed,
+                "door {door} exact {exact}"
+            );
         }
     }
 }
@@ -1466,7 +1487,7 @@ fn claim_13_quirk_foundation_exit_lists() {
         r.globals.quirks.foundation_exit_lists = exact;
         let mut w = game(&r);
         let k = building(&mut w, "BARRACKS", 0, 0, 0);
-    far_rally(&mut w, k);
+        far_rally(&mut w, k);
         let tl = top_left(&w, k);
         for (a, b) in release::ring(4, 3) {
             if a != 4 || !(0..=2).contains(&b) {
@@ -1557,7 +1578,11 @@ fn claim_15_pad_position() {
         let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
         assert_eq!(release::aircraft(&mut w, k, plane, true), Outcome::Released);
         let p = w.obj(plane).unwrap().pos;
-        assert_eq!((p.x, p.y, p.z), (c.x + d[0], c.y + d[1], c.z + d[2]), "place {i}");
+        assert_eq!(
+            (p.x, p.y, p.z),
+            (c.x + d[0], c.y + d[1], c.z + d[2]),
+            "place {i}"
+        );
     }
     // An aircraft already in contact through place 1 keeps it, though place 0 is empty.
     let (mut w, k) = pad_world(Some(2), Some(offs.clone()), true);
@@ -1565,9 +1590,15 @@ fn claim_15_pad_position() {
     let first = new_unit(&mut w, Kind::Aircraft, "PLANE");
     let second = new_unit(&mut w, Kind::Aircraft, "PLANE");
     assert_eq!(release::aircraft(&mut w, k, first, true), Outcome::Released);
-    assert_eq!(release::aircraft(&mut w, k, second, true), Outcome::Released);
+    assert_eq!(
+        release::aircraft(&mut w, k, second, true),
+        Outcome::Released
+    );
     w.obj_mut(first).unwrap().contact = None;
-    assert_eq!(release::aircraft(&mut w, k, second, true), Outcome::Released);
+    assert_eq!(
+        release::aircraft(&mut w, k, second, true),
+        Outcome::Released
+    );
     let p = w.obj(second).unwrap().pos;
     assert_eq!((p.x, p.y), (c.x + offs[1][0], c.y + offs[1][1]));
     // A count of 1: the sole displacement.
@@ -1588,7 +1619,11 @@ fn claim_15_pad_position() {
         let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
         assert_eq!(release::aircraft(&mut w, k, plane, true), Outcome::Released);
         let p = w.obj(plane).unwrap().pos;
-        assert_eq!((p.x, p.y, p.z), (c.x, c.y, c.z), "{docks:?} {offsets:?} {pad}");
+        assert_eq!(
+            (p.x, p.y, p.z),
+            (c.x, c.y, c.z),
+            "{docks:?} {offsets:?} {pad}"
+        );
     }
 }
 
@@ -1598,14 +1633,20 @@ fn claim_13_aircraft_edge_entry_without_rally() {
     let mut w = game(&ruleset());
     let k = building(&mut w, "AIRPAD", 0, 0, 0);
     let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
-    assert_eq!(release::aircraft(&mut w, k, plane, false), Outcome::Released);
+    assert_eq!(
+        release::aircraft(&mut w, k, plane, false),
+        Outcome::Released
+    );
     let o = w.obj(plane).unwrap();
     assert_eq!(o.beh.current, Some(Behaviour::Move));
     let Some(Target::Cell(d)) = o.dest else {
         panic!("a nearby cell destination: {:?}", o.dest)
     };
     let b = w.reference_point(k).cell();
-    assert!((d.x - b.x).abs() <= 8 && (d.y - b.y).abs() <= 8, "{d:?} near {b:?}");
+    assert!(
+        (d.x - b.x).abs() <= 8 && (d.y - b.y).abs() <= 8,
+        "{d:?} near {b:?}"
+    );
 }
 
 // spec: S-0404 claim 14 (P12 part g: each cloning building, in acquisition order, gets a copy released by the infantry row, each with its creation draw; none when the original is busy)

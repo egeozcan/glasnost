@@ -861,10 +861,17 @@ fn claim_15_full_tab() {
     assert_eq!(tab.len(), 76);
     let f = |w: &World, i: usize| t(w, Kind::Infantry, &format!("F{i}"));
     // The last registered types are the suppressed ones.
-    let suppressed: Vec<TypeRef> = (0..80).map(|i| f(&w, i)).filter(|x| !tab.contains(x)).collect();
+    let suppressed: Vec<TypeRef> = (0..80)
+        .map(|i| f(&w, i))
+        .filter(|x| !tab.contains(x))
+        .collect();
     assert!(!suppressed.is_empty());
     let first_out = suppressed[0];
-    assert!(suppressed.iter().all(|x| x.index > tab.iter().map(|y| y.index).max().unwrap()));
+    assert!(
+        suppressed
+            .iter()
+            .all(|x| x.index > tab.iter().map(|y| y.index).max().unwrap())
+    );
     assert!(!glasnost_sim::econ::tech::offered(&w, H, first_out));
     assert!(!issue(&mut w, 0, Order::Build { what: first_out }));
     let f1 = f(&w, 1);
@@ -917,6 +924,9 @@ fn claim_15_capacity_before_removals() {
     step(&mut w);
     let after = infantry_tab(&w);
     assert!(!after.contains(&f0));
-    assert!(!after.contains(&h0), "F0's place still counted at admission");
+    assert!(
+        !after.contains(&h0),
+        "F0's place still counted at admission"
+    );
     assert_eq!(after.len(), 75);
 }
