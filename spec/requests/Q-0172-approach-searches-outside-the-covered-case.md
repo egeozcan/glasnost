@@ -1,9 +1,9 @@
 ---
 id: Q-0172
 title: Approach-position searches outside open level ground, and the failure centre after candidates
-status: open
+status: answered
 related: [S-0307, S-0215, S-0212]
-answered-by: []
+answered-by: [S-0307]
 ---
 
 ## Need

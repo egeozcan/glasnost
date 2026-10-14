@@ -2,13 +2,13 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0172]
 supersedes: []
 ---
 
@@ -27,8 +27,10 @@ to Q-0072: claims 16 to 18 add obstructed level-ground searches, failure outcome
 object destination. S-0215 claim 37 owns the trigger, gating and destination renewal.
 S-0207 claim 19 owns the resolved vehicle movement outcomes; S-0208 claims 16 and 17 own ordinary
 walking infantry's stopping and destination outcomes. Claims 19 to 21 extend ordinary searches to terrain, bridges and ordinary cell targets,
-and resolve their failure centre and usable-area exception for Q-0172. Close-range searches,
-destroyable-cliff cell targets and jumpjet stopping remain open below.
+and resolve their failure centre and usable-area exception for Q-0172. Claim 22 gives the search
+of types with the close-range property, claim 23 the replacement of a destroyable-cliff cell
+target, and claim 24 the one rule that treats jumpjets differently. Deploying searches and
+jumpjet stopping remain open below.
 Skirmish is covered; campaigns and network games are out of scope.
 
 ## Terms
@@ -58,8 +60,16 @@ and *subject to walls*. In addition:
   elevation bonus of claim 6.
 - **Cell rangefinding.** A weapon property (Import mapping). It moves the source point to the
   firer's cell (claim 8 a).
-- **Close-range property.** A boolean type field (Import mapping). Claims 15 and 16 cover only
-  types without this property; the approach rules for types with it remain open.
+- **Close-range property.** A boolean type field (Import mapping). Claims 15, 16, 19 and 20
+  cover only types without this property; claim 22 gives the differences for types with it.
+- **Standing position, position class, position choice.** As in S-0208 (Terms, claims 1 to 3):
+  the *position choice* for a cell and a desired point is the standing position that S-0208
+  claim 3's table gives for that cell's occupancy record, including its random draw.
+- **Scatter reference point.** As in S-0208 (Terms): the actor's walking target while it has
+  one, otherwise its own position. Claim 23 uses it for vehicles as well, with the next point its
+  locomotor is heading for in place of the walking target.
+- **Destroyable-cliff cell.** As in S-0214 (Terms). Its tile's cells and sub-tile are those of
+  S-0010 and the glossary (*sub-tile*); a *tile cell* is a non-empty cell of a tile (S-0010 Terms).
 - **Hunter-seeker property, balloon-hover property.** Boolean type fields (Import mapping), read
   only for the exceptional destinations of claims 17 and 18. This spec does not define their
   special abilities or locomotion.
@@ -256,8 +266,8 @@ and *subject to walls*. In addition:
     passengers have short weapons still passes the range test at its own weapon's range, while
     those other rules see the shorter value. The passengers' own range tests use their own weapons
     and the bonus of claim 5.
-    S-0306 claim 4 needs a same-round correction: its primary-only passenger wording must
-    instead defer to this current-weapon rule. Its P3 f does not distinguish the two rules.
+    S-0306 claim 4 (its revision 6) defers to this current-weapon rule; its P3 f does not
+    distinguish the current weapon from the primary one.
     - Backing: `measurable` (RG9 and RG10 for an ordinary armed passenger and the range test's
       non-use; scatter and scan consequences through S-0306 P3 and S-0309's scenarios).
       Backing: `unmeasured` for multi-weapon current-slot selection and missing passenger weapons,
@@ -371,9 +381,10 @@ and *subject to walls*. In addition:
     tick-number choice of that claim, not the cell nearest the attacker, and takes no random
     draw.
 
-    **Failure centre after candidates (Q-0172 question 1).** For the ordinary searches of
-    claims 15, 16 and 19 to 21, let the *failure anchor* be the last primary in F4's preference
-    order that passes the range test, whether or not it is usable or clear. If there is none,
+    **Failure centre after candidates (Q-0172 question 1).** For every search of claims 15,
+    16 and 19 to 24, let the *failure anchor* be the last primary in F4's preference
+    order that passes the range test (or, for a close-range type, is treated as passing it by
+    claim 22 d), whether or not it is usable or clear. If there is none,
     the centre is the target-reference cell, even when the radii were not empty. Otherwise
     the centre is the failure anchor's cell, except when that primary offered an alternative
     that passed both range and clear-cell tests but failed the detour limit: the centre is
@@ -384,8 +395,9 @@ and *subject to walls*. In addition:
     Thus an ordinary actor still drops its target and receives the nearby-search result or
     no destination as in the table; non-empty radii do not suppress the nearby search.
     For ground actors without bridges its parameters are the empty-radius parameters above,
-    now using this centre. Close-range and jumpjet failure centres remain outside this claim.
-    - Backing: `measurable` (RG12 and RG17)
+    now using this centre. No rule of the failure distinguishes close-range types or jumpjets,
+    and the nearby-search parameters for actors outside that ground scope are S-0212's.
+    - Backing: `measurable` (RG12, RG17 and RG23 f)
     - Confidence: high for keeping or dropping the target and the object-destination exceptions,
       medium for the nearby-search parameters and failure-centre rule
 
@@ -437,7 +449,7 @@ and *subject to walls*. In addition:
     its failure centre and target-drop rule. This does not imply an infantry early stop:
     S-0208 claim 17 excludes cell targets.
     - Backing: `measurable` (RG19)
-    - Confidence: high for ordinary cells; destroyable-cliff retargeting remains open
+    - Confidence: high for ordinary cells; claim 23 gives the destroyable-cliff replacement
 
 21. **Alternatives outside the usable area (Q-0172 question 6).** The usable-area test
     rejects primary cells, but is not applied to a vehicle's alternatives. A legal alternative
@@ -446,6 +458,92 @@ and *subject to walls*. In addition:
     here for a cell outside the map's legal cells.
     - Backing: `measurable` (RG20)
     - Confidence: high
+
+22. **Close-range searches (Q-0172 question 3).** For an attacker whose type has the
+    close-range property, the search of claims 15 to 21 applies with the changes below. Nothing
+    else differs: F4's bearing order, the vehicle alternatives of claim 16, the detour limit,
+    the heights and layers of claim 19, cell targets (claims 20 and 23) and the failure
+    outcomes and centre of claim 17 are as stated there. *T* is the target's reference point.
+
+    a. **Radius (infantry only).** When F4's *u*′ is at most 332 leptons, an infantry attacker
+       uses the single radius 332 leptons; a larger *u*′ keeps F4's radii. Because the next
+       radius, 76 leptons, is below F4's limit, the search then has exactly one radius. An
+       empty-radius case therefore never occurs for close-range infantry, and claim 17's
+       empty-radius branch does not apply to them. The original compares *u*′ with 332.8 in
+       double precision, which for the integer *u*′ is the same as *u*′ ≤ 332.
+    b. **Near-target shortcut (every actor kind).** Before any candidate is examined, let *q* be
+       the centre of the cell holding the target's position when the target is a vehicle,
+       infantry unit, aircraft or building (for a building, the cell of its position, not of
+       its reference point), and *T* for any other target, such as a cell. Let *d*₀ be the planar
+       distance, truncated to an integer, from the centre of the attacker's cell to the centre
+       of the cell holding *q*, and *d*₁ the same distance from a point *P* to *q*. Only when
+       *d*₀ ≤ 384 leptons (the attacker's cell is the target's cell or one of its eight
+       neighbours), *P* is the position choice in the attacker's own cell with desired point *T*,
+       read from that cell's ground occupancy record whatever surface the attacker is on. The
+       attacker's own entry counts as taken there. When a position is found and *d*₁ < *d*₀, the
+       search ends successfully at once: the attacker's movement is sent directly to *P*, its
+       destination becomes the cell of *T*, and the target is kept. No candidate is examined.
+       Otherwise the search continues with (c). With *d*₀ = 0 the shortcut never succeeds. A vehicle on the ground carries
+       its own vehicle mark in its cell's ground record, so the position choice gives it no
+       position and the shortcut does not succeed for it.
+    c. **Primary points (infantry only).** Each F4 primary's point is not its cell centre but
+       the position choice in that primary cell with desired point *T*, read from the cell's
+       ground record. Its height is then that of claim 19: the terrain surface height at the
+       chosen point, plus 416 leptons when the cell carries a high bridge. The cell's other
+       tests, its failure-anchor cell and the destination are those of the primary cell. When
+       the choice gives no position, the point is the map origin (map coordinates 0, 0) at
+       the surface height there. That point lies outside the usable area, so it can only
+       ever become a failure anchor, whose cell is then the cell at map coordinates (0, 0),
+       never a destination. It passes the range test only with a weapon reaching across the map.
+    d. **Range bypass (every actor kind).** A primary or vehicle alternative whose point fails
+       the range test is treated as passing it when the planar distance from its point to *T*,
+       truncated to an integer, is at most 307 leptons (the original compares it with 307.2).
+       From then on it is treated as a range-passing candidate in every respect, including claim
+       17's failure anchor.
+    e. **Own occupancy disregarded (every actor kind).** During each clear-cell test of claims 15,
+       16 and 19, an attacker in the ground layer has its own occupancy entry withdrawn and restored right after the
+       test. A cell whose only occupant is the attacker can therefore be clear. Any other
+       occupant still makes it not clear: the whole occupancy record must be empty, even though
+       (c) found a free standing position in it.
+    f. **Random draws.** Every position choice of (b) and (c) takes a scenario-stream draw of S-0208 claim 3 exactly when the desired class is the centre and the table's first row (the refused cell: vehicle-present flag, or object-present flag without an open gate) does not apply. The draw occurs even when every position of the selected row is taken and the choice returns no position. The observable draw order places the shortcut's choice, when its distance condition holds, before draws attributable to primary candidates; primary-candidate draws follow F4's preference order. A primary contributes its draw even if its range test fails, and each occurrence of a repeated cell contributes another draw. No draw attributable to a later primary occurs after the search ends. These same draw results apply when the search may not change the actor. The class of *T* is the centre, for example, for a vehicle standing on a cell centre and for every building, whose reference point lies on a cell centre, edge or corner (S-0208 claim 2).
+
+    When the search may not change the actor (claim 17), the shortcut moves nothing and sets no
+    destination, but it still ends the search.
+    - Backing: `measurable` (RG23)
+    - Confidence: high for the radius, the shortcut's conditions and constants, the bypass,
+      the disregarded own occupancy and the draws; medium for the shortcut's combined movement
+      and destination outcome and for the map-origin case
+
+23. **Destroyable-cliff cell targets (Q-0172 question 2).** When the target is a destroyable-cliff
+    cell and the search of claims 15 to 22 is about to run, the target is first replaced by one
+    cell of the same tile. Let the target cell be (*x*, *y*), with sub-tile *s* of a tile *W*
+    cells wide and *H* cells high (sub-tiles counted row by row, *W* per row). The tile's cells
+    are taken at (*x*₀ + *i*, *y*₀ + *j*) for 0 ≤ *i* < *W* and 0 ≤ *j* < *H*, where
+    *x*₀ = *x* − (*s* mod *W*) and *y*₀ = *y* − ⌊*s* / *W*⌋. A cell qualifies when its part of
+    the tile is a tile cell and the cell is inside the usable area. Whether the map cell there
+    still holds that tile is not checked. Let *c* be the cell of the attacker's scatter
+    reference point. Among qualifying cells the one with the smallest *r*((Δ*x*)² + (Δ*y*)²),
+    the table square root of S-0204 of the squared cell-coordinate differences from *c*, is
+    chosen. If qualifying cells tie for the smallest distance, the selected cell is the one earliest in row-major order: increasing *j*, then increasing *i*.
+    The new target may be the old one. The search then continues with that cell as an
+    ordinary cell target (claim 20, or claim 22 for close-range types), keeping it on success
+    and dropping it on failure. No random draw is taken. When the search may not change the
+    actor, the target is not replaced and the search continues with the original cell.
+    When no cell qualifies, the target becomes the cell at map coordinates (0, 0), which is
+    reachable only when every tile cell lies outside the usable area.
+    - Backing: `measurable` (RG24); `unmeasured` for the case with no qualifying cell, which
+      needs an attackable cliff whose whole tile is outside the usable area
+    - Confidence: high for the replacement rule; medium for the scatter-reference cell of a
+      moving vehicle; low for the no-qualifying-cell result
+
+24. **No detour limit for jumpjets.** When the attacker is a jumpjet (glossary: moving with
+    its jumpjet locomotor at the time of the search), a clear primary, or the first qualifying
+    alternative, is accepted without either inequality of claim 16. Within the search this is
+    the only rule that distinguishes a jumpjet; its clear-cell tests use its own locomotion
+    class, movement zone and reach region as in claims 15 and 19. Whether and when a jumpjet
+    takes the search is S-0215 claim 37; its stopping is S-0208.
+    - Backing: `measurable` (RG25)
+    - Confidence: high for the exemption; medium that nothing else in the search differs
 
 ## Formulas
 
@@ -631,7 +729,7 @@ The rows exclude one another, so exactly one applies to each question.
 |---|---|---|---|---|
 | rules, weapon section | `Range` | weapon range *R*₀ (claims 1, 2); also the approach radius through ρ in claims 13 and 15 | lepton form of claim 1 | 0 |
 | rules, weapon section | `MinimumRange` | minimum range *m* | lepton form of claim 1 | 0 |
-| rules, section of an infantry or vehicle type | `CloseRange` | close-range property, excluded from claims 15 and 16 | boolean (S-0003) | no |
+| rules, section of an infantry or vehicle type | `CloseRange` | close-range property (claim 22) | boolean (S-0003) | no |
 | rules, infantry or vehicle type section | `SpeedType` | locomotion class for approach-cell qualification (claims 15 to 21) and the failure nearby search | name, as S-0211 Import mapping | S-0211 claim 3: infantry foot; vehicle track when its crusher flag is yes, otherwise wheel |
 | rules, infantry or vehicle type section | `MovementZone` | own movement zone and reach region for claims 15 to 21 | name, as S-0211 claim 12 and Import mapping | normal |
 | rules, weapon section | `CellRangefinding` | cell rangefinding property (claim 8) | boolean (S-0003) | no |
@@ -673,7 +771,8 @@ candidate cells; the glossary's bystander void rule applies. No run assumes the 
 remains inactive. Unless stated otherwise the attacker is a
 stock turreted vehicle on cell (*x*, *y*) of flat open ground at height level 0, its weapon has no
 minimum range and a projectile that is neither arcing nor subject to elevation, cliffs or walls,
-and targets stand on cell centres. One run per row; no random draw decides the outcome.
+and targets stand on cell centres. One run per row; no random draw decides the outcome, except in
+RG23, whose predictions use the recorded draw values.
 
 **RG1. Range field and comparisons (claims 1, 2, 9).** Target vehicle on (*x* + 5, *y*) (1280
 leptons).
@@ -1057,22 +1156,87 @@ planar distance passes. Record positions and first-shot/first-movement outcome, 
   rule or its different use by the two comparisons. Repeat b with the firer one level lower
   and compute the recorded spatial distance: Δh remains 0 and the same bonuses apply.
 
+**RG23. Close-range searches (claim 22; claim 17 for f).** Use RG10's flat map, houses, speed
+and recorder, and add to the recorded values each tick: the attacker's position and standing
+position, its destination kind and cell, the point its movement is heading for, the target, and
+the scenario random stream's state and draw count. Named test data gives one infantry type and
+one turreted vehicle type the close-range property and a weapon of range 1 cell, no minimum
+range and no elevation, cliff or wall properties. The target is an unarmed enemy vehicle on a
+cell centre. Before each run, compute F4's bearing, the claim 22 points and the predicted
+draws from the recorded positions. One run per part; the controls repeat a part with the
+close-range property off.
+- (a) Radius: target ten cells away. Expected: a destination from the single radius of 332
+  leptons, target kept. Control: the empty-radius outcome of claim 17 (target dropped).
+- (b) Shortcut: the infantry attacker pre-placed at the top standing position of the cell
+  diagonally adjacent to the target's cell on the side of the target's top corner, with two
+  idle friendly infantry at the right and left positions of the same cell. Expected on the
+  first search: movement heading for the bottom position of its own cell (271 leptons from the
+  target's cell centre, against 362 for the attacker's cell centre), destination the target's
+  cell, target kept, exactly one draw. With the right position free instead, the draw decides:
+  a choice of the right position (373 leptons) gives no shortcut. Control: attacker two cells away (*d*₀ = 512),
+  no shortcut. Repeat (b) with the vehicle attacker: no shortcut.
+- (c) Bypass: the vehicle with weapon range 0.75 cell (192 leptons), so its single radius is 256
+  leptons with the property on or off, ten cells from the target along a map axis. Expected:
+  the axis-neighbour cell of the target on the attacker's side (256 leptons, failing the range
+  test, within 307) is the destination. Control, property off: every candidate fails, claim 17
+  applies. Diagonal candidates (362 leptons) fail in both runs.
+- (d) Own occupancy: the same vehicle standing on the centre of the cell axis-adjacent to the
+  target, so that it is out of range, its shortcut finds no position (its own vehicle mark)
+  and the first F4 primary is its own cell. Expected: its own cell is the destination. Without
+  the withdrawal the prediction would instead be a claim 16 alternative or a later primary.
+- (e) Draw count (predictions from the recorded random state): compare a vehicle target on a cell centre (class centre) with an infantry
+  target standing at the right position (a side class, free in each candidate cell). Expected:
+  one draw per primary examined (plus one for a shortcut whose distance holds) for the first,
+  none for the second.
+- (f) Failure: block every primary cell with immobile units while candidates pass the range
+  test or the bypass, leaving nearby cells free. Expected: target dropped, nearby result centred
+  on the last range-passing or bypassed primary.
+- Falsifier: an empty-radius outcome for close-range infantry, a shortcut where *d*₀ > 384 or
+  *d*₁ ≥ *d*₀, rejection of a candidate within 307 leptons for range alone, a draw count other
+  than predicted, or a different destination or centre under the recorded inputs.
+
+**RG24. Destroyable-cliff target (claim 23).** A named map on a theater whose destroyable-cliff
+role is set, with one destroyable cliff tile at least 2 cells wide inside the usable area and
+open ground around it. Named test data gives an infantry type and a vehicle type a weapon that
+can attack such a cell (S-0214), range 3 cells, no close-range property. Use RG10's houses,
+speed and recorder, recording the target cell before and after the first approach step and
+the first destination.
+- Runs: force-attack one cliff cell from a stationary attacker placed so that another cell of
+  the same tile is nearest to it; then from a position equidistant from two tile cells; then
+  with part of the tile outside the usable area and the nearest cell among those outside.
+- Expected: the target becomes the nearest qualifying tile cell, the first in row order on a
+  tie, never a cell outside the usable area, and the search then runs as claim 20 on it, with
+  no draw. A different replacement or no replacement falsifies claim 23.
+
+**RG25. The jumpjet detour exemption (claim 24).** Use RG11 c's wall maze, houses, speed and
+recorder. Named test data gives an infantry type the jumpjet flag and the same weapon as
+RG11's infantry, and sets the locomotion class and movement zone of it and of the control type
+explicitly to the same values. Order it to attack while airborne so that the first clear,
+range-passing primary fails both detour inequalities, computed by S-0212 F8 for that class
+and zone, and a later one passes them. A fixture in which the jumpjet's own estimates pass is
+not a valid run.
+- Expected: the jumpjet takes the first primary. Control: the same type without the jumpjet
+  flag takes the later primary (claim 16). One run each; a jumpjet choosing the later primary
+  falsifies claim 24.
+
 ## Open questions
 
-- **Q-0172 remaining parts.** Question 3 remains open: close-range infantry have a distinct
-  radius, standing-position choice and near-target shortcut, and close-range clear-cell tests
-  temporarily release the actor's occupancy. Their complete result has not been verified.
-  Questions 1, 2, 4 and 5 are answered for the ordinary ground-search scope, not for those
-  close-range or jumpjet paths. Question 2 additionally leaves destroyable-cliff cell targets
-  open: they can be replaced by another cell before the ordinary search, and that choice
-  needs further tracing. Question 6 is answered for legal alternatives, not off-map cells.
-  Question 7 is answered by claim 18. Q-0172 is not added to requests until all its owned
-  exceptional-search parts are resolved. No workaround is asserted as original behaviour.
+- **Q-0172.** Answered: question 1 by claim 17 (for every search, close-range included),
+  question 2 by claims 20 and 23, question 3 by claim 22, questions 4 and 5 by claims 19 and
+  22 c, question 6 by claim 21 and question 7 by claim 18. Two edges stay open: a vehicle
+  alternative outside the map's legal cells (claim 21), and whether withdrawing and restoring
+  the attacker's occupancy (claim 22 e) changes any observable order among a cell's occupants.
+- **Reach region of a moving attacker.** The reach region that the clear-cell test of claims 15
+  and 19 requires is looked up from the cell of the attacker's scatter reference point, which is
+  its own cell only while it is not moving. Claims 15 and 19 state the stationary case. A
+  moving attacker whose next point lies in another reach region has not been measured.
 
-- **Q-0072 question 2, remaining coverage.** Close-range types and their infantry
-  standing-position choice, jumpjet searches, destroyable-cliff cell targets, and the deploying
-  search beyond S-0215's adjusted reach still need verification. Claims 19 to 21 now cover
-  ordinary ground searches on terrain and bridges, ordinary cell targets, the failure centre
+- **Q-0072 question 2, remaining coverage.** The deploying search beyond S-0215's adjusted
+  reach still needs verification: for a deploy-to-fire vehicle whose own cell fails its deploy
+  test, a primary cell is examined only when it passes that test too. Such a skipped primary
+  is never range-tested, so it never becomes claim 17's failure anchor. The rest of that search
+  has not been traced. Claims 19 to 24 now cover ordinary searches on terrain and
+  bridges, cell targets, close-range types, the jumpjet detour exemption, the failure centre
   and legal alternatives outside the usable area. Q-0072 is not yet in this spec's requests list. Crushing destinations are
   owned by S-0210 claim 11 and S-0215 claim 37 h, not by this search.
 - **Q-0072 question 3, remaining stopping coverage.** S-0215 claim 37 e's approach-step retention
@@ -1101,14 +1265,15 @@ planar distance passes. Record positions and first-shot/first-movement outcome, 
 
 ## Cross-spec changes required in this round
 
-- S-0306 claim 4 must replace its primary-only passenger reduction with claim 13's current
-  weapon rule. Its bridge-mark open question should distinguish the elevation-deck mark from
-  S-0212's deck-entry mark and defer to Terms here for the verified intact-overlay scope.
-- S-0212 claim 25's failed-approach row must include the ordinary non-close-range ground,
-  no-bridge failures after candidate trials, not only empty radii, using claim 17's centre.
-  Its existing parameters and exceptional-search exclusions remain unchanged.
-- S-0215 claim 37 and its related scope pointers must cite claims 15 to 21, drop the stale
-  assertion that only the empty-radius failure centre is known, and include cell targets in
-  claim 18's balloon-hover vertical destination rule. Close-range and jumpjet gaps remain.
-- The glossary's elevation-level entry should name the elevation-deck mark of Terms here,
-  explicitly distinct from S-0212's deck-entry mark and the high-bridge-cell test.
+- S-0306 claim 4's current-weapon rule and its bridge-mark question are applied in S-0306
+  revision 6, which is handed off with this revision.
+- S-0212 claim 25's failed-approach row may drop its non-close-range qualifier: claim 17's
+  centre now covers close-range searches, and close-range infantry never have empty radii.
+  Its parameters and other exclusions remain unchanged.
+- S-0215 claim 37 and its related scope pointers should cite claims 15 to 24 and drop the
+  close-range and jumpjet search gaps. The deploying search gap remains.
+- S-0208 should name claim 22 as a user of its claim 3 position choice (desired point the target's
+  reference point, ground record on any surface), and own the movement outcome of claim 22 b,
+  in which the attacker is sent to a standing position in its own cell while its destination
+  is the target's cell.
+- The glossary may add *close-range property* (this spec's claim 22 and S-0215 F3 both use it).
