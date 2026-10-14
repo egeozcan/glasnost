@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -337,9 +337,11 @@ this spec:
      known to leave a vehicle thief searching with a vehicle as its destination and no target (an
      order or a hunt that gives it a vehicle also gives it that vehicle as its target, which a
      search keeps), so the case cannot be set up. The building rule: no situation in our engine asks a building for an
-     area or map-wide search (a building placed by a map starts in *guard*, S-0009 claim 40, and
-     S-0215 claim 32 processes a building's *area guard* as *guard*), so the rule cannot be seen; it
-     fixes the result for any later rule that does ask
+     area or map-wide search (map set-up queues *guard*, not *area guard* or *hunt*, S-0009
+     claim 40, and S-0215 claim 32 processes a building's *area guard* as *guard*), so the rule
+     cannot be seen; it fixes the result for any later rule that does ask. Queuing *guard* does
+     not guarantee that it is current; the set-up building's first automatic start remains open
+     in S-0215 (Q-0241)
    - Confidence: high (weapon classes, deploy-to-fire, no-auto-fire, infantry-only warhead),
      medium (the aircraft, vehicle-thief and money-thief cases, including the infiltrate flag
      that an unarmed money thief needs, the armed vehicle thief and the combinations of the
