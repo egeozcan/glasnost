@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590]
 supersedes: []
 ---
 
@@ -49,6 +49,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   and 17 use the refinery-flag building where they say so. Every other "refinery" in this spec is
   the first set, the dock-type buildings.
 - **Capacity *C*.** A harvester type's storage field: the number of bales it can carry, an integer.
+  With `quirks.zero_capacity_harvester_cycles` off, a vehicle harvester's imported capacity
+  of 0 instead gives effective *C* = 1 bale throughout this spec. Slave capacity is unchanged.
 - **Load.** The bales a harvester carries, held as one amount per tiberium. Amounts are whole
   numbers of bales. The *total* is the sum of the amounts. For *C* ≥ 1, the harvester is *full*
   when the total equals *C*. For *C* = 0, it is treated as not full while seeking and at a load
@@ -132,11 +134,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
 1. **Capacity and the load.** A harvester carries at most *C* bales. Each bale it loads is added
    to the amount of the tiberium of the cell it came from. A harvester type with *C* = 0 is bad
-   data: its fill ratio is 0 / 0, which is not a number, and the cycle then runs without ever
-   carrying a bale (Edge cases). The load
+   data: under `quirks.zero_capacity_harvester_cycles` (default: original), its fill ratio
+   is 0 / 0, which is not a number, and the cycle runs without ever carrying a bale
+   (Edge cases). With the switch off, imported capacity 0 uses effective capacity
+   1 bale and the ordinary positive-capacity cycle. The importer warns in either setting.
+   The load
    survives everything in this spec except unloading; what happens to it when the harvester dies
    is S-0312's.
-   - Backing: `measurable` (scenario H1; its variant d for *C* = 0)
+   - Backing: `measurable` (scenario H1; its variant d for imported capacity 0)
    - Confidence: high; low for *C* = 0
 
 2. **The harvester behaviours.** The cycle uses three behaviours: *harvest* for seeking, loading
@@ -192,9 +197,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    harvester's movement zone connects it with the harvester's cell (S-0212), its land type is
    *tiberium*, and the harvester could enter it now (the entry outcome *clear* for a ground
    vehicle mover, S-0209 claim 5).
-   Shroud does not matter in a skirmish. The search takes no draws. Because worth grows with the
-   value per bale, a harvester prefers a tiberium of greater value per bale to one of smaller value
-   at the same ring distance, and a denser cell to a sparser one.
+   Shroud does not matter in a skirmish. The search takes no draws. Within the selected ring, preference is by the product of value per bale and bales
+   present, not by either factor alone. At equal density, greater value per bale wins.
+   For the same tiberium, a denser cell wins.
    - Backing: `measurable` (scenario H2; variants b and c for the entry test and the movement zone)
    - Confidence: high; medium for the entry test (which entry outcomes count as "could enter")
 
@@ -205,8 +210,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    *p* < 0, and never for *p* = 0 (`quirks.zero_load_period_stalls`, Edge cases). Starting a period
    replaces the schedule of the one before. A rise in tick *t* first counts at the processing in tick
    *t* + 1, and it counts there even when the processing in tick *t* set the counter to 0 (Formulas
-   F6). With nothing interrupting, the first bale is therefore loaded 19 ticks after loading starts
-   and each further bale 9*L* + 1 ticks after the previous one (Formulas F1); the "+ 1" and the 19
+   F6). With nothing interrupting and *C* ≥ 1, the first bale is therefore loaded 19 ticks after
+   loading starts and, for *L* > 0, each further bale 9*L* + 1 ticks after the previous one (Formulas F1); the "+ 1" and the 19
    come from that one-tick lag.
 
    A load step takes one bale from the harvester's cell (S-0401, claim 3) when the harvester has
@@ -234,7 +239,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
      19 ticks, which depend on the one-tick lag of the counter; medium for the period of 0 and the
      negative periods (scenario H1, variant c)
 
-5a. **The vehicle's harvesting display (Q-0550, Q-0580).** A vehicle harvester shows a separate
+5a. **The vehicle's harvesting display (Q-0550, Q-0580, Q-0590).** A vehicle harvester shows a separate
     harvesting sprite while loading, subject to the visibility conditions below. It is the
     same fixed game-wide sprite for every harvester type and every resource kind, including
     ore and gems. Neither the vehicle's rules nor its art names a harvesting animation.
@@ -268,9 +273,17 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     **Visibility conditions.** While eligible, the sprite is suppressed during movement
     or body turning, while an erasing weapon is removing the vehicle, and during its
     teleport disappearance or reappearance state. For a ground-driving harvester the
-    movement test means either a turning body or an active track with positive current
-    speed; a destination alone does not suppress it. For a teleporting harvester it means
-    a teleport journey still in progress. Ordinary object visibility still applies.
+    movement test means either a turning body or an active track with a positive
+    integer per-tick progress step *s* (S-0207 claim 2), not merely a positive
+    double-precision speed fraction *ρ* (S-0207 Terms). The step is
+    *s* = trunc(*s*₂ × *ρ*), truncated toward zero after the floating-point
+    multiplication, with *s*₂ as defined in S-0207 claim 2. On an active track
+    with *ρ* > 0 but *s* = 0, the sprite is shown if the body is not turning and
+    the other visibility conditions permit it. Conversely, *s* > 0 suppresses
+    it even when the progress budget buys no track point and the position does
+    not change that tick (S-0207 claim 3). A destination alone does not suppress
+    it. For a teleporting harvester it means a teleport journey still in progress.
+    Ordinary object visibility still applies.
     Thus driving to another resource cell suppresses the sprite without restarting its
     frame cycle, and it can reappear on stopping before another successful load step.
 
@@ -285,10 +298,13 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     Load pips are independently S-0111 claim 14's, already answering that part of the
     display before Q-0550 was filed. The refinery animations remain claim 11's and do
     not substitute for this field-loading display.
-    - Backing: `measurable` (H26)
+    - Backing: `measurable` (H26). The bridge-deck brightness case is `unmeasured`:
+      H26 establishes no legal-input setup with the display eligible on a bridge deck.
+      The inherited deck-light modifier alone does not establish that overlap.
     - Confidence: high for the fixed sprite, frame selection, phase boundaries and no
       loading-specific body change, table trigonometry, brightness and order before the
-      shadow; medium for placement and visibility boundaries
+      shadow and the integer-step movement test; medium for placement and the other
+      visibility boundaries
 
 6. **When the harvester is full.** When a load step fails because the harvester is full (or
    because its capacity is 0, Edge cases), it runs the ring search with the short scan range and remembers the result (or forgets any remembered
@@ -326,7 +342,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
 8. **Choosing a refinery.** A harvester chooses among the buildings its owner owns that are of one
    of its dock types, are on the map, are connected to it by its movement zone, and accept
-   it (claim 10). *Connected* means that two cells lie in the same reach region (S-0212, claim 4)
+   it (claim 10). With `quirks.non_unloading_refinery_accepts` off, buildings without
+   the dock-unload flag are excluded from both the normal and waiting choices.
+   No other eligibility, distance, primary-building or tie rule changes. *Connected* means that two cells lie in the same reach region (S-0212, claim 4)
    for the movement zone of the harvester's type, read for the deck when the harvester is on a
    bridge deck: the cell of the harvester's heading point (S-0212, Terms; its own position when it
    is not moving) and the cell of the refinery's reference point. A harvester whose heading-point
@@ -352,13 +370,16 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    building only if it is one itself, also when the type has a primary building and a nearer
    candidate after it is the type's best (scenario H4 part i). In the normal choice a refinery whose dock slots are all held by
    other harvesters does not accept; in the *waiting choice* (claim 9) slots are not looked at.
-   - Backing: `measurable` (scenario H4 parts a, c and i; part c's production-order run and part j
+   - Backing: `measurable` (scenario H4 parts a, c and i; part c's placing-order runs and part j
      for the holding order of produced and captured buildings; part e for the wrap, `unmeasured` if
      the original cannot load a map that large; part k for connected versus disconnected
      refineries). The heading-point/deck-specific connectivity cases and the outside-usable-area
      exception are `unmeasured`: part k does not distinguish them from a test at the current
      ground cell, and no legal-input setup reliably places a seeking harvester's heading point
      outside the usable area. These cases need a separate reachable boundary setup.
+     Joining at placement rather than production start is also `unmeasured`:
+     H4's same-type runs preserve both orders, while different-type ties are decided
+     by dock-list order and cannot distinguish those joining times.
    - Confidence: high for nearest-first and the slot test; medium for the two-level rule, the
      primary-building rule, the holding order (Terms) and the tie order that rests on it, and for
      the connectivity cells; low for the usable-area exception
@@ -403,7 +424,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 10. **Contact and docking.** A refinery accepts a harvester (agrees to contact, and counts as
     accepting in claim 8) only when it is not in its construction state, is not being sold, has a
     dock slot free or already held by that harvester (except in the waiting choice), and is not
-    switched off (S-0405, claim 10). Whether a refinery that is being erased also refuses is not
+    switched off (S-0405, claim 10). `quirks.non_unloading_refinery_accepts` defaults to
+    the original: absence of the dock-unload flag adds no refusal to this refinery
+    exchange. With the switch off, that absence also refuses the harvester's refinery
+    contact request, including one made through an explicit enter order. This does not
+    change other unit-entry exchanges, such as repair or absorption. Whether a refinery that is being erased also refuses is not
     determined (Open questions). Further refusals for other kinds of units are the structures
     specs'. A refinery whose art gives no dock count has one dock slot, so one
     harvester at a time holds contact with it and the others queue. The house's power level does
@@ -426,8 +451,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     So there is no backing in: the harvester arrives with whatever facing its path gives, and the
     turn of row 3 happens on the docking cell. The turn of row 3 aims at exactly 16384, so row 4
     holds at the first processing after the turn has ended; claim 11's facing range then holds at
-    once. A refinery that is not a dock-unload refinery agrees to contact but never directs the
-    harvester: the harvester stays in *enter*, processed at every standard delay, until something
+    once. Under the default quirk, a refinery that is not a dock-unload refinery and has
+    no other applicable unit-entry exchange can agree to contact but never directs the
+    harvester: it stays in *enter*, processed at every standard delay, until something
     else ends it (Edge cases).
 
     **Second route to unloading.** In the tick in which a driving harvester reaches its track
@@ -462,8 +488,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     standard delay is caused by this report.
     - Backing: `measurable` (scenario H4 parts a and d for one-at-a-time, the power switch and
       low power, part g for the construction state and for being sold, part h for being erased,
-      H10 for the docking cell, the approach, the turn, the delays and the start of *unload*,
-      H14 for the second route, its ordering, refusal request, retained state and draw count)
+      H10 for the docking cell, the approach, the turn, the delays, the start of *unload*
+      and the non-dock-unload contact stall,
+      H14 for the second route, its ordering and draw count). The selling-state
+      arrival refusal and its destination-absent scatter case are `unmeasured`:
+      H14 proposes timing controls but establishes no reliable overlap before
+      the sale independently releases contact and tether.
     - Confidence: medium; high for the docking cell at (3, 1) from the top-left cell; low
       for being erased and for the refinery that is not a dock-unload refinery; high for the
       second route's track-completion event, the absence of facing and stopped tests and its
@@ -642,7 +672,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     engine, the neutral and special houses retain the original computer-controlled rule.
     - Backing: `measurable` (scenario H5; its parts C and D for the no-field record; H11 part d for
       the step-off search; H11 part e for failure, the destination replacement, the queued
-      behaviour, retained state and draws)
+      behaviour, retained state and draws). The no-field record suppressing another
+      harvester's resumption is `unmeasured`: H5 D establishes no reliable second
+      resting harvester after that record is set, without computer intervention.
     - Confidence: high for the guard results and the failed step-off destination, queueing and
       draw rules; medium for the 105-tick idle interval, for the record never being cleared,
       for the step-off search settings and for the retained state
@@ -1044,7 +1076,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     harvester, a zero-capacity slave has fill ratio 0, not a non-number. Its *harvest*
     processing queues *guard* with a 1-tick delay. At a group update checking a slave
     still on resource land, no longer in *harvest*, the slave re-enters searching.
-    arrival at a selected resource cell queues *harvest* again. It can therefore
+    Arrival at a selected resource cell queues *harvest* again. It can therefore
     alternate searching and attempted harvesting without taking resources.
 
     A negative-capacity slave starting empty has fill ratio 0 as well. On resource
@@ -1073,7 +1105,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     Resources in legal cells outside the usable area can therefore be selected. This
     promises neither a deployable site nor a reachable slave destination. Site tests
     remain claim 24's separate rule.
-    - Backing: `measurable` (H21)
+    - Backing: `measurable` (H21). The heading-point-specific slave connectivity
+      test is `unmeasured`: H21's disconnected-field variant does not distinguish
+      the heading-point cell from the slave's current cell, and no separate reachable
+      boundary setup is established here.
     - Confidence: high for place ordering, clocks, non-positive capacity and deployed-scan
       qualification; medium for slave connectivity and scan-centre boundaries
 
@@ -1081,7 +1116,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     outside-slave searches and delivery continue at due group updates during a building's
     construction, selling or packing. Returning slaves in the unloading cell without a
     destination still pay and go inside. The table fixes master decisions and emergence.
-    there is no separate all-group busy-state pause.
+    There is no separate all-group busy-state pause.
 
     | Group state and master | Due update result |
     |---|---|
@@ -1107,7 +1142,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     suppress the field-seeking or retrying rows themselves. A selling building can
     refuse the destination and queued behaviour under claim 27a without
     preventing the group's change to travelling.
-    - Backing: `measurable` (H22, H25)
+    - Backing: `measurable` (H22, H25). Checking-the-field during current
+      *selling* is `unmeasured`: H22 has no established fixture that preserves
+      that overlap rather than entering packing or removing the master.
     - Confidence: high for absence of a group-wide pause and the state gates; medium for
       busy-state delivery and reachable selling-state variants
 
@@ -1156,7 +1193,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 28. **Manual packing and order boundaries (Q-0414).** Stop and ordinary behaviour-order
     recall belong to S-0213 claim 8 and claim 5. They do not supply a building with the
     vehicle-only recall effect. *Attack* is already excluded from behaviour-order recall.
-    do not extend recall to all move and attack orders alike.
+    Do not extend recall to all move and attack orders alike.
 
     At the first processing of selling or packing, a slave-master building invokes the
     directed site rule only when its remembered destination is a resource-land cell other
@@ -1194,7 +1231,8 @@ nothing interrupting, bale *j* (*j* = 1, 2, …) is loaded at tick
 
 > *t*₀ + 19 + (*j* − 1)(9*L* + 1)
 
-integers, ticks. A harvester of capacity *C* that starts empty on a field that never runs out has
+integers, ticks, for effective capacity *C* ≥ 1 and *L* > 0. A harvester of capacity *C*
+that starts empty on a field that never runs out has
 its last bale at tick *t*₀ + 19 + (*C* − 1)(9*L* + 1). It is full from then on, but the phase ends
 only at the next load step, in tick *t*₀ + 19 + *C*(9*L* + 1), when that step fails because the
 harvester is full. That processing changes it to *returning*; refinery selection occurs no
@@ -1409,9 +1447,14 @@ select which harvester takes the earlier turn.
   left is 0) and fails without touching the counter or the period (claim 5's table); the check
   after it counts the harvester as full, it runs claim 6's short-scan search and goes *returning*
   with an empty load, is docked, unloads nothing (becoming *finishing* once the counter allows)
-  and returns to harvest; it never carries a bale, is never paid, and repeats the cycle. Our
-  engine does the same (no switch; the importer warns). Confidence low for both outcomes, which
-  scenario H1 variant d checks.
+  and returns to harvest; it never carries a bale, is never paid, and repeats the cycle.
+  `quirks.zero_capacity_harvester_cycles` (default: original) retains this empty cycle.
+  With the switch off, imported vehicle capacity 0 uses effective capacity 1 bale:
+  fill ratio, load limit, full checks and load steps all use that positive capacity,
+  so it loads, returns and earns payment normally. This changes neither slave capacity
+  nor any other imported capacity. The importer warns about vehicle capacity 0 in
+  both settings. Confidence is low for the original outcome, measurable by H1 variant d.
+  The off setting is a design rule, tested only on our engine.
 - **Non-positive slave capacity** (claim 26). Neither zero nor negative capacity
   makes an empty slave full. Zero capacity alternates guard and group-driven searches
   without loading; negative capacity can stay harvesting unchanged resource land
@@ -1451,10 +1494,17 @@ select which harvester takes the earlier turn.
   row of claim 11 falls back to rest as if *unload* were not current, so the harvester queues what
   S-0215 claim 15 gives it (row 4: *harvest*, or *guard* for a human-controlled harvester off its
   resource's land type) and starts it at once. No importer warning: no data is involved.
-- **A refinery that is not a dock-unload refinery** (claim 10). It agrees to contact but never
-  directs the harvester to a docking cell, so the harvester stays in *enter* and never unloads,
-  until an order or another rule ends it. Our engine does the same (no switch; the importer warns
-  when a building type in a harvester's dock list lacks the dock-unload flag). Confidence low.
+- **A refinery that is not a dock-unload refinery** (claims 8 and 10).
+  `quirks.non_unloading_refinery_accepts` (default: original) allows refinery contact
+  without that flag. With no other applicable unit-entry exchange, the building never
+  directs the harvester to a docking cell: it stays in *enter* without unloading until
+  an order or another rule ends it. With the switch off, the building is excluded
+  from both refinery choices and refuses refinery contact with that harvester, also
+  through an explicit enter order. A valid dock-unload candidate can therefore be
+  chosen instead; with none, claim 9's no-choice waiting applies. Other unit-entry
+  exchanges are unchanged. The importer warns about a dock-list building lacking
+  the flag in either setting. Confidence low for the original stall, measurable by H10.
+  The off setting is a design rule, tested only on our engine.
 - **Harvester truce.** Out of scope: the original's lobby has a harvester-truce setting (harvesters
   immune to damage), but its skirmish start writes it off in every skirmish (S-0412, claim 1), so
   harvesters take damage normally and nothing in this spec depends on it.
@@ -1465,20 +1515,22 @@ select which harvester takes the earlier turn.
   `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
   together with `quirks.harvester_failed_step_off_origin` (claim 13) and
   `quirks.slave_relocation_failed_search_origin` (claim 25) and
-  `quirks.slave_negative_capacity_stalls` (claim 26), are this spec's own switches.
+  `quirks.slave_negative_capacity_stalls` (claim 26),
+  `quirks.zero_capacity_harvester_cycles` (claim 1) and
+  `quirks.non_unloading_refinery_accepts` (claims 8 and 10), are this spec's own switches.
 
 ## Import mapping
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | Rules, vehicle type section, `Harvester` | harvester (Terms); eligibility for the vehicle harvesting sprite (claim 5a) | boolean | no |
-| Fixed game asset `OREGATH.SHP` | vehicle harvesting sprite of claim 5a; loaded by its fixed filename, not by a rules or art animation name | sprite file; ordinary asset precedence of S-0005 claim 1 | no alternate harvesting asset is selected |
-| No data key | harvesting-display phase and movement gates, frame selection, 15-tick stationary repetition and 30-lepton anchor displacement (claim 5a, F8) | engine behaviour and constants; no per-type or per-resource animation setting | fixed |
+| Fixed harvesting asset | vehicle harvesting sprite of claim 5a; loaded as a fixed engine asset, not by a rules or art animation name | sprite file; ordinary asset precedence of S-0005 claim 1 | no alternate harvesting asset is selected |
+| No data key | harvesting-display phase and movement gates, frame selection, 15-tick stationary repetition and 30-lepton anchor displacement (claim 5a, F8) | engine behaviour and constants; ground movement gate uses S-0207 claim 2's integer step, whose speed and acceleration inputs and absent-key defaults are imported by S-0207; no separate display-speed threshold or per-type or per-resource animation setting | fixed |
 | Rules, `[AudioVisual]`, `ExtraUnitLight` | harvesting sprite uses the same extra brightness as its vehicle (claim 5a) | decimal converted to integer per-mille; S-0104 claim 13 owns the vehicle light rule and its cell/bridge inputs | 0 per-mille |
 | No data key | harvesting sprite precedes the vehicle's shadow and body; table sine and cosine select its anchor (claim 5a, F8) | engine drawing rules; no animation-type lighting or playback setting | fixed |
 | No harvesting-specific body key | loading keeps the ordinary vehicle image and frame rules (claim 5a) | existing vehicle art and model imports; S-0105 claim 16 owns voxel frames | no extra loading image |
 | Rules, vehicle type section, `Weeder` | weeder (Edge cases) | boolean | no |
-| Rules, type section, `Storage` | harvester capacity *C* (claim 1); slave capacity, including distinct zero and negative treatments (claim 26) | signed integer, bales; negative slave values are retained under the default quirk | 0 |
+| Rules, type section, `Storage` | harvester capacity *C* (claim 1); slave capacity, including distinct zero and negative treatments (claim 26) | signed integer, bales; zero vehicle capacity warns in either setting and uses effective 1 bale only with claim 1's quirk off; negative slave values are retained under the default quirk | 0 |
 | Rules, type section, `Dock` | dock types (Terms, claim 8) | list of building type names | empty |
 | Rules, type section, `Teleporter` | chrono miner (claim 17) | boolean | no |
 | Rules, type section, `ResourceGatherer`, `ResourceDestination` | together with an enslaves field, a slave miner (claim 14) | boolean | no |
@@ -1503,7 +1555,7 @@ select which harvester takes the earlier turn.
 | Rules, `[General]`, `AIVirtualPurifiers` | virtual purifiers per difficulty index, original only, and for the neutral and special houses (entry 2, claim 12) | decimal-prefix signed 32-bit integer list of purifier counts (S-0003 claim 23, row C21), 511-byte text limit; no scalar hexadecimal forms; unreadable non-empty items retain a place with 0, empty items are skipped; missing or empty keeps the whole list in force, present non-empty replaces it; item conversion, wrapping and importer warnings are S-0003's | initially empty list (original: undefined result; engine: 0 virtual purifiers, departure, importer warning; claim 12) |
 | Rules, building type section, `OrePurifier` | ore-purifier flag (Terms) | boolean | no |
 | Rules, building type section, `Refinery` | refinery flag: the refinery-flag building rules of claims 3, 11, 13 and 17 (the idle step-off, the unloading animation and the harvester's wait for it, the chrono miner's guard rule) | boolean | no |
-| Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): directs a harvester to its docking cell, and queues unloading on an accepted track-completion report | boolean | no |
+| Rules, building type section, `DockUnload` | dock-unload refinery (Terms, claim 10): directs a harvester to its docking cell, and queues unloading on an accepted track-completion report; a dock-list building lacking it warns in either setting and is excluded from refinery choice/contact with claim 10's quirk off | boolean | no |
 | Rules, mobile type section, `SpeedType`, `MovementZone` | locomotion class and movement zone used by the idle step-off (claim 13) and slave field-search connectivity and entry (claim 26); scatter uses the vehicle search settings of S-0207 claim 16 | vocabulary forms owned by S-0211 | S-0211 |
 | No data key | no docking-cell exception to harvest seeking, no docking-exchange eviction of an unrelated occupant and no docking-reservation timeout (claims 3a, 10a) | engine behaviour, not imported settings | fixed; processing rates are those of claims 3 and 10 |
 | No data key | failed step-off destination (0, 0), track-completion report timing, facing-independent arrival acceptance and forced, no-threat-point, not-move-anywhere scatter options (claims 10, 13) | engine behaviour, not imported fields | fixed rules of claims 10 and 13 |
@@ -1568,13 +1620,21 @@ with director and mods off except for the scenario's named test data.
   other tick. (c) *L* = 0: exactly one bale loads in 3000
   ticks; and *L* = −1 (if the data layer accepts it): bales 19 ticks, then 9 ticks apart. On our
   engine with `quirks.zero_load_period_stalls` off, *L* = 0 gives bales 19 ticks, then 9 ticks
-  apart (no oracle part). Falsified if *L* = 0 loads a second bale in the oracle. (d) Capacity 0
+  apart (no oracle part). A second bale with *L* = 0 in the oracle, or any interval
+  other than 19 ticks initially and 9 ticks thereafter with *L* = −1, falsifies
+  the respective rule. (d) Capacity 0
   (the data layer may refuse it; then it is `unmeasured` for the original, with that reason): the
   harvester goes to the field and starts loading; expected: no bale at any tick, the harvester
-  *returning* 19 ticks after loading starts (the tick of its first load step) or at the
-  processing after it, no balance change in 3000 ticks, and the cycle repeating (it docks and
-  returns to the field again); falsified if a bale is loaded, if it stays in *loading* for more
-  than 21 ticks after loading starts, or if it is paid. (e) The three animations: the refinery's
+  *returning* exactly 19 ticks after loading starts (the tick of its first load step),
+  with the counter and period unchanged by that failure, no resource-stage or balance
+  change in 3000 ticks, and the cycle repeating (it docks and returns to the field again).
+  A different transition tick, counter reset, period restart, resource reduction, loaded
+  bale, payment or failure to repeat the cycle falsifies the hypothesis.
+  On our engine only, repeat with `quirks.zero_capacity_harvester_cycles` off and
+  compare against an otherwise identical capacity-1 control: one bale at tick 19,
+  returning 28 ticks later with this setup's *L* = 3, and payment for one bale under F3.
+  Any difference from the capacity-1 control falsifies the off-setting rule. Both settings
+  must warn at import. These are conformance tests, not oracle measurements. (e) The three animations: the refinery's
   art gets a docking animation of 30 ticks, a payment animation of 200 ticks and an unloading
   animation of 60 ticks (animation types of known length). Run (i) with these, (ii) with a
   docking animation of 400 ticks, (iii) without an unloading animation. Expected, with *f* the
@@ -1667,12 +1727,13 @@ with director and mods off except for the scenario's named test data.
   - *Tie setup:* two refineries at exactly equal distance, neither primary, placed in turn: (i) X
     first then Y; (ii) Y first then X. *Tie expected:* in both runs the one placed first. *Tie
     falsified if:* the one placed second.
-  - *Production-order run:* two refinery test types, R1 of line kind building and R2 a copy whose
-    test data makes it a *defence* (S-0403's line kinds), so that both can be in production at
-    once; both are dock types of the harvester. R1's production is started first and R2's second.
-    When both are ready, R2 is placed first and R1 second, at exactly equal distances, neither
-    primary. *Expected:* the harvester docks at R2 (placement decides). *Falsified if:* it docks at
-    R1 (production start would decide).
+  - *Cross-type tie run:* two refinery test types, R1 of line kind building and R2 a copy whose
+    test data makes it a *defence* (S-0403's line kinds), so both can be in production at
+    once. Start R1 first but place R2 first, at exactly equal distances, neither primary.
+    With dock list R1 then R2, expect R1; with that list reversed, expect R2.
+    Choosing the second dock-list type falsifies the across-type tie rule.
+    This does not test when a building joins holding order: the tie is across types,
+    not within one type, regardless of production or placement order.
   - *Order after a removal:* three refineries W, X, Y placed in that order, X and Y at equal
     distance and W anywhere that does not decide the choice (farther than both), W then sold:
     expected, the harvester docks at X (the others keep their relative order). Then X is sold and
@@ -1750,18 +1811,27 @@ with director and mods off except for the scenario's named test data.
   2 ticks after the refinery has gone, or it loads another bale.
 - *Part C (original only, no record set):* the bystander computer player owns a refinery and a
   harvester (its own objects, in the observed area), and none of its harvesters has gone idle. The
-  harvester is given a stop order (S-0213, table T1). *Observable:* its behaviour per tick.
-  *Expected:* it is in *guard* one tick after the order and in *harvest* again within 3 ticks, and
-  it harvests without further orders. *Falsified if:* it is still in *guard* 10 ticks after the
-  order.
+  map pre-places the harvester in *guard* beside a reachable field. Do not issue
+  a human stop order to that house: S-0213 claim 3 does not allow it to take effect.
+  *Observable:* its behaviour and due processing ticks, with computer-player
+  behaviour changes logged separately. *Expected:* its first qualifying *guard*
+  processing queues *harvest* with a 1-tick interval, and harvesting resumes under
+  the ordinary start rules. *Falsified if:* that processing queues no *harvest* or
+  uses another interval. A computer-player behaviour change before the observation
+  makes that run inconclusive, not evidence of automatic resumption.
 - *Part D (original only, record set and never cleared):* the same bystander house, its harvester
   on an isolated field so that it exhausts the field and goes *idle* (the house's no-field
-  record is now set). A second harvester of the same house, standing in *guard* next to the
-  refinery, and a new ore cell placed within its scan range by a trigger later. *Observable:* the
-  behaviour of both harvesters per tick over 3000 ticks after the first went idle. *Expected:*
-  neither harvester leaves *guard* by itself (the first stays in *guard* after its 105 ticks; the
-  second, given a stop order after the record is set, stays in *guard* too), also after the new
-  cell appears. *Falsified if:* either harvester is in *harvest* again without an order.
+  record is now set). A new ore cell is placed within its scan range by a trigger
+  later. *Observable:* its behaviour per tick over 3000 ticks after it went idle,
+  distinguishing guard processing from independent computer-player behaviour changes.
+  *Expected:* after its idle wait it reaches *guard*, and this claim's guard rule
+  does not queue *harvest*, even after the new cell appears. *Falsified if:* a
+  qualifying guard processing queues *harvest* by this rule. Independent computer
+  intervention makes the affected interval inconclusive. A second same-house
+  harvester observed naturally in *guard* after the record is set should have
+  the same result, but no reliable fixture for that overlap is established here.
+  That cross-harvester case remains `unmeasured`. No human stop order or runtime
+  write may manufacture the overlap.
 - *Runs:* 3 for each part.
 
 **H6. Payments, purifiers, mixed loads and no cap (claims 11, 12, 15; F3).**
@@ -1802,8 +1872,10 @@ with director and mods off except for the scenario's named test data.
   entries in three runs. *Observable:* the neutral house's balance per tick (recorder).
   *Expected:* in every run a main payment of 240 and a bonus payment for *x* = 2 × 0.25 × 8 = 4
   bales, 120 (the second entry). *Falsified if:* a bonus of 60 or 240 (the first or third entry),
-  no bonus, or a bonus that follows the lobby setting.
-- *Runs:* 3 for each of a and b, 1 for each of c, d and e, 1 per lobby setting for f.
+  no bonus, or a bonus that follows the lobby setting. Repeat with the same objects
+  owned by the special house: the same payments and falsifiers apply.
+- *Runs:* 3 for each of a and b, 1 for each of c, d and e,
+  1 per lobby setting and non-player house for f.
 
 **H7. Slave miner (claim 14).**
 - *Setup:* a slave miner of a human house with 3 slaves of capacity 2 and harvest rate 40, kick
@@ -1842,7 +1914,9 @@ with director and mods off except for the scenario's named test data.
   slaves leave at or before *r* + *k*. (f) The deployed miner: the miner is ordered to deploy next
   to the field; the cell where the slaves reach the miner to deliver is the foundation cell of
   claim 14 (*W* − 1, ⌊*H*/2⌋) counted from its top-left cell; falsified if they deliver at another
-  cell.
+  cell. Damage an outside slave without killing it before delivery. At the first group
+  update after its reload delay expires, expect full strength, not its delivery health.
+  A different health or restoration between group updates falsifies that part of claim 14.
 - *Runs:* 3 for the main run, 1 for each variant.
 
 **H8. Chrono miner (claim 17).**
@@ -1884,24 +1958,37 @@ is wrong). *Runs:* 3.
   The harvester is given a full load by an ore field next to it. Two runs per refinery art: the
   stock refinery, and a test refinery type with the same art except a larger foundation (one
   more cell in each direction). A further run with the test data's refinery having the dock-unload
-  flag off.
-- *Observable:* per tick, from the tick the harvester goes *requesting* to its first payment: its
-  cell, its body facing, whether its locomotor moves, its behaviour, and the tick of each
-  processing of *enter* (recorder).
+  flag off and no alternative entry exchange (no weed-unloading, absorption, repair
+  or reload role). Retain its place in the harvester's dock list.
+- *Observable:* per tick, from returning through payment or 3000 ticks after contact
+  in the no-flag run: cell, body facing, locomotor movement, current and queued behaviours,
+  destination, contact, load, balance and tick of each processing of *enter* (recorder).
 - *Expected:* the harvester drives forwards to the cell (*x*₀ + 3, *y*₀ + 1) from the refinery's
   top-left cell, for both foundation sizes; on that cell it turns on the spot until its facing is
   exactly 16384; *unload* becomes current after the first processing of *enter* that sees it on the
   cell, facing 16384 and not moving, unless the separately recorded track-completion route
   of H14 queued it earlier; the processings of *enter* are spaced by values the standard
-  delay of *enter* allows (S-0215, claim 6). The run without the dock-unload flag: the harvester stays
-  in *enter* for 3000 ticks and is never paid. Repeat from several approach sides (the harvester
+  delay of *enter* allows (S-0215, claim 6). The run without the dock-unload flag:
+  it takes contact, receives no docking destination from the refinery, remains in
+  *enter* for 3000 ticks with the same load and contact, and is never paid. Repeat from several approach sides (the harvester
   starting north, south, east and west of the refinery): the arrival facing varies, the final facing
   does not, and the harvester never reverses onto the cell.
 - *Falsified if:* another docking cell, a cell that depends on the foundation size, a reversing
   approach, *unload* before the turn has ended through the processing route (the second route
-  is distinguished by H14), or a final facing other than 16384; in the last run,
-  a payment.
-- *Runs:* 2 per approach side and foundation size, 1 without the flag.
+  is distinguished by H14), or a final facing other than 16384; in the no-flag run,
+  refusal of contact, a refinery-directed docking destination, departure from *enter*,
+  lost contact, changed load or a payment without an independent order or event.
+- *Engine-only off-setting controls:* with `quirks.non_unloading_refinery_accepts`
+  off, the no-flag building is never chosen in normal or waiting choice. Add a farther,
+  valid dock-unload refinery: the harvester chooses that one, including when it is busy
+  and only the waiting choice can use it. Remove that alternative: it stays returning
+  without refinery contact, as claim 9's no-choice case requires. Separately give an
+  explicit enter order to the no-flag building and record refusal of refinery contact,
+  not an unloading payment. Repeat the valid-refinery main run: its outcomes must
+  be unchanged. A no-flag choice or accepted refinery contact, or changed valid-refinery
+  docking, falsifies the alternative. Import warns about the no-flag dock-list type
+  in either setting. These controls are conformance tests, not oracle measurements.
+- *Runs:* 2 per approach side and foundation size, 3 without the flag; 1 per engine-only control.
 
 **H11. The queueing search and the step-off (claims 9, 13).**
 - *Setup:* a human house with one refinery (default queueing shift) and two harvesters, so one
@@ -1942,7 +2029,8 @@ is wrong). *Runs:* 3.
 
 **H12. Contact lost and orders while unloading (claim 11).**
 - *Setup:* a human house with one refinery and two full harvesters, the second waiting at the
-  queueing cell; the test data's dump rate is slow enough that unloading lasts several payments.
+  queueing cell. Each carries two resource kinds, so a payment leaves an unpaid load.
+  Named map data gives a slow dump rate to leave time for input between those payments.
 - *Observable:* per tick, each harvester's behaviour, contact, load, position, and the house's
   balance.
 - *Expected:* part a: the refinery is destroyed (test data: a weapon that kills it in one shot)
@@ -2357,14 +2445,14 @@ is wrong). *Runs:* 3.
   that variant; its backing remains `unmeasured`, with the unreachable overlap
   recorded as the reason.
 
-**H26. Vehicle harvesting display (claim 5a, F8; Q-0550, Q-0580).**
+**H26. Vehicle harvesting display (claim 5a, F8; Q-0550, Q-0580, Q-0590).**
 - *Setup:* a small, level purpose-made skirmish map with a human-owned ordinary miner,
   a chrono miner and a slave miner, their appropriate unloading buildings and separate
   ore and gem fields. Keep the observed vehicles free of attackers. Use stock data,
   speed index 2, 800 × 600, director and mods off. Run each vehicle separately so its
   images are not covered by other objects. Use a read-only recorder and tick-labelled
   frame capture; log position, body facing, behaviour, harvest phase, step counter,
-  walk-animation counter and load alongside each drawn frame.
+  walk-animation counter, load and scenario random-stream state alongside each drawn frame.
 - *Procedure:* record three full cycles for each ordinary and chrono miner on each
   resource kind, from approach through full load and departure. Record the slave miner
   stationary and deployed while its slaves work. In separate runs, stop an ordinary
@@ -2406,6 +2494,14 @@ is wrong). *Runs:* 3.
   The sprite must follow that addition like the vehicle. Unchanged full-brightness
   pixels, or agreement only with bare cell light when the addition is nonzero,
   falsify the claim. No tint or house remap should be added to the animation palette.
+  Repeat the same visible frame with two different owner colours: the harvesting
+  sprite's palette indices and colours must not change solely with the owner colour.
+  A remapped harvesting pixel falsifies the no-remap rule. Repeat beside a tall
+  building whose shadowed-cell light penalty covers the field, capturing sprite
+  pixels not occluded by its body or the building. Expected brightness includes
+  S-0104 claim 13's shadowed-cell penalty; agreement only with unpenalised brightness
+  falsifies that case. These controls use the same recorder, game settings and three
+  cycle runs as the main scenario.
 - *Shadow-order control:* retain stock vehicle art and use a named copy of the
   harvesting sprite with a broad opaque, uniformly coloured patch extending beyond
   the body into its shadow footprint. Capture a stationary loading vehicle with a
@@ -2419,7 +2515,27 @@ is wrong). *Runs:* 3.
   target it with an erasing weapon, and record a chrono miner's journey. The extra
   image is absent in the conditions of claim 5a and can resume when those conditions
   end without restarting its image cycle. Record whether loading is still eligible:
-  ending the behaviour is not evidence for a movement-only gate.
+  ending the behaviour is not evidence for a movement-only gate. Presence while an
+  erasing weapon is removing an otherwise eligible miner, or during a recorded
+  teleport disappearance or reappearance state, falsifies those suppression rules.
+  Account for behaviour-delay, creation and resource-event draws using their owning
+  claims; any additional scenario draw attributed solely to drawing the harvesting
+  sprite falsifies its no-draw rule.
+- *Zero-step movement control (Q-0590):* use the exhausted-cell run
+  with a second resource cell directly ahead, so the miner keeps loading eligibility
+  while starting a straight track without a body turn. Record active track, body-turn
+  state, speed fraction *ρ*, integer step *s* from S-0207 claim 2 and progress budget
+  with each captured frame. Select ticks with *ρ* > 0 and *s* = 0. Expected: the
+  sprite remains visible on those ticks, subject to the other gates. Once *s* > 0
+  it is suppressed, even on a tick with no position change because the budget buys
+  no track point. Absence at *s* = 0 with every other gate clear, or presence at
+  *s* > 0 on an active track, falsifies the integer-step test. Use the marked sprite
+  to distinguish suppression from body occlusion. If stock acceleration produces
+  no qualifying tick, repeat as a separately labelled map-data control with the
+  acceleration flag enabled and a smaller positive acceleration factor, leaving
+  the harvest and display settings unchanged; restore stock data afterwards.
+  This control must still record loading eligibility, not infer it from lack of
+  movement. No writes to runtime state are proposed.
 - *Engine-only control:* repeat the marked-centre tests with `quirks.table_direction`
   off and compare against F8's full-scale alternative. This tests our engine, not
   another original-game result.
@@ -2432,13 +2548,13 @@ is wrong). *Runs:* 3.
 - Q-0550 is answered by claim 5a, F8 and H26. S-0111 claim 14 already covered load
   pips. The fixed harvesting sprite is not an animation instance, so its frame cycle
   does not require a new S-0109 playback claim.
-- Q-0580 questions 1, 2 and 4 are answered by claim 5a, corrected F8 and H26.
-  S-0205 claim 6 already required table trigonometry before the request; the prior
-  F8 omitted that precision rule and also reversed its coordinate contributions.
-  Question 3 belongs to S-0102 claim 13: its harvesting-sprite depth row must be added.
-- Cross-spec changes to confirm: S-0102 claim 13 needs the harvesting-sprite depth
-  row (flat profile, unit depth adjustment minus 2, depth test without depth write,
-  draw point at F8's anchor). S-0215 claim 4 already covers the reachable 450-tick no-op building *move* described in claim 27a and cites H25. S-0415 claim 9 already recognizes that claim 27a's site offer can supply a guard spot, including with lobby redeploy off; pack-up legality remains S-0213 claim 12's, unchanged here.
+- Q-0580 questions 1, 2 and 4 were already answered by claim 5a, corrected F8
+  and H26. S-0205 claim 6 already required table trigonometry before the request.
+  The prior F8 omitted that precision rule and also reversed its coordinate
+  contributions. Question 3 is already answered by S-0102 claim 13 and scenario
+  D43. Question 5 is answered by claim 5a's integer-step test and H26's zero-step
+  movement control; S-0207 claim 2 already defines the step and its rounding.
+- Cross-spec coverage: S-0215 claim 4 already covers the reachable 450-tick no-op building *move* described in claim 27a and cites H25. S-0415 claim 9 already recognizes that claim 27a's site offer can supply a guard spot, including with lobby redeploy off; pack-up legality remains S-0213 claim 12's, unchanged here.
 - Q-0500 is answered by claim 27a. Claim 28 and S-0415 claims 9 and 10
   already identify the shared guard spot and its packing consequences.
   S-0215 claims 7 and 11 already fix queue refusal and building starts.
@@ -2473,7 +2589,7 @@ is wrong). *Runs:* 3.
 - Q-0371 is answered here for harvest and docking rules by claims 3a and 10a.
   Claims 3, 9, 10 and 13 already supplied phase intervals, queueing and rest.
   Non-contact docking-cell entry, persistence and departure are S-0212 claim 27a/P27.
-  route-failure classification and retry delay are its claim 23, and later behaviour
+  Route-failure classification and retry delay are its claim 23, and later behaviour
   starts and processing are S-0215 claim 11a. General step-aside requests and their
   destinations remain with the movement specs. S-0417 claim 13's
   factory-apron clearing must not be assumed to apply to every refinery.
@@ -2494,10 +2610,10 @@ is wrong). *Runs:* 3.
 
 ## Questions for the project lead
 
-None. The seven quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
+None. The nine quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
 `quirks.refinery_distance_wraps`,
 `quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
 `quirks.unload_without_contact_stalls`, `quirks.slave_relocation_failed_search_origin`
-and `quirks.slave_negative_capacity_stalls`,
-each default original) follow the project's quirk
+and `quirks.slave_negative_capacity_stalls`, `quirks.zero_capacity_harvester_cycles`
+and `quirks.non_unloading_refinery_accepts`, each default original) follow the project's quirk
 convention.

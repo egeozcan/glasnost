@@ -1,9 +1,9 @@
 ---
 id: Q-0590
 title: Which speed hides the harvesting sprite of a moving harvester?
-status: open
+status: answered
 related: [S-0402, S-0207]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
