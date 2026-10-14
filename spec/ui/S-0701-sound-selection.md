@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,9 @@ Sound data, selection and order responses, event sounds, announcements, mixing l
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
 Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Revision 7 cites
+is claim 34; the byte formats of those files are outside this spec. Revision 8 fixes duplicate
+damage-sound playback as a lead-approved presentation departure without a quirk switch.
+Revision 7 cites
 S-0410 claims 14–15 for radar-event zoom timing and S-0411 claim 18 for scroll dispatch,
 while retaining this spec's suppression tails and sound-feedback rules. Revision 6 records the
 persistent creation-derived report value, capture-entry selection and explicit unresolved
@@ -188,7 +190,7 @@ normalisation N of its Formulas F3. In addition:
 
 7. **Placement can follow scrolling even for a one-shot.** Direct positional requests, including
    normal weapon reports and death responses, keep their start level and pan. Other requests,
-   including the doubled damage sound, retain their map position but are placed again at audio
+   including the damage sound, retain their map position but are placed again at audio
    passes. Object-attached sounds such as movement and turret sounds are re-placed during the
    object's updates, not only at audio passes. Updated placement below 0.05 stops a playing
    instance. An indefinitely looping entry can restart when placement becomes audible again, but
@@ -390,8 +392,8 @@ normalisation N of its Formulas F3. In addition:
     aircraft or building follow its damage-state result (S-0302). A berserk-causing hit has no
     such reactions (S-0302 claim 10). This does not override kind-specific death reactions:
     - *unchanged* (or any result beyond *now dead*): the type's damage sound plays at the object,
-      positional, any owner. It is started twice, as two instances of the same entry (quirk
-      `quirks.damage_sound_doubled`; the per-entry limit of claim 8 applies to both),
+      positional, any owner. Request exactly one instance per damage-sound event, subject to
+      the ordinary placement, entry-limit and channel rules of claims 6 to 9,
     - *now yellow*: one R(0, 99) is drawn from the unsynchronised random stream for every object
       whose type has a feedback list, whoever owns it; if the result is below 30 and the owner is
       the local player, one feedback response is chosen by a raw value (F5) and played at the
@@ -402,7 +404,9 @@ normalisation N of its Formulas F3. In addition:
       chosen (F5) and played at the object; then, for every owner, if the type has a death sound list
       one is chosen (F5) and played at the object. Both positional.
     Buildings also have the game-wide building damage and death sounds of claim 23.
-    - Backing: `measurable` (scenario F1)
+    - Backing: `measurable` (scenario F1) for the original's reaction eligibility, feedback
+      and death choices; the single damage-sound instance is a lead-approved departure,
+      tested against this spec in F1, not against the original.
     - Confidence: high (common reactions); low (multiplicity on infantry death). Exactly once
       per infantry death is not established and is `unmeasured`: the relationship between its
       common and kind-specific death paths is not established for every death outcome.
@@ -475,8 +479,9 @@ normalisation N of its Formulas F3. In addition:
 24. **Interface sounds and refusal cues.** Sidebar clicks, tab and button clicks and the other
     interface sounds are screen sounds of game-wide entries (Import mapping). Revision 2 corrects
     revision 1, which gave every refused click the game-wide refusal sound. The cues are:
-    - *start, queue, resume, hold, cancel* (S-0411 claim 12): the game-wide build click sound, plus
-      the matching announcement of claim 28.
+    - *start, queue, resume, hold, cancel* (S-0411 claim 12): the game-wide build click sound.
+      Start, resume, hold and cancel also request the matching announcement of claim 28.
+      Adding a queued copy to an active line requests no new start announcement.
     - *busy production line* (S-0411 claim 12: a building or defence click while that line already
       holds an item): only the "unable to comply" announcement, no interface sound.
     - *refused placement* (S-0411 claim 10, S-0406): only the "cannot deploy here" announcement, no
@@ -738,8 +743,8 @@ normalisation N of its Formulas F3. In addition:
     last alliance under S-0414 claim 6, even after the local player's defeat. The described
     announcement muting still applies during that continued observation.
     - Backing: `measurable` (scenario G4) for the fixed entry bindings and events exercised there.
-      Alliance announcement conditions are `unmeasured`: G4 supplies no isolated alliance
-      sequence distinguishing each branch. Post-defeat muting is `measurable` in S-0414
+      Alliance announcement bindings and conditions are `unmeasured`: G4 supplies no
+      established isolated alliance sequence distinguishing each branch. Post-defeat muting is `measurable` in S-0414
       V20 for superweapon launch/detection requests isolated in a named lengthened end delay.
       Its alliance controls are conditional: if no matching computer alliance request occurs,
       alliance muting remains inconclusive, not confirmed.
@@ -1017,7 +1022,9 @@ never takes a channel or the draws of claim 13.
   A2 cannot restore a valid body to the already-loaded entry. Confidence: high.
 - **`quirks.shroud_sound_corner_cell`** (default: on). A *shroud* sound at cell (0, 0) is never heard.
   Off: that cell is judged like any other.
-- **`quirks.damage_sound_doubled`** (default: on). The damage sound of an object starts twice per *unchanged* hit (louder, and two instances against its limit). Off: once.
+- **Damage-sound departure** (claim 20): the original requests two identical damage-sound
+  instances per eligible hit, an obvious audio bug confirmed by the project lead and fixed
+  without a switch.
 - **`quirks.deploy_command_silent`** (default: on). The deploy command's game-wide sound is never
   read, so it is silent. Off: it is read under the key the Import mapping gives and played.
 - **`quirks.announcement_volume_ignored`** (default: on). An announcement's volume key has no effect.
@@ -1077,81 +1084,89 @@ Announcement data file:
 | `Allied`, `Russian`, `Yuri` | sample per voice set | file name, first 8 characters, extension added | empty (silent) |
 | `Volume` | ignored (claim 26) | floating point | 1 |
 
-Announcement requests (claim 36): fixed section names in the announcement data file.
+Announcement requests (claim 36): literal INI section headers in the player's announcement
+data file, also named by values in its announcement list. The square brackets below denote
+section headers, not program identifiers; list values and announcement references use the
+name inside the brackets, without the brackets. Like the other INI section names in this Import
+mapping, they are input-format bindings, not names of program classes, fields or functions.
 Lookup ignores case; an absent or unknown entry is silent. These bindings are not configurable
 rules keys and do not specify sample names: the voice-set fields above specify those.
 
-| Event | Fixed announcement entry |
+| Event | Fixed announcement section header |
 |---|---|
-| construction complete | `EVA_ConstructionComplete` |
-| unit ready | `EVA_UnitReady` |
-| new construction options | `EVA_NewConstructionOptions` |
-| building | `EVA_Building` |
-| training | `EVA_Training` |
-| on hold | `EVA_OnHold` |
-| cancelled | `EVA_Canceled` |
-| unable to comply (claim 24) | `EVA_UnableToComply` |
-| cannot deploy here (claim 24) | `EVA_CannotDeployHere` |
-| structure sold | `EVA_StructureSold` |
-| unit sold | `EVA_UnitSold` |
-| unit repaired | `EVA_UnitRepaired` |
-| unit promoted (either rank) | `EVA_UnitPromoted` |
-| low funds (house countdown or repair-depot refusal) | `EVA_InsufficientFunds` |
-| unit lost | `EVA_UnitLost` |
-| low power | `EVA_LowPower` |
-| base under attack | `EVA_OurBaseIsUnderAttack` |
-| ally under attack | `EVA_OurAllyIsUnderAttack` |
-| harvester under attack | `EVA_OreMinerUnderAttack` |
-| defeat | `EVA_YouHaveLost` |
-| player defeated | `EVA_PlayerDefeated` |
-| victory | `EVA_YouAreVictorious` |
-| alliance requesting | `EVA_RequestingAlliance` |
-| alliance requested | `EVA_AllianceRequested` |
-| alliance formed | `EVA_AllianceFormed` |
-| enemy alliance formed | `EVA_EnemyAllianceFormed` |
-| alliance broken | `EVA_AllianceBroken` |
-| play-speech trigger action | entry named by the action, with interrupt kind override |
-| primary building selected | `EVA_PrimaryBuildingSelected` |
-| rally point set | `EVA_NewRallyPointEstablished` |
-| building captured, ordinary capture announcement | `EVA_BuildingCaptured` |
-| tech building lost | `EVA_TechBuildingLost` |
-| structure garrisoned | `EVA_StructureGarrisoned` |
-| structure abandoned | `EVA_StructureAbandoned` |
-| building online | `EVA_BuildingOnLine` |
-| building offline | `EVA_BuildingOffLine` |
+| construction complete | `[EVA_ConstructionComplete]` |
+| unit ready | `[EVA_UnitReady]` |
+| new construction options | `[EVA_NewConstructionOptions]` |
+| building | `[EVA_Building]` |
+| training | `[EVA_Training]` |
+| on hold | `[EVA_OnHold]` |
+| cancelled | `[EVA_Canceled]` |
+| unable to comply (claim 24) | `[EVA_UnableToComply]` |
+| cannot deploy here (claim 24) | `[EVA_CannotDeployHere]` |
+| structure sold | `[EVA_StructureSold]` |
+| unit sold | `[EVA_UnitSold]` |
+| unit repaired | `[EVA_UnitRepaired]` |
+| unit promoted (either rank) | `[EVA_UnitPromoted]` |
+| low funds (house countdown or repair-depot refusal) | `[EVA_InsufficientFunds]` |
+| unit lost | `[EVA_UnitLost]` |
+| low power | `[EVA_LowPower]` |
+| base under attack | `[EVA_OurBaseIsUnderAttack]` |
+| ally under attack | `[EVA_OurAllyIsUnderAttack]` |
+| harvester under attack | `[EVA_OreMinerUnderAttack]` |
+| defeat | `[EVA_YouHaveLost]` |
+| player defeated | `[EVA_PlayerDefeated]` |
+| victory | `[EVA_YouAreVictorious]` |
+| alliance requesting | `[EVA_RequestingAlliance]` |
+| alliance requested | `[EVA_AllianceRequested]` |
+| alliance formed | `[EVA_AllianceFormed]` |
+| enemy alliance formed | `[EVA_EnemyAllianceFormed]` |
+| alliance broken | `[EVA_AllianceBroken]` |
+| play-speech trigger action | section named by the action, with interrupt kind override |
+| primary building selected | `[EVA_PrimaryBuildingSelected]` |
+| rally point set | `[EVA_NewRallyPointEstablished]` |
+| building captured, ordinary capture announcement | `[EVA_BuildingCaptured]` |
+| tech building lost | `[EVA_TechBuildingLost]` |
+| structure garrisoned | `[EVA_StructureGarrisoned]` |
+| structure abandoned | `[EVA_StructureAbandoned]` |
+| building online | `[EVA_BuildingOnLine]` |
+| building offline | `[EVA_BuildingOffLine]` |
 
-Superweapon category bindings for claim 36, with the same case-insensitive entry lookup:
+Superweapon category bindings for claim 36, using the same literal-section-header notation
+and case-insensitive lookup:
 
-| Category | Ready entry | Activation or launch entry |
+| Category | Ready section header | Activation or launch section header |
 |---|---|---|
-| nuclear missile | `EVA_NuclearMissileReady` | `EVA_NuclearMissileLaunched` |
-| iron protection | `EVA_IronCurtainReady` | `EVA_IronCurtainActivated` |
-| weather storm | `EVA_LightningStormReady` | `EVA_LightningStormCreated` |
-| teleport source | `EVA_ChronosphereReady` | `EVA_ChronosphereActivated` |
-| either paradrop category | `EVA_ReinforcementsReady` | no binding established here |
-| psychic domination | `EVA_PsychicDominatorReady` | `EVA_PsychicDominatorActivated` |
-| spy plane | `EVA_SpyPlaneReady` | no binding established here |
-| genetic mutation | `EVA_GeneticMutatorReady` | `EVA_GeneticMutatorActivated` |
-| force shield | `EVA_ForceShieldReady` | no binding established here |
-| psychic reveal | `EVA_PsychicRevealReady` | no binding established here |
+| nuclear missile | `[EVA_NuclearMissileReady]` | `[EVA_NuclearMissileLaunched]` |
+| iron protection | `[EVA_IronCurtainReady]` | `[EVA_IronCurtainActivated]` |
+| weather storm | `[EVA_LightningStormReady]` | `[EVA_LightningStormCreated]` |
+| teleport source | `[EVA_ChronosphereReady]` | `[EVA_ChronosphereActivated]` |
+| either paradrop category | `[EVA_ReinforcementsReady]` | no binding established here |
+| psychic domination | `[EVA_PsychicDominatorReady]` | `[EVA_PsychicDominatorActivated]` |
+| spy plane | `[EVA_SpyPlaneReady]` | no binding established here |
+| genetic mutation | `[EVA_GeneticMutatorReady]` | `[EVA_GeneticMutatorActivated]` |
+| force shield | `[EVA_ForceShieldReady]` | no binding established here |
+| psychic reveal | `[EVA_PsychicRevealReady]` | no binding established here |
 
 Detection bindings traced at superweapon-building placement:
 
-| Building's superweapon category | Detection entry |
+| Building's superweapon category | Detection section header |
 |---|---|
-| nuclear missile | `EVA_NuclearSiloDetected` |
-| iron protection | `EVA_IronCurtainDetected` |
-| weather storm | `EVA_WeatherDeviceReady` |
-| psychic domination | `EVA_PsychicDominatorDetected` |
-| genetic mutation | `EVA_GeneticMutatorDetected` |
-| teleport source | `EVA_ChronosphereDetected` |
+| nuclear missile | `[EVA_NuclearSiloDetected]` |
+| iron protection | `[EVA_IronCurtainDetected]` |
+| weather storm | `[EVA_WeatherDeviceReady]` |
+| psychic domination | `[EVA_PsychicDominatorDetected]` |
+| genetic mutation | `[EVA_GeneticMutatorDetected]` |
+| teleport source | `[EVA_ChronosphereDetected]` |
 
 An unestablished cell above is not a claim that the event is silent. For Q-0325 these
 activation/launch bindings remain explicitly `unmeasured`, low confidence: the complete
 category dispatch and indirect requests have not been composed, so no entry is invented.
 G6 is the settling scenario for those cells and exhaustive activation/detection eligibility.
-The fixed bindings above are high confidence, `measurable` in G4; feature request conditions
-are not completed by this table. Custom capture selection is claim 39 and the following rows.
+The fixed bindings above are high confidence, `measurable` for G4's established event
+controls. Alliance bindings remain `unmeasured`: G4's proposed alliance extension has no
+established input sequence reaching every request branch, so its conditional observations
+cannot yet test all those bindings. Feature request conditions are not completed by this
+table. Custom capture selection is claim 39 and the following rows.
 
 | Key (building type section) | Concept | Parse form | Default when absent |
 |---|---|---|---|
@@ -1304,8 +1319,8 @@ test entry's sample that exists only as a loose file and not in the bank: expect
 *Falsified if:* a sound entry plays a loose file, an announcement ignores it, or case alone
 changes bank-sample lookup.
 
-**B1. Screen sounds.** Select a unit at the far corner of the map from the view. *Expected:* the
-response at full level, centred. Repeat a guard interface sound after moving the view without changing the request.
+**B1. Screen sounds.** Assign a local unit to a group, move the view far away from it, then
+recall that group without centring the view. *Expected:* the response at full level, centred. Repeat a guard interface sound after moving the view without changing the request.
 *Falsified if:* either response or interface sound changes level or pan with view position.
 
 **B2. Positional level and pan.** A tank fires (fixed report variant, claim 21) at known screen
@@ -1496,15 +1511,18 @@ are inconclusive, not established by audible start times alone.
 **F1. Damage and death.** Hit a local unit with a feedback list 200 times across its yellow
 threshold over many seeds; record the share that speak (*expected:* about 30 %) and the
 unsynchronised draws per hit (*expected:* one R(0, 99) on now yellow for any owner, one more raw
-value when spoken). A damage-sound hit: two instances. A death: death response (local only) then
-death sound. *Falsified if:* the share is far from 30 %, the chance is drawn on other results, or a
-single damage-sound instance. Repeat the threshold sequence on enemy-owned test vehicles,
+value when spoken). A death: death response (local only) then
+death sound. *Falsified if:* the share is far from 30 % or the chance is drawn on other results. Repeat the threshold sequence on enemy-owned test vehicles,
 with feedback and death lists referring to distinguishable entries that have no instance draws:
 expect the feedback chance draw but no spoken feedback, and a death-sound choice without a
 death-response choice. Local deaths choose the response before the death sound. Include
 *unaffected*, *now red* and a berserk hit: expect no common reaction. Named test data provides
-a sufficiently high per-entry limit to distinguish the doubled damage sample in loopback
-capture. For the 200 local yellow crossings, use an exact binomial test at significance 0.01
+one distinguishable damage sample with no instance draws, a high per-entry limit and free
+channels. For the departure test, run an isolated *unchanged* hit on our engine, recording
+requested instances as well as loopback playback: expect exactly one positional damage-sound
+request, following scrolling as in B3. Zero or multiple requests for an eligible hit falsify
+claim 20's fixed behaviour; inaudible or suppressed playback alone does not. This part is
+conformance testing against this spec, not measurement against the original. For the 200 local yellow crossings, use an exact binomial test at significance 0.01
 against probability 0.30; a rejection falsifies the chance hypothesis, not a small deviation.
 F9 separately settles infantry multiplicity; this scenario makes no exactly-once prediction.
 
@@ -1566,8 +1584,10 @@ Space actions until all earlier announcements have finished and their waiting qu
 Use distinguishable named test samples for the build-click and refusal entries and the two
 refusal announcements; capture requested entries as well as playback with a proposed read-only
 recorder. A suppressed announcement is not evidence of an absent request.
-*Expected:* the build click entry plus the matching announcement for the five production clicks,
-only the "unable to comply" announcement for the busy line; only "cannot deploy here" for the
+*Expected:* the build click entry for all five production clicks; the matching announcement
+for start, resume, hold and cancel, but no new building/training request for a queued copy
+added to an active line (claim 28, F11); only the "unable to comply" announcement for the
+busy line; only "cannot deploy here" for the
 refused placement; the refusal entry for the full queue. Repeat as each side.
 *Falsified if:* a listed cue is absent, an interface sound accompanies the busy-line or placement
 refusal, or a cue depends on side. A click on an item at its build limit: expect no click sound
@@ -1616,7 +1636,13 @@ by a rotation sample with one entirely between samples: only the former requests
 A cut at the stop alone, loss of the old sample solely on restart, grace delay or per-tick restart falsifies claim
 23. Void the between-samples case unless the recorder establishes both motion and sample timing.
 
-**F6. Lightning sound.** Fire the weather superweapon; record the scenario stream per tick.
+**F6. Lightning sound.** Fire the weather superweapon; record the scenario stream per tick
+and strike positions with a read-only recorder. Repeat with a named test rules file giving
+an empty lightning sound list: expect no sound-choice value, without deleting the bolt or
+explosion animation's own draws. An extra sound-choice value falsifies that guard.
+For the same-point guard, compare consecutive recorded strike positions; if no exact repeat
+occurs, that sub-test is inconclusive rather than confirmed. An exact repeat must omit the
+sound choice as well as the later explosion/damage draws of claim 25.
 *Expected:* for each non-repeated strike point with a nonempty sound list, one raw value after
 the bolt animation's creation draws and before explosion creation and damage, whose modulo
 selects the audible entry. A repeated point has no sound draw. Account for animation draws using
@@ -1630,7 +1656,9 @@ repeat with named test rules giving the type its own damage sound and death list
 and the game-wide building death sound at destruction, positional at the building and following
 scrolling when the view moves during the sample. With own sounds, neither fallback plays.
 Claim 20 does not promise the type's own damage sound at a threshold crossing: add a separate
-*unchanged* hit to hear its doubled damage sound. Destruction uses the type's death list.
+*unchanged* hit to exercise its damage-sound event. Test that event's single-instance
+requirement on our engine under F1's departure control, not against the original.
+Destruction uses the type's death list.
 *Falsified if:* an expected fallback is absent, a fallback plays with an own sound present,
 the unchanged-hit or death choices differ from claim 20, or a fallback is heard at screen level.
 Repeat threshold and lethal hits on an enemy building, with a long destruction animation
@@ -1802,8 +1830,8 @@ within one F4 step.
 
 ## Open questions
 
-- Whether an infantry death plays its death response and death sound once or twice (two copies of
-  the death handling exist; claim 20, low).
+- Whether an infantry death plays its death response and death sound once or twice
+  (claim 20, low; F9 distinguishes the alternatives).
 - The type flag that exempts some types from the unit lost announcement and the one that exempts some
   buildings from base under attack (claim 28).
 - Which copy of a sample the bank plays when its index lists the name twice (claim 34).
@@ -1827,7 +1855,16 @@ within one F4 step.
 
 ## Changes for other specs
 
-Revision 5 additions:
+Current wording corrections needed:
+- S-0314 claim 6, H4 part f and Open questions: replace the stale assertion that radar-event
+  zoom duration is unresolved with S-0410 claims 14–15's progression and cadence and this
+  spec's F7 post-zoom tail. Keep the *unit repaired* suppression row and cross-creator
+  coverage explicitly unmeasured; the resolved zoom rule is not measurement of that row.
+- S-0213 claim 16: remove the historical assertion that current S-0701 claim 24 says
+  once-per-game silence; both specs now agree on another cue after a completed tick.
+
+The remaining items are historical joint-hand-off confirmations, not new requests to
+change already agreeing behaviour. Earlier additions:
 - S-0411: state the infantry-only training versus other-kind building split for start/resume,
   and no repeated start announcement when adding to an active queue (claim 28, F11).
   Q-0339's dispatch is already specified in S-0411 claim 18 and S13; claim 24/F10
@@ -1878,11 +1915,11 @@ Other existing hand-off checks:
   unresolved.
 - S-0213 claim 16 and O8 already correct the earlier once-per-game route cue assertion:
   a completed tick permits another message-and-sound cue. Claim 24 and F8 here now agree.
-  No once-per-game quirk remains. S-0213 revision 17's hand-off note already confirms
+  No once-per-game quirk remains. S-0213's hand-off note already confirms
   that agreement; confirm both current passages at sign-off.
-- S-0406 approved revision 8 already agrees in claims 1/10, State and ordering and its
+- S-0406 already agrees in claims 1/10, State and ordering and its
   scenarios: failed placement requests only the cannot-deploy-here announcement, not the
-  game-wide refusal sound. Confirm revision 8 or its agreeing successor at joint sign-off.
+  game-wide refusal sound. Confirm the agreeing hand-off text at joint sign-off.
   No placement-audio correction is needed. Keep no-eligible-factory orders silent and
   distinguish announcement requests from queue-dependent playback (claim 27).
 - S-0404: a request refused as it is applied (full queue or build limit) plays the refusal sound
@@ -1899,7 +1936,7 @@ Other existing hand-off checks:
 - S-0314 and S-0410: point repeat-suppression questions to F7, retaining its unmeasured
   kinds. Zoom timing is owned by S-0410 claims 14–15, not an unresolved total tick duration.
   R13 is a proposed measurement, not evidence that all lifetimes have been measured.
-- glossary: revision 20 already records claim 28's low-funds countdown as presentation
+- glossary already records claim 28's low-funds countdown as presentation
   timing, not a new game-state timing exception. No further glossary change is needed.
 
 ## Questions for the project lead
