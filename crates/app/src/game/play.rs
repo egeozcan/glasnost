@@ -87,8 +87,14 @@ pub struct Play {
     pub effects: Vec<Effect>,
     /// Interface sounds asked for since the client last took them.
     pub cues: Vec<UiCue>,
-    /// Clicks whose acknowledgement the client should voice.
-    pub acks: Vec<ClickResult>,
+    /// Battlefield clicks that gave orders, with the selection they were
+    /// given to in selection order, for the order response (S-0701 claim 18).
+    pub acks: Vec<(Vec<ObjectId>, ClickResult)>,
+    /// The first object each selecting input selected, for the selection
+    /// response (S-0701 claim 17).
+    pub selected: Vec<ObjectId>,
+    /// Key commands that issued orders, for their sounds (S-0701 claim 19).
+    pub keys: Vec<KeyCommand>,
     /// The game's result, once it is over (S-0414).
     pub outcome: Option<Outcome>,
     radar_on: bool,
@@ -128,6 +134,8 @@ impl Play {
             effects: Vec::new(),
             cues: Vec::new(),
             acks: Vec::new(),
+            selected: Vec::new(),
+            keys: Vec::new(),
             outcome: None,
             radar_on,
             waiting: false,
@@ -242,6 +250,8 @@ impl Play {
                     Some(o) => {
                         if self.issue(vec![o]) > 0 {
                             self.tool = Tool::Select;
+                            // spec: S-0701 claim 23 (the local player's house places a building: the placement sound)
+                            self.cues.push(UiCue::BuildingPlaced);
                         }
                     }
                     None => {
@@ -285,10 +295,16 @@ impl Play {
         let w = &self.game.world;
         sel.retain(|&id| targeting::selectable(w, id));
         let r = targeting::click(w, self.local, &sel, on, mods);
-        self.selection = r.selection.clone().unwrap_or(sel);
+        // spec: S-0701 claim 17 (the first object the input selects speaks; one already in the selection the click acted on does not)
+        if let Some(new) = &r.selection
+            && let Some(&first) = new.iter().find(|id| !sel.contains(id))
+        {
+            self.selected.push(first);
+        }
+        self.selection = r.selection.clone().unwrap_or_else(|| sel.clone());
         self.issue(r.orders.clone());
-        if r.acknowledge.is_some() {
-            self.acks.push(r);
+        if !r.orders.is_empty() {
+            self.acks.push((sel, r));
         }
     }
 
@@ -311,11 +327,15 @@ impl Play {
         if !add {
             self.selection.clear();
         }
+        let mut first = None;
         for id in taken {
             if !self.selection.contains(&id) {
                 self.selection.push(id);
+                first = first.or(Some(id));
             }
         }
+        // spec: S-0701 claim 17 (several objects selected by one input: only the first speaks)
+        self.selected.extend(first);
     }
 
     /// A key command for the selection (S-0213 table T2).
@@ -323,7 +343,10 @@ impl Play {
         let w = &self.game.world;
         self.selection.retain(|&id| targeting::selectable(w, id));
         let list = targeting::key_command(w, self.local, &self.selection, cmd);
-        self.issue(list);
+        // interim: Q-0336 (a key command sounds once per press, and only when it issued orders)
+        if self.issue(list) > 0 {
+            self.keys.push(cmd);
+        }
     }
 
     /// The cheer command (S-0213 table T2, claim 19).

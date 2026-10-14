@@ -1,0 +1,1117 @@
+//! Tests of the game's sound events on synthetic worlds, entries and
+//! samples (S-0701 claims 4, 6, 16 to 24 and 26 to 29).
+
+use super::*;
+use crate::catalog::SoundEntry;
+use crate::output::NullOutput;
+use crate::speech::Line;
+use glasnost_fmt::pcm::Pcm;
+use glasnost_rules::schema::Ruleset;
+use glasnost_sim::testkit;
+use glasnost_sim::world::Target;
+
+const RATE: u32 = 8000;
+const ME: HouseId = HouseId(0);
+const SIZE: i32 = 30;
+
+fn centre(_: i32, _: i32, _: i32) -> (i32, i32) {
+    (400, 300)
+}
+
+/// A view that sees every position at its centre.
+fn view() -> View {
+    View {
+        origin: (0, 0),
+        size: (800, 600),
+        project: centre,
+    }
+}
+
+/// The synthetic combat rules with an infantry factory `BARR` and a
+/// negative-damage weapon on `BUGGY`; `CART` is an unarmed harvester.
+fn ruleset() -> Ruleset {
+    use glasnost_rules::sim::{BuildingType, Decimal, WeaponType};
+    let mut r = testkit::combat_ruleset();
+    r.registries
+        .get_mut("buildings")
+        .expect("buildings")
+        .push("BARR".into());
+    r.sim.buildings.insert(
+        "BARR".into(),
+        BuildingType {
+            strength: Some(500),
+            foundation: Some([1, 1]),
+            factory: Some("infantry".into()),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "Mend".into(),
+        WeaponType {
+            damage: Some(-20),
+            rof: Some(40),
+            range: Some(Decimal("5".into())),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("SA".into()),
+            ..Default::default()
+        },
+    );
+    if let Some(v) = r.sim.vehicles.get_mut("BUGGY") {
+        v.primary = Some("Mend".into());
+    }
+    if let Some(v) = r.sim.vehicles.get_mut("CART") {
+        v.harvester = Some(true);
+        v.primary = None;
+    }
+    r
+}
+
+fn world() -> World {
+    testkit::game_with(&ruleset(), SIZE, 5)
+}
+
+fn spawn(w: &mut World, kind: Kind, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
+    testkit::spawn(w, kind, name, house, testkit::mid(SIZE, dx, dy), 0)
+}
+
+fn index(w: &World, kind: Kind, name: &str) -> u32 {
+    w.rules().index_of(kind, name).expect("type")
+}
+
+fn tref(w: &World, kind: Kind, name: &str) -> TypeRef {
+    TypeRef {
+        kind,
+        index: index(w, kind, name),
+    }
+}
+
+/// Audio for house 0 of `w` with one entry and one sample of four frames
+/// per name.
+fn audio_with(w: &World, names: &[&str], q: Quirks) -> Audio {
+    let mut a = Audio::new(Box::new(NullOutput::new(RATE, "test")));
+    a.set_quirks(q);
+    let mut bank = SoundBank::new();
+    let mut cat = SoundCatalog::new();
+    for n in names {
+        bank.add_pcm(
+            n,
+            Pcm {
+                sample_rate: RATE,
+                channels: 1,
+                samples: vec![1000; 4],
+            },
+        );
+        cat.insert(SoundEntry::new(n, &[n]));
+    }
+    a.set_bank(bank);
+    a.set_catalog(cat);
+    a.start(w, Some(ME), 1);
+    a.set_view(view());
+    a
+}
+
+fn audio(w: &World, names: &[&str]) -> Audio {
+    audio_with(w, names, Quirks::default())
+}
+
+/// The entries of every live instance after a pass, in channel order.
+fn heard(a: &mut Audio, now: i64) -> Vec<String> {
+    a.service(now);
+    let on: Vec<EntryId> = a.mixer().channel_entries().into_iter().flatten().collect();
+    on.iter()
+        .map(|e| a.catalog().entry(*e).name.clone())
+        .collect()
+}
+
+fn render(a: &mut Audio, frames: usize) {
+    let mut b = vec![0i16; frames * 2];
+    a.mixer_mut().render(&mut b);
+}
+
+fn strings(v: &[&str]) -> Vec<String> {
+    v.iter().map(|s| (*s).to_owned()).collect()
+}
+
+fn mv(actor: ObjectId) -> Order {
+    Order::Behaviour {
+        actor,
+        behaviour: Behaviour::Move,
+        attack_move: false,
+        target: None,
+        dest: Some(Target::Cell(testkit::mid(SIZE, 3, 3))),
+    }
+}
+
+fn click(orders: Vec<Order>) -> ClickResult {
+    ClickResult {
+        orders,
+        selection: None,
+        acknowledge: None,
+        marker: false,
+    }
+}
+
+// spec: S-0701 claim 4 (quirks.missing_sample_silences_entry: one missing sample silences the whole entry; off: it is left out)
+#[test]
+fn missing_sample_silences_entry() {
+    let w = world();
+    for quirk in [true, false] {
+        let q = Quirks {
+            missing_sample_silences_entry: quirk,
+            ..Quirks::default()
+        };
+        let mut a = audio_with(&w, &["Here"], q);
+        let mut cat = SoundCatalog::new();
+        let e = cat.insert(SoundEntry::new("Both", &["Here", "Gone"]));
+        a.set_catalog(cat);
+        assert_eq!(a.prepare(e).is_none(), quirk);
+        if !quirk {
+            assert_eq!(a.prepare(e).map(|p| p.clips.len()), Some(1));
+        }
+    }
+}
+
+// spec: S-0701 Edge cases (quirks.attack_decay_without_body: an attack or decay entry with no body sample is silent)
+#[test]
+fn attack_decay_without_body_is_silent() {
+    let w = world();
+    let mut a = audio(&w, &["A"]);
+    let mut cat = SoundCatalog::new();
+    let mut e = SoundEntry::new("Rise", &["A"]);
+    e.attack = 1;
+    e.control.attack = true;
+    let e = cat.insert(e);
+    a.set_catalog(cat);
+    assert!(a.prepare(e).is_none());
+}
+
+// spec: S-0701 claim 6 and Edge cases (quirks.shroud_sound_corner_cell: a shroud sound at cell (0, 0) is never heard; unexplored cells are silent)
+#[test]
+fn shroud_sounds() {
+    let w = world();
+    let mut a = audio(&w, &["Hush"]);
+    let mut cat = SoundCatalog::new();
+    let mut e = SoundEntry::new("Hush", &["Hush"]);
+    e.placement.shroud = true;
+    let e = cat.insert(e);
+    a.set_catalog(cat);
+    let corner = Pos::new(128, 128, 0);
+    assert_eq!(corner.cell().x, 0);
+    assert!(a.request(Some(&w), e, Where::Fixed(corner), FULL).is_none());
+    let mut a2 = audio_with(
+        &w,
+        &["Hush"],
+        Quirks {
+            shroud_sound_corner_cell: false,
+            ..Quirks::default()
+        },
+    );
+    let mut cat = SoundCatalog::new();
+    let mut e = SoundEntry::new("Hush", &["Hush"]);
+    e.placement.shroud = true;
+    let e = cat.insert(e);
+    a2.set_catalog(cat);
+    let explored = glasnost_sim::econ::shroud::explored(&w, ME, corner.cell());
+    assert_eq!(
+        a2.request(Some(&w), e, Where::Fixed(corner), FULL)
+            .is_some(),
+        explored
+    );
+    // A screen sound is never shrouded.
+    assert!(a.request(Some(&w), e, Where::Screen, FULL).is_some());
+}
+
+/// A world with a local `CRUSHER` and the response names of `t`.
+fn speaker(t: TypeSounds) -> (World, ObjectId, Audio) {
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, 0, 0);
+    let mut a = audio(
+        &w,
+        &[
+            "Yes0", "Yes1", "Yes2", "Go", "Hit", "Special", "In", "Take", "Dig", "Up", "Mend",
+        ],
+    );
+    let mut n = SoundNames::default();
+    n.set_type(Kind::Vehicle, index(&w, Kind::Vehicle, "CRUSHER"), t);
+    n.voice_ifv_repair = Some("Mend".into());
+    a.set_names(n);
+    (w, tank, a)
+}
+
+// spec: S-0701 claim 16 (a waiting response is spoken as a screen sound if not speaking; the same entry is dropped; a different one waits)
+#[test]
+fn response_slot() {
+    let (w, tank, mut a) = speaker(TypeSounds {
+        voice_select: strings(&["Yes0"]),
+        voice_move: strings(&["Go"]),
+        ..TypeSounds::default()
+    });
+    let mut u = Rng::new(3);
+    a.selected(&w, tank, &mut u);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 0), ["Yes0"]);
+    assert_eq!(
+        a.mixer().placement(InstanceId(0)),
+        Some((FULL, crate::mixer::CENTRE))
+    );
+    // The same entry again while it is spoken: dropped, not restarted.
+    a.selected(&w, tank, &mut u);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 1);
+    render(&mut a, 100);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 0);
+    // A different one waits for the current one.
+    a.selected(&w, tank, &mut u);
+    a.tick(&w, &[], &mut u);
+    heard(&mut a, 100);
+    a.ordered(&w, &[tank], &click(vec![mv(tank)]), &mut u);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 200), ["Yes0"]);
+    render(&mut a, 100);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 300), ["Go"]);
+}
+
+// spec: S-0701 claim 16 (only the local player's objects respond); claim 17 (one raw value, entry x mod n) and 31 (the draw is taken first)
+#[test]
+fn selection_response_draw() {
+    let (mut w, tank, mut a) = speaker(TypeSounds {
+        voice_select: strings(&["Yes0", "Yes1", "Yes2"]),
+        ..TypeSounds::default()
+    });
+    let theirs = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 2, 0);
+    let mut u = Rng::new(11);
+    let mut r = u.clone();
+    a.selected(&w, tank, &mut u);
+    let x = r.raw();
+    assert_eq!(u, r);
+    a.tick(&w, &[], &mut u);
+    let want = format!("Yes{}", x % 3);
+    assert_eq!(heard(&mut a, 0), [want]);
+    a.mixer_mut().clear();
+    a.selected(&w, theirs, &mut u);
+    r.raw();
+    assert_eq!(u, r);
+    a.tick(&w, &[], &mut u);
+    assert!(heard(&mut a, 100).is_empty());
+}
+
+// spec: S-0701 claim 18 (the responder: the most recently selected positive-primary-damage object, else the earliest; no other responds)
+#[test]
+fn order_responder() {
+    let mut w = world();
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, 0, 0);
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, 1, 0);
+    let tank2 = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, 2, 0);
+    let buggy = spawn(&mut w, Kind::Vehicle, "BUGGY", 0, 3, 0);
+    let mut a = audio(&w, &["CartGo", "TankGo", "BuggyGo"]);
+    let mut n = SoundNames::default();
+    for (t, s) in [
+        ("CART", "CartGo"),
+        ("CRUSHER", "TankGo"),
+        ("BUGGY", "BuggyGo"),
+    ] {
+        n.set_type(
+            Kind::Vehicle,
+            index(&w, Kind::Vehicle, t),
+            TypeSounds {
+                voice_move: strings(&[s]),
+                ..TypeSounds::default()
+            },
+        );
+    }
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let all = |s: &[ObjectId]| click(s.iter().map(|&x| mv(x)).collect());
+    let mut said = |a: &mut Audio, sel: &[ObjectId], c: ClickResult, now: i64| {
+        a.mixer_mut().clear();
+        a.ordered(&w, sel, &c, &mut u);
+        a.tick(&w, &[], &mut u);
+        heard(a, now)
+    };
+    // interim: Q-0328 (the selection order from selection times)
+    assert_eq!(
+        said(&mut a, &[cart, tank, buggy], all(&[cart, tank, buggy]), 0),
+        ["TankGo"]
+    );
+    assert_eq!(
+        said(&mut a, &[tank, cart, tank2], all(&[tank, cart, tank2]), 100),
+        ["TankGo"]
+    );
+    assert_eq!(
+        said(&mut a, &[cart, buggy], all(&[cart, buggy]), 200),
+        ["CartGo"]
+    );
+    // The responder got no order: silence.
+    let none: Vec<String> = Vec::new();
+    assert_eq!(said(&mut a, &[tank, cart], all(&[cart]), 300), none);
+}
+
+// spec: S-0701 F6 (the response of each order kind and its fallbacks; a single response takes no draw)
+#[test]
+fn order_response_table() {
+    let full = TypeSounds {
+        voice_move: strings(&["Go"]),
+        voice_attack: strings(&["Hit"]),
+        voice_special_attack: strings(&["Special"]),
+        voice_enter: Some("In".into()),
+        voice_capture: Some("Take".into()),
+        voice_harvest: Some("Dig".into()),
+        voice_deploy: Some("Up".into()),
+        ..TypeSounds::default()
+    };
+    let (mut w, tank, mut a) = speaker(full.clone());
+    let other = spawn(&mut w, Kind::Vehicle, "CART", 1, 2, 0);
+    let mut u = Rng::new(1);
+    let b = |behaviour: Behaviour, attack_move: bool| Order::Behaviour {
+        actor: tank,
+        behaviour,
+        attack_move,
+        target: Some(Target::Object(other)),
+        dest: None,
+    };
+    let mut now = 0;
+    let mut say = |a: &mut Audio, w: &World, o: Order, u: &mut Rng| {
+        a.mixer_mut().clear();
+        a.ordered(w, &[tank], &click(vec![o]), u);
+        a.tick(w, &[], u);
+        now += 100;
+        heard(a, now)
+    };
+    assert_eq!(say(&mut a, &w, b(Behaviour::Move, false), &mut u), ["Go"]);
+    assert_eq!(say(&mut a, &w, b(Behaviour::Attack, true), &mut u), ["Go"]);
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Attack, false), &mut u),
+        ["Hit"]
+    );
+    let before = u.taken();
+    assert_eq!(say(&mut a, &w, b(Behaviour::Enter, false), &mut u), ["In"]);
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Capture, false), &mut u),
+        ["Take"]
+    );
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Harvest, false), &mut u),
+        ["Dig"]
+    );
+    assert_eq!(
+        say(&mut a, &w, Order::Deploy { actor: tank }, &mut u),
+        ["Up"]
+    );
+    assert_eq!(say(&mut a, &w, b(Behaviour::Unload, false), &mut u), ["Up"]);
+    assert_eq!(u.taken(), before);
+    assert_eq!(
+        say(&mut a, &w, Order::Stop { actor: tank }, &mut u),
+        ["Special"]
+    );
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Hunt, false), &mut u),
+        ["Special"]
+    );
+    // Fallbacks: capture to enter to move; enter and harvest to move.
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            voice_enter: None,
+            voice_capture: None,
+            voice_harvest: None,
+            voice_deploy: None,
+            ..full
+        },
+    );
+    a.set_names(n);
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Capture, false), &mut u),
+        ["Go"]
+    );
+    assert_eq!(say(&mut a, &w, b(Behaviour::Enter, false), &mut u), ["Go"]);
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Harvest, false), &mut u),
+        ["Go"]
+    );
+    let none: Vec<String> = Vec::new();
+    assert_eq!(say(&mut a, &w, Order::Deploy { actor: tank }, &mut u), none);
+}
+
+// spec: S-0701 F6 (attack by the repair-response vehicle with a weapon of negative damage: the game-wide repair-vehicle response)
+#[test]
+fn repair_vehicle_response() {
+    let mut w = world();
+    let buggy = spawn(&mut w, Kind::Vehicle, "BUGGY", 0, 0, 0);
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, 1, 0);
+    let mut a = audio(&w, &["Hit", "Mend"]);
+    let mut n = SoundNames::default();
+    let t = TypeSounds {
+        voice_attack: strings(&["Hit"]),
+        repair_vehicle: true,
+        ..TypeSounds::default()
+    };
+    n.set_type(Kind::Vehicle, index(&w, Kind::Vehicle, "BUGGY"), t);
+    n.voice_ifv_repair = Some("Mend".into());
+    a.set_names(n);
+    let o = Order::Behaviour {
+        actor: buggy,
+        behaviour: Behaviour::Attack,
+        attack_move: false,
+        target: Some(Target::Object(cart)),
+        dest: None,
+    };
+    let mut u = Rng::new(1);
+    let (_, wid) = weapon::would_use(&w, buggy, Some(Target::Object(cart)));
+    assert!(wid.is_some_and(|x| w.rules().combat.weapon(x).damage < 0));
+    a.ordered(&w, &[buggy], &click(vec![o]), &mut u);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 0), ["Mend"]);
+}
+
+// spec: S-0701 claim 19 (guard, stop and scatter: their game-wide sounds as screen sounds; quirks.deploy_command_silent)
+#[test]
+fn key_command_sounds() {
+    let w = world();
+    for quirk in [true, false] {
+        let q = Quirks {
+            deploy_command_silent: quirk,
+            ..Quirks::default()
+        };
+        let mut a = audio_with(&w, &["G", "S", "X", "D"], q);
+        let mut n = SoundNames::default();
+        n.guard = Some("G".into());
+        n.stop = Some("S".into());
+        n.scatter = Some("X".into());
+        n.deploy_command = Some("D".into());
+        a.set_names(n);
+        let mut now = 0;
+        for (k, want) in [
+            (KeyCommand::Guard, Some("G")),
+            (KeyCommand::Stop, Some("S")),
+            (KeyCommand::Scatter, Some("X")),
+            (KeyCommand::Deploy, (!quirk).then_some("D")),
+        ] {
+            a.mixer_mut().clear();
+            a.key(k);
+            now += 100;
+            let got = heard(&mut a, now);
+            assert_eq!(got.first().map(String::as_str), want);
+        }
+    }
+}
+
+fn hit(w: &World, of: TypeRef, owner: u8, result: HitResult, attacker: Option<ObjectId>) -> Effect {
+    let _ = w;
+    Effect::Hit {
+        id: ObjectId(999),
+        of,
+        owner: Some(HouseId(owner)),
+        pos: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+        result,
+        attacker,
+    }
+}
+
+fn damage_names(w: &World) -> SoundNames {
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            damage_sound: Some("Ouch".into()),
+            voice_feedback: strings(&["Help"]),
+            die_sound: strings(&["Boom0", "Boom1"]),
+            ..TypeSounds::default()
+        },
+    );
+    n
+}
+
+// spec: S-0701 claim 20 (unchanged or beyond now dead: the damage sound, positional, any owner; quirks.damage_sound_doubled)
+#[test]
+fn damage_sound() {
+    let w = world();
+    let t = tref(&w, Kind::Vehicle, "CRUSHER");
+    for quirk in [true, false] {
+        let q = Quirks {
+            damage_sound_doubled: quirk,
+            ..Quirks::default()
+        };
+        let mut a = audio_with(&w, &["Ouch"], q);
+        a.set_names(damage_names(&w));
+        let mut u = Rng::new(1);
+        for r in [HitResult::Unchanged, HitResult::PostMortem] {
+            a.mixer_mut().clear();
+            a.tick(&w, &[hit(&w, t, 1, r, None)], &mut u);
+            assert_eq!(a.mixer().alive(), if quirk { 2 } else { 1 });
+        }
+        // Unaffected and now red: nothing, no draws.
+        a.mixer_mut().clear();
+        let before = u.taken();
+        a.tick(
+            &w,
+            &[
+                hit(&w, t, 0, HitResult::Unaffected, None),
+                hit(&w, t, 0, HitResult::NowRed, None),
+            ],
+            &mut u,
+        );
+        assert_eq!(a.mixer().alive(), 0);
+        assert_eq!(u.taken(), before);
+    }
+}
+
+// spec: S-0701 claim 20 and 31 (now yellow: R(0, 99) for every owner; below 30 and local: one feedback response, positional)
+#[test]
+fn feedback_chance() {
+    let w = world();
+    let t = tref(&w, Kind::Vehicle, "CRUSHER");
+    let mut a = audio(&w, &["Help"]);
+    a.set_names(damage_names(&w));
+    let (mut spoke, mut quiet) = (0, 0);
+    for seed in 0..40 {
+        let mut u = Rng::new(seed);
+        let mut r = u.clone();
+        a.mixer_mut().clear();
+        a.tick(&w, &[hit(&w, t, 0, HitResult::NowYellow, None)], &mut u);
+        let x = r.ranged(0, 99, true);
+        if x < 30 {
+            r.raw();
+            spoke += 1;
+        } else {
+            quiet += 1;
+        }
+        assert_eq!(u, r);
+        assert_eq!(a.mixer().alive(), usize::from(x < 30));
+        assert!(
+            !matches!(a.mixer().placement(InstanceId(0)), Some((_, p)) if p != crate::mixer::CENTRE)
+        );
+        // Another owner's object: the draw, never a response.
+        let mut u = Rng::new(seed);
+        let mut r = u.clone();
+        a.mixer_mut().clear();
+        a.tick(&w, &[hit(&w, t, 1, HitResult::NowYellow, None)], &mut u);
+        r.ranged(0, 99, true);
+        assert_eq!(u, r);
+        assert_eq!(a.mixer().alive(), 0);
+    }
+    assert!(spoke > 0 && quiet > 0);
+}
+
+// spec: S-0701 claim 20 (now dead: for every owner one death sound chosen by F5, positional)
+#[test]
+fn death_sound() {
+    let w = world();
+    let t = tref(&w, Kind::Vehicle, "CRUSHER");
+    let mut a = audio(&w, &["Boom0", "Boom1"]);
+    a.set_names(damage_names(&w));
+    let mut u = Rng::new(9);
+    let mut r = u.clone();
+    a.tick(&w, &[hit(&w, t, 1, HitResult::NowDead, None)], &mut u);
+    let x = r.raw();
+    assert_eq!(u, r);
+    assert_eq!(heard(&mut a, 0), [format!("Boom{}", x % 2)]);
+}
+
+// spec: S-0701 claim 21 (the report at the firing position, any owner, no draw); interim: Q-0327 (entry 0)
+#[test]
+fn weapon_report() {
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 0, 0);
+    let gun = veterancy::type_combat(&w, tank)
+        .and_then(|c| c.slots[0])
+        .expect("gun");
+    let mut a = audio(&w, &["Bang0", "Bang1"]);
+    let mut n = SoundNames::default();
+    n.set_report(
+        &w.rules().combat.weapon(gun).name.clone(),
+        &["Bang0", "Bang1"],
+    );
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let fx = Effect::Shot {
+        firer: tank,
+        weapon: gun,
+        from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+    };
+    a.tick(&w, &[fx], &mut u);
+    assert_eq!(u.taken(), 0);
+    assert_eq!(heard(&mut a, 0), ["Bang0"]);
+}
+
+// spec: S-0701 claim 22 (an animation's start sound, positional, any owner)
+#[test]
+fn animation_start_sound() {
+    let w = world();
+    let mut a = audio(&w, &["Poof"]);
+    let mut n = SoundNames::default();
+    n.set_anim_report("Puff", "Poof");
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let fx = [
+        Effect::Anim {
+            name: "PUFF".into(),
+            pos: Pos::new(0, 0, 0),
+        },
+        Effect::Anim {
+            name: "Silent".into(),
+            pos: Pos::new(0, 0, 0),
+        },
+    ];
+    a.tick(&w, &fx, &mut u);
+    assert_eq!(heard(&mut a, 0), ["Poof"]);
+}
+
+// spec: S-0701 claim 23 (movement: one entry by F5 as an attached sound; grace 3; then finish looping)
+#[test]
+fn movement_sound_episode() {
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 0, 0);
+    let mut a = audio(&w, &["Rumble"]);
+    let mut cat = SoundCatalog::new();
+    let mut e = SoundEntry::new("Rumble", &["Rumble"]);
+    e.control.looped = true;
+    cat.insert(e);
+    a.set_catalog(cat);
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            move_sound: strings(&["Rumble"]),
+            ..TypeSounds::default()
+        },
+    );
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 0);
+    w.obj_mut(tank).expect("tank").pos.x += 10;
+    a.tick(&w, &[], &mut u);
+    assert_eq!(u.taken(), 1);
+    assert_eq!(heard(&mut a, 0), ["Rumble"]);
+    w.obj_mut(tank).expect("tank").pos.x += 10;
+    a.tick(&w, &[], &mut u);
+    // Three updates count the grace down; the loop goes on.
+    for _ in 0..3 {
+        a.tick(&w, &[], &mut u);
+    }
+    render(&mut a, 100);
+    assert_eq!(a.mixer().alive(), 1);
+    // The following one asks it to finish looping.
+    a.tick(&w, &[], &mut u);
+    render(&mut a, 100);
+    assert_eq!(a.mixer().alive(), 0);
+    assert_eq!(u.taken(), 1);
+}
+
+// spec: S-0701 claim 23 (the rotation sound as an attached sound while the turret turns)
+#[test]
+fn turret_sound() {
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 0, 0);
+    let mut a = audio(&w, &["Whirr"]);
+    let mut cat = SoundCatalog::new();
+    let mut e = SoundEntry::new("Whirr", &["Whirr"]);
+    e.control.looped = true;
+    cat.insert(e);
+    a.set_catalog(cat);
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            turret_rotate: Some("Whirr".into()),
+            ..TypeSounds::default()
+        },
+    );
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 0);
+    let tick = w.tick;
+    let o = w.obj_mut(tank).expect("tank");
+    o.turret.t0 = tick;
+    o.turret.duration = 100;
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 0), ["Whirr"]);
+    w.tick += 10_000;
+    a.tick(&w, &[], &mut u);
+    render(&mut a, 100);
+    assert_eq!(a.mixer().alive(), 0);
+}
+
+// spec: S-0701 claim 23 (unit ready: the type's creation sound, else the game-wide one of its kind, any owner)
+#[test]
+fn unit_ready_sound() {
+    let w = world();
+    let mut a = audio(&w, &["Mine", "Wheels", "Boots"]);
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            create: Some("Mine".into()),
+            ..TypeSounds::default()
+        },
+    );
+    n.create_unit = Some("Wheels".into());
+    n.create_infantry = Some("Boots".into());
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let ready = |t: TypeRef, h: u8| Effect::Sound {
+        sound: Sound::UnitReady,
+        of: Some(t),
+        house: Some(HouseId(h)),
+        pos: Some(Pos::centre(testkit::mid(SIZE, 0, 0), 0)),
+    };
+    let fx = [
+        ready(tref(&w, Kind::Vehicle, "CRUSHER"), 1),
+        ready(tref(&w, Kind::Vehicle, "CART"), 1),
+        ready(tref(&w, Kind::Infantry, "WALKER"), 0),
+    ];
+    a.tick(&w, &fx, &mut u);
+    assert_eq!(heard(&mut a, 0), ["Mine", "Wheels", "Boots"]);
+}
+
+// spec: S-0701 claim 23 (building placement and sale sounds; promotion for the local player's objects)
+#[test]
+fn building_and_promotion_sounds() {
+    let mut w = world();
+    let mine = spawn(&mut w, Kind::Vehicle, "CRUSHER", 0, 0, 0);
+    let theirs = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 2, 0);
+    let mut a = audio(&w, &["Slam", "Cash", "Vet", "Elite"]);
+    let mut n = SoundNames::default();
+    n.building_slam = Some("Slam".into());
+    n.sell = Some("Cash".into());
+    n.upgrade_veteran = Some("Vet".into());
+    n.upgrade_elite = Some("Elite".into());
+    a.set_names(n);
+    a.cue(UiCue::BuildingPlaced);
+    assert_eq!(heard(&mut a, 0), ["Slam"]);
+    a.mixer_mut().clear();
+    let mut u = Rng::new(1);
+    let sell = |h: u8, pos: Option<Pos>| Effect::Sound {
+        sound: Sound::Sell,
+        of: None,
+        house: Some(HouseId(h)),
+        pos,
+    };
+    a.tick(&w, &[sell(1, None), sell(0, None)], &mut u);
+    assert_eq!(heard(&mut a, 100), ["Cash"]);
+    a.mixer_mut().clear();
+    for id in [mine, theirs] {
+        w.obj_mut(id).expect("object").combat.experience.0 = 0x3F80_0000; // 1.0
+    }
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 200), ["Vet"]);
+    a.mixer_mut().clear();
+    w.obj_mut(mine).expect("object").combat.experience.0 = 0x4000_0000; // 2.0
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 300), ["Elite"]);
+}
+
+// spec: S-0701 claim 24 (production-feedback clicks: the build click; refusals: the refusal sound); S-0416 claim 4 (credit ticks at one half)
+#[test]
+fn interface_sounds() {
+    let w = world();
+    let mut a = audio(&w, &["Click", "Nope", "Up", "Down"]);
+    let mut n = SoundNames::default();
+    n.gui_build = Some("Click".into());
+    n.scold = Some("Nope".into());
+    n.credit_ticks = strings(&["Up", "Down"]);
+    a.set_names(n);
+    let mut now = 0;
+    for (c, want) in [
+        (UiCue::BuildStarted, "Click"),
+        (UiCue::BuildResumed, "Click"),
+        (UiCue::BuildHeld, "Click"),
+        (UiCue::BuildCancelled, "Click"),
+        (UiCue::BuildRefused, "Nope"),
+        (UiCue::PlacementRefused, "Nope"),
+        (UiCue::CreditTick { rising: true }, "Up"),
+        (UiCue::CreditTick { rising: false }, "Down"),
+    ] {
+        a.mixer_mut().clear();
+        let i = a.cue(c).expect("plays");
+        now += 100;
+        assert_eq!(heard(&mut a, now), [want]);
+        let level = if matches!(c, UiCue::CreditTick { .. }) {
+            FULL / 2
+        } else {
+            FULL
+        };
+        assert_eq!(a.mixer().placement(i), Some((level, crate::mixer::CENTRE)));
+    }
+}
+
+/// Audio whose announcements are entries named after their role, each with
+/// one sample per voice set.
+fn announcing(w: &World, roles: &[(Announcement, &str)]) -> Audio {
+    let mut samples: Vec<String> = Vec::new();
+    for (_, n) in roles {
+        for v in 0..3 {
+            samples.push(format!("{n}{v}"));
+        }
+    }
+    let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+    let mut a = audio(w, &refs);
+    let mut s = SpeechCatalog::default();
+    let mut names = SoundNames::default();
+    for (role, n) in roles {
+        s.insert(Line {
+            name: (*n).into(),
+            samples: [format!("{n}0"), format!("{n}1"), format!("{n}2")],
+            ..Line::default()
+        });
+        names.set_announcement(*role, n);
+    }
+    a.set_speech(s);
+    a.set_names(names);
+    a
+}
+
+// spec: S-0701 claim 27 (one at a time, more than 500 ms after the previous start); claim 26 (the local player's voice set)
+#[test]
+fn announcements_one_at_a_time() {
+    let w = world();
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::Building, "Bld"),
+            (Announcement::OnHold, "Hold"),
+        ],
+    );
+    let set = a.voice_set();
+    assert!(set < 3);
+    a.cue(UiCue::BuildStarted);
+    a.service(1000);
+    assert!(a.mixer().speaking());
+    // A standard request while one plays and the place is empty waits.
+    a.cue(UiCue::BuildHeld);
+    render(&mut a, 100);
+    assert!(!a.mixer().speaking());
+    a.service(1400);
+    assert!(!a.mixer().speaking());
+    a.service(1500);
+    assert!(!a.mixer().speaking());
+    a.service(1501);
+    assert!(a.mixer().speaking());
+}
+
+fn base_names(a: &mut Audio) {
+    let mut n = SoundNames::default();
+    for (r, s) in [
+        (Announcement::BaseUnderAttack, "Base"),
+        (Announcement::UnitLost, "Lost"),
+        (Announcement::HarvesterUnderAttack, "Harv"),
+        (Announcement::LowFunds, "Funds"),
+        (Announcement::LowPower, "Power"),
+    ] {
+        n.set_announcement(r, s);
+    }
+    n.base_under_attack = Some("Siren".into());
+    a.set_names(n);
+}
+
+fn speech_of(roles: &[&str]) -> SpeechCatalog {
+    let mut s = SpeechCatalog::default();
+    for n in roles {
+        s.insert(Line {
+            name: (*n).into(),
+            samples: [format!("{n}0"), format!("{n}1"), format!("{n}2")],
+            ..Line::default()
+        });
+    }
+    s
+}
+
+/// Whether an announcement started at `now` after an earlier one ended.
+fn announced(a: &mut Audio, now: i64) -> bool {
+    a.service(now);
+    let s = a.mixer().speaking();
+    render(a, 100);
+    s
+}
+
+const ROLES: [&str; 5] = ["Base", "Lost", "Harv", "Funds", "Power"];
+
+fn base_audio(w: &World) -> Audio {
+    let mut samples = vec!["Siren".to_owned()];
+    for n in ROLES {
+        for v in 0..3 {
+            samples.push(format!("{n}{v}"));
+        }
+    }
+    let refs: Vec<&str> = samples.iter().map(String::as_str).collect();
+    let mut a = audio(w, &refs);
+    a.set_speech(speech_of(&ROLES));
+    base_names(&mut a);
+    a
+}
+
+// spec: S-0701 claim 28 and F7 (base under attack with the attack-warning sound; suppressed near a recent one)
+#[test]
+fn base_under_attack() {
+    let mut w = world();
+    let tower = tref(&w, Kind::Building, "TOWER");
+    let foe = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 5, 5);
+    let mut a = base_audio(&w);
+    let mut u = Rng::new(1);
+    let hit_by = |dx: i32, attacker: Option<ObjectId>| Effect::Hit {
+        id: ObjectId(999),
+        of: tower,
+        owner: Some(ME),
+        pos: Pos::centre(testkit::mid(SIZE, dx, 0), 0),
+        result: HitResult::Unchanged,
+        attacker,
+    };
+    let at = |dx: i32| hit_by(dx, Some(foe));
+    a.tick(&w, &[at(0)], &mut u);
+    assert_eq!(heard(&mut a, 0), ["Siren"]);
+    assert!(announced(&mut a, 1000));
+    // Within 8 cells: suppressed; 8 cells away: raised.
+    a.tick(&w, &[at(7)], &mut u);
+    assert!(!announced(&mut a, 2000));
+    a.tick(&w, &[at(8)], &mut u);
+    assert!(announced(&mut a, 3000));
+    // A hit without an attacker raises nothing; no draws at all.
+    a.tick(&w, &[hit_by(20, None)], &mut u);
+    assert!(!announced(&mut a, 4000));
+    assert_eq!(u.taken(), 0);
+    // After 600 ticks the first place is free again.
+    w.tick += 600;
+    a.tick(&w, &[at(0)], &mut u);
+    assert!(announced(&mut a, 5000));
+}
+
+// spec: S-0701 claim 28 (unit lost and harvester under attack, F7)
+#[test]
+fn unit_lost_and_harvester() {
+    let w = world();
+    let mut a = base_audio(&w);
+    let mut u = Rng::new(1);
+    let tank = tref(&w, Kind::Vehicle, "CRUSHER");
+    let cart = tref(&w, Kind::Vehicle, "CART");
+    a.tick(&w, &[hit(&w, tank, 0, HitResult::NowDead, None)], &mut u);
+    assert!(announced(&mut a, 1000));
+    a.tick(&w, &[hit(&w, tank, 0, HitResult::NowDead, None)], &mut u);
+    assert!(!announced(&mut a, 2000));
+    a.tick(&w, &[hit(&w, tank, 1, HitResult::NowDead, None)], &mut u);
+    assert!(!announced(&mut a, 2500));
+    a.tick(&w, &[hit(&w, cart, 0, HitResult::Unchanged, None)], &mut u);
+    assert!(announced(&mut a, 3000));
+}
+
+// spec: S-0701 claim 28 (low funds: below 100 credits with a factory; the countdown N(⌊k × 900⌋))
+#[test]
+fn low_funds() {
+    let mut w = world();
+    let mut a = base_audio(&w);
+    let mut u = Rng::new(1);
+    w.houses[0].credits = 50;
+    // No factory: nothing.
+    a.tick(&w, &[], &mut u);
+    assert!(!announced(&mut a, 1000));
+    spawn(&mut w, Kind::Building, "BARR", 0, 0, 0);
+    a.tick(&w, &[], &mut u);
+    assert!(announced(&mut a, 2000));
+    // interim: Q-0330 (no speak delay: once)
+    a.tick(&w, &[], &mut u);
+    assert!(!announced(&mut a, 3000));
+    // With a speak delay of one minute the countdown restarts at N(900).
+    let mut b = base_audio(&w);
+    let mut n = SoundNames::default();
+    n.set_announcement(Announcement::LowFunds, "Funds");
+    n.speak_delay = Some(glasnost_ini::binfloat::Binary::from_i64(
+        glasnost_ini::binfloat::Format::Double,
+        1,
+    ));
+    b.set_names(n);
+    b.tick(&w, &[], &mut u);
+    assert!(announced(&mut b, 1000));
+    let wait = glasnost_sim::infantry::normalised(900, w.game_speed);
+    w.tick += wait - 1;
+    b.tick(&w, &[], &mut u);
+    assert!(!announced(&mut b, 2000));
+    w.tick += 1;
+    b.tick(&w, &[], &mut u);
+    assert!(announced(&mut b, 3000));
+    // Enough credits: nothing.
+    w.houses[0].credits = 100;
+    w.tick += wait;
+    b.tick(&w, &[], &mut u);
+    assert!(!announced(&mut b, 4000));
+}
+
+// spec: S-0701 claim 28 (low power once per episode, with one of the first three construction-building types)
+#[test]
+fn low_power_once_per_episode() {
+    let mut w = world();
+    let mut a = base_audio(&w);
+    let mut n = SoundNames::default();
+    n.set_announcement(Announcement::LowPower, "Power");
+    n.build_const = vec![index(&w, Kind::Building, "BARR")];
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    w.houses[0].credits = 10_000;
+    w.houses[0].econ.power.drain = 50;
+    w.houses[0].econ.power.output = 10;
+    a.tick(&w, &[], &mut u);
+    assert!(!announced(&mut a, 1000));
+    spawn(&mut w, Kind::Building, "BARR", 0, 0, 0);
+    w.houses[0].econ.power.drain = 50;
+    w.houses[0].econ.power.output = 10;
+    a.tick(&w, &[], &mut u);
+    assert!(announced(&mut a, 2000));
+    a.tick(&w, &[], &mut u);
+    assert!(!announced(&mut a, 3000));
+    w.houses[0].econ.power.output = 60;
+    a.tick(&w, &[], &mut u);
+    w.houses[0].econ.power.output = 10;
+    a.tick(&w, &[], &mut u);
+    assert!(announced(&mut a, 4000));
+}
+
+// spec: S-0701 claim 29 (nothing in the game reads sound: the state hash is the same with and without audio)
+#[test]
+fn state_hash_without_audio() {
+    let run = |audio: bool| {
+        let mut w = testkit::combat_game(21);
+        let rep = testkit::combat_replay(21, 300);
+        let mut a = audio.then(|| {
+            let mut a = audio_with(&w, &["Bang", "Boom", "Ouch", "Yes"], Quirks::default());
+            let mut n = SoundNames::default();
+            for kind in [Kind::Vehicle, Kind::Infantry] {
+                for i in 0..3 {
+                    n.set_type(
+                        kind,
+                        i,
+                        TypeSounds {
+                            damage_sound: Some("Ouch".into()),
+                            die_sound: strings(&["Boom"]),
+                            voice_feedback: strings(&["Yes"]),
+                            move_sound: strings(&["Ouch"]),
+                            ..TypeSounds::default()
+                        },
+                    );
+                }
+            }
+            a.set_names(n);
+            a
+        });
+        let mut u = Rng::new(21);
+        for t in 0..300 {
+            rep.issue_due(&mut w);
+            glasnost_sim::tick::step(&mut w);
+            let fx = std::mem::take(&mut w.effects);
+            if let Some(a) = a.as_mut() {
+                a.tick(&w, &fx, &mut u);
+                a.service(i64::from(t) * 67);
+                render(a, 64);
+            }
+        }
+        glasnost_sim::save::state_hash(&w)
+    };
+    assert_eq!(run(true), run(false));
+}

@@ -98,28 +98,27 @@ pub fn platform_default() -> Box<dyn Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mixer::{Clip, MixParams, Placement, UNITY, VoiceRequest};
+    use crate::catalog::{EntryId, SoundEntry};
+    use crate::mixer::{Clip, MixQuirks, Prepared, Where};
     use std::sync::Arc;
 
     #[test]
     fn null_output_drops_voices() {
         let mut o = NullOutput::new(8000, "test");
-        let mut m = Mixer::new(o.rate(), MixParams::default());
-        m.play(VoiceRequest {
-            clip: Arc::new(Clip {
+        let mut m = Mixer::new(o.rate(), 1, MixQuirks::default());
+        let prep = Prepared {
+            id: EntryId(0),
+            entry: Arc::new(SoundEntry::new("k", &["k"])),
+            clips: vec![Arc::new(Clip {
                 sample_rate: 8000,
                 channels: 1,
                 samples: vec![1; 10],
-            }),
-            key: "k".into(),
-            gain: UNITY,
-            placement: Placement::Everywhere,
-            priority: 0,
-            limit: None,
-        })
-        .unwrap();
+            })],
+        };
+        m.request(prep, Where::Screen, crate::catalog::FULL)
+            .unwrap();
         o.pump(&mut m);
-        assert_eq!(m.playing(), 0);
+        assert_eq!(m.alive(), 0);
         assert!(matches!(o.state(), OutputState::Silent(_)));
     }
 }

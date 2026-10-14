@@ -69,6 +69,8 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
     assert_eq!(p.selection, [mcv]);
     assert!(p.game.replay().orders.is_empty());
+    // spec: S-0701 claim 17 (the newly selected object gives the selection response)
+    assert_eq!(std::mem::take(&mut p.selected), [mcv]);
     // A left click on the ground clears it.
     p.click_map(Button::Left, None, cell, Modifiers::default());
     assert!(p.selection.is_empty());
@@ -78,6 +80,10 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     let to = CellXY::new(cell.x, cell.y + 2);
     p.click_map(Button::Right, None, to, Modifiers::default());
     assert_eq!(p.game.replay().orders.len(), 1, "the move is in the replay");
+    // spec: S-0701 claim 18 (the click's orders and selection go to the order response); the order selects nothing new
+    assert_eq!(p.acks.len(), 1);
+    assert_eq!(p.acks[0].0, [mcv]);
+    assert_eq!(std::mem::take(&mut p.selected), [mcv], "only the second left click");
     p.step();
     assert_eq!(p.world().obj(mcv).unwrap().dest, Some(Target::Cell(to)));
     step_until(&mut p, 400, |p| {
@@ -85,6 +91,8 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     });
     // Deploy (D) turns it into the base building.
     p.key(KeyCommand::Deploy);
+    // spec: S-0701 claim 19 (a key command that issued orders)
+    assert_eq!(p.keys, [KeyCommand::Deploy]);
     step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
     let first_buildings = own(&p, Kind::Building).len();
     // A building icon appears; a left click starts it.
@@ -112,6 +120,8 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
         .expect("a legal cell near the base");
     p.click_map(Button::Left, None, spot, Modifiers::default());
     assert_eq!(p.tool, Tool::Select, "placement mode ends");
+    // spec: S-0701 claim 23 (the placement sound)
+    assert!(p.cues.contains(&UiCue::BuildingPlaced));
     step_until(&mut p, 10, |p| {
         own(p, Kind::Building).len() > first_buildings
     });
@@ -135,6 +145,8 @@ fn box_selection_takes_own_mobile_objects() {
     let all: Vec<ObjectId> = p.world().objects.keys().copied().collect();
     p.select_box(&all, false);
     assert!(!p.selection.is_empty());
+    // spec: S-0701 claim 17 (one input selecting several objects: only the first speaks)
+    assert_eq!(p.selected, [p.selection[0]]);
     for id in &p.selection {
         let o = p.world().obj(*id).unwrap();
         assert_eq!(o.owner, Some(p.local));

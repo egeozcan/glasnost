@@ -1,34 +1,47 @@
-//! What the game client calls every frame: [`Audio`] turns simulation
-//! effects, order acknowledgements and interface cues into voices.
+//! What the game client calls: [`Audio`] turns simulation effects, the
+//! world's state, selections, orders, key commands and interface cues into
+//! sound instances and announcements (S-0701 claims 16 to 28).
 //!
-//! Sound never feeds back into the simulation. [`Audio`] reads effects and
-//! the world, and the one random stream it draws from is the
-//! *unsynchronised* stream (S-0202 claim 11), which the caller owns and
-//! passes in; the scenario random stream is never touched.
+//! Sound never feeds back into the simulation (S-0701 claim 29): [`Audio`]
+//! reads effects and the world. The game-side choices of claims 17, 18, 20
+//! and 23 draw from the *unsynchronised* stream (S-0202 claim 11), which the
+//! caller owns and passes in; per-instance draws use the mixer's own
+//! presentation generator (interim, Q-0333); the scenario random stream is
+//! never touched.
 
+use std::collections::BTreeMap;
+
+use glasnost_rules::quirks::Quirks;
+use glasnost_sim::combat::damage::HitResult;
 use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::combat::veterancy::{self, Rank};
+use glasnost_sim::combat::weapon;
+use glasnost_sim::econ::{TypeRef, power, production};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rng::Rng;
-use glasnost_sim::rules::{Behaviour, Kind};
-use glasnost_sim::targeting::{ClickResult, selection_response, selection_responses};
+use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
+use glasnost_sim::targeting::{ClickResult, KeyCommand};
 use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
 use crate::bank::SoundBank;
-use crate::catalog::SoundCatalog;
-use crate::mixer::{Listener, MixParams, Mixer, Placement, Refused, UNITY, VoiceId, VoiceRequest};
-use crate::names::{Announcement, SoundNames};
+use crate::catalog::{EntryId, FULL, SoundCatalog};
+use crate::mixer::{InstanceId, MixQuirks, Mixer, Prepared, View, Where};
+use crate::names::{Announcement, SoundNames, TypeSounds};
 use crate::output::{Output, OutputState};
+use crate::speech::{Announcer, Requested, SpeechCatalog, voice_set};
 
-/// Why a sound did not start.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PlayError {
-    /// The catalog does not know the sound name.
-    Unknown(String),
-    /// The bank has no playable sample for it.
-    Missing(String),
-    /// The mixer refused the voice.
-    Refused(Refused),
-}
+/// The feedback chance: a draw below this of R(0, 99) (S-0701 Constants).
+const FEEDBACK_CHANCE: i32 = 30; // spec: S-0701 claim 20 and Constants (30 in 100)
+/// The movement sound's grace counter (S-0701 Constants).
+const MOVE_GRACE: i32 = 3; // spec: S-0701 claim 23 and Constants (3 ticks)
+/// Low funds threshold (S-0701 Constants).
+const LOW_FUNDS: i32 = 100; // spec: S-0701 claim 28 and Constants (below 100 credits)
+/// Ticks per minute of the speak delay: N(⌊k × 900⌋) (S-0701 Constants).
+const SPEAK_DELAY_TICKS: i64 = 900; // spec: S-0701 claim 28 and Constants (N(⌊k × 900⌋) ticks)
+/// The level of a credit tick's request: one half (S-0416 Constants).
+const CREDIT_TICK_LEVEL: i32 = FULL / 2; // spec: S-0416 claim 4 and Constants (tick sound volume one half)
+/// Anchors of turret sounds are offset from those of movement sounds.
+const TURRET_ANCHOR: u64 = 1 << 40;
 
 /// Interface cues the client reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,31 +70,1043 @@ pub enum UiCue {
     PlacementRefused,
     /// A building item became done (S-0411 claims 9 and 12).
     ConstructionComplete,
+    /// The local player's house placed a building (S-0701 claim 23).
+    BuildingPlaced,
 }
 
-/// The order kinds that have an acknowledgement of their own kind (S-0214
-/// claim 14): harvest, attack, move and attack move, enter, capture and
-/// unload. `None` for an order with no actor.
-fn own_kind(o: &Order) -> bool {
-    match o {
-        Order::Behaviour {
-            behaviour,
-            attack_move,
-            ..
-        } => {
-            *attack_move
-                || matches!(
-                    behaviour,
-                    Behaviour::Harvest
-                        | Behaviour::Attack
-                        | Behaviour::Move
-                        | Behaviour::AttackMove
-                        | Behaviour::Enter
-                        | Behaviour::Capture
-                        | Behaviour::Unload
-                )
+/// The F7 radar-event kinds that announcements pass through.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RadarKind {
+    BaseAttacked,
+    HarvesterAttacked,
+    UnitProduced,
+    UnitLost,
+    AllyAttacked,
+}
+
+impl RadarKind {
+    /// (*r* cells, *t* ticks) of F7's table.
+    fn table(self) -> (i64, i32) {
+        match self {
+            // spec: S-0701 F7 (base attacked 8, 600; harvester attacked 8, 400; unit produced 2, 200; unit lost 8, 200; ally attacked 8, 600)
+            RadarKind::BaseAttacked => (8, 600),
+            RadarKind::HarvesterAttacked => (8, 400),
+            RadarKind::UnitProduced => (2, 200),
+            RadarKind::UnitLost => (8, 200),
+            RadarKind::AllyAttacked => (8, 600),
         }
-        _ => false,
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RadarEvent {
+    kind: RadarKind,
+    cell: (i32, i32),
+    until: i32,
+}
+
+/// An object's response slot (S-0701 claim 16).
+#[derive(Clone, Copy, Debug, Default)]
+struct Slot {
+    waiting: Option<EntryId>,
+    speaking: Option<(InstanceId, EntryId)>,
+}
+
+/// An object's movement-sound episode (S-0701 claim 23).
+#[derive(Clone, Copy, Debug)]
+struct Motion {
+    last: Pos,
+    grace: i32,
+    begun: bool,
+}
+
+/// The audio of a game.
+pub struct Audio {
+    mixer: Mixer,
+    output: Box<dyn Output>,
+    bank: SoundBank,
+    catalog: SoundCatalog,
+    speech: SpeechCatalog,
+    names: SoundNames,
+    quirks: Quirks,
+    announcer: Announcer,
+    voice: usize,
+    local: Option<HouseId>,
+    slots: BTreeMap<ObjectId, Slot>,
+    motion: BTreeMap<ObjectId, Motion>,
+    turrets: BTreeMap<ObjectId, InstanceId>,
+    ranks: BTreeMap<ObjectId, Rank>,
+    radar: Vec<RadarEvent>,
+    low_funds_after: Option<i32>,
+    low_funds_spoken: bool,
+    low_power: bool,
+    now_ms: i64,
+}
+
+fn mix_quirks(q: &Quirks) -> MixQuirks {
+    MixQuirks {
+        sound_order_startup_draw: q.sound_order_startup_draw,
+        ranged_draw_half_span: q.ranged_draw_half_span,
+    }
+}
+
+impl Audio {
+    /// Audio on an output, with no sound data, an empty bank and no sound
+    /// names.
+    pub fn new(output: Box<dyn Output>) -> Self {
+        let quirks = Quirks::default();
+        let mixer = Mixer::new(output.rate(), 1, mix_quirks(&quirks));
+        Self {
+            mixer,
+            output,
+            bank: SoundBank::new(),
+            catalog: SoundCatalog::new(),
+            speech: SpeechCatalog::default(),
+            names: SoundNames::default(),
+            quirks,
+            announcer: Announcer::default(),
+            voice: 0,
+            local: None,
+            slots: BTreeMap::new(),
+            motion: BTreeMap::new(),
+            turrets: BTreeMap::new(),
+            ranks: BTreeMap::new(),
+            radar: Vec::new(),
+            low_funds_after: None,
+            low_funds_spoken: false,
+            low_power: false,
+            now_ms: 0,
+        }
+    }
+
+    /// Audio on the platform's default output
+    /// ([`crate::output::platform_default`]).
+    pub fn platform() -> Self {
+        Self::new(crate::output::platform_default())
+    }
+
+    /// Sets the sample bank.
+    pub fn set_bank(&mut self, bank: SoundBank) {
+        self.bank = bank;
+    }
+
+    /// The sample bank.
+    pub fn bank_mut(&mut self) -> &mut SoundBank {
+        &mut self.bank
+    }
+
+    /// Sets the sound entries (S-0701 claims 1 to 4).
+    pub fn set_catalog(&mut self, catalog: SoundCatalog) {
+        self.catalog = catalog;
+    }
+
+    /// The sound entries.
+    pub fn catalog(&self) -> &SoundCatalog {
+        &self.catalog
+    }
+
+    /// Sets the announcement data (S-0701 claim 26).
+    pub fn set_speech(&mut self, speech: SpeechCatalog) {
+        self.speech = speech;
+    }
+
+    /// Sets the rules data's sound names (from
+    /// [`SoundNames::from_ruleset`]).
+    pub fn set_names(&mut self, names: SoundNames) {
+        self.names = names;
+    }
+
+    /// The sound names.
+    pub fn names(&self) -> &SoundNames {
+        &self.names
+    }
+
+    /// Sets the quirk switches (the game's rules).
+    pub fn set_quirks(&mut self, q: Quirks) {
+        self.quirks = q;
+        self.mixer = Mixer::new(self.output.rate(), 1, mix_quirks(&q));
+    }
+
+    /// The mixer (offline rendering, tests, volume).
+    pub fn mixer_mut(&mut self) -> &mut Mixer {
+        &mut self.mixer
+    }
+
+    /// The mixer.
+    pub fn mixer(&self) -> &Mixer {
+        &self.mixer
+    }
+
+    /// Starts a game: the local player's house, its voice set and the
+    /// presentation generator's seed (interim, Q-0333: the game's seed).
+    pub fn start(&mut self, w: &World, local: Option<HouseId>, seed: u32) {
+        self.mixer.clear();
+        self.mixer.reseed(seed);
+        self.announcer.reset();
+        self.local = local;
+        // spec: S-0701 claim 26 (the voice set follows the local player's side: first, second, any other)
+        self.voice = local
+            .and_then(|h| w.houses.get(usize::from(h.0)))
+            .and_then(|h| {
+                w.rules()
+                    .econ
+                    .tech
+                    .country_side
+                    .get(h.country as usize)
+                    .copied()
+                    .flatten()
+            })
+            .map_or(2, |s| voice_set(s.max(0) as usize));
+        self.slots.clear();
+        self.motion.clear();
+        self.turrets.clear();
+        self.ranks.clear();
+        self.radar.clear();
+        self.low_funds_after = None;
+        self.low_funds_spoken = false;
+        self.low_power = false;
+    }
+
+    /// The voice set in use (0 Allied, 1 Soviet, 2 Yuri).
+    pub fn voice_set(&self) -> usize {
+        self.voice
+    }
+
+    /// Sets the battlefield view. Call every frame.
+    pub fn set_view(&mut self, v: View) {
+        self.mixer.set_view(v);
+    }
+
+    /// Starts or resumes the output; call from a user-input handler.
+    pub fn resume(&mut self) {
+        self.output.resume();
+    }
+
+    /// Services the audio at host time `now_ms` (the audio clock): an audio
+    /// pass when one is due (claim 12), the next announcement (claim 27),
+    /// then the output. Call once per drawn frame, after the frame's events.
+    pub fn frame(&mut self, now_ms: i64) {
+        self.service(now_ms);
+        self.output.pump(&mut self.mixer);
+    }
+
+    /// [`Audio::frame`] without feeding the output (offline rendering).
+    pub fn service(&mut self, now_ms: i64) {
+        self.now_ms = now_ms;
+        self.mixer.service(now_ms);
+        if let Some(id) = self.announcer.next(now_ms, self.mixer.speaking()) {
+            let sample = self.speech.line(id).samples[self.voice].clone();
+            // spec: S-0701 claim 26 (quirks.announcement_volume_ignored: the volume key has no effect)
+            // interim: Q-0325 (announcements at full level; the volume key is not applied with the quirk off either)
+            if let Some(clip) = self.bank.clip(&sample).filter(|c| c.frames() > 0) {
+                self.mixer.speak(clip);
+            }
+        }
+    }
+
+    /// The output's state.
+    pub fn state(&self) -> OutputState {
+        self.output.state()
+    }
+
+    /// A sound entry with its loaded samples, or `None` when it never
+    /// plays (S-0701 claim 4 and Edge cases).
+    pub fn prepare(&mut self, id: EntryId) -> Option<Prepared> {
+        let entry = self.catalog.entry_arc(id);
+        let mut clips = Vec::new();
+        for s in &entry.samples {
+            match self.bank.clip(s).filter(|c| c.frames() > 0) {
+                Some(c) => clips.push(c),
+                // spec: S-0701 claim 4 (quirks.missing_sample_silences_entry: one missing sample silences the whole entry; off: it is left out)
+                None if self.quirks.missing_sample_silences_entry => return None,
+                None => {}
+            }
+        }
+        if clips.is_empty() {
+            return None;
+        }
+        let n = clips.len() as i32;
+        let a = entry.attack.clamp(0, n);
+        let d = entry.decay.clamp(0, n - a);
+        // spec: S-0701 Edge cases (quirks.attack_decay_without_body: an attack or decay entry with no body sample is silent; off: attack and decay play)
+        if self.quirks.attack_decay_without_body
+            && (entry.control.attack || entry.control.decay)
+            && n - a - d <= 0
+        {
+            return None;
+        }
+        Some(Prepared { id, entry, clips })
+    }
+
+    /// Requests an entry at a placement; `w` gives the shroud for *shroud*
+    /// entries (claim 6).
+    fn request(
+        &mut self,
+        w: Option<&World>,
+        id: EntryId,
+        at: Where,
+        scale: i32,
+    ) -> Option<InstanceId> {
+        let prep = self.prepare(id)?;
+        if prep.entry.placement.shroud
+            && let Some(p) = match at {
+                Where::Screen => None,
+                Where::Fixed(p) | Where::Follow(p) | Where::Attached { pos: p, .. } => Some(p),
+            }
+        {
+            let cell = p.cell();
+            // spec: S-0701 claim 6 and Edge cases (quirks.shroud_sound_corner_cell: a shroud sound at cell (0, 0) is never heard)
+            if self.quirks.shroud_sound_corner_cell && cell.x == 0 && cell.y == 0 {
+                return None;
+            }
+            // spec: S-0701 claim 6 (shroud: silent when the cell is not explored by the local player)
+            if let (Some(w), Some(h)) = (w, self.local)
+                && !glasnost_sim::econ::shroud::explored(w, h, cell)
+            {
+                return None;
+            }
+        }
+        self.mixer.request(prep, at, scale).ok()
+    }
+
+    /// Plays a sound by name at a placement (unknown names play nothing,
+    /// claim 1).
+    pub fn play_named(&mut self, name: Option<&str>, at: Where) -> Option<InstanceId> {
+        let id = self.catalog.resolve(name?)?;
+        self.request(None, id, at, FULL)
+    }
+
+    fn play_in(&mut self, w: &World, name: Option<&str>, at: Where) -> Option<InstanceId> {
+        let id = self.catalog.resolve(name?)?;
+        self.request(Some(w), id, at, FULL)
+    }
+
+    /// F5: one entry of a list chosen by one raw value, `x mod n` over the
+    /// list with unknown names dropped; no value when it is empty.
+    fn choose(&self, list: &[String], unsync: &mut Rng) -> Option<EntryId> {
+        // spec: S-0701 Import mapping (lists drop unknown names)
+        let ids: Vec<EntryId> = list
+            .iter()
+            .filter_map(|n| self.catalog.resolve(n))
+            .collect();
+        if ids.is_empty() {
+            // spec: S-0701 F5 (no raw value when n = 0)
+            return None;
+        }
+        // spec: S-0701 F5 (i = x mod n, x the next raw value)
+        let x = unsync.raw();
+        Some(ids[(x % ids.len() as u32) as usize])
+    }
+
+    fn single(&self, name: Option<&String>) -> Option<EntryId> {
+        self.catalog.resolve(name?)
+    }
+
+    fn sounds(&self, t: TypeRef) -> TypeSounds {
+        self.names
+            .of_type(t.kind, t.index)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Puts a response in an object's slot (claim 16).
+    fn respond(&mut self, id: ObjectId, e: Option<EntryId>) {
+        if let Some(e) = e {
+            // spec: S-0701 claim 16 (replacing any response already waiting)
+            self.slots.entry(id).or_default().waiting = Some(e);
+        }
+    }
+
+    /// Plays an announcement for the local player (claims 27 and 28).
+    pub fn announce(&mut self, a: Announcement) {
+        let Some(name) = self.names.announcement(a) else {
+            return;
+        };
+        let Some(id) = self.speech.resolve(name) else {
+            return;
+        };
+        if self
+            .announcer
+            .request(&self.speech, id, self.mixer.speaking())
+            == Requested::StopCurrent
+        {
+            self.mixer.stop_speech();
+        }
+    }
+
+    /// F7: tries to create a radar event; false when a nearby one of the
+    /// same kind suppresses it.
+    fn radar_event(&mut self, kind: RadarKind, cell: (i32, i32), tick: i32) -> bool {
+        // interim: Q-0331 (the zoom-in phase lasts 0 ticks: an event lasts t ticks from its creation)
+        self.radar.retain(|e| e.until > tick);
+        let (r, t) = kind.table();
+        let near = self.radar.iter().any(|e| {
+            let dx = i64::from(e.cell.0 - cell.0);
+            let dy = i64::from(e.cell.1 - cell.1);
+            // spec: S-0701 F7 (⌊√(Δx² + Δy²)⌋ < r cells, for a kind that suppresses)
+            e.kind == kind && ((dx * dx + dy * dy) as u64).isqrt() < r as u64
+        });
+        if near {
+            return false;
+        }
+        self.radar.push(RadarEvent {
+            kind,
+            cell,
+            until: tick + t,
+        });
+        true
+    }
+
+    /// Handles one tick: its effects (claims 20 to 23 and 28), the response
+    /// slots (claim 16), movement, turret and promotion sounds (claim 23) and
+    /// the low funds and low power announcements (claim 28). Call after each
+    /// simulation step with that step's effects.
+    pub fn tick(&mut self, w: &World, effects: &[Effect], unsync: &mut Rng) {
+        for e in effects {
+            self.effect(w, e, unsync);
+        }
+        self.serve_slots(w);
+        self.scan(w, unsync);
+        self.house_announcements(w);
+    }
+
+    fn effect(&mut self, w: &World, e: &Effect, unsync: &mut Rng) {
+        match e {
+            // spec: S-0701 claim 22, S-0109 claim 13 (an animation's start sound, positional, any owner)
+            Effect::Anim { name, pos } => {
+                let s = self.names.anim_report(name).map(str::to_owned);
+                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+            }
+            Effect::Shot { weapon, from, .. } => {
+                let name = w.rules().combat.weapon(*weapon).name.clone();
+                // spec: S-0701 claim 21 (the report at the firing position, positional, any owner; no draw)
+                // interim: Q-0327 (entry 0 of the list instead of the creation draw's variant)
+                let first = self
+                    .names
+                    .report(&name)
+                    .iter()
+                    .find_map(|n| self.catalog.resolve(n));
+                if let Some(id) = first {
+                    self.request(Some(w), id, Where::Fixed(*from), FULL);
+                }
+            }
+            Effect::Hit {
+                id,
+                of,
+                owner,
+                pos,
+                result,
+                attacker,
+            } => self.hit(w, *id, *of, *owner, *pos, *result, *attacker, unsync),
+            // A detonation's sounds are those of the animations it creates
+            // (claim 22); a kill's are claim 20's, through Effect::Hit.
+            Effect::Killed { .. } | Effect::Detonation { .. } => {}
+            // spec: S-0011 claim 32 (play sound, and sound at a waypoint: the sound at the cell's centre)
+            Effect::Trigger {
+                code: 19 | 99,
+                name,
+                pos,
+                ..
+            } => {
+                let at = pos.map_or(Where::Screen, Where::Fixed);
+                self.play_in(w, Some(name), at);
+            }
+            Effect::Trigger { .. } => {}
+            Effect::Sound {
+                sound,
+                of,
+                house,
+                pos,
+            } => self.sound(w, *sound, *of, *house, *pos),
+        }
+    }
+
+    fn sound(
+        &mut self,
+        w: &World,
+        sound: Sound,
+        of: Option<TypeRef>,
+        house: Option<HouseId>,
+        pos: Option<Pos>,
+    ) {
+        let ts = of.map(|t| self.sounds(t)).unwrap_or_default();
+        let at = pos.map_or(Where::Screen, Where::Fixed);
+        // A sound that concerns a house is heard only by that house's player
+        // (S-0408 claims 6, 11 and 12; S-0415 claims 4 and 9).
+        let mine = house.is_none() || house == self.local;
+        match sound {
+            // spec: S-0415 claims 6 and 9 (the type's deploy sound at its position)
+            Sound::Deploy if mine => {
+                self.play_in(w, ts.deploy.as_deref(), at);
+            }
+            // spec: S-0415 claim 9; S-0701 claim 23 (the pack-up sound, positional at the build-down start)
+            Sound::Packup if mine => {
+                self.play_in(w, ts.packup.as_deref(), at);
+            }
+            // spec: S-0408 claims 6 and 12; S-0701 claim 23 (positional at the building; a wall sale's as a screen sound)
+            Sound::Sell if mine => {
+                let s = self.names.sell.clone();
+                self.play_in(w, s.as_deref(), at);
+            }
+            // spec: S-0415 claim 4 (the refusal announcement)
+            Sound::CannotDeploy if mine => self.announce(Announcement::CannotDeploy),
+            // spec: S-0408 claim 11; S-0701 claim 28 (unit sold)
+            Sound::UnitSold if mine => self.announce(Announcement::UnitSold),
+            Sound::UnitReady => {
+                let Some(t) = of else { return };
+                // spec: S-0701 claim 23 (the type's creation sound, else the game-wide one of its kind; any owner)
+                let kind_wide = match t.kind {
+                    Kind::Infantry => self.names.create_infantry.clone(),
+                    Kind::Aircraft => self.names.create_aircraft.clone(),
+                    _ => self.names.create_unit.clone(),
+                };
+                let id = self
+                    .single(ts.create.as_ref())
+                    .or_else(|| self.single(kind_wide.as_ref()));
+                if let Some(id) = id {
+                    self.request(Some(w), id, at, FULL);
+                }
+                // spec: S-0701 claim 28 (unit ready for the local player, F7 kind unit produced at the factory)
+                if house.is_some()
+                    && house == self.local
+                    && let Some(p) = pos
+                    && self.radar_event(RadarKind::UnitProduced, cell_of(p), w.tick)
+                {
+                    self.announce(Announcement::UnitReady);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn hit(
+        &mut self,
+        w: &World,
+        _id: ObjectId,
+        of: TypeRef,
+        owner: Option<HouseId>,
+        pos: Pos,
+        result: HitResult,
+        attacker: Option<ObjectId>,
+        unsync: &mut Rng,
+    ) {
+        let ts = self.sounds(of);
+        let local = owner.is_some() && owner == self.local;
+        match result {
+            // spec: S-0701 claim 20 (unchanged or any result beyond now dead: the damage sound at the object, positional, any owner)
+            HitResult::Unchanged | HitResult::PostMortem => {
+                if let Some(e) = self.single(ts.damage_sound.as_ref()) {
+                    // spec: S-0701 claim 7 (the damage sound keeps its map position and is placed again at passes)
+                    self.request(Some(w), e, Where::Follow(pos), FULL);
+                    // spec: S-0701 claim 20 and Edge cases (quirks.damage_sound_doubled: started twice)
+                    if self.quirks.damage_sound_doubled {
+                        self.request(Some(w), e, Where::Follow(pos), FULL);
+                    }
+                }
+            }
+            HitResult::NowYellow => {
+                let has = ts
+                    .voice_feedback
+                    .iter()
+                    .any(|n| self.catalog.resolve(n).is_some());
+                if has {
+                    // spec: S-0701 claim 20 and 31 (one R(0, 99) for every owner's object with a feedback list)
+                    let r = unsync.ranged(0, 99, self.quirks.ranged_draw_half_span);
+                    // spec: S-0701 claim 20 (below 30 and the local player's: one feedback response, positional, not through the slot)
+                    if r < FEEDBACK_CHANCE
+                        && local
+                        && let Some(e) = self.choose(&ts.voice_feedback, unsync)
+                    {
+                        self.request(Some(w), e, Where::Fixed(pos), FULL);
+                    }
+                }
+            }
+            HitResult::NowDead => {
+                // The death response list's key is unnamed (Q-0326): no death response.
+                // spec: S-0701 claim 20 (now dead: for every owner one death sound (F5), at the object, positional)
+                if let Some(e) = self.choose(&ts.die_sound, unsync) {
+                    self.request(Some(w), e, Where::Fixed(pos), FULL);
+                }
+            }
+            // spec: S-0701 claim 20 (unaffected or now red: nothing)
+            HitResult::Unaffected | HitResult::NowRed => {}
+        }
+        // Building damage and death sounds: when they play is Q-0332.
+        self.attack_announcements(w, of, owner, pos, result, attacker);
+    }
+
+    /// Claim 28's attack and loss announcements of one hit.
+    fn attack_announcements(
+        &mut self,
+        w: &World,
+        of: TypeRef,
+        owner: Option<HouseId>,
+        pos: Pos,
+        result: HitResult,
+        attacker: Option<ObjectId>,
+    ) {
+        let (Some(local), Some(owner)) = (self.local, owner) else {
+            return;
+        };
+        if result == HitResult::Unaffected {
+            return;
+        }
+        let cell = cell_of(pos);
+        let tick = w.tick;
+        let r = w.rules();
+        if of.kind == Kind::Building && attacker.is_some() {
+            // Walls are overlays in our engine, never hit as buildings; the exempt types' flag is an open question of S-0701.
+            if owner == local {
+                // spec: S-0701 claim 28 (base under attack: F7 kind base attacked; also the game-wide base under attack sound, a screen sound)
+                if self.radar_event(RadarKind::BaseAttacked, cell, tick) {
+                    self.announce(Announcement::BaseUnderAttack);
+                    let s = self.names.base_under_attack.clone();
+                    self.play_named(s.as_deref(), Where::Screen);
+                }
+            } else {
+                let passive = w
+                    .houses
+                    .get(usize::from(owner.0))
+                    .and_then(|h| r.countries.get(h.country as usize))
+                    .is_some_and(|c| c.passive);
+                // spec: S-0701 claim 28 (ally under attack: a non-passive house allied to the local player; F7 kind ally attacked; the same sound)
+                if !passive
+                    && w.allied(Some(local), Some(owner))
+                    && self.radar_event(RadarKind::AllyAttacked, cell, tick)
+                {
+                    self.announce(Announcement::AllyUnderAttack);
+                    let s = self.names.base_under_attack.clone();
+                    self.play_named(s.as_deref(), Where::Screen);
+                }
+            }
+        }
+        if owner != local {
+            return;
+        }
+        let harvester = r.unit(of.kind, of.index).is_some_and(|u| u.harvester);
+        // spec: S-0701 claim 28 (harvester under attack: damage without dying; F7 kind harvester attacked)
+        if harvester
+            && result != HitResult::NowDead
+            && self.radar_event(RadarKind::HarvesterAttacked, cell, tick)
+        {
+            self.announce(Announcement::HarvesterUnderAttack);
+        }
+        // spec: S-0701 claim 28 (unit lost: an infantry unit, vehicle or aircraft of the local player dies; F7 kind unit lost)
+        if result == HitResult::NowDead
+            && matches!(of.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+            && self.radar_event(RadarKind::UnitLost, cell, tick)
+        {
+            self.announce(Announcement::UnitLost);
+        }
+    }
+
+    /// The response slots (claim 16): at every tick a waiting response is
+    /// spoken if the object is not speaking, dropped if it is the entry being
+    /// spoken, and kept otherwise.
+    fn serve_slots(&mut self, w: &World) {
+        let ids: Vec<ObjectId> = self.slots.keys().copied().collect();
+        for id in ids {
+            if w.obj(id).is_none() {
+                self.slots.remove(&id);
+                continue;
+            }
+            let slot = self.slots[&id];
+            let Some(r) = slot.waiting else { continue };
+            let speaking = slot
+                .speaking
+                .filter(|(i, _)| self.mixer.is_alive(*i))
+                .map(|(_, e)| e);
+            let s = self.slots.get_mut(&id).expect("present");
+            match speaking {
+                // spec: S-0701 claim 16 (the same entry as the one being spoken is dropped)
+                Some(e) if e == r => s.waiting = None,
+                // spec: S-0701 claim 16 (a different one keeps waiting)
+                Some(_) => {}
+                None => {
+                    s.waiting = None;
+                    // spec: S-0701 claim 16 and 5 (spoken as a screen sound)
+                    let inst = self.request(Some(w), r, Where::Screen, FULL);
+                    let s = self.slots.get_mut(&id).expect("present");
+                    s.speaking = inst.map(|i| (i, r));
+                }
+            }
+        }
+    }
+
+    /// Movement, turret and promotion sounds from the world (claim 23).
+    fn scan(&mut self, w: &World, unsync: &mut Rng) {
+        let tick = w.tick;
+        let gone: Vec<ObjectId> = self
+            .motion
+            .keys()
+            .chain(self.turrets.keys())
+            .copied()
+            .filter(|id| w.obj(*id).is_none())
+            .collect();
+        for id in gone {
+            self.mixer.finish_anchor(u64::from(id.0));
+            self.mixer.finish_anchor(TURRET_ANCHOR | u64::from(id.0));
+            self.motion.remove(&id);
+            self.turrets.remove(&id);
+        }
+        self.ranks.retain(|id, _| w.obj(*id).is_some());
+        for (&id, o) in &w.objects {
+            if !o.kind.is_mobile() && o.kind != Kind::Building {
+                continue;
+            }
+            let ts = match self.names.of_type(o.kind, o.type_index) {
+                Some(t) => t.clone(),
+                None => TypeSounds::default(),
+            };
+            let anchor = u64::from(id.0);
+            if o.kind.is_mobile() && !ts.move_sound.is_empty() {
+                let m = self.motion.entry(id).or_insert(Motion {
+                    last: o.pos,
+                    grace: 0,
+                    begun: false,
+                });
+                let moved = m.last != o.pos;
+                m.last = o.pos;
+                let mut m = *m;
+                if moved {
+                    if !m.begun {
+                        // spec: S-0701 claim 23 (an episode start chooses one movement-list entry (F5), requested as an attached sound; marked begun even if inaudible)
+                        m.begun = true;
+                        if let Some(e) = self.choose(&ts.move_sound, unsync) {
+                            self.request(Some(w), e, Where::Attached { anchor, pos: o.pos }, FULL);
+                        }
+                    }
+                    // spec: S-0701 claim 23 (movement resets a grace counter to 3)
+                    m.grace = MOVE_GRACE;
+                    self.mixer.move_anchor(anchor, o.pos);
+                } else if m.begun {
+                    if m.grace > 0 {
+                        m.grace -= 1;
+                    } else {
+                        // spec: S-0701 claim 23 (after three updates the following one asks the sound to finish looping)
+                        self.mixer.finish_anchor(anchor);
+                        m.begun = false;
+                    }
+                }
+                self.motion.insert(id, m);
+            }
+            if let Some(turret) = self.single(ts.turret_rotate.as_ref()) {
+                let t_anchor = TURRET_ANCHOR | anchor;
+                let turning = o.turret.turning(tick);
+                let live = self
+                    .turrets
+                    .get(&id)
+                    .copied()
+                    .filter(|i| self.mixer.is_alive(*i));
+                match (turning, live) {
+                    // spec: S-0701 claim 23 (the rotation sound as an attached sound while the turret turns)
+                    // interim: Q-0337 (requested while turning with no live instance; finishes its loop pass once stopped)
+                    (true, None) => {
+                        if let Some(i) = self.request(
+                            Some(w),
+                            turret,
+                            Where::Attached {
+                                anchor: t_anchor,
+                                pos: o.pos,
+                            },
+                            FULL,
+                        ) {
+                            self.turrets.insert(id, i);
+                        }
+                    }
+                    (true, Some(_)) => self.mixer.move_anchor(t_anchor, o.pos),
+                    (false, Some(_)) => {
+                        self.mixer.finish_anchor(t_anchor);
+                        self.turrets.remove(&id);
+                    }
+                    (false, None) => {}
+                }
+            }
+            if o.owner.is_some() && o.owner == self.local {
+                let rank = veterancy::rank(w, id);
+                let before = self.ranks.insert(id, rank);
+                if let Some(b) = before
+                    && rank_value(rank) > rank_value(b)
+                {
+                    // spec: S-0701 claim 23 (the veteran or elite promotion sound, for the local player's objects, positional)
+                    let s = match rank {
+                        Rank::Elite => self.names.upgrade_elite.clone(),
+                        _ => self.names.upgrade_veteran.clone(),
+                    };
+                    self.play_in(w, s.as_deref(), Where::Fixed(o.pos));
+                }
+            }
+        }
+    }
+
+    /// Low funds and low power (claim 28).
+    fn house_announcements(&mut self, w: &World) {
+        let Some(local) = self.local else { return };
+        let r = w.rules();
+        let tick = w.tick;
+        let owns = |f: &dyn Fn(u32) -> bool| {
+            w.objects
+                .values()
+                .any(|o| o.owner == Some(local) && o.kind == Kind::Building && f(o.type_index))
+        };
+        // spec: S-0701 claim 28 (low funds: available credits below 100, the countdown expired, and an infantry, vehicle, building or naval factory owned)
+        let low = production::available_credits(w, local) < LOW_FUNDS;
+        if low
+            && self.low_funds_after.is_none_or(|t| tick >= t)
+            && !self.low_funds_spoken
+            && owns(&|i| {
+                r.buildings.get(i as usize).is_some_and(|b| {
+                    matches!(
+                        b.factory,
+                        Some(FactoryKind::Infantry | FactoryKind::Vehicle | FactoryKind::Building)
+                    )
+                })
+            })
+        {
+            self.announce(Announcement::LowFunds);
+            match self.names.speak_delay {
+                Some(k) => {
+                    // spec: S-0701 claim 28 (the countdown restarts at N(⌊k × 900⌋) ticks)
+                    let b = k
+                        .mul_rz(
+                            &glasnost_ini::binfloat::Binary::from_i64(
+                                glasnost_ini::binfloat::Format::Double,
+                                SPEAK_DELAY_TICKS,
+                            ),
+                            glasnost_ini::binfloat::Format::Double,
+                        )
+                        .trunc_to_i64()
+                        .unwrap_or(0)
+                        .clamp(0, i64::from(i32::MAX)) as i32;
+                    let n = glasnost_sim::infantry::normalised(b, w.game_speed);
+                    self.low_funds_after = Some(tick.saturating_add(n));
+                }
+                // interim: Q-0330 (no SpeakDelay: raised once, never repeated)
+                None => self.low_funds_spoken = true,
+            }
+        }
+        // spec: S-0701 claim 28 (low power: output below a positive drain, one of the first three construction-building types owned; once per episode)
+        let lp = power::low_power(w, local);
+        if lp && !self.low_power {
+            let bc = self.names.build_const.clone();
+            if owns(&|i| bc.contains(&i)) {
+                self.low_power = true;
+                self.announce(Announcement::LowPower);
+            }
+        } else if !lp {
+            self.low_power = false;
+        }
+    }
+
+    /// A selection response (claim 17): `id` became selected by the local
+    /// player's input, the first object of that input to do so.
+    pub fn selected(&mut self, w: &World, id: ObjectId, unsync: &mut Rng) {
+        let Some(o) = w.obj(id) else { return };
+        let ts = self.sounds(TypeRef {
+            kind: o.kind,
+            index: o.type_index,
+        });
+        // Our engine has no enslaved or deactivated objects yet, so the
+        // normal list always applies (claim 17).
+        // spec: S-0701 claim 17 and 31 (one raw value, entry x mod n; a passive house's object takes it and stays silent)
+        // interim: Q-0335 (any other house's object takes the draw too)
+        let e = self.choose(&ts.voice_select, unsync);
+        // spec: S-0701 claim 16 (only the local player's objects respond)
+        if o.owner.is_some() && o.owner == self.local {
+            self.respond(id, e);
+        }
+    }
+
+    /// The order response of a battlefield click (claim 18, F6).
+    /// `selection` is the selection in the order its objects were selected.
+    pub fn ordered(
+        &mut self,
+        w: &World,
+        selection: &[ObjectId],
+        click: &ClickResult,
+        unsync: &mut Rng,
+    ) {
+        // interim: Q-0328 (the responder is the most recently selected positive-primary-damage object, else the earliest selected; it responds when the click gave it an order)
+        let positive = |id: ObjectId| {
+            veterancy::type_combat(w, id)
+                .and_then(|tc| tc.slots[0])
+                .is_some_and(|wid| w.rules().combat.weapon(wid).damage > 0)
+        };
+        let Some(id) = selection
+            .iter()
+            .rev()
+            .copied()
+            .find(|&id| positive(id))
+            .or_else(|| selection.first().copied())
+        else {
+            return;
+        };
+        let Some(o) = w.obj(id) else { return };
+        // spec: S-0701 claim 16 (only the local player's objects respond)
+        if o.owner.is_none() || o.owner != self.local {
+            return;
+        }
+        let Some(order) = click.orders.iter().find(|x| actor(x) == Some(id)) else {
+            // spec: S-0701 claim 18 (no other object responds instead)
+            return;
+        };
+        let ts = self.sounds(TypeRef {
+            kind: o.kind,
+            index: o.type_index,
+        });
+        let e = match order {
+            // spec: S-0701 F6 (move, attack move: the move list)
+            Order::Behaviour {
+                attack_move: true, ..
+            }
+            | Order::Behaviour {
+                behaviour: Behaviour::Move | Behaviour::AttackMove,
+                ..
+            } => self.choose(&ts.voice_move, unsync),
+            Order::Behaviour {
+                behaviour: Behaviour::Attack,
+                target,
+                ..
+            } => {
+                // spec: S-0701 F6 (attack by the repair-response vehicle with a weapon of negative damage: the game-wide repair-vehicle response, then the attack list)
+                let heal = ts.repair_vehicle
+                    && weapon::would_use(w, id, *target)
+                        .1
+                        .is_some_and(|x| w.rules().combat.weapon(x).damage < 0);
+                // The four weapon responses' keys are unnamed (Q-0326): the attack list.
+                let ifv = if heal {
+                    self.single(self.names.voice_ifv_repair.as_ref())
+                } else {
+                    None
+                };
+                ifv.or_else(|| self.choose(&ts.voice_attack, unsync))
+            }
+            // spec: S-0701 F6 (enter: enter response, then the move list)
+            Order::Behaviour {
+                behaviour: Behaviour::Enter,
+                ..
+            } => self
+                .single(ts.voice_enter.as_ref())
+                .or_else(|| self.choose(&ts.voice_move, unsync)),
+            // spec: S-0701 F6 (capture: capture response, then enter response, then the move list)
+            Order::Behaviour {
+                behaviour: Behaviour::Capture,
+                ..
+            } => self
+                .single(ts.voice_capture.as_ref())
+                .or_else(|| self.single(ts.voice_enter.as_ref()))
+                .or_else(|| self.choose(&ts.voice_move, unsync)),
+            // spec: S-0701 F6 (harvest: harvest response, then the move list)
+            Order::Behaviour {
+                behaviour: Behaviour::Harvest,
+                ..
+            } => self
+                .single(ts.voice_harvest.as_ref())
+                .or_else(|| self.choose(&ts.voice_move, unsync)),
+            // spec: S-0701 F6 (unload, deploy: the deploy response; deployed infantry's undeploy response has an unnamed key, Q-0326)
+            Order::Behaviour {
+                behaviour: Behaviour::Unload,
+                ..
+            }
+            | Order::Deploy { .. } => {
+                if o.kind == Kind::Infantry && deployed_infantry(o) {
+                    None
+                } else {
+                    self.single(ts.voice_deploy.as_ref())
+                }
+            }
+            // spec: S-0701 F6 (any other order: the special-attack list)
+            _ => self.choose(&ts.voice_special_attack, unsync),
+        };
+        self.respond(id, e);
+    }
+
+    /// A key command of the local player that issued orders (claim 19).
+    pub fn key(&mut self, cmd: KeyCommand) {
+        let s = match cmd {
+            // spec: S-0701 claim 19 (guard, stop and scatter: their game-wide interface sounds, screen sounds)
+            KeyCommand::Guard => self.names.guard.clone(),
+            KeyCommand::Stop => self.names.stop.clone(),
+            KeyCommand::Scatter => self.names.scatter.clone(),
+            // spec: S-0701 claim 19 and Edge cases (quirks.deploy_command_silent: the deploy command is silent; off: `DeploySound`)
+            KeyCommand::Deploy if !self.quirks.deploy_command_silent => {
+                self.names.deploy_command.clone()
+            }
+            _ => None,
+        };
+        self.play_named(s.as_deref(), Where::Screen);
+    }
+
+    /// Plays an interface cue for the local player (claims 23, 24 and 28).
+    pub fn cue(&mut self, cue: UiCue) -> Option<InstanceId> {
+        let screen = |a: &mut Self, s: Option<String>| a.play_named(s.as_deref(), Where::Screen);
+        match cue {
+            UiCue::CreditTick { rising } => {
+                let t = &self.names.credit_ticks;
+                // spec: S-0416 claim 4 (fewer than two entries: no tick sound at all)
+                if t.len() < 2 {
+                    return None;
+                }
+                // spec: S-0416 claim 4 (first entry rising, second falling)
+                let name = t[usize::from(!rising)].clone();
+                let id = self.catalog.resolve(&name)?;
+                // spec: S-0416 claim 4 (volume one half: the request level of a screen sound, F3)
+                self.request(None, id, Where::Screen, CREDIT_TICK_LEVEL)
+            }
+            // spec: S-0410 claim 3 (the radar-on and radar-off sounds)
+            UiCue::RadarOn => screen(self, self.names.radar_on.clone()),
+            UiCue::RadarOff => screen(self, self.names.radar_off.clone()),
+            // spec: S-0701 claim 28 (construction complete; no throttle)
+            UiCue::ConstructionComplete => {
+                self.announce(Announcement::ConstructionComplete);
+                None
+            }
+            // spec: S-0701 claim 24 (the production-feedback clicks play the game-wide build click; their announcements, claim 28)
+            UiCue::BuildStarted | UiCue::BuildResumed => {
+                self.announce(Announcement::Building);
+                screen(self, self.names.gui_build.clone())
+            }
+            UiCue::BuildHeld => {
+                self.announce(Announcement::OnHold);
+                screen(self, self.names.gui_build.clone())
+            }
+            UiCue::BuildCancelled => {
+                self.announce(Announcement::Cancelled);
+                screen(self, self.names.gui_build.clone())
+            }
+            // spec: S-0701 claim 24 (the refusal of a click: the game-wide refusal sound)
+            UiCue::BuildRefused => {
+                self.announce(Announcement::UnableToComply);
+                screen(self, self.names.scold.clone())
+            }
+            UiCue::PlacementRefused => screen(self, self.names.scold.clone()),
+            // spec: S-0701 claim 23 (the game-wide building placement sound, a screen sound)
+            UiCue::BuildingPlaced => screen(self, self.names.building_slam.clone()),
+        }
+    }
+}
+
+fn cell_of(p: Pos) -> (i32, i32) {
+    let c = p.cell();
+    (c.x, c.y)
+}
+
+/// An infantry unit in a deployed state (S-0701 F6: its unload or deploy
+/// order is an undeploy).
+fn deployed_infantry(o: &glasnost_sim::world::Object) -> bool {
+    use glasnost_sim::infantry::Seq;
+    o.infantry
+        .as_ref()
+        .and_then(|s| s.seq)
+        .is_some_and(|q| matches!(q, Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle))
+}
+
+fn rank_value(r: Rank) -> u8 {
+    match r {
+        Rank::Rookie => 0,
+        Rank::Veteran => 1,
+        Rank::Elite => 2,
     }
 }
 
@@ -102,515 +1127,6 @@ fn actor(o: &Order) -> Option<ObjectId> {
     }
 }
 
-fn at(p: Pos) -> Placement {
-    Placement::At { x: p.x, y: p.y }
-}
-
-/// The audio of a game: mixer, output, samples, catalog and the rules
-/// data's sound names.
-pub struct Audio {
-    mixer: Mixer,
-    output: Box<dyn Output>,
-    bank: SoundBank,
-    catalog: SoundCatalog,
-    names: SoundNames,
-}
-
-impl Audio {
-    /// Audio on an output, with the interim catalog (Q-0260), an empty bank
-    /// and no sound names.
-    pub fn new(output: Box<dyn Output>) -> Self {
-        let mixer = Mixer::new(output.rate(), MixParams::default());
-        Self {
-            mixer,
-            output,
-            bank: SoundBank::new(),
-            catalog: SoundCatalog::interim(),
-            names: SoundNames::default(),
-        }
-    }
-
-    /// Audio on the platform's default output
-    /// ([`crate::output::platform_default`]).
-    pub fn platform() -> Self {
-        Self::new(crate::output::platform_default())
-    }
-
-    /// Sets the sample bank.
-    pub fn set_bank(&mut self, bank: SoundBank) {
-        self.bank = bank;
-    }
-
-    /// The sample bank.
-    pub fn bank_mut(&mut self) -> &mut SoundBank {
-        &mut self.bank
-    }
-
-    /// Sets the catalog.
-    pub fn set_catalog(&mut self, catalog: SoundCatalog) {
-        self.catalog = catalog;
-    }
-
-    /// Sets the rules data's sound names (from
-    /// [`SoundNames::from_ruleset`]).
-    pub fn set_names(&mut self, names: SoundNames) {
-        self.names = names;
-    }
-
-    /// The sound names.
-    pub fn names(&self) -> &SoundNames {
-        &self.names
-    }
-
-    /// The mixer (offline rendering, tests, volume).
-    pub fn mixer_mut(&mut self) -> &mut Mixer {
-        &mut self.mixer
-    }
-
-    /// Moves the listener: the view centre in map leptons. Call every frame.
-    pub fn set_listener(&mut self, l: Listener) {
-        self.mixer.set_listener(l);
-    }
-
-    /// Starts or resumes the output; call from a user-input handler.
-    pub fn resume(&mut self) {
-        self.output.resume();
-    }
-
-    /// Feeds the output. Call once per frame, after the frame's events.
-    pub fn frame(&mut self) {
-        self.output.pump(&mut self.mixer);
-    }
-
-    /// The output's state.
-    pub fn state(&self) -> OutputState {
-        self.output.state()
-    }
-
-    /// Plays a sound by name at a placement, with an extra gain
-    /// ([`UNITY`] = as the catalog gives it).
-    pub fn play_sound(
-        &mut self,
-        name: &str,
-        placement: Placement,
-        gain: u32,
-    ) -> Result<VoiceId, PlayError> {
-        let def = self
-            .catalog
-            .resolve(name)
-            .ok_or_else(|| PlayError::Unknown(name.to_owned()))?;
-        let clip = def
-            .samples
-            .first()
-            .and_then(|s| self.bank.clip(s))
-            .ok_or_else(|| PlayError::Missing(name.to_owned()))?;
-        let gain = ((u64::from(def.gain) * u64::from(gain)) >> 16) as u32;
-        self.mixer
-            .play(VoiceRequest {
-                clip,
-                key: name.to_ascii_uppercase(),
-                gain,
-                placement,
-                priority: def.priority,
-                limit: def.limit,
-            })
-            .map_err(PlayError::Refused)
-    }
-
-    fn play_opt(&mut self, name: Option<String>, p: Placement, gain: u32) -> Option<VoiceId> {
-        self.play_sound(&name?, p, gain).ok()
-    }
-
-    /// Plays an announcement for the local player, where a spec names its
-    /// entry (Q-0261 otherwise).
-    pub fn announce(&mut self, a: Announcement) -> Option<VoiceId> {
-        let entry = self.names.announcement(a)?;
-        self.play_sound(entry, Placement::Everywhere, UNITY).ok()
-    }
-
-    /// Plays the sounds of a tick's (or frame's) presentation effects, as
-    /// heard by the local player's house (`None`: an observer, who hears
-    /// no house's own sounds). Returns the voices started.
-    pub fn play_effects(&mut self, effects: &[Effect], local: Option<HouseId>) -> usize {
-        let mut started = 0;
-        for e in effects {
-            let v = match e {
-                // spec: S-0109 claim 13 (an animation's creation start event plays its type's start sound)
-                Effect::Anim { name, pos } => {
-                    let s = self.names.anim_report(name).map(str::to_owned);
-                    self.play_opt(s, at(*pos), UNITY)
-                }
-                // No spec gives a shot's or a death's own sound (Q-0264);
-                // a detonation's sounds are those of the animations it
-                // creates.
-                Effect::Shot { .. } | Effect::Killed { .. } | Effect::Detonation { .. } => None,
-                // spec: S-0011 claim 32 (play sound, and sound at a waypoint: the sound at the cell's centre; giving a building or terrain object on that cell the sound as its ambient sound is not done yet)
-                Effect::Trigger {
-                    code: 19 | 99,
-                    name,
-                    pos,
-                    ..
-                } => {
-                    let p = pos.map_or(Placement::Everywhere, at);
-                    self.play_sound(name, p, UNITY).ok()
-                }
-                // Text messages, speech and radar events are the interface's.
-                Effect::Trigger { .. } => None,
-                Effect::Sound {
-                    sound,
-                    of,
-                    house,
-                    pos,
-                } => {
-                    // A sound that concerns a house is heard only by that
-                    // house's player (S-0408 claims 6, 11 and 12; S-0415
-                    // claims 4 and 9).
-                    if house.is_some() && *house != local {
-                        continue;
-                    }
-                    let p = pos.map_or(Placement::Everywhere, at);
-                    let ts = of
-                        .and_then(|t| self.names.of_type(t.kind, t.index))
-                        .cloned();
-                    match sound {
-                        // spec: S-0415 claims 6 and 9 (the type's deploy sound at its position)
-                        Sound::Deploy => self.play_opt(ts.and_then(|t| t.deploy), p, UNITY),
-                        // spec: S-0415 claim 9 (the pack-up sound, when the type has one)
-                        Sound::Packup => self.play_opt(ts.and_then(|t| t.packup), p, UNITY),
-                        // spec: S-0408 claims 6 and 12 (the sell sound)
-                        Sound::Sell => self.play_opt(self.names.sell.clone(), p, UNITY),
-                        // spec: S-0415 claim 4 (the refusal announcement)
-                        Sound::CannotDeploy => self.announce(Announcement::CannotDeploy),
-                        // spec: S-0408 claim 11 (the unit-sold announcement; its entry: Q-0261)
-                        Sound::UnitSold => self.announce(Announcement::UnitSold),
-                    }
-                }
-            };
-            started += usize::from(v.is_some());
-        }
-        started
-    }
-
-    /// The spoken acknowledgement of a click's orders (S-0214 claim 14).
-    /// `by_local_player` is false for any other house's orders, AI houses
-    /// included: they give none. `unsync` is the unsynchronised random
-    /// stream (S-0202 claim 11).
-    pub fn acknowledge(
-        &mut self,
-        w: &World,
-        click: &ClickResult,
-        by_local_player: bool,
-        unsync: &mut Rng,
-    ) -> Option<VoiceId> {
-        if !by_local_player {
-            return None;
-        }
-        let id = click.acknowledge?;
-        let order = click.orders.iter().find(|o| actor(o) == Some(id))?;
-        let o = w.obj(id)?;
-        let n = selection_responses(w, id);
-        self.acknowledge_parts(o.kind, o.type_index, own_kind(order), n, unsync)
-    }
-
-    /// [`Audio::acknowledge`] for a known speaker: its type, whether the
-    /// order has an acknowledgement of its own kind, and the type's number
-    /// of selection responses `n`.
-    pub fn acknowledge_parts(
-        &mut self,
-        kind: Kind,
-        type_index: u32,
-        own: bool,
-        n: u32,
-        unsync: &mut Rng,
-    ) -> Option<VoiceId> {
-        if own {
-            // The own-kind acknowledgements have no Import mapping
-            // (Q-0265): nothing plays and no value is taken.
-            return None;
-        }
-        if n == 0 {
-            // spec: S-0214 claim 14, F5 (no value is taken when the type has no selection response)
-            return None;
-        }
-        // spec: S-0214 F5 (one raw value of the unsynchronised stream, i = x mod n)
-        let i = selection_response(unsync.raw(), n)?;
-        let name = self
-            .names
-            .of_type(kind, type_index)
-            .and_then(|t| t.voice_select.get(i as usize))
-            .cloned();
-        self.play_opt(name, Placement::Everywhere, UNITY)
-    }
-
-    /// Plays an interface cue for the local player.
-    pub fn cue(&mut self, cue: UiCue) -> Option<VoiceId> {
-        match cue {
-            UiCue::CreditTick { rising } => {
-                let t = &self.names.credit_ticks;
-                // spec: S-0416 claim 4 (fewer than two entries: no tick sound at all)
-                if t.len() < 2 {
-                    return None;
-                }
-                // spec: S-0416 claim 4 (first entry rising, second falling)
-                let name = t[usize::from(!rising)].clone();
-                // spec: S-0416 claim 4 and Constants (tick sound volume one half; linear amplitude, Q-0262)
-                self.play_opt(Some(name), Placement::Everywhere, UNITY / 2)
-            }
-            // spec: S-0410 claim 3 (the radar-on and radar-off sounds)
-            UiCue::RadarOn => {
-                self.play_opt(self.names.radar_on.clone(), Placement::Everywhere, UNITY)
-            }
-            UiCue::RadarOff => {
-                self.play_opt(self.names.radar_off.clone(), Placement::Everywhere, UNITY)
-            }
-            // spec: S-0411 claims 9 and 12 (the done announcement; its entry: Q-0261)
-            UiCue::ConstructionComplete => self.announce(Announcement::ConstructionComplete),
-            // spec: S-0411 claim 12 (a cue plays; which sound is Q-0266)
-            UiCue::BuildStarted
-            | UiCue::BuildResumed
-            | UiCue::BuildHeld
-            | UiCue::BuildCancelled
-            | UiCue::BuildRefused
-            | UiCue::PlacementRefused => None,
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::names::TypeSounds;
-    use crate::output::NullOutput;
-    use glasnost_fmt::pcm::Pcm;
-    use glasnost_sim::econ::TypeRef;
-
-    const RATE: u32 = 8000;
-
-    /// Audio with one invented sample per name: a constant level, so the
-    /// mix shows which sound played and at what gain.
-    fn audio(samples: &[(&str, i16)]) -> Audio {
-        let mut a = Audio::new(Box::new(NullOutput::new(RATE, "test")));
-        let mut bank = SoundBank::new();
-        for (n, level) in samples {
-            bank.add_pcm(
-                n,
-                Pcm {
-                    sample_rate: RATE,
-                    channels: 1,
-                    samples: vec![*level; 4],
-                },
-            );
-        }
-        a.set_bank(bank);
-        a
-    }
-
-    fn first_frame(a: &mut Audio) -> [i16; 2] {
-        let mut out = [0; 2];
-        a.mixer_mut().render(&mut out);
-        out
-    }
-
-    fn sound(
-        sound: Sound,
-        of: Option<TypeRef>,
-        house: Option<HouseId>,
-        pos: Option<Pos>,
-    ) -> Effect {
-        Effect::Sound {
-            sound,
-            of,
-            house,
-            pos,
-        }
-    }
-
-    fn hut() -> TypeRef {
-        TypeRef {
-            kind: Kind::Building,
-            index: 2,
-        }
-    }
-
-    fn with_hut(a: &mut Audio, packup: Option<&str>) {
-        let mut n = SoundNames::default();
-        n.set_type(
-            Kind::Building,
-            2,
-            TypeSounds {
-                deploy: Some("Whirr".into()),
-                packup: packup.map(Into::into),
-                ..TypeSounds::default()
-            },
-        );
-        n.sell = Some("Kaching".into());
-        n.set_anim_report("Puff", "Poof");
-        a.set_names(n);
-    }
-
-    // spec: S-0415 claims 6 and 9, S-0408 claims 6 and 12 (deploy at a position for everyone; sell and pack-up only for the house's player)
-    #[test]
-    fn structure_sounds_follow_their_house() {
-        let mut a = audio(&[("Whirr", 100), ("Kaching", 1000), ("Clunk", 10)]);
-        with_hut(&mut a, Some("Clunk"));
-        let me = Some(HouseId(1));
-        let them = Some(HouseId(2));
-        let pos = Some(Pos { x: 0, y: 0, z: 0 });
-        let fx = [
-            sound(Sound::Deploy, Some(hut()), None, pos),
-            sound(Sound::Sell, Some(hut()), them, None),
-            sound(Sound::Packup, Some(hut()), them, None),
-        ];
-        assert_eq!(a.play_effects(&fx, me), 1);
-        assert_eq!(first_frame(&mut a), [100, 100]);
-        a.mixer_mut().clear();
-        let fx = [
-            sound(Sound::Sell, Some(hut()), me, None),
-            sound(Sound::Packup, Some(hut()), me, None),
-        ];
-        assert_eq!(a.play_effects(&fx, me), 2);
-        assert_eq!(first_frame(&mut a), [1010, 1010]);
-    }
-
-    // spec: S-0415 claim 9 (no pack-up sound plays for a type without one)
-    #[test]
-    fn packup_without_a_sound_is_silent() {
-        let mut a = audio(&[("Whirr", 100)]);
-        with_hut(&mut a, None);
-        let fx = [sound(Sound::Packup, Some(hut()), Some(HouseId(0)), None)];
-        assert_eq!(a.play_effects(&fx, Some(HouseId(0))), 0);
-    }
-
-    // spec: S-0109 claim 13 (an animation's start sound at its position)
-    #[test]
-    fn animations_play_their_report() {
-        let mut a = audio(&[("Poof", 300)]);
-        with_hut(&mut a, None);
-        let fx = [
-            Effect::Anim {
-                name: "PUFF".into(),
-                pos: Pos { x: 10, y: 10, z: 0 },
-            },
-            Effect::Anim {
-                name: "Silent".into(),
-                pos: Pos { x: 0, y: 0, z: 0 },
-            },
-        ];
-        assert_eq!(a.play_effects(&fx, None), 1);
-        assert_eq!(first_frame(&mut a), [300, 300]);
-    }
-
-    // spec: S-0415 claim 4 and Import mapping (`EVA_CannotDeployHere`)
-    #[test]
-    fn the_deploy_refusal_announces_its_entry() {
-        let mut a = audio(&[("eva_cannotdeployhere", 50)]);
-        let fx = [sound(
-            Sound::CannotDeploy,
-            Some(hut()),
-            Some(HouseId(3)),
-            None,
-        )];
-        assert_eq!(a.play_effects(&fx, Some(HouseId(4))), 0);
-        assert_eq!(a.play_effects(&fx, Some(HouseId(3))), 1);
-        assert_eq!(first_frame(&mut a), [50, 50]);
-    }
-
-    fn grunt(a: &mut Audio) {
-        let mut n = SoundNames::default();
-        n.set_type(
-            Kind::Infantry,
-            0,
-            TypeSounds {
-                voice_select: vec!["Yes0".into(), "Yes1".into(), "Yes2".into()],
-                ..TypeSounds::default()
-            },
-        );
-        a.set_names(n);
-    }
-
-    // spec: S-0214 claim 14, F5 (one raw value of the unsynchronised stream, response x mod n)
-    #[test]
-    fn acknowledgement_takes_one_raw_value_and_plays_response_x_mod_n() {
-        let mut a = audio(&[("Yes0", 1), ("Yes1", 2), ("Yes2", 3)]);
-        grunt(&mut a);
-        let mut stream = Rng::new(77);
-        let mut copy = stream.clone();
-        let expect = copy.raw() % 3;
-        a.acknowledge_parts(Kind::Infantry, 0, false, 3, &mut stream)
-            .unwrap();
-        assert_eq!(stream, copy, "exactly one raw value taken");
-        assert_eq!(first_frame(&mut a), [expect as i16 + 1; 2]);
-    }
-
-    // spec: S-0214 claim 14 (no value for a type without responses; own-kind orders, Q-0265)
-    #[test]
-    fn no_value_is_taken_without_responses_or_for_own_kind_orders() {
-        let mut a = audio(&[("Yes0", 1)]);
-        grunt(&mut a);
-        let mut stream = Rng::new(5);
-        let before = stream.clone();
-        assert!(
-            a.acknowledge_parts(Kind::Infantry, 0, false, 0, &mut stream)
-                .is_none()
-        );
-        assert!(
-            a.acknowledge_parts(Kind::Infantry, 0, true, 3, &mut stream)
-                .is_none()
-        );
-        assert_eq!(stream, before);
-        let mv = Order::Behaviour {
-            actor: ObjectId(1),
-            behaviour: Behaviour::Guard,
-            attack_move: true,
-            target: None,
-            dest: None,
-        };
-        assert!(own_kind(&mv));
-        assert!(!own_kind(&Order::Deploy { actor: ObjectId(1) }));
-    }
-
-    // spec: S-0416 claim 4 (first entry rising, second falling, at half volume; fewer than two entries: none)
-    #[test]
-    fn credit_ticks() {
-        let mut a = audio(&[("Up", 1000), ("Down", 2000)]);
-        let mut n = SoundNames::default();
-        n.credit_ticks = vec!["Up".into(), "Down".into()];
-        a.set_names(n.clone());
-        a.cue(UiCue::CreditTick { rising: true }).unwrap();
-        assert_eq!(first_frame(&mut a), [500, 500]);
-        a.mixer_mut().clear();
-        a.cue(UiCue::CreditTick { rising: false }).unwrap();
-        assert_eq!(first_frame(&mut a), [1000, 1000]);
-        n.credit_ticks.truncate(1);
-        a.set_names(n);
-        assert!(a.cue(UiCue::CreditTick { rising: true }).is_none());
-    }
-
-    // spec: S-0410 claim 3 (radar-on and radar-off sounds)
-    #[test]
-    fn radar_cues() {
-        let mut a = audio(&[("Bleep", 7)]);
-        let mut n = SoundNames::default();
-        n.radar_on = Some("Bleep".into());
-        a.set_names(n);
-        assert!(a.cue(UiCue::RadarOn).is_some());
-        assert!(a.cue(UiCue::RadarOff).is_none());
-        // Interface cues without a named sound stay silent (Q-0266).
-        assert!(a.cue(UiCue::BuildStarted).is_none());
-    }
-
-    #[test]
-    fn play_sound_reports_why_it_did_not_start() {
-        let mut a = audio(&[]);
-        a.set_catalog(SoundCatalog::explicit());
-        assert_eq!(
-            a.play_sound("x", Placement::Everywhere, UNITY),
-            Err(PlayError::Unknown("x".into()))
-        );
-        a.set_catalog(SoundCatalog::interim());
-        assert_eq!(
-            a.play_sound("x", Placement::Everywhere, UNITY),
-            Err(PlayError::Missing("x".into()))
-        );
-    }
-}
+#[path = "events_tests.rs"]
+mod tests;

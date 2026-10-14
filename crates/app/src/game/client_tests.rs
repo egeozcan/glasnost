@@ -48,6 +48,8 @@ fn synthetic_install() -> Install {
             },
         )],
         names: Default::default(),
+        sounds: None,
+        speech: None,
         bank: Default::default(),
         summary: "synthetic".into(),
     }
