@@ -2,7 +2,7 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -661,19 +661,7 @@ this spec owns its rules. The terms below are specific to this spec.
     - **Draws.** A tile animation is created with no loop delay, and its creation takes the draws
       that S-0202 (claim 10, *animation creation draws*) lists, at the moment it starts, during
       map loading too.
-    - **How it is created.** The creation is an ordinary one in the sense of S-0109, with no
-      parameter of its own beyond those above: no loop delay, so its start event (S-0109 claim 13)
-      happens at once, at the moment the animation starts, during map loading included; no repeat
-      factor (S-0109 claim 7 with *m* = 1), so its passes are those of its type's loop count; and
-      it is not a trigger-played animation, so its start event has its start sound and its
-      resource chain reaction. Every effect of the start event, and the middle event that the start
-      event produces when μ = 0 (S-0109 claim 14), takes place at the animation's position from
-      **Where**: the chain reaction acts on the cell that contains that position, which is another
-      cell than the tile cell when the displacement carries the position across a cell edge, and
-      the height test of S-0109 claim 14 reads that position's height above the terrain. The start
-      events of the animations that the first pass of claim 12 starts happen too, and their effects
-      stay after those animations are removed. What the effects are, and their draws, belong to
-      S-0109 and to the specs of those effects.
+    - **How it is created.** When a qualifying terrain recalculation starts a tile animation, its start event occurs immediately, including during map loading. The animation runs the number of passes specified by its type's loop count, without an additional repeat factor. It does not start from a trigger. Its start event therefore has its start sound and resource-chain reaction. Every effect of the start event, and the middle event that it produces when μ = 0 (S-0109 claim 14), occurs at the position given under **Where**: the chain reaction acts on the cell containing that position, which may differ from the tile cell when the displacement crosses a cell edge, and the height test of S-0109 claim 14 uses that position's height above the terrain. The start events of animations started in the first pass of claim 12 also occur, and their effects remain after those animations are removed. S-0109 and the specs for those effects own their details and draws. S-0202 claim 15 owns immediate crater timing: a tile animation started by overlay placement's recalculation acts before the overlay data stream is read, whereas one first started in the first whole-map pass acts on the imported data, and the second and game-start passes act later still. The data stream overwrites overlay data but does not restore an overlay type exhausted by an earlier crater request.
 
     These are S-0103's and S-0104's *terrain animations*; how they play belongs to S-0109 (animation
     playback).
@@ -693,6 +681,7 @@ this spec owns its rules. The terms below are specific to this spec.
       | The creation draws | `measurable` through S-0202's scenario R8, part F |
       | The creation parameters: the start event at creation, at the displaced position, with the chain reaction in the cell under that position; passes from the type's loop count | `measurable` (scenario G4 part F, named test data) |
       | The start events of first-pass animations keep their effects | `measurable` (scenario G4 part F, run 2) |
+      | Immediate crater timing relative to the overlay data stream and recalculation passes | S-0202 claim 15 owns the rule, confidence and `measurable` backing (its scenario R14 part C) |
 
     - Confidence: high for when an animation starts at map load and at the game-start pass, for the
       position formula and for the creation parameters, medium for a start in play after smoothing (part C) and for the displacement far larger than
