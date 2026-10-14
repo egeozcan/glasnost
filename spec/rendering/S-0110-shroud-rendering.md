@@ -2,7 +2,7 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -374,6 +374,11 @@ piece of the same cell; a lower cell's shroud piece can replace an upper cell's 
   state; SH8 part Q2 tests both consequences. Whether those border cells lie inside the local area
   (S-0009), and so can be seen, depends on the map. This is the original's behaviour and our engine
   reproduces it; there is no additional switch beyond S-0409's shared-state switch.
+- **Oversized battlefield view** (claim 8). S-0101 claim 8 makes pixels outside the local-area
+  interval on each oversized axis black. That rule takes precedence over cover and light drawing:
+  the non-legal-cell lighting rule is not reached there, regardless of reveal or the shared
+  explored state. Other uses of the point test remain unchanged, as do overlays and UI.
+  S-0101 claim 8 owns this presentation departure, its backing and confidence.
 - **Cell coordinates outside 0 … 511 in the point test** (claim 8). The original reads a candidate
   cell (*x*, *y*) of the point test as the cell (*x* mod 512, *y* + ⌊*x* / 512⌋) when
   *y* + ⌊*x* / 512⌋ lies in 0 … 511, and otherwise as the shared off-map state (normally
@@ -764,12 +769,11 @@ appears several times; that is harmless, since each check below is made within o
   SH10 uses S-0106 claim 3's negative centre heights. Claim 8 here owns the point test for
   both signs and the odd-negative pair switch. S-0111 claim 19 supplies the wrench observable
   and already points here for both signs, without a duplicate negative-height formula.
-  S-0410 claim 6 supplies radar's initial cell, not the candidate cells of this spec.
-  Q-0480 question 1 is answered by claim 8 for both signs. Questions 2 and 3 belong to
-  S-0410 claim 6: its friendly-gap test must use the same candidates, including the
-  odd-negative pair and its switch, and its obsolete non-negative-only backing must be
-  replaced with this pointer and a negative-height radar scenario. This request remains
-  jointly dependent on that companion change.
+  S-0410 claim 6 supplies radar's initial cell, not the candidate cells of this spec. Its
+  current approved revision already applies claim 8's same signed-height candidates to the
+  friendly-gap test, including the odd-negative pair and its switch, and includes a
+  negative-height radar scenario. Q-0480 questions 1 to 3 are therefore reflected in the
+  reviewed S-0110 and S-0410 texts; no further S-0410 companion edit is identified here.
 - Claims 5 and 6 here own battlefield cover and glow updates; S-0104's Terms and claim 15
   agree and own the shade-row formula, including its final cap. This is not an additional
   lighting channel or a departure from the original. Claim 6 supplies the battlefield glow
