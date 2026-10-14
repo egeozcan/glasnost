@@ -1,9 +1,9 @@
 ---
 id: Q-0392
 title: Which objects are a drawn frame's screen candidates, and in what order inside a group?
-status: open
+status: answered
 related: [S-0214]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

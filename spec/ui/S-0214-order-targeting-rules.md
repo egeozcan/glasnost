@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392]
 supersedes: []
 ---
 
@@ -42,7 +42,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 - **Action.** The result of resolving a click for one selected object: one of the actions of
   table A, or *nothing*. The cursor image is presentation, specified by claims 21 and 22.
-  it does not change the action or the resulting order.
+  It does not change the action or the resulting order, including when the presentation-only
+  berserk-cursor quirk below is off.
 - **Acting house.** The house whose input is being resolved: the local player's house for a
   person's clicks. An *AI house* (glossary) is held to the same rules: when its order is checked
   against this spec, it is the acting house, and every rule below that names the local player
@@ -254,8 +255,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 1. **The representative.** When the selection is not empty, the action the cursor shows over a
    target (an object or a cell) is the action of one selected object, the representative. Each
    selected object gets a rank from table R. The representative is the object with the highest
-   rank. Among objects of equal rank it is the one nearest to the target (Formulas F1), and among
-   those, the first in selection order (claim 12). With an empty selection the cursor shows the actions of the
+   rank. The presentation-only berserk-cursor quirk can replace its cursor image, not its
+   action or rank (claim 15). Among objects of equal rank it is the one nearest to the target
+   (Formulas F1), and among those, the first in selection order (claim 12). With an empty selection the cursor shows the actions of the
    current sidebar mode (claim 13), or *select* over an object that can be selected.
    - Backing: `measurable` (Scenario T1, which also separates the tie-break by selection order)
    - Confidence: high for the rank order, medium for the distance
@@ -568,10 +570,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     aircraft can still get *tote* (rows AC2 and AC3) and the move order that *tote* produces
     (table M, low). (Its generic result is *nothing*, but
     some infantry and vehicle rows do not depend on the generic result, so such an actor can still
-    show an action when it is the representative.) A berserk object has rank 0 (table R). The tote exception is
-    original behaviour and has its own quirk switch, in Edge cases under *berserk carrier tote*.
-    - Backing: `measurable` (Scenario T6) for the berserk case, and Scenario T9 part C for the
-      melee-linked case, with scripted clicks while the link holds.
+    show an action when it is the representative.) A berserk object has rank 0 (table R).
+    The infantry/vehicle cursor mismatch has the presentation-only switch
+    `quirks.berserk_action_cursor`, defined below; it changes neither the resolved action nor
+    claim 3's selection fallback. The tote exception is original behaviour and has its own
+    independent quirk switch, in Edge cases under *berserk carrier tote*.
+    - Backing: `measurable` (Scenario T6, including part B for the cursor mismatch) for the
+      berserk case, and Scenario T9 part C for the melee-linked case, with scripted clicks
+      while the link holds.
     - Confidence: medium (low for the melee-linked case, whose cause is low)
 
 16. **Selecting a destroyed building awaiting removal (Q-0081 parts 3 and 4).** A building
@@ -668,16 +674,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     successful addition, not necessarily the eventual first object in selection order.
     Candidate admission at overflow is not nearest-to-box-centre selection and does not
     prefer own eligible units: the box uses candidates already admitted for the view,
-    without replenishing places consumed by ineligible objects. Mobile drawing candidates
-    consume places before the later building candidates; an ordinary building can nevertheless
-    consume a place that remains. Exact identities within an overflowing mobile group remain
-    `unmeasured`, with low confidence: no complete observable tie rule has been established
-    for equal drawing priorities or changing render layers. Scenario T15 part B settles
-    that detail; this spec does not invent a creation-order or distance tie-break.
-    - Backing: `measurable` (Scenario T15) for the capacity and mobile-before-building
-      consequence; `unmeasured` for exact overflowing-mobile identities (reason above)
-    - Confidence: high for the separate limits and absence of eligibility replenishment,
-      medium for mobile-before-building priority; low for the remaining overflow tie rule
+    without replenishing places consumed by ineligible objects. Buildings consume places
+    before mobile drawing candidates, including buildings that an ordinary box cannot select.
+    Claims 24 and 25 give membership and overflow priority. This corrects the earlier
+    mobile-before-building statement.
+    - Backing: `measurable` (Scenario T15)
+    - Confidence: high
 
 21. **Battlefield cursor images (Q-0277 parts 1 and 3, battlefield actions).** Table C gives
     the cursor frames for every action in table A, outside route-point editing. A range is
@@ -688,8 +690,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     ordinary arrow, and an illegal move has a dedicated refusal image: there is no single
     universal no-action cursor. Damaging entry retains the previous cursor image rather
     than choosing a fresh capture image (quirk below). Sell, repair and power input offers
-    are still claim 13's; their images are included in table C.
-    - Backing: `measurable` (Scenario T16, with the existing targeting scenarios)
+    are still claim 13's; their images are included in table C. With the presentation-only
+    berserk-cursor quirk off, its arrow replacement takes precedence over table C.
+    - Backing: `measurable` (Scenario T16, with the existing targeting scenarios; T6 part B
+      for the berserk-cursor exception). Table C cases with no known reachable actor/target
+      setup are `unmeasured`: T16 cannot present those actions, in particular the shrouded
+      cases eliminated by the action tables. Their assignments are not inferred from clicks.
     - Confidence: high for frame assignments; medium for shrouded cases not normally reachable
 
 22. **Cursor frames, hot spot and time (Q-0277 part 2, battlefield cursors).** Cursor images
@@ -718,6 +724,65 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     reads Shift independently, including while Ctrl is also held (claim 19).
     - Backing: `measurable` (Scenario T17)
     - Confidence: high
+
+24. **Which objects consume candidate places (Q-0392 questions 1, 3 and 4).**
+    Candidate membership is not image intersection with the battlefield view, and is not
+    restricted to objects whose box points are inside that view. For a mobile object
+    participating in the frame's ordinary body drawing, its point qualifies exactly
+    when it satisfies F7's expanded-view test. The drawing tests of S-0101 claim 6
+    still apply; a candidate is not created for a unit excluded from that drawing. A body can therefore consume a place while entirely outside the
+    view, or while all its pixels are covered by other objects. Conversely, a large image
+    entering the view does not suffice when its point fails that test. This is a drawing
+    participation rule, not a scan of all units in play: an object omitted from mobile
+    drawing contributes no mobile candidate. A vehicle playing its deploying or
+    undeploying presentation supplies no ordinary vehicle candidate even when that
+    presentation has visible pixels. It does not require any opaque body pixel
+    to survive clipping or depth comparison. Claim 19's transient-point qualification
+    still applies; this claim does not substitute the shadow or image centre for that point.
+
+    Buildings have a separate point test: their height-lifted projected positions must
+    lie in the unexpanded view, including its right and bottom boundary coordinates
+    (F7). An in-play building that is on the map and whose type is not invisible in the
+    game contributes a candidate on that basis, without requiring its image to intersect
+    the view, be freshly drawn, or be visible through shroud. Zero health alone does not
+    remove it while it remains in play. A vehicle-like building is a building for this
+    admission rule and for claim 25's priority, even though claim 19 can select it.
+
+    Neither group is filtered by owner, selection eligibility or already-selected status.
+    Ordinary terrain objects, overlays, animations, projectiles, particles and their
+    effects consume no places. Nor does a veinhole monster: it supplies no drawing in
+    a stock frame. A unit disguised as scenery is still a unit, not an additional terrain
+    candidate. Candidate admission does not change claim 19's later selection tests.
+    - Backing: `measurable` (Scenario T18; T15 part B for vehicle-like buildings and
+      ineligible objects consuming capacity)
+    - Confidence: high for the point tests, building classification and excluded ordinary
+      kinds; medium for stock mobile drawing participation in transient states
+
+25. **Which candidates survive overflow (Q-0392 question 2).** The admitted set is the
+    first 500 qualifying candidates in this priority order, or all of them when fewer
+    qualify. Qualifying buildings precede every qualifying mobile object. Among buildings,
+    earlier-created surviving buildings precede later-created ones; changing owner does
+    not move one ahead. Among mobile objects the priority is their current drawing order:
+    underground, surface, ground, air, then top render layer, and within each layer the
+    order of S-0102 claims 4–7. Non-candidate drawings between two mobile drawings consume
+    no places and do not reverse their priority. Thus ground mobile candidates precede
+    air and top candidates regardless of house, selection eligibility or distance from
+    the pointer. Equal ground sort keys keep the drawing-order tie rule, not a new
+    house or object-number tie-break. Upper-layer priority follows layer entry and
+    re-entry rather than screen position. Use the actual current layer and drawing order,
+    not a fresh full sort of ground positions at box release. S-0102 claim 4's unresolved
+    flight re-entry moments remain that spec's uncertainty, not permission to choose a
+    different order among the drawings of a given frame.
+
+    Only the admitted set is available to an ordinary box. For example, 20 qualifying
+    ordinary buildings and 490 qualifying mobile objects leave places for only the
+    earliest 480 mobile candidates, although none of those buildings can be added to
+    an ordinary selection. Changing ownership alone does not replenish those places.
+    This order concerns selection availability; it does not change which overlapping
+    object's image is drawn on top.
+    - Backing: `measurable` (Scenario T15 part B; S-0102 claims 4–7 for drawing order)
+    - Confidence: high for building-before-mobile and render-order priority; medium for
+      building creation priority
 
 ## Formulas
 
@@ -771,11 +836,21 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > min(*a*, *c*) ≤ *x* ≤ max(*a*, *c*) and min(*b*, *e*) ≤ *y* ≤ max(*b*, *e*).
 > Endpoint limiting and these comparisons are exact integer operations, without rounding.
 
+> **F7 (screen-candidate point bounds).** Coordinates are integer pixels relative to
+> the battlefield view's top-left corner; *W* and *H* are its width and height in pixels,
+> not the whole window or sidebar dimensions. A mobile candidate point (*x*, *y*) passes
+> exactly when −32 ≤ *x* ≤ *W* + 32 and −32 ≤ *y* ≤ *H* + 32. A building point passes
+> exactly when 0 ≤ *x* ≤ *W* and 0 ≤ *y* ≤ *H*. These are inclusive integer comparisons,
+> with no rounding. In particular the mobile upper bound is *W* + 32, not *W* − 1 + 32.
+> Projection and height-lift rounding are S-0101 claim 5 and F1's; transient mobile point
+> corrections remain qualified by claim 19.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
 | Drag threshold | 4 | pixels of truncated table-root distance | Claim 18, F6; strictly greater starts the drag |
-| Screen candidates | 500 | objects per drawn frame | Claim 20; not the selected-object limit |
+| Screen candidates | 500 | objects per drawn frame | Claims 20, 24 and 25; not the selected-object limit |
+| Mobile candidate margin | 32 | pixels on each axis | F7; independent of image dimensions |
 | Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
 | Type-select double press | 500 | milliseconds | Claim 12. Press times are whole milliseconds; a second press counts when its time minus the first press's time is at most 500. Input only. |
 | Full health | 1 | health ratio | Tables I and V. The original fixes the threshold at 1 and does not read it from data. |
@@ -1279,10 +1354,22 @@ Ordering consequences:
   temporarily disguised one does not. `quirks.permadisguise_attack_cursor` (default: the
   original). With the switch off, a permanently disguised target is treated like any other
   disguised one.
-- **Berserk actors show actions they cannot use** (claim 15). Some infantry and vehicle rows do not
-  look at the generic result, so a berserk engineer, for example, can show *capture* over an enemy
-  building while it is the representative, although the click gives it no order. This is
-  presentation only and needs no switch.
+- **Berserk actors show actions they cannot use** (claim 15).
+  `quirks.berserk_action_cursor` (default: original). A berserk infantry or vehicle
+  representative shows the cursor for its resolved action even though it can receive no order.
+  For example, a berserk engineer can show *capture* over an enemy capturable building below
+  the capture threshold. Off: whenever the representative is berserk infantry or a berserk
+  vehicle, display the ordinary arrow (table C, frame 0, hot spot (0, 0)) instead.
+  This replaces only the displayed image: tables G, I, V and the cell tables still give the
+  same action, claim 3 still uses that action for command handling and selection fallback,
+  and table M still decides each object's order. Thus hiding a capture cursor does not turn
+  that capture click into a selection click or allow an order to the berserk actor. Other
+  selected actors still resolve the click under claim 2. Representative rank and tie-breaking
+  do not change. Aircraft and buildings are unaffected; the independent carrier-tote switch
+  below retains its own meaning. Backing: `measurable` (T6 part B) for the original mismatch.
+  The off behaviour is `unmeasured` against the original because it has no such setting.
+  It is a proposed presentation rule of our engine, checked by T6 part B's off-state replay.
+  Confidence: medium.
 - **Inputs that never occur.** No aircraft has the generic result *area guard* on an object (row
   G6 excludes aircraft), and no building has the generic result *move* without force-move (row
   G7). Tables AC and B therefore have no rows for those inputs. Three further combinations are
@@ -1368,7 +1455,7 @@ Ordering consequences:
 | Vehicle types, `NonVehicle` | does not count as a vehicle (Terms) | boolean (S-0003) | no |
 | Vehicle types, `IsTrain` | train (row I14) | boolean (S-0003) | no |
 | Vehicle and aircraft types, `Passengers` | transport (values *x* of table I and *q* of table V, rows VD4 to VD8, AC7): more than 0 | integer (S-0003) | 0 |
-| Building types, `UndeploysInto` | vehicle-like building, with a 1 × 1 foundation (Terms); undeploys into a vehicle (Terms, *movable*; rows GC9, BC2; table M) | vehicle type name | none |
+| Building types, `UndeploysInto` | vehicle-like building, with a 1 × 1 foundation (Terms); undeploys into a vehicle (Terms, *movable*; rows GC9, BC2; table M); does not change its building candidate group (claim 24) | vehicle type name | none |
 | Aircraft types, `Dock` | docking buildings (row AC10) | list of building types | empty |
 | Building type `Capturable` | capturable (claim 6, rows I7, I24) | boolean (S-0003) | no |
 | Building type `Spyable` | spyable (claim 6, row I24) | boolean (S-0003) | no |
@@ -1383,7 +1470,7 @@ Ordering consequences:
 | Building type `Factory` | imported category (claim 17): factory-marked for rows B3, B5 and table M's deploy row; only the corresponding producing kinds for rows B9 to B12 and the kind-specific rally rules | named value, S-0003 claim 21 and Import mapping row C19, including recognised non-producing categories | no factory; missing or empty in a later layer keeps the value in force |
 | Building type `WeaponsFactory` | vehicle factory (row AC2) | boolean (S-0003) | no |
 | Building type `ConstructionYard` | construction yard (Terms, *movable*; deploy readiness) | boolean (S-0003) | no |
-| Building type `InvisibleInGame` | invisible in the game (rows B1, BC1, I16, I18) | boolean (S-0003) | no |
+| Building type `InvisibleInGame` | invisible in the game (rows B1, BC1, I16, I18); excludes the building from frame candidates (claim 24) | boolean (S-0003) | no |
 | Building type `TogglePower` | can be switched off (claim 13) | boolean (S-0003) | yes |
 | Building type `Powered` | the needs-power flag (claim 13; S-0405, Terms) | boolean (S-0003) | no |
 | Building type `Cloning` | rally-capable (Terms) | boolean (S-0003) | no |
@@ -1410,7 +1497,7 @@ Ordering consequences:
 | Object type `Selectable` | type permits click and box selection (Terms, claims 16 and 19); destruction does not clear this type property | boolean (S-0003) | yes |
 | Cursor image `MOUSE.SHA` | table C's frame numbers and full canvas dimensions | sprite image, resolved by S-0005; frame encoding follows the sprite format | no replacement file is specified if missing |
 | Cursor palette `MOUSEPAL.PAL` | cursor colours | 256-entry palette, S-0103 | no replacement palette is specified if missing |
-| Box threshold, candidate count and cursor timing | claims 18, 20 and 22 | engine constants, not imported keys | F6 and Constants |
+| Box threshold, candidate count, point bounds, admission priority and cursor timing | claims 18, 20, 22, 24 and 25 | engine constants and drawing state, not imported keys; neither the 500-place capacity nor the 32-pixel margin is a data field | F6, F7 and Constants |
 | Physical held modifiers | force-move, force-fire and force-select (claim 23) | engine bindings, not rules keys or saved command entries | Alt, Ctrl and Shift respectively |
 | Attack-move entry | claim 5 | held Ctrl+Shift, or the available command-bar button; no dedicated default keyboard command | gesture available without a command bar |
 | Transient box points and crowded-view admission | qualifications of claims 19 and 20 | drawing-state behaviour, not imported selection-distance or count keys | no additional imported default; unresolved details have settling scenarios |
@@ -1695,6 +1782,26 @@ Falsified if any listed actor gets a different action or a different order. Resu
 show a specific error: an unload order for the empty transport (table VD), no order for the
 barracks without force-move (row BC5), an order for the berserk unit (claim 15), and no attack
 for the garrisoned building with the flag on (Terms, *armed*).
+
+**Scenario T6 part B: unusable berserk cursors (claims 15 and 21).** Use the isolated
+flat skirmish setup at speed 6 and 800×600, director and unrelated mods off. Reuse T5's
+named test-map capture-threshold override. Place an own engineer, an own armed tank, an
+enemy capturable repairable building below that threshold, an enemy tank and a stock
+berserk-causing attacker. Select each own actor alone before berserk starts, in separate
+runs, with a non-berserk actor as control. Script hover and click while the read-only
+recorder confirms berserk at the input tick; record cursor images, selected identities and issued orders. Repeat
+three valid runs per actor; a run where berserk ended before input is inconclusive.
+Expected in the original and our engine with `quirks.berserk_action_cursor` at its default:
+the berserk engineer shows *capture* (frames 89–98), its click issues no order and retains
+that engineer as the selection. The berserk tank over the enemy tank shows *no-move*
+(frame 41), likewise issuing no order and retaining the selection. Before berserk, the
+same pairs show capture and attack respectively and issue their table M orders.
+Any different berserk cursor, issued order or selection change falsifies the corresponding
+original-behaviour claim. On our engine with the switch off, repeat the same recorded
+input/state cases: both berserk cursors are the ordinary arrow, but the resolved actions,
+selection and order results must be identical to the default cases. A changed action,
+new selection fallback or issued order fails the presentation-only alternative. The
+non-berserk controls must be unchanged by the switch.
 
 **Scenario T7: cells (claims 9, 11, tables GC, IC, VC).**
 - A tank and an impassable cell (a cliff tile) inside the usable area, with open cells around it:
@@ -1996,20 +2103,78 @@ whole view: at most 500 can be newly selected; other screen candidates can lower
 count. Repeat with 130 individually selected units and issue an order: only 128 can have
 orders pending, as S-0213 O2 tests independently. A selection that cannot exceed 500 across
 views, or a single ordinary box admitting more than 500 objects, falsifies the count claims.
-*Part B, settling overflow identities:* repeat the crowded run with 490 own mobile units
-and 20 ordinary buildings in the view, then with 510 mobile units split between own and
-enemy houses, and then with mobile units split between ground and air render layers.
-Record admitted identities, box additions and selection order separately, with the
-read-only recorder and tick-labelled video. Repeat each case with reversed placement-entry
-order, exchanged ownership and small view scrolls; keep all tested points inside the
-box and the same rendering state. Expected confirmed consequence: mobile candidates have
-priority over building candidates, and enemy candidates consume capacity without a
-replacement own unit being admitted at box release. A building admitted while 500
-otherwise admitted mobile candidates fit, or eligibility-based replenishment at release,
-falsifies that consequence. The remaining mobile tie rule is unmeasured: compare the
-logged sets against drawing order, creation order and screen-position order, including
-repeated equal-priority cases. A repeatable discriminating result settles it in a follow-up
-revision; no one of those tie hypotheses is promised by this revision.
+*Part B, candidate priority (claims 24 and 25; Q-0392):* repeat the crowded run with
+490 own mobile units and 20 ordinary buildings whose points are inside the view.
+Expected: all 20 buildings consume places, so exactly 480 otherwise eligible mobile
+units can be added by the full-view box. With 500 qualifying mobile units and one
+vehicle-like building, the building is admitted and only 499 mobile units are admitted.
+The building itself can also be added if it passes claim 19. Record candidate identities
+separately from successful box additions, using the read-only recorder and tick-labelled
+video. Keep the candidate total, eligibility and view stable until release.
+
+Then use 510 mobile units with no qualifying buildings: split them between own and
+enemy houses, then between ground and air/top render layers. Expected: the admitted set
+is the first 500 qualifying mobile drawings in the frame's S-0102 order, not the first
+500 own objects or the nearest objects to the box centre. Ground candidates take places
+before air/top candidates. Use stationary ground units at distinct sort keys, then at
+equal keys with reversed placement order; move a unit through the ordering lag of
+S-0102 claim 6. Repeat the upper-layer case with reversed layer-entry order and record
+any re-entry rather than assuming creation order equals flight order. Repeat each case
+three times, then exchange ownership and make small view scrolls while keeping the
+same points within the candidate bounds. Ownership alone must not change priority.
+Scrolling may change which points qualify, not the relative priority of unchanged
+qualifying drawings. For building order, use more than 500 qualifying buildings on a
+named test map at a larger view size that fits all their points, reversing creation
+order, then removing an early building and creating
+another: surviving earlier-created buildings precede the new one. Any different
+admitted prefix, mobile-before-building result or eligibility-based replenishment
+falsifies the corresponding claim. Unrecorded flight re-entry makes that comparison
+inconclusive, not evidence for a new tie-break.
+
+**Scenario T18: frame membership at the view edges (claim 24, F7; Q-0392).** Use an
+isolated purpose-made skirmish map, speed 6, 800×600, director and mods off, with one
+bystander computer player kept outside the observed area under the glossary's void
+rule. With scripted scrolling, put an ordinary stationary mobile unit's recorded box
+point successively at −33, −32, −1, 0, the view dimension, the dimension + 32 and the
+dimension + 33 on each axis; keep the other coordinate well inside. Read candidate
+membership and points after each drawn frame, not just the visible pixels. Use three
+replays of each position. Expected: the inclusive interval from −32 through dimension
++ 32 admits the drawn mobile object; the two outer samples do not. A partially visible
+large vehicle with its point outside the interval remains absent; an entirely clipped
+small body inside the interval still consumes a place. Named test art may enlarge the
+body without changing the unit's position to separate image intersection from point
+membership. This named-art run is separate from the stock-data run.
+
+Repeat with an ordinary building at −1, 0, the view dimension and dimension + 1.
+Expected: only 0 through the dimension inclusive qualify, independent of foundation
+extent. Repeat with a vehicle-like building: it uses those same building bounds.
+A named map override that makes a test building invisible excludes it; making it
+unselectable does not. Use the existing Import mapping rows for these two flags.
+Repeat with an enemy building, a selected own object and a deactivated own unit whose
+body is still drawn: later selection refusal must not remove a qualifying candidate.
+Compare an on-map building before and after its cell is revealed from shroud: its
+candidate membership depends on its point and invisible-type flag, not that reveal.
+Ordinary trees, a wall, resource overlays and visible animations added to the same
+scene must not increase candidate count. In a separate run keep all unit and building
+points inside their bounds and let one stationary shooter fire: log projectile and
+particle presence alongside the candidate set. Named test-map weapon data may supply
+visible particles if the stock weapon does not. Neither the projectile nor any particle
+or particle-system effect may appear as a candidate or displace a mobile witness at
+capacity. The live veinhole monster of T10's GC4 run likewise must consume no candidate
+place; if that map cannot place it, this sub-test is inconclusive. Put a candidate behind
+a tall building to confirm that occlusion of every body pixel does not by itself remove the candidate.
+
+The read-only frame recorder is the primary observable for off-view points that cannot
+be boxed directly. As an ordinary-input cross-check, add a crowded group with a late
+own mobile witness: an earlier qualifying off-view candidate can displace that witness
+at the 500-place boundary, without itself lying in the released box. Its removal from
+the margin restores the witness. Record the full ordered candidate set to avoid
+mistaking another object's displacement for the witness's. A different membership
+boundary, dependence on opaque-image intersection, or any place consumed by an ordinary
+terrain object, overlay, animation, projectile, particle effect or veinhole monster
+falsifies the relevant rule. A mobile state in
+which body drawing is suppressed is not a test of the margin; use an ordinary stationary
+control and record the suppression separately.
 
 **Scenario T14 part B: settling transient box points (claim 19).** Use T14's setup,
 scripted input and read-only recorder, at fixed view position. Track one own vehicle
@@ -2072,7 +2237,8 @@ video timestamp and presentation-update times. Expected: one frame per qualifyin
 on kind change, and no game-speed scaling. A deliberately delayed display update advances
 only one frame. Any frame outside its range, wrong hot spot, simulation-tick pacing or
 multi-frame catch-up falsifies the corresponding rule. Unreachable table C cases remain
-unconfirmed by this run rather than being forced with modified executable behaviour.
+`unmeasured`, with the reason given in claim 21, rather than being forced with modified
+executable behaviour.
 
 **Coverage of table M.** Each case gives its order in these steps. *Move*, *no-move*: Scenarios T2, T7
 and T10 (lines I9, I27 and V6, self). *Attack-move to a place* and *attack-move on a target*: T3.
@@ -2117,11 +2283,11 @@ Rows with no step, `unmeasured`, each for a reason.
 
 ## Open questions
 
-- Q-0278 is answered by claims 18–20, with two explicitly unmeasured qualifications:
-  state-specific transient box points (claim 19, T14 part B) and exact identities within
-  overflowing mobile drawing candidates (claim 20, T15 part B). Both remain low-confidence
-  open details with reasons and settling scenarios, not guessed normal-position or
-  creation-order rules. No other part of this request remains open.
+- Q-0278 is answered by claims 18–20, with the remaining explicitly unmeasured qualification
+  of state-specific transient box points (claim 19, T14 part B). Claims 24 and 25 answer
+  Q-0392's four candidate questions and replace the earlier overflow-order uncertainty:
+  priority follows buildings first, then current mobile drawing order. The precise
+  flight re-entry moments remain S-0102 claim 4's open detail.
 - Q-0286 question 2 is answered by claims 5 and 23 and T17. S-0213 claims 22 and 23
   already answer questions 1 and 3. Its companion request text should name both specs
   at the coordinated hand-off.
