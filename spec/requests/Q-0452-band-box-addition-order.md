@@ -1,9 +1,9 @@
 ---
 id: Q-0452
 title: In which order does a band box add its eligible candidates to the selection?
-status: open
+status: answered
 related: [S-0214, S-0701]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

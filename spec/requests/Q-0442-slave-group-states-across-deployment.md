@@ -1,9 +1,9 @@
 ---
 id: Q-0442
 title: Slave-group states that S-0402 claim 27 does not list for a building master, and the automatic remembered cell as a guard spot
-status: open
+status: answered
 related: [S-0402, S-0415, S-0408, S-0213]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0279]
+requests: [Q-0279, Q-0450]
 supersedes: []
 ---
 
@@ -22,13 +22,6 @@ local area, and how a screen pixel is turned back into a ground position or a ce
 Projection and picking calculations state their number domains and rounding. Edge, right-drag and keyboard
 scrolling specify their displacement, acceleration and relation to game speed and freezes.
 This spec covers skirmish; network games and campaigns are out of scope.
-
-**Cross-spec correction required at hand-off.** S-0102's height-lift term still describes
-floating-point lift and gives *L*(400) = 57 pixels. It must instead use claim 3's exact lift,
-which gives 58 pixels. S-0102 claims 11 and 13 must use that same integer in their depth biases.
-Its height examples and scenarios must follow it. Its overlay-lift quirk's rationale that
-whole-level object and overlay lifts differ is obsolete under claims 3–4 and 11 here.
-Hand off the reconciled texts together; the exact lift is the rule, not an unresolved choice.
 
 ## Terms
 
@@ -308,13 +301,45 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     likewise, so dragging right moves the viewed map imagery right rather than moving the view
     centre right. Recentring occurs even when F5 prevents actual motion. Near the client edges,
     outward components receive F10's minimum and fourfold boost. Diagonals retain their separate
-    full components. Order blocks, frozen cycles and stand-stills suppress drag updates as they do
-    edge updates; the gesture's release classification remains S-0214 claim 27's.
+    full components. Each unfrozen input cycle samples the pointer once for this update; in a
+    running skirmish this is once per tick and per drawn frame, not per host mouse event or monitor
+    refresh. Game speed changes cycles per second, not F10's pixels per cycle. The drag itself
+    does not hide the pointer; claim 17 specifies its image. Order blocks, frozen cycles and
+    stand-stills suppress drag updates as they do edge updates; the gesture's release
+    classification remains S-0214 claim 27's.
     - Backing: `measurable` (M8) for reachable cases. Full-client edge substitutions and
       boosts whose anchors cannot be reached are `unmeasured`: M8 records reachability,
       but normal input cannot place an anchor outside the battlefield view.
     - Confidence: high for displacement, method direction and recentering; medium for edge
       boosts in reachable boundary cases
+17. **Right-drag cursor (Q-0450).** Each permitted active drag update displays a separate,
+    static drag-scroll image, not an edge-scroll image of S-0213 claim 24. Its hot spot is
+    the full cursor canvas centre, (⌊*w*/2⌋, ⌊*h*/2⌋) pixels for canvas width *w* and height *h*.
+    It uses the full-size image, not a radar miniature. Before applying that update's drag
+    displacement, test whether a one-pixel view-centre request in each of the four screen
+    directions can move the view under claim 8. The refused directions select the image
+    below. Image selection does not depend on the pointer's displacement, drag method or
+    scrolling magnitude; a latched drag whose magnitude rounds to zero still selects it.
+
+    | Refused screen directions | Cursor image frame (zero-based) |
+    |---|---|
+    | none | 385 |
+    | Up | 386 |
+    | Up and Right | 387 |
+    | Right | 388 |
+    | Right and Down | 389 |
+    | Down | 390 |
+    | Down and Left | 391 |
+    | Left | 392 |
+    | Left and Up | 393 |
+    | any other combination | 385 |
+
+    Frames belong to the cursor image imported by S-0214 claim 22. The gesture adds no
+    pointer-hiding rule; hiding caused by another interaction, such as an order block,
+    remains outside this claim.
+    - Backing: `measurable` (M8, including cursor-image observations)
+    - Confidence: high for the images, centred hot spot and ordinary limits; medium for
+      combinations reached only with an oversized view, which use claim 8's departure
 
 ## Formulas
 
@@ -919,7 +944,7 @@ A second run otherwise serves to rule out a reading mistake.
     layer: expect μ = 1.0. Restore all test files afterwards. Another default falsifies
     the import row. This tests defaults, not a stock-data value.
 
-- **M8 — right-drag displacement and preferences** (claim 16). Use M7's large revealed flat
+- **M8 — right-drag displacement, preferences and cursor** (claims 16 and 17). Use M7's large revealed flat
   map, view away from limits, 800×600, game speed 2, scripted input and frame capture. Choose
   an interior anchor and begin a drag with a sampled crossing under S-0214 claim 27.
   For each method 0, 1 and 2 and scroll index 0 … 6, record pointer and view origin every
@@ -941,6 +966,17 @@ A second run otherwise serves to rule out a reading mistake.
   remove the saved method at fresh start: expect method 0; any other method falsifies the
   import default. Unreachable client-edge substitutions and boosts are `unmeasured`:
   view-relative anchors may not reach the full-client thresholds in the chosen layout.
+  Also record the cursor image and its hot spot relative to the sampled pointer, using
+  the imported cursor frames as references. Test the view interior, each limit and each
+  corner, with every drag method and with a zero-magnitude sample after latching. Expect
+  claim 17's static full-size frames and centred hot spot, independent of requested drag
+  direction, with no hiding caused by the drag. A frame from S-0213 claim 24's edge set,
+  direction-dependent image, animation, non-centred hot spot or drag-induced hiding
+  falsifies claim 17. The image reflects the limits before that cycle's displacement.
+  A request newly reaching a limit changes the image on the next update. One run per
+  condition. On our engine add claim 8's horizontally, vertically and doubly oversized
+  fixtures and expect frame 385 for the other refusal combinations; these are departure
+  conformance tests, not original-game measurements.
 
 ## Open questions
 

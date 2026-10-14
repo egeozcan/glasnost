@@ -2,7 +2,7 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -216,6 +216,12 @@ S-0108 (Formulas F3).
     T2): the passenger capacity for the passengers kind, but 0 for the kind none, the ammunition
     capacity for the ammunition kind, and so on. Let the *m* passengers be numbered *k* = 1 … *m* in
     the order they entered, *z*<sub>k</sub> being passenger *k*'s size field (binary64).
+    - **Retained pip values.** An infantry type's passenger pip colour and occupant pip image frame
+      keep the held value whenever a rules layer contains its section but omits the corresponding
+      key, including in the base rules; before any reading their defaults are image frames 1 and 7
+      respectively (S-0003 claim 16; S-0006 claim 5). This fixed display-only departure has no quirk
+      switch and is independent of `quirks.override_resets_keys`: it changes no passenger capacity,
+      loading legality or other gameplay rule.
     - **Total size.** When every size is 0 or more, the total size is *Z* = Σ trunc(*z*<sub>k</sub>),
       the sum of the sizes each truncated toward zero, whatever the order of entry. A negative size
       can make *Z* depend on that order: in general *Z* = *Z*<sub>1</sub>, where *Z*<sub>m+1</sub> = 0
@@ -259,8 +265,9 @@ S-0108 (Formulas F3).
       total-size block layout above. If such a building
       holds more passengers than *R*, the original's result is *unspecified*; our engine shows only
       the *R* most recent passengers.
-    - Backing: `measurable` (scenario OV7)
-    - Confidence: high for the row length, total size, blocks, image frames and order.
+    - Backing: `measurable` (scenario OV7); fixed pip retention is a display-only departure tested
+      against this spec in OV7-R, not an original-game expectation
+    - Confidence: high for fixed pip retention, the row length, total size, blocks, image frames and order.
       Medium for the gunner gap and the absorbing buildings
     - Overflow clipping backing: departure, tested against this spec in OV7-D, not the original,
       confidence high for the lead-decided rule
@@ -389,20 +396,10 @@ S-0108 (Formulas F3).
     - below level 0, *Z*<sub>c</sub> is 1 lepton higher than with the level height (S-0106 claim 3),
       for example −103 on a flat cell at level −1.
 
-    **Centre height below 0.** S-0110 claim 8 covers only heights *Z* ≥ 0. For *Z* < 0 the original
-    applies the same test with *u* = trunc(*Z* / 104), the quotient rounded toward zero, which equals
-    claim 8's ⌊*Z* / 104⌋ for every *Z* ≥ 0. With (*c*<sub>x</sub>, *c*<sub>y</sub>) as in claim 8:
-    - for even *u* the cell tested is (*c*<sub>x</sub> − *u*/2, *c*<sub>y</sub> − *u*/2), as for
-      *Z* ≥ 0,
-    - for odd *u* < 0 the two cells tested are (*c*<sub>x</sub> − *k*, *c*<sub>y</sub> − *k*) and
-      (*c*<sub>x</sub> − *k* + 1, *c*<sub>y</sub> − *k* + 1) with *k* = (*u* + 3) / 2, a whole
-      number. That pair lies one step closer to the map origin on both axes than the pair
-      (*k* = (*u* + 1) / 2) that the rule for odd *u* > 0 would give if applied unchanged.
-
-    So a flat cell at level −1 (*Z*<sub>c</sub> = −103, *u* = 0) tests itself, and a flat cell
-    (*c*<sub>x</sub>, *c*<sub>y</sub>) at level −2 (*Z*<sub>c</sub> = −207, *u* = −1) tests the
-    cells (*c*<sub>x</sub> − 1, *c*<sub>y</sub> − 1) and (*c*<sub>x</sub>, *c*<sub>y</sub>). This
-    extends S-0110 claim 8, which should come to own it (Open questions). Our engine reproduces it.
+    **Centre height below 0.** S-0110 claim 8 owns the point test for both signs of the centre
+    height, including truncation toward zero and `quirks.shroud_negative_odd_pair` (default:
+    on, the original). The wrench uses that shared test and its quirk alternatives, not a separate
+    negative-height rule.
 
     The wrench's image frame at tick *t* is ⌊6·(*t* mod *p*) / (*p* − 1)⌋, where *p* = max(2,
     ⌊N(14, *s*) / 4⌋) ticks and N is the game-speed normalisation of S-0107 (F3). So the wrench
@@ -543,35 +540,10 @@ between two ticks shows the same state.
   kind shows no pip scale at all (claim 11). Off: it shows the resource row of claim 14 with the
   building row of claim 10, and its group number as usual (buildings show no self-heal marker,
   claim 16).
-- **`quirks.pip_colour_default_shift`** (default: on). Each time the passenger pip colour key or the
-  occupant pip key is absent from an infantry type's section that a rules layer contains (S-0006),
-  the value held changes as the table below gives (the words are those of the vocabulary in Import
-  mapping). The value after such a read is that of the vocabulary word whose place in the list,
-  counted from 0, equals the value held, so the value moves on with each such read. The table
-  covers every value that can be held:
-
-  | Value held | Value after a read without the key |
-  |---|---|
-  | 1 (`green`) | 2 (`yellow`) |
-  | 2 | 3 |
-  | 3 | 4 |
-  | 4 | 5 |
-  | 5 | 7 |
-  | 7 (`persongreen`) | 9 (`personwhite`) |
-  | 8 | 10 |
-  | 9 | 11 |
-  | 10 | 12 |
-  | 11 or 12 | 1: the default is then a word from outside the vocabulary, which matches no entry and gives the fallback 1 (`green`) |
-
-  The values restart at 1 and 7 at every game start, since the type registries are rebuilt then
-  (S-0006, claims 1 and 10). With the base rules alone, an absent passenger pip colour therefore
-  gives yellow (2) instead of green (1), and an absent occupant pip gives personwhite (9) instead of
-  persongreen (7). Each further layer whose section for the type omits the key moves the value
-  again. This is an exception to the rule that an absent key keeps the value in force (S-0003 claim
-  16, S-0006 claims 3 and 5), which those specs do not list yet (Questions for the project lead).
-  The importer warns about an infantry section that a layer contains without these keys, naming the
-  value that results. Off: an absent key keeps the value held, as S-0003 claim 16 states for
-  named-value fields.
+- **Pip-value retention** (display-only departure, no switch; claim 12). The original shifts the
+  passenger pip colour and occupant pip image frame on successive reads of an infantry section
+  that omits the corresponding key, a display-only bug. Our engine retains the held values under
+  S-0003 claim 16 and S-0006 claim 5; omission alone produces no importer warning.
 - **The game-wide enemy-health flag does nothing.** The original reads it, but no overlay changes
   with its value. Our engine imports it and ignores it, with no switch, since there is no behaviour
   to reproduce.
@@ -621,8 +593,8 @@ between two ticks shows the same state.
 | type section, `Organic` | boolean | healing ability used (claim 16) | as the combat specs give |
 | type section, `Primary` | weapon name | *M* is that weapon's damage (claim 13) | none (then *M* = 0 and an importer warning for the mind-control kind) |
 | type section, `Gunner` | boolean | gunner gap in the passenger row (claim 12) | no |
-| infantry section, `Pip` | named value (vocabulary below) | passenger pip colour (claim 12) | see `quirks.pip_colour_default_shift` |
-| infantry section, `OccupyPip` | named value (vocabulary below) | occupant pip image frame (claim 11) | see `quirks.pip_colour_default_shift` |
+| infantry section, `Pip` | named value (vocabulary below) | passenger pip colour (claim 12) | keep held value; initially 1 |
+| infantry section, `OccupyPip` | named value (vocabulary below) | occupant pip image frame (claims 11, 12) | keep held value; initially 7 |
 | building section, `CanBeOccupied` | boolean | claim 9 | no |
 | building section, `ShowOccupantPips` | boolean | occupant row (claim 11) | yes |
 | building section, `MaxNumberOccupants` | integer | occupant slots (claim 11) | 0 |
@@ -632,8 +604,9 @@ between two ticks shows the same state.
 
 Vocabulary of `Pip` and `OccupyPip`, compared ignoring case (S-0003 claim 16), with the image frame
 each word selects: `green` 1, `yellow` 2, `white` 3, `red` 4, `blue` 5, `persongreen` 7,
-`personyellow` 8, `personwhite` 9, `personred` 10, `personblue` 11, `personpurple` 12, in this
-order (the order matters for `quirks.pip_colour_default_shift`). A word that matches none gives 1. The values held before any read are 1 (`Pip`) and 7 (`OccupyPip`).
+`personyellow` 8, `personwhite` 9, `personred` 10, `personblue` 11, `personpurple` 12.
+A word that matches none gives 1, with an importer warning (S-0003 claim 16). An absent read
+retains the held value, initially 1 (`Pip`) and 7 (`OccupyPip`), as claim 12 requires.
 
 Overlay sprites, resolved by S-0005: `PIPS.SHP` (pip sprite), `PIPS2.SHP` (second pip sprite),
 `PIPBRD.SHP` (bracket sprite), `WRENCH.SHP` (wrench sprite). Pips and brackets use the overlay palette
@@ -718,17 +691,27 @@ involved.
   infantry aboard: expected pip 0 at its claim 10 place, then two empty pip places, then pips 1 and 2.
   Then an absorbing building of the player that absorbs infantry, entered by two infantry of
   different pip colours: expected the second one's colour at pip 0, the first one's at pip 1, the
-  rest image frame 0. Then the default shift (Edge cases, `quirks.pip_colour_default_shift`): a
-  loose copy of the base rules gives a stock infantry type the passenger pip colour `green`, and a
-  test map holds an override section for that type that changes only an unrelated field that does
-  not show on the pip scale and has no passenger pip colour key. The skirmish's mode file has no
-  section for the type, so the map layer is the only read without the key. One such infantry is
-  loaded into the transport. Expected: its colour pip in image frame 2 (yellow), not 1. The same
-  with `personblue` (11) in the loose copy: expected image frame 1. Falsified if the transport fill runs from
-  the last pip, the image frames differ, the empty transport loses its group number under the
-  kind none, the gunner row has no gap or a gap of another width, the absorbing building shows the
-  first passenger at pip 0, or the shifted pip keeps the base value (1 in the first test map, 11 in
-  the second).
+  rest image frame 0. Then measure the original's omitted-value bug: a named loose test copy
+  of the base rules gives a stock infantry type passenger pip image frame 1 and occupant pip image
+  frame 7. Compare a control map with no section for the type to a test map whose override section
+  changes one unrelated field and omits both pip keys. The skirmish's mode file has no section for
+  the type, so the map layer is the only read without the keys. At game speed 2, load one such
+  infantry into the transport and, separately, occupy an own occupiable building with another of
+  that type. Capture both selected hosts' pips, one run per map. Expected original result: frames
+  1 and 7 on the control, 2 and 9 on the test map. Repeat with base passenger pip image frame 11:
+  expected 11 on the control and 1 on the test map. These are oracle expectations for the bug,
+  not our engine's corrected result. Falsified if the transport fill runs from the last pip, the
+  image frames differ, the empty transport loses its group number under the kind none, the gunner
+  row has no gap or a gap of another width, the absorbing building shows the first passenger at
+  pip 0, or either omitted pip value remains unchanged in the original.
+- **OV7-R (claim 12; departure conformance, not an original-game measurement).** Replay OV7's
+  control and omission maps in our engine at game speed 2, with no AI orders in the observed area.
+  Capture the selected transport and occupied building after the same loading and occupation
+  orders, one run per map. Expected: frames 1 and 7 on both maps, and passenger frame 11 on both
+  maps in the repeat. Repeat with `quirks.override_resets_keys` off: the result is unchanged.
+  Finally omit both pip keys from the named test base rules as well: expected the initial frames
+  1 and 7 on both maps. Any shift after omission, or a warning caused solely by omission, fails
+  fixed retention.
 - **OV7-D (claims 11, 12; departure conformance, not an original-game measurement).** Replay the
   common tiny-map setup in our engine at game speed 3. Use a non-gunner transport in control group
   1, its owner holding a unit-repair building, and three size-1 infantry passengers with distinct
@@ -839,17 +822,12 @@ involved.
 - The extra-information overlay that some units draw beside the pip scale is not covered, nor is the
   talk bubble that can be shown over one object at a time (it uses its own sprite, drawn at the
   status anchor without shading; what shows it is not traced).
-- The shroud test for a centre height below 0 (claim 19) is given here because S-0110 claim 8 covers
-  only heights of 0 or more. It belongs in S-0110 claim 8, which would then also decide whether the
-  odd case below 0 gets a quirk switch, whose alternative would be the pair of cells that the rule
-  for odd counts above 0 gives when applied unchanged. Claim 19 would then only point to it.
 
-## Questions for the project lead
+## Cross-spec consistency
 
-- S-0003 claim 16 says that a missing key on a named-value field gives the value in force, and it
-  names the passenger pip colour as an example of such a field. S-0006 claim 3 makes keeping the
-  held value the general rule, and its claim 5 lists every exception, in three kinds. The passenger
-  pip colour and the occupant pip do not keep the held value: each read without the key moves it on
-  (Edge cases, `quirks.pip_colour_default_shift`). That is a fourth kind of exception. Should S-0003
-  claim 16 and S-0006 claim 5 name it, with this spec as its owner? Until they do, the three specs
-  disagree for these two keys.
+- Hand off with S-0003 claim 16 and S-0006 claim 5 aligned to claim 12's fixed pip-value retention,
+  initial image frames 1 and 7, and no pip-default switch. OV7 observes the original bug.
+  OV7-R checks the correction in our engine.
+- Hand off with S-0110 claim 8 owning the point test for both signs of height and
+  `quirks.shroud_negative_odd_pair`. Claim 19 supplies the tested centre surface height and wrench
+  observable, not an independent negative-height extension; OV14 retains the original expectations.

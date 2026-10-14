@@ -1,9 +1,9 @@
 ---
 id: Q-0451
 title: What is the layout of the game's bitmap font file?
-status: open
+status: answered
 related: [S-0213, S-0005]
-answered-by: []
+answered-by: [S-0005]
 ---
 
 ## Need

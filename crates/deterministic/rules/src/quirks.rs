@@ -1047,10 +1047,6 @@ pub struct Quirks {
     // spec: S-0412 claim 11
     #[serde(default = "on")]
     pub short_game_without_bases: bool,
-    /// Alliance messages take the colour of the country's colour field rewritten by the lobby slot.
-    // spec: S-0413 claim 5
-    #[serde(default = "on")]
-    pub alliance_message_slot_colour: bool,
     /// Only the first three positions of the base-unit list count in the short-game test.
     // spec: S-0414 claim 2
     #[serde(default = "on")]
@@ -1436,7 +1432,6 @@ impl Default for Quirks {
             superweapon_setting_tests_first_only: true,
             crate_count_humans_only: true,
             short_game_without_bases: true,
-            alliance_message_slot_colour: true,
             short_game_first_three_base_units: true,
             vehicle_buildings_keep_nobody_alive: true,
             defeat_during_end_delay: true,
@@ -2089,10 +2084,6 @@ impl Quirks {
             ("crate_count_humans_only", self.crate_count_humans_only),
             ("short_game_without_bases", self.short_game_without_bases),
             (
-                "alliance_message_slot_colour",
-                self.alliance_message_slot_colour,
-            ),
-            (
                 "short_game_first_three_base_units",
                 self.short_game_first_three_base_units,
             ),
@@ -2345,6 +2336,10 @@ mod tests {
                 }
             }
         }
+        // Switches a spec names only to withdraw them.
+        const WITHDRAWN: &[&str] = &[
+            "alliance_message_slot_colour", // spec: S-0413 Edge cases (fixed with no switch; the old switch must not survive)
+        ];
         let q = Quirks::default();
         let have: std::collections::BTreeSet<&str> =
             q.named().into_iter().map(|(n, _)| n).collect();
@@ -2366,7 +2361,9 @@ mod tests {
                 if name.is_empty() {
                     continue;
                 }
-                if !have.contains(name.as_str()) && !EXTERNAL_QUIRKS.iter().any(|(n, _)| *n == name)
+                if !have.contains(name.as_str())
+                    && !EXTERNAL_QUIRKS.iter().any(|(n, _)| *n == name)
+                    && !WITHDRAWN.contains(&name.as_str())
                 {
                     missing.push(format!("{} in {}", name, f.display()));
                 }
