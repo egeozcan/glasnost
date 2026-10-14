@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,7 +23,7 @@ behaviour, which resting behaviour it falls back to, and the per-behaviour prope
 rules data can set. It also gives what the general-purpose behaviours and a gate's *open* behaviour
 do at each processing, the approach step by which an attacking infantry unit or vehicle decides
 whether to keep, renew or take a destination towards its target (claim 37, answering the behaviour
-side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 21), the area-guard threshold's engine default (the guard stray distance has
+side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 24), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
 that own the other behaviours (harvesting, structures, superweapons, team scripts).
 
@@ -44,7 +44,7 @@ streams), S-0203 (tick order), S-0204 (coordinates, distance and facing), S-0205
 S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry movement), S-0209
 (occupancy and crowding), S-0210 (crushing), S-0212 (pathfinding), S-0213 (human orders), S-0214
 (order targeting rules), S-0301 (the firing cycle), S-0307 (weapon range test), S-0308 (weapon
-choice), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle) and
+choice), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle), S-0406 (building placement) and
 S-0412 (skirmish setup rules) and S-0417 (factory unloading, structures). All cited specs are approved; references also follow their current correction drafts.
 This spec cites S-0412's Terms, its claims 3, 4 and 5 and its scenario K10 for the house skill
 level and the difficulty index of each house at game start (claim 5 for the index of the neutral
@@ -60,9 +60,9 @@ refuses only requests with a threat point (claims 17 and 19), with the vehicle's
 destination left to S-0207 claim 16. It answers request Q-0030, where within a gate's own turn its
 door reaches rest, in claim 35 (d) and scenario B28 case g. Q-0072 is answered in part:
 claim 37 gives the approach triggers, destination retention and renewal, and the building and
-deployed-infantry exceptions. S-0307 claims 15 to 21 give covered searches and failure outcomes.
+deployed-infantry exceptions. S-0307 claims 15 to 24 give covered searches and failure outcomes.
 S-0207 claim 19 gives driving, sailing and hovering outcomes after coming in range. S-0208 claims 16 and 17 give the ordinary walker's stopping and destination outcomes.
-Exceptional searches remain open, so this is not a complete answer to Q-0072. Q-0161 is
+The deploying-search gap remains open, so this is not a complete answer to Q-0072. Q-0161 is
 answered in full by claim 37 a2: the per-tick approach follows processing and the per-tick
 search, rechecks its conditions independently of a processing's approach, and can drop a
 newly acquired target on that same tick. Q-0202 is answered by claim 13: refresh precedes
@@ -168,8 +168,11 @@ Terms used by this spec:
   passage state and close countdown are defined in claim 35, which owns when a gate is open or
   closed.
 - **Ready mark:** a per-building yes/no state that makes a building ready to change (claim 11).
-  Some building processings set it (claim 32); a successful per-tick start of the building clears
-  it. It is internal state; only its effect on when queued behaviours start is observable.
+  Some building processings set it (claim 32), as does the construction state (S-0406 claim 17).
+  A building without a turret also sets it when its body range advances onto its last stage, or
+  on every non-advancing turn of a zero-delay range; a turreted building does so only while its
+  behaviour is *construction* or *selling* (claim 11). A successful per-tick start clears it.
+  Only its effect on when queued behaviours start is observable.
 - **Attack-move order, attack-move memory, eligible for attack-move:** S-0213 (human orders)
   owns the order and its initial memory; S-0214 (order targeting rules) owns eligibility.
   S-0309 claim 23 owns the memory's searches, refresh, removal and resumption. An attack-move order is the order that the
@@ -394,7 +397,16 @@ Terms used by this spec:
 1. **Three slots per actor.** Every actor has a current, a queued and a suspended behaviour. A newly
    created actor has *none* in all three. Other objects (projectiles, animations, overlays) have no
    behaviour.
-   - Backing: `measurable` (scenario B1, reading the slots with the recorder)
+
+   As a general rule, when an actor has no current behaviour, rules that ask for its behaviour
+   see the queued one. This does not start that behaviour or fill the current slot: processing
+   still follows claim 4 while the current slot is *none*.
+
+   A building's placement fall-back queues *construction*, rather than choosing a resting
+   behaviour, and requests the construction body (S-0406 claim 17). At game set-up it instead
+   receives the idle body and *guard* queued.
+   - Backing: `measurable` (scenario B1, reading the slots with the recorder; S-0406 PL11 for
+     construction entry and the queued-behaviour query; scenario B33 for game-set-up buildings)
    - Confidence: high
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
@@ -722,8 +734,14 @@ Terms used by this spec:
       in a flight phase that does not allow it (the aircraft spec owns the phases).
     - **Buildings** are ready while their ready mark (Terms) is set. Every processing of an armed
       building in *guard*, *sticky* or *area guard*, and every processing of *attack* by a building
-      without the SAM flag that has a target, sets the mark (claim 32); rules of the structures
-      specs (the construction state, repair, selling and others) also set or clear it. Each of the building's two
+      without the SAM flag that has a target, sets the mark (claim 32). The construction state
+      also sets it (S-0406 claim 17). For a building without a turret, the body range sets it
+      whenever the stage advances onto its last stage, or on every non-advancing turn of a
+      zero-delay range. For a turreted building this body-range rule applies only while its
+      behaviour is *construction* or *selling*, including a queued one seen while none is current
+      (claim 1). Running past the last stage and wrapping does not itself set the mark.
+      Other structures rules (repair, selling and others) also set or clear it.
+      Each of the building's two
       per-tick starts clears the mark when it succeeds; nothing else of this spec clears it. So a
       behaviour queued for a building becomes current at the first of its per-tick starts at which
       the mark is set (and, for the first start of a tick, the building has left its construction state); this
@@ -736,7 +754,8 @@ Terms used by this spec:
       processing.
     - Backing: `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
       exceptions of queued *enter* and contact with a vehicle-factory building, and case c for a
-      transport letting its passengers out; scenario B16, case d, for buildings). Further parts are
+      transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for
+      the construction ready mark and second start; scenario B33 for the body-range rule). Further parts are
       `unmeasured`. The deploying and undeploying transitions and the unfinished unload or deploy
       cycle: which vehicles have them, how long they last and how they end belong to the deploy
       specs, and no setup in this spec can time an order inside them (as for claim 22). The
@@ -746,10 +765,8 @@ Terms used by this spec:
       an unloading or of a descent, which belong to the transport and movement specs, and no setup
       is known that has the vehicle moving at that instant. Aircraft readiness: the flight phases
       belong to the aircraft spec, and no scenario here tests them (Open questions). The building's
-      second per-tick start is `unmeasured`: it is observable only when a behaviour
-      is queued while the mark is clear and the same tick's processing sets it, and no input or
-      data sequence that produces this is known (buildings take only attack orders, and an order
-      for the current behaviour changes no slot). Of the infantry conditions, being in the middle
+      second per-tick start is measurable at construction entry under S-0406 claim 17 and PL11.
+      Of the infantry conditions, being in the middle
       of firing, falling and a sequence that is not interruptible are `unmeasured`: the first and
       the last last only as long as a firing or a sequence that S-0107 and the combat specs own,
       and no setup here can time an order inside them, and whether the input can give an order to
@@ -1063,12 +1080,16 @@ Terms used by this spec:
       can send a vehicle a request with a threat point. For example, once a unit that is entering
       a bunker has stopped on the bunker's cell, the unit nearest the centre of each of the
       bunker's cells, other than the entering unit, is sent a forced request, not move-anywhere,
-      with the bunker's position as threat point. The structures specs own that rule,
+      with the bunker's position as threat point. The structures specs own that rule.
+      Factory apron-neighbour clearing is another sender: S-0417 claim 4 sends forced,
+      move-anywhere requests with the apron centre as threat point, both while unloading and
+      under that spec's idle clearing rule (claim 13),
     - the no-threat fall-back of claim 16 does not happen while the zombie property holds.
     - Backing: `measurable` (scenario B6: part e for the fall-back rows, with an infantry unit and
       an armed vehicle reaching row 6 or 9 and an unarmed vehicle reaching row 7 first; part b for
       the damage scatter of a paralysed vehicle; part c for the refusal of a request with a threat
-      point; scenario B5, case b, for the zombie property suppressing the no-threat fall-back). The
+      point, including its factory variant; scenario B5, case b, for the zombie property
+      suppressing the no-threat fall-back). The
       precedence of a target, a destination or queued destinations over the zombie and paralysed
       rows is `unmeasured`: *attack* falls back to rest only without a target and *move* only
       without a destination, the fall-back of *capture*, *sabotage* and *eaten* (claim 28) happens
@@ -1682,8 +1703,9 @@ apply in our engine to the actors of every player house.
       *attack* by this rule.
     - **Unarmed, in *guard*:** a building whose type has the stupid-guard-mode flag chooses 100 ticks
       and does nothing else. Any other unarmed building runs the factory, repair-bay and reload
-      rules of the structures specs (which can queue *repair* and end the processing with 1 tick)
-      and chooses the standard delay if its type is a unit repair building, else
+      rules of the structures specs (which can queue *repair* and end the processing with 1 tick),
+      including S-0417 claim 13's idle apron clearing for a vehicle factory in *guard*, *sticky*
+      and *area guard*, and chooses the standard delay if its type is a unit repair building, else
       3 × *D*<sub>r</sub> + *U*(0, 2). Neither sets the ready mark.
     - **In *attack*, a building whose type does not have the SAM flag:** without a target it queues
       *guard* and starts it at once, whether or not it is ready to change, and chooses 1 tick. With
@@ -2073,7 +2095,7 @@ apply in our engine to the actors of every player house.
       |---|---|
       | the target is in range, the actor is in the playfield (Terms), and the actor is not the deploy-to-fire vehicle of part f2 | destination unchanged: an absent one stays absent, and an airborne actor's held one stays held |
       | not the case above, and the actor is a vehicle with at least one approach destination (Terms) | it takes the first approach destination as its destination, that entry leaves the list, and the step ends |
-      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 21, subject to that spec's close-range and jumpjet gaps; claim 17 supplies the ordinary failure centre after candidate trials as well as with empty radii |
+      | neither of the cases above | the actor searches for an approach position; the covered search results and failure outcomes are S-0307 claims 15 to 24, with only the deploying-search gap remaining; claim 17 supplies the ordinary failure centre after candidate trials as well as with empty radii |
 
       (f2) **Deploy-to-fire vehicle.** A vehicle whose type deploys to fire (S-0301), standing on
       a cell where its deploy test fails (S-0301, the must-deploy answer), searches as in the
@@ -2912,7 +2934,13 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   unit on its cells; another vehicle of the same house is ordered into the bunker. Expected: once
   the entering vehicle has stopped on the bunker's cell, *G* stays where it is. Control run with a
   test file that turns the paralysed property of *guard* off: expected *G* moves away from the
-  bunker.
+  bunker. Factory variant: use S-0417 U5's blocked-apron setup, with *G* on one apron
+  neighbour and a stationary blocker on the apron itself. Observe the first clearing request
+  while the blocker remains. Expected: *G* refuses the neighbour's threat-point request with
+  the paralysed property on; with it off, *G* accepts and scatters under S-0207 claim 16.
+  Record the request options, destination, movement and scenario-stream state. One run per
+  setting; movement with the property on falsifies the refusal. A run without a blocked-apron
+  clearing request is void.
   Falsified by *K* starting *move* in (a), by *Z* not starting *move* at a per-tick start at which it
   is ready, by a scatter of *G* or *A* with the property off in (b), by *G* or *A* not scattering
   with the property on in (b), by *K* or *Z* scattering in (b), in the variant of (b) by a
@@ -3868,6 +3896,21 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   These collision cases remain `unmeasured` until a legal input sequence establishes the
   prerequisites; this scenario proposes recording them, not a state-writing harness.
 
+- **B33 (claims 1 and 11).** Use the common skirmish setup, speed 2, director and mods off,
+  a tiny open-ground map and one unarmed map-placed building with no turret. Record its body
+  state and current and queued behaviours at entry and each turn. Expected at game set-up:
+  idle body and *guard* queued, not a construction body or *construction* queued. One run.
+  Named test art gives its idle body a range of 3 stages and delay 4 ticks; a second run gives
+  the range delay 0. Observe the ready mark through a read-only recorder before each per-tick
+  start. Expected: landing on the last stage sets it in the first run, wrapping alone does not.
+  every non-advancing turn sets it in the zero-delay run. Repeat with a named test type that
+  has a turret: idle *guard* does not set it through this body-range rule. No weapon or other
+  ready-mark-setting rule is present. Replay S-0406 PL11 with turreted and non-turreted types
+  to confirm that queued *construction* qualifies in both. A different entry body/queue or
+  any ready-mark change contrary to these conditions falsifies the corresponding rule.
+  Runs: one per case. The observation area is the test building and its surrounding cells.
+  the common bystander void rule applies. Remove the named test data afterwards.
+
 ## Open questions
 
 - Whether any stock map, campaign mission or team script puts an actor into *queued move* or
@@ -3883,9 +3926,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   override to *attack* (for example a retaliation) while that value stands. No stock type combines
   them; scenario B16 (m) reaches the rule only with a test gate type, and only if the retaliation
   rules allow the override while the gate is in *open*.
-- Which rules of the structures specs set or clear a building's ready mark (claim 11). In
-  particular, an unarmed building's own *guard* processing never sets it, so what makes a queued
-  behaviour of an unarmed building current is not established here.
+- Which additional structures rules set or clear a building's ready mark (claim 11), beyond
+  the established processings and body-range rule. An unarmed building's own *guard*
+  processing never sets it, but its non-turreted body range can.
 - The guard spot's reference point when the guard spot is a cell (F4): presumably the cell's centre
   at the cell's height.
 - Which situations fill a vehicle's approach destinations (claim 13). S-0417 claim 5 now
@@ -3901,9 +3944,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   stray distance has none in the original; claim 36 b gives our engine's replacement.)
 - Aircraft readiness (claim 11): which flight phases do not allow a change of behaviour. The
   aircraft spec owns the phases, and no scenario here tests aircraft readiness.
-- The bunker rule of claim 17, the only identified sender of a scatter request with a threat point
-  to a vehicle, and so the only way known to observe the paralysed refusal (scenario B6, part c).
-  The structures specs own it and its exact conditions.
+- The bunker rule of claim 17 and its exact conditions remain owned by the structures specs.
+  It is not the only identified threat-point sender: S-0417 claim 4's factory apron-neighbour
+  clearing supplies another setup for the paralysed refusal (scenario B6, part c).
 - Whether the recruitable property also keeps actors out of the computer player's teams (claim 20); scenario
   B20 tests base defence only.
 - The vehicle *unload* processing (transports, deploying vehicles), *retreat*, *patrol* and the entry
@@ -3924,10 +3967,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   search, no idle action). The two differ in the draws and the targeting-timer restart of that
   first processing; scenario B10 (g) checks only the guard spot afterwards.
 
-- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 21 cover ordinary
-  ground candidates on terrain and bridges, ordinary cell targets, failure centres after trials,
-  usable-area exceptions and balloon-hover destinations. Close-range and jumpjet searches
-  and their exceptional failure centres remain open.
+- **Q-0072, question 2 (exceptional searches).** S-0307 claims 15 to 24 cover ground
+  candidates on terrain and bridges, cell targets including destroyable cliffs, failure centres
+  after trials, usable-area exceptions, balloon-hover destinations, close-range searches and
+  the jumpjet detour exemption. Only the deploying-search gap remains.
 - Which parts of the approach fill a vehicle's approach destinations (Terms; claim 37 f).
 - The in-the-playfield mark (Terms; claim 37 f): which objects other than ones arriving from
   outside the usable area lack it.
@@ -3936,15 +3979,15 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
   scenario B32 (c and c2).
 
-### Cross-spec changes required in this round
+### Cross-spec changes to confirm
 
 - S-0309 claim 23 b should cite claim 13 here for assignments that can supersede the refresh
   result, and for route-generated orders rather than immediate route destination changes.
-- S-0213 claim 16 should point to claim 13 here for that route-order timing, while retaining
-  its unresolved full route-action and looping scope.
-- S-0207 claim 20 e's blanket attacker target-loss wording should follow claim 10's conditional
-  live erasing-lock exception and its distinction between a dropped jumping target and some
-  other target restored by a revert. No stock setup establishes the lock/jump combination.
+Joint hand-off checks: S-0213 revision 13 claim 16 already supplies the route-order timing
+pointer, and the current S-0207 claim 20 e already supplies claim 10's live erasing-lock exception
+and restored-target distinction. S-0307 revision 6 claims 15 to 24, S-0406 revision 4 claim 17
+and S-0417 revision 2 claims 4 and 13 supply the expanded search, construction and factory
+contracts cited here. Hand these versions off together; no further edit to them is requested.
 
 ## Questions for the project lead
 
