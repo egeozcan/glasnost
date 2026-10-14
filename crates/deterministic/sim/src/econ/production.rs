@@ -609,7 +609,7 @@ fn bonus_product(w: &World, house: HouseId, factor: usize) -> F64 {
             .get(o.type_index as usize)
             .and_then(|p| p.bonus);
         if let Some(beta) = bonus {
-            // spec: S-0404 F1 (b = RZ₂₄(… RZ₂₄(RZ₂₄(1 × β₁) × β₂) … × βⱼ))
+            // spec: S-0404 F1 (b = ρ₂₄(… ρ₂₄(ρ₂₄(1 × β₁) × β₂) … × βⱼ); ρ₂₄ is RZ₂₄ with quirks.chop_rounding on, RN₂₄ off, through the rules rounding mode)
             b = b.mul(beta[factor], mode).to_f32(mode).to_f64();
         }
     }
@@ -642,11 +642,11 @@ pub fn cost_factors(w: &World, house: HouseId, t: TypeRef) -> (F64, F64) {
     }
 }
 
-/// trunc(RZ₅₃(RZ₅₃(C × b) × a)) for a cost and a type's kind (S-0404 F1).
+/// trunc(ρ₅₃(ρ₅₃(C × b) × a)) for a cost and a type's kind (S-0404 F1).
 fn base_price(w: &World, house: HouseId, cost: i32, lk: LineKind) -> i32 {
     let mode = w.rules().mode;
     let (a, b) = factors_of(w, house, lk);
-    // spec: S-0404 F1 (P = trunc(RZ₅₃(RZ₅₃(C × b) × a)))
+    // spec: S-0404 F1 (P = trunc(ρ₅₃(ρ₅₃(C × b) × a)); ρ₅₃ is RZ₅₃ with quirks.chop_rounding on, RN₅₃ off; trunc toward zero either way)
     F64::from_i64(i64::from(cost), mode)
         .mul(b, mode)
         .mul(a, mode)

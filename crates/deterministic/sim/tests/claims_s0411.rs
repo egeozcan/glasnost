@@ -819,3 +819,104 @@ fn claim_13_intermediate_start() {
     // One creation draw more when B starts in between.
     assert_eq!(draws[0] - draws[1], 1);
 }
+
+/// The production ruleset with `n` more infantry types, copies of GRUNT
+/// named F0, F1, …, registered after it; F0 needs PREQ.
+fn full_tab_rules(n: usize) -> Ruleset {
+    let mut r = preq_rules();
+    for i in 0..n {
+        let name = format!("F{i}");
+        let mut u = r.sim.infantry["GRUNT"].clone();
+        if i == 0 {
+            u.econ.prerequisite = Some(vec!["PREQ".into()]);
+        }
+        r.registries.get_mut("infantry").unwrap().push(name.clone());
+        r.sim.infantry.insert(name, u);
+    }
+    r
+}
+
+/// The tab of GRUNT's icon and its icons.
+fn infantry_tab(w: &World) -> Vec<TypeRef> {
+    let grunt = t(w, Kind::Infantry, "GRUNT");
+    w.houses[0]
+        .econ
+        .tech
+        .icons
+        .iter()
+        .find(|tab| tab.iter().any(|i| i.t == grunt))
+        .map(|tab| tab.iter().map(|i| i.t).collect())
+        .unwrap_or_default()
+}
+
+// spec: S-0004 claim 11 and Constants (a tab holds at most 76 items) and S-0411 claim 15 (S10: a suppressed type is absent from the taken-up set, so a build order for it is illegal; admission in increasing registration index within one kind; a vacancy left by a removal is not given to a suppressed type at that recheck, only at the next recheck event)
+#[test]
+fn claim_15_full_tab() {
+    let mut w = game(&full_tab_rules(80));
+    let preq = building(&mut w, "PREQ", 0, 6, 0);
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    ready(&mut w);
+    set_credits(&mut w, 0, 1_000_000);
+    let tab = infantry_tab(&w);
+    assert_eq!(tab.len(), 76);
+    let f = |w: &World, i: usize| t(w, Kind::Infantry, &format!("F{i}"));
+    // The last registered types are the suppressed ones.
+    let suppressed: Vec<TypeRef> = (0..80).map(|i| f(&w, i)).filter(|x| !tab.contains(x)).collect();
+    assert!(!suppressed.is_empty());
+    let first_out = suppressed[0];
+    assert!(suppressed.iter().all(|x| x.index > tab.iter().map(|y| y.index).max().unwrap()));
+    assert!(!glasnost_sim::econ::tech::offered(&w, H, first_out));
+    assert!(!issue(&mut w, 0, Order::Build { what: first_out }));
+    let f1 = f(&w, 1);
+    assert!(issue(&mut w, 0, Order::Build { what: f1 }));
+    // PREQ leaves: F0's icon goes, and the vacancy stays empty at that recheck.
+    objects::remove(&mut w, preq);
+    step(&mut w);
+    let tab = infantry_tab(&w);
+    assert!(!tab.contains(&f(&w, 0)));
+    assert_eq!(tab.len(), 75);
+    assert!(!tab.contains(&first_out));
+    // S-0411 claim 15 (a vacancy alone schedules no recheck)
+    for _ in 0..5 {
+        step(&mut w);
+    }
+    assert_eq!(infantry_tab(&w).len(), 75);
+    // The next recheck event admits the first suppressed type.
+    glasnost_sim::econ::tech::recheck_due(&mut w, H);
+    step(&mut w);
+    let tab = infantry_tab(&w);
+    assert_eq!(tab.len(), 76);
+    assert!(tab.contains(&first_out));
+    assert!(glasnost_sim::econ::tech::offered(&w, H, first_out));
+}
+
+// spec: S-0411 claim 15 (capacity is judged before the removals of that recheck: an icon the same recheck removes still occupies a place for admission)
+#[test]
+fn claim_15_capacity_before_removals() {
+    // A full tab: GRUNT, MEDIC and F0 to F73. PREQ's loss and the arrival of
+    // H0 and H1 (both needing HUT) come in one recheck.
+    let mut r = full_tab_rules(74);
+    for name in ["H0", "H1"] {
+        let mut u = r.sim.infantry["GRUNT"].clone();
+        u.econ.prerequisite = Some(vec!["HUT".into()]);
+        r.registries.get_mut("infantry").unwrap().push(name.into());
+        r.sim.infantry.insert(name.into(), u);
+    }
+    let mut w = game(&r);
+    let preq = building(&mut w, "PREQ", 0, 6, 0);
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    ready(&mut w);
+    let before = infantry_tab(&w);
+    assert_eq!(before.len(), 76);
+    let f0 = t(&w, Kind::Infantry, "F0");
+    let h0 = t(&w, Kind::Infantry, "H0");
+    assert!(before.contains(&f0) && !before.contains(&h0));
+    // In one tick: PREQ leaves (F0 out) and a HUT comes (H0 and H1 eligible).
+    objects::remove(&mut w, preq);
+    building(&mut w, "HUT", 0, -6, 0);
+    step(&mut w);
+    let after = infantry_tab(&w);
+    assert!(!after.contains(&f0));
+    assert!(!after.contains(&h0), "F0's place still counted at admission");
+    assert_eq!(after.len(), 75);
+}

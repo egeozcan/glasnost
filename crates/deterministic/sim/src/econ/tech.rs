@@ -823,6 +823,11 @@ fn admission_rank(w: &World, house: HouseId, kind: Kind) -> usize {
         .unwrap_or(usize::MAX)
 }
 
+/// Items per sidebar tab (S-0004 claim 11 and Constants). The simulation
+/// has no superweapon items yet (a seam), so only production icons count.
+// spec: S-0004 Constants (items per sidebar tab: 76)
+const TAB_CAPACITY: usize = 76;
+
 /// Marks a recheck due for a house (S-0407 claim 12): every event of the
 /// table calls this; the recheck runs in the house's next house update.
 pub fn recheck_due(w: &mut World, house: HouseId) {
@@ -848,14 +853,36 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     }
     let before = h.econ.tech.taken_up.clone();
     let mut after = BTreeSet::new();
+    let mut candidates = Vec::new();
     for t in w.rules().econ.tech.all_types() {
-        // spec: S-0407 claim 1 (a) and (b) (answer allowed or at limit; a factory could make it)
-        let a = answer(w, house, t) != Answer::Refused;
-        if !a || !factory_condition(w, house, t) {
+        // spec: S-0407 claim 1 (a) (answer allowed or at limit)
+        if answer(w, house, t) == Answer::Refused {
             continue;
         }
-        // spec: S-0407 claim 1 (c) (in the set before, or a qualifying factory at the recheck)
-        if before.contains(&t) || qualifying_factory(w, house, t) {
+        if before.contains(&t) {
+            // spec: S-0407 claim 1 (b) and (c) (in the set before; a factory could make it)
+            if factory_condition(w, house, t) {
+                after.insert(t);
+            }
+        } else if qualifying_factory(w, house, t) {
+            // spec: S-0411 claim 15 (the candidates for admission: an allowed or at-limit answer presented by a qualifying factory, S-0407 claim 1 (c))
+            candidates.push(t);
+        }
+    }
+    // spec: S-0407 claim 17 and S-0411 claim 15 (admission order: kinds in the acquisition order of their earliest still-owned qualifying factory, then increasing registration index)
+    candidates.sort_by_cached_key(|t| (admission_rank(w, house, t.kind), t.kind, t.index));
+    // spec: S-0411 claim 15 (capacity is judged before the removals of the recheck: every icon present at its start occupies a place; each tab of each player house separately)
+    let mut used: [usize; 4] = std::array::from_fn(|i| h.econ.tech.icons[i].len());
+    for t in candidates {
+        let tab = usize::from(tt(w, t).map_or(0, |f| f.tab)).min(3);
+        // spec: S-0004 claim 11 and Constants (a tab holds at most 76 items; a candidate for a full tab is suppressed: no icon, not in the set) and S-0411 claim 15
+        if used[tab] >= TAB_CAPACITY {
+            continue;
+        }
+        // spec: S-0411 claim 15 (an admitted candidate occupies a place against later candidates even when claim 1 (b) removes it in the same recheck)
+        used[tab] += 1;
+        // spec: S-0407 claim 1 (b) (a factory could make it)
+        if factory_condition(w, house, t) {
             after.insert(t);
         }
     }
@@ -914,7 +941,6 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     for tab in hh.icons.iter_mut() {
         tab.retain(|i| !gone.contains(&i.t));
     }
-    // Q-0196 (interim: S-0004 claim 11's 76-item cap is not applied; every offered type is shown)
     for (icon, key) in added {
         let tab = &mut hh.icons[usize::from(key.tab)];
         // spec: S-0004 claim 11 (an item already shown is not added twice)

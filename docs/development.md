@@ -303,7 +303,6 @@ Provisional rules of M5a, each tied to a request:
 | `econ::body::set_up` | a turreted building placed at game set-up also gets its ready mark, so its queued *guard* (S-0215 claim 1) becomes current at its first per-tick start; no rule of the specs is known to set it otherwise | Q-0241 |
 | `econ::release::arrival`, `walk` | a walking unit's cell-arrival update (S-0417 claims 7 and 10) is the arrival tick of S-0208 claim 6; S-0417 revision 3 defines it for driving vehicles only | Q-0295 |
 | `econ::release::ring` | with `quirks.foundation_exit_lists` off, a foundation without cells (0 × 0) has an empty exit list, as with the switch on | Q-0195 |
-| `econ::tech::recheck` (full tab) | S-0004 claim 11's 76-item cap is not applied: every offered type gets an icon and stays in the taken-up set | Q-0196 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 
 ## Own AI (M5b)
