@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,10 +16,13 @@ supersedes: []
 
 ## Summary
 
-Factory doors, apron clearing, vehicle exit movement and the destination chosen on release from
-contact. S-0404 claim 13 owns release positions, facings, busy and failed results, and refunds.
-Skirmish only: campaigns and network games are out of scope. This supplies part of Q-0120, but
-leaves aircraft docking geometry and infantry initial walk-out unresolved, so does not close it.
+Factory doors, apron clearing (while unloading and while an idle vehicle factory guards),
+vehicle exit movement, the first destinations of released infantry, the tether given to a
+released aircraft and the destination chosen on release from contact. S-0404 claim 13 owns
+release positions, facings, busy and failed results, and refunds. Skirmish only: campaigns and
+network games are out of scope. This supplies most of Q-0120. Still open: what moves a released
+infantry unit when there is no rally point (Open question 3), and the aircraft docking position,
+which S-0404 owns.
 
 ## Terms
 
@@ -33,6 +36,9 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
   cell is (*x*₀, *y*₀).
 - **Unloading:** K's current behaviour is *unload*, specifically to release a produced unit.
   Passenger unloading, absorbed units and non-factory buildings are outside this spec.
+- **Idle apron clearing:** the apron test and requests of claim 4, made by a vehicle factory in
+  *guard* (or *sticky* or *area guard*) rather than while unloading (claim 13). It is the only
+  rule for those behaviours that this spec gives.
 - **Door:** closed, opening, open or closing. Open and closed mean at rest. Movement takes the
   door time of F2. This spec specifies only the factory-unloading uses of the door.
 - **Exit apron cell E:** the target cell of a ground vehicle factory's exit track (claim 3).
@@ -168,34 +174,52 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
    - Backing: `measurable` (U9)
    - Confidence: high
 
-10. **Infantry factory and cloning building.** Placement, facing and cloning are S-0404 claim 13
-    and claim 14. The released unit saves K's rally point as guard spot. Contact is established
-    and K gives clearance to unload, tethering the unit when the contact exchange succeeds.
-    A tethered infantry unit reports clear on its next cell-arrival update. An ordinary infantry
-    factory does not give the run-away reply: contact and tether simply end. At fall-back to rest,
-    the guard-spot row of S-0215 claim 13 can supply the rally destination and queue *move*.
-    K has no unloading stages or door movement and the contact exchange itself takes no draw.
+10. **Infantry factory and cloning building.** Placement, facing and cloning are S-0404 claims 13
+    and 14. K has no unloading stages or door movement. Before placement, the released unit saves
+    K's rally point as its guard spot, or saves no spot if K has no rally point. Placement immediately
+    makes the unit fall back to rest, so S-0215 claim 13's guard-spot row applies at that moment. A
+    freshly made unit has no current behaviour; consequently, if its rally point is not its own cell,
+    it takes the rally point as its destination, queues *move*, and clears its guard spot. After that
+    placement consequence, if the unit has a destination and is neither jumpjet infantry nor marked
+    as teleporting, its guard spot becomes that destination, *move* is queued, and its destination
+    becomes the exit cell (S-0404 claim 13). K then offers contact. If the unit accepts, K gives it
+    clearance to unload and tethers it. Contact and clearance take no draw.
 
-    When the just-placed unit already has a destination, and its type is neither jump-jet infantry
-    nor marked as a teleporting type, that destination replaces its guard spot, *move* is queued, and its
-    destination becomes the exit cell. How initial placement supplies that destination has not
-    been traced. This spec therefore does not promise that every infantry unit first walks to
-    the exit cell, or give a no-rally walk-out rule. The original's computer-controlled release
-    also queues *area guard* and can choose a base-cell guard spot. Our player houses use the
-    human rule; neutral and special houses retain the original owner rule.
-    - Backing: `measurable` (U10 for ordinary contact and rally outcomes). The initial-destination
-      branch and no-rally walk-out are `unmeasured`: their initial movement setup is untraced.
-      U10 b is exploratory, not backing for a definite rule. Non-player-house production is also
-      `unmeasured`: no stock factory-release setup for it is established.
-    - Confidence: medium (contact and guard spot); low (initial walk-out)
+    Thus, with a rally point outside its own cell, an ordinary infantry unit walks first to the
+    exit cell and then, when *move* falls back to rest there, to the rally point by the guard-spot
+    row of S-0215 claim 13. A jumpjet or teleporting infantry type heads straight for the rally
+    point with an empty guard spot. A tethered infantry unit reports clear on its next
+    cell arrival. An ordinary infantry factory does not give the run-away reply: contact and
+    tether simply end.
 
-11. **Aircraft factory.** It does not enter these factory unloading stages. Contact and
-    edge-entry orders belong to S-0404 claim 13. Newly released aircraft tether timing is not
-    established here; the glossary's landing example is provisional, not proof of this case.
-    Docking geometry and the cell near K remain open.
-    - Backing: `measurable` (U1 for no unloading). Tether timing and geometry are `unmeasured`:
-      the release-to-landing sequence has not been traced to an exact position or tether tick.
-    - Confidence: medium (no unloading); low (unresolved docking details)
+    With no rally point (or a rally point in the unit's own cell), neither placement nor the release
+    gives a destination or queues *move*. What then moves the unit off the foundation, if
+    anything, is not established (Open question 3). Only a cell arrival produces the clear report,
+    so if nothing moved it, it would stay in contact with K. That would affect S-0404's busy test
+    for the next infantry unit, which makes the case observable (U10 b).
+
+    The original's computer-controlled release also queues *area guard* and can choose a
+    base-cell guard spot. Our player houses use the human rule; neutral and special houses retain
+    the original owner rule.
+    - Backing: `measurable` (U10 a and c back items (a) to (d) and the two-leg walk; U10 b, the
+      no-rally case). Non-player-house production is `unmeasured`: no stock factory-release setup
+      for it is established.
+    - Confidence: high ((a), (c), (d)); medium ((b) and the two-leg walk); low (no-rally case)
+
+11. **Aircraft factory.** It does not enter these factory unloading stages. Edge-entry orders and
+    where the aircraft appears belong to S-0404 claim 13. When the aircraft appears docked at K,
+    K offers contact and then sends a tether request on the same tick:
+    - a type that need not return to a dock accepts and is tethered to K from the tick of its
+      release, and
+    - a type that must return to a dock refuses the request, so the release does not tether it.
+      Contact is established in both cases.
+
+    The tether of a docked aircraft ends when it leaves the ground (glossary *tether link*,
+    provisional there). The docking position and the cell near K remain S-0404's open questions.
+    - Backing: `measurable` (U1 for no unloading; U12 for the tether). The end of the tether on
+      take-off is inherited from the glossary's provisional entry.
+    - Confidence: high (no unloading); medium (tether at release, both branches); medium (end on
+      take-off)
 
 12. **Random-stream consequences.** Each vehicle-factory unloading processing assigns exactly
     one ranged delay draw over 0 … 2. A blocked processing assigns the scatter draws of claim 4
@@ -210,9 +234,34 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
     and death effects; those are not covered by the zero-draw statements. Other actors' processing
     and movement draws, initial placement, cloning creation and the original's computer-only
     base-cell choice are not unloaded-unit delay draws either.
-    - Backing: `measurable` (U3). Failed replacement's effects are `unmeasured`: no stock setup
+    Idle apron clearing (claim 13) assigns its scatter draws, in claim 4's order, before that
+    *guard* processing's own delay draw. Turning the guard spot into a destination at placement
+    (claim 10), offering contact and the tether request to a docked aircraft take no draw.
+    - Backing: `measurable` (U3, U11). Failed replacement's effects are `unmeasured`: no stock setup
       causing that failure is established.
     - Confidence: high (explicit delay and scatter assignments); medium (downstream effects)
+
+13. **Idle vehicle factory clears its apron.** This applies to a building whose type has the vehicle
+    factory flag, naval or not, that is unarmed and lacks the stupid-guard-mode flag (S-0215
+    claim 32), while its current behaviour is *guard*, or *sticky* or *area guard*, which S-0215
+    claim 32 processes by the same rule.
+    - The first processing after such a behaviour starts returns K's animation to idle and makes
+      no apron test. This holds for every start, including the *guard* that ends unloading.
+    - Every later processing of that behaviour applies claim 4's blocked test to E. When E is
+      blocked, it sends exactly claim 4's requests: to E, then to the occupied apron
+      neighbours. The result has no other effect, and the behaviour does not change.
+    - Each processing chooses S-0215 claim 32's delay 3 × *D*r + *U*(0, 2), with *D*r F1 applied
+      to the rate of the current behaviour, unless that claim's repair-bay rule has already ended
+      the processing.
+
+    E is claim 3's apron for K's own foundation, including the short-list results (Edge cases).
+    A naval factory therefore clears an apron while idle, although it never tests one while
+    unloading (claim 9). Thus a unit left on E of an idle vehicle factory is asked to scatter at
+    about every 3 × *D*r ticks. A refusing occupant changes nothing, because the factory is idle.
+    No apron test happens while K is armed, has the stupid-guard-mode flag, or is in any
+    behaviour other than these three or *unload*.
+    - Backing: `measurable` (U11)
+    - Confidence: high (tests, order, delay); medium (naval case)
 
 ## Formulas
 
@@ -240,6 +289,7 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
 |---|---|---|---|
 | Rate and door time conversion | 900 | ticks per game minute | F1, F2 |
 | Delay draw | 0 … 2 inclusive | ticks | every unloading processing |
+| Idle clearing rate factor | 3 | dimensionless | claim 13, S-0215 claim 32 |
 | Apron list position | 11 | entries counted from 1 | claim 3 |
 | Apron displacement from that pair | (−1, 0) | cells | F3 |
 | Exit speed fraction | 0.5 | fraction | claim 5 |
@@ -325,6 +375,9 @@ requirements concern the resulting direction choices, delay and stream state (cl
 | `Locomotor` | rules, vehicle type | locomotor identifier, exit mode | S-0207 |
 | `Accelerates` | rules, vehicle type | boolean speed-update choice | S-0207 |
 | `JumpJet`, `Teleporter` | rules, infantry type | boolean exceptions to initial exit destination | S-0208 and S-0402 |
+| `Rate` in the current behaviour's section (`[Guard]` and the others named by S-0215) | rules | decimal game minutes, rate of claim 13's delay | S-0215 |
+| `HasStupidGuardMode` | rules, building type | boolean; set means no idle apron clearing (claim 13) | S-0215 |
+| `AirportBound` | rules, aircraft type | boolean; set means the type refuses the release tether (claim 11) | form and default owned by S-0407 |
 
 ## Measurement scenarios
 
@@ -380,39 +433,50 @@ Use stock data, no engine add-ons, and mods off, a tiny flat clear map, one huma
 - **U9, naval.** Produce a ship with rally set. Record two unload processings, two delay
   assignments, then guard queued; the ship keeps its release move. Door animation can continue
   after unloading. Falsifier: a third unload processing or unload redirecting the ship.
-- **U10, infantry.** Part a: rally set, record saved guard spot, contact, tether, initial
-  destination and first cell arrival. Expect the successful contact exchange to tether and the
-  subsequent clear report to end contact without a run-away reply; ordinary rally movement uses
-  S-0215's guard-spot rule. Falsifiers: barracks unload stages or door movement, or that contact
-  exchange taking an additional random draw. Part b: no rally, record initial destination and
-  position after 300 ticks. This explores initial walk-out; there is no established expected
-  first destination against which to score it.
+- **U10, infantry.** Part a: rally point set several cells from an infantry factory. Record
+  the saved guard spot, current and queued behaviours, destination per tick from release,
+  contact, tether and each cell arrival. Expect: on the release tick the destination is the exit
+  cell, *move* is queued and the guard spot equals the rally point. The unit walks to the exit
+  cell, reports clear on its first cell arrival without a run-away reply, then heads for the rally
+  point with an empty guard spot. Falsifiers: rally point as the first destination, barracks unload
+  stages or door movement, or an extra draw for the contact exchange. Part b: no rally point.
+  Record destination, position, contact and tether over 300 ticks, then order a second infantry
+  unit and record its release result. Expect no destination and no *move* from the release
+  itself. Report every later movement and its first tick, without scoring it, and whether the
+  second release is busy. Part c: rally point set, stock jumpjet infantry type if one is
+  available from an infantry factory. Expect the rally point as first destination and an empty
+  guard spot. Falsifier: an exit-cell leg.
+- **U11, idle apron clearing.** Part a: an idle stock ground vehicle factory in *guard*, no
+  production. Place an idle vehicle of the factory's own house on E by map pre-placement or a move
+  order. Record the factory's guard processings, the scatter requests and the vehicle's
+  destination. Expect no request at the first processing after *guard* starts and a forced,
+  move-anywhere request at each later one while E is occupied. Intervals are 3 × *D*r + 0, 1 or
+  2 ticks from the guard rate. Part b: also occupy an apron neighbour; expect E's request,
+  then the neighbour's, then the delay draw (random-state recorder). Part c: a stock naval factory
+  with a ship on its E; expect the same requests while idle. Part d: an occupied neighbour with
+  E free; expect no request. Falsifiers: a request at the first processing, a request with E
+  free, or the delay draw assigned before the scatter draws.
+- **U12, aircraft tether.** Produce from an aircraft factory with a free docking place a stock
+  type that need not return to a dock, and one that must. Record contact and tether on the
+  aircraft and K from the release tick, then order each to take off. Expect: the first is tethered
+  on its release tick and untethered when it leaves the ground. The second has contact but no
+  tether from the release. Falsifier: either branch reversed.
 
 ## Open questions
 
-1. Aircraft docking position and release-to-landing tether timing are untraced.
+1. Aircraft docking position: S-0404 owns it and it is untraced. The end of the tether on take-off is
+   inherited from the glossary's provisional entry (claim 11).
 2. The aircraft's cell near K without a rally point remains S-0404's open question.
-3. Infantry initial placement destination and walk-out without rally remain open. S-0404 claim 13's
-   universal promise of a walk to the exit cell needs qualification: only the traced
-   pre-existing-destination branch supplies it (claim 10 here).
+3. What moves a released infantry unit off the foundation when there is no rally point, or the
+   rally point is its own cell. The release and its placement give no destination (claim 10).
+   No other rule that would move it has been found. U10 b records what happens.
 4. Failed temporary driving replacement and refused exit-track instructions: subsequent damage,
    movement and contact loss remain untraced. They must not be implemented as guaranteed
    permanent waits on the evidence here.
 5. The owner must decide the fixed alternative of the proposed short-list quirk and invalid-apron
-   handling. The original's special pairs are definite, not an undefined last-entry fallback.
+   handling (Q-0221). The original's special pairs are definite, not an undefined last-entry
+   fallback.
 6. With S-0404's foundation exit-list quirk off, should this track retain its original E or use
-   the full-ring eleventh entry? Proposed: retain the original E. Await owner decision.
+   the full-ring eleventh entry? Proposed: retain the original E. Await owner decision (Q-0221).
 7. Existing destination of a unit or building at the run-away reply: the additional interaction
    is untraced; no stock produced-unit setup is established.
-8. Q-0120 remains partial. S-0404 should point here for ground and naval unloading and qualified
-   post-contact rules; its infantry exit-search entry test and contact-place count remain open.
-   S-0215 claim 34 and S-0108's door terms should point here. S-0207 claim 16's statement that
-   only bunkers send threat-point scatter needs correction: apron-neighbour clearing is a forced,
-   move-anywhere sender and may supply a measurement setup for its destination/turret-turn gate.
-   Its known-senders claim also needs qualification: factory clearing does not filter moving
-   occupants before sending requests; receivers still apply their own refusal tests.
-9. Factory release supplies candidate tether setups for S-0213, S-0208 and S-0209 backings that
-   currently rely on no known tether situation. S-0215's temporary-locomotor backing likewise
-   has claim 5's candidate setup. Those specs must check whether their particular effect can be
-   isolated before upgrading backing. The glossary should add exit apron cell and reference
-   these concrete tether situations, while keeping aircraft tether timing provisional.
