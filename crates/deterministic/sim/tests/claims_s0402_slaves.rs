@@ -643,6 +643,24 @@ fn claim_10a_sold_master_cheer_and_no_recipient() {
             Some(glasnost_sim::infantry::Seq::Cheer)
         );
     }
+    // The no-recipient path at the master's sale itself: the slave's
+    // destination stays and no guard is queued.
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    until(&mut w, 40, |w| !on_map(w, b).is_empty()).expect("emerged");
+    let s = on_map(&w, b)[0];
+    let spot = Some(Target::Cell(at(-3, -3)));
+    if let Some(o) = w.obj_mut(s) {
+        o.dest = spot;
+        o.beh.queued = None;
+    }
+    let target = w.obj(s).unwrap().target;
+    slaves::master_sold(&mut w, b);
+    let o = w.obj(s).unwrap();
+    assert!(!slaves::is_slave(&w, s));
+    assert_eq!(o.dest, spot);
+    assert_eq!(o.target, target);
+    assert_eq!(o.beh.queued, None);
 }
 
 /// One repeating tag `TAG` over one trigger whose only event is
@@ -738,6 +756,63 @@ fn s0312_claim_30_tagged_hidden_slave_raises() {
         // The building itself is one more loss.
         assert_eq!(losses, SLAVES + 1, "attacker {with_attacker}");
         assert!(fired > 0, "attacker {with_attacker}");
+    }
+}
+
+// spec: S-0312 claim 30 and scenario D21 variant b (r16: the initial lethal hit of a delay-kill warhead on an eligible building master is a reprieve that neither frees nor removes its group; the actual death at expiry ends it under claim 30)
+// spec: S-0302 claim 16 (the expiry hit: whole health, the demolition warhead, no attacker)
+#[test]
+fn s0312_claim_30_delayed_death_master() {
+    let mut r = rules();
+    r.sim
+        .buildings
+        .get_mut("SMH")
+        .unwrap()
+        .eligible_for_delay_kill = Some(true);
+    r.sim.warheads.insert(
+        "DK".into(),
+        WarheadType {
+            verses: Some((0..11).map(|_| Decimal("1".into())).collect()),
+            cell_spread: dec("2"),
+            causes_delay_kill: Some(true),
+            delay_kill_frames: Some(5),
+            delay_kill_at_max: dec("7"),
+            ..Default::default()
+        },
+    );
+    let dk = r.sim.warheads.keys().position(|k| k == "DK").unwrap() as u32;
+    let mut w = game_on(&r, &field(5, -1, 5), true);
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    until(&mut w, 40, |w| on_map(w, b).len() == SLAVES as usize).expect("emerged");
+    let ids = slaves::slaves_of(&w, b);
+    let out = on_map(&w, b);
+    damage::apply(
+        &mut w,
+        b,
+        Hit {
+            amount: 100_000,
+            warhead: Some(dk),
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+    assert!(w.obj(b).unwrap().combat.delay_kill_until.is_some());
+    assert_eq!(
+        slaves::slaves_of(&w, b),
+        ids,
+        "the reprieve keeps the group"
+    );
+    for &s in &out {
+        assert_eq!(w.obj(s).unwrap().owner, Some(HouseId(0)));
+    }
+    until(&mut w, 40, |w| w.obj(b).is_none()).expect("dies at expiry");
+    for &s in &out {
+        let o = w.obj(s).unwrap();
+        assert!(!slaves::is_slave(&w, s));
+        assert_eq!(o.owner, Some(HouseId(2)), "no attacker: the civilian side");
     }
 }
 
