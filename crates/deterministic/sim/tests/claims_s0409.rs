@@ -826,3 +826,85 @@ fn claim_15_satellite_after_defeat() {
     assert!(!shroud::explored(&w, A, c(15, 15)));
     assert!(glasnost_sim::econ::radar::available(&w, A));
 }
+
+/// Explored cells of house A next to pending ones, the pending ones, and
+/// the world, after a sight-explored patch and a reveal on fire beside it
+/// made between ticks 270 and 360 (regrowth period 90 with rate 0.1).
+fn coincident_setup(regrow: bool) -> (World, Vec<CellXY>, Vec<CellXY>) {
+    let mut r = testkit::combat_ruleset();
+    let w0 = r.sim.weapons.keys().next().cloned().unwrap();
+    r.sim.weapons.get_mut(&w0).unwrap().reveal_on_fire = Some(true);
+    let mut r2 = rules();
+    r2.sim.weapons = r.sim.weapons.clone();
+    r2.sim.warheads = r.sim.warheads.clone();
+    r2.sim.projectiles = r.sim.projectiles.clone();
+    r2.sim.general.economy.shroud_grow = Some(regrow);
+    r2.sim.general.economy.shroud_rate = Some(glasnost_rules::sim::Decimal("0.1".into()));
+    let mut w = game(&r2);
+    while w.tick < 280 {
+        step(&mut w);
+    }
+    // A sight explores the patch around (0, 0) and leaves it (not pending).
+    let eye = spawn(&mut w, Kind::Vehicle, "EYE3", 0, 0, 0);
+    step(&mut w);
+    glasnost_sim::objects::remove(&mut w, eye);
+    // A reveal on fire beside it: never-sighted cells become pending.
+    let firer = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 6, 0);
+    let target = spawn(&mut w, Kind::Vehicle, "EYE1", 0, 15, 0);
+    shroud::fired(&mut w, firer, &w0, Target::Object(target));
+    glasnost_sim::objects::remove(&mut w, firer);
+    glasnost_sim::objects::remove(&mut w, target);
+    let mut pending = Vec::new();
+    let mut edge = Vec::new();
+    for dy in -8..=8 {
+        for dx in -6..=12 {
+            let cell = c(dx, dy);
+            if shroud::pending(&w, A, cell) {
+                pending.push(cell);
+            }
+        }
+    }
+    for dy in -8..=8 {
+        for dx in -6..=12 {
+            let cell = c(dx, dy);
+            if shroud::explored(&w, A, cell)
+                && !shroud::pending(&w, A, cell)
+                && pending
+                    .iter()
+                    .any(|p| (p.x - cell.x).abs() <= 1 && (p.y - cell.y).abs() <= 1)
+            {
+                edge.push(cell);
+            }
+        }
+    }
+    assert!(!pending.is_empty() && !edge.is_empty(), "the fixture touches");
+    assert!(w.tick < 360);
+    (w, pending, edge)
+}
+
+// spec: S-0409 claim 18 and State and ordering (revision 8, scenario V11 part F: on a tick where regrowth and the re-cover sweep are both due, regrowth acts first, so the pending cells' explored neighbours lose their surrounded marks and go one regrowth step later; with regrowth off they stay)
+#[test]
+fn claim_18_regrowth_before_a_coincident_sweep() {
+    for regrow in [true, false] {
+        let (mut w, pending, edge) = coincident_setup(regrow);
+        while w.tick <= 360 {
+            step(&mut w);
+        }
+        for &p in &pending {
+            assert!(!shroud::explored(&w, A, p), "pending {p:?} gone at 360");
+        }
+        for &e in &edge {
+            assert!(shroud::explored(&w, A, e), "neighbour {e:?} still explored at 360");
+        }
+        while w.tick <= 450 {
+            step(&mut w);
+        }
+        for &e in &edge {
+            assert_eq!(
+                shroud::explored(&w, A, e),
+                !regrow,
+                "neighbour {e:?} at 450, regrowth {regrow}"
+            );
+        }
+    }
+}

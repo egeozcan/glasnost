@@ -19,10 +19,11 @@ pub fn step(w: &mut World) {
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
     crate::econ::resource::part(w);
     // Rows 2, 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
+    // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
+    // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
+    crate::econ::shroud::regrowth(w);
     // spec: S-0409 claim 13 (the re-cover sweep, before the turn pass of its tick)
     crate::econ::shroud::sweep(w);
-    // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud, placed freely; S-0409 claim 18)
-    crate::econ::shroud::regrowth(w);
     turn_pass(w);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
     // Rows 15 and 16 (blast rings, crate respawns): empty seams.
