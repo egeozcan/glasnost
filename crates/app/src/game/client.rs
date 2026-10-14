@@ -499,6 +499,8 @@ impl Client {
             return;
         };
         s.clock_ms = now_ms;
+        // spec: S-0213 claim 25 (status lines expire at display updates, also while paused or unfocused)
+        s.play.update_messages(now_ms);
         // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
         if !s.ticking() || !self.focused {
             self.pacer.reset();

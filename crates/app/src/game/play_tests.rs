@@ -272,3 +272,36 @@ fn surrender_ends_the_game_with_an_end_screen() {
     assert_eq!(end.headline(), "DEFEAT");
     assert!(!p.running());
 }
+
+/// spec: S-0213 claim 25 (status lines: deadline = clock count + 480 in 16 ms units, removed when the count is strictly greater; six shared lines, oldest first, the oldest evicted at capacity; a later message appends rather than refreshing; the clock runs on regardless of ticks)
+#[test]
+fn s0213_claim_25_status_lines() {
+    let mut p = start();
+    p.messages.clear();
+    p.update_messages(16 * 100 + 15);
+    assert_eq!(p.clock, 100);
+    p.say("one");
+    assert_eq!(p.messages[0].until, 580);
+    p.update_messages(16 * 580);
+    assert_eq!(p.messages.len(), 1, "kept at equality");
+    p.update_messages(16 * 581 - 1);
+    assert_eq!(p.messages.len(), 1, "still clock 580");
+    p.say("one");
+    assert_eq!(p.messages.len(), 2, "appended, not refreshed");
+    p.update_messages(16 * 581);
+    assert_eq!(p.messages.len(), 1, "gone once the count is greater");
+    assert_eq!(p.messages[0].until, 580 + 480);
+    for k in 0..7 {
+        p.say(format!("line {k}"));
+    }
+    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(
+        texts,
+        ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"]
+    );
+    // No simulation tick runs; the presentation clock alone expires lines.
+    let tick = p.world().tick;
+    p.update_messages(16 * (581 + 481));
+    assert!(p.messages.is_empty());
+    assert_eq!(p.world().tick, tick);
+}

@@ -571,22 +571,36 @@ impl Session {
     /// `press` to `end` (S-0214 claim 19, Terms *box point*): objects of
     /// any owner in play on the map, at their position projected with
     /// height lift, aircraft at their lifted origin. Terrain objects are not
-    /// candidates, and the 500-candidate frame limit of claim 20 is not
-    /// applied (interim, Q-0278).
+    /// candidates. The frame's screen candidates are cut at 500, mobile
+    /// objects before buildings (claim 20); interim (Q-0392): a screen
+    /// candidate is one whose box point is in the battlefield view, and
+    /// each group is in object order.
     fn box_candidates(&self, press: Point, end: Point) -> Vec<ObjectId> {
         let w = &self.play.game.world;
         let v = self.view();
         let m = self.map_rect();
-        w.objects
+        // spec: S-0214 Terms (box point: the drawing origin, the position projected with world-height lift; S-0101 F1)
+        let point = |o: &glasnost_sim::world::Object| {
+            let (qx, qy) = project_lifted(o.pos.x, o.pos.y, o.pos.z);
+            Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y)
+        };
+        let corner = Point::new(m.right() - 1, m.bottom() - 1);
+        let screen: Vec<(ObjectId, Point, bool)> = w
+            .objects
             .values()
             .filter(|o| o.on_map && o.kind != SimKind::Terrain)
-            .filter(|o| {
-                // spec: S-0214 Terms (box point: the drawing origin, the position projected with world-height lift; S-0101 F1)
-                let (qx, qy) = project_lifted(o.pos.x, o.pos.y, o.pos.z);
-                let q = Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y);
-                band::inside(press, end, q)
-            })
-            .map(|o| o.id)
+            .map(|o| (o.id, point(o), o.kind == SimKind::Building))
+            .filter(|&(_, q, _)| band::inside(Point::new(m.x, m.y), corner, q))
+            .collect();
+        // spec: S-0214 claim 20 (500 screen candidates, mobile before buildings, places consumed whether eligible or not)
+        let admitted = band::admit(
+            screen.iter().filter(|c| !c.2).copied(),
+            screen.iter().filter(|c| c.2).copied(),
+        );
+        admitted
+            .into_iter()
+            .filter(|&(_, q, _)| band::inside(press, end, q))
+            .map(|(id, _, _)| id)
             .collect()
     }
 
@@ -795,12 +809,13 @@ impl Session {
         {
             d.frame(Rect::spanning(drag.press, band::limit(p, m)), colour::ACCENT);
         }
-        let mut y = m.y + 4;
+        // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
+        let mut y = m.y;
         for msg in &self.play.messages {
-            let wdt = font::text_width(&msg.text) + 8;
-            d.fill(Rect::new(m.x + 4, y, wdt, 13), [0, 0, 0, 150]);
-            d.text(m.x + 8, y + 2, msg.text.clone(), colour::TEXT, m);
-            y += 15;
+            let wdt = font::text_width(&msg.text) + 4;
+            d.fill(Rect::new(m.x + 1, y, wdt, 13), [0, 0, 0, 150]);
+            d.text(m.x + 3, y + 2, msg.text.clone(), colour::TEXT, m);
+            y += 19;
         }
         if let Some(f) = &self.play.failed {
             d.fill(Rect::new(m.x, m.bottom() - 16, m.w, 16), [0, 0, 0, 200]);

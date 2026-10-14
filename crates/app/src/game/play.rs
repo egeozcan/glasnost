@@ -26,10 +26,15 @@ use crate::mapview::credits::{CreditCounter, Tick};
 use crate::mapview::live::guarded;
 use crate::mapview::sidebar::{self, Action};
 
-/// How long a status message stays, in ticks. Interim (Q-0282).
-pub const MESSAGE_TICKS: i32 = 90;
-/// The most status messages shown at once. Interim (Q-0282).
-pub const MESSAGES_SHOWN: usize = 4;
+/// How long a status line stays, in units of the presentation clock.
+// spec: S-0213 claim 25 (each line expires 480 units of the 16 ms clock after it was added)
+pub const MESSAGE_CLOCKS: i64 = 480;
+/// The most status lines the shared display holds.
+// spec: S-0213 claim 25 (at most six text lines, shared by every event's status messages)
+pub const MESSAGES_SHOWN: usize = 6;
+/// Milliseconds per unit of the presentation clock.
+// spec: S-0213 claim 25 (the real-time presentation clock's unit is 16 milliseconds, independent of game speed)
+pub const CLOCK_MS: i64 = 16;
 
 /// What a left click on the battlefield does.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -48,8 +53,10 @@ pub enum Tool {
 pub struct Message {
     /// Its text.
     pub text: String,
-    /// The tick after which it goes.
-    pub until: i32,
+    /// Its deadline: the presentation clock count when added plus
+    /// [`MESSAGE_CLOCKS`]; it goes at the first display update whose count
+    /// is greater.
+    pub until: i64,
 }
 
 /// Which mouse button.
@@ -77,8 +84,11 @@ pub struct Play {
     pub scroll: usize,
     /// The credit counter (S-0416).
     pub credits: CreditCounter,
-    /// Status messages, oldest first.
+    /// Status lines, oldest first.
     pub messages: Vec<Message>,
+    /// The presentation clock: host milliseconds over [`CLOCK_MS`], set
+    /// at each display update (S-0213 claim 25).
+    pub clock: i64,
     /// Why the game stopped, when a tick failed.
     pub failed: Option<String>,
     /// The cheer command's rate limit (S-0213 claim 19).
@@ -129,6 +139,7 @@ impl Play {
             scroll: 0,
             credits: CreditCounter::default(),
             messages: Vec::new(),
+            clock: 0,
             failed: None,
             cheer,
             effects: Vec::new(),
@@ -152,17 +163,32 @@ impl Play {
         self.failed.is_none() && self.outcome.is_none()
     }
 
-    /// Shows a status message.
+    /// Shows a status message as a new line of the shared display (S-0213
+    /// claim 25): it appends, never refreshing an older copy, and a line
+    /// added at capacity removes the oldest.
     pub fn say(&mut self, text: impl Into<String>) {
-        let until = self.game.world.tick + MESSAGE_TICKS;
+        // spec: S-0213 claim 25 (deadline = clock count when added + 480, exact integers)
+        let until = self.clock + MESSAGE_CLOCKS;
         self.messages.push(Message {
             text: text.into(),
             until,
         });
         let n = self.messages.len();
+        // spec: S-0213 claim 25 (a new line at capacity removes the oldest line)
         if n > MESSAGES_SHOWN {
             self.messages.drain(..n - MESSAGES_SHOWN);
         }
+    }
+
+    /// One status-display update at host time `now_ms` (S-0213 claim 25):
+    /// the clock advances, and lines whose deadline the count has passed
+    /// go. The clock runs on through pauses and loss of focus.
+    pub fn update_messages(&mut self, now_ms: i64) {
+        // spec: S-0213 claim 25 (the 16 ms clock count)
+        self.clock = now_ms.div_euclid(CLOCK_MS);
+        let clock = self.clock;
+        // spec: S-0213 claim 25 (removed when the count is strictly greater than the deadline, not at equality)
+        self.messages.retain(|m| clock <= m.until);
     }
 
     /// Runs one tick: the AI thinks and the simulation steps
@@ -209,8 +235,6 @@ impl Play {
         }
         self.selection
             .retain(|&id| targeting::selectable(&self.game.world, id));
-        let tick = self.game.world.tick;
-        self.messages.retain(|m| m.until > tick);
         self.outcome = self.game.outcome();
     }
 
