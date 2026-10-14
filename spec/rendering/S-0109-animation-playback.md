@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -330,7 +330,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     the particle creation draw groups during loading and play, including their conditional speed,
     lifetime and colour draws. Its R14 A and D test their composition, including trigger-created
     animations and middle events later in playback. The creator and loading/play phase do not
-    change the event gates or draw composition.
+    change the event gates or draw composition. Subsequent particle updates are outside this
+    composition, not draw-free; their draws must be accounted for separately.
 
     The scorch marks and craters of the middle event are attempted only when the animation's
     height above the terrain (glossary) is less than 30 leptons. For world position (X, Y, Z),
@@ -361,8 +362,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     smudge candidate preferences and selection draws during loading and play,
     using S-0312 claim 26's footprint fit and draw-free placement rules. These draws are separate
     from the scorch-or-crater choice. A crater request takes 6 bales from the animation's cell
-    under S-0401 claim 3 before placement is attempted; the resulting cell stage and any bales
-    delivered follow that claim, so failure to place a crater does not undo the removal.
+    under S-0401 claim 3 before placement is attempted. A resource cell at stage 6 remains
+    resource at stage 0; stages 0 through 5 are emptied. These are exact integer stage changes.
+    Any bales delivered follow that claim, so failure to place a crater does not undo the removal.
     S-0202 claim 15 also owns the loading-phase relation to the overlay data stream and the conditional resource-removal effects before
     smudge selection: tile-animation creation from recalculation and neighbour spread-offer
     draws. The same conditional effects apply during play; they do not add a fixed draw count
@@ -1313,7 +1315,7 @@ building that can cloak), it sets them in the test map's override section, which
   Event timing, sprite-derived μ and the height gate remain claims 13, 14 and 25's rules here.
   S-0401 claim 20 answers Q2a's chain-reaction
   draw sequence, including its no-resource gate and ordering after the whole immediate middle
-  event. Subsequent particle updates are not specified here.
+  event. Subsequent particle updates are not specified here and must not be treated as draw-free.
 - Whether the first image frame is held one extra tick when *d* = 1 depends on the part of the tick
   that creates the animation (claim 5). The specs of the creators (combat, structures, triggers)
   should say which part that is for each creator. For the animations that a shot or a death creates
