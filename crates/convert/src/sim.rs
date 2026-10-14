@@ -392,7 +392,7 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
 ];
 
 /// Building rules fields (`glasnost_rules::sim::BuildingType`). `Factory`
-/// is not converted: no approved spec gives the vocabulary of its value.
+/// is converted apart, by its category words (`sim_econ`, S-0003 claim 21).
 const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
     // spec: S-0311 F1 and Import mapping, S-0314 claim 5 and Import mapping (the cost field, an integer)
