@@ -1,9 +1,9 @@
 ---
 id: Q-0415
 title: The building companion depth image: which file, and where it is placed
-status: open
+status: answered
 related: [S-0102, S-0108]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
