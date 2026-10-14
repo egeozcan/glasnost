@@ -576,6 +576,19 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         "IdleActionFrequency",
         Dec,
     ),
+    // spec: S-0202 Import mapping (OreTwinkle: an animation-type name, case-insensitive; OreTwinkleChance: a signed integer)
+    (
+        "ore_twinkle",
+        b"General",
+        "OreTwinkle",
+        Ref(Kind::Animations),
+    ),
+    (
+        "ore_twinkle_chance",
+        b"AudioVisual",
+        "OreTwinkleChance",
+        Int,
+    ),
     // spec: S-0213 Import mapping
     ("maximum_cheer_rate", b"General", "MaximumCheerRate", Int),
     // spec: S-0209, S-0215, S-0210 Import mapping ([IQ])

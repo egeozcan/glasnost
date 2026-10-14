@@ -143,6 +143,26 @@ fn game_wide_fields_and_not_given_values() {
     assert!(warned(&w, "PathDelay \"soon\" has no number"));
 }
 
+/// spec: S-0202 Import mapping (OreTwinkle an animation-type name, OreTwinkleChance a signed integer; omitted or empty layered values keep the value in force)
+#[test]
+fn resource_glint_fields() {
+    let base =
+        "[Animations]\n1=Glint\n[General]\nOreTwinkle=Glint\n[AudioVisual]\nOreTwinkleChance=-3\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.general.ore_twinkle.as_deref(), Some("Glint"));
+    assert_eq!(s.general.ore_twinkle_chance, Some(-3));
+    // An empty value keeps the value in force; `none` names no animation.
+    let (s, _) = sim(base, "[AudioVisual]\nOreTwinkleChance=\n", "");
+    assert_eq!(s.general.ore_twinkle_chance, Some(-3));
+    let (s, _) = sim(base, "[General]\nOreTwinkle=none\n", "");
+    assert_eq!(s.general.ore_twinkle, None);
+    let (s, _) = sim("", "", "");
+    assert_eq!(
+        (s.general.ore_twinkle, s.general.ore_twinkle_chance),
+        (None, None)
+    );
+}
+
 /// spec: S-0207 claim 1, S-0208 Import mapping (Speed −1 keeps; warnings), S-0215 Import mapping (GuardRange −1)
 #[test]
 fn speed_and_guard_range() {

@@ -4177,6 +4177,23 @@
           "format": "int32",
           "default": null
         },
+        "ore_twinkle": {
+          "description": "`OreTwinkle`, the resource-glint animation type (S-0202 claim 14).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ore_twinkle_chance": {
+          "description": "`[AudioVisual] OreTwinkleChance`, the resource-glint frequency f\n(S-0202 claim 14).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "path_delay": {
           "description": "`[AI] PathDelay`, game minutes (S-0212 F3).",
           "anyOf": [

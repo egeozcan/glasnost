@@ -478,6 +478,8 @@ pub struct GeneralRules {
     pub condition_red: F64,
     /// Idle-action frequency R, game minutes (double).
     pub idle_frequency: F64,
+    /// The resource-glint frequency f.
+    pub ore_twinkle_chance: i32,
     /// Maximum cheer rate, ticks.
     pub cheer_rate: i32,
     /// Area-guard threshold of the house skill level.
@@ -728,6 +730,9 @@ pub struct SimRules {
     pub gates: GateTypes,
     /// Animation types by registration index.
     pub animations: Vec<AnimRules>,
+    /// The resource-glint animation type, if one is configured (S-0202
+    /// claim 14).
+    pub ore_twinkle: Option<String>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
     /// The combat rules (M4).
@@ -849,6 +854,8 @@ impl SimRules {
             // spec: S-0107 Import mapping (IdleActionFrequency absent: the double nearest 0.083)
             idle_frequency: dec(&g.idle_action_frequency, mode)
                 .unwrap_or_else(|| nearest_double("0.083")),
+            // spec: S-0202 Import mapping (OreTwinkleChance: 50 at database creation)
+            ore_twinkle_chance: g.ore_twinkle_chance.unwrap_or(50),
             // spec: S-0213 Import mapping (MaximumCheerRate absent: 1 tick)
             cheer_rate: g.maximum_cheer_rate.unwrap_or(1),
             // spec: S-0215 claim 36 (a) and Constants ([IQ] GuardArea absent from every layer: engine default 4)
@@ -1099,6 +1106,8 @@ impl SimRules {
             mode,
             general,
             animations,
+            // spec: S-0202 Import mapping (OreTwinkle: no animation at database creation)
+            ore_twinkle: g.ore_twinkle.clone(),
             base_units,
             // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
             game_tech_level: g.multiplayer_tech_level.unwrap_or(10),

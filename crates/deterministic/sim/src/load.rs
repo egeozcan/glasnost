@@ -170,6 +170,39 @@ pub fn anim_creation_draws(w: &mut World, name: &str) {
     }
 }
 
+/// The resource-glint setup of S-0202 claim 14. With a glint animation
+/// type configured, each cell in `order` whose contained resource value
+/// (value per bale times bales, S-0401 claim 2, a wrapping signed 32-bit
+/// product) is nonzero takes the choice R(0, f − 1); a result of 0 creates
+/// the glint with no loop delay, its creation draws taken before the next
+/// cell's choice. The glint is cosmetic in our engine: only its draws are
+/// kept.
+pub fn resource_glints(w: &mut World, order: &[CellXY]) {
+    let rules = w.rules_arc();
+    // spec: S-0202 claim 14 (with no configured animation the group takes no draw)
+    let Some(glint) = rules.ore_twinkle.clone() else {
+        return;
+    };
+    let q = rules.quirks;
+    // spec: S-0202 claim 14 (f − 1 wraps in signed 32-bit arithmetic)
+    let top = rules.general.ore_twinkle_chance.wrapping_sub(1);
+    for &c in order {
+        let Some((t, d)) = crate::econ::resource::resource_at(w, c) else {
+            continue;
+        };
+        let v = rules.econ.resource.tiberiums[t].value;
+        // spec: S-0202 claim 14 (contained value: value per bale times the bale count d + 1, S-0401 claim 2, a wrapping signed 32-bit product; zero-value cells take no draw)
+        if v.wrapping_mul(i32::from(d) + 1) == 0 {
+            continue;
+        }
+        // spec: S-0202 claim 14 (the choice R(0, f − 1); claims 4 and 5 for its bounds)
+        if w.rng.ranged(0, top, q.ranged_draw_half_span) == 0 {
+            // spec: S-0202 claim 14 (a zero result creates the glint at once, with claim 10's creation draws)
+            anim_creation_draws(w, &glint);
+        }
+    }
+}
+
 /// Sets up a new game on `map` (S-0009, S-0202 claim 8): the early phase
 /// of start positions, the initial fill, the overlay type stream and its
 /// placement effects, the overlay data stream, the first terrain
@@ -430,6 +463,9 @@ pub fn new_game(
     // spec: S-0010 claim 12 (the game-start pass: every legal cell once more, in the visiting order, after the starting units and before the first tick; its tile animations by claim 19)
     // spec: S-0202 claim 14 (its tile-animation draws follow the starting units' final draw, the crate placement draws, the secret-lab choices and the end-of-loading tag draws, and precede the first tick; the tags are not implemented, S-0011)
     recalc_cells(&mut w, &order);
+
+    // spec: S-0202 claim 14 and table *Load-time draw order* (resource-glint setup after the game-start recalculation and before tick 0)
+    resource_glints(&mut w, &order);
 
     // spec: S-0010 claim 25 (once at game start, before the first tick: the bridge spans, S-0212's bridge links, and the bridge-body marks of low spans)
     crate::bridges::find_spans(&mut w, &order);

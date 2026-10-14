@@ -419,6 +419,15 @@ pub struct General {
     /// `[AudioVisual] IdleActionFrequency`, game minutes (S-0107 F4).
     #[serde(default)]
     pub idle_action_frequency: Option<Decimal>,
+    /// `OreTwinkle`, the resource-glint animation type (S-0202 claim 14).
+    // spec: S-0202 Import mapping (OreTwinkle: an animation-type name in [General])
+    #[serde(default)]
+    pub ore_twinkle: Option<String>,
+    /// `[AudioVisual] OreTwinkleChance`, the resource-glint frequency f
+    /// (S-0202 claim 14).
+    // spec: S-0202 Import mapping (OreTwinkleChance: a signed integer in [AudioVisual])
+    #[serde(default)]
+    pub ore_twinkle_chance: Option<i32>,
     /// `MaximumCheerRate`, ticks (S-0213 claim 19).
     #[serde(default)]
     pub maximum_cheer_rate: Option<i32>,
