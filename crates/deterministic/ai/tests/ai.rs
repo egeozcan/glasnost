@@ -56,7 +56,8 @@ fn of(w: &World, h: u8, n: &str) -> Vec<ObjectId> {
 /// Steps until `done` holds or `limit` ticks have run; returns whether it
 /// held.
 fn step_until(g: &mut Game, limit: i32, mut done: impl FnMut(&World) -> bool) -> bool {
-    while g.world.tick < limit {
+    // The final tick leaves the tick number at itself (S-0201 claim 1): stop once the game is over.
+    while g.world.tick < limit && g.outcome().is_none() {
         if done(&g.world) {
             return true;
         }
@@ -283,6 +284,20 @@ fn plays_to_a_winner() {
             );
             assert!(paid[h], "seed {seed} house {h} was paid for ore");
         }
+        // spec: S-0201 claim 1 (the final tick leaves the tick number at itself; a replay of an ended game stops after it)
+        let replayed = Game::run_replay(
+            g.replay(),
+            fixture::rules(),
+            &fixture::map(),
+            testkit::catalogue(),
+            |_| {},
+        )
+        .expect("replays");
+        assert_eq!(
+            replayed.state_hash(),
+            g.state_hash(),
+            "seed {seed}: the replay of the ended game reproduces its final state"
+        );
     }
 }
 
