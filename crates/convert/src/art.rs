@@ -81,7 +81,7 @@ pub struct ArtQuirks {
     pub loading_archive_sprites_vanish: bool,
     /// `quirks.sequence_value_length_limit` (S-0107 claim 22): the
     /// `Sequence=` value and each kind value are read as at most 31
-    /// characters. Off: read whole.
+    /// bytes of text. Off: read whole.
     pub sequence_value_length_limit: bool,
     /// `quirks.case_sensitive_direction` (S-0107 claim 22): a declared
     /// direction is recognised only in exact upper case. Off: any case.

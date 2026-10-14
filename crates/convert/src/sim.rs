@@ -31,7 +31,7 @@ use crate::names::{encode, show};
 /// bytes that matches after the cut could tell them apart).
 const NAME_LIMIT: usize = value::COMMON_TEXT_LIMIT; // spec: S-0003 claim 16, Constants (common text limit)
 /// Bytes of the `Sequence=` value and of each kind value (S-0107 claim 22).
-const SEQUENCE_VALUE_MAX: usize = 31; // spec: S-0107 claim 22 (31 characters)
+const SEQUENCE_VALUE_MAX: usize = 31; // spec: S-0107 claim 22 (31 bytes of text)
 /// Bytes of a building's `Foundation` value (S-0108 Import mapping).
 const FOUNDATION_MAX: usize = 31; // spec: S-0108 Import mapping (Foundation, text cut to 31)
 
@@ -1797,13 +1797,13 @@ impl Builder<'_> {
             return value::text(v, usize::MAX).to_vec();
         }
         if v.len() > SEQUENCE_VALUE_MAX {
-            // spec: S-0107 Import mapping (warning for a value longer than 31 characters)
+            // spec: S-0107 Import mapping (warning for a value longer than 31 bytes)
             self.art_warn(line, format!(
-                "{key} value {:?} is longer than 31 characters; the rest is not read (S-0107 claim 22)",
+                "{key} value {:?} is longer than 31 bytes; the rest is not read (S-0107 claim 22)",
                 show(v)
             ));
         }
-        // spec: S-0107 claim 22 (each value is read as at most 31 characters)
+        // spec: S-0107 claim 22 (each value is read as at most 31 bytes of text)
         value::text(v, SEQUENCE_VALUE_MAX).to_vec()
     }
 

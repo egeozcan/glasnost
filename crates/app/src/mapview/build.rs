@@ -2092,7 +2092,7 @@ impl Builder<'_> {
     /// The sequence entry (start, count, multiplier) of `key` for infantry
     /// type `idx` (S-0107 Import mapping; claim 1: absent fields are 0).
     fn sequence_entry(&self, idx: usize, key: &[u8]) -> (i32, i32, i32) {
-        // spec: S-0107 Import mapping (values read as at most 31 characters)
+        // spec: S-0107 Import mapping (values read as at most 31 bytes of text)
         const VALUE_LIMIT: usize = 31; // spec: S-0107 Constants (value length limit)
         let Some(seq) = self.art_value(Kind::Infantry, idx, b"Sequence") else {
             // spec: S-0107 claim 1 (no sequence table: every entry is zero)

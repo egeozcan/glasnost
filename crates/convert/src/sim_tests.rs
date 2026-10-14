@@ -674,7 +674,7 @@ fn infantry_art_and_lists() {
     // Lower case: no declared direction.
     assert_eq!(e("die_1"), (1, 2, 3, None));
     assert_eq!(e("cheer"), (5, 6, 7, Some(5)));
-    // Cut at 31 characters: the multiplier lies beyond the cut.
+    // Cut at 31 bytes: the multiplier lies beyond the cut.
     assert_eq!(e("panic"), (1, 2, 0, None));
     assert_eq!(e("deployed_fire"), (1, 2, 3, None));
     assert!(!q.contains_key("guard"));
@@ -687,7 +687,7 @@ fn infantry_art_and_lists() {
         "FireUp=\"1,2\": the multiplier field is missing"
     ));
     assert!(warned(&w, "Die1=\"1,2,3,ne\": the direction"));
-    assert!(warned(&w, "longer than 31 characters"));
+    assert!(warned(&w, "longer than 31 bytes"));
     assert!(!warned(&w, "Ready="));
     assert_eq!(s.infantry["Runner"].crawls, Some(true));
     assert!(s.infantry["Runner"].sequences.is_empty());
