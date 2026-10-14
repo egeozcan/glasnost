@@ -154,6 +154,11 @@ impl Session {
         )));
         let scene = std::mem::take(&mut loaded.built.scene);
         let mut problems = std::mem::take(&mut loaded.problems);
+        let Some(live) = loaded.live.as_mut() else {
+            return Err(problems
+                .pop()
+                .unwrap_or_else(|| "the game did not start".into()));
+        };
         if icon_missing {
             // spec: S-0103 claim 13 (our engine's departure: black icons and an importer warning naming the file)
             problems.push(
@@ -161,11 +166,6 @@ impl Session {
                     .into(),
             );
         }
-        let Some(live) = loaded.live.as_mut() else {
-            return Err(problems
-                .pop()
-                .unwrap_or_else(|| "the game did not start".into()));
-        };
         live.clear_scripts();
         let setup: GameSetup = live.setup.clone();
         let catalogue = live
