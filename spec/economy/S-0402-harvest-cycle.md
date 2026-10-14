@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550]
 supersedes: []
 ---
 
@@ -233,6 +233,54 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    - Confidence: high for the 9-count, *L* and the counter resets; medium for the "+ 1" and for the
      19 ticks, which depend on the one-tick lag of the counter; medium for the period of 0 and the
      negative periods (scenario H1, variant c)
+
+5a. **The vehicle's harvesting display (Q-0550).** A vehicle harvester shows a separate
+    harvesting sprite while loading, subject to the visibility conditions below. It is the
+    same fixed game-wide sprite for every harvester type and every resource kind, including
+    ore and gems. Neither the vehicle's rules nor its art names a harvesting animation.
+    This is an extra image drawn with the animation palette, centred at the projected point
+    of F8 and composited before the vehicle's body. Parts of it can therefore be covered by
+    the body. It has no house-colour remap. It is not a separately existing animation:
+    S-0109 claim 1's animation stage and its playback fields do not pace it, and it takes
+    no random draws. Its image frame is given by F8, with eight facing groups of 15 frames
+    each, advancing every tick and repeating after 15 ticks when the vehicle's
+    walk-animation counter stays constant.
+
+    **Start and stop.** The display becomes eligible in the processing that starts loading
+    (claim 5), not on mere entry into the cell and not on the first successful bale.
+    With uninterrupted loading, it is therefore already eligible during the 19-tick wait
+    before that bale. It remains eligible between load steps and while full until the
+    failing load step changes the phase to returning (claim 6). After an exhausted cell,
+    finding another cell keeps it eligible, including before the next bale at that cell.
+    Finding no cell and returning with a partial load ends it. Seeking, waiting for a
+    field, returning, docking and unloading do not themselves show this sprite.
+    Leaving *harvest* ends it by the vehicle's next turn; merely queueing a replacement
+    behaviour does not end loading. It is not replayed from image frame 0 at loading
+    start, at a bale or after movement: F8 uses the current tick and walk-animation counter.
+
+    **Visibility conditions.** While eligible, the sprite is suppressed during movement
+    or body turning, while an erasing weapon is removing the vehicle, and during its
+    teleport disappearance or reappearance state. For a ground-driving harvester the
+    movement test means either a turning body or an active track with positive current
+    speed; a destination alone does not suppress it. For a teleporting harvester it means
+    a teleport journey still in progress. Ordinary object visibility still applies.
+    Thus driving to another resource cell suppresses the sprite without restarting its
+    frame cycle, and it can reappear on stopping before another successful load step.
+
+    **Body and variants.** Loading selects no different body model, voxel section, HVA
+    frame sequence, turret or barrel motion, or vehicle-sprite sequence. Ordinary body
+    and turret drawing continues, including S-0105 claim 16's frame rules; loading's
+    step counter is not the walk-animation counter. The separate harvesting sprite is
+    unchanged for a harvester that can deploy or teleport. A slave miner taking claim
+    22's group-directed route does not load itself and does not gain this display merely
+    because its slaves are working. Slaves' own harvesting sequence belongs to S-0107,
+    and a deployed master's building images are not a vehicle harvesting sprite.
+    Load pips are independently S-0111 claim 14's, already answering that part of the
+    display before Q-0550 was filed. The refinery animations remain claim 11's and do
+    not substitute for this field-loading display.
+    - Backing: `measurable` (H26)
+    - Confidence: high for the fixed sprite, frame selection, phase boundaries and no
+      loading-specific body change; medium for placement and visibility boundaries
 
 6. **When the harvester is full.** When a load step fails because the harvester is full (or
    because its capacity is 0, Edge cases), it runs the ring search with the short scan range and remembers the result (or forgets any remembered
@@ -1232,10 +1280,36 @@ The final addition is signed 32-bit wrapping arithmetic as in F5, with no furthe
 rounding. On normal-sized maps no narrowing or addition wrap occurs. This formula
 uses claim 25's cell (0, 0) substitution for missing results under the default quirk.
 
+**F8. Harvesting sprite** (claim 5a). Let *q* be the body's 8-step facing, an integer
+from 0 to 7 by S-0204 claim 10; *t* the current tick number; and *ν* the vehicle's
+walk-animation counter of S-0105 claim 16. The image frame is
+
+> 15(7 − *q*) + ((*t* + *ν*) mod 15).
+
+This is integer arithmetic with a non-negative remainder, in image frames. Each facing
+has 15 image frames. The loading step counter and the load period do not enter this formula.
+For the anchor, let (*X*, *Y*, *Z*) be the vehicle's world position in integer leptons,
+and let *f̂* be 8192*q* reduced to the signed facing range −32768 to 32767. Then
+
+> θ = RZ₅₃((*f̂* − 16383) × *c*), where *c* is the binary64 value nearest −2π / 65534,
+> *X*ₐ = trunc(RZ₅₃(*X* + RZ₅₃(30 × sin θ))),
+> *Y*ₐ = trunc(RZ₅₃(*Y* − RZ₅₃(30 × cos θ))), and *Z*ₐ = *Z*.
+
+The angle is in radians, the 30 in leptons, and both coordinate conversions truncate
+toward zero. Trigonometric results and the products and sums use the original's
+floating-point round-toward-zero mode, not integer lookup distances. Project
+(*X*ₐ, *Y*ₐ, *Z*ₐ) by S-0101 claim 1 and centre the harvesting image there.
+S-0204 claim 8's `quirks.table_direction` covers this reverse short-angle scale too:
+with it off, replace 16383 by 16384 and *c* by the binary64 value nearest −2π / 65536.
+The image-frame formula and the visibility conditions are unchanged.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
+| Harvesting sprite facing groups | 8 | facing groups | claim 5a, F8 |
+| Harvesting sprite frames per facing | 15 | image frames | claim 5a, F8 |
+| Harvesting sprite anchor displacement | 30 | leptons | claim 5a, F8 |
 | Step counter threshold for a load step | 9 | counter steps | claim 5 |
 | Pacing period started when loading starts | 2 | ticks | claim 5 |
 | Pacing period while unloading | 1 | ticks | claim 11 |
@@ -1386,7 +1460,10 @@ select which harvester takes the earlier turn.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
-| Rules, vehicle type section, `Harvester` | harvester (Terms) | boolean | no |
+| Rules, vehicle type section, `Harvester` | harvester (Terms); eligibility for the vehicle harvesting sprite (claim 5a) | boolean | no |
+| Fixed game asset `OREGATH.SHP` | vehicle harvesting sprite of claim 5a; loaded by its fixed filename, not by a rules or art animation name | sprite file; ordinary asset precedence of S-0005 claim 1 | no alternate harvesting asset is selected |
+| No data key | harvesting-display phase and movement gates, frame selection, 15-tick stationary repetition and 30-lepton anchor displacement (claim 5a, F8) | engine behaviour and constants; no per-type or per-resource animation setting | fixed |
+| No harvesting-specific body key | loading keeps the ordinary vehicle image and frame rules (claim 5a) | existing vehicle art and model imports; S-0105 claim 16 owns voxel frames | no extra loading image |
 | Rules, vehicle type section, `Weeder` | weeder (Edge cases) | boolean | no |
 | Rules, type section, `Storage` | harvester capacity *C* (claim 1); slave capacity, including distinct zero and negative treatments (claim 26) | signed integer, bales; negative slave values are retained under the default quirk | 0 |
 | Rules, type section, `Dock` | dock types (Terms, claim 8) | list of building type names | empty |
@@ -2267,14 +2344,61 @@ is wrong). *Runs:* 3.
   that variant; its backing remains `unmeasured`, with the unreachable overlap
   recorded as the reason.
 
+**H26. Vehicle harvesting display (claim 5a, F8; Q-0550).**
+- *Setup:* a small, level purpose-made skirmish map with a human-owned ordinary miner,
+  a chrono miner and a slave miner, their appropriate unloading buildings and separate
+  ore and gem fields. Keep the observed vehicles free of attackers. Use stock data,
+  speed index 2, 800 × 600, director and mods off. Run each vehicle separately so its
+  images are not covered by other objects. Use a read-only recorder and tick-labelled
+  frame capture; log position, body facing, behaviour, harvest phase, step counter,
+  walk-animation counter and load alongside each drawn frame.
+- *Procedure:* record three full cycles for each ordinary and chrono miner on each
+  resource kind, from approach through full load and departure. Record the slave miner
+  stationary and deployed while its slaves work. In separate runs, stop an ordinary
+  miner during loading, let a small cell exhaust with a second cell nearby, and exhaust
+  an isolated field with only a partial load. Include a body turn during an approach.
+- *Observable:* the extra sprite's first and last visible ticks, its location and frame
+  progression, the body/turret images, and their relation to bales and phase changes.
+- *Expected:* the ordinary and chrono miners use the same extra harvesting sprite on
+  both resources; it begins on the loading-start processing once stationary, before the
+  first bale, and repeats every 15 ticks with a constant walk-animation counter.
+  It continues after becoming full until the failed step ends loading. Moving or
+  turning hides it, but on stopping within loading its image frame follows F8, not
+  a fresh frame 0. Returning with a partial load ends it. No body or turret cycle
+  is started by a bale. Slave work alone gives the master no vehicle harvesting sprite.
+  A stop that actually ends *harvest* removes it by the next vehicle turn.
+- *Falsifiers:* no extra image on a visible stationary loading miner; a sprite specific
+  to gems or to the chrono miner; a first display delayed to the first bale; disappearance
+  at the filling bale rather than the failed step, an image cycle reset at every bale,
+  a loading-selected body section or turret movement; or a master display caused only
+  by working slaves.
+- *Exact-frame and anchor control:* use a named test copy of the fixed harvesting sprite
+  with 120 distinguishable, small numbered image frames and a marked canvas centre.
+  Change no playback data. This is test data, removed after the run. Record eight
+  stationary loading approaches with different 8-step body facings, and one run with
+  a different load period. Compare the visible centre against F8 projected by S-0101
+  claim 1, and every frame against 15(7 − *q*) + ((*t* + *ν*) mod 15).
+  The changed load period must change the bale times but not this frame rule. A
+  different facing group, repeat length, phase or anchor falsifies F8. The named sprite
+  also separates absence from ordinary body occlusion.
+- *Suppression controls:* in separate runs, give the loading miner a movement order,
+  target it with an erasing weapon, and record a chrono miner's journey. The extra
+  image is absent in the conditions of claim 5a and can resume when those conditions
+  end without restarting its image cycle. Record whether loading is still eligible:
+  ending the behaviour is not evidence for a movement-only gate.
+- *Engine-only control:* repeat the marked-centre tests with `quirks.table_direction`
+  off and compare against F8's full-scale alternative. This tests our engine, not
+  another original-game result.
+- *Tool:* tick-labelled screen capture and the read-only recorder; scripted ordinary
+  mouse/keyboard orders suffice. No harness change or oracle measurement is performed
+  by this spec.
+
 ## Open questions
 
-- Cross-spec changes to confirm: S-0215 claim 4 must explicitly cover the reachable
-  450-tick no-op building *move* of claim 27a, with H25 as its scenario, rather
-  than treating every no-rule building case as unreachable. S-0415 claim 9's
-  backing must no longer say that a move click is the only way a construction
-  yard can gain a guard spot: claim 27a's site offer can supply one with lobby
-  redeploy off. Its pack-up legality remains S-0213 claim 12's, unchanged here.
+- Q-0550 is answered by claim 5a, F8 and H26. S-0111 claim 14 already covered load
+  pips. The fixed harvesting sprite is not an animation instance, so its frame cycle
+  does not require a new S-0109 playback claim.
+- Cross-spec changes to confirm: none identified against the current approved revisions. S-0215 claim 4 already covers the reachable 450-tick no-op building *move* described in claim 27a and cites H25. S-0415 claim 9 already recognizes that claim 27a's site offer can supply a guard spot, including with lobby redeploy off; pack-up legality remains S-0213 claim 12's, unchanged here.
 - Q-0500 is answered by claim 27a. Claim 28 and S-0415 claims 9 and 10
   already identify the shared guard spot and its packing consequences.
   S-0215 claims 7 and 11 already fix queue refusal and building starts.

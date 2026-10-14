@@ -1,9 +1,9 @@
 ---
 id: Q-0550
 title: What does a vehicle harvester show while it loads resources on a field?
-status: open
+status: answered
 related: [S-0402, S-0109, S-0111]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
