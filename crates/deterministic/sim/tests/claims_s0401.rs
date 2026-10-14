@@ -78,6 +78,22 @@ fn claim_3_taking_bales_and_the_lost_last_bale() {
     assert_eq!(resource::take_bales(&mut w, c, 1), 0);
 }
 
+// spec: S-0401 claims 3 and 16c (a 6-bale take: stages 0 and 5 are emptied, stage 6 keeps its overlay at stage 0, stage 7 at stage 1)
+#[test]
+fn claim_16c_six_bale_take_by_stage() {
+    let r = ruleset();
+    let cells = [(at(0, 0), 0), (at(3, 0), 5), (at(6, 0), 6), (at(9, 0), 7)];
+    let ore: Vec<_> = cells.iter().map(|&(c, d)| (c, ORE, d)).collect();
+    let mut w = game_with_ore(&r, &ore, 7);
+    for &(c, _) in &cells {
+        resource::take_bales(&mut w, c, 6); // spec: S-0401 claim 16c (6 bales)
+    }
+    assert_eq!(stage(&w, cells[0].0), None);
+    assert_eq!(stage(&w, cells[1].0), None);
+    assert_eq!(stage(&w, cells[2].0), Some(0));
+    assert_eq!(stage(&w, cells[3].0), Some(1));
+}
+
 // spec: S-0401 claim 3 (quirks.last_bale_lost off: all d + 1 bales delivered)
 #[test]
 fn claim_3_quirk_last_bale_lost_off() {
