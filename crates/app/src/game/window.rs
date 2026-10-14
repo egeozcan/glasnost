@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use glasnost_render::batch2d::Batch2d;
+use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
 use glasnost_render::gpu::{self, BackendChoice};
 use glasnost_render::wgpu;
 use glasnost_sim::targeting::Modifiers;
@@ -19,6 +20,8 @@ use winit::window::{Window, WindowId};
 
 use super::client::{Client, Done, Key, run_job};
 use super::play::Button;
+use super::session::{MAP_IMAGE, Session};
+use glasnost_ui::shell::Screen;
 use crate::Status;
 
 /// Options for [`run_game`].
@@ -225,6 +228,8 @@ impl ApplicationHandler<GameEvent> for GameApp {
             GameEvent::Graphics(result) => match *result {
                 Ok(gfx) => {
                     log::info!("game rendering with {}", gfx.backend);
+                    // The battlefield is drawn on the GPU from here on.
+                    self.client.cpu_map = false;
                     self.client
                         .resize((gfx.config.width as i32, gfx.config.height as i32));
                     gfx.window.request_redraw();
@@ -337,6 +342,15 @@ impl ApplicationHandler<GameEvent> for GameApp {
     }
 }
 
+/// The battlefield drawn on the GPU (`glasnost_render::map_gpu`) into a
+/// target the batch shows as its image `MAP_IMAGE`.
+struct MapGpu {
+    serial: u64,
+    renderer: MapRenderer,
+    size: (u32, u32),
+    targets: Option<(wgpu::Texture, wgpu::Texture)>,
+}
+
 struct Gfx {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -344,6 +358,7 @@ struct Gfx {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     batch: Batch2d,
+    map: Option<MapGpu>,
     backend: &'static str,
     webgpu_extras: bool,
     frames_presented: u64,
@@ -386,6 +401,7 @@ impl Gfx {
             queue,
             config,
             batch,
+            map: None,
             backend: gpu::backend_label(info.backend),
             webgpu_extras,
             frames_presented: 0,
@@ -417,6 +433,19 @@ impl Gfx {
             }
         };
         let (list, images) = client.frame();
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("game frame"),
+            });
+        if !client.cpu_map
+            && client.shell.screen == Screen::Game
+            && let Some(s) = client.session.as_ref()
+            && let Err(e) = self.render_map(s, client.game_serial, &mut encoder)
+        {
+            log::warn!("the battlefield is drawn on the CPU from now on: {e}");
+            client.cpu_map = true;
+        }
         let painter = &mut client.painter;
         if painter.dirty {
             self.batch
@@ -438,11 +467,6 @@ impl Gfx {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("game frame"),
-            });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("game frame"),
@@ -463,6 +487,62 @@ impl Gfx {
         self.window.pre_present_notify();
         self.queue.present(frame);
         self.frames_presented += 1;
+        Ok(())
+    }
+
+    /// Draws the session's battlefield into the map target.
+    fn render_map(
+        &mut self,
+        s: &Session,
+        serial: u64,
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), String> {
+        // A game's scene only grows: upload what it gained, or all of it for
+        // a new game or when the atlas is full.
+        let synced = match self.map.as_mut() {
+            Some(m) if m.serial == serial => m
+                .renderer
+                .sync(&self.device, &self.queue, &s.scene)
+                .is_ok(),
+            _ => false,
+        };
+        if !synced {
+            let renderer = MapRenderer::new(&self.device, &self.queue, &s.scene, COLOR_FORMAT)
+                .map_err(|e| e.to_string())?;
+            self.map = Some(MapGpu {
+                serial,
+                renderer,
+                size: (0, 0),
+                targets: None,
+            });
+        }
+        let m = self.map.as_mut().ok_or("no map renderer")?;
+        let v = s.view();
+        if m.size != v.size || m.targets.is_none() {
+            let (color, depth) = targets(&self.device, v.size, COLOR_FORMAT);
+            self.batch.set_image_view(
+                &self.device,
+                MAP_IMAGE,
+                &color.create_view(&Default::default()),
+                v.size,
+            );
+            m.targets = Some((color, depth));
+            m.size = v.size;
+        }
+        let (color, depth) = m.targets.as_ref().ok_or("no map targets")?;
+        let alpha = s.light_alpha();
+        m.renderer.render_lit(
+            &self.device,
+            &self.queue,
+            encoder,
+            &color.create_view(&Default::default()),
+            &depth.create_view(&Default::default()),
+            &s.scene,
+            &v,
+            s.filter(),
+            &glasnost_render::compose::ComposeQuirks::default(),
+            Some(&alpha),
+        );
         Ok(())
     }
 }

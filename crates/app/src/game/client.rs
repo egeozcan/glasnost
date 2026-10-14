@@ -138,6 +138,9 @@ pub struct Client {
     /// Whether the battlefield is composed here on the CPU (else the window
     /// layer draws it on the GPU).
     pub cpu_map: bool,
+    /// Counts the games started (the window layer re-uploads the
+    /// battlefield's scene when it changes).
+    pub game_serial: u64,
     /// Whether Quit is offered (not on the web).
     pub can_quit: bool,
     /// Window size.
@@ -157,10 +160,14 @@ pub struct Client {
     pointer: Option<Point>,
     press: Option<Point>,
     held: [bool; 4],
-    menu_targets: Targets<MenuHit>,
-    setup_targets: Targets<SetupHit>,
-    end_targets: Targets<()>,
+    /// The main menu's targets of the last frame.
+    pub menu_targets: Targets<MenuHit>,
+    /// The setup screen's targets of the last frame.
+    pub setup_targets: Targets<SetupHit>,
+    /// The end screen's targets of the last frame.
+    pub end_targets: Targets<()>,
     radar_tick: i32,
+    cpu_images: BTreeMap<u32, CpuImage>,
 }
 
 impl Client {
@@ -176,6 +183,7 @@ impl Client {
             audio: None,
             focused: true,
             cpu_map: true,
+            game_serial: 0,
             can_quit: true,
             size: (1024, 768),
             next_seed: 1,
@@ -192,6 +200,7 @@ impl Client {
             setup_targets: Targets::new(),
             end_targets: Targets::new(),
             radar_tick: -1,
+            cpu_images: BTreeMap::new(),
         }
     }
 
@@ -238,6 +247,7 @@ impl Client {
                         self.start_audio();
                         self.pacer.reset();
                         self.radar_tick = -1;
+                        self.game_serial += 1;
                         self.session = Some(s);
                         self.shell.screen = Screen::Game;
                     }
@@ -549,9 +559,8 @@ impl Client {
     /// The whole frame drawn on the CPU (tests and local snapshots).
     pub fn frame_rgba(&mut self) -> Vec<u8> {
         let (list, images) = self.frame();
-        let mut cpu = BTreeMap::new();
         for (id, w, h, rgba) in images.changed {
-            cpu.insert(
+            self.cpu_images.insert(
                 id,
                 CpuImage {
                     w: w as i32,
@@ -561,7 +570,7 @@ impl Client {
             );
         }
         let quads = self.painter.quads(&list);
-        self.painter.reference(&quads, &cpu, self.size)
+        self.painter.reference(&quads, &self.cpu_images, self.size)
     }
 
     /// The end screen shown, if any.

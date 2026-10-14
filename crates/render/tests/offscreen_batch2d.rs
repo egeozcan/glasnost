@@ -97,3 +97,60 @@ fn batch_pixels_match_the_cpu_reference() {
         }
     }
 }
+
+/// An image drawn from a texture the caller owns (the client's map target)
+/// matches the same image uploaded through `set_image`.
+#[test]
+fn image_views_draw_like_uploaded_images() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let (w, h) = (16u32, 12u32);
+    let rgba: Vec<u8> = (0..(w * h) as usize)
+        .flat_map(|i| [(i * 7) as u8, (i * 3) as u8, 255 - i as u8, 255])
+        .collect();
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("owned"),
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        texture.as_image_copy(),
+        &rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(w * 4),
+            rows_per_image: Some(h),
+        },
+        wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+    );
+    let quads = [Quad::image(1, (w as i32, h as i32), [0, 0, w as i32, h as i32])];
+    let mut atlas = Atlas::default();
+    let mut batch = Batch2d::new(&device, OFFSCREEN_FORMAT);
+    batch.upload_atlas(&queue, &mut atlas);
+    batch.set_palettes(&device, &queue, &[palette(0)]);
+    batch.set_image_view(&device, 1, &texture.create_view(&Default::default()), (w, h));
+    batch.prepare(&device, &queue, (w, h), &quads);
+    let got = render_rgba(&device, &queue, w, h, |pass| batch.draw(pass));
+    for (i, (g, e)) in got.chunks(4).zip(rgba.chunks(4)).enumerate() {
+        for k in 0..3 {
+            assert!(
+                (i32::from(g[k]) - i32::from(e[k])).abs() <= 1,
+                "pixel {i} got {g:?} want {e:?}"
+            );
+        }
+    }
+}

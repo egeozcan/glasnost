@@ -308,7 +308,8 @@ pub fn reference(
 }
 
 struct GpuImage {
-    texture: wgpu::Texture,
+    /// The batch's own texture; `None` for a view the caller owns.
+    texture: Option<wgpu::Texture>,
     size: (u32, u32),
     group: wgpu::BindGroup,
 }
@@ -605,7 +606,10 @@ impl Batch2d {
         if w == 0 || h == 0 {
             return;
         }
-        let fresh = self.images.get(&id).is_none_or(|i| i.size != (w, h));
+        let fresh = self
+            .images
+            .get(&id)
+            .is_none_or(|i| i.size != (w, h) || i.texture.is_none());
         if fresh {
             let t = texture(
                 device,
@@ -625,15 +629,43 @@ impl Batch2d {
             self.images.insert(
                 id,
                 GpuImage {
-                    texture: t,
+                    texture: Some(t),
                     size: (w, h),
                     group,
                 },
             );
         }
-        if let Some(i) = self.images.get(&id) {
-            write(queue, &i.texture, w, h, 4, rgba);
+        if let Some(t) = self.images.get(&id).and_then(|i| i.texture.as_ref()) {
+            write(queue, t, w, h, 4, rgba);
         }
+    }
+
+    /// Makes image `id` draw from `view`, a filterable RGBA texture of
+    /// `size` the caller owns and renders into (a render target), in place
+    /// of any image of that id.
+    pub fn set_image_view(
+        &mut self,
+        device: &wgpu::Device,
+        id: u32,
+        view: &wgpu::TextureView,
+        size: (u32, u32),
+    ) {
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("batch2d image view"),
+            layout: &self.layout1,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(view),
+            }],
+        });
+        self.images.insert(
+            id,
+            GpuImage {
+                texture: None,
+                size,
+                group,
+            },
+        );
     }
 
     /// Writes the quads of the next [`draw`](Self::draw) for a target of

@@ -147,7 +147,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         };
         let starts = start_count(&bytes);
         if starts >= 2 {
-            let label = format!("{} ({starts})", l.name);
+            let label = l.name.clone();
             maps.push((l, MapEntry { label, starts }));
         }
     }
