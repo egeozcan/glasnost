@@ -249,6 +249,69 @@ fn claim_6_surface_height_at_the_centre() {
     assert!(differs > 0, "no slope's centre is a level up");
 }
 
+// spec: S-0410 claim 6 (r15, Q-0480: both radar tests use S-0110 claim 8's candidates at the centre height, heights
+// below 0 included, z = trunc(Z / 104); odd z < 0 reads (x − k, y − k) and (x − k + 1, y − k + 1), k = (z + 3)/2;
+// quirks.shroud_negative_odd_pair off: k = (z + 1)/2; quirks.shroud_on_flat_grid off: the cell itself takes precedence),
+// scenario R4 part G's centre heights −103, −207 and −311
+#[test]
+fn claim_6_negative_centre_heights() {
+    use glasnost_sim::world::Pos;
+    let c = CellXY::new(10, 10);
+    let at = |j: i32| CellXY::new(c.x + j, c.y + j);
+    let p = |z: i32| Pos::new(256 * c.x + 128, 256 * c.y + 128, z);
+    // −103: z = 0, the cell itself (truncation toward zero, not floor; no clamp to height 0).
+    assert_eq!(shroud::point_candidates_on(p(-103), true, true), (at(0), None));
+    // −207: z = −1, k = 1: c − 1 and c. With only c + 1 explored the pixel is black, and the gap
+    // test needs both c − 1 and c covered.
+    assert_eq!(
+        shroud::point_candidates_on(p(-207), true, true),
+        (at(-1), Some(at(0)))
+    );
+    // −311: z = −2, the one cell c + 1.
+    assert_eq!(shroud::point_candidates_on(p(-311), true, true), (at(1), None));
+    // The pair switch off: k = 0, c and c + 1 (the both-covered replay shows ordinary terrain
+    // when c + 1 is explored but not covered).
+    assert_eq!(
+        shroud::point_candidates_on(p(-207), false, true),
+        (at(0), Some(at(1)))
+    );
+    // The flat-grid switch off: the cell itself, whatever the height or the pair switch.
+    for z in [-311, -207, -103, 0, 104, 207] {
+        for pair in [true, false] {
+            assert_eq!(shroud::point_candidates_on(p(z), pair, false), (at(0), None));
+        }
+    }
+    // The radar's tests on flat ground at levels −1, −2 and −3, against the explored cells.
+    let mut s = common::Scene::new();
+    let cells: Vec<CellXY> = (-4..=4).map(|k| common::cell(k, 0)).collect();
+    for (i, &c) in cells.iter().enumerate() {
+        s.set_cell(c, 0, -1 - (i % 3) as i8);
+    }
+    let mut w = s.build();
+    let centre = Pos::centre(common::cell(-1, 1), 0);
+    shroud::area_reveal(&mut w, A, centre, 1);
+    let explored = |c: CellXY| shroud::explored(&w, A, c);
+    let (mut black, mut shown) = (0, 0);
+    for &c in &cells {
+        let mid = Pos::centre(c, 0);
+        let z = w.surface_at(mid.x, mid.y);
+        let level = i32::from(w.cells.cell(c).unwrap().level);
+        // Flat cells at levels −1, −2 and −3 have centre heights −103, −207 and −311.
+        assert_eq!(z, [-103, -207, -311][(-1 - level) as usize], "{c:?}");
+        let (a, b) = shroud::point_candidates_on(Pos::new(mid.x, mid.y, z), true, true);
+        let want = !explored(a) && !b.is_some_and(explored);
+        assert_eq!(minimap::cell_shrouded(&w, A, c), want, "{c:?}");
+        assert_eq!(minimap::cell_shrouded_on(&w, A, c, true), want, "{c:?}");
+        assert_eq!(minimap::cell_shrouded_on(&w, A, c, false), !explored(c), "{c:?}");
+        if want {
+            black += 1;
+        } else {
+            shown += 1;
+        }
+    }
+    assert!(black > 0 && shown > 0, "both outcomes are reached");
+}
+
 // spec: S-0410 claim 6 and F3 (the cell shown at a pixel; at scale 1 the right-hand point of (x, y) shows (x + 1, y), quirks.radar_pixel_cell_shift)
 #[test]
 fn claim_6_cell_at_pixel() {
@@ -414,6 +477,7 @@ fn claims_6_7_8_listing_and_compose() {
         flash: &flash,
         flash_frame_time: 7,
         bits: Bits([5, 6, 5]),
+        on_flat_grid: true,
     };
     let out = minimap::compose(&w, &view, &arr, &g, &img, &terrain);
     assert_eq!(out[(px.1 * img.width + px.0) as usize], [31, 0, 0]);

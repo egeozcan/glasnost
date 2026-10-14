@@ -669,10 +669,33 @@ pub fn point_candidates(p: Pos, negative_odd_pair: bool) -> (CellXY, Option<Cell
     (at(k), Some(at(k - 1)))
 }
 
+/// [`point_candidates`] under the renderer's `quirks.shroud_on_flat_grid`
+/// (S-0110 Edge cases), for the radar, which shares it (S-0410 claim 6):
+/// off, the cell under the point (trunc(X / 256), trunc(Y / 256)) is the
+/// one candidate, whatever the height and the pair switch.
+pub fn point_candidates_on(
+    p: Pos,
+    negative_odd_pair: bool,
+    on_flat_grid: bool,
+) -> (CellXY, Option<CellXY>) {
+    if !on_flat_grid {
+        // spec: S-0110 Edge cases (quirks.shroud_on_flat_grid off: the point test uses the cell under
+        // the point directly; its direct-cell test takes precedence over the pair switch)
+        return (CellXY::new(p.x / 256, p.y / 256), None);
+    }
+    point_candidates(p, negative_odd_pair)
+}
+
 /// Whether a world point is shrouded for a house (S-0110 claim 8, with
 /// `quirks.shroud_point_cell_wrap` and `quirks.shroud_negative_odd_pair`).
 pub fn point_shrouded(w: &World, house: HouseId, p: Pos) -> bool {
-    let (a, b) = point_candidates(p, w.rules().quirks.shroud_negative_odd_pair);
+    point_shrouded_on(w, house, p, true)
+}
+
+/// [`point_shrouded`] under the renderer's `quirks.shroud_on_flat_grid`
+/// (S-0110 Edge cases; the radar shares it, S-0410 claim 6).
+pub fn point_shrouded_on(w: &World, house: HouseId, p: Pos, on_flat_grid: bool) -> bool {
+    let (a, b) = point_candidates_on(p, w.rules().quirks.shroud_negative_odd_pair, on_flat_grid);
     let cand = |c: CellXY| candidate_explored(w, house, c.x, c.y);
     // spec: S-0110 claim 8 (even u: one candidate; odd u: shrouded when neither of two is explored)
     !cand(a) && !b.is_some_and(cand)
