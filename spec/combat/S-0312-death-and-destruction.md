@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -564,7 +564,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 26. **Which smudge type a destruction leaves.** Claim 19 (a) and the smudge steps of claim 19 (g)
     choose a smudge type of a given kind (crater or scorch mark) for an anchor cell (the cell of the
-    point they give) as follows.
+    point they give) as follows. Animation-specific smudge selection is owned by S-0202
+    claim 15, including its size-dependent candidate preferences; the destruction forms below
+    remain unchanged.
     - *No smudge at one cell.* When the anchor cell is the map cell with both coordinates 0, nothing
       is placed and no draw is taken.
     - *Fit.* A smudge type of the kind fits at the anchor cell when the anchor cell lies on the map
@@ -794,7 +796,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play |
 | crashing | reaches the ground, was shot down | death weapon, leaves play |
 | crashing | reaches the ground, was alive | destroyed by its remaining health, detonation |
-| alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled, health max(1, trunc(25 % of strength)) |
+| alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled; health becomes the greater of 1 health point and one quarter of its type's strength, truncated toward zero |
 | prone cyborg | lethal hit | dies (S-0107 claim 17) |
 | alive eligible building | lethal hit of a delay-kill warhead | 1 health point, countdown of *T* ticks (claim 3) |
 | building in a countdown | its turn at or after the end of the countdown | S-0302 claim 16's expiry hit; if it destroys the building, the death effects with no crew (claim 3) |
@@ -976,10 +978,12 @@ animations. Contrary precedence or an extra passenger draw falsifies b.
 **D2. Cyborg crippling (claim 2).** *Setup:* a test infantry type with the cyborg flag and strength
 200; a weapon that deals 1000 damage (not ignoring defences). *Observable:* the unit's health and
 posture after each hit, and whether it dies. *Expected:* after the first hit it lives with 50 health
-and crawls; the second hit kills it. Variant b: a type with strength 2 (expected health 1). Variant
+and crawls; the second hit kills it. Repeat with strength 203: the first hit leaves 50 health,
+not 51, testing truncation. Variant b: a type with strength 2 (expected health 1). Variant
 c: a cyborg that is prone (for example after taking fire, if its type can go prone) dies on the
-first lethal hit. *Falsified if:* it dies on the first hit or has another health, or the prone
-cyborg of variant c survives.
+first lethal hit. *Falsified if:* an initially non-prone cyborg dies on the first hit or has another health, or the prone
+cyborg of variant c survives. The first-hit survival expectation applies only to the initially
+non-prone cyborgs; first-hit death is expected in variant c.
 
 **D3. Delayed building death (claim 3).** *Setup:* a stock building type made eligible; a test
 warhead with the delay-kill flag, tick count 5, edge factor 7 and spread 2; lethal damage at
@@ -1122,8 +1126,10 @@ variant b has an amount other than the aircraft's remaining health, or the vehic
 leaves play before it reaches the ground. Variant d: repeat the shot-down aircraft with its
 explodes flag on and off. Expected: on gives death weapons at both death and impact; off gives
 one only at impact. A missing second detonation or one at death in the flag-off case falsifies d.
-Replay the list pick and three crash-start draws separately from detonation draws; a different
-stream state falsifies the count or order. Variant e: kill the aircraft on its pad at terrain
+Give the aircraft two distinct explosion-list entries. Record the selected animation at the
+death position and replay its list pick and three crash-start draws separately from detonation
+draws; a missing or wrong animation, wrong position or different stream state falsifies that
+choice, count or order. Variant e: kill the aircraft on its pad at terrain
 height: it leaves play at the end of death effects without crash-start draws; delayed removal or
 those draws falsifies e. Variant b cannot run until a normal input or named-data setup that
 starts a living crash is established; it provides no measurable backing in this revision.
@@ -1134,7 +1140,7 @@ destroyed while a harvester is docked. *Observable:* whether each contact surviv
 credit. *Expected:* the vehicles in contact within 256 leptons of the building's reference point are
 destroyed with no kill credit. Variant b: a stock building type with the helipad flag destroyed
 while an aircraft is docked on it: the aircraft is destroyed whatever its distance. *Falsified if:*
-they survive, or the docked aircraft of variant b survives.
+they survive, the docked aircraft of variant b survives, or either contact death credits an attacker.
 
 **D13. Survivors (claim 18).** *Setup:* a test 3 × 3 building with the crewed flag, explodes flag
 off and no sale in progress, whose refund gives *C* = 5 (at least five times the divisor of the
@@ -1194,7 +1200,11 @@ each run's raw-value count equals the count the claims predict by replay from th
 state. In (i) it contains no smudge-step draws at all. In (ii) it contains a smudge step for every
 clear foundation cell, including the cells after *C* survivors have been released; a step whose
 nearby point lies inside the foundation takes no smudge-type draw and leaves no smudge, and a smudge
-that a step does leave lies at the cell of its nearby point. Variant f: a test building type with a destruction particle-system
+that a step does leave lies at the cell of its nearby point. Also give the base test buildings two distinct destruction-animation entries. Expected: one
+entry at the building's position, matching its list-pick replay after the foundation explosions
+and any barrel-fire effects, with no resource-spill draws in these empty-storage setups. A
+missing or wrong entry, wrong position or replay mismatch falsifies this part.
+Variant f: a test building type with a destruction particle-system
 list containing one stock smoke-behaviour particle-system type, with no attached damage system
 before the kill and a named displacement of (32, 48, 64) leptons: one system appears at the
 building position plus that displacement. Absence, a second system or a different position
