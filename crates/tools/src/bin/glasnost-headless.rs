@@ -14,12 +14,16 @@
 //!   stock maps with two start positions (or the listed map indices), played
 //!   to the last side; writes counts and timings to the git-ignored
 //!   `local-lane/skirmish.txt`.
+//! - `GLASNOST_GAME_DIR=<install> glasnost-headless triggers [index …]`: the
+//!   map trigger event and action codes every map of the install uses
+//!   (S-0011), with the listed map indices' own counts; codes and counts
+//!   only, written to the git-ignored `local-lane/trigger-codes.txt`.
 
 use std::process::ExitCode;
 
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
-use glasnost_tools::{headless, skirmish_lane};
+use glasnost_tools::{headless, skirmish_lane, trigger_lane};
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
     args.get(i).and_then(|a| a.parse().ok()).unwrap_or(default)
@@ -122,9 +126,37 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("triggers") => {
+            let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+                eprintln!("glasnost-headless triggers: set {GAME_DIR_VAR} to an install folder");
+                return ExitCode::from(2);
+            };
+            let detail: Vec<usize> = args.iter().skip(1).filter_map(|a| a.parse().ok()).collect();
+            match trigger_lane::run(std::path::Path::new(&dir), &detail) {
+                Ok(report) => {
+                    print!("{report}");
+                    let out = std::path::Path::new("local-lane");
+                    if std::fs::create_dir_all(out).is_ok()
+                        && std::fs::write(out.join("trigger-codes.txt"), &report).is_ok()
+                    {
+                        println!(
+                            "wrote local-lane/trigger-codes.txt (git-ignored; never commit it)"
+                        );
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless: could not read the install ({:?})",
+                        e.kind()
+                    );
+                    ExitCode::FAILURE
+                }
+            }
+        }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …]"
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | triggers [index …]"
             );
             ExitCode::from(2)
         }
