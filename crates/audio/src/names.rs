@@ -208,6 +208,8 @@ pub struct SoundNames {
     pub scold: Option<String>,
     /// `GUIBuildSound` (S-0701 claim 24).
     pub gui_build: Option<String>,
+    /// `GUITabSound` (S-0701 claim 24, S-0411 claim 18: the tab-scroll sound).
+    pub gui_tab: Option<String>,
     /// `VoiceIFVRepair` (S-0701 F6).
     pub voice_ifv_repair: Option<String>,
     /// `SpeakDelay`, minutes, as read (S-0701 claim 28); `None` when absent.
@@ -335,6 +337,7 @@ impl SoundNames {
             deploy_command: global("DeploySound"),
             scold: global("ScoldSound"),
             gui_build: global("GUIBuildSound"),
+            gui_tab: global("GUITabSound"),
             voice_ifv_repair: global("VoiceIFVRepair"),
             // spec: S-0701 Import mapping (`SpeakDelay`, floating point, minutes)
             speak_delay: av.and_then(|s| s.get("SpeakDelay")).and_then(|v| {
@@ -701,6 +704,7 @@ mod tests {
             ("DeploySound", "D"),
             ("ScoldSound", "Nope"),
             ("GUIBuildSound", "Click"),
+            ("GUITabSound", "Tab"),
             ("VoiceIFVRepair", "Mend"),
             ("SpeakDelay", "2.5"),
         ] {

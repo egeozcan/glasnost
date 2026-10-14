@@ -458,21 +458,42 @@ impl Play {
 
     /// Scrolls the icon grid by `d` rows, `rows` being shown.
     pub fn scroll_icons(&mut self, d: i32, rows: usize) {
-        let n = self
-            .game
+        let n = self.shown_icon_count();
+        // spec: S-0411 claim 18 (all icons fit: the buttons are disabled; no request and no sound)
+        if d == 0 || !hud::overflows(n, rows) {
+            return;
+        }
+        if hud::at_end(d, self.scroll, rows, n) {
+            // spec: S-0411 claim 18 and S-0701 claim 24 (a request already at its requested end: the game-wide refusal sound)
+            self.cues.push(UiCue::StripEnd);
+            return;
+        }
+        // spec: S-0411 claim 18 (one page, the complete visible rows, in its direction; movement stops at the end with no further sound)
+        let max = hud::max_scroll(n, rows) as i64;
+        let page = rows as i64 * i64::from(d.signum());
+        self.scroll = (self.scroll as i64 + page).clamp(0, max) as usize;
+        // spec: S-0411 claim 18 and S-0701 claim 24 (an accepted request, even for less than a full page: the tab-scroll sound)
+        self.cues.push(UiCue::StripScroll);
+    }
+
+    /// A mouse-wheel event over the game (S-0411 claim 18): one row on the
+    /// shown tab, upward for a positive `delta`, with the same ends and no
+    /// sound.
+    pub fn wheel_icons(&mut self, delta: i32, rows: usize) {
+        let n = self.shown_icon_count();
+        let max = hud::max_scroll(n, rows) as i64;
+        // spec: S-0411 claim 18 (one row per wheel event whatever the delta's magnitude; upward for a positive delta; no tab-scroll or refusal sound)
+        let step = -i64::from(delta.signum());
+        self.scroll = (self.scroll as i64 + step).clamp(0, max) as usize;
+    }
+
+    fn shown_icon_count(&self) -> usize {
+        self.game
             .world
             .houses
             .get(usize::from(self.local.0))
             .and_then(|h| h.econ.tech.icons.get(self.shown_tab()))
-            .map_or(0, Vec::len);
-        let max = hud::max_scroll(n, rows) as i32;
-        let before = self.scroll;
-        self.scroll = (self.scroll as i32 + d).clamp(0, max) as usize;
-        // spec: S-0701 claim 24 (the sidebar strip scrolled past its end: the game-wide refusal sound)
-        // interim: Q-0339 (past its end: a scroll click that cannot move the strip at all)
-        if d != 0 && self.scroll == before {
-            self.cues.push(UiCue::StripEnd);
-        }
+            .map_or(0, Vec::len)
     }
 
     /// A click on a mode button: the mode, or back to selecting when it is

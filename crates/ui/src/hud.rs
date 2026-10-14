@@ -83,6 +83,20 @@ pub fn tab_lit(t: i32, u: i32, extra: bool) -> bool {
     }
 }
 
+/// The power bar's display capacity in bands, one per pixel inside its
+/// frame (S-0405 F4's *N*, a design parameter).
+pub const METER_BANDS: i32 = RADAR.0 - 2; // spec: S-0405 F4 (N > 1, the chosen display capacity: our bar's inner width)
+
+/// The power meter's part extents in whole bands (S-0405 claim 19, F4),
+/// each truncated; the quantisation is our design.
+pub fn power_meter(w: &World, house: HouseId) -> [i32; 3] {
+    use glasnost_sim::econ::power;
+    let (o, d) = power::totals(w, house);
+    let b = power::meter_base(w, house);
+    let (_, ext) = power::meter(b, o, d, METER_BANDS, w.rules().mode);
+    ext.map(|e| e.to_i32_common())
+}
+
 /// What the sidebar shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HudModel {
@@ -90,6 +104,9 @@ pub struct HudModel {
     pub credits: i32,
     /// Power output and drain (S-0405 claim 4).
     pub power: (i32, i32),
+    /// The power meter's supplied, near-shortage and further-shortage
+    /// extents in pixels of the bar (S-0405 claim 19, F4).
+    pub meter: [i32; 3],
     /// The four tabs.
     pub tabs: [TabView; TABS],
     /// The shown tab.
@@ -143,6 +160,7 @@ pub fn model(
         return m;
     };
     m.power = (h.econ.power.output, h.econ.power.drain);
+    m.meter = power_meter(w, house);
     m.radar = glasnost_sim::econ::radar::available(w, house);
     for (i, icons) in h.econ.tech.icons.iter().enumerate().take(TABS) {
         m.tabs[i].count = icons.len();
@@ -278,7 +296,28 @@ const MODE_LABELS: [(Mode, &str); 3] = [
 
 /// The largest scroll position for `n` icons in `rows` rows.
 pub fn max_scroll(n: usize, rows: usize) -> usize {
+    // spec: S-0411 Formulas, settled scroll end (E = max(0, ⌈N/2⌉ − R), two icons per row)
     n.div_ceil(2).saturating_sub(rows)
+}
+
+/// Whether a tab of `n` icons has more than fit in `rows` rows, so that
+/// its page buttons are enabled (S-0411 claim 18).
+pub fn overflows(n: usize, rows: usize) -> bool {
+    // spec: S-0411 claim 18 (both buttons enabled whenever the tab has more icons than fit, two per row)
+    n > rows * 2
+}
+
+/// Whether a page request in direction `d` is at its requested end
+/// (S-0411 claim 18): the top end at *T* = 0, the bottom end when
+/// 2 × (*T* + *R*) ≥ *N*.
+pub fn at_end(d: i32, top: usize, rows: usize, n: usize) -> bool {
+    if d < 0 {
+        // spec: S-0411 claim 18 (the top end is T = 0)
+        top == 0
+    } else {
+        // spec: S-0411 claim 18 (the bottom end when 2 × (T + R) ≥ N)
+        2 * (top + rows) >= n
+    }
 }
 
 /// Draws the sidebar. `radar_image`: the client's image id of the radar.
@@ -312,22 +351,14 @@ pub fn view(
     }
 
     d.text_centred(l.credits, &format!("$ {}", m.credits), colour::ACCENT);
-    // Power: a bar filled to the drain's share of the output (our look);
-    // red when the drain exceeds the output (S-0405 claim 4: output and
-    // drain).
-    let (out, drain) = m.power;
+    // Power: S-0405 claim 19's three parts from the left, supplied, near
+    // shortage and further shortage (the colours are our look).
     d.fill(l.power, colour::BACKDROP);
-    let full = l.power.w - 2;
-    let filled = if out <= 0 {
-        if drain > 0 { full } else { 0 }
-    } else {
-        (full as i64 * drain.min(out) as i64 / out as i64) as i32
-    };
-    let ok = drain <= out;
-    d.fill(
-        Rect::new(l.power.x + 1, l.power.y + 1, filled, l.power.h - 2),
-        if ok { colour::GOOD } else { colour::BAD },
-    );
+    let mut x = l.power.x + 1;
+    for (ext, ink) in m.meter.iter().zip([colour::GOOD, colour::ACCENT, colour::BAD]) {
+        d.fill(Rect::new(x, l.power.y + 1, *ext, l.power.h - 2), ink);
+        x += ext;
+    }
     d.frame(l.power, colour::EDGE);
 
     for (r, (mode, label)) in l.modes.iter().zip(MODE_LABELS) {
@@ -365,9 +396,13 @@ pub fn view(
         cameo(&mut d, r, c, hot(r));
         t.push(r, HudHit::Cameo(n));
     }
+    // spec: S-0411 claim 18 (both page buttons disabled when all icons fit)
+    let enabled = overflows(m.cameos.len(), rows);
     for (k, (r, label)) in l.scroll.iter().zip(["Up", "Down"]).enumerate() {
-        widget::button(&mut d, *r, label, hot(*r), true);
-        t.push(*r, HudHit::Scroll(if k == 0 { -1 } else { 1 }));
+        widget::button(&mut d, *r, label, enabled && hot(*r), enabled);
+        if enabled {
+            t.push(*r, HudHit::Scroll(if k == 0 { -1 } else { 1 }));
+        }
     }
     (d, t)
 }

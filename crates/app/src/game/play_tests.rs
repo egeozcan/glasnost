@@ -263,17 +263,60 @@ fn claim_19_empty_box_switch_off() {
     assert!(p.game.replay().orders.is_empty());
 }
 
-/// spec: S-0701 claim 24 (the strip scrolled past its end: the refusal sound); interim: Q-0339 (a click that cannot move the strip)
+/// spec: S-0411 claim 18 and S-0701 claim 24 (all icons fit: the page buttons are disabled, no request and no sound)
 #[test]
-fn scrolling_past_the_strip_end_cues_the_refusal_sound() {
+fn page_requests_on_a_fitting_strip_are_silent() {
     let mut p = start();
     p.cues.clear();
     p.scroll_icons(-1, 4);
+    p.scroll_icons(1, 4);
     assert_eq!(p.scroll, 0);
-    assert_eq!(p.cues, [UiCue::StripEnd]);
-    p.cues.clear();
-    p.scroll_icons(0, 4);
     assert!(p.cues.is_empty());
+}
+
+/// spec: S-0411 claim 18 and S-0701 claim 24 (an overflowing strip: a request at its requested end gives the refusal sound; an accepted one moves a page, clamped at the end, with the tab-scroll sound; the wheel moves one row silently)
+#[test]
+fn page_requests_and_wheel_on_an_overflowing_strip() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| {
+        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+    });
+    p.tab_click(0);
+    // Five icons on the shown tab, one row visible: N = 5, R = 1, E = 2.
+    let icons = &mut p.game.world.houses[usize::from(p.local.0)].econ.tech.icons[0];
+    let first = icons[0].clone();
+    while icons.len() < 5 {
+        icons.push(first.clone());
+    }
+    p.cues.clear();
+    p.scroll_icons(-1, 1);
+    assert_eq!((p.scroll, p.cues.clone()), (0, vec![UiCue::StripEnd]));
+    p.cues.clear();
+    p.scroll_icons(1, 1);
+    p.scroll_icons(1, 1);
+    assert_eq!(p.scroll, 2);
+    assert_eq!(p.cues, [UiCue::StripScroll, UiCue::StripScroll]);
+    p.cues.clear();
+    p.scroll_icons(1, 1);
+    assert_eq!((p.scroll, p.cues.clone()), (2, vec![UiCue::StripEnd]));
+    // Two rows visible from the top row 2 of 3: partial page accepted, clamped.
+    p.scroll = 0;
+    p.cues.clear();
+    p.scroll_icons(1, 2);
+    assert_eq!((p.scroll, p.cues.clone()), (1, vec![UiCue::StripScroll]));
+    p.cues.clear();
+    p.wheel_icons(-3, 1);
+    assert_eq!(p.scroll, 2);
+    p.wheel_icons(-1, 1);
+    assert_eq!(p.scroll, 2);
+    p.wheel_icons(7, 1);
+    assert_eq!(p.scroll, 1);
+    assert!(p.cues.is_empty(), "the wheel is silent");
 }
 
 /// spec: S-0414 claim 11 (surrender), S-0414 (the outcome ends the game)

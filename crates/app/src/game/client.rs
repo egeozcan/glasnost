@@ -382,6 +382,16 @@ impl Client {
         }
     }
 
+    /// A mouse-wheel event with the sign of its vertical delta (S-0411
+    /// claim 18).
+    pub fn wheel(&mut self, delta: i32) {
+        if self.shell.screen == Screen::Game
+            && let Some(s) = self.session.as_mut()
+        {
+            s.wheel(delta);
+        }
+    }
+
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.gesture();

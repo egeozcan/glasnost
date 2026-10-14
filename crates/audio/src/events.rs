@@ -76,8 +76,12 @@ pub enum UiCue {
     BuildRefused,
     /// A placement click refused by its tests (S-0411 claim 10, S-0406).
     PlacementRefused,
-    /// The sidebar strip asked to scroll past its end (S-0701 claim 24).
+    /// A page request at the sidebar strip's requested end (S-0701 claim
+    /// 24, S-0411 claim 18).
     StripEnd,
+    /// An accepted page request of the sidebar strip (S-0701 claim 24,
+    /// S-0411 claim 18).
+    StripScroll,
     /// A building item became done (S-0411 claims 9 and 12).
     ConstructionComplete,
     /// The local player's house placed a building (S-0701 claim 23).
@@ -1203,6 +1207,8 @@ impl Audio {
             }
             // spec: S-0701 claim 24 (the sidebar strip scrolled past its end: the game-wide refusal sound)
             UiCue::StripEnd => screen(self, self.names.scold.clone()),
+            // spec: S-0701 claim 24 and S-0411 claim 18 (an accepted page request: the tab-scroll sound)
+            UiCue::StripScroll => screen(self, self.names.gui_tab.clone()),
             // spec: S-0701 claim 23 (the game-wide building placement sound, a screen sound)
             UiCue::BuildingPlaced => screen(self, self.names.building_slam.clone()),
         }

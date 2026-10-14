@@ -929,14 +929,15 @@ fn building_and_promotion_sounds() {
     assert_eq!(heard(&mut a, 300), ["Elite"]);
 }
 
-// spec: S-0701 claim 24 (production-feedback clicks: the build click; the strip past its end: the refusal sound); S-0416 claim 4 and S-0701 claim 35 (credit ticks at request level 8192)
+// spec: S-0701 claim 24 and S-0411 claim 18 (production-feedback clicks: the build click; a page request at the strip's end: the refusal sound; an accepted one: the tab-scroll sound); S-0416 claim 4 and S-0701 claim 35 (credit ticks at request level 8192)
 #[test]
 fn interface_sounds() {
     let w = world();
-    let mut a = audio(&w, &["Click", "Nope", "Up", "Down"]);
+    let mut a = audio(&w, &["Click", "Nope", "Up", "Down", "Tab"]);
     let mut n = SoundNames::default();
     n.gui_build = Some("Click".into());
     n.scold = Some("Nope".into());
+    n.gui_tab = Some("Tab".into());
     n.credit_ticks = strings(&["Up", "Down"]);
     a.set_names(n);
     let mut now = 0;
@@ -947,6 +948,7 @@ fn interface_sounds() {
         (UiCue::BuildHeld, "Click"),
         (UiCue::BuildCancelled, "Click"),
         (UiCue::StripEnd, "Nope"),
+        (UiCue::StripScroll, "Tab"),
         (UiCue::CreditTick { rising: true }, "Up"),
         (UiCue::CreditTick { rising: false }, "Down"),
     ] {

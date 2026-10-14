@@ -419,7 +419,6 @@ Provisional rules of the audio, each tied to a request:
 | `mixer` | a delayed instance plays the immediate mode's partition, keeps one body sample across loops, takes no startup draw and has no waits | Q-0329 |
 | `Audio::tick` (F7) | the radar event's zoom-in phase lasts 0 ticks. The events are kept for announcements only | Q-0331 |
 | `mixer` | the crowded master level reaches its target at once | Q-0333 |
-| `play::Play::scroll_icons` | a scroll click plays the refusal sound only when it cannot move the strip at all | Q-0339 |
 
 ## Game client (M5b)
 
@@ -447,7 +446,7 @@ Interim rules of the game client, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `session::read_icons`, `register_art` | an icon is frame 0 of its file, index 0 transparent, its canvas centred in the slot and clipped; a darkened icon gets a translucent black veil; the alternate icon is unused (the palette part is answered, see below; frame selection, placement and the darkening mask are S-0411 claim 16's and not yet brought over) | Q-0275 |
-| `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar, sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
+| `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar (the meter's three parts follow S-0405 claim 19 and F4), sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
 | `session::update_cursor` | battlefield and sidebar-mode cursors follow S-0214 claims 21 and 22 (`game::cursor`); the parts still open keep the system pointer: edge scrolling, the radar, building-placement hover and route-point editing | Q-0277 |
 | `session::box_candidates`, `play::select_box` | S-0214 claims 18 to 20 apply; the parts still open: a box's candidates are every non-terrain object in play whose position, projected with height lift, is inside (transient drawing displacements ignored), added in object order, with no 500-candidate frame limit | Q-0278 |
 | `install::offered_countries`, `glasnost_ui::setup` | the setup offers the non-passive countries except the neutral and special houses', in registration order; at most 8 slots, the first always the person's; teams 1 to 4 or none | Q-0281 |
@@ -455,7 +454,7 @@ Interim rules of the game client, each tied to a request:
 | `play::click_map` (sell mode) | walls get no sell order | Q-0284 |
 | `window::GameApp::modifiers` | the command, options and arrow keys follow S-0213 claims 22 and 23 (`client::bound`); the physical modifier keys (question 2, S-0214's part) are still open: Shift is force-select, Ctrl or Cmd force-fire, Alt force-move, and attack-move mode has no key | Q-0286 |
 
-Answered requests of the game client: Q-0285 by S-0414 claims 19 to 23 (`econ::stats`: the result screen's own built total, kills, losses and running score, the displayed score fixed once after play stops with one scenario-stream draw per undefeated listed house, and `Play::clock`'s active 16-ms clock for the duration), Q-0283 by S-0411 claim 11 (`glasnost_ui::hud::tab_lit`: a tab flash keeps the tick that started it, with the initial extra period and `quirks.tab_flash_initial_extra_period`; the lit look is our own design), Q-0279 by S-0101 claims 12 to 15 (`game::scroll`: edge scrolling at the outermost client pixel with F9's direction, momentum and magnitude table scaled by the imported `ScrollMultiplier`, 21 px per held arrow, both once per unfrozen cycle; the scroll index is the default 3, since our engine has no settings file yet, and no order block or timed freeze is modelled), and Q-0280 by S-0103 claims 11 and 12 (`install::slot_swatches`: the fixed slot colours after the 16-bit step).
+Answered requests of the game client: Q-0339 by S-0411 claim 18 (`play::Play::scroll_icons`: a page move, the end sound at the end, no effect when the icons fit, one silent row per wheel step); Q-0285 by S-0414 claims 19 to 23 (`econ::stats`: the result screen's own built total, kills, losses and running score, the displayed score fixed once after play stops with one scenario-stream draw per undefeated listed house, and `Play::clock`'s active 16-ms clock for the duration), Q-0283 by S-0411 claim 11 (`glasnost_ui::hud::tab_lit`: a tab flash keeps the tick that started it, with the initial extra period and `quirks.tab_flash_initial_extra_period`; the lit look is our own design), Q-0279 by S-0101 claims 12 to 15 (`game::scroll`: edge scrolling at the outermost client pixel with F9's direction, momentum and magnitude table scaled by the imported `ScrollMultiplier`, 21 px per held arrow, both once per unfrozen cycle; the scroll index is the default 3, since our engine has no settings file yet, and no order block or timed freeze is modelled), and Q-0280 by S-0103 claims 11 and 12 (`install::slot_swatches`: the fixed slot colours after the 16-bit step).
 
 Known limits:
 
