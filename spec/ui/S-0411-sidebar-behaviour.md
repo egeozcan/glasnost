@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283]
+requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339]
 supersedes: []
 ---
 
@@ -33,7 +33,7 @@ states and timing, not a reproduction of the original shell. Power values and me
 meter scaling belong to S-0405, radar state to S-0410 and credit values to S-0416.
 The icon-file content rules of claim 16 answer Q-0275 separately from shell layout.
 
-**Paired revisions.** S-0404 revision 12 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 13 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary, without retry (its claims 7
 and 13). No eligible releasing factory instead leaves the item done. Claim 14 here covers
@@ -362,6 +362,12 @@ last recheck). In addition:
     use the game-wide build-click sound (S-0701 claim 24). Announcements follow S-0701 claims
     27 and 28, including nearby-event suppression where applicable: requesting one does not
     guarantee immediate audible playback.
+    Starting or resuming infantry requests the training announcement; starting or resuming
+    any other producible kind requests the building announcement, including vehicles,
+    naval vehicles, aircraft and defences. Adding a queued copy to an already active line
+    requests no new training or building announcement, but retains the build-click sound.
+    These are announcement requests, not promises of audible playback. S-0701 claim 28
+    already states the same split and suppression.
     The busy-building-line refusal requests the unable-to-comply announcement, without a
     build-click or game-wide refusal sound. Refused building placement instead requests the
     cannot-deploy-here announcement, without the game-wide refusal sound. These two refusal
@@ -380,7 +386,7 @@ last recheck). In addition:
     4); the build-limit row; and a click whose build order is ignored when it is applied (the
     darkened icon, the lit aircraft icon with every dock taken). Scenarios S3 and S4 record these
     without a prediction.
-    - Backing: `measurable` (scenarios S3, S4, S5, S7 and S8; S-0701 F5)
+    - Backing: `measurable` (scenarios S3, S4, S5, S7, S8 and S14; S-0701 F5 and F11)
     - Confidence: medium
 
 13. **Several offers removed at one recheck (Q-0123).** For types with shown icons, the
@@ -540,6 +546,42 @@ last recheck). In addition:
     - Backing: `measurable` (scenario S12)
     - Confidence: high (listed sidebar events and label entries)
 
+18. **Scrolling and end feedback (Q-0339).** A scroll-button click requests one page
+    in its direction on the displayed tab. A page is the number of complete visible
+    icon rows. The original has two icons per row; shell geometry remains a design
+    choice. At settled positions let *N* be the tab's icon count, *R* its complete
+    visible row count and *T* the zero-based row at the top. The top end is *T* = 0.
+    the bottom end is reached when 2 × (*T* + *R*) ≥ *N*. A button request already
+    at its requested end requests the game-wide refusal sound. With any room left
+    it is accepted and requests the tab-scroll sound instead, even when less than
+    a full page remains. Movement stops at the end; reaching that end during the
+    accepted movement generates no additional refusal sound. S-0701 claim 24
+    already establishes this feedback distinction, not the input dispatch below.
+
+    Both buttons are enabled whenever the tab has more icons than fit, even at
+    either end. When all icons fit, both buttons are disabled. Clicking a disabled
+    button gives no scroll request and no scroll/refusal sound. Thus the conditional
+    refusal for a dispatched request on an all-fitting strip is not a prediction
+    of a sound from an ordinary click on its disabled button.
+
+    The button acts on release over the button after a press there, not repeatedly
+    while held. Left and right button clicks use the same page response. Holding
+    for many cycles adds no requests; releasing outside the button does not activate
+    it. There is no held-button repeat delay or interval to import.
+
+    The mouse wheel instead requests one row per wheel event, upward for a positive
+    wheel delta and downward for a negative one, irrespective of the delta's magnitude
+    or the pointer's location over the battlefield or sidebar. It affects the
+    displayed tab and uses the same ends, but requests neither the tab-scroll nor
+    the refusal sound, including at an end or when all icons fit. It does not
+    activate a disabled page button. These controls change presentation only,
+    not production orders or offer membership. The predictions concern normal
+    active skirmish play, not wheel events delivered to a modal dialog.
+    - Backing: `measurable` (scenario S13; S-0701 F10)
+    - Confidence: high (end predicate, partial-page feedback, disabled buttons and
+      wheel's one-row silent path); medium (release activation and pointer-independent
+      wheel observation)
+
 ## Formulas
 
 - **Clock stage** = progress + 1 (claim 8). Integers: progress is S-0403's integer from 0 to 54, so
@@ -552,6 +594,14 @@ last recheck). In addition:
   exact, no rounding; the remainder lies from 0 to 9. Subsequent toggle spacing is 10 ticks.
   Initial lit state: ⌊*t*/10⌋ + 1 even. After the first toggle: ⌊(*u* + 1)/10⌋ even
   at tick *u*. Each floor division rounds down in the non-negative integer domain.
+
+- **Settled scroll end** (claim 18): *E* = max(0, ⌈*N*/2⌉ − *R*) rows.
+  *N*, *R* and the top row *T* are non-negative integers; *R* is positive.
+  The division rounds upward, counting an incomplete final row. A single accepted
+  page from a settled strip finishes at min(*E*, *T* + *R*) downward or
+  max(0, *T* − *R*) upward. A wheel event uses 1 row instead of *R*.
+  All additions, comparisons and clamping are exact integer operations.
+  The end-feedback test uses the starting *T*, not the clamped destination.
 
 ## Constants
 
@@ -634,6 +684,9 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | No data key | queue count format and label lifetime | decimal integer count; labels are state-bound, not timed messages; claims 7, 8 and 17 |
 | No data key | tab flash | initial parity/countdown and later 10-tick periods are engine constants, claim 11 |
+| No data key | scroll dispatch and end tests | claim 18: page button on release, no held repeat, wheel one row per event; disabled buttons emit no request; no imported repeat timer |
+| `GUITabSound`, `ScoldSound` (rules, audio-visual section) | accepted page-scroll and refused page-scroll sound respectively | single sound-entry names; initially no sound, later omission or unknown name retains earlier value, including session retention; S-0701 Import mapping |
+| `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
 
 These delegated inputs matter to claims 13 and 14:
 
@@ -1057,6 +1110,51 @@ the time the script sent a button event, dates a click.
   its state remains, a different string-table entry supplies either label, or the
   missing-entry result lacks its identifier.
 
+**S13. Scroll dispatch and end feedback (claim 18, Q-0339).**
+- Setup: common sidebar probe skirmish, speed 6, 800 × 600, director and mods off.
+  Named map overrides offer enough types for two extra rows on one tab and fewer
+  than one page on another. Count complete visible rows rather than assuming a
+  shell size. Screen/audio capture and a read-only recorder log scroll positions,
+  input activations and requested sound entries. Use S-0701 F10's named distinct
+  tab-scroll/refusal test sounds if the stock entries cannot be distinguished.
+- Procedure: at the top, click up; click down once with only two rows left, wait
+  for movement to settle, then click down at the bottom. Repeat upward with less
+  than a page left. On the all-fitting tab, click both disabled buttons. Separately
+  press and hold each enabled button for 100 cycles before releasing over it,
+  then repeat releasing outside it. Repeat with right-button clicks. Wheel in
+  both directions at the top, interior and bottom and on the all-fitting tab,
+  first with the pointer over icons and then over the battlefield. Compare single
+  delivered wheel events with different positive and negative delta magnitudes.
+  Run each variant once; date received input rather than script-send time.
+- Observable: request counts, settled top rows, enabled states, sound-entry
+  requests and audible playback. Allow the existing movement to finish before
+  testing an end, so animation does not obscure the starting position.
+- Expected: an enabled page button already at its end requests refusal; a
+  partial page requests the tab-scroll cue and stops at the end without a later
+  refusal. Both buttons stay enabled on the overflowing tab. Both are disabled
+  and silent on the all-fitting tab. Holding dispatches nothing until release
+  over the button, then exactly one page; release outside gives none. Left and
+  right clicks agree. Wheel events move at most one row each, independent of
+  magnitude and pointer location, and request neither cue in all tested states.
+- Falsified by different end feedback, refusal after accepted partial movement,
+  a disabled-button request, held repeat, activation on press, outside-release
+  activation, wheel page movement or either wheel cue. The recorder distinguishes
+  a missing sound request from playback suppression.
+
+**S14. Start/resume announcement kind and queue suppression (claim 12).**
+- Setup: common skirmish, slow infantry, ground/naval vehicle, aircraft, ordinary
+  building and defence items, eligible factories, free docks, ample credits and
+  unreached limits. Screen/audio and read-only announcement-request recorder.
+- Procedure: start each kind, hold it, then resume from its own icon. For each
+  unit line add another copy while its first item runs. One run per kind, with
+  distinct input cycles; S-0701 F11 may serve as the same run.
+- Observable: requested announcement identifiers, build-click requests and actual
+  line/queue changes, separately from audible playback.
+- Expected: infantry start/resume requests training, every other kind building.
+  Queue additions retain build-click feedback but request neither announcement.
+  Falsified by any opposite kind, missing predicted request or a new start/resume
+  announcement merely for adding an active-line queued copy.
+
 ## Open questions
 
 1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
@@ -1083,9 +1181,22 @@ the time the script sent a button event, dates a click.
 
 ## Changes for other specs
 
-- S-0404: refresh its paired Summary reference from S-0411 revision 14 to revision 15
+- S-0404: refresh its paired Summary reference from S-0411 revision 15 to revision 16
   at joint hand-off. Its application-boundary release/refund, sale and capacity contracts
   already agree; no behavioural replacement is required.
+- S-0701: Q-0339's dispatch is now claim 18 and S13 here. Replace its remaining
+  dispatch-open wording with that pointer: all-fitting tabs disable both buttons,
+  holding does not repeat, and wheel requests are one-row and silent.
+- S-0406: Q-0282 placement text/no-text is already answered by claim 20 and PL15.
+  retain that ownership. No behavioural change required.
+- S-0408: Q-0282 sell/repair text/no-text is already answered by claim 18 and S12.
+  retain that ownership. No behavioural change required.
+- S-0213: Q-0282 route notices and the shared message lifetime/capacity are already
+  answered by claim 25 and O21; retain that ownership. No behavioural change required.
+- S-0007: Q-0275 main/alternate icon selection is already claims 22 and 25.
+  retain the pointer to claim 16 here. No behavioural change required.
+- S-0103: Q-0275 palette conversion, lifetime and missing-file behaviour are already
+  claim 13; retain that ownership. No behavioural change required.
 
 Earlier correction requests are resolved by the current companion drafts: S-0406 claims 1
 and 20 give placement's appropriate announcement and text/no-text feedback; S-0007 claims
