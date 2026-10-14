@@ -57,7 +57,8 @@ pub enum Locomotor {
     Drive,
     /// The walking locomotor of infantry (S-0208).
     Walk,
-    /// The teleporting locomotor of a vehicle (S-0207 claim 20).
+    /// The teleporting locomotor of a vehicle or infantry unit (S-0207 claim
+    /// 20, S-0208 claim 19).
     Teleport,
     /// Not moved in M3: every other locomotor, and a locomotor on a kind
     /// whose movement with it no spec gives (S-0207 Open questions).
