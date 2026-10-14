@@ -2,13 +2,13 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: []
+requests: [Q-0191]
 supersedes: []
 ---
 
@@ -305,6 +305,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       offer in the house update of the same tick.
     - a placed building changes the offer in the next tick's house update, because place and sell
       orders are applied after the house updates of their tick (S-0203, claim 7).
+    - a due recheck sees the surrender and defeat destruction of that same house update
+      (S-0414 claim 16), including any removal that makes a recheck due. An object retained on
+      the map after death still follows this spec's own counting conditions.
     - a suspension or resumption of event (k) caused by a change of the house's low-power state,
       which happens inside its house update, is taken up by the recheck of that same house update.
     - a cancellation order issued because of a recheck is applied at the end of that tick (S-0404,
@@ -358,7 +361,8 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     A trigger action that changes a type's tech level exists in the original and calls for a recheck
     of every house. It is not among the trigger actions of S-0011's subset, and if a later revision
     adds it, it is an event.
-    - Backing: `measurable`. Each scenario looks for an icon that appears or disappears, which only
+    - Backing: `measurable` (same-update surrender and defeat destruction by S-0414 V12).
+      Each scenario looks for an icon that appears or disappears, which only
       a recheck can cause (claim 1; S-0411 claim 2). The darkened state is not used: it follows the
       current counts in every tick, whatever the event. (a) by T1 (placement) and T2 (capture); (b),
       (c), (d) and (f) by T14 runs 1 to 5; (h) by T6; (e), (g), (j) and (k), whose effect on the
@@ -372,7 +376,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       applied at the tick boundary, a superweapon found lost), because seeing it needs a non-event inside the single tick between
       the two house updates, which a scenario cannot arrange reliably (the first recheck already
       shows every earlier change).
-    - Confidence: high: the timing, and events (a) to (d), (f) and (h). Medium: events (e), (g)
+    - Confidence: high: the timing (including S-0414 V12's same-update destruction test), and events (a) to (d), (f) and (h). Medium: events (e), (g)
       and (j), the whole-set rule and the non-events. Low: event (k), since when a superweapon is
       suspended or resumed belongs to the superweapon specs. Medium: the completeness of the list,
       since the original's own list may hold more events (Open question 1).
@@ -425,7 +429,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     | *n* = 0, *N* = 0 or *n* > *N* | none | its fixed secret type if it has one; none from the lists |
     | 1 ≤ *n* ≤ *N* | one ranged draw *r*ₖ over 0 … *N* − 1 − *k* for every lab, a lab with a fixed secret type included (F4) | its fixed secret type if it has one; otherwise entry *r*ₖ of the concatenated list, counted from 0 |
 
-    On the random-state recorder the labs' draws come after the draws taken while the starting units are placed. After the secret-lab choices, the game-start recalculation takes tile-animation creation draws in visiting order, before tick 0 (S-0202 claim 14). S-0412 claim 14 owns the broader game-start draw order and must be revised in the same hand-off to remove its conflicting statement that secret-lab draws are the last draws before tick 0. Because the range shrinks but the entry is taken by position, two labs can get the same type and the last entries can never be drawn by later labs (`quirks.secret_lab_pick_by_position`). The range of the last draw is 0 … 0 when *N* − *k* = 1, and a ranged draw over a single value consumes no raw value (S-0202 claim 4), so that draw leaves the stream state unchanged.
+    On the random-state recorder the labs' draws come after the draws taken while the starting units are placed. After the secret-lab choices, the game-start recalculation takes tile-animation creation draws in visiting order, before tick 0 (S-0202 claim 14). S-0412 claim 14 owns the broader game-start draw order; its current correction agrees that secret-lab choices are not an exhaustive last-draw boundary. Because the range shrinks but the entry is taken by position, two labs can get the same type and the last entries can never be drawn by later labs (`quirks.secret_lab_pick_by_position`). The range of the last draw is 0 … 0 when *N* − *k* = 1, and a ranged draw over a single value consumes no raw value (S-0202 claim 4), so that draw leaves the stream state unchanged.
     - Backing: `measurable` (scenario T9, with the random-state recorder of the measurement setup)
     - Confidence: medium
 
@@ -463,6 +467,35 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     that type in production, a copy at its positive limit therefore cannot start.
     - Backing: `measurable` (scenario T12, runs 1 to 6)
     - Confidence: medium (queue tests and the application-time limit on a queued start; T12 run 6)
+
+17. **Several new offers at one recheck (Q-0191).** For newly admitted types of one kind,
+    admission follows increasing registration index. This applies to buildings across both
+    building tabs, to infantry, to vehicles across naval and ground types, and to aircraft.
+    With space for all the new icons, two newly admitted types of the same kind that tie on
+    every ordering key of S-0004 claim 11 therefore appear with the higher registration index
+    first under `quirks.sidebar_tie_newest_first`, and the lower index first with that switch
+    off. Existing icons are not removed and added again merely because another factory can
+    offer them; their earlier tie position is retained.
+
+    There is no fixed precedence of infantry, vehicles, aircraft and buildings for admission.
+    The kinds follow the order in which the house acquired their earliest qualifying factory
+    buildings (Terms), among the buildings still owned at the recheck. For example, when
+    vehicle and aircraft types newly enter the fourth tab together, the kind with the earlier
+    qualifying factory is admitted first. Fully tied icons of the later-admitted kind then
+    precede those of the earlier kind with the newest-first switch on. Factory owner countries
+    and naval matching still decide final offer membership under claim 1, not this precedence.
+    Repeated qualifying factories of a kind do not change already admitted icons' positions.
+    This rule applies both at the first recheck at game start and at later rechecks; admission
+    order is not the order of the prerequisite entries that unlock the types.
+
+    These results describe icon order and, through S-0411 claim 13, later automatic cancellation
+    order and possible intermediate starts. They do not require a particular representation
+    of the taken-up set. Full-tab offer legality, cancellation and later refill remain Open
+    question 4; no outcome for a suppressed type is added here.
+    - Backing: `measurable` (T15); the every-player extension follows claim 13 and is
+      `unmeasured`, a design rule not observable in the original
+    - Confidence: high (increasing indices within one kind and unchanged existing icons),
+      medium (factory acquisition precedence and identical game-start result, pending T15)
 
 ## Formulas
 
@@ -572,6 +605,7 @@ after the placement order is applied, while the building is still in its constru
 
 | Key (file, section) | Concept | Form | Absent |
 |---|---|---|---|
+| `BuildingTypes`, `InfantryTypes`, `VehicleTypes`, `AircraftTypes` (rules, type lists) | registration indices within each kind for claim 17 | ordered lists, registration and layering owned by S-0004 | no entries added by an absent list |
 | `Prerequisite` (rules, type) | prerequisite list (claim 8) | list of building type names and group words | empty |
 | `PrerequisiteOverride` (rules, type) | override list (claim 3) | list of building type names (a group word is bad data, claim 3) | empty |
 | `POWER`, `FACTORY`, `BARRACKS`, `RADAR`, `TECH`, `PROC` (words in the two lists above, compared ignoring case) | the six generic groups (claim 8 b) | word | — |
@@ -989,6 +1023,32 @@ Backing).
   (the original makes a recheck that the table omits); each switch-off variant gives a different tick than the one
   stated. The original's behaviour in runs 6 to 14 has not been observed yet, so the confidence of
   the claims they test is medium (low for run 13) until measured.
+
+**T15. Simultaneous admissions (Q-0191, claim 17).**
+- Setup: the common measurement setup, speed index 2, fixed seed, engine add-ons and director
+  off. Named test data defines two distinguishable icons A and B of one kind, with A registered
+  before B, otherwise tied on every S-0004 claim 11 key, including display name, current price,
+  category rank and side. Keep the tab below capacity. Both share one prerequisite building
+  and have eligible factories. Repeat separately for infantry, vehicles, aircraft and buildings.
+- Procedure: run 1 enables both at game start, with factories and prerequisite present before
+  the first recheck. Run 2 begins without the prerequisite and places it by scripted input.
+  Run 3 reverses only the types' registration order. Run 4 unlocks A earlier, then B, and causes
+  another recheck with an additional qualifying factory; it must not reposition A or B.
+- Observable and tool: read-only sidebar recorder and screenshots at 800×600, logging ordered
+  type identities each tick, not merely the shared displayed name; one run per configuration.
+- Expected: B before A in runs 1 and 2, A before B in run 3, B still before A in run 4. With
+  the newest-first switch off in our engine these tie outcomes reverse. A different order,
+  different game-start and later results, or repositioning in run 4 falsifies the corresponding
+  claim. Non-ties or failure of either icon to appear make that run inconclusive.
+- Mixed-kind runs: use one aircraft and one counts-as-aircraft vehicle tied on all sort keys.
+  Acquire their qualifying factories in opposite orders in two games before placing the shared
+  prerequisite. Repeat with both factories present for the first game-start recheck, reversing
+  their acquisition order. Expected: the type whose kind has the later qualifying factory is
+  shown first in all four runs. Also capture an older enemy factory after acquiring the other
+  kind's factory: acquisition by this house, not original creation age, predicts the captured
+  kind's icon first. A kind that always wins irrespective of factory acquisition falsifies
+  the factory-precedence rule. Record factory ownership-change and icon ticks; void a run with
+  an intervening recheck that already admitted either test type.
 
 ## Open questions
 
