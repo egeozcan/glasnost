@@ -2,7 +2,7 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -440,10 +440,11 @@ our engine's result.
     movement zone, a terrain speed class, a building foundation size or a passenger pip colour) read
     the value as text (the limit is per field: 31 or 127 bytes in the cases checked) and compare it
     with the vocabulary ignoring ASCII case. The field's absent-key default is itself a vocabulary
-    word, and a missing key normally gives the value in force. The original has a display-only
-    bug: reading an infantry section without its passenger pip colour or occupant pip field can
-    change the held pip image frame on each read (S-0111 claim 12). Our engine keeps the held
-    value for both fields, with no quirk switch; this correction changes no passenger capacity,
+    word, and a missing key normally gives the value in force. For an infantry type's passenger
+    pip colour and occupant pip image frame, our engine keeps the held value on an absent read
+    as a fixed display-only departure (S-0006 claim 5; S-0111 claim 12), with no quirk switch.
+    The original instead shifts the held pip image frame on successive reads of an infantry
+    section that omits the corresponding field. This correction changes no passenger capacity,
     loading legality or other gameplay rule. A word that matches nothing does **not** give
     the value in force. It gives a fallback that is fixed per
     field: for some fields a particular vocabulary entry, for others an invalid "no value" result.
