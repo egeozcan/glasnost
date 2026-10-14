@@ -519,6 +519,10 @@ impl Client {
         s.clock_ms = now_ms;
         // spec: S-0213 claim 25 (status lines expire at display updates, also while paused or unfocused)
         s.play.update_messages(now_ms);
+        // spec: S-0213 Edge cases (Unfittable status text: an importer warning for the offending text)
+        for p in s.play.status_problems.drain(..) {
+            log::warn!("status text: {p}");
+        }
         // spec: S-0414 claim 23 (the active clock pauses for the options menu and lost focus)
         let active = !s.paused && self.focused;
         s.play.clock(now_ms, active);

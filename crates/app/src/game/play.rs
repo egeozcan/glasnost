@@ -21,6 +21,7 @@ use glasnost_sim::world::{GameSetup, HouseId, HouseRole, ObjectId, World};
 use glasnost_ui::end::End;
 use glasnost_ui::hud::{self, HudModel};
 use glasnost_ui::modes::{self, Mode};
+use glasnost_ui::status;
 
 use crate::mapview::credits::{CreditCounter, Tick};
 use crate::mapview::live::guarded;
@@ -92,6 +93,12 @@ pub struct Play {
     pub status_clock: i64,
     /// Whether a display update has set [`Self::status_clock`] yet.
     pub clock_started: bool,
+    /// The status lines' width budget in pixels (S-0213 claim 25); set
+    /// by [`Self::status_view`], unlimited until then.
+    pub status_width: i32,
+    /// Status texts left partly out because they could not fit (S-0213
+    /// Edge cases), for the client's log.
+    pub status_problems: Vec<String>,
     /// Why the game stopped, when a tick failed.
     pub failed: Option<String>,
     /// The cheer command's rate limit (S-0213 claim 19).
@@ -150,6 +157,8 @@ impl Play {
             messages: Vec::new(),
             status_clock: 0,
             clock_started: false,
+            status_width: i32::MAX,
+            status_problems: Vec::new(),
             failed: None,
             cheer,
             effects: Vec::new(),
@@ -191,20 +200,48 @@ impl Play {
         self.failed.is_none() && self.outcome.is_none()
     }
 
-    /// Shows a status message as a new line of the shared display (S-0213
-    /// claim 25): it appends, never refreshing an older copy, and a line
-    /// added at capacity removes the oldest.
+    /// Sets the status lines' width budget from the battlefield view's
+    /// width `view_w` (S-0213 claim 25): at game start the width minus 22;
+    /// after an in-game change of the view's dimensions (`resized`) the
+    /// width minus 16, and the existing lines are cleared, not split again.
+    pub fn status_view(&mut self, view_w: i32, resized: bool) {
+        if resized {
+            // spec: S-0213 claim 25 (a video-mode change clears the existing status lines rather than re-splitting them)
+            self.messages.clear();
+            // spec: S-0213 claim 25 (after an in-game change of the view's dimensions, the new width minus 16)
+            self.status_width = view_w - status::RESIZED_MARGIN;
+        } else {
+            // spec: S-0213 claim 25 (the view's width minus 22 pixels after game start; the sidebar is not included)
+            self.status_width = view_w - status::START_MARGIN;
+        }
+    }
+
+    /// Shows a status message on the shared display (S-0213 claim 25):
+    /// it is split into lines within the width budget, each appended with
+    /// its own lifetime and counting against the capacity, never
+    /// refreshing an older copy; a line added at capacity removes the
+    /// oldest. Widths are our own font's until the game font can be read
+    /// (interim, Q-0451).
     pub fn say(&mut self, text: impl Into<String>) {
-        // spec: S-0213 claim 25 (deadline = clock count when added + 480, exact integers)
-        let until = self.status_clock + MESSAGE_CLOCKS;
-        self.messages.push(Message {
-            text: text.into(),
-            until,
-        });
-        let n = self.messages.len();
-        // spec: S-0213 claim 25 (a new line at capacity removes the oldest line)
-        if n > MESSAGES_SHOWN {
-            self.messages.drain(..n - MESSAGES_SHOWN);
+        let text = text.into();
+        // spec: S-0213 claim 25 (Line splitting and font; interim glyph widths, Q-0451)
+        let split = status::split(&text, self.status_width, status::our_glyph_width);
+        if split.unfittable {
+            // spec: S-0213 Edge cases (Unfittable status text: the remainder is omitted with a warning)
+            self.status_problems.push(format!(
+                "status text {text:?} has a remainder that cannot fit {} pixels; it is left out",
+                self.status_width
+            ));
+        }
+        for line in split.lines {
+            // spec: S-0213 claim 25 (each line's deadline = clock count when added + 480, exact integers)
+            let until = self.status_clock + MESSAGE_CLOCKS;
+            self.messages.push(Message { text: line, until });
+            let n = self.messages.len();
+            // spec: S-0213 claim 25 (a new line at capacity removes the oldest line; wrapped lines count against the same capacity)
+            if n > MESSAGES_SHOWN {
+                self.messages.drain(..n - MESSAGES_SHOWN);
+            }
         }
     }
 

@@ -466,3 +466,81 @@ fn s0213_claim_25_status_lines() {
     assert!(p.messages.is_empty());
     assert_eq!(p.world().tick, tick);
 }
+
+/// spec: S-0213 claim 25 (Line splitting: the budget is the view width minus 22 after game start and minus 16 after a change of the view's dimensions, which clears the lines; every stored line, explicit breaks included, takes a place and its own 480-unit lifetime) and Edge cases (Unfittable status text)
+#[test]
+fn s0213_claim_25_split_lines_share_capacity_and_lifetime() {
+    let mut p = start();
+    p.messages.clear();
+    p.status_view(500, false);
+    assert_eq!(p.status_width, 478);
+    p.update_messages(16 * 100);
+    p.say("one\ntwo\r\nthree");
+    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(texts, ["one\n", "two\r", "three"]);
+    assert!(p.messages.iter().all(|m| m.until == 580));
+    // Lines said at a later count expire later.
+    p.update_messages(16 * 101);
+    p.say("four\nfive\nsix\nseven");
+    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(texts, ["two\r", "three", "four\n", "five\n", "six\n", "seven"]);
+    p.update_messages(16 * 581);
+    let texts: Vec<&str> = p.messages.iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(texts, ["four\n", "five\n", "six\n", "seven"]);
+    // A long word wraps inside itself at the budget; each piece is a line.
+    p.messages.clear();
+    let word = "W".repeat(200);
+    p.say(word.clone());
+    assert!(p.messages.len() > 1 && p.messages.len() <= 6);
+    let joined: String = p.messages.iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(joined, word);
+    // A change of the view's dimensions clears the lines and sets W − 16.
+    p.status_view(300, true);
+    assert!(p.messages.is_empty());
+    assert_eq!(p.status_width, 284);
+    // An unfittable remainder is left out with a warning.
+    p.status_view(22, false);
+    p.say("x");
+    assert!(p.messages.is_empty());
+    assert_eq!(p.status_problems.len(), 1);
+}
+
+/// spec: S-0411 claim 17 (starting, holding, resuming and cancelling production and its completion add no battlefield status line; the sidebar labels are not status messages)
+#[test]
+fn s0411_claim_17_production_adds_no_status_line() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    let to = CellXY::new(cell.x, cell.y + 2);
+    p.click_map(Button::Left, None, to, Modifiers::default());
+    step_until(&mut p, 400, |p| {
+        p.world().obj(mcv).is_some_and(|o| o.pos.cell() == to)
+    });
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
+    step_until(&mut p, 50, |p| {
+        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+    });
+    p.tab_click(0);
+    let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
+    p.messages.clear();
+    for b in [Button::Left, Button::Right, Button::Left] {
+        p.cameo_click(0, b, false);
+        p.step();
+    }
+    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.local, t));
+    p.cameo_click(0, Button::Right, false);
+    p.step();
+    for cue in [
+        UiCue::BuildStarted { infantry: false },
+        UiCue::BuildHeld,
+        UiCue::BuildResumed { infantry: false },
+        UiCue::ConstructionComplete,
+        UiCue::BuildCancelled,
+    ] {
+        assert!(p.cues.contains(&cue), "{cue:?} in {:?}", p.cues);
+    }
+    assert!(p.messages.is_empty(), "{:?}", p.messages);
+}

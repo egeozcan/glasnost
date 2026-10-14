@@ -28,10 +28,10 @@ use glasnost_sim::rules::Kind as SimKind;
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, ObjectId};
 use glasnost_ui::draw::{DrawList, colour};
-use glasnost_ui::font;
 use glasnost_ui::geom::{Point, Rect};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
 use glasnost_ui::modes::{self, Mode};
+use glasnost_ui::status;
 use glasnost_ui::widget::Targets;
 use glasnost_vfs::{FileRef, Vfs};
 
@@ -86,6 +86,8 @@ pub struct Session {
     pub paused: bool,
     /// The window size.
     pub screen: (i32, i32),
+    /// Whether the client has set the starting window size.
+    sized: bool,
     centre: (i32, i32),
     reference: i32,
     filter: Filter,
@@ -234,6 +236,7 @@ impl Session {
             speed,
             paused: false,
             screen: (1024, 768),
+            sized: false,
             centre: (0, 0),
             reference: Frame::reference_at_reset(0, &ComposeQuirks::default()),
             filter: Filter {
@@ -262,6 +265,9 @@ impl Session {
         problems.append(&mut s.loaded.problems);
         s.problems = problems;
         s.set_centre(start.unwrap_or((0, 0)), true);
+        // spec: S-0213 claim 25 (the status width budget after game start)
+        let view_w = s.map_rect().w;
+        s.play.status_view(view_w, false);
         s.play.say("Game started.");
         Ok(s)
     }
@@ -305,12 +311,19 @@ impl Session {
         Layout::new(self.screen).map
     }
 
-    /// Sets the window size.
+    /// Sets the window size. The client's first call, as the game starts,
+    /// sets the starting size; a later change is an in-game change of the
+    /// battlefield view's dimensions (S-0213 claim 25).
     pub fn resize(&mut self, size: (i32, i32)) {
+        let first = !self.sized;
+        self.sized = true;
         if size != self.screen {
             self.screen = size;
             let c = self.centre;
             self.set_centre(c, false);
+            let view_w = self.map_rect().w;
+            // spec: S-0213 claim 25 (W − 22 after game start; after an in-game change of the view's dimensions W − 16 and the lines cleared)
+            self.play.status_view(view_w, !first);
         }
     }
 
@@ -901,11 +914,16 @@ impl Session {
             );
         }
         // spec: S-0213 claim 25 (left-aligned at the battlefield's top left, oldest above newest; the original's first line 3 pixels in at the top edge, 19 pixels between line origins)
+        // spec: S-0213 claim 25 (drawn with the measuring font's advances and 64-pixel tab stops; our own font until the game font can be read, Q-0451)
         let mut y = m.y;
         for msg in &self.play.messages {
-            let wdt = font::text_width(&msg.text) + 4;
+            let wdt = msg.text.encode_utf16().fold(0, |x, c| {
+                status::advance(x, c, &status::our_glyph_width)
+            }) + 4;
             d.fill(Rect::new(m.x + 1, y, wdt, 13), [0, 0, 0, 150]);
-            d.text(m.x + 3, y + 2, msg.text.clone(), colour::TEXT, m);
+            for (dx, run) in status::runs(&msg.text, status::our_glyph_width) {
+                d.text(m.x + 3 + dx, y + 2, run, colour::TEXT, m);
+            }
             y += 19;
         }
         if let Some(f) = &self.play.failed {

@@ -16,4 +16,5 @@ pub mod menu;
 pub mod modes;
 pub mod setup;
 pub mod shell;
+pub mod status;
 pub mod widget;
