@@ -1,13 +1,8 @@
-//! Audio playback.
-//!
-//! **Milestone M1**: preview playback of decoded 16-bit PCM for the asset
-//! viewer ([`Player`]). On the web it uses WebAudio. Natively it is a
-//! development stopgap: the sound is written to a temporary WAV file and
-//! handed to the first command-line player found (`pw-play`, `paplay`,
-//! `aplay`, `afplay`), because an in-process backend (kira or cpal, PLAN.md
-//! 4.1) needs system audio headers that not every development machine has.
-//! **M5** replaces the native path with an in-process mixer for SFX, voices
-//! and EVA.
+//! Preview playback for the asset viewer ([`Player`]): one sound at a time.
+//! On the web it uses WebAudio. Natively it is a development stopgap: the
+//! sound is written to a temporary WAV file and handed to the first
+//! command-line player found (`pw-play`, `paplay`, `aplay`, `afplay`). The
+//! game's sounds go through the mixer ([`crate::Audio`]) instead.
 
 /// A 16-bit PCM WAV file holding `samples` (interleaved).
 pub fn wav_bytes(sample_rate: u32, channels: u16, samples: &[i16]) -> Vec<u8> {
