@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -280,8 +280,10 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     (S-0415), packing up, capture or triggers never raise it.
     Release itself is governed by S-0404 claims 7 and 13: an aircraft appears at a free dock,
     otherwise a non-dock-bound type enters from the local area's edge with one ranged draw,
-    a dock-bound type without a free dock is cancelled with a refund. A cancelled release
-    raises no ever-built count. Queue acceptance (claim 16) guarantees neither a later start
+    a dock-bound type without a free dock is cancelled with a refund. A busy or failed release
+    cancels the item with S-0404 claim 6's refund at the place order's application boundary,
+    without retry; no eligible releasing factory instead leaves the item done (S-0404 claim 7).
+    A cancelled release raises no ever-built count. Queue acceptance (claim 16) guarantees neither a later start
     nor a release.
     - Backing: `measurable` (scenario T10, parts b, c, g and h; S-0404 P12 for aircraft release)
     - Confidence: medium
@@ -399,21 +401,26 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     taken-up set, the cancel and cancel-all orders required by S-0404 claim 9 are issued in that
     house update and applied at the end of the same tick, for every player house. S-0411 claim 13
     owns their order when several types are removed. This follows the AI-house ruling (glossary,
-    *AI house*).
+    *AI house*). These orders are distinct from S-0404 claim 8's permanent-removal cancellation:
+    loss of the last eligible factory can cancel and refund an item in the removal tick itself,
+    before the later sidebar orders apply. An item already cancelled that way is not refunded
+    again (T14 run 7).
     For AI designers: in the original, the prerequisite condition (claim 8) and the build limit
     play no part in what a computer-controlled house is offered, and such a house's production is
     never cancelled when a prerequisite is lost.
     - Backing: `measurable` (scenario T11, including the order for a type refused since the last
       recheck; S-0411 S4 b2 for held-item resume at and above the infantry limit; S-0404 P9 for
-      cancellation issue and application timing) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
+      cancellation issue and application timing; T14 run 7 and S-0404 P8 for the separate
+      permanent-removal refund) for the local player's behaviour; the rule for our AI houses is `unmeasured`, a rule
       of our engine; the sentence on the original's
       computer-controlled houses is `unmeasured` too: a scenario cannot force a bystander computer
       player to try a given type (its choices come from its own build logic, and the glossary
       keeps it away from the observed area), so the skip could not be told from the computer
       player simply never choosing that type. It is a note for AI designers and decides no rule of
       this spec.
-    - Confidence: high (the local player); medium (that a type refused since the last recheck can
-      be ordered); low (the original's computer-controlled houses, not observed: see Backing)
+    - Confidence: high (the local player, except the following medium-confidence cases); medium
+      (that a type refused since the last recheck can be ordered, and the permanent-removal refund
+      distinction); low (the original's computer-controlled houses, not observed: see Backing)
 
 14. **Secret labs at game start.** During the game-start setup, under the conditions of the table
     below, every secret lab on the map, whoever owns it, is given the secret type, or none, that the
