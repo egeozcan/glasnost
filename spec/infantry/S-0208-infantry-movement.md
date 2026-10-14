@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 24
+revision: 25
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -284,15 +284,19 @@ used by this spec:
    the cell, as far as it is free. In the normal case (every case but that of claim 4) the cell's
    other occupants are taken into account, and the walker gets the position that the table below
    gives. In it, *c* is the class of its desired point (claim 2), and "free" and "taken" refer to the
-   cell's occupancy record (S-0209 Terms and claim 1) for the surface the walker is on (ground or
-   bridge deck). A side position that a terrain object in the cell marks (S-0209 claim 1) counts as
+   cell's occupancy record for the surface selected by this height test: let *z* be the walker's
+   current integer world height and *F* the terrain surface height at its desired point, both in
+   leptons. The selected surface is bridge deck exactly when the asked cell carries a high bridge
+   and *z* > *F* + 312 leptons, and ground otherwise. This is exact integer arithmetic, with no
+   rounding; equality selects ground. This choice is independent of the walker's current cell
+   layer and of the entry check's record (S-0209 claim 15). A side position that a terrain object in the cell marks (S-0209 claim 1) counts as
    taken like one an infantry unit holds, so a walker never gets it. The *vehicle-present* and
    *object-present* flags are those of S-0209 Terms. What a walker that gets no position does belongs
    to S-0209.
 
    | Occupancy record of the cell being entered | Class *c* | Position the walker gets | Draws from the scenario random stream |
    |---|---|---|---|
-   | the record for the walker's surface has its vehicle-present flag on, or both the cell's ground record has its object-present flag on and no open gate (Terms) stands in the cell | any | none | none |
+   | the record for the selected surface has its vehicle-present flag on, or both the cell's ground record has its object-present flag on and no open gate (Terms) stands in the cell | any | none | none |
    | neither | right, left or bottom, and *c* is free | *c* | none |
    | neither | right, left or bottom, and *c* is taken | the first free position of the row of table O for *c* (S2 for right, S3 for left, S4 for bottom); none when no position of that row is free | none |
    | neither | centre | the first free position of row R*k* of table O, where *k* is one ranged draw over 0 to 3; none when no position of that row is free | one |
@@ -318,19 +322,26 @@ used by this spec:
 
    The chosen position is reserved at once: from the tick on which the walker chooses it, the
    occupancy record of the cell being entered shows that position as taken, and the walker's
-   standing position in the cell it is leaving is shown as free (S-0209 claim 1). An ordinary walker therefore
+   previous mark is cleared using the former walking target's position and height, or its actual
+   position and height when it had no walking target (S-0209 claims 1 and 15). The new position
+   and infantry house are marked on the selected surface. Choosing it does not change the
+   walker's listing layer, and crossing a cell boundary does not transfer the reservation.
+   S-0209 claim 15 owns boundary-time layer changes, including crossings of a third cell on the
+   way to a diagonal target. An ordinary walker therefore
    holds exactly one entry in the occupancy record at any time: its walking target while it has one,
    otherwise the position it stands on. One exception is the top position (claim 2, Edge
    cases): a unit at the top position and a unit at the centre of the same cell share the centre's
    entry, and when either of them leaves, the record shows the centre free although the other still
    stands there.
    - Backing: `measurable` (scenarios W1, W2 part c, W3 and W9; the reservation through S-0209 scenario
-     C1; the vehicle-present row through S-0209 scenario C2, the building-present flag through S-0209
+     C1, and the surface selection and boundary-time layer changes through S-0209 scenario C22,
+     parts e and f; the vehicle-present row through S-0209 scenario C2, the building-present flag through S-0209
      scenario C10, the terrain marks through S-0209 scenario C16). `unmeasured` for the
      object-present flag and its open-gate exception, for the reason S-0209 claim 1 gives: every
      stock object known to set the flag gets an entry outcome of its own, so its effect here, and
      so the exception to it, has no known stock trigger
-   - Confidence: high for the class rule, table O, the draw and the reservation; medium for the
+   - Confidence: high for the class rule, table O, the draw, the strict surface-selection test and
+     the reservation; medium for the
      object-present flag and the open-gate exception
 
 4. **Walking into a cell without regard to its occupants.** The occupants of the cell being
