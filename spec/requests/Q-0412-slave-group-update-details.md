@@ -1,9 +1,9 @@
 ---
 id: Q-0412
 title: Details of the slave group update and the slaves' own harvest
-status: open
+status: answered
 related: [S-0402, S-0203, S-0208, S-0209]
-answered-by: []
+answered-by: [S-0203]
 ---
 
 ## Need

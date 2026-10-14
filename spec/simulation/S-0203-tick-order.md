@@ -2,13 +2,13 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0018]
+requests: [Q-0018, Q-0412]
 supersedes: []
 ---
 
@@ -88,6 +88,10 @@ skirmishes only; network games and campaigns are out of scope.
 - **First infantry death-sequence entry.** The entry S-0107, claim 17, selects for an infantry death of kind 1.
 - **Single-player game.** As in S-0201: a skirmish or a campaign mission. Only skirmishes are
   covered here.
+- **Slave master, slave group, group update, slave place.** Used as in S-0402 claims 19,
+  21 and 26: a vehicle or building controls harvesting infantry slaves, with persistent
+  places in its group. A group update is the periodic opportunity to replace, restore,
+  receive or release slaves and reconsider the master's movement, not a slave's own turn.
 - **Cycle.** As in S-0201: the unit of real time in which the original runs a game. A cycle that is
   not frozen processes at most one waiting input event and then runs one tick. S-0213 claim 1
   owns the input-event limit, its definition, confidence and backing; S-0201 claim 2 owns pacing.
@@ -521,9 +525,12 @@ skirmishes only; network games and campaigns are out of scope.
     - An animation that ends: `unmeasured`, for the reason given in claim 2's backing: where such
       an animation stands in the update order is not established, so no setup can predict which
       object loses its turn.
-    - A unit boarding an open-topped transport (claim 3), or going inside anything: `unmeasured`.
-      Whose turn performs the boarding or the going inside is not known (Open questions), so no
-      setup can predict which object loses its turn.
+    - A returning slave going inside its master during delivery: `measurable` (O14 D).
+      This happens in the master's turn (claim 12), so only a slave earlier than the master
+      in update order counts.
+    - A unit boarding an open-topped transport (claim 3), or other entry exchanges: `unmeasured`.
+      Whose turn performs those exchanges is not known (Open questions), so no setup can
+      predict which object loses its turn.
 
     **Consequence for an object that missed its turn.** Suppose projectile P1 detonates in its
     turn, so that unit U directly after it misses its turn, and later in the same pass another
@@ -555,6 +562,50 @@ skirmishes only; network games and campaigns are out of scope.
       the tick or its first, because it is not known whose turn performs the boarding (Open
       questions).
     - Confidence: medium
+
+12. **Slave-group effects belong to the master's turn (Q-0412 question 1).** A due,
+    unsuspended group update happens in the master's turn, not in a separate tick part
+    or in one of the slaves' turns. S-0402 claims 21 and 26 already own its timing and
+    within-group order; this claim places it against the master's other work.
+    - **Building masters.** The group sees the operation-state effects and animation
+      advancement already applied in that building turn. Their scenario draws, if any,
+      precede the group's replacement and emergence draws. A construction-state change
+      reported by that turn's animation advancement is already visible to the group
+      decisions of S-0402 claim 27. Paid building repair comes later: a delivery to this
+      master can provide the credits for its due repair step in the very same turn,
+      even when the returning slave has not yet taken its own turn. That repair cannot
+      retroactively affect the group's decisions or earlier operation-state work.
+      Operation-state effects are S-0405 claim 9's building effects, not the house-wide
+      power recalculation: the latter remains in the later house update (claim 8).
+      S-0314 claim 8 owns the repair cost, due ticks and health change.
+      - Backing: `measurable` (O14 parts A and C; S-0402 H22 for the construction-state gate)
+      - Confidence: high for repair and the draw precedence; medium for the same-turn
+        construction-state boundary
+    - **Vehicle masters.** The group sees the position and destination before the vehicle's
+      movement in that turn. Reaching a destination later in the turn does not make it
+      destination-free for a group update that already ran. In particular, automatic
+      deployment requiring no destination waits for a later eligible group update
+      (S-0402 claim 22), not the arrival tick's already-completed update. Conversely a
+      destination assigned by the group is available to movement in this turn; ordinary
+      movement gates still apply.
+      - Backing: `measurable` (O14 part B)
+      - Confidence: high
+    - **Consequences within the group.** Slave-state effects use increasing slave-place
+      order, not separate passes for all replacements, all reloads and all deliveries.
+      An earlier place's delivery therefore precedes a later place's replacement-creation
+      draws. These effects precede the master's field, travelling, deployment and
+      relocation decisions; subsequent emergence offers use reverse slave-place order
+      where the resulting group state permits them. A replacement or completed reload
+      can therefore emerge in this update. A slave received in this update cannot
+      complete reload until a later update, even with a zero reload delay. These rules
+      are S-0402 claims 21 and 26's, rather than an additional slave behaviour here.
+      Delivery credits are available to later objects' turns and to this tick's
+      production lines (claim 8). Taking the slave inside is a removal during the
+      master's turn: claim 10 counts it only when the slave stood before the master
+      in update order, and emergence appends it under claims 3 and 4.
+      - Backing: `measurable` (S-0402 H21 for within-group effects; O14 A for delivery
+        before repair; O14 D for the removal consequence)
+      - Confidence: high for within-group order and delivery placement
 
 ## Formulas
 
@@ -634,12 +685,16 @@ scenario random stream has no place here (claim 1).
 
 ## Import mapping
 
-The order of a tick takes one input from the user's rules data, apart from the map's own order of
-entries (claim 3), whose format S-0009 owns:
+The order of a tick uses the following inputs from the user's rules data, apart from the map's
+own order of entries (claim 3), whose format S-0009 owns. The slave fields select the group
+whose timing S-0402 owns; they do not change claim 12's precedence:
 
 | Key | Section | Form | Absent | Feeds |
 |---|---|---|---|---|
 | `SpawnsTiberium` | a terrain type's section | boolean | no | the spawns-resources flag of claim 2: a terrain object of a type with the flag on takes turns; one with it off takes none. What the flag does for resources belongs to the economy specs |
+| `Enslaves` | a vehicle or building type's section | infantry type name | none | the slave type for a master's group; S-0402 claim 19 owns creation, claim 12 here its turn placement |
+| `SlavesNumber` | the master's type section | signed integer | 0 | initial slave-place count; S-0402 claim 19 |
+| `SlaveRegenRate`, `SlaveReloadRate` | the master's type section | signed integers, ticks | 0 each | replacement and reload delays; S-0402 claim 21 owns due group updates and claim 12 here their precedence |
 
 ## Measurement scenarios
 
@@ -1139,6 +1194,92 @@ scenarios' timing expectations use the stated index.
   row. Part A tests row 1 before row 5, part B tests row 5 before row 8, and together they test
   row 1 before row 8. Neither part confirms the untested rows listed in claim 1's backing.
 
+**Scenario O14: slave groups against repair, movement and power effects (claim 12).**
+- *Common setup and tool:* a flat purpose-made skirmish map, one human player with a
+  slave miner and one distant bystander computer player, game speed 6, crates off,
+  director and mods off. Stock data except explicitly named map overrides and, in
+  part C, a temporary test art file. Extend the read-only recorder to record group
+  state, due-update tick, slave places, creation samples, inside/on-map state,
+  destinations, loads, building repair state, body construction state and animation
+  types and delays. Script only ordinary input. Count three distinguishing
+  observations per part within 100 attempts; fewer is inconclusive. Unexpected
+  combat, unrelated credits, creation, removal or unexplained draws void the counted
+  tick. The common void rule permits the named slaves' deliveries and emergence.
+- *Part A, delivery before repair:* pre-place a deployed miner building, so its slaves
+  first emerge later than the master in update order. Damage it without killing it and turn on
+  repair. Named map overrides may set the building repair period and slave reload
+  delay to align a due repair tick with a group update and retain the delivered
+  slave inside afterward. In pilot runs, identify an update at which a loaded
+  returning slave already stands in the unloading cell without a destination at
+  the preceding tick's end. Spend through ordinary wall placement or completed
+  production after the previous repair step so that available credits just before this update are less
+  than one repair step's cost; the impending delivery must cover that cost. No
+  other line spends credits in the counted tick. Record health, repair state,
+  credits, slave load and presence in that tick. Expected: the slave is received,
+  its payment less the repair cost is the credit delta, and health rises by the
+  repair step with repair staying on unless full health is reached. A repair that
+  turns off for insufficient money despite the qualifying delivery falsifies the
+  ordering. A control with the slave one cell short gets no payment and repair
+  turns off. If the slave was not delivery-ready before the master's turn, the
+  run is not distinguishing. This also distinguishes delivery in the master's
+  turn from delivery in the later slave's turn.
+- *Part B, group before movement:* use a travelling vehicle master with a nonempty
+  destination. Pilot runs tune named map overrides for movement speed and a field
+  destination so that its final movement reaches that destination in tick *n*,
+  which is also a due group-update tick. The destination must still be nonempty
+  at the end of *n* − 1, and the site must permit deployment. Give no further
+  orders. Record vehicle position, destination, group state and conversion tick.
+  Expected: at the end of *n* the vehicle has arrived and lost its destination but
+  has not deployed through that update. It attempts deployment at the next due
+  group update with no destination, normally *n* + 10 by S-0402 claim 21.
+  Deployment in *n* through the group seeing that tick's arrival falsifies the
+  ordering. A failed site or an independent deploy order makes the run void.
+  In a second control, let a field-seeking update assign a site on an unobstructed
+  straight route, with no turning, suspension or behaviour gate delaying movement.
+  Record the assignment and first movement ticks. Movement may use that new
+  destination in the assignment tick; a mandatory extra tick despite satisfied
+  movement gates falsifies that consequence, not the arrival test.
+- *Part C, operation-state draws before group draws:* named map data makes the
+  building master need power with a positive drain. Named test art gives it a
+  working animation with a random stage delay, no damage or extra effects, which
+  starts afresh on recovery from low power. Stop other animation and creation
+  effects. Ordinary construction or sale of another power/drain building restores
+  full power in the house update before the counted master turn. Align a lost
+  slave's replacement expiry with that turn's group update. The replacement stays
+  inside, using a blocked emergence cell. Control runs exercise recovery alone
+  and replacement alone and account for their complete draw groups using S-0109
+  claim 3 and S-0202 claim 10, including rejected ranged-draw values and infantry
+  creation effects. If recovery resumes an old animation rather than starting a
+  fresh one, or any draw remains unexplained, this setup is inconclusive.
+  Read the scenario stream before and after each tick and the labelled animation
+  delay and replacement creation sample. Expected: all recovery-animation draws
+  precede the replacement-creation group, with exactly the combined draw count.
+  Count only runs in which that allocation differs from the reversed allocation.
+  A reversed labelled allocation falsifies the ordering; matching neither sends
+  the draw accounting back for investigation. Also repeat S-0402 H22's working
+  construction-state gate with its completion tick aligned to a due update:
+  that update sees the completed construction state, not the preceding tick's.
+  H22 owns the resulting group transition and emergence rules.
+- *Part D, delivery removal in the master's turn:* allow a slave to emerge, then
+  pack and redeploy its master while that slave remains on the map, preserving the
+  group under S-0415 claims 6 and 10. The new building master is later than that
+  slave in update order. Produce an armed test vehicle observer after redeployment,
+  with a stationary enemy target in range, a one-tick shot delay and no firing or
+  damage effects except its projectile. Record a delivery-ready slave at the end
+  of the preceding tick and exactly one delivery in a due group update. Count only
+  when the recorder's update order puts the observer directly after the master,
+  its weapon is ready, and no other object enters or leaves play in the master's
+  turn. Expected with the removal-skip switch on: the observer does not fire in
+  the delivery tick, but fires in the next tick. Its normal shots otherwise occur
+  every tick. For a control, use a pre-placed building master and produce the
+  observer before its slaves first emerge: those slaves are later than the master.
+  A qualifying delivery there costs the observer no turn. Firing in the first
+  test's delivery tick, or a missed turn in the control caused solely by delivery,
+  falsifies the counting-removal consequence. With the switch off, neither case
+  loses a turn. The named observer's ordinary projectiles are exempt from the
+  common unexpected-firing rule; reject ticks with any additional removal before
+  the observer, so a different cause cannot explain its silence.
+
 **Production-start assignment (claim 8).** S-0404 P11 B and C own the shared measurement
 scenarios: game speed 6, quiet test maps with named test data, scripted normal input and a
 read-only random-state and item-creation recorder. P11 B reverses line creation order while
@@ -1161,6 +1302,10 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
 
 ## Open questions
 
+- Q-0412 question 1 is answered by claim 12 together with S-0402 claims 21 and 26.
+  Questions 2 to 7 belong to S-0402: claims 21 and 26 already cover them except
+  negative slave capacity in question 4, whose resource and load consequences
+  remain open there. The request must not be closed until that remaining part is answered.
 - Network games are out of scope here, as in S-0201 (claim 13) and S-0202 (claim 12). They run the
   same parts of a tick plus some of their own, and take the orders of every player. A future
   multiplayer spec owns them, including their extra draws from the scenario random stream.
@@ -1170,7 +1315,8 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
 - Whose turn removes an infantry unit when its death sequence completes is not traced (claim 6).
   Scenario O9 tests the unit's own turn.
 - Whose turn performs boarding, the boarding unit's or the transport's, is not traced, and neither
-  is whose turn performs going inside anything else. It decides which object loses its turn when a
+  is whose turn performs other entry exchanges, except slave delivery, which claim 12 places
+  in the master's turn. It decides which object loses its turn when a
   unit boards or goes inside (claim 10) and whether a boarding open-topped passenger's next turn is
   its second of the tick (claim 11).
 - The earlier simultaneous-item-start allocation question is resolved by S-0404 claim 11's
