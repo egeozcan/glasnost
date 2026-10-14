@@ -205,11 +205,12 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 
 **Coverage.** `convert::coverage` gives every (category, key) of the rules and art files an outcome: `field` and `render` for keys interpreted per an approved spec, `folded` for type lists and similar, `unsupported` for keys kept as INI text because no approved spec maps them yet (the `spec` column names the specs whose import mapping mentions a key that is not converted yet).
 
+Q-0234 is answered by S-0003 claim 23: the virtual-purifier, extra-credit and computer-timer lists read their items in the decimal-prefix form of claims 20 and 22 (`Form::Maxima`, 511 bytes), and the importer warns for items with no digit, text after the number or a 32-bit wrap, and for a cut beyond 511 bytes.
+
 **Open requests and their placeholders.**
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `convert::sim` (`Form::Ints`: the economy lists `AIVirtualPurifiers`, `MultiplayerAICM`, `AIHateDelays`) | the items of a general integer list are read with S-0003 claim 3's integer form within 127 bytes; an empty item takes no place; an unreadable item gives 0 and keeps its place (Q-0171's former workaround; S-0003 claim 22 answers it for the auto-deploy list only) | Q-0234 |
 | `render::voxel::section_order` | mixed-depth ties outside F8's six rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24) | Q-0215 |
 | `render::voxel::column_steps` | a top-down normal-mode-0 span applies its empty count after its colours, as claim 35's table has it; claim 35's colour-height relation applies it before them, and MS-26's two-span row follows the relation (S-0105 claim 35) | Q-0216 |
 
@@ -448,14 +449,14 @@ Interim rules of the game client, each tied to a request:
 | `glasnost_ui::hud::Layout` | our own sidebar layout: the radar, credits and power bar, sell, repair and power buttons, four tabs, a grid of icon slots with scroll buttons, and the options button; the build clock is a veil of stage/55; "Ready" and "On hold" labels | Q-0276 |
 | `session` | the system pointer; no action cursors | Q-0277 |
 | `session::pointer_up`, `play::select_box` | a left drag of more than 4 px selects the local house's selectable mobile objects whose reference point is inside the box; Shift adds to the selection; an empty box clears it | Q-0278 |
-| `client::update`, `session::edge_scroll` | 16 px per drawn frame within 4 px of a window edge (corners scroll diagonally) or while an arrow key is held, also while paused, then S-0101 claim 8's limits | Q-0279 |
-| `install::slot_swatches` | a lobby swatch is the colour definition of the slot through S-0103's HSV formula; grey when missing | Q-0280 |
 | `install::offered_countries`, `glasnost_ui::setup` | the setup offers the non-passive countries except the neutral and special houses', in registration order; at most 8 slots, the first always the person's; teams 1 to 4 or none | Q-0281 |
 | `play::say` | status messages are our own texts at the battlefield's top left, at most 4 at a time, each for 90 ticks | Q-0282 |
 | `glasnost_ui::hud` | a tab with a newly ready item flashes, lit while (tick / 10) is even | Q-0283 |
 | `play::click_map` (sell mode) | walls get no sell order | Q-0284 |
 | `play::end`, `glasnost_ui::end` | the end screen shows, per house, the result, objects built, kills, losses and the house's combat score; the time is the last tick × the paced period; there is no harvested figure | Q-0285 |
 | `client::key`, `window::GameApp::modifiers` | S stop, X scatter, G guard, D deploy, C cheer; Shift is force-select, Ctrl or Cmd force-fire, Alt force-move; attack-move mode has no key; Escape opens and closes the options menu; no route mode | Q-0286 |
+
+Answered requests of the game client: Q-0279 by S-0101 claims 12 to 15 (`game::scroll`: edge scrolling at the outermost client pixel with F9's direction, momentum and magnitude table scaled by the imported `ScrollMultiplier`, 21 px per held arrow, both once per unfrozen cycle; the scroll index is the default 3, since our engine has no settings file yet, and no order block or timed freeze is modelled), and Q-0280 by S-0103 claims 11 and 12 (`install::slot_swatches`: the fixed slot colours after the 16-bit step).
 
 Known limits:
 
