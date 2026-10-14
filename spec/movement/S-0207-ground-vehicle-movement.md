@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -52,7 +52,8 @@ and a *fresh search* (its claim 20). From S-0215: *behaviour* and the behaviour 
 the *scatter* and *paralysed* properties of a behaviour, *falling back to rest* (its claim 13), an
 *override* (its claim 10), *target*, *destination* and *approach destinations* (its Terms). From
 S-0211: the land type *tunnel* and the *high-bridge cell* (its claim 15). Whether a drive vehicle
-is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
+is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here. The *exit apron cell*
+is the target cell of a ground vehicle factory's exit track (S-0417 Terms and claim 3).
 
 - **Drive vehicle.** A vehicle whose locomotor is the driving locomotor (wheeled and tracked ground
   vehicles in stock data), that is, an object of the vehicle type kind (glossary *vehicle*) that
@@ -391,9 +392,7 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       *n* = Δ*x*² + Δ*y*² + Δ*z*², the distance in leptons from the vehicle to its move destination
       taken with S-0204's table square root (F5), not the exact root. From *n* = 16641 (129 leptons)
       on, *d*ₘ can be one lepton less than ⌊√*n*⌋ (S-0204 claim 5), so near the threshold the
-      braking test *d*ₘ < *D*ₛ can hold one lepton earlier than with the exact root. The new
-      fraction *ρ*′ is given by the first row of this table whose condition
-      holds, and is then clamped to 0 to 1:
+      braking test *d*ₘ < *D*ₛ can hold one lepton earlier than with the exact root. When more than one condition below holds, the earlier condition in the table determines the update. Apply that condition's stated result, then clamp the resulting fraction to the interval [0, 1]. If no condition before “Steady” holds, the fraction is unchanged.
 
       | Case | Condition | New fraction *ρ*′ |
       |---|---|---|
@@ -445,8 +444,9 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       applies, and a passive vehicle does not copy); medium for case 1 (the speed rule; when the
       state begins and ends is S-0210's confidence), for case 3 and for car chains
 
-    These rules hold on the tracks of this spec (T1 and T2). The separate tracks that buildings use
-    are outside it (Open questions).
+    These rules hold on the tracks of this spec (T1 and T2). The factory exit track is
+    S-0417 table T1; its speed-fraction rules are S-0417 claims 5 and 6. Other separate tracks
+    that buildings use remain outside this spec (Open questions).
 
 11. **Stopping.** When a vehicle's move is stopped or cancelled while it is on a track, its move
     destination is cleared, and its target fraction becomes min(*ρ*ₜ, *F*₀.₃). It finishes the track
@@ -793,34 +793,43 @@ is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here.
       move-anywhere, so a vehicle accepts them even when it has a destination.
     - The scatter off a building of S-0215 claim 28 and the scatter from damage of S-0215 claim 19
       are forced and have no threat point, so they follow the first case above.
+    - Factory apron clearing (S-0417 claim 4) sends forced, move-anywhere requests to every
+      object listed in the selected ground layers, including moving receivers. In the exit apron
+      cell the request has no threat point: an accepting vehicle takes no draw, uses the
+      nearby-cell search above and does not queue a behaviour. In an occupied apron neighbour
+      the threat point is the exit apron cell's centre: an accepting vehicle takes one draw over
+      0 to 2, no draw over 1 to 4, and queues *move* to the candidate chosen above. Forced and
+      move-anywhere bypass only cases c and e, not the other refusals; case j still applies to
+      a neighbour's threat-point request.
     - The search and the eight neighbours are centred on the vehicle scatter centre cell (Terms),
       never on the cell of the move destination as such. A drive vehicle that stands still, turns in
       place or waits between tracks searches around its own cell; one that is on a track searches
       around the cell of that track's target, the cell one step ahead (two for a two-cell curve).
-      The known senders of a request that a vehicle with a destination accepts (move-anywhere) send
-      it only to a vehicle that does not count as moving (S-0209 claims 5 and 8, claim 15 here,
-      S-0212 claim 27), so in stock play the
-      centre is almost always the vehicle's own cell. The track-target case arises when the vehicle
-      is on a track without a destination, for example while it finishes its track after a stop
-      order.
+      The blocked-step and crowding senders (S-0209 claims 5, 8 and 12, claim 15 here,
+      S-0212 claim 27) normally reach receivers that do not count as moving. Factory apron
+      clearing has no such restriction. A moving drive vehicle that accepts that request searches
+      around its track target, not necessarily the apron cell that lists it. The track-target case
+      also arises without a destination, for example while it finishes its track after a stop order.
     - Backing: `measurable` (scenario D18: part a for the search without a draw and the behaviours
       left unchanged, part b for case e, part c for case a, part d for case b, part e for the
       threat-point case and its direction draw, part f for case d, part g for case f; scenario D17
       part a for a move-anywhere request, part c for the refusal in *sticky*; D18 part h for case
-      h; D18 part i for the vehicle scatter centre cell on a track and at rest). `unmeasured` for these parts, each for the reason given:
+      h; D18 part i for the vehicle scatter centre cell on a track and at rest; D18 part j for
+      factory clearing, including case j and moving receivers; S-0417 U5 for the two clearing
+      request kinds). `unmeasured` for these parts, each for the reason given:
       - case c: every sender of a request to a vehicle whose options are known sends a forced one
-        (S-0209 claim 12, S-0215 claims 19 and 28, claim 15 here), so no setup is known that sends
+        (S-0209 claim 12, S-0215 claims 19 and 28, S-0417 claim 4, claim 15 here), so no setup is known that sends
         a vehicle a request that is not forced.
       - case g: which effects switch a locomotor off belongs to specs not yet written, so no setup
         can yet be defined.
-      - cases i and j and the draw over 1 to 4: the only identified sender of a request with a
-        threat point is the bunker rule of S-0215 claim 17, which sends a forced request that is
-        not move-anywhere. So the draw over 1 to 4 (which needs a request that is not forced) and
-        case j (which needs a move-anywhere request) never happen in a known setup, and no setup is
-        known that times that request to a vehicle that is unloading passengers at that moment
+      - case i: no setup is known that times a threat-point request to a vehicle unloading
+        passengers while it passes the earlier refusals.
+      - the draw over 1 to 4: both identified threat-point senders, the bunker rule of S-0215
+        claim 17 and factory apron-neighbour clearing of S-0417 claim 4, send forced requests.
+        Neither reaches this non-forced acceptance draw
     - Confidence: medium for cases a to f, h and i, for the search without a draw and for the
-      behaviours left unchanged, and for the threat-point case and its draws (read; the bunker rule
-      of S-0215 claim 17 is the only identified sender). Low for cases g and j. High for the vehicle
+      behaviours left unchanged, and for the threat-point case and its draws (read; known senders
+      are S-0215 claim 17 and S-0417 claim 4). Low for cases g and j. High for the vehicle
       scatter centre cell of a drive vehicle (the heading point was read wherever it is set and
       cleared); medium for the tunnel exit; the heading point of the ship and hovering locomotors is
       their specs'
@@ -2269,7 +2278,25 @@ cell before *X*.
     stands still, the same around its own cell; in neither run a cell chosen around *X*. If *V*
     has no destination only once it stands still, the first run is inconclusive and only the
     second applies.
-- *Runs:* 3 each; (a) at three different *N*.
+  - (j) Factory clearing. Use S-0417 U5's stock ground vehicle factory and blocked exit apron
+    cell E, game speed index 2, director and mods off, with a bystander computer player kept
+    outside the observed factory and neighbouring cells. Place an idle drive vehicle in E,
+    then in a separate run in an occupied neighbour of E while a persistent scatter-refusing
+    unit blocks E. Record requests, destinations, current and queued behaviours and scenario
+    stream state. Expect no scatter draw or queued behaviour in E; in the neighbour expect
+    one draw over 0 to 2, no draw over 1 to 4, and *move* queued, with destinations given by
+    claim 16. For case j, use a turreted vehicle in that neighbour, with a destination and a
+    target making its turret turn but not its body. Time production completion by scripted
+    input so a clearing request arrives in that state. Expect refusal, no destination change
+    and no scatter draw; a control with the turret steady accepts when no other refusal holds.
+    Separately time a request while a drive vehicle with a destination crosses E or its
+    neighbour on a track. When accepted, expect the new destination to be selected around
+    its heading point's cell, not around the cell listing it. Runs without the recorded
+    required recipient state are inconclusive. Void runs with unrelated activity in the
+    observed area. Falsifiers: wrong draw count, behaviour change in E, acceptance in the
+    qualifying turret-turning case, refusal in its eligible control, or a destination differing
+    from claim 16's search or candidate selection around the recorded scatter centre.
+- *Runs:* 3 each; (a) at three different *N*; (j) three qualifying requests per recipient state.
 - *Falsified if:* in (a) a draw is recorded, the behaviour becomes *move*, or another cell is chosen,
   in (b) the destination changes, in (c) or (d) a vehicle moves or gets a destination, in (e) no draw, two draws, or no
   *move*, in (f) *T* gets a destination while it turns or none in the control, in (g) the deployed
@@ -2528,13 +2555,14 @@ cell before *X*.
   starts on or off the bridge deck (claim 5 covers only the changes made while it drives). The
   specs of map placement (S-0009) and of the structures own this.
 - The hovering locomotor's fresh search after a wait (claim 19 d) is read as being retried on every
-  tick until *R* has run out; scenario D21 run 3 records the search ticks.
+  tick until *R* has run out; scenario D21 run 4 records the search ticks.
 - Whether a vehicle at rest keeps its leftover budget on every way of arriving (claim 3). Scenario
   D8 part b tests the end of an ordinary move only.
 - Whether interpolation (claim 4) can move a vehicle into a cell that it has not yet claimed under
   the occupancy rules (S-0209). S-0209's next revision should settle this.
-- The tracks used by vehicles leaving factories and other buildings are separate engine data and
-  belong to the structures specs. A reading, not exercised (low confidence), points to two rules
+- S-0417 table T1 and claims 5 and 6 now specify the vehicle-factory exit track and its initial
+  and updated speed fractions. Other building tracks remain separate engine data belonging to
+  the structures specs. A reading, not exercised (low confidence), points to two rules
   for them. On such a track, a vehicle whose acceleration flag is on gets no update of claim 10 at
   all: none of its six cases applies (the braking and sinking floors and the crush slowdown
   included), and a leader copies nothing to its cars. A vehicle whose acceleration flag is off still
