@@ -2,7 +2,7 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -289,18 +289,26 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     opposed arrows cancel on their axis. Mouse and arrow requests add before the next displayed
     view position, subject to F5. Key down/up events take effect when accepted as input, not
     necessarily in the cycle in which the player physically presses/releases them (S-0213
-    claim 1). A modifier-assisted scroll is outside this claim.
-    - Backing: `measurable` (M7d, M7e)
+    claim 1). S-0213 claim 23 owns acceptance of arrow presses and releases during an
+    order block, including `quirks.blocked_arrow_events`. A modifier-assisted scroll is
+    outside this claim.
+    - Backing: `measurable` (M7d, M7e; S-0213 claim 23, scenario O22 for blocked input)
     - Confidence: high
 15. **Scrolling while paused or frozen.** Neither edge nor arrow scrolling continues during a
     stand-still for the options menu or lost focus, or during a frozen cycle. Drawn frames during
     a freeze do not imply scroll updates. Arrow scrolling also stops during a freeze if an arrow
     was already held before it began. A freeze does not itself clear edge momentum or held-arrow
     state: when unfrozen cycles resume, scrolling can resume without starting acceleration over.
-    Edge scrolling is suppressed during an order block. A previously held arrow continues
-    scrolling during its unfrozen cycles, although the block can prevent new inputs. This is presentation behaviour, not an additional game-speed path
-    to game state. S-0201 claims 8 to 11 already specify the stand-still/freeze distinction.
-    - Backing: `measurable` (M7f)
+    Edge scrolling is suppressed during an order block. Under S-0213 claim 23's default
+    input rule, arrow presses and releases made during the block are discarded: previously
+    accepted contributions remain unchanged and continue scrolling in unfrozen cycles.
+    Unblocking does not synthesize a press for an arrow first pressed during the block,
+    even if it remains physically held. Events already accepted into waiting inputs before
+    the block are not cancelled by this rule. S-0213 claim 23 also owns the alternative
+    input rule under `quirks.blocked_arrow_events`; neither setting permits scrolling during
+    frozen cycles or stand-stills. This is presentation behaviour, not an additional
+    game-speed path to game state. S-0201 claims 8 to 11 specify the stand-still/freeze distinction.
+    - Backing: `measurable` (M7f; S-0213 claim 23, scenario O22 for blocked input)
     - Confidence: high for scrolling suppression and retained state; medium for its visible
       resumption, which depends on accepted input and the pointer's position
 
@@ -880,8 +888,18 @@ a reading mistake.
     no backlog jump. A frozen-frame origin change or a fresh acceleration ramp without
     an intervening pointer/input change falsifies claim 15. Separately start a chrono flash
     while holding an edge, and in another run while holding an arrow: expect edge suppression
-    during its order block but continued held-arrow scrolling until its frozen cycles begin. These trigger fixtures
-    use S-0201's mappings, not a new pause input invented for this spec.
+    during its order block but continued held-arrow scrolling until its frozen cycles begin.
+    Extend these runs with S-0213 claim 23's scenario O22: a new press during the block
+    contributes nothing even after unblock while still held, whereas release or release/repress
+    during the block leaves a previously accepted contribution unchanged. An accepted release
+    after unblock ends that contribution; a fresh accepted press then starts it. Use O22's
+    separate fresh runs, initial-block variant, recorder, event-boundary checks and three repeats
+    per case. Read displacement as 21 pixels per unfrozen cycle per accepted arrow, with
+    addition/cancellation and F5 limits as in claim 14; frozen cycles still give zero.
+    Movement from a discarded new press, automatic start at unblock, or stopping from a
+    discarded release falsifies the default input rule. O22 also supplies the working unblocked
+    control. These trigger fixtures use S-0201 claim 11's mapping, not a new pause input
+    invented for this spec.
   - (g) Remove the saved scroll index for a fresh program start, then read the scroll-speed
     control and replay (b): expect index 3 and its displacement sequence. For a named loose
     test rules file with the edge multiplier omitted, remove that key from every applied
