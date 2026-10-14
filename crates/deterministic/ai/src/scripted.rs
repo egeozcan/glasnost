@@ -82,7 +82,7 @@ const SEARCH_STEP: i32 = 8; // nocite: tuning of our own opponent
 const GAP: i32 = 2; // nocite: tuning of our own opponent
 
 /// The largest ring of the placement spiral around the construction yard.
-const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
+pub(crate) const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
 
 /// What a type is for in the plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -181,7 +181,7 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
 }
 
 /// Whether an object is a construction yard (a factory of buildings).
-fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
+pub(crate) fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
     o.kind == Kind::Building
         && w.rules()
             .buildings
@@ -196,7 +196,7 @@ const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
 /// Whether a unit has nothing to do: no destination (or a cell destination
 /// it has as good as reached), no target, and a resting behaviour (or a
 /// move that has arrived).
-fn idle(w: &World, id: ObjectId) -> bool {
+pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         let arrived = match o.dest {
             None => true,
@@ -219,7 +219,7 @@ fn idle(w: &World, id: ObjectId) -> bool {
 }
 
 /// The squared distance between two cells.
-fn dist2(a: CellXY, b: CellXY) -> i64 {
+pub(crate) fn dist2(a: CellXY, b: CellXY) -> i64 {
     let dx = i64::from(a.x - b.x);
     let dy = i64::from(a.y - b.y);
     dx * dx + dy * dy
@@ -283,7 +283,7 @@ impl Script {
     }
 
     /// The types the house can build now for `role`, cheapest first.
-    fn candidates(&self, w: &World, role: Role) -> Vec<TypeRef> {
+    pub(crate) fn candidates(&self, w: &World, role: Role) -> Vec<TypeRef> {
         let mut v: Vec<TypeRef> = all_types(w)
             .into_iter()
             .filter(|&t| self.allowed(w, t, role) && tech::buildable(w, self.house, t))
@@ -292,7 +292,7 @@ impl Script {
         v
     }
 
-    fn own(&self, w: &World) -> Vec<ObjectId> {
+    pub(crate) fn own(&self, w: &World) -> Vec<ObjectId> {
         w.objects
             .values()
             .filter(|o| o.owner == Some(self.house) && o.on_map && o.health > 0)
@@ -301,7 +301,7 @@ impl Script {
     }
 
     /// The house's objects on the map that play `role`.
-    fn of_role(&self, w: &World, role: Role) -> Vec<ObjectId> {
+    pub(crate) fn of_role(&self, w: &World, role: Role) -> Vec<ObjectId> {
         self.own(w)
             .into_iter()
             .filter(|&id| {
@@ -313,7 +313,7 @@ impl Script {
 
     /// The house's construction yard or, before one exists, its first
     /// object's cell.
-    fn home(&self, w: &World) -> Option<CellXY> {
+    pub(crate) fn home(&self, w: &World) -> Option<CellXY> {
         let own = self.own(w);
         own.iter()
             .find(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
@@ -323,7 +323,7 @@ impl Script {
     }
 
     /// Whether the line of `t` holds an item or a queue.
-    fn busy(&self, w: &World, t: TypeRef) -> bool {
+    pub(crate) fn busy(&self, w: &World, t: TypeRef) -> bool {
         production::line_of(w, self.house, t)
             .is_some_and(|l| l.item.is_some() || !l.queue.is_empty())
     }
@@ -521,7 +521,7 @@ impl Script {
     }
 
     /// Enemy objects on cells the house sees, with their cells.
-    fn seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
+    pub(crate) fn seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
         let me = &w.houses[usize::from(self.house.0)];
         w.objects
             .values()
@@ -541,7 +541,7 @@ impl Script {
     /// The first cell of a square spiral around the construction yard where
     /// a place order for `t` is legal, the cell test passes and the
     /// foundation is free.
-    fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+    pub(crate) fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let home = self.home(w)?;
         // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
         let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
@@ -573,22 +573,36 @@ impl Script {
     /// Whether the foundation's cells hold no object and keep a gap of
     /// [`GAP`] cells to other buildings, so that units can leave the
     /// factories and reach the docks.
-    fn free(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
+    pub(crate) fn free(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
+        self.free_but(w, t, c, None)
+    }
+
+    /// [`Script::free`], not counting object `but`.
+    pub(crate) fn free_but(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>) -> bool {
         let cells = placement::foundation_cells(w, t.index, c);
-        w.objects.values().filter(|o| o.on_map).all(|o| {
-            // A building's position is its top-left cell's centre.
-            let tl = o.pos.cell();
-            if o.kind == Kind::Building {
-                let (fw, fh) = o.foundation;
-                cells.iter().all(|k| {
-                    k.x < tl.x - GAP
-                        || k.x > tl.x + fw - 1 + GAP
-                        || k.y < tl.y - GAP
-                        || k.y > tl.y + fh - 1 + GAP
-                })
-            } else {
-                !cells.contains(&tl)
-            }
-        })
+        // Only what the house knows: its own objects and those on cells it
+        // sees (the AI sees only its own house's shroud).
+        w.objects
+            .values()
+            .filter(|o| {
+                o.on_map
+                    && Some(o.id) != but
+                    && (o.owner == Some(self.house) || shroud::seen(w, self.house, o.pos.cell()))
+            })
+            .all(|o| {
+                // A building's position is its top-left cell's centre.
+                let tl = o.pos.cell();
+                if o.kind == Kind::Building {
+                    let (fw, fh) = o.foundation;
+                    cells.iter().all(|k| {
+                        k.x < tl.x - GAP
+                            || k.x > tl.x + fw - 1 + GAP
+                            || k.y < tl.y - GAP
+                            || k.y > tl.y + fh - 1 + GAP
+                    })
+                } else {
+                    !cells.contains(&tl)
+                }
+            })
     }
 }

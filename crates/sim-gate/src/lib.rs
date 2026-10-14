@@ -8,8 +8,14 @@
 //! `golden/scripted.txt`, `golden/combat.txt` and `golden/skirmish.txt`
 //! exactly. The skirmish's replay is recorded by running its scripts, then
 //! replayed without them.
+//!
+//! The two AI duels (M5b) play our own AI against itself on the two
+//! synthetic maps of `glasnost_ai::fixture` through `glasnost_ai::game::Game`,
+//! whose hash covers the world and the AI's state; halfway through each run
+//! the game is saved and loaded, the loaded game must hash alike, and the
+//! run goes on from the loaded game (`golden/duel.txt`, `golden/duel-diagonal.txt`).
 
-use glasnost_ai::{fixture, skirmish};
+use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
 
 /// Seed of the gate's replay.
@@ -37,11 +43,21 @@ pub enum Scenario {
     Combat,
     /// The scripted skirmish (M5a).
     Skirmish,
+    /// Our own AI against itself on the first synthetic map (M5b).
+    Duel,
+    /// Our own AI against itself on the diagonal synthetic map (M5b).
+    DuelDiagonal,
 }
 
 impl Scenario {
     /// Every scenario, in gate order.
-    pub const ALL: [Scenario; 3] = [Scenario::Scripted, Scenario::Combat, Scenario::Skirmish];
+    pub const ALL: [Scenario; 5] = [
+        Scenario::Scripted,
+        Scenario::Combat,
+        Scenario::Skirmish,
+        Scenario::Duel,
+        Scenario::DuelDiagonal,
+    ];
 
     /// The scenario's name, also its golden file's stem.
     pub fn name(self) -> &'static str {
@@ -49,6 +65,8 @@ impl Scenario {
             Scenario::Scripted => "scripted",
             Scenario::Combat => "combat",
             Scenario::Skirmish => "skirmish",
+            Scenario::Duel => "duel",
+            Scenario::DuelDiagonal => "duel-diagonal",
         }
     }
 
@@ -60,7 +78,7 @@ impl Scenario {
     /// The ticks of a full run of the scenario.
     pub fn ticks(self) -> i32 {
         match self {
-            Scenario::Skirmish => SKIRMISH_TICKS,
+            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal => SKIRMISH_TICKS,
             _ => TICKS,
         }
     }
@@ -68,15 +86,56 @@ impl Scenario {
     /// Every how many ticks the golden file keeps a hash.
     pub fn stride(self) -> usize {
         match self {
-            Scenario::Skirmish => SKIRMISH_STRIDE,
+            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal => SKIRMISH_STRIDE,
             _ => 1,
         }
     }
 }
 
+/// The state hash of an AI duel after each tick until the game is over or
+/// `ticks` ticks ran; saved and loaded halfway (panics when the loaded game
+/// hashes differently).
+fn duel(map: &glasnost_map::Map, name: &str, ticks: i32) -> Vec<String> {
+    let mut g = Game::new(
+        fixture::rules(),
+        map,
+        name,
+        testkit::catalogue(),
+        fixture::setup(SEED),
+    )
+    .expect("the synthetic duel loads");
+    let mut out = Vec::new();
+    while g.world.tick < ticks {
+        if g.world.tick == ticks / 2 {
+            let loaded = Game::load(&g.save(), fixture::rules(), testkit::catalogue())
+                .expect("the duel's save loads");
+            assert_eq!(
+                loaded.state_hash(),
+                g.state_hash(),
+                "{name}: a save and load keeps the state"
+            );
+            g = loaded;
+        }
+        g.step();
+        out.push(g.state_hash());
+        // As the skirmish: stop after the tick in which the game ends.
+        if g.outcome().is_some() {
+            break;
+        }
+    }
+    out
+}
+
 /// The state hash after each of the first `ticks` ticks of a replay (the
-/// skirmish stops earlier when its game is over).
+/// skirmish and the duels stop earlier when their game is over).
 pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
+    match scenario {
+        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks),
+        Scenario::DuelDiagonal => {
+            return duel(&fixture::map_diagonal(), "synthetic-duel-diagonal", ticks);
+        }
+        _ => {}
+    }
     if scenario == Scenario::Skirmish {
         let run = skirmish::run(
             fixture::rules(),
@@ -104,7 +163,9 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     let (rep, rules) = match scenario {
         Scenario::Scripted => (testkit::scripted_replay(SEED, ticks), testkit::rules()),
         Scenario::Combat => (testkit::combat_replay(SEED, ticks), testkit::combat_rules()),
-        Scenario::Skirmish => unreachable!("handled above"),
+        Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal => {
+            unreachable!("handled above")
+        }
     };
     let mut out = Vec::with_capacity(usize::try_from(ticks).unwrap_or(0));
     rep.run(rules, &testkit::map(), testkit::catalogue(), |w| {
