@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1688,7 +1688,7 @@ record says so and the side stays `unmeasured` (Open questions).
   cannot select it. The selling variant pays no refund and does not resume selling (S-0312).
   Refusal of selection while the building is present, visible, selectable and not being
   erased falsifies the claim. A run with no click inside the interval is inconclusive, not
-  evidence of refusal. Tool: scripted input and read-only recorder under the measurement setup.
+  evidence of refusal. The measurement procedure supplies the specified input and records the listed state and selection observables under the measurement setup.
 
 **Scenario T13: non-producing factory categories (claim 17).** Use the usual isolated test map,
 stock executable, speed index 6, director and unrelated mods off, and named test data as in
@@ -1696,13 +1696,17 @@ T10 and S-0003 V16. The test data gives
 an own visible selectable building a recognised non-producing factory category from S-0003
 C19, no weapon, no passengers and no other deployment ability. Select it alone and click it
 on itself before it is marked primary: expected *deploy* and a recorded primary order, not
-production eligibility. In separate runs give that same category a repair-depot flag, a
+production eligibility. After that order applies, click it on itself again: expected *nothing*
+and no further primary order (row B3). Repeat the first click with the explicit no-factory
+value from S-0003 Import mapping C19 as a control: expected no primary order. Thus recognised
+non-producing categories are distinguished from no factory as well as from producing kinds.
+In separate runs give that same category a repair-depot flag, a
 cloning flag, or neither, and click an empty visible reachable cell. Expected: *move* and a
 guard-spot order in the first two runs, no order in the third. Record cursor, issued orders
 and imported category, not the availability of production as a proxy for the click. Falsified
-by absence of the primary order, loss of the guard-spot order in either independently
-rally-capable variant, or a rally order from the category alone. Tool: scripted input and the
-read-only order recorder. These named-data variants are not stock-data measurements.
+by absence of the first primary order, another primary order after the designation has
+applied, a primary order from the no-factory control, loss of the guard-spot order in either
+independently rally-capable variant, or a rally order from the category alone. The measurement procedure supplies the specified input and records the listed orders and imported category under the measurement setup. These named-data variants are not stock-data measurements.
 
 **Coverage of table M.** Each case gives its order in these steps. *Move*, *no-move*: Scenarios T2, T7
 and T10 (lines I9, I27 and V6, self). *Attack-move to a place* and *attack-move on a target*: T3.
