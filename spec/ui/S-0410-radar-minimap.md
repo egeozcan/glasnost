@@ -2,7 +2,7 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -377,8 +377,14 @@ The halving belongs to the tile colour only: the other colours are used as given
     players place on the map) and the outline that marks the battlefield view's part of the map are
     drawn over the radar map; a click on the radar
     map moves the battlefield view (S-0102, *view jump*). Their details belong to the interface
-    specs.
-    - Backing: `unmeasured` here (pointer only; the owning specs carry the scenarios)
+    specs. S-0701 Formulas F7 owns radar-event repeat suppression: the per-kind radii,
+    which kinds suppress nearby repeats, and the lifetime after the zoom-in phase. Its
+    scenario G3 covers unit production, base attacks and harvester attacks; the remaining
+    kinds and cross-creator suppression remain `unmeasured` there. The zoom-in duration,
+    whether it advances with ticks or drawn frames, and whether it advances without radar
+    remain unresolved in S-0701; the post-zoom lifetime is not the total suppression duration.
+    - Backing: `unmeasured` here (pointer only; S-0701 F7 carries the suppression backings
+      and scenario G3, including its unmeasured cases)
     - Confidence: high that they exist
 
 ## Formulas
@@ -917,6 +923,10 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
 
 ## Open questions
 
+- Radar-event repeat suppression is owned by S-0701 F7, not an unresolved radius or
+  post-zoom lifetime here. Its unmeasured kinds and cross-creator cases retain that backing,
+  the zoom-in duration and its advancement with or without radar remain open there
+  (S-0701 scenario G3).
 - Which pixels the mean of F6 rounds either way when it lies within about 10⁻⁶ of an exact half
   (the original sums in floating point and the order of its summation was not fixed here): not
   measurable by design; an implementation may differ there.
