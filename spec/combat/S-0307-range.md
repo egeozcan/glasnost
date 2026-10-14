@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1428,8 +1428,11 @@ choice's use and the ordinary walking outcome; the glossary defines the close-ra
 These behavioural changes are already in the approved copies as well as the current drafts.
 Sign-off should retain the failed-approach row's agreement with claim 17, including close-range
 failures, and the shortcut's target-reference desired point and ground occupancy inputs in
-claim 22 b and c. S-0215's cross-spec hand-off note still names S-0307 revision 6 as a version
-to hand off together: update that note to recognise approved revision 9 and this revision 10,
-which retain those search contracts. Its claim 37's approach processing and destination
-retention agree with this spec and require no behavioural change. The other S-0212 coordinated
-movement checks are owned by S-0207 and S-0208.
+claim 22 b and c. S-0215's current cross-spec hand-off note now recognises approved S-0307
+revision 10 and its current correction draft, retaining claims 15 to 25. Its claim 37's
+approach processing and destination retention agree with this spec and require no behavioural
+change. S-0208's current hand-off note likewise retains claim 17's agreement with S-0212
+claim 25. Confirm these matching contracts at joint sign-off; no further edit to either spec
+is requested here. The shared teleport-ground-reservation and same-tick search and landing
+checks named by S-0215 concern S-0207, S-0209, S-0212 and S-0208; they do not change this
+spec's approach-position selection or failed-approach search parameters.
