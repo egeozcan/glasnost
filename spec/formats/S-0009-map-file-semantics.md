@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -42,9 +42,15 @@ already present in approved S-0009 revision 14 and retained in approved revision
 
 **Joint hand-off checks.** Claim 29 and the header-pair Import mapping agree with S-0003
 claim 9: unread components are unspecified in the original, with deterministic completion
-only in our engine. S-0412 claim 14 and its ordering table must allow the game-start
+only in our engine. S-0412 claim 14 and its ordering table already allow the game-start
 tile-animation draws of S-0202 claim 14 after secret-lab choices; those choices are not
-necessarily the last draws before tick 0.
+necessarily the last draws before tick 0. S-0407 claim 14 already agrees with this order and
+no longer requests a correction to S-0412. Joint sign-off confirms these current passages,
+S-0414's end-test and end-delay rules used by S-0412 claim 11, and the standard versus
+all-base-units scope and shared placement-search reuse described above. No further
+S-0009 scope change is required. Downstream particle and smudge draw counts remain
+unresolved (S-0202 claims 10 and 14); neither these checks nor the loading-order table
+treats them as zero.
 
 ## Terms
 
@@ -901,8 +907,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       here: M16's older discriminating variants require network games, now deferred, and no
       equivalent in-scope setup is established. Cleanup's position after the second pass,
       removal-cell recalculations and conditional tile-animation draws are likewise
-      `unmeasured` here: S-0202 R11 reuses M16 variant A's deferred network setup,
-      not an established no-computer-player skirmish fixture. That AI houses count as computer players
+      `unmeasured` here, in agreement with S-0202 claim 14: its R11 is now deferred
+      because the former proposal reused M16 variant A's network setup, and no
+      discriminating no-computer-player skirmish fixture is established. That AI houses count as computer players
       is our engine's reading of the condition (design), not an oracle observation.
     - Confidence: high that a removed house is gone with its objects and that the house after a
       removed one is kept; medium for the condition; low for the trigger removal (including that tags created
@@ -1287,9 +1294,12 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     damaged variant when the building is damaged (S-0108 claim 12).
 
     The building fields that change the start:
-    - **Switched-on flag** (default set): when it is 0, the building starts switched off, exactly
-      as if its owner had switched it off in play (S-0405 claim 10; S-0108 claim 13
-      for its slot animations). When it is set, nothing changes.
+    - **Switched-on flag** (default set): when it is 0, the building starts switched off only
+      when its type has a base drain above 0 or the needs-power flag. Otherwise it stays
+      switched on, including a pure producer with neither condition. Firestorm-wall types
+      are not excluded from this startup rule, unlike later power orders. A set or absent
+      flag leaves the building switched on (S-0405 claim 18 and scenario W13; later orders
+      follow its claim 10; S-0108 claim 13 owns the slot-animation consequences).
     - **Upgrades.** With upgrade count *c* (default 0), each of the first min(*c*, 3) upgrade name
       fields that names a building type is placed as an upgrade of this building: an object of that
       type, for the same owner, at the same cell and facing, right after the building. A name that
@@ -1324,8 +1334,9 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     house may read the three computer flags and choose to reproduce the original's treatment of
     the building through ordinary orders.
     - Backing: `measurable` (scenario M21: variant A for the complete idle start, the slot starts
-      and the damaged variant, variant B for the sprite turret slot, variant C for the switched-off
-      start, variant D for upgrades and the carried-over field). The effects of the three
+      and the damaged variant, variant B for the sprite turret slot, variant C for an eligible
+      switched-off start, variant D for upgrades and the carried-over field; S-0405 W13 for
+      the startup power-state conditions and firestorm-wall cases). The effects of the three
       computer flags are `unmeasured` here: the repair flag's effect is S-0314's (its scenario
       H9 measures the gate), and the sell and rebuild flags act only through the computer
       players' base logic, which no scenario of this spec observes. The *guard* start is
@@ -3164,9 +3175,11 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     *Expected:* no turret animation is drawn at placement (claim 40). *Falsified if* the turret is
     drawn from the first tick. A third copy built in play by the human player is the control: its
     turret appears when it completes.
-  - (C) A stock building with powered slot animations, once with the switched-on flag 0 and once
-    with it absent. *Expected:* the first starts switched off (its powered animations frozen as
-    for a building switched off in play), the second runs. *Falsified if* both behave alike.
+  - (C) A stock building with powered slot animations and either a positive base drain or the
+    needs-power flag, once with the switched-on flag 0 and once with it absent. *Expected:*
+    the first starts switched off (its powered animations frozen as for a building switched
+    off in play), the second runs. *Falsified if* both behave alike. S-0405 W13 supplies the
+    pure-producer and firestorm-wall controls for the startup conditions.
   - (D) A stock building that accepts upgrades, with upgrade count 1 and one valid upgrade name,
     then a second building entry with upgrade count 1 and no upgrade name field. *Expected:* both
     buildings show the upgrade (the second through `quirks.upgrade_fields_carry_over`). *Falsified
