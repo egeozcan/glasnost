@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -499,9 +499,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       and claim 26's row 1, in *area guard*; both use the same rule). At a processing of *guard* or
       *area guard*, the slaves wake exactly when
 
-      > (*k* + *s*<sub>m</sub> < *t*) AND group-at-rest AND
-      > (owner-is-computer-controlled OR miner-cell-is-*tiberium* OR
-      > ((*k* + *s*<sub>g</sub> < *t*) AND short-scan-finds-a-cell)).
+      > The slaves wake under this rule only when the current tick is later than the sum of the kick delay and the current behaviour's start tick, and the group is at rest, and at least one of these alternatives holds: the owner is computer-controlled; the miner stands on tiberium land; or the current tick is later than the sum of the kick delay and the group's last-rest tick and the short-scan search finds a cell.
 
       Here *k* is the kick delay in ticks, *s*<sub>m</sub> is the current behaviour's start tick,
       *s*<sub>g</sub> is the group's last-rest tick, and *t* is the tick number. “Group at rest”
@@ -580,11 +578,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       mapping; the dock list is not consulted here), or when it is full and still moving. In the
       original this rule is reached only for a human-controlled owner (a computer-controlled owner
       gets claim 13's rule instead); in our engine it applies to every player house.
-    How it teleports is the movement specs' (the teleport locomotor).
-    - Backing: `measurable` (scenario H8; its part g for the "full and still moving" trigger,
-      `unmeasured` if no run reaches it)
-    - Confidence: medium; high for dropping a destination when seeking; low for the "full and
-      still moving" trigger
+    How it teleports is S-0207 claim 20's. A vehicle whose type has the harvester flag does not
+    phase in after a jump (S-0207 claim 20 f).
+    - Backing: `measurable` (scenario H8; S-0207 scenario D22 run 2 for no phasing in; H8 part g
+      for the "full and still moving" trigger, `unmeasured` if no run reaches it)
+    - Confidence: medium; high for dropping a destination when seeking and for no phasing in.
+      Low for the "full and still moving" trigger
 
 ### A building's free unit
 
@@ -838,7 +837,7 @@ select which harvester takes the earlier turn.
 - **Harvester truce.** Out of scope: the original's lobby has a harvester-truce setting (harvesters
   immune to damage), but its skirmish start writes it off in every skirmish (S-0412, claim 1), so
   harvesters take damage normally and nothing in this spec depends on it.
-- `quirks.table_root_distance` (S-0204) covers the too-far and wait distances of claim 9.
+- `quirks.table_root_distance` (S-0204) covers the too-far and wait distances of claim 9. Default: the original's tabulated square root, truncated to an integer. With the switch off, use the exact integer square root, ⌊√*n*⌋, of the squared distance instead.
 - `quirks.chop_rounding` (S-0205) covers F3.
 - `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8),
   `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
