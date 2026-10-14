@@ -454,6 +454,12 @@ fn final_tick_adds_nothing() {
     common::run(&mut w, 1);
     assert_eq!(w.tick, 2, "the final tick added nothing");
     assert!(victory::outcome(&w).is_some());
+    // Three ticks ran; a replay runs to that count and stops after the final tick.
+    assert_eq!(glasnost_sim::tick::ticks_run(&w), 3);
+    let rep = glasnost_sim::save::Replay::new(w.rules(), "t", s.setup.clone());
+    let mut u = w.clone();
+    rep.run_on(&mut u, 10, |_| {});
+    assert_eq!(u.tick, 2, "no tick runs after the final one");
 }
 
 // spec: S-0414 claim 9 (a house defeated during the end delay loses; the delay restarts only for a person-played house with a win pending; quirks.defeat_during_end_delay)

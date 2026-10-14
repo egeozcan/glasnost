@@ -11,6 +11,14 @@ use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
 use crate::{drive, infantry, occupancy, orders, process, turret, walk};
 
+/// The number of ticks that have run: the tick number, and one more once
+/// the final tick has run, since that tick adds nothing to the tick number
+/// (S-0201 claim 1).
+pub fn ticks_run(w: &World) -> i32 {
+    // spec: S-0201 claim 1 (the final tick runs but leaves the tick number at itself)
+    w.tick.wrapping_add(i32::from(w.econ.end.finished))
+}
+
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
     // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 13, 14, then the turn pass, row 5)
