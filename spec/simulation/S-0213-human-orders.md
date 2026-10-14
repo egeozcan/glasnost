@@ -2,11 +2,11 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530]
 supersedes: []
@@ -180,20 +180,35 @@ Terms).
    - Quirk: `quirks.pending_order_limit` (default: the YR limit of 128). With the switch
      off, no house's pending list has a limit.
 
-3. **Order of application within a tick.** For one house, non-behaviour orders have issue-order precedence among themselves, and behaviour orders have issue-order precedence among themselves. When a non-behaviour order and a behaviour order conflict for the same actor in one tick, the resulting state is the one produced by the behaviour order, regardless of which was issued later. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
+3. **Order precedence within a tick.** For one house, non-behaviour orders have
+   issue-order precedence among themselves, and behaviour orders have issue-order precedence
+   among themselves. Results, including application checks, are those against the effects
+   of preceding orders under that precedence. The whole non-behaviour group has precedence
+   before the behaviour group. Thus when successful orders in the two groups change the
+   same actor state, the behaviour order determines that state, regardless of issue order.
+   This specifies outcomes and checks, not an internal work schedule. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
 
-   If orders from different houses in one tick affect the same state, the resulting state in our engine is the one given by resolving the houses in their creation order (S-0009 owns that order). This includes assignment of scenario-stream values to production starts: an earlier house's order-caused starts receive their values before a later house's. This between-house order-boundary extension is a deterministic design rule, not a finding about the original's computer production.
+   In our engine, house creation order (S-0009 claim 19) supplies between-house
+   precedence: a later-created house's orders have the results they would have against
+   the state including all earlier-created houses' order effects at that boundary.
+   A later house's successful changes therefore prevail over conflicting earlier-house
+   changes, but an order whose actor an earlier house removed fails its actor check.
+   Earlier-created houses' order-caused production starts receive earlier scenario-stream
+   values than later-created houses' starts. These are requirements on resulting state
+   and draw assignments, not on internal scheduling. This between-house extension is a
+   deterministic design rule, not a finding about the original's computer production.
    - **Production-start draw assignment.** S-0404 claim 11 owns the creation draw at each
-     successful start. A start receives its value at the action that causes it, in order of
-     application, not according to the line's creation or payment priority. Thus automatic
-     cancellations that start replacements assign values in S-0411 claim 13's tab/icon and
-     per-type cancellation order. A replacement that starts and is cancelled by a later order
-     at the same boundary has already taken its creation draw; removing a queued type before
-     it starts takes none. Intervening actions' draws remain between starts, with no values
-     reserved ahead of the causing action. A turn-pass start receives its draw before
-     order-caused starts at that tick's end (S-0203). In our engine, order-boundary starts
-     across houses follow house creation order and, within each house, production-order issue
-     order. The original's computer production is separate (S-0404 claim 12).
+     successful start. The association of starts with values follows their causing orders'
+     precedence, not the lines' creation or payment priority. Replacements caused by
+     automatic cancellations therefore receive values in S-0411 claim 13's tab/icon and
+     per-type cancellation order. A replacement that starts and is cancelled by a later
+     order at the same boundary still accounts for one creation draw; removing a queued
+     type before it starts accounts for none. Other draw-taking actions with precedence
+     between two starts have their values between those starts' values, with no values
+     reserved for a line in advance. A turn-pass start receives an earlier value than
+     order-caused starts at that tick's end (S-0203 claim 7). In our engine an earlier-created
+     house's order-boundary starts receive earlier values; within a house, starts caused
+     by earlier-issued production orders receive earlier values. The original's computer production is separate (S-0404 claim 12).
    - **Which houses' orders are applied.** In the original only the orders of human-controlled
      houses are applied, and an order issued in the name of a computer-controlled house is dropped
      silently. The original's computer houses never issue orders: its computer player changes its
@@ -230,7 +245,9 @@ Terms).
    - Backing: `measurable` (Scenario O13) for a target destroyed in the tick of the order and for
      an actor that has just entered a transport. The difference between *live* and *valid* (an
      object that is live but has no hit points left) is `unmeasured`: no setup can hold an object
-     in that state at a tick boundary.
+     in that state at a tick boundary. The absence of validity checks on cells and non-unit,
+     non-building references is `unmeasured`: O13 supplies no invalid reference of those
+     kinds that normal input can name and preserve until application.
    - Confidence: high for the actor checks of table T1; medium for the target and destination
 
 5. **Behaviour order.** A behaviour order names a behaviour, and optionally a target and a
@@ -278,20 +295,30 @@ Terms).
 
    As far as studied, only the rows "a target only" and "a destination only" of the eligible
    column arise from input (confidence: medium; whether an attack-move click on an object can carry
-   both a target and a destination has not been checked). The other cells arise only from a
-   change of the actor's type eligibility between issue and application; an AI house is held to
-   the same input rules (claim 3), so it cannot issue them directly either. The table still
-   defines them, so that every order has a result. An attack-move order to a mobile actor whose type is not eligible leaves any attack-move memory it already had unchanged.
+   both a target and a destination has not been checked). Losing eligibility between issue
+   and application can expose the ineligible-mobile column. No input path is established
+   here for the building column or the neither-reference row; those cells define otherwise
+   unreachable orders, not a claim that an eligibility change alone can create them.
+   An AI house follows the same input rules (claim 3) and cannot issue those orders directly.
+   The table defines them so that every order has a result.
+   An attack-move order is distinct from the standing behaviour named *attack move*:
+   the ordinary eligible target-only and destination-only orders produce *attack* and
+   *move*, respectively, with memory, not that standing behaviour. S-0215 claim 5's
+   statement that player input never creates those orders needs this distinction made
+   explicit; its conclusion that only data puts an actor into *attack move* needs the
+   same ordinary-input scope qualification. This is a required companion change, listed
+   under Questions for the project lead. An attack-move order to a mobile actor whose type is not eligible leaves any attack-move memory it already had unchanged.
    - Backing: `measurable` (Scenario O3, steps 5a and 5b) for the two eligible rows that input
      creates: the recorded behaviour of an attack-moving unit is *move* with the cell as its
      destination (destination only) and *attack* with the object as its target (target only). What
      the attack-move memory holds is not recorded by the measurement setup, so the "memory holds"
      parts of the table and the removal of the memory by another behaviour order are `unmeasured`
      (S-0309 claim 23 owns the memory's lifecycle, searches and resumption; S-0215 owns
-     ordinary rest outcomes after removal). The rows that input cannot create are `unmeasured`,
+     ordinary rest outcomes after removal). The cells with no established input path are `unmeasured`,
      since the measurement setup cannot issue them. Applying the translation at the time of
      application, not of issue, is `unmeasured` for the same reason.
-   - Confidence: high for the translation; later memory behaviour has the confidence of
+   - Confidence: high for the translation, medium for which payloads input creates.
+     later memory behaviour has the confidence of
      S-0309 claim 23, with ordinary rest outcomes owned by S-0215
 
 7. **Group destinations.** When, within one house's behaviour orders of one tick, two or more
@@ -353,10 +380,12 @@ Terms).
    approximate square root of S-0204 and then converted to integers. The line of a placement is
    followed in floating point, and each point on it is converted to a cell (Formulas). Every such conversion
    truncates toward zero, in every rounding mode (S-0205, claim 7); `quirks.chop_rounding` (S-0205)
-   covers only the floating-point operations before it. The members and cells are judged in the
-   state left by every order that claim 3 places before this house's behaviour orders at the same
-   boundary, and by none of this house's behaviour orders; so a building placed by an order of the
-   same tick already counts. Runs arise when the destinations that a click gives the selected
+   covers only the floating-point operations before it. For group-destination purposes,
+   members and cells include the effects of orders with precedence over this house's
+   behaviour-order group under claim 3, but exclude effects of that group's behaviour orders.
+   Thus a building placed by this house's non-behaviour order at the same boundary already
+   counts as an obstacle; this house's behaviour orders do not alter the group geometry
+   against which their destinations are determined. Runs arise when the destinations that a click gives the selected
    objects (S-0214, claims 2 and 11) coincide, which is typical for a group of one movement zone
    moved onto a usable cell; a mixed group whose members get different nearby cells forms several
    shorter runs, or none.
@@ -381,7 +410,11 @@ Terms).
      object that is off the map; and the run identity of attack-move orders, because one input event
      issues one kind of behaviour order (claim 1), so no input makes a run that mixes attack-move
      orders and plain ones. The mean of the positions (the centre) is not recorded directly; the
-     leader that follows from it is (part c).
+     leader that follows from it is (part c). The exact priority among overlapping look
+     classes, the nearest-member destination priority and the last-taken-cell fallback
+     are `unmeasured`: O10 d records final cells but does not isolate those alternatives
+     with a setup having a unique predicted assignment. They remain low-confidence
+     placement details, not claims that O10 d can independently confirm.
    - Confidence: medium that spreading happens, that only runs of identical consecutive orders with
      a cell destination are spread, and for the leader and the placement order; low for the
      placement details and for the shared-cell rule
@@ -645,7 +678,9 @@ Terms).
     At program start it is −100, and a game start does not reset it. So in the first game of a
     session the first cheer is accepted only after tick *R* − 100. In a later game no cheer is
     accepted until the tick counter passes the tick of the last cheer of an earlier game plus *R*.
-    - Backing: `measurable` (Scenario O7)
+    - Backing: `measurable` (Scenario O7) for the strict interval and session carry-over.
+      Remembering an accepted cheer whose order is dropped is `unmeasured`: no scenario
+      here fills the pending list before a cheer input in that same tick.
     - Confidence: medium
     - Quirk: `quirks.cheer_memory_spans_session` (default: YR behaviour). With the switch off, the
       remembered tick is set to −100 at every game start, so it never carries over from an
@@ -970,8 +1005,8 @@ Terms).
 > (*a*_z − *b*_z)²)), the sum of squares and the root in floating point, the root being the
 > approximate square root of S-0204, and the conversion to an integer truncating toward zero in
 > every rounding mode (S-0205, claim 7). Leader *L* = the member with
-> the smallest *d*(*p*ᵢ, *c*), the latest in the run on equal values. The other members are placed in
-> increasing order of *d*(*p*ᵢ, *p*_L), ties in run order.
+> the smallest *d*(*p*ᵢ, *c*), the latest in the run on equal values. The other members have
+> destination priority by increasing *d*(*p*ᵢ, *p*_L), ties in run order (claim 7).
 
 > Look line (claim 7). Cells are written as integer pairs (*X*, *Y*) of cell coordinates. For a
 > member in cell *m* and the leader in cell *ℓ*, let *v* = *m* − *ℓ* (integers) and *u* = *v* /
@@ -1097,15 +1132,18 @@ unconditional get-up effect of a move behaviour. Scatter and route following use
 only when they actually assign a destination.
 
 **Ordering consequences.**
-- Production starts receive scenario-stream values at their causing actions, not in a
-  line-update draw batch. Cancellation order can therefore change both which replacements
-  exist briefly at the boundary and which values they receive (claim 3; S-0404 claim 11,
-  S-0411 claim 13). Turn-pass starts precede order-boundary starts; across houses at the
-  boundary, house creation order is our engine's design extension.
-- When two orders of the same kind for the same actor are issued in one tick, any state changed
-  by both has the value specified by the later-issued order. When a behaviour order and a
-  different-kind order affect the same actor in one tick, any state they both change has the
-  value specified by the behaviour order, regardless of issue order. Thus a behaviour order
+- Production starts are assigned scenario-stream values by their causing actions'
+  precedence, not by a line-update draw batch. Cancellation order can therefore change both
+  which replacements exist briefly at the boundary and which values they receive
+  (claim 3, S-0404 claim 11, S-0411 claim 13). Turn-pass starts receive earlier values than order-boundary
+  starts; across houses at the boundary, earlier-created houses receive earlier values under
+  our engine's design extension. This constrains draw-to-start associations, not scheduling.
+- When two successful orders of the same kind for the same actor are issued in one tick,
+  any state changed by both has the value specified by the later-issued order. When a
+  successful behaviour order and a successful different-kind order affect the same actor
+  in one tick, any state they both change has the value specified by the behaviour order,
+  regardless of issue order. An order that fails its application checks does not overwrite
+  state changed by a preceding order (claim 4). Thus a behaviour order
   issued before or after a stop, scatter or deploy order determines the conflicting state
   (claim 3).
 - An order is applied after the tick's object updates. Consequently, an object destroyed during
@@ -1152,10 +1190,9 @@ only when they actually assign a destination.
   engine keeps that, for every house alike; ownership is kept by the input rules that every house's
   orders pass when issued (claim 3). An object whose owner changes between issue and application
   still gets the order, as in the original. No switch is proposed.
-- **The click marker.** When a selection's click action is *move* (not *no-move*, which can
-  also produce a move order; S-0214, claim 14), the original shows a marker animation at the
-  clicked cell. In a skirmish game it is created as an ordinary animation object, and only for
-  the local player's own clicks. Our engine treats it as drawing only: it never takes part in
+- **The click marker.** S-0214 claim 30 owns click-marker eligibility and placement.
+  In a skirmish game the original creates it as an ordinary animation object.
+  Our engine treats it as drawing only: it never takes part in
   game state and never draws from the scenario random stream. This is a departure, confirmed by
   the project lead. Because the original creates the marker only on the machine of the player
   who clicked, any effect it had on game state would already have split the original's own
@@ -1902,13 +1939,15 @@ applied: a cue is not proof that an order passed its application checks.
   Capture again after expiry to check that no blank band remains.
 - *Observable:* first stored row positions, differences between successive line
   origins, visible bottom row, wrapping, retained line count and background pixels.
-- *Expected:* origins remain 19 pixels apart with the first at battlefield top.
+- *Expected:* origins remain 19 pixels apart, each 3 pixels right of the battlefield's
+  left edge, with the first at battlefield top.
   Stored row zero starts at each origin, regardless of H or P. The oracle clips
   rows below row P but can paint row P itself when H > P, including row zero at
   zero pitch. Our engine instead clips to min(H, P) rows and paints none at zero
   pitch. Tall admitted masks can overlap; P does not re-space the lines or clear
   a background band. Width-based breaks and capacity remain unchanged.
-- *Falsified if:* changing P moves an origin, changes horizontal splitting or
+- *Falsified if:* an origin has a different horizontal inset or spacing, or changing P
+  moves an origin, changes horizontal splitting or
   capacity, shifts the glyph top, or paints oracle rows beyond P; failure to
   paint a set boundary pixel at row P with H > P falsifies the recorded cosmetic
   defect. The corrected clipping is an engine acceptance check, not an oracle
@@ -2007,7 +2046,7 @@ extension is a design rule and has no oracle measurement.
   studied; nothing suggests that it changes game state.
 - Other tether exchanges beyond the ground vehicle factory release and successful infantry
   factory or cloning-building release exchanges of S-0417 (claims 1, 7 and 10), and docked
-  aircraft release (S-0417 revision 2, claim 11). A docked aircraft is tethered at release
+  aircraft release (S-0417 claim 11). A docked aircraft is tethered at release
   unless its type must return to a dock; landing and take-off timing remains provisional.
   The refinery case remains exploratory (Scenario O4 iv). Factory release does not yet
   identify an order-time untethered-contact interval or isolate deploy's tether refusal
@@ -2070,6 +2109,13 @@ off together at sign-off:
 - **Q-0286 joint answer already supplied:** confirm S-0214 claims 5 and 23, Scenario T17
   and its Import mapping together with claims 22 and 23 here. The request's current
   answered-by already lists S-0213 and S-0214; preserve both at hand-off.
+- **Required S-0215 claim 5 change:** distinguish attack-move orders, which ordinary
+  eligible input does create, from the standing behaviour *attack move*, which those
+  target-only and destination-only orders do not produce after claim 6's translation.
+  Qualify the current “player input never creates those orders” and “only data” wording
+  to this ordinary-input case, preserving the separately defined unsupported payloads.
+  Check claim 12 and dependent statements for the same distinction. Confirm the corrected
+  companion and this draft together at sign-off.
 - **Production-start ordering already agrees:** S-0404 claim 11/P11 B/C, S-0411
   claim 13/S9 and S-0202 claim 10 agree with claim 3 here: causing-action draw assignment,
   cancellation-order consequences and turn-pass starts before order-boundary starts.
