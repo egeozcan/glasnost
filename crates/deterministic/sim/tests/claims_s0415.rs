@@ -484,3 +484,38 @@ fn claim_11_quirk_off() {
             .all(|o| o.type_index != mcv || o.kind != Kind::Vehicle)
     );
 }
+
+// spec: S-0415 claim 10 and S-0207 claim 20 (a) (a packed-up teleporting vehicle's guard-spot destination is taken at once: its vehicle-present mark is on the landing cell in the tick it appears)
+#[test]
+fn claim_10_teleporter_mark_moves_at_once() {
+    let mut r = rules();
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("TSHOP".into());
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("TKIT".into());
+    r.sim
+        .buildings
+        .insert("TSHOP".into(), building(2, 2, Some("TKIT")));
+    let mut tkit = vehicle("TSHOP");
+    tkit.locomotor = Some(Locomotor::Teleport);
+    r.sim.vehicles.insert("TKIT".into(), tkit);
+    let mut w = game(&r);
+    let y = testkit::spawn(&mut w, Kind::Building, "TSHOP", 0, c(0, 0), 0);
+    let spot = Target::Cell(c(6, 6));
+    order(&mut w, Order::GuardSpot { actor: y, spot });
+    step(&mut w);
+    order(&mut w, Order::Sell { actor: y });
+    until(&mut w, 60, |w| w.obj(y).is_none()).expect("packed up");
+    let v = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle && o.owner == Some(A))
+        .map(|o| o.id)
+        .expect("the vehicle");
+    assert_eq!(w.obj(v).unwrap().dest, Some(spot));
+    assert_eq!(glasnost_sim::teleport::mark_cell(&w, v), Some(c(6, 6)));
+}

@@ -439,11 +439,12 @@ fn set_phase(w: &mut World, id: ObjectId, p: Phase) {
 /// Gives a mobile unit a cell to drive to.
 fn drive_to(w: &mut World, id: ObjectId, dest: Target) {
     if let Some(o) = w.obj_mut(id) {
-        o.dest = Some(dest);
         // A new destination starts a new path search (S-0212 claim 20).
         o.path.steps.clear();
         o.path.retry_at = 0;
     }
+    // spec: S-0207 claim 20 (a) (a teleporting harvester's landing point and mark move at once)
+    super::assign_destination(w, id, Some(dest));
 }
 
 fn zone(w: &World, id: ObjectId) -> Option<glasnost_rules::sim::MovementZone> {
@@ -1026,9 +1027,7 @@ fn returning(w: &mut World, id: ObjectId) -> i32 {
         if chrono && choose_refinery(w, id, false).is_some() {
             // spec: S-0402 claim 17 (a chrono miner moving in returning drops its movement when the normal choice finds a refinery; its next processing reserves it)
             crate::drive::stop(w, id);
-            if let Some(ob) = w.obj_mut(id) {
-                ob.dest = None;
-            }
+            super::assign_destination(w, id, None);
         }
         // spec: S-0402 State and ordering (returning with a destination: keeps driving)
         return standard(w, id);

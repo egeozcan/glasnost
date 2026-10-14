@@ -414,9 +414,8 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
         if let Some(ob) = w.obj_mut(vid) {
-            if let Some(spot) = o.guard_spot {
+            if o.guard_spot.is_some() {
                 // spec: S-0415 claim 10 (a guard spot: the vehicle's destination, with move)
-                ob.dest = Some(spot);
                 ob.beh.force(Behaviour::Move, tick, stale);
             } else {
                 ob.beh.force(Behaviour::Guard, tick, stale);
@@ -424,6 +423,10 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         }
         // spec: S-0415 claim 10 (the centre of the return cell, facing D × 256)
         crate::objects::place(w, vid, Pos::centre(c, z), facing_of(d));
+        if let Some(spot) = o.guard_spot {
+            // spec: S-0415 claim 10 and S-0207 claim 20 (a) (the destination given once the vehicle is on the map: a teleporter's mark moves at once)
+            super::assign_destination(w, vid, Some(spot));
+        }
         retarget(w, id, vid, false);
     } else {
         // spec: S-0415 claim 11 (the vehicle cannot be put on the map: the sale refund instead)

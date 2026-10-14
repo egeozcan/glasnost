@@ -531,13 +531,9 @@ fn move_to(w: &mut World, unit: ObjectId, t: Target) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let tick = w.tick;
     let Some(o) = w.obj_mut(unit) else { return };
-    let before = o.dest;
-    o.dest = Some(t);
     o.beh.queue_and_start_at_once(Behaviour::Move, tick, stale);
-    if o.kind == Kind::Infantry {
-        // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
-        crate::infantry::destination_assigned(w, unit, before);
-    }
+    // spec: S-0107 claim 15 and S-0207 claim 20 (a) (the destination assigned: get-up, and a teleporter's mark moves at once)
+    super::assign_destination(w, unit, Some(t));
 }
 
 /// Whether a building's foundation covers cell `c` (S-0406 claim 2).
@@ -1197,10 +1193,8 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
             } else {
                 e
             };
-            if let Some(ob) = w.obj_mut(u) {
-                // spec: S-0417 claim 5 (any other locomotor gets the destination and moves by its own locomotor's rules)
-                ob.dest = Some(Target::Cell(dest));
-            }
+            // spec: S-0417 claim 5 (any other locomotor gets the destination and moves by its own locomotor's rules; S-0207 claim 20 (a))
+            super::assign_destination(w, u, Some(Target::Cell(dest)));
         }
     }
     if let Some(d) = w.obj_mut(u).and_then(|o| o.drive.as_mut()) {
@@ -1337,10 +1331,8 @@ fn run_away(w: &mut World, id: ObjectId) {
     if let Some(gs) = o.guard_spot
         && o.dest != Some(gs)
     {
-        if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0417 claim 8 (the saved guard spot becomes the destination, without queueing a new move)
-            ob.dest = Some(gs);
-        }
+        // spec: S-0417 claim 8 (the saved guard spot becomes the destination, without queueing a new move; S-0207 claim 20 (a))
+        super::assign_destination(w, id, Some(gs));
         return;
     }
     if let Some(ob) = w.obj_mut(id) {
