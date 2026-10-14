@@ -767,6 +767,9 @@ impl Live {
             elevation: voxel::barrel_elevation_after(fire_angle, w.tick.max(0) as u32),
             infantry,
             object: sim_code(id),
+            // spec: S-0402 claim 5a, F8 (ν: the walk-animation counter of S-0105 claim 16). Our choice,
+            // pending a spec request: the simulation keeps no such counter yet, so 0, as for the body's HVA frame.
+            harvesting: super::harvesting::of(w, id, 0),
         })
     }
 

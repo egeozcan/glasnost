@@ -106,9 +106,150 @@ pub fn trunc_single(v: &BigUint) -> F32 {
     F64::from_parts(false, m, e, Rounding::TowardZero).to_f32(Rounding::TowardZero)
 }
 
+/// The sign bit of a double.
+// nocite: binary64 layout
+const SIGN64: u64 = 1 << 63;
+
+/// Bits of a fixed-point magnitude kept before the final rounding.
+// nocite: working precision of this reference arithmetic, not game behaviour
+const KEEP: u64 = 120;
+
+/// A double as a signed fixed-point value with [`FRAC`] fraction bits
+/// (truncated toward zero below 2^−FRAC); `None` for infinities and NaN.
+fn fixed_of(x: F64) -> Option<BigInt> {
+    if x.0 & !SIGN64 == 0 {
+        return Some(BigInt::from(0u32));
+    }
+    let (neg, m, e) = x.parts()?;
+    let m = BigUint::from(m);
+    let shift = e + FRAC as i32;
+    let v = if shift >= 0 {
+        m << shift.unsigned_abs()
+    } else {
+        m >> shift.unsigned_abs()
+    };
+    let v = BigInt::from(v);
+    Some(if neg { -v } else { v })
+}
+
+/// A signed fixed-point value rounded to a double in `mode`.
+///
+/// The magnitude is first cut to its leading [`KEEP`] bits, toward zero,
+/// which composes with round-toward-zero; with round-to-nearest the result
+/// can differ only for a value within 2^−119 relative of a tie.
+fn double_of(v: &BigInt, mode: Rounding) -> F64 {
+    let neg = v.sign() == Sign::Minus;
+    let a = v.magnitude();
+    let bits = a.bits();
+    if bits == 0 {
+        return F64::ZERO;
+    }
+    let (m, e) = if bits > KEEP {
+        let sh = bits - KEEP;
+        (a >> sh, sh as i32 - FRAC as i32)
+    } else {
+        (a.clone(), -(FRAC as i32))
+    };
+    F64::from_parts(neg, u128::try_from(m).unwrap_or(0), e, mode)
+}
+
+/// sin of a fixed-point angle *r* in 0 … 2π, by the quarter-wave symmetries
+/// of the sine (`p` is π).
+fn sin_reduced(r: &BigUint, p: &BigUint) -> BigInt {
+    let half = p >> 1u32;
+    let three_halves = p + &half;
+    let two_pi = p << 1u32;
+    if r <= &half {
+        BigInt::from(sin(r))
+    } else if r <= p {
+        BigInt::from(sin(&(p - r)))
+    } else if r <= &three_halves {
+        -BigInt::from(sin(&(r - p)))
+    } else {
+        -BigInt::from(sin(&(&two_pi - r.min(&two_pi))))
+    }
+}
+
+/// The exact sine and cosine of a double, each rounded once to a double
+/// in `mode` (with round-toward-zero: RZ₅₃(sin *x*) and RZ₅₃(cos *x*)).
+/// The harvesting-sprite anchor of S-0402 F8 uses them, on the literal
+/// reading of F8 (plain sin and cos, rounded toward zero). Whether F8
+/// means table sines instead, as S-0205 claim 6 and sibling formulas do,
+/// is ambiguous and pending a spec request. `None` for infinities
+/// and NaN. The sine of a zero keeps the zero's sign.
+///
+/// The working precision ([`FRAC`] bits) is far beyond a double's, so the
+/// result is the correctly rounded value unless the exact one lies within
+/// about 2^−250 of a double boundary.
+pub fn sin_cos(x: F64, mode: Rounding) -> Option<(F64, F64)> {
+    let v = fixed_of(x)?;
+    let p = pi();
+    let two_pi = &p << 1u32;
+    // Reduce to 0 … 2π.
+    let mut r = &v % BigInt::from(two_pi.clone());
+    if r.sign() == Sign::Minus {
+        r += BigInt::from(two_pi.clone());
+    }
+    let r = r.magnitude().clone();
+    let s = sin_reduced(&r, &p);
+    // cos x = sin(x + π/2).
+    let mut rc = &r + (&p >> 1u32);
+    if rc >= two_pi {
+        rc -= &two_pi;
+    }
+    let c = sin_reduced(&rc, &p);
+    let s = if s.sign() == Sign::NoSign {
+        F64(x.0 & SIGN64)
+    } else {
+        double_of(&s, mode)
+    };
+    Some((s, double_of(&c, mode)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // spec: S-0402 F8 (trigonometric results rounded toward zero: sin and cos of a double, rounded once)
+    #[test]
+    fn sin_cos_rounded_once() {
+        let rz = Rounding::TowardZero;
+        let rn = Rounding::Nearest;
+        // π_d / 2 lies just below π/2: its sine rounds toward zero to the double below 1
+        // (1 − 2^−53) and to nearest to 1; its cosine is a tiny positive value.
+        let half_pi = F64::from_parts(false, 884279719003555, -49, rz);
+        let (s, c) = sin_cos(half_pi, rz).unwrap();
+        assert_eq!(s, F64(0x3fef_ffff_ffff_ffff));
+        assert!(c.gt(F64::ZERO) && c.lt(F64::from_parts(false, 1, -53, rz)));
+        let (s, _) = sin_cos(half_pi, rn).unwrap();
+        assert_eq!(s, F64::from_i64(1, rz));
+        // Zeros: the sine keeps the sign, the cosine is 1.
+        assert_eq!(
+            sin_cos(F64::ZERO, rz),
+            Some((F64::ZERO, F64::from_i64(1, rz)))
+        );
+        let neg_zero = F64(SIGN64);
+        assert_eq!(
+            sin_cos(neg_zero, rz),
+            Some((neg_zero, F64::from_i64(1, rz)))
+        );
+        // Odd and even symmetry, and a negative angle reduced into 0 … 2π.
+        let x = F64::from_parts(false, 3, -2, rz); // 0.75
+        let (s1, c1) = sin_cos(x, rz).unwrap();
+        let (s2, c2) = sin_cos(x.negated(), rz).unwrap();
+        assert_eq!((s2, c2), (s1.negated(), c1));
+        // sin 0.75 = 0.68163876002333416673…, cos 0.75 = 0.73168886887382088631…
+        let close = |v: F64, num: u128, den_pow: i32| {
+            let lo = F64::from_parts(false, num, -den_pow, rz);
+            let hi = F64::from_parts(false, num + 1, -den_pow, rz);
+            v.ge(lo) && v.lt(hi)
+        };
+        // 0.68163876002333416673 × 2^40 = 749 469 742 588.47…; 0.73168886887382088631 × 2^40 = 804 500 419 241.03…
+        assert!(close(s1, 749_469_742_588, 40), "{s1:?}");
+        assert!(close(c1, 804_500_419_241, 40), "{c1:?}");
+        // Infinities and NaN have none.
+        assert_eq!(sin_cos(F64(0x7ff0_0000_0000_0000), rz), None);
+    }
 
     #[test]
     fn pi_digits() {

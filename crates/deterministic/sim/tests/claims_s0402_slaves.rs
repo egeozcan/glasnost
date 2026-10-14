@@ -2070,3 +2070,36 @@ fn s0209_claim_4_partly_occupied_field_cell_qualifies() {
     );
     assert_eq!(w.obj(other).unwrap().pos.cell(), ore);
 }
+
+// spec: S-0402 claim 5a (a slave miner on claim 22's group route does not load itself and gains no vehicle
+// harvesting display, even with the vehicle harvester flag, while its slaves work)
+#[test]
+fn claim_5a_slave_miner_has_no_harvesting_display() {
+    let mut r = rules();
+    r.sim.vehicles.get_mut("SMV").unwrap().harvester = Some(true);
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
+    unblock(&mut w);
+    let credits = w.houses[0].credits;
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: Behaviour::Harvest,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(6, 0))),
+        }
+    ));
+    let mut harvesting = 0;
+    until(&mut w, 1500, |w| {
+        if let Some(o) = w.obj(m) {
+            harvesting += i32::from(o.beh.current == Some(Behaviour::Harvest));
+            assert!(!glasnost_sim::econ::harvest::display_eligible(w, m));
+        }
+        w.houses[0].credits > credits
+    })
+    .expect("the slaves earn");
+    assert!(harvesting > 0);
+}
