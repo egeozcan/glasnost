@@ -1090,6 +1090,10 @@ dependencies = [
 [[package]]
 name = "glasnost-ui"
 version = "0.0.0"
+dependencies = [
+ "glasnost-ai",
+ "glasnost-sim",
+]
 
 [[package]]
 name = "glasnost-vfs"
