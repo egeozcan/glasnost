@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1007,10 +1007,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     | Packing, still a building | Waits for conversion; no field check or emergence. |
     | Packing, now a vehicle | Recalls slaves and enters field seeking; no check or emergence in this update. |
 
-    Ending a master without an ordinary killing hit, true sale, or successful conversion
-    belongs to S-0312 and S-0415. Those owners must distinguish the retained hidden vehicle
-    after failed placement from successful group transfer; this claim does not apply the
-    true-sale result to every failed pack-up.
+    Removal without a killing hit ends a remaining, untransferred group under S-0312
+    claim 31. That rule fixes the group's fate at removal, not when a sale, erasure or
+    failed conversion reaches removal. S-0415 claims 6 and 10 own successful group
+    transfer and the failed-conversion boundary; this claim does not apply the true-sale
+    result to every failed pack-up.
     - Backing: `measurable` (H22)
     - Confidence: high for absence of a group-wide pause and the state gates; medium for
       busy-state delivery and reachable selling-state variants
@@ -2071,7 +2072,7 @@ is wrong). *Runs:* 3.
   deployed scan centre and qualification (questions 2, 3 and 5–7). Claim 26 now
   completes question 4's non-positive capacities, correcting the earlier zero-capacity
   fullness statement. Question 1's master-turn integration is S-0203 claim 12.
-  claims 21 and 26 own the within-group order.
+  Claims 21 and 26 own the within-group order.
 - Q-0411 is answered by claim 25 and F7; Q-0413's busy-state part by claim 27, with
   removal and failed-conversion parts owned by S-0312, S-0408 and S-0415. Q-0414's
   harvesting, manual packing and arrival parts are claims 22 and 28; applied-order
@@ -2081,9 +2082,11 @@ is wrong). *Runs:* 3.
   counting, emergence, ownership retention, directed harvesting, sites and successful relocation,
   claim 25 now supplies failure comparison inputs and the immediate vehicle destination,
   with H19 to confirm them. No failure is assumed to mean stay-in-place.
-  Ordinary killing-hit integration is S-0312 claim 30; true-sale slave fate is S-0408
-  claim 10a, whose exact cleanup tick remains open. Erasure, environmental sinking
-  and other destruction paths remain unresolved. Surviving-master capture and
+  Ordinary killing-hit integration is S-0312 claim 30; attacker-less removal of a
+  remaining, untransferred group is S-0312 claim 31. True-sale slave fate is S-0408
+  claim 10a, whose exact cleanup tick remains open. Earlier group-ending events during
+  erasure or environmental sinking, and when other destruction paths reach removal,
+  remain unresolved. Surviving-master capture and
   mind-control return are claim 23, pending H17. Deployment and packing-up
   preservation already belong to S-0415 claims 6 and 10.
 - Q-0371 is answered here for harvest and docking rules by claims 3a and 10a.
