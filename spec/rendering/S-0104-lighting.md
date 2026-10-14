@@ -2,7 +2,7 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -17,8 +17,6 @@ supersedes: []
 ## Summary
 
 This spec covers skirmish rendering only; campaigns and network games are out of scope. How the map's ambient light, tint and height factors, the light sources and the global screen effects (ion storm, nuke flash, chrono flash, psychic dominator) give each cell a light level and a tint, and how the ambient light fades over time. How a palette is shaded into rows of 16-bit pixels for a tint, and how a drawn object's brightness picks a row (palette loading and the house-colour ramp are in S-0103).
-
-**Cross-spec changes required at hand-off.** S-0103 claim 8, its confidence statement and its open questions must delegate the now-established overlay palette and tint rules to S-0112 claims 1 and 2, rather than leave them unresolved. Its ore and gem statement must respect claim 1's deck-cell precedence: outside deck cells they use the untinted start-up resource table at neutral brightness; drawn deck overlays use the cell's tile shade table and scaled raised light level.
 
 ## Terms
 

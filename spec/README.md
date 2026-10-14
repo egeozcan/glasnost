@@ -55,7 +55,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0311](combat/S-0311-veterancy.md) | Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience) | combat | 2 | approved | — |
 | [S-0013](formats/S-0013-voxel-lighting-table-layout.md) | voxel lighting table file layout | formats | 2 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 7 | approved | — |
-| [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 13 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 5 | approved | — |
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 9 | approved | — |
 | [S-0106](rendering/S-0106-voxel-tilt-slopes.md) | Slope shapes, terrain surface height and voxel tilt on slopes | rendering | 4 | approved | — |
@@ -96,3 +95,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 8 | approved | — |
 | [S-0101](rendering/S-0101-isometric-projection.md) | Isometric projection, height lift, view position and scroll limits | rendering | 5 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 11 | approved | — |
+| [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 14 | approved | — |
