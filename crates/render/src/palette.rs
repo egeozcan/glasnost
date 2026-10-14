@@ -349,6 +349,31 @@ pub fn slot_position(slot: u8) -> Option<usize> {
     SLOT_POSITIONS.get(usize::from(slot)).copied()
 }
 
+/// The fixed RGB colour of each setup-screen colour slot 0 … 7 (S-0103
+/// claim 11 and Constants, "Lobby swatch colours"): engine constants,
+/// independent of every colour definition.
+// spec: S-0103 Constants (lobby swatch colours, claim 11)
+pub const LOBBY_SWATCHES: [Rgb8; 8] = [
+    Rgb8::new(221, 226, 13),
+    Rgb8::new(255, 25, 25),
+    Rgb8::new(42, 116, 226),
+    Rgb8::new(62, 209, 46),
+    Rgb8::new(255, 160, 25),
+    Rgb8::new(50, 215, 230),
+    Rgb8::new(149, 40, 189),
+    Rgb8::new(255, 154, 235),
+];
+
+/// The setup-screen swatch of colour slot `slot` as a 5-6-5 pixel (S-0103
+/// claim 11: the slot's fixed RGB reduced directly by the 16-bit step, with
+/// no HSV conversion, ramp, palette multiplication, lighting or subtraction
+/// of 1), or `None` for a slot above 7.
+pub fn lobby_swatch_565(slot: u8) -> Option<u16> {
+    LOBBY_SWATCHES
+        .get(usize::from(slot))
+        .map(|&c| hicolor_565(c))
+}
+
 /// A colour in the 16-bit 5-6-5 pixel layout (S-0103 claim 9).
 pub fn hicolor_565(c: Rgb8) -> u16 {
     // spec: S-0103 Formulas (red5 = ⌊R/8⌋, green6 = ⌊G/4⌋, blue5 = ⌊B/8⌋)
@@ -465,6 +490,20 @@ mod tests {
 
     fn rgb(t: [(u8, u8, u8); 16]) -> [Rgb8; 16] {
         t.map(|(r, g, b)| Rgb8::new(r, g, b))
+    }
+
+    /// spec: S-0103 claim 11 and Constants (lobby swatches: the slot's RGB reduced directly by the 16-bit step, no subtraction of 1)
+    #[test]
+    fn lobby_swatch_is_the_stepped_constant() {
+        // Slot 0 is (221, 226, 13): ⌊221/8⌋ = 27, ⌊226/4⌋ = 56, ⌊13/8⌋ = 1.
+        assert_eq!(lobby_swatch_565(0), Some((27 << 11) | (56 << 5) | 1));
+        for s in 0..8u8 {
+            assert_eq!(
+                lobby_swatch_565(s),
+                Some(hicolor_565(LOBBY_SWATCHES[usize::from(s)]))
+            );
+        }
+        assert_eq!(lobby_swatch_565(8), None);
     }
 
     /// spec: S-0103 Constants (the bit patterns are the tabulated singles)

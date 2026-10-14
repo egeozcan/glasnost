@@ -586,6 +586,35 @@ fn colours_and_colour_add() {
     assert_eq!(o.colour_add[3].0, [0, 0, 0]);
 }
 
+/// spec: S-0006 claim 2 and S-0103 claim 5 (quirks.colour_redefinition_ignored: on, a later layer's definition of a name already defined, ignoring case, keeps the earlier one; off, it replaces the value at the same position; neither adds a position)
+#[test]
+fn colour_redefinition_switch() {
+    let base = "[Colors]\nRuby=0,200,200\nJade=90,200,200\n";
+    let map = "[Colors]\nRUBY=5,5,5\nOnyx=0,0,10\n";
+    let run = |on: bool| {
+        let o = apply_with(
+            &[layer(Role::Base, base), layer(Role::Map, map)],
+            "",
+            GameKind::Skirmish,
+            LayerQuirks {
+                colour_redefinition_ignored: on,
+                ..LayerQuirks::default()
+            },
+        );
+        o.colours
+            .iter()
+            .map(|c| (String::from_utf8_lossy(&c.name).into_owned(), c.hsv))
+            .collect::<Vec<_>>()
+    };
+    let on = run(true);
+    assert_eq!(on.len(), 3);
+    assert_eq!(on[0], ("Ruby".into(), [0, 200, 200]));
+    let off = run(false);
+    assert_eq!(off.len(), 3);
+    assert_eq!(off[0].1, [5, 5, 5]);
+    assert_eq!(off[2], ("Onyx".into(), [0, 0, 10]));
+}
+
 fn file(name: &str, text: &str) -> InputFile {
     InputFile {
         name: name.into(),

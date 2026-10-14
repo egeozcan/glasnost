@@ -2044,6 +2044,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "importer (convert::layers::LayerQuirks), S-0006 claim 10",
     ),
     (
+        "colour_redefinition_ignored",
+        "importer (convert::layers::LayerQuirks), S-0103 claim 5 and S-0006 claim 2",
+    ),
+    (
         "persist_tiberium_overrides",
         "importer (convert::layers::LayerQuirks), S-0006 claim 10",
     ),
