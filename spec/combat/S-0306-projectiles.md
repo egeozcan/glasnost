@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -278,7 +278,7 @@ they are used.
      reads the current weapon regardless of the transport's target, not the passenger's weapon
      choice against that target.
 
-   The radius draw comes first, then one direction draw R(0, 2147483646). Only the horizontal
+   The random-state recorder observes the radius draw before the direction draw R(0, 2147483646). Only the horizontal
    position moves. Inaccurate projectiles of other kinds do not scatter at launch; flak-scattering
    invisible projectiles scatter by claim 9.
    - Backing: `measurable` (scenario P3, statistical, with the random-state recorder for the draw
@@ -365,7 +365,7 @@ they are used.
    invisible projectile is moved at once to the point that the table below gives, and its velocity
    becomes 0. When it is both invisible and flak-scattering, *K* is a scattered point: the
    target's reference point moved by a radius trunc(R(0, 2*B*) × *D* / *R*₀) in a random direction
-   (radius draw, then direction draw, F5), where *D* is the spatial distance from the fire point to
+   (the random-state recorder observes the radius draw before the direction draw, F5), where *D* is the spatial distance from the fire point to
    the unscattered point and *R*₀ the weapon range. The table and every later rule use this
    scattered *K*:
 
@@ -611,10 +611,7 @@ they are used.
     airburst weapon and takes the firer of the projectile that launched it, so the same
     attacker rule applies at their detonation.
     A projectile that is not airburst detonates *n*_c times, *n*_c being its cluster count: the first
-    at the point of claim 20, each later one at a nearby point of the point before it. After
-    *every* detonation, the last one included, it takes
-    one draw R(256, 512), the distance *λ*, and then one raw value of the scenario random stream
-    for the nearby point N(*Q*, *λ*, snap off) of S-0312 F2, *Q* being the point just used. So a
+    at the point of claim 20, each later one at a nearby point of the point before it. For every detonation, including the last, the random-state recorder observes a ranged draw R(256, 512), whose result is the distance *λ*, followed by one raw value of the scenario random stream; that raw value is used for the nearby point N(*Q*, *λ*, snap off) of S-0312 F2, where *Q* is the point just used. So a
     cluster count of 1 still takes the two draws once, and the points form a chain: each is 256 to
     512 leptons from the one before it, horizontally and up to the rounding of F2, except that a
     point whose cell would lie outside 0 to 511 in either coordinate is replaced by *Q* itself
@@ -675,12 +672,7 @@ they are used.
     - Confidence: high for the first and third rows; medium for the layer row and for the absence of
       the anti-ground test
 
-24. **Draws of a launch.** A shot's projectile takes, from the scenario random stream: the radius
-    and direction draws of claim 4 (inaccurate arcing only), then the radius and direction draws of
-    claim 9 (invisible flak-scattering only). Placement takes no other draw. A spray-attack firer's
-    pick (S-0313 claim 9) comes before these (S-0301 claim 18). Later draws belong to the
-    projectile's turns (trailer animations, claim 16) and to its detonation (claim 21, including the
-    draws after the last cluster detonation, and S-0303).
+24. **Draws of a launch.** For a shot, the random-state recorder observes the projectile's claim 4 radius draw followed by its direction draw (inaccurate arcing only), then the claim 9 radius draw followed by its direction draw (invisible flak-scattering only). Placement takes no other draw. The recorder observes a spray-attack firer's pick (S-0313 claim 9) before these projectile draws (S-0301 claim 18). Later recorded draws belong to the projectile's turns (trailer animations, claim 16) and to its detonation (claim 21, including the draws after the last cluster detonation, and S-0303).
     - Backing: `measurable` (scenario P3 with the random-state recorder for the launch draws; P14
       variant d for the draws of claim 21 and P10 variant c for a trailer's draw before the
       detonation's)
