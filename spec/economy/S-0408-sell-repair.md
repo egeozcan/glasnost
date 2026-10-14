@@ -2,13 +2,13 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0130, Q-0131, Q-0225, Q-0282, Q-0284]
+requests: [Q-0130, Q-0131, Q-0225, Q-0282, Q-0284, Q-0440]
 supersedes: []
 ---
 
@@ -324,16 +324,27 @@ its *master*, and slaves *inside* rather than on the map. In addition:
 10a. **Removing a slave master by sale.** A true sale that removes a building master does not
     transfer its working slave group to a new vehicle. When the removed master's slaves are
     dealt with, every existing slave loses its master. Slaves still inside and off the map are
-    removed without being placed: they do not join the sale survivors or get a placement attempt.
+    destroyed and removed without being placed: they do not join the sale survivors or get a
+    placement attempt. Each contributes a loss for its current house, subject to S-0414
+    claim 21's victim exclusions, with no attacker credit. It receives S-0312 claim 29's
+    common destruction notifications without an attacker, including the destroyed-by-anything
+    raise when tagged, not the extra vehicle group. As in S-0312 claims 30 and 31,
+    it plays no death sequence and produces none of its own debris, death-weapon or
+    attached-bomb effects. Removal is not a separate killing hit.
     Slaves already on the map remain there and change owner to the civilian-side recipient
     (Terms), not to the seller or a nearby enemy. Their destination and target are cleared and
-    they are given *guard*, ending their harvesting for that master. The removed group makes
+    they are queued to *guard*, ending their harvesting for that master. After that reset,
+    each transfer requests the *cheer* sequence (S-0107 claim 21). This is a sequence request,
+    not a guarantee of visible animation: S-0107 claim 6's start conditions still apply.
+    The removed group makes
     no further replacements. No additional sale refund is paid for either kind of slave.
 
     If no civilian-side recipient exists, an on-map slave instead receives a hit whose integer
     damage amount is its current health, using the demolition warhead, with no attacker and
     without the ignore-defences marker. S-0302 claims 6 and 9 determine the resulting health.
-    This is not an unconditional deletion. Hidden slaves are still removed.
+    This is not an unconditional deletion. That fallback does not itself clear the slave's
+    target or destination, queue *guard* or request *cheer*; the hit and later ordinary
+    processing can still change them. Hidden slaves are still destroyed and removed.
 
     This happens as a consequence of removing the master, not at the earlier passenger,
     garrison and survivor release of claim 6. Selling only an upgrade (claim 5) does not remove
@@ -351,7 +362,7 @@ its *master*, and slaves *inside* rather than on the map. In addition:
     - Backing: `measurable` (scenario S13, including its failed-placement control)
     - Confidence: high for hidden removal, recipient selection, no replacement and no
       old-group transfer on failed placement; medium for the sale integration, guard reset
-      and no-recipient hit
+      and no-recipient hit, destruction notifications and losses, and the cheer request
 
 ### Selling other things
 
@@ -465,7 +476,10 @@ its *master*, and slaves *inside* rather than on the map. In addition:
       range of at least 2 stages, its completion tick is therefore
       *D* + min(*n* − 1, 23) × *d_b*. This applies even when S-0213's pack-up conditions
       make it sell as an ordinary building. A guard spot suppresses this early report.
-      Whether the completed sequence gives a refund or a vehicle is still S-0415's rule.
+      The guard spot includes automatic relocation's remembered old top-left cell, not just
+      a manually ordered destination (S-0402 claim 28). It therefore suppresses stage-23
+      completion too. Whether the completed sequence gives a refund or a vehicle is still
+      S-0415 claim 9's rule.
     - A zero-delay build-down does not advance its stage but reports completion on the next
       eligible building turn. With uninterrupted processing it pays and removes at *D* + 1,
       not at *D*. This applies to a sellable type with a build-up sprite and zero delay.
@@ -667,6 +681,9 @@ tick the building disappears.
 |---|---|---|---|
 | Rules, side list `[Sides]`, side named `Civilian`; country section, `Side` | civilian-side recipient of claim 10a: first existing house whose country belongs to that named side; name lookup is case-insensitive | side registry and country-to-side mapping, S-0004 claim 9 | no matching recipient uses claim 10a's hit fallback |
 | Rules, type section, `Enslaves`; `[CombatDamage]`, `C4Warhead` | slave group and fallback demolition warhead of claim 10a | infantry type name (S-0402 claims 19 to 21); warhead type name (S-0303 Import mapping) | existing owning specs' defaults |
+| No data key | hidden-slave destruction notifications and loss accounting, transferred-slave cheer request, and no cheer/reset on the no-recipient path (claim 10a) | engine behaviour; notification evaluation is S-0011 claim 19, loss exclusions S-0414 claim 21, sequence start S-0107 claim 6 | fixed |
+| Map object tag field, `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | hidden slave's destruction notifications (claim 10a), not a new sale-specific event | S-0011 claim 19 and Import mapping; S-0312 claim 29's common group | no matching tag: no tag raises |
+| Art, infantry sequence section, `Cheer` | transferred slave's requested sequence (claim 10a) | sequence entry; S-0107 claims 1 and 22 own defaults and parsing | zero frame count when absent, so the direct request is refused (S-0107 claims 1 and 6) |
 | Rules, `[General]`, `RefundPercent` | refund percentage *r* (claim 1) | decimal, a percent sign allowed (S-0003, claims 6 and 7), held as a double, narrowed to single (RZ₂₄) when used | 0.5; a layer without the key keeps the value in force |
 | Rules, type section, `Soylent` | refund override *v* (claim 1) | integer, credits | 0 |
 | Rules, upgrade building section, `Turret` | resets upgrade count to 0 on sale when yes; otherwise lowers it by 1 (claim 5) | boolean | no |
@@ -917,7 +934,10 @@ tick number. Any game speed.
   completion test makes a positive-delay range of 1 stage or fewer finish. For the
   early-report variants use a building that names a vehicle to pack into and a 30-stage range,
   once with no guard spot and once with a guard spot. S-0415 D6/D7 supply reachable pack-up
-  inputs. Any game speed; repeat each variant once at another speed. One sale per variant
+  inputs. Also use S-0402 claim 28's scenario H25 to obtain an automatic relocation
+  destination, then sell during build-down without replacing that destination. Expect
+  ordinary last-stage completion, not stage-23 completion, while that guard spot remains.
+  Any game speed; repeat each variant once at another speed. One sale per variant
   and speed; void a run if the bystander affects the observed area or is defeated.
 - *Procedure:* sell each ordinary building and pack up each packing variant with scripted
   input. With a read-only recorder, log each tick's build-down stage, behaviour, foundation
@@ -1023,12 +1043,23 @@ tick number. Any game speed.
 - *Procedure:* let some slaves emerge and harvest while at least one is inside. Sell the
   non-converting master with normal scripted input. Use a read-only recorder to identify each
   existing slave, its position, owner, master, destination, target and behaviour, and the
-  master's refund and removal ticks. Observe through removal and for at least twice the
+  master's refund and removal ticks. Record each transferred slave's sequence request and
+  accepted sequence, rather than inferring the request solely from visible cheering. Compare
+  the seller's end-of-game losses with a matched no-sale control, counting only the existing
+  hidden slaves separately from other deaths. With named test-map data, give a hidden slave
+  a repeating destroyed-by-anything tag and a calibrated visible counter action as in
+  S-0312 scenario D20. Record tag firings and confirm no hidden-slave death effects.
+  Observe through removal and for at least twice the
   imported regeneration delay afterward. Repeat three times. Repeat with all slaves inside,
   and with all on the map. Run the packing-up control with both hidden and emerged slaves.
-- *Expected:* true sale removes every hidden slave without emergence or placement. On-map
-  slaves keep their positions, lose their master and become the neutral house's in this stock
-  setup, with target and destination cleared and *guard* given. No replacements or slave
+- *Expected:* true sale destroys every hidden slave without emergence or placement, with
+  one loss per non-excluded hidden slave for its current house and no attacker credit.
+  Tagged hidden slaves receive the no-attacker common destruction group of S-0312
+  claim 29; the repeating-tag counter follows S-0011 claim 19's latches, not an assumed
+  one firing per slave. No death sequence, debris, death weapon or attached bomb occurs
+  for those hidden slaves. On-map slaves keep their positions, lose their master and
+  become the neutral house's in this stock setup, with target and destination cleared,
+  *guard* queued and *cheer* requested afterward. No replacements or slave
   refunds occur. The control preserves the existing group under the resulting vehicle.
   Record cleanup ticks rather than assuming they equal the foundation-removal tick.
 - *Failed-placement control:* use S-0415 claim 11's scenario D8 setup with a slave-master
@@ -1042,12 +1073,16 @@ tick number. Any game speed.
   while retaining the normal neutral house. The earlier-created player is then the recipient.
   In a separate variant ensure no existing country's house belongs to that side; the on-map
   slaves then receive health-sized demolition hits, with resolved damage following S-0302,
-  rather than an ownership transfer. Keep ordinary defence factors and record health changes.
+  rather than an ownership transfer. That path requests no cheer and does not itself
+  reset target or destination or queue guard. Keep ordinary defence factors and record
+  health changes and sequence requests.
   Verify the house-side setup with the recorder before accepting either variant.
 - *Falsified if:* hidden slaves appear as survivors, the seller keeps on-map slaves in the stock
   run, a slave continues harvesting for the removed master, a replacement appears, an extra
   slave refund is paid, the recipient variants choose a later qualifying house or ignore the
-  no-recipient hit, or the successful conversion frees rather than transfers the group.
+  no-recipient hit, the hidden losses or common destruction raises are missing, a transfer
+  omits its cheer request, the no-recipient path requests cheer, or the successful conversion
+  frees rather than transfers the group.
   Void and repeat a run if the bystander affects the patch or is defeated.
 
 ## Open questions

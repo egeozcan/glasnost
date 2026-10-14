@@ -1,9 +1,9 @@
 ---
 id: Q-0440
 title: Notifications and cheer for the slaves of a sold slave master
-status: open
+status: answered
 related: [S-0408, S-0312, S-0402]
-answered-by: []
+answered-by: [S-0408]
 ---
 
 ## Need
