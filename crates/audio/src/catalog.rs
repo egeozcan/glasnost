@@ -1,7 +1,7 @@
 //! The sound catalog: what a sound name (from the rules data) plays.
 //!
 //! The meaning of the player's sound and speech databases is not specified
-//! yet (Q-0260, Q-0261; planned S-0701). Until it is, the catalog runs on an
+//! yet (Q-0260, Q-0261; a sound spec is planned). Until it is, the catalog runs on an
 //! interim rule: a sound name plays the single sample of the same name, at
 //! full gain, with the default priority and no per-sound limit. Entries can
 //! be defined explicitly ([`SoundCatalog::define`]); that is the seam a sound

@@ -40,7 +40,7 @@ The page shows a palette-indexed checkerboard: an R8 index texture resolved thro
 
 `/?mode=viewer` opens the asset viewer instead of the demo. **Pick install folder…** opens the browser's folder dialog (`<input webkitdirectory>`). Only the MIX containers at the top of the folder are mounted, and they are read lazily with `File.slice`, so nothing is copied or uploaded. Natively: `cargo run -p glasnost-platform-native -- --viewer [--game-dir DIR]`.
 
-The viewer lists archives (nested ones included) and their entries, previews sprites, tiles, images, palettes, string tables and a simple voxel view with a chosen palette and house-colour rows, and plays IDX samples and AUD sounds. Names come from text entries in the install, or type a file name under **Find file**. The remap range and the palette expansion are provisional settings (spec requests Q-0001 and Q-0003). Natively, sound previews go through a command-line player (`pw-play`, `paplay`, `aplay` or `afplay`) until the in-process mixer arrives.
+The viewer lists archives (nested ones included) and their entries, previews sprites, tiles, images, palettes, string tables and a simple voxel view with a chosen palette and house-colour rows, and plays IDX samples and AUD sounds. Names come from text entries in the install, or type a file name under **Find file**. The remap range and the palette expansion are provisional settings (spec requests Q-0001 and Q-0003). Natively, sound previews go through a command-line player (`pw-play`, `paplay`, `aplay` or `afplay`). In-game sound goes through `glasnost-audio`'s mixer instead (docs/development.md, "Audio (M5b)").
 
 ## Native demo
 
