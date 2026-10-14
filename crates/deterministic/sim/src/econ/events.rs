@@ -101,6 +101,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     let (kind, new) = (o.kind, o.owner);
     // spec: S-0414 claim 4 (a change of owner on the map: a leaving for the old owner, an entry for the new)
     crate::econ::victory::owner_changed(w, id, old);
+    // spec: S-0414 claims 21 and 22 (an ownership gain's kill and score)
+    crate::econ::stats::owner_changed(w, id, old);
     crate::econ::shroud::owner_changed(w, id);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)

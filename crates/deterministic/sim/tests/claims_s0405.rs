@@ -805,3 +805,46 @@ fn w12_g_positions_above_the_count_contribute() {
         );
     }
 }
+
+// spec: S-0405 claim 19 (the meter's scale B is base output plus base drain, without health scaling or switching)
+#[test]
+fn claim_19_meter_base() {
+    let mut w = game(&rules());
+    let base = power::meter_base(&w, A);
+    let p = put(&mut w, "PLANT", 0, 0, 0);
+    let c = put(&mut w, "CONS", 0, 2, 0);
+    w.obj_mut(p).unwrap().health = 100;
+    w.obj_mut(c).unwrap().econ.building.switched_off = true;
+    assert_eq!(power::meter_base(&w, A), base + 160);
+}
+
+// spec: S-0405 claim 19 and F4 (A = N − min(N − 1, max(0, trunc(RZ₅₃(RZ₅₃(400 / RZ₅₃(B + 400)) × N)))); at least one band at B = 0; the RZ₅₃ product below 1 at B = 3600)
+#[test]
+fn claim_19_meter_capacity() {
+    let rz = glasnost_num::Rounding::TowardZero;
+    let rn = glasnost_num::Rounding::Nearest;
+    assert_eq!(power::meter(0, 0, 0, 10, rz).0, 1);
+    assert_eq!(power::meter(400, 0, 0, 10, rz).0, 5);
+    assert_eq!(power::meter(3600, 0, 0, 10, rz).0, 10);
+    assert_eq!(power::meter(3600, 0, 0, 10, rn).0, 9);
+    assert_eq!(power::meter(1_000_000, 0, 0, 10, rz).0, 10);
+}
+
+// spec: S-0405 claim 19 and F4 (supplied A × O/T, near shortage A × V/T for the first 100 units of unmet drain, further shortage A × W/T; full power only the supplied part; T = 0 the supplied extent A)
+#[test]
+fn claim_19_meter_parts() {
+    let rz = glasnost_num::Rounding::TowardZero;
+    let i = |e: glasnost_num::F64| e.to_i32_common();
+    // N = 20, B = 400: A = 10.
+    let (a, e) = power::meter(400, 150, 300, 20, rz);
+    assert_eq!(a, 10);
+    assert_eq!(e.map(i), [5, 3, 1]);
+    let (_, e) = power::meter(400, 50, 100, 20, rz);
+    assert_eq!(e.map(i), [5, 5, 0], "below 100 units of shortage: no further part");
+    let (_, e) = power::meter(400, 200, 100, 20, rz);
+    assert_eq!(e.map(i), [10, 0, 0], "unused output is no part");
+    let (_, e) = power::meter(400, 0, 0, 20, rz);
+    assert_eq!(e.map(i), [10, 0, 0]);
+    let (_, e) = power::meter(400, 0, 200, 20, rz);
+    assert_eq!(e.map(i), [0, 5, 5]);
+}

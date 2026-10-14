@@ -99,6 +99,12 @@ pub struct Play {
     pub outcome: Option<Outcome>,
     radar_on: bool,
     waiting: bool,
+    /// The tick that started each tab's flash (S-0411 claim 11).
+    flash: [Option<i32>; hud::TABS],
+    /// Active play time in 16-ms clock units, *E* of S-0414's result
+    /// duration, and the host time of the active interval's last frame.
+    pub clock_units: i64,
+    clock_last: Option<i64>,
 }
 
 fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -139,7 +145,25 @@ impl Play {
             outcome: None,
             radar_on,
             waiting: false,
+            flash: [None; hud::TABS],
+            clock_units: 0,
+            clock_last: None,
         }
+    }
+
+    /// Advances the result duration's active clock to host time `now_ms`
+    /// (S-0414 claim 23): `active` is false while the game is paused for the
+    /// options menu or has lost focus. The clock stops when play stops.
+    pub fn clock(&mut self, now_ms: i64, active: bool) {
+        if !active || !self.running() {
+            self.clock_last = None;
+            return;
+        }
+        if let Some(u) = self.clock_last {
+            // spec: S-0414 Formulas, result duration (an interval's contribution ⌊v/16⌋ − ⌊u/16⌋ clock units)
+            self.clock_units += now_ms.div_euclid(16) - u.div_euclid(16);
+        }
+        self.clock_last = Some(now_ms);
     }
 
     /// The world.
@@ -202,6 +226,17 @@ impl Play {
             self.cues.push(UiCue::ConstructionComplete);
         }
         self.waiting = waiting;
+        let tick = w.tick;
+        for (f, tv) in self.flash.iter_mut().zip(model.tabs.iter()) {
+            *f = match (*f, tv.waiting) {
+                // spec: S-0411 claim 11 (with no ready subject on the tab the flash stops and clears)
+                (_, false) => None,
+                // spec: S-0411 claim 11 (a ready item found again does not restart an existing flash)
+                (Some(s), true) => Some(s),
+                // spec: S-0411 claim 11 (the tick whose sidebar update starts a new flash)
+                (None, true) => Some(tick),
+            };
+        }
         if let Tool::Place(t) = self.tool
             && !icon_ready(w, house, t)
         {
@@ -212,6 +247,11 @@ impl Play {
         let tick = self.game.world.tick;
         self.messages.retain(|m| m.until > tick);
         self.outcome = self.game.outcome();
+        if let Some(o) = &self.outcome {
+            let listed: Vec<HouseId> = o.results.iter().map(|r| r.0).collect();
+            // spec: S-0414 claims 19 and 23, S-0202 claim 16 (the displayed scores, once, after the simulation has stopped)
+            glasnost_sim::econ::stats::finish(&mut self.game.world, &listed);
+        }
     }
 
     /// Issues orders in the local house's name; returns how many the
@@ -255,9 +295,8 @@ impl Play {
                         }
                     }
                     None => {
-                        // spec: S-0411 claim 10 (placement mode resumes); S-0701 claim 24 (a refused placement: the cannot-deploy-here announcement only)
+                        // spec: S-0411 claim 10 (placement mode resumes); S-0701 claim 24 (a refused placement: the cannot-deploy-here announcement only); S-0406 claim 20 (no battlefield text)
                         self.cues.push(UiCue::PlacementRefused);
-                        self.say("Cannot place there.");
                     }
                 }
             }
@@ -267,6 +306,8 @@ impl Play {
                     Some(o) => {
                         self.issue(vec![o]);
                     }
+                    // spec: S-0408 claim 18 (a no-sell or no-repair click adds no battlefield text)
+                    None if m != Mode::Power => {}
                     None => self.say("Nothing to do there."),
                 }
             }
@@ -351,10 +392,19 @@ impl Play {
         let w = &self.game.world;
         self.selection.retain(|&id| targeting::selectable(w, id));
         let list = targeting::key_command(w, self.local, &self.selection, cmd);
-        // interim: Q-0336 (a key command sounds once per press, and only when it issued orders)
-        if self.issue(list) > 0 {
-            self.keys.push(cmd);
+        // spec: S-0701 claim 19 (an empty selection requests no command sound)
+        if self.selection.is_empty() {
+            return;
         }
+        let local = self.local;
+        for o in list {
+            // spec: S-0701 claim 19 (a failed issuance exits the command without its sound, even after earlier orders)
+            if !self.game.issue(local, o) {
+                return;
+            }
+        }
+        // spec: S-0701 claim 19 (one sound per press after a nonempty selection, however many objects were ordered, even none)
+        self.keys.push(cmd);
     }
 
     /// The cheer command (S-0213 table T2, claim 19).
@@ -389,6 +439,9 @@ impl Play {
             art,
         );
         m.scroll = self.scroll;
+        for (tv, f) in m.tabs.iter_mut().zip(self.flash) {
+            tv.flash_start = f;
+        }
         m.mode = match self.tool {
             Tool::Mode(x) => Some(x),
             _ => None,
@@ -406,21 +459,42 @@ impl Play {
 
     /// Scrolls the icon grid by `d` rows, `rows` being shown.
     pub fn scroll_icons(&mut self, d: i32, rows: usize) {
-        let n = self
-            .game
+        let n = self.shown_icon_count();
+        // spec: S-0411 claim 18 (all icons fit: the buttons are disabled; no request and no sound)
+        if d == 0 || !hud::overflows(n, rows) {
+            return;
+        }
+        if hud::at_end(d, self.scroll, rows, n) {
+            // spec: S-0411 claim 18 and S-0701 claim 24 (a request already at its requested end: the game-wide refusal sound)
+            self.cues.push(UiCue::StripEnd);
+            return;
+        }
+        // spec: S-0411 claim 18 (one page, the complete visible rows, in its direction; movement stops at the end with no further sound)
+        let max = hud::max_scroll(n, rows) as i64;
+        let page = rows as i64 * i64::from(d.signum());
+        self.scroll = (self.scroll as i64 + page).clamp(0, max) as usize;
+        // spec: S-0411 claim 18 and S-0701 claim 24 (an accepted request, even for less than a full page: the tab-scroll sound)
+        self.cues.push(UiCue::StripScroll);
+    }
+
+    /// A mouse-wheel event over the game (S-0411 claim 18): one row on the
+    /// shown tab, upward for a positive `delta`, with the same ends and no
+    /// sound.
+    pub fn wheel_icons(&mut self, delta: i32, rows: usize) {
+        let n = self.shown_icon_count();
+        let max = hud::max_scroll(n, rows) as i64;
+        // spec: S-0411 claim 18 (one row per wheel event whatever the delta's magnitude; upward for a positive delta; no tab-scroll or refusal sound)
+        let step = -i64::from(delta.signum());
+        self.scroll = (self.scroll as i64 + step).clamp(0, max) as usize;
+    }
+
+    fn shown_icon_count(&self) -> usize {
+        self.game
             .world
             .houses
             .get(usize::from(self.local.0))
             .and_then(|h| h.econ.tech.icons.get(self.shown_tab()))
-            .map_or(0, Vec::len);
-        let max = hud::max_scroll(n, rows) as i32;
-        let before = self.scroll;
-        self.scroll = (self.scroll as i32 + d).clamp(0, max) as usize;
-        // spec: S-0701 claim 24 (the sidebar strip scrolled past its end: the game-wide refusal sound)
-        // interim: Q-0339 (past its end: a scroll click that cannot move the strip at all)
-        if d != 0 && self.scroll == before {
-            self.cues.push(UiCue::StripEnd);
-        }
+            .map_or(0, Vec::len)
     }
 
     /// A click on a mode button: the mode, or back to selecting when it is
@@ -451,12 +525,18 @@ impl Play {
         };
         let held = glasnost_sim::econ::sidebar::icon_state(w, self.local, t)
             .is_some_and(|s| s.on_hold);
+        // spec: S-0411 claim 12 (training for infantry, building for every other kind)
+        let infantry = t.kind == glasnost_sim::rules::Kind::Infantry;
+        // spec: S-0411 claim 12 (an already active line: the click adds a queued copy)
+        let active = glasnost_sim::econ::production::line_of(w, self.local, t)
+            .is_some_and(|l| l.item.is_some());
         match sidebar::click(w, self.local, t, click, shift) {
             Action::Order(o) => {
                 // spec: S-0411 claim 12 (start, queue, resume, hold and cancel clicks play interface sounds)
                 let cue = match &o {
-                    Order::Build { .. } if held => Some(UiCue::BuildResumed),
-                    Order::Build { .. } => Some(UiCue::BuildStarted),
+                    Order::Build { .. } if held => Some(UiCue::BuildResumed { infantry }),
+                    Order::Build { .. } if active => Some(UiCue::BuildQueued),
+                    Order::Build { .. } => Some(UiCue::BuildStarted { infantry }),
                     Order::Hold { .. } => Some(UiCue::BuildHeld),
                     Order::Cancel { .. } | Order::CancelAll { .. } => Some(UiCue::BuildCancelled),
                     _ => None,
@@ -468,8 +548,8 @@ impl Play {
             Action::Place(t) => self.tool = Tool::Place(t),
             Action::Refused => {
                 // spec: S-0411 claims 4 and 12; S-0701 claim 24 (a busy production line: the unable-to-comply announcement only)
+                // spec: S-0411 claim 17 (no battlefield text for the refusal)
                 self.cues.push(UiCue::BuildRefused);
-                self.say("Cannot build that now.");
             }
             Action::Nothing => {}
         }
@@ -484,12 +564,12 @@ impl Play {
         }
     }
 
-    /// The end screen, once the game is over (S-0414). `period_ms` is the
-    /// paced period of a tick (S-0201 claim 4).
-    pub fn end(&self, period_ms: i64) -> Option<End> {
+    /// The end screen, once the game is over (S-0414), with the active
+    /// clock's duration (claim 23).
+    pub fn end(&self) -> Option<End> {
         self.outcome
             .as_ref()
-            .map(|o| End::from_world(&self.game.world, o, Some(self.local), period_ms))
+            .map(|o| End::from_world(&self.game.world, o, Some(self.local), self.clock_units))
     }
 }
 

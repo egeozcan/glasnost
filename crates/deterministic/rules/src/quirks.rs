@@ -860,6 +860,22 @@ pub struct Quirks {
     // spec: S-0407 claim 10
     #[serde(default = "on")]
     pub placed_buildings_not_ever_built: bool,
+    /// An unknown or non-building prerequisite name is dropped when the list is read; off: it stays an unmet entry.
+    // spec: S-0407 claim 8 (d) and Edge cases
+    #[serde(default = "on")]
+    pub prerequisite_names_dropped: bool,
+    /// An ownership change gives the gaining house a kill on the result screen; off: only destructions add kills.
+    // spec: S-0414 claim 21
+    #[serde(default = "on")]
+    pub ownership_gain_counts_as_kill: bool,
+    /// A tab flash starts with an extra 10-update period; off: the first toggle comes at the next 10-tick boundary.
+    // spec: S-0411 claim 11 and Edge cases
+    #[serde(default = "on")]
+    pub tab_flash_initial_extra_period: bool,
+    /// A sidebar icon clips only at its content region's right and bottom; off: at all four edges.
+    // spec: S-0411 claim 16 and Edge cases
+    #[serde(default = "on")]
+    pub sidebar_icon_surface_clip: bool,
     /// Each secret lab picks its entry by position with replacement, so labs can share a type.
     // spec: S-0407 claim 14
     #[serde(default = "on")]
@@ -1355,6 +1371,10 @@ impl Default for Quirks {
             upgrade_level_without_room: true,
             upgrade_prerequisite_last_building: true,
             placed_buildings_not_ever_built: true,
+            prerequisite_names_dropped: true,
+            ownership_gain_counts_as_kill: true,
+            tab_flash_initial_extra_period: true,
+            sidebar_icon_surface_clip: true,
             secret_lab_pick_by_position: true,
             unit_changes_no_recheck: true,
             sale_start_no_recheck: true,
@@ -1936,6 +1956,16 @@ impl Quirks {
                 "placed_buildings_not_ever_built",
                 self.placed_buildings_not_ever_built,
             ),
+            ("prerequisite_names_dropped", self.prerequisite_names_dropped),
+            (
+                "ownership_gain_counts_as_kill",
+                self.ownership_gain_counts_as_kill,
+            ),
+            (
+                "tab_flash_initial_extra_period",
+                self.tab_flash_initial_extra_period,
+            ),
+            ("sidebar_icon_surface_clip", self.sidebar_icon_surface_clip),
             (
                 "secret_lab_pick_by_position",
                 self.secret_lab_pick_by_position,

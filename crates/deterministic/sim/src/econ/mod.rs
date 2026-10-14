@@ -28,6 +28,7 @@ pub mod sell;
 pub mod setup;
 pub mod shroud;
 pub mod sidebar;
+pub mod stats;
 pub mod tech;
 pub mod victory;
 

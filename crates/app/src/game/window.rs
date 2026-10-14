@@ -278,6 +278,17 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 self.client.pointer_moved(self.pointer);
             }
             WindowEvent::CursorLeft { .. } => self.client.pointer_left(),
+            WindowEvent::MouseWheel { delta, .. } => {
+                let dy = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => y as f64,
+                    winit::event::MouseScrollDelta::PixelDelta(p) => p.y,
+                };
+                // Host input only: the wheel's direction (S-0411 claim 18).
+                if dy != 0.0 {
+                    self.client.wheel(if dy > 0.0 { 1 } else { -1 });
+                }
+                self.after_input();
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 let b = match button {
                     MouseButton::Left => Button::Left,

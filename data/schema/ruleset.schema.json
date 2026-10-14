@@ -6495,6 +6495,11 @@
           "type": "boolean",
           "default": true
         },
+        "ownership_gain_counts_as_kill": {
+          "description": "An ownership change gives the gaining house a kill on the result screen; off: only destructions add kills.",
+          "type": "boolean",
+          "default": true
+        },
         "packup_release_by_guard_spot": {
           "description": "A packing building releases survivors according to its guard spot and undeploy type only.",
           "type": "boolean",
@@ -6567,6 +6572,11 @@
         },
         "placement_shroud_at_cursor": {
           "description": "A person's placement click takes the shroud result from when the cursor entered the cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "prerequisite_names_dropped": {
+          "description": "An unknown or non-building prerequisite name is dropped when the list is read; off: it stays an unmet entry.",
           "type": "boolean",
           "default": true
         },
@@ -6785,6 +6795,11 @@
           "type": "boolean",
           "default": true
         },
+        "sidebar_icon_surface_clip": {
+          "description": "A sidebar icon clips only at its content region's right and bottom; off: at all four edges.",
+          "type": "boolean",
+          "default": true
+        },
         "sidebar_tie_newest_first": {
           "description": "A sidebar item tied with existing items on every key goes before\nthem (the newest first); off: after them.",
           "type": "boolean",
@@ -6912,6 +6927,11 @@
         },
         "superweapon_setting_tests_first_only": {
           "description": "The superweapon setting's build bar tests only a building type's first superweapon.",
+          "type": "boolean",
+          "default": true
+        },
+        "tab_flash_initial_extra_period": {
+          "description": "A tab flash starts with an extra 10-update period; off: the first toggle comes at the next 10-tick boundary.",
           "type": "boolean",
           "default": true
         },

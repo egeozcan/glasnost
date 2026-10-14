@@ -295,6 +295,40 @@ fn claim_3_queue_limit_zero() {
     assert!(line(&w, 0, tank).unwrap().queue.is_empty());
 }
 
+// spec: S-0404 claim 3 and P3 (k) (a queue request refused at application by the queue limit or the build limit requests the refusal cue for its house; an accepted one does not)
+#[test]
+fn claim_3_refusal_cue_at_application() {
+    use glasnost_sim::combat::effects::{Effect, Sound};
+    let refusals = |w: &glasnost_sim::world::World| {
+        w.effects
+            .iter()
+            .filter(|e| {
+                matches!(e, Effect::Sound { sound: Sound::QueueRefused, house: Some(h), .. } if h.0 == 0)
+            })
+            .count()
+    };
+    for limit in [false, true] {
+        let mut r = ruleset();
+        if limit {
+            r.sim.vehicles.get_mut("TANK").unwrap().econ.build_limit = Some(1);
+        } else {
+            r.sim.general.economy.maximum_queued_objects = Some(0);
+        }
+        let mut w = game(&r);
+        building(&mut w, "WARFACT", 0, 0, 0);
+        ready(&mut w);
+        rich(&mut w);
+        let tank = t(&w, Kind::Vehicle, "TANK");
+        assert!(issue(&mut w, 0, Order::Build { what: tank }));
+        step(&mut w);
+        assert_eq!(refusals(&w), 0);
+        w.effects.clear();
+        issue(&mut w, 0, Order::Build { what: tank });
+        step(&mut w);
+        assert_eq!(refusals(&w), 1);
+    }
+}
+
 // spec: S-0404 claim 3 (P3 (f), (g), (h): a switched-off only factory, owner countries and the naval match)
 #[test]
 fn claim_3_factory_conditions() {

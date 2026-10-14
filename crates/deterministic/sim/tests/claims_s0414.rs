@@ -900,3 +900,167 @@ fn claim_16_final_tick_commitment() {
         }
     }
 }
+
+// ---- Result-screen statistics (claims 19 to 23) ----
+
+use glasnost_num::F64;
+use glasnost_sim::combat::damage::{self, Hit};
+use glasnost_sim::econ::stats;
+
+/// The statistics scene: TANK, INS and DS cost 100, INSB 50 (S-0404 claim
+/// 2's price with no country factors).
+fn stats_scene() -> Scene {
+    let mut s = scene(false);
+    for n in ["TANK", "INS", "DS"] {
+        if let Some(t) = s.ruleset.sim.vehicles.get_mut(n) {
+            t.cost = Some(100);
+        }
+    }
+    if let Some(b) = s.ruleset.sim.buildings.get_mut("INSB") {
+        b.cost = Some(50);
+    }
+    s
+}
+
+fn lethal(w: &mut World, victim: ObjectId, attacker: Option<ObjectId>, house: Option<HouseId>) {
+    let amount = w.obj(victim).unwrap().health;
+    damage::apply(
+        w,
+        victim,
+        Hit {
+            amount,
+            warhead: None,
+            distance: 0,
+            attacker,
+            house,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    );
+}
+
+fn st(w: &World, h: HouseId) -> stats::Stats {
+    stats::of(w, h)
+}
+
+fn f(w: &World, x: i64) -> F64 {
+    F64::from_i64(x, w.rules().mode)
+}
+
+// spec: S-0414 claim 20 (the built total is the sum of the ever-built counts, not the owned or created objects; a not-scored type raises nothing)
+#[test]
+fn claim_20_built_total() {
+    let mut w = stats_scene().build();
+    let _ = armed(&mut w);
+    assert_eq!(stats::built_total(&w, A), 0, "created objects raise nothing");
+    let tank = type_ref(&w, Kind::Vehicle, "TANK");
+    let man = type_ref(&w, Kind::Infantry, "MAN");
+    let ds = type_ref(&w, Kind::Vehicle, "DS");
+    glasnost_sim::econ::tech::count_built(&mut w, A, tank);
+    glasnost_sim::econ::tech::count_built(&mut w, A, tank);
+    glasnost_sim::econ::tech::count_built(&mut w, A, man);
+    glasnost_sim::econ::tech::count_built(&mut w, A, ds);
+    assert_eq!(stats::built_total(&w, A), 3);
+    assert_eq!(stats::built_total(&w, B), 0);
+}
+
+// spec: S-0414 claims 21 and 22 (a credited destruction: a kill and the victim's price × rank to the attacker's house, a loss to the victim's; a not-scored victim nothing; an insignificant building neither kill nor loss but still score; no attacking object: a loss only)
+#[test]
+fn claim_21_kills_and_losses() {
+    let mut w = stats_scene().build();
+    let [a, _, _] = armed(&mut w);
+    let t = spawn(&mut w, Kind::Vehicle, "TANK", 1, 0, 4);
+    lethal(&mut w, t, Some(a), None);
+    assert_eq!((st(&w, A).kills, st(&w, A).score), (1, 100));
+    assert_eq!(st(&w, B).losses, 1);
+    let d = spawn(&mut w, Kind::Vehicle, "DS", 1, 2, 4);
+    lethal(&mut w, d, Some(a), None);
+    assert_eq!((st(&w, A).kills, st(&w, A).score, st(&w, B).losses), (1, 100, 1));
+    let i = spawn(&mut w, Kind::Vehicle, "INS", 1, 4, 4);
+    lethal(&mut w, i, Some(a), None);
+    assert_eq!((st(&w, A).kills, st(&w, B).losses), (2, 2), "an insignificant unit still counts");
+    let ib = spawn(&mut w, Kind::Building, "INSB", 1, 6, 6);
+    lethal(&mut w, ib, Some(a), None);
+    assert_eq!((st(&w, A).kills, st(&w, B).losses), (2, 2), "an insignificant building does not");
+    assert_eq!(st(&w, A).score, 250, "but gives destruction score");
+    let n = spawn(&mut w, Kind::Vehicle, "TANK", 1, 8, 4);
+    lethal(&mut w, n, None, Some(A));
+    assert_eq!((st(&w, A).kills, st(&w, A).score, st(&w, B).losses), (2, 250, 3));
+}
+
+// spec: S-0414 claims 21 and 22 (the same house's victim: a kill and a loss, but no destruction score since a house allies itself)
+#[test]
+fn claim_22_allied_victim() {
+    let mut w = stats_scene().build();
+    let [a, _, _] = armed(&mut w);
+    let own = spawn(&mut w, Kind::Vehicle, "TANK", 0, 0, 4);
+    lethal(&mut w, own, Some(a), None);
+    assert_eq!((st(&w, A).kills, st(&w, A).score, st(&w, A).losses), (1, 0, 1));
+}
+
+// spec: S-0414 claims 21 and 22 (an ownership gain: one kill and the old owner's price to the gaining house, no loss to the losing one; quirks.ownership_gain_counts_as_kill off: no kill, the score unchanged)
+#[test]
+fn claim_21_ownership_gain() {
+    for on in [true, false] {
+        let mut s = stats_scene();
+        s.ruleset.globals.quirks.ownership_gain_counts_as_kill = on;
+        let mut w = s.build();
+        let t = spawn(&mut w, Kind::Vehicle, "TANK", 0, 0, 0);
+        let d = spawn(&mut w, Kind::Vehicle, "DS", 0, 2, 0);
+        for id in [t, d] {
+            w.obj_mut(id).unwrap().owner = Some(B);
+            glasnost_sim::econ::events::owner_changed(&mut w, id, Some(A));
+        }
+        assert_eq!(st(&w, B).kills, i32::from(on), "a not-scored object gives no kill");
+        assert_eq!(st(&w, B).score, 200, "no flag exclusion for the score");
+        assert_eq!(st(&w, A).losses, 0);
+        // spec: S-0414 claim 21 (a return to an earlier owner is another gain)
+        w.obj_mut(t).unwrap().owner = Some(A);
+        glasnost_sim::econ::events::owner_changed(&mut w, t, Some(B));
+        assert_eq!(st(&w, A).kills, i32::from(on));
+    }
+}
+
+// spec: S-0414 claim 22 (resource score p = trunc(p + 5 × a), each update truncated, nothing accumulated between updates)
+#[test]
+fn claim_22_resource_score() {
+    let mut w = stats_scene().build();
+    let m = w.rules().mode;
+    let tenth = f(&w, 1).div(f(&w, 10), m);
+    let v = f(&w, 7);
+    stats::resource(&mut w, A, v);
+    assert_eq!(st(&w, A).score, 35);
+    stats::resource(&mut w, A, tenth);
+    stats::resource(&mut w, A, tenth);
+    assert_eq!(st(&w, A).score, 35, "0.5 twice, truncated each time");
+    let half = f(&w, 1).div(f(&w, 2), m);
+    stats::resource(&mut w, A, half);
+    assert_eq!(st(&w, A).score, 37);
+}
+
+// spec: S-0414 claim 23 and S-0202 claim 16 (a defeated house shows b; an undefeated b + ⌊b/2⌋ + R(⌊b/2⌋, b), one draw per undefeated listed house in house order, fixed once)
+#[test]
+fn claim_23_displayed_score() {
+    assert_eq!(stats::displayed(-5, None), 0);
+    assert_eq!(stats::displayed(10, None), 10);
+    assert_eq!(stats::displayed(10, Some(7)), 22);
+    let mut w = stats_scene().build();
+    let v = f(&w, 20);
+    stats::resource(&mut w, A, v);
+    let v = f(&w, 20);
+    stats::resource(&mut w, B, v);
+    let v = f(&w, 2);
+    stats::resource(&mut w, C, v);
+    w.houses[1].econ.result.defeated = true;
+    let mut expected = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let ra = expected.ranged(50, 100, half);
+    let rc = expected.ranged(5, 10, half);
+    stats::finish(&mut w, &[C, B, A]);
+    assert_eq!(st(&w, A).shown, Some(150 + ra));
+    assert_eq!(st(&w, B).shown, Some(100));
+    assert_eq!(st(&w, C).shown, Some(15 + rc));
+    assert_eq!(w.rng, expected, "two draws, A before C");
+    stats::finish(&mut w, &[A, B, C]);
+    assert_eq!(w.rng, expected, "computed once");
+}
