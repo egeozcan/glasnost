@@ -2,7 +2,7 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,7 +16,8 @@ supersedes: []
 
 ## Summary
 
-**Revision scope.** Q-0215 questions 1–6 are already answered by revision 10's F8.
+**Revision scope.** Fifteen lead-classified presentation glitches are fixed outright,
+with no switches. Q-0215 questions 1–6 are already answered by F8.
 Question 7's arbitrary-section characterization is explicitly `unmeasured`, not an
 implied extrapolation from that table. MS-28 proposes larger mixed-tie discriminators
 and states what is still required to close that question.
@@ -57,9 +58,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **View space.** After the view transform: *x* to the screen's right, *y* upward on screen
   (screen rows are *−y*), *z* toward the viewer (larger *z* is nearer).
 - **voxel image** (also called the *voxel buffer* below). The palette-index image produced for
-  a part before placement on screen. Palette index 0 is transparent. Its pixel coordinates wrap
-  with a period of 256 pixels per axis (claims 22 and 24). This is an image-coordinate convention,
-  not a required storage size or layout.
+  a part before placement on screen. Palette index 0 is transparent. Its signed integer
+  coordinates do not wrap. Its extent contains every rendered voxel and adjacent pixel
+  (claims 22 and 24), without prescribing a storage size or layout.
 - **Shade index.** A lighting level 0–31 chosen per voxel normal; it selects one 256-entry row
   of the VPL.
 - **VPL.** The voxel lighting table file: for each shade index and each voxel colour index, the palette index to draw. Claim 38 gives how its content is used; its byte layout is given by S-0013. A *row* is the 256 entries of one shade index.
@@ -77,10 +78,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **voxel depth** (also called the *depth plane* below). The depth associated with a voxel-image
   pixel when claim 24's depth comparison applies. Its integer range and comparison are specified
   there. It need not be stored beside the colour image.
-- **Previous-draw clearing, clear area.** Claim 34 specifies which effects of earlier draws cease
-  to affect a fresh image, and where they can remain visible. *Clear area* names the coordinates
-  of that rule, not a memory region. Likewise *colour plane* below means colour-image effects,
-  not a required storage layout.
+- **Colour plane, depth plane.** Colour-image and comparison-depth effects, not required
+  storage layouts. Claim 34 gives fresh-draw initialisation. *Empty comparison depth*,
+  denoted 0 when discussing clearing, is a sentinel below all numeric voxel depths,
+  including numeric depth zero; logically it compares as −∞ (claim 24).
 - **Recoil cycle, recoil slide.** A building turret's or barrel's slide back and return after a
   shot (claim 27); its recoil slide *λ* is how far back the part currently sits, in model units
   (F7).
@@ -138,10 +139,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **Alternative body.** A second body model that a type can have besides its main body (file
   naming: S-0007, claim 16). It is drawn only through the alternative-body option (claim 12,
   import mapping).
-- **Alternative-model state.** On while claim 12 has a vehicle show something other than its main
-  body in the body's place: its alternative body, or, for a type with the turret flag, its turret
-  model, or, for a turretless type with the option but no alternative body loaded, nothing at all.
-  It is off otherwise. It is part of the image-cache keys (claim 26).
+- **Alternative-model state.** On while the alternative-body option is enabled and none
+  of the vehicle's spawned aircraft is docked (claim 12), even when missing alternative
+  art makes it show its main body instead. Otherwise off. It is a separate cache-key
+  component (claim 26).
 - **Multi-turret type.** A vehicle type whose imported turret count is above 0 and that does not
   have rotating-barrel weapon stages (import mapping). Such a type has one turret model, and
   optionally one barrel model, per turret index 0, 1, … (file naming: S-0007).
@@ -194,9 +195,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
    takes 2 ticks: the elevation's 32-step value is level after the first tick and one step
    (11.25°) above level from the second tick on (`quirks.barrel_elevation_quantised`). For an illustrative type whose imported fire-angle field is *A = 20*, the turn is 5120
    facing units and takes 6 ticks at 853 facing units per tick; the 32-step values 0, 1, …, 6
-   ticks after placement are 8, 8, 7, 7, 6, 6, 6 (F9). This is an example field value, not a value asserted for stock data. What a barrel image shows is the elevation at the time the image was made; a
-   cached barrel image keeps it (claim 26, `quirks.barrel_cache_ignores_elevation`), so a barrel first drawn in the first tick
-   can stay level on screen after the elevation has risen. Buildings re-aim the elevation
+   ticks after placement are 8, 8, 7, 7, 6, 6, 6 (F9). This is an example field value, not stock data. Every appearance shows the current
+   32-step elevation, including reused images, because barrel keys include elevation
+   (claim 26; a lead-confirmed departure checked by MS-10 engine conformance). Buildings re-aim the elevation
    when firing; how they choose it belongs to the building combat specs, and this spec only fixes
    that the shown pitch is the 32-step value of that elevation.
    - Backing: `measurable` (MS-2 and MS-14 for vehicles, MS-6 for buildings)
@@ -228,17 +229,13 @@ turn per unit), to tell it apart from the coarser facings derived from it.
    - Backing: `measurable` (MS-6, including its anchor run)
    - Confidence: medium (high for the anchor shift)
 
-10. **Barrel placement.** With *t* the translation column of the turret transform *T* (before the
-    view), the barrel transform is *B = T · Tr(−t) · Ry(φ) · Tr(t)*, where *φ* is the elevation
-    angle of claim 6 and *Tr(v)* is a translation in the current local frame. The only points
-    the elevation leaves in place are those of the lateral (y) line through the turret-frame point *−t*, so the barrel pitches about a
-    lateral axis through *−t* in turret coordinates, not through the turret origin (`quirks.barrel_pivot_frame_mixup`).
-    *t* is the turret's translation in its parent frame: for a vehicle on flat ground it is
-    *δ × ρ* along the body's forward direction (plus any translation in *D*, S-0106),
-    for a building it is *d_b* along the turret's own forward direction. When *t = 0* the pivot
-    is the turret origin. The barrel is drawn with *V · B*.
-    - Backing: `measurable` (MS-2 for vehicles, MS-6 for buildings)
-    - Confidence: high (composition), medium (visible effect)
+10. **Barrel placement.** The barrel transform is *B = T · Ry(φ)*, where *T* is the
+    turret transform before the view and *φ* is claim 6's elevation. Pitch about the
+    lateral y axis through the turret origin; draw with *V · B*. Building recoil adds
+    claim 27's displacement without changing this pivot.
+    - Backing: `measurable` (MS-2 and MS-6; lead-confirmed pivot departure,
+      tested against this spec rather than the original)
+    - Confidence: high
 
 11. **Turret and barrel order.** The turret and barrel are separate images; whichever is drawn
     second covers the first where they overlap. If the turret's 4-step facing is 1 or 2 (pointing
@@ -262,22 +259,19 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       is ever drawn. A vehicle with the type name S-0007 singles out but without the option always shows
       its main body, even when its alternative body has loaded. So for a type without the option,
       S-0007's `quirks.apc_water_body` changes only what is loaded, not what is drawn.
-    - **Option without a file.** A turretless vehicle with the option for which no alternative
-      body has loaded draws no body at all while none of its spawned aircraft is docked
-      (`quirks.alt_body_turret_model`). The alternative-model state is on meanwhile (Terms), so the
-      body's image-cache key differs from the main body's, and no cached main-body image is shown
-      in its place (claim 26). Its shadow still shows, because the shadow always comes
-      from the main body (claim 29).
+    - **Option without a file.** Draw the main body whenever no alternative body is
+      available, including types with the turret flag, for which S-0007 loads no
+      alternative body. Draw the turret normally, never as a substitute body. The
+      alternative-model state remains a separate key component (Terms, claim 26).
+      This fallback is a lead-confirmed departure checked by MS-11 engine conformance.
 
-    A type that also has the turret flag has no alternative body file (S-0007); while none of its spawned aircraft is docked, the
-    original draws the type's turret model in place of the body, posed as the body, and the
-    turret as usual (`quirks.alt_body_turret_model`). A vehicle of a multi-turret type draws
+    A vehicle of a multi-turret type draws
     the turret model and barrel model of its selected turret index instead of the type's ordinary
     turret and barrel. A type with rotating-barrel weapon stages always draws its ordinary turret
     and barrel, whatever its turret count. File naming is S-0007.
     - Backing: `measurable` (MS-11)
-    - Confidence: medium (high for the turret model in place of the body and for an alternative
-      body never drawn without the option)
+    - Confidence: high (missing-body fallback and no alternative without the option),
+      medium (remaining model choices)
 
 ### Sections and animation
 
@@ -418,27 +412,15 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       of bounding-box corner depths, so neither distinguishes that tie priority.
     - Confidence: high
 
-22. **One pixel per voxel.** Outside the depth-buffered mode (claim 24), each voxel writes
-    exactly one pixel of the voxel buffer, at the
-    position given by formula F5. There is no splatting; a section magnified past one model unit
-    per voxel shows gaps (`quirks.voxel_single_pixel`). Positions wrap modulo 256 in both
-    directions, so a voxel whose position lies past one edge of the buffer is written near the
-    opposite edge (`quirks.voxel_buffer_wrap`). A part whose voxels all lie inside their section
-    boxes wraps only when it is at least about 250 pixels wide or tall (the box is centred in the
-    buffer, and the carry of F5 moves a voxel by less than 3 pixels, claim 34). At *w₀* or *h₀* =
-    247, the copy rectangle (claim 25) still fits in the buffer, but the clear area formed from
-    that rectangle and widened by one pixel on its right and bottom (claim 34) fails the fit test.
-    The next fresh draw therefore clears the whole colour plane, and the wrapped pixels do not
-    survive to a later image. Voxels that lie outside their section boxes
-    (claims 35 and 36) can wrap in a part of any size, and what they leave in the buffer can show
-    in a later image (claim 34).
-    - Backing: `measurable` (MS-5, MS-13) for one pixel per voxel and the gaps; `measurable`
-      (MS-24 (c)) for the wrap itself, which shows through what it leaves for a later image, and
-      `unmeasured` for how a copy rectangle larger than the buffer reaches the screen. The
-      original's handling of such a rectangle has not been determined (open questions), so there
-      is no expected value to compare with. Until it is, our engine copies only the part of such
-      a rectangle that lies inside the voxel buffer.
-    - Confidence: high (one pixel per voxel, the wrap), medium (the size from which a part wraps)
+22. **One pixel per voxel; no image-coordinate wrap.** Outside depth mode, each
+    voxel writes exactly one pixel at F5's position. Magnification shows gaps
+    (`quirks.voxel_single_pixel`). Enlarge the image extent to contain every rendered
+    voxel and right-hand pixel, including out-of-box voxels from claims 35 and 36.
+    No coordinate wraps or clips at an artificial 256-pixel edge. Claim 25's copy
+    rectangle still determines which pixels reach the screen.
+    - Backing: `measurable` (MS-5/MS-13 for pixel size; MS-24 engine conformance for
+      the lead-confirmed no-wrap departure)
+    - Confidence: high
 
 23. **Section overlap priority.** Outside depth-buffered mode, the sections of one part have
     ascending overlap priority by nearest view-space depth (the largest *z* of their transformed
@@ -460,35 +442,30 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       extrapolation beyond the covered configurations
 
 24. **Per-type depth buffering.** A type with the depth-buffer option draws differently in four
-    ways. See claim 32 for a case where this mode is applied to types that do not have the option.
+    ways. Claim 32 confines this mode to fresh depth-option part draws.
     - **Section ties and depth.** Distinct-depth sections contribute nearest first. For F8's
       configurations, equal comparison depths at a coincident pixel favour the section of
       highest overlap priority there: reversing the priorities makes that section contribute
       first, and the strict depth test retains it. F8 also lists the contributing order for
       those configurations. Within-section coverage follows claim 21's depth-mode rules,
       not its greatest-tuple painter winner.
-    - **Depth test.** Each voxel-image pixel has an associated comparison depth, an integer
-      from 0 to 255. These values specify which pixels show, not a required storage plane.
-      The depth plane is not reset as a whole before each draw: at the start of a draw in this
-      mode it is set to 0 over the clear area of claim 34 only, and elsewhere it keeps the depths
-      that earlier draws in this mode left there (`quirks.voxel_depth_plane_partial_clear`). A voxel's depth is *⌊pz / 256⌋ mod 256*, with *pz* its z position from
-      formula F5; this is about the integer part of *z + 128 − c_z*, wrapped modulo 256. A voxel
-      is drawn only if its depth is strictly greater than the depth stored at its pixel. So a
-      voxel whose depth is 0 is never drawn (`quirks.voxel_depth_zero_hidden`), a voxel whose pixel still holds a stale
-      depth at least as great as its own is not drawn either (claim 34), and of two voxels with equal depth on one
-      pixel the one drawn first stays.
+    - **Depth test.** A voxel's comparison depth is the unwrapped signed integer
+      *d = ⌊pz / 256⌋*, with *pz* from F5, one model unit per depth level. Before each
+      fresh depth-mode draw, every coordinate is empty, below all numeric voxel depths
+      (claim 34). Clearing depth to 0 denotes that empty sentinel, logically −∞,
+      not numeric voxel depth zero. A voxel passes an empty coordinate or one whose
+      stored numeric depth is strictly smaller. Zero and negative depths therefore
+      pass empty coordinates, and wrapping never reverses depth order. Equal depths
+      retain the first left-pixel contribution unless a right-hand write interferes.
     - **Two pixels per voxel** (`quirks.voxel_depth_double_width`). A voxel that passes the test writes its colour (0 included, claim 19) and its
       depth into its own pixel and into the pixel immediately to its right. Only the left pixel's
       stored depth is tested: the right pixel is overwritten even if it held a greater depth. At
-      buffer column 255 the right-hand pixel is column 0 of the next row down (and outside the
-      buffer for the last row, where the result is unspecified; our engine drops that pixel).
-    - **No carry error.** The 1/256-pixel carry of `quirks.voxel_x_carry_into_y` does not occur.
-    - Backing: `measurable` (MS-5, MS-12; section ties MS-25; the depth-plane clearing: claim 34, MS-18).
-      The column-255 right-pixel wrap is `unmeasured`: MS-12 places no left pixel at that
-      image edge, so it cannot distinguish wrapping into the next row from clipping.
-      The right pixel beyond the last buffer row is `unmeasured`: its original result is
-      unspecified, so no safe expected image is available. Dropping it is our engine's
-      departure, also used by F10 for shadows.
+      every image column, including 255, the right-hand pixel is *(x + 1, y)*,
+      contained by the enlarged image, never column 0 of another row.
+    - **Independent coordinates.** Horizontal arithmetic never carries into vertical
+      position in either mode (F5).
+    - Backing: `measurable` (MS-5/MS-12/MS-25 for coverage; MS-12/MS-18/MS-24
+      engine conformance for lead-confirmed depth, clearing and coordinate departures)
     - Confidence: high
 
 25. **Copy to the screen.** After all sections are drawn, the bounding box of the transformed
@@ -501,28 +478,26 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 26. **Image reuse.** Finished part images are kept in the image cache of the object's type and
     reused, by every object of that type, whenever a later draw produces the same key. The key is
-    meant to capture every input of the image, but it does not:
+    composed of the following independent components:
     - **Body:** the ramp state (which settled tilt the body has, for locomotors that tilt the
       body on ramps, S-0106), the 32-step body facing, the alternative-model state, and the HVA
-      frame modulo 32 (`quirks.voxel_cache_frame_mod32`).
+      complete applicable frame number.
     - **Vehicle turret:** the ramp state, the 32-step body facing, the 32-step turret facing, the
-      selected turret index for a multi-turret type, and a frame value *v*. With *f* the turret
-      frame, *v = f mod 256* while the alternative-model state is off and
-      *v = 2⌊(f mod 256) / 2⌋ + 1* while it is on (`quirks.voxel_cache_alt_turret_frame`). So while the turret model stands in for the body (claim 12), an even
-      turret frame and the odd frame after it share a key, and both share it with that odd frame
-      drawn while the state is off. When the turret displacement is 0, the body facing is left out of the key. A turret
+      selected turret index for a multi-turret type, the alternative-model state and
+      the complete applicable turret-frame number as separate components. Adjacent
+      frames and distinct states never collide. When the turret displacement is 0,
+      the body facing is left out of the key. A turret
       on the body's origin then has the same orientation for every body facing with the same
       turret facing. On flat ground, and on a settled ramp, the reused image therefore differs
       from a fresh one by at most the 0.088° rounding of F1, which rarely moves a pixel. (On a ramp
       the tilt is part of the key. On a settled ramp the body transform is the cell's tilt
       followed by the body's 32-step rotation, so the tilt does not depend on the body facing.
       The tilt itself is left to S-0106.)
-    - **Building turret:** the 32-step turret facing and the turret frame modulo 256.
+    - **Building turret:** the 32-step turret facing and complete applicable turret frame.
     - **Barrel:** the turret's key (for a building's barrel drawn without a turret, claim 37
-      gives the key). Barrel images are kept apart from turret images, so a
-      barrel draw reuses only a barrel image. Barrel elevation is **not** part of the key, so
-      once a barrel image is cached for a key, later draws with that key show the cached
-      elevation (`quirks.barrel_cache_ignores_elevation`).
+      gives the key), plus the current 32-step barrel elevation *e₃₂*. Barrel images
+      stay apart from turret images and reuse only at the same elevation. Turret keys
+      themselves acquire no elevation component.
 
     A part image is made in a fresh draw, and neither looked up nor stored, in any of three cases:
     - the type has the cache-disable option (body, turret and barrel alike),
@@ -536,9 +511,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       pitch changes) are S-0106 claim 13's.
 
     **Independent reuse and lifetime.** Reuse is decided independently for each part and shadow:
-    a fresh body does not require a fresh turret. A turret and its accompanying barrel share the
-    reuse class and become available together, so both are reused or both are fresh unless image
-    reuse has been invalidated. An earlier image can remain visible across drawn frames.
+    a fresh body does not require a fresh turret. Changed elevation may require a fresh
+    barrel alongside a reused turret. Each part uses its own complete key. An earlier image can remain visible across drawn frames.
     The original can invalidate all earlier images together, making later appearances fresh
     again, but the event that triggers this is not specified here. Our engine never invalidates
     images during a game and invalidates them at game start (a departure, with no switch).
@@ -548,35 +522,32 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     **What reuse changes on screen.** Because only fresh draws have side effects, every key
     component shows: a draw with a key not yet in the cache is fresh, and a draw with a known key
     is not. The visible consequences are:
-    - the collisions: frames *f* and *f* + 32 of a body (`quirks.voxel_cache_frame_mod32`), turret frames *f* and *f* + 256,
-      the turret frames that share a key under `quirks.voxel_cache_alt_turret_frame`, and barrel elevation (`quirks.barrel_cache_ignores_elevation`),
+    - distinct applicable frames, alternative-model states and elevations cannot reuse
+      the wrong frame, model state or pitch,
     - a turret at displacement 0 reused across body facings, which can differ from a fresh one
       by the rounding above,
     - the side effects of fresh draws: the shades given to normal indices, which other models'
       out-of-table indices then show (claim 20), the switching of the depth-buffered mode
-      (claim 32), and the clear area the next fresh draw starts from (claim 34),
-    - the depth-buffered look: the key never records whether the depth-buffered mode was on, so
-      an image made during a claim 32 window keeps that look when reused,
-    - under the cache-disable option, no earlier part image is reused: reuse collisions and
-      retained old appearances disappear, while fresh-draw shade, mode and clearing effects
-      occur on every eligible draw.
+      (claim 32), and fresh-image initialisation (claim 34),
+    - the depth look belongs to the type's own option, never to another draw,
+    - under the cache-disable option, every eligible part appearance is fresh, so its
+      out-of-table shades follow current fresh-draw inputs rather than an earlier image.
     - Backing: `measurable`. MS-17 covers the body facing, the ramp state, the unsettled tilt
       of the driving locomotor and the body facing in the turret key, at both zero and non-zero
       displacement. MS-2 covers
-      the turret facing. MS-3b covers the body frame modulo 32, the turret frame modulo 256 and
-      the cache-disable option. MS-11 covers the alternative-model state, the selected turret
-      index and the collision of `quirks.voxel_cache_alt_turret_frame`. MS-10 covers the barrel, MS-6 the recoil case and MS-9 the depth-buffered
-      look. Global image invalidation in the original is `unmeasured`: no scenario here forces
-      such an event or separates it from a new reuse class. `unmeasured` in two further places. The building turret's frame modulo 256: a building's
-      animation-frame counter advances only through attacking, by rules other specs own, so no
-      scenario here can bring a building turret past frame 255 on demand. The naval locomotor
-      case: when a ship's body tilts is S-0106's (claims 6 and 7), but stock data may give a
+      the turret facing. MS-3b covers complete frame keys and cache disabling. MS-11
+      covers separate state/frame components and selected turret index. MS-10 covers
+      elevation, MS-6 recoil and MS-9 mode isolation. Corrected cache components are
+      lead-confirmed departures tested against this spec rather than the original. Global image invalidation in the original is `unmeasured`: no scenario here forces
+      such an event or separates it from a new reuse class. MS-3b's rendering fixture
+      tests complete building turret frames without requiring an oracle counter above
+      255. The naval locomotor case remains `unmeasured`: when a ship's body tilts is S-0106's (claims 6 and 7), but stock data may give a
       ship no tilt at all (S-0106, Open questions), and none of this spec's scenarios uses
       S-0106's naval test data (its scenario T6), so none of them makes it happen. A body
       drawn fresh beside a reused turret is covered by MS-17 (turret's body facing, run 2). The point at which the original empties its caches is not a claim of this spec (a
       departure, above), and whether a new game empties them is an open question.
-    - Confidence: high (the frame keys, the collision of `quirks.voxel_cache_alt_turret_frame`, the barrel key without elevation, the body facing
-      in the turret key), medium (the ramp state and the unsettled-tilt case, whose details
+    - Confidence: high (complete frames, separate alternative state, current elevation
+      and body facing in the turret key), medium (ramp state and unsettled tilt, whose details
       are left to S-0106)
 
 ### Recoil
@@ -584,22 +555,18 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 27. **Building turret recoil.** When a building with the recoil option fires, its turret and its
     barrel each run a recoil cycle (formula F7, state table S1): they slide back along the
     turret's forward axis by the imported travel distance (model units, i.e. pixels; a negative
-    travel slides them forward, F7), hold, then return. The turret's recoil moves the turret image only, not the barrel (`quirks.turret_recoil_leaves_barrel`). The
-    barrel's recoil moves the whole barrel, pitched as claim 10 gives, back along the turret's
-    forward axis: the direction of the slide does not tilt with the barrel's elevation.
-    - **Timing.** A cycle started from rest lasts *max(1, t_c) + t_h′ + max(1, t_r)* ticks, where
-      *t_h′ = t_h* if *t_h ≥ 2* and *t_h′ = 0* if *t_h ≤ 1*: a hold of 1 holds for no tick at all
-      (`quirks.recoil_hold_one_skipped`). With the absent-key defaults (travel 2, compress 1, hold 1, recover 1) the
-      recoil slide is 2 model units in the first tick of the cycle and 0 from the second on, so
-      the recoiled pose shows in the drawn frames of exactly one tick.
-    - **A shot during a cycle.** Every shot starts both cycles anew (a cycle whose travel is 0
-      stays at rest). A cycle that is still running when the shot comes starts its new compress
-      phase from its current recoil slide *λ_r* instead of from 0. The recoil slide then rises by the full compress step for
-      *max(1, t_c)* ticks, to about *λ_r + ℓ*, holds, and recovers by the ordinary recover step.
-      In the last recover tick it jumps to 0 from about *λ_r + ℓ / max(1, t_r)*. So the slide is
-      not bounded by the travel distance: each shot during a cycle adds about *ℓ* more, and a
-      building that keeps firing faster than its cycle ends slides farther with every shot
-      (`quirks.recoil_refire_accumulates`).
+    travel slides them forward, F7), hold, then return. The turret displacement is
+    *−λ_turret* along its forward axis; the barrel follows that displacement in addition
+    to its own, for total *−(λ_turret + λ_barrel)* along the same axis. Neither direction
+    tilts with barrel elevation.
+    - **Timing.** From rest, a cycle lasts *max(1, t_c) + max(0, t_h) + max(1, t_r)*
+      ticks. Every positive hold duration holds for exactly that many ticks. With
+      absent-key defaults (travel 2, compress 1, hold 1, recover 1), each cycle slides
+      2, 2, 0 model units on successive ticks.
+    - **A shot during a cycle.** Restart both cycles from their current slides, moving
+      toward their configured travel over the new compress duration, without exceeding
+      its magnitude. Zero travel stays at rest. F7 gives the signed clamp and rounding.
+      Repeated shots cannot accumulate unbounded displacement.
     - **Barrel values across rules layers** (`quirks.barrel_recoil_layer_reset`). The barrel's travel, compress, hold and
       recover values each default to the turret's corresponding value, and this default is
       applied again in every rules layer that has a section for the type. After such a layer,
@@ -613,7 +580,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       turret's current value as their reset value: an exception to S-0006's rule that an absent
       key keeps the earlier value (S-0006, claim 3), which S-0006 lists among its keys that reset
       to another key's value (S-0006, claim 5).
-    - Backing: `measurable` (MS-6, including its hold, negative-travel, refire and layer runs)
+    - Backing: `measurable` (MS-6; barrel-following, positive holds and bounded refire
+      are lead-confirmed departures tested against this spec rather than the original)
     - Confidence: high (cycle timing, step values, the refire rule and the barrel values across
       layers), medium (visible placement)
 
@@ -639,7 +607,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     plane). A column listed as present counts even if its runs hold no voxel; a column the file
     marks as empty marks nothing. Columns are positioned from the (min x, min y) corner, so the
     footprint is not mirrored. For vehicles, claim 39 excludes pixels covered by the object's
-    own part image when the shadow image is made. These positions have no 1/256-pixel carry error. Formula F10 gives the exact
+    current completed part image on every appearance. These positions have no 1/256-pixel carry error. Formula F10 gives the exact
     positions, the rounding and the copy to the screen. All marked pixels take one value,
     which the shadow treatment then darkens. The shadow transform is
     *V · S · H(0, shadow section)*, where *S* is the body's shadow transform: the ramp tilt of the
@@ -647,8 +615,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     body do not change the unmasked footprint's outline; they can change the own-image
     exclusions of claim 39.
     - Backing: `measurable` (MS-8) for ordinary footprint positions and present-column output.
-      The right-pixel wrap inherited from claim 24 is `unmeasured`: this scenario contains
-      no controlled column-255 footprint pixel. Independence of the outline from body height
+      Unwrapped right-pixel adjacency is a lead-confirmed departure tested by MS-24's
+      enlarged-footprint variant. Independence of the outline from body height
       and rocking is also `unmeasured`: MS-8 has no independently controlled comparison of
       either input.
     - Confidence: medium (high for the two pixels per column and for present columns without
@@ -666,23 +634,21 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     hovering unit rocks (S-0106, claim 12). These freshness rules do not override the cloak and
     no-shadow suppression above. For cache-eligible shadows, the key covers every input of the
     unmasked footprint (frame 0, the type's shadow section and scale are fixed per type).
-    The exclusions of claim 39 are not key components, so a reused vehicle shadow can differ
-    from a fresh one when the part image changes without changing that shadow key. Whether a shadow draw is fresh still matters in two
-    additional ways: only a fresh shadow of a depth-option type opens a claim 32 window,
-    the own-image exclusions made by claim 39 are retained with the shadow image, and on some
-    cache misses the shadow may be skipped for that draw (open questions). That cache-miss skip does
+    Cache only the unmasked footprint: current own-image exclusions are recomputed on
+    every appearance (claim 39), and no shadow enables depth mode (claim 32). Freshness
+    still matters where the original skips a shadow on a cache miss (open questions). That cache-miss skip does
     not apply to the unsettled shadows just described. Until those cache-miss cases are known,
     our engine makes the shadow on every cache miss.
     - Backing: `measurable` (MS-8) for the shift, scale, cloak and no-shadow conditions.
-      MS-9 covers the claim 32 side effect, and MS-18 (b) and its control cover shadow images being
-      reused while the key stays the same and drawn fresh under the shadow-cache-disable option.
-      `measurable` for hovering unsettled-shadow freshness through the own-image exclusions
-      (MS-27's rocking reuse comparison). The driving/naval unsettled case and exemption
+      MS-9 tests corrected mode isolation; MS-27 tests current-image exclusion with
+      caching enabled and disabled, as lead-confirmed departures. Hovering unsettled
+      shadow freshness is `unmeasured`: corrected exclusions agree for cached and fresh
+      footprints, so the old rocking comparison no longer distinguishes freshness. The driving/naval unsettled case and exemption
       from cache-miss skip remain `unmeasured`: no scenario here isolates their freshness
       or the miss-skip event from changed keys and other fresh draws. Also `unmeasured` in
       two places. The look of a reused unmasked footprint: its key covers every input of that
       footprint, so fresh and reused unmasked footprints have the same pixels. Vehicle
-      own-image exclusions are a separate, measurable difference (claim 39, MS-27). The ramp-key component is `measurable` through
+      own-image exclusions also agree for fresh and reused appearances (claim 39). The ramp-key component is `measurable` through
       the changed footprint in
       S-0106 T3 and T6. The body-facing component is `unmeasured`: a new body facing
       also gives the body image a new key, so no scenario here separates their fresh-draw side
@@ -690,116 +656,38 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       yet (open questions).
     - Confidence: medium (shift, scale, cache), high (cloak and no-shadow conditions)
 
-### Depth-mode leak
+### Depth-mode isolation
 
-32. **Depth mode left on after a depth-option shadow.** A fresh draw of the shadow of a type with
-    the depth-buffer option switches the depth-buffered mode (claim 24) on and leaves it on.
-    Every later fresh draw of a voxel part then uses the depth-buffered mode, whatever its type:
-    sections nearest first, depth test, two-pixel-wide voxels, and the depth plane set to 0 over
-    the clear area (claim 34). So do the projectiles and debris drawn as voxel models in that time
-    (how they are otherwise drawn belongs to their own specs), and the fresh shadow draws of other
-    types (for a shadow only the clearing of the depth plane changes, claim 34). This lasts until a
-    part of a depth-option type (its body, turret or barrel) is next drawn fresh, which switches the
-    mode off once that part is finished. Nothing else switches it off: reused images, shadows of
-    any type, projectiles and debris switch nothing off. Images made during this window are cached
-    and keep the look (`quirks.depth_mode_leak`). The mode carries over from one drawn frame to the
-    next and from one game to the next; only the start of the program sets it off. For example, take a parked depth-option type whose part images are all reused, but whose
-    shadow is drawn fresh in every drawn frame because it has the shadow-cache-disable option.
-    If no other depth-option part is drawn fresh, from its second drawn frame on the mode
-    is on for every other fresh draw, whatever the order in which objects are drawn.
-    **With `quirks.depth_mode_leak` off (Q-0056).** A shadow never switches the mode on,
-    regardless of its type's depth option. The mode is on only during a fresh draw of a
-    depth-option part, and off between draws, drawn frames and games. Reused images do not
-    change it. Thus no fresh part of a type without the option, and no projectile or debris,
-    uses the depth-buffered mode. Every fresh shadow leaves the depth plane unchanged during
-    ordinary clearing; claim 34's first-fresh-draw initial clear of both planes still applies.
-    Shadow footprint pixels and copy rectangles are unchanged, but later depth-tested parts
-    can differ because the shadow did not clear their retained depths. This off state is our
-    engine's design rule, not a selectable behaviour of the original.
-    - Backing: `measurable` (MS-9; its game-change run for the carry-over between games and its
-      projectile run for projectiles drawn as voxel models; MS-18 (c) for a shadow of a type
-      without the option clearing the depth plane inside a window, and MS-18 (e) for a
-      depth-option shadow's own depth clear). Debris using and retaining the mode is
-      `unmeasured`: MS-9's projectile run contains no controlled voxel-debris draw, and no
-      other scenario here isolates its draw from the parts that could change the mode.
-      The off state is checked by engine-conformance replays of MS-9 and MS-18 (e), not an
-      oracle measurement of the design choice.
-    - Confidence: high (medium for projectiles and debris, and for the carry-over between games)
+32. **Depth mode belongs to one fresh part draw (Q-0056).** Start with depth mode
+    off. Enable it only during fresh depth-option part draws, and leave it off between
+    draws, drawn frames and games. Shadows never enable it or ordinarily clear retained
+    depths; claim 34's initial full clear remains. Non-depth parts, projectiles and
+    debris inherit no depth mode from another draw. Reused images change no mode.
+    - Backing: `measurable` (MS-9/MS-18; lead-confirmed departure, engine conformance)
+    - Confidence: high
 
-33. **The leak in stock play.** With stock data a window opens only when a depth-option type's
-    shadow is drawn fresh: in every drawn frame for such a type that has the shadow-cache-disable
-    option, and otherwise on a cache miss: a ramp state or body facing not yet cached, or
-    a key whose image was removed by cache emptying (claim 26). A shadow skipped on a cache
-    miss opens none (open questions). A window
-    closes at the next fresh draw of any part of a depth-option type. Which other fresh draws
-    fall inside a window therefore depends on the order in which objects and shadows are drawn
-    within a drawn frame (S-0102), which has not been determined. So the leak can occur in a
-    stock game, but how often it shows is not predicted here.
-    - Backing: `unmeasured`. How often it happens depends on a cross-object draw order that no
-      spec fixes yet; the mechanism itself is `measurable` by MS-9 (claim 32). With non-stock test data,
-      the unsettled-shadow case of claim 31 adds another possible opener; S-0106 claim 12
-      explains why that case does not add an opener in stock play.
-    - Confidence: medium
+33. **Draw-order independence of the depth look.** Only a part's own type option
+    selects its depth look, whether fresh or reused. Another fresh shadow, unsettled
+    tilt or earlier draw cannot change that look. Scene compositing under S-0102 and
+    claim 31's freshness rules are otherwise unchanged.
+    - Backing: `measurable` (MS-9; lead-confirmed departure, engine conformance)
+    - Confidence: high
 
 ### Buffer clearing and unusual model data
 
-34. **Earlier-draw effects on a fresh image.** Earlier colours can reappear in later images,
-    and earlier depths can suppress their voxels at the same image coordinates, across fresh
-    draws, drawn frames and games. The first fresh draw after program start has no earlier
-    effects: its initial colour is transparent and its initial depth is 0 everywhere. After
-    that, with the default partial-clearing quirks enabled, depth is reset only locally and
-    colour is reset locally except for the failed-fit case below. Each fresh draw of a part,
-    shadow, voxel projectile or voxel debris is unaffected by earlier colours within the
-    *clear area*: the previous fresh draw's copy rectangle (F6), widened by one pixel
-    column on its right and one pixel row at its bottom. In voxel-buffer pixels, with that
-    rectangle's corner *(x₀, y₀)* and size *w × h*, the clear area is columns *x₀ … x₀ + w* and
-    rows *y₀ … y₀ + h*, both ends included.
-    - **Colour.** The clear area is set to transparent (palette index 0). If it does not fit in
-      the buffer (*x₀ < 0*, *y₀ < 0*, *x₀ + w > 255* or *y₀ + h > 255*), the whole buffer is set
-      to transparent instead.
-    - **Depth.** The depth plane is set to 0 over the clear area only, and only if the
-      draw is made with the depth-buffered mode on. With `quirks.depth_mode_leak` on, every
-      fresh draw of a part or shadow of a depth-option type is made with it on, and so is every
-      fresh draw inside a claim 32 window (S2). With the switch off, only a fresh depth-option
-      part uses it; shadows never do. A draw made with the mode
-      off leaves the depth plane as it is after the first fresh draw's full initial clear. This
-      initial clear is independent of the mode. When the clear area does not fit in the buffer, what
-      this clear does to the depth plane is unspecified (it can reach pixels outside the clear
-      area); our engine clears the part of the clear area that lies inside the buffer.
-    - **Consequence (`quirks.voxel_depth_plane_partial_clear`).** When a fresh draw made with the mode off comes between two
-      fresh draws made with it on, the later one keeps the earlier one's depths outside its own
-      clear area (the copy rectangle of the draw in between, widened as above), and its voxels
-      there are drawn only where their depth is greater than that stale depth. A parked
-      depth-option object redrawn in every drawn frame after a smaller non-depth draw thus loses
-      every voxel outside the smaller draw's copy rectangle, widened as above, whose pixel still
-      holds the same depth from its own previous draw.
-    - **Colour residue (`quirks.voxel_colour_partial_clear`).** A pixel that a fresh draw writes
-      outside its own copy rectangle, widened as above (the next fresh draw's clear area),
-      survives the next fresh draw's clear whenever that clear area fits in the buffer, and then
-      shows in the next part's image if that image's copy rectangle covers it. It stays until a
-      later clear covers it or clears the whole colour plane. The copy rectangle reaches at least
-      2½ pixels beyond every section box on each side (its nominal margin is 4 pixels, less what
-      the truncations of F6 take), and the widened rectangle one pixel more on the right and at the
-      bottom. The carry of F5 moves a voxel down by 1/256 pixel per carrying term, and a
-      well-formed section has at most 3 × 255 such terms per voxel, so less than 3 pixels. A voxel
-      that lies inside its section box, and its right-hand pixel in the depth-buffered mode,
-      therefore never lands outside its draw's widened copy rectangle. Residue needs voxels outside their
-      section boxes: the voxels of a column whose counted cells go past *Nz* (claims 35 and 36),
-      which are drawn beyond the top or bottom face of the box, wrapped or not (claim 22). A part
-      that wraps although its voxels lie inside their boxes leaves no residue, because its copy
-      rectangle fails the fit test (claim 22).
-    - Backing: `measurable`. MS-18 covers the depth plane: (a) its partial clear, (b) a shadow's
-      copy rectangle as the next clear area, (c) the depth clear of a shadow of a type without the
-      option inside a claim 32 window, (d) the depth plane kept across games, and (e) a depth-option
-      shadow's own depth clear. MS-24 covers the
-      colour clear, its fit test and the residue, and its run (f) the colour plane kept across
-      games. `unmeasured` for projectiles and debris in the chain of clear areas: when and in
-      which drawn frames a projectile or a piece of debris is drawn, and whether its image is ever
-      reused, belong to their own specs, so no scenario here can say which fresh draw follows
-      one, and there is no expected value to compare with. MS-9's projectile run shows that they
-      are drawn fresh in the depth-buffered mode inside a window.
-    - Confidence: medium (depth plane, projectiles and debris in the chain), high (colour clear
-      area, its sides and its fit test)
+34. **Fresh-image initialisation.** Every fresh part, shadow, voxel projectile and
+    voxel debris draw starts with completely transparent colour. Each fresh depth-mode
+    draw also has empty comparison depth at every coordinate before any voxel contributes.
+    Depth clearing to 0 means the empty sentinel of claim 24, below all numeric depths.
+    Non-depth draws preserve retained depths except that the first fresh draw after
+    program start fully clears both planes regardless of mode. Shadows never enable
+    depth mode and ordinarily preserve depth. Newly added image coordinates are empty.
+    No previous copy rectangle limits clearing; earlier colours never contaminate a
+    fresh image and retained depths never suppress a fresh depth-option part.
+    - Backing: `measurable` (MS-18/MS-24; lead-confirmed departures, engine conformance).
+      Depth preservation between non-depth draws is `unmeasured`: the next depth draw
+      clears it completely, so screenshots cannot distinguish preservation in that interval.
+    - Confidence: high
 
 35. **Normal mode 0.** A section whose normal mode is 0 has no normal table and is drawn unlit:
     each voxel's value goes into the voxel buffer as it is, without the VPL (a value of 0 is
@@ -842,7 +730,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       top-down. Thus bottom-up the span's empty count precedes its colours; top-down it
       follows them and affects only later spans. This applies to every span, including the
       topmost one, in both depth modes: there is no first-span exception (Q-0216).
-      Projection uses F5, including its carry and the empty-count exception below.
+      Projection uses F5's independent unwrapped components and the empty-count exception below.
       In the standard *e + 2*-cell column in the table, the top-down colours are *Y* at
       traversal distance 0 and *X* at distance 1, hence *Y* at cell *e + 1* and *X* at
       cell *e*. The remaining *e* empty cells contribute no pixel. In depth-buffered mode colours are still unlit,
@@ -896,10 +784,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       rendering includes voxels beyond the section grid, at the cell positions described by the
       column. Top-down rendering shifts that output 256 cells lower in grid coordinates, with
       no stray voxels in this case (`quirks.voxel_topdown_column_origin`). These voxels lie
-      beyond a face of the section box; claim 34 gives their later pixel consequences. This
+      beyond a face of the section box; they cannot contaminate another fresh image (claim 34). This
       fixture does not establish the output of every possible long malformed column.
-    - Backing: `measurable` (MS-20 for the four-cell cutoff; MS-24 (a) and (e) for the 260-cell
-      column drawn bottom-up and top-down). MS-26 covers the additional mode-0 prefix and
+    - Backing: `measurable` (MS-20 for the four-cell cutoff; MS-24's upright/upside-down variants for the 260-cell
+      column). MS-26 covers the additional mode-0 prefix and
       depth-mode distinction. The general cutoff and shift rule for other column data in
       the quirk entry remains `unmeasured`: these scenarios supply only the four- and 260-cell
       cases and do not discriminate other prefix totals or shifts. Also `unmeasured`
@@ -917,7 +805,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - **Pose.** Its draw transform is *V · Rz(θ) · Ry(φ)*, where *θ* is the building turret angle
       of claim 5 and *φ* is the elevation angle of claim 6. The turret displacement plays no part:
       there is no shift by *d_b* (claim 9), and the barrel pitches about its own model origin, as
-      claim 10 gives for *t* = 0.
+      claim 10 specifies.
     - **Place.** The image is centred at the turret anchor (Terms).
     - **Frame.** It is drawn in HVA frame *u mod F_bar*, where *u* is the building's
       animation-frame counter (claim 16) and *F_bar* is the barrel HVA's frame count. It is not
@@ -926,14 +814,11 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       and values. A running recoil cycle does not stop its image being reused either
       (`quirks.barrel_only_no_recoil`).
     - **Image reuse.** It is kept with the type's barrel images. Its key is the 32-step facing of
-      claim 5 together with its frame modulo 256. The elevation is not part of the key
-      (`quirks.barrel_cache_ignores_elevation`), and the cache-disable option applies as in
-      claim 26.
+      claim 5, its complete applicable frame and current 32-step elevation. The
+      cache-disable option applies as in claim 26.
     - Backing: `measurable` (MS-21) for pose, placement, animation, lack of recoil and image
-      reuse during recoil. The frame-key reduction modulo 256 and elevation omitted from this
-      barrel-only key are `unmeasured`: MS-21 neither drives the building's animation counter
-      past 255 nor independently changes elevation at one fixed key, so it supplies no
-      discriminating expected result for those two key components. The exact modulo mapping
+      reuse during recoil. Complete frames and current elevation are lead-confirmed
+      departures tested by MS-21's engine-rendering fixtures, not the original. The exact modulo mapping
       from animation counter u to barrel-only frame is also `unmeasured`: MS-21 records the
       marker and attacks, not u, and therefore tests only the initial frame and attack-only changes.
     - Confidence: high (pose, frame, no recoil, key), medium (visible placement)
@@ -965,8 +850,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - Confidence: high (rows, row count, unused parts), medium (a file that ends part-way through
       a row, a file that ends before row 0, a missing file)
 
-39. **A vehicle shadow excludes its own image (Q-0213).** When a vehicle's shadow image is
-    made fresh, neither marked pixel of a footprint column is retained where the vehicle's
+39. **A vehicle shadow excludes its current own image (Q-0213).** On every shadow
+    appearance, fresh or reused, neither marked pixel of a footprint column remains
+    where the vehicle's
     completed body, turret or barrel image has a non-transparent pixel at the same screen
     position. Each of the two shadow pixels is excluded independently. This depends on the
     part-image pixel, not on whether that pixel passes the scene's depth test. The shadow
@@ -974,16 +860,12 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     where both would pass, a freshly made vehicle shadow leaves its own visible part pixels
     undarkened. This applies on flat ground, on slopes and to hovering vehicles. Suppression
     and depth tests still apply (claim 31; S-0102 claim 18).
-    - **Reuse caveat.** The exclusions become part of the cached shadow image. They are not
-      recomputed when that image is reused, and the shadow key does not include a body HVA
-      frame, turret facing, barrel elevation or the particular object's part-image silhouette.
-      Thus a current body pixel at a shadow-marked position that was transparent in the
-      image used to make the cached shadow can be darkened; conversely a retained exclusion
-      can leave an unshadowed gap after the body has moved away. Objects of the same type
-      share these exclusions (`quirks.voxel_shadow_cached_cutouts`). With shadow caching
-      disabled, every eligible shadow excludes the current completed part image instead.
-    - Backing: `measurable` (MS-27, including the reused-image variant)
-    - Confidence: high (fresh exclusion and retention with reuse), medium (visible overlap)
+    - **Reuse.** Cache only the unmasked footprint. Exclude this object's current
+      completed part image on every appearance, even when another object supplied the
+      cached footprint. No old-pose cutouts persist.
+    - Backing: `measurable` (MS-27; fresh exclusions are oracle-testable, corrected
+      reuse is a lead-confirmed departure tested against this spec)
+    - Confidence: high
 
 ## Formulas
 
@@ -1106,78 +988,55 @@ units of 1/256 pixel, truncated toward zero:
 > *Δ_ξ = trunc(256 × (P_ξ − P₀) / N_ξ)* for *ξ* in x, y, z (the z components of *o* and of
 > the *Δ_ξ* matter only in the depth-buffered mode).
 
-A voxel *n_x, n_y, n_z* steps away from the farthest corner (counting along each axis from that
-corner) lands at *p = o + n_x Δ_x + n_y Δ_y + n_z Δ_z*, each component taken modulo 65536, and
-is written to voxel-buffer pixel *(⌊px / 256⌋ mod 256, ⌊py / 256⌋ mod 256)*. In the
-depth-buffered mode the z component is formed the same way, and a voxel's depth (claim 24) is
-*⌊pz / 256⌋ mod 256*.
-
-Without depth buffering, *py* also receives carries from *px* (`quirks.voxel_x_carry_into_y`). Write ⟨v⟩ for
-*v mod 65536* (in 0 … 65535), and ⟨w⟩ₓ for ⟨x component of the vector *w*⟩. For a voxel, let
-*v* be the number of voxels drawn before it in its column, and *e₁, …, e_r* the lengths of the
-runs of empty cells before it in its column. The rows of columns before the voxel's row number
-*n_y*, and the columns before the voxel's column in its row number *n_x*, empty columns included.
-Then
-
-> *U = ⟨o⟩ₓ + n_y ⟨Δ_y⟩ₓ + n_x ⟨Δ_x⟩ₓ + ⟨e₁ Δ_z⟩ₓ + … + ⟨e_r Δ_z⟩ₓ + v ⟨Δ_z⟩ₓ*,
-
-where each empty run's term reduces the whole product *e_m Δ_z* (not *e_m ⟨Δ_z⟩ₓ*), and *py* is
-the value above plus *⌊U / 65536⌋*, modulo 65536. Equivalently, with the position seen as *o*
-plus these terms (one per row before, one per column before, one per empty run before, one per
-voxel before), *py* gains 1/256 pixel for each term whose x component, taken in 0 … 65535,
-carries the running *px*, also taken in 0 … 65535, to 65536 or beyond; the count is the same
-whatever order the terms are added in. With a negative x step that happens for nearly every term (all
-but those that take *px* below 0); with a positive x step it happens only when *px* passes 65536
-(256 pixels). The depth-buffered mode and the shadow footprint have no such carry.
+A voxel *n_x, n_y, n_z* steps from the farthest corner lands at
+*p = o + n_x Δ_x + n_y Δ_y + n_z Δ_z*. Each component uses exact signed integer
+arithmetic in units of 1/256 pixel, independently, without wrapping. The image pixel is
+*(⌊px / 256⌋, ⌊py / 256⌋)* and the numeric depth is *⌊pz / 256⌋*, with floors toward
+negative infinity, including negative coordinates. Image enlargement changes neither
+these logical coordinates nor F6 placement. Horizontal arithmetic never changes *py*.
+These are lead-confirmed coordinate, carry and depth departures; F0 preparation above
+remains unchanged. MS-5/MS-12/MS-24 test them against this spec.
 
 **F6. Screen placement.** A model point at view-space *(x, y)* (*y* flipped, F5) lands on the
 screen at the draw point *+ trunc(c) + ⌊128 + (x, y) − c⌋ − 128*, i.e. within one pixel of
-*⌊(x, y)⌋*. For every point that lands inside the voxel buffer, each component of
-*128 + (x, y) − c* is at least 0 and below 256, so this floor equals the truncation toward zero
-of F0. A point outside the buffer wraps instead (claim 22). The area that
+*⌊(x, y)⌋*. Floors apply to signed logical image coordinates. No point wraps at an
+image edge (claim 22). The area that
 reaches the screen, the part's *copy rectangle*, is a *w × h* rectangle. With the overall bounding box
 *[x_min, x_max] × [y_min, y_max]*, *w₀ = trunc(x_max − x_min)*, *h₀ = trunc(y_max − y_min)*,
 *w = w₀ + 8* and *h = h₀ + 8*. The rectangle's corner is voxel-buffer pixel
 *(128 − ⌊w₀/2⌋ − 4, 128 − ⌊h₀/2⌋ − 4)*, and it lands at the draw point plus
 *(trunc(c_x) − ⌊w/2⌋, trunc(c_y) − ⌊h/2⌋)*.
 
-**F7. Recoil cycle.** The travel distance *ℓ* (model units), and the compress, hold and recover
-durations *t_c, t_h, t_r* (ticks), are imported signed integers. A travel of 0 starts no cycle; a
-negative travel makes the part slide forward instead of back. Write *t_c′ = max(1, t_c)*,
-*t_r′ = max(1, t_r)*, and *t_h′ = t_h* if *t_h ≥ 2*, *t_h′ = 0* if *t_h ≤ 1* (`quirks.recoil_hold_one_skipped`). The
-steps are
+**F7. Recoil cycle.** Imported signed integer travel *ℓ* is in model units; signed
+integer durations *t_c, t_h, t_r* are in ticks. Zero travel starts no cycle; negative
+travel slides forward. Let *t_c′ = max(1, t_c)*, *t_h′ = max(0, t_h)* and
+*t_r′ = max(1, t_r)*. At each shot, *λ_r* is the current slide, zero at rest.
 
-> compress step *s_c = ℓ / t_c′*, hold step 0, recover step *s_r = −(ℓ / t_r′)*.
+> *s_c = (ℓ − λ_r) / t_c′*, hold step 0, *s_r = −ℓ / t_r′*, in model units per tick.
 
-The division is a **real (floating-point) division**, not an integer one: with *ℓ = 3* and
-*t_c = 2* the step is 1.5. It is formed at 53-bit precision and stored in single precision,
-truncated toward zero (F0). The recoil slide *λ* is a single-precision value, 0 at rest. In each
-tick of a cycle *λ* becomes *λ + step*, stored truncated toward zero, with the step of the phase
-that tick belongs to: *t_c′* compress ticks, then *t_h′* hold ticks, then *t_r′* recover ticks. In
-the last recover tick *λ* is set to exactly 0 instead, and the cycle ends. So *λ* can end a
-compress phase slightly short of *ℓ* (for example *ℓ = 1, t_c = 3* gives steps of
-0.333333313…). The first tick of a cycle is the tick of the shot or the one after it (which of the
-two is not fixed here; MS-6 does not depend on it).
+Divisions are floating point at 53-bit precision, stored in single precision truncated
+toward zero (F0). The slide is single precision. Each compress tick adds *s_c*, stored
+under F0 and clamped to the closed interval between 0 and *ℓ*. The last of *t_c′*
+compress ticks reaches exactly *ℓ*, removing accumulated rounding error. It holds
+there for exactly *t_h′* ticks. Each recover tick adds *s_r*, stored and clamped the
+same way; the last of *t_r′* recover ticks sets exactly zero and ends the cycle.
+A new shot restarts durations from the current slide, never adding another full travel.
+Exact compress endpoint and signed clamp are part of the corrected presentation rule,
+a lead-confirmed departure checked by MS-6 engine conformance. The first cycle tick
+is the shot tick or the next (not fixed here).
 
-A shot while a cycle runs (claim 27) starts a new cycle with *λ* left as it is: *t_c′* compress
-ticks, *t_h′* hold ticks and *t_r′* recover ticks follow, with the same steps, and the last recover
-tick again sets *λ* to 0. Examples, as the recoil slides of successive ticks:
-- travel 3, compress 2, hold 3, recover 4, one shot: 1.5, 3, 3, 3, 3, 2.25, 1.5, 0.75, 0.
-- the same with hold 1: 1.5, 3, 2.25, 1.5, 0.75, 0; with hold 2: 1.5, 3, 3, 3, 2.25, 1.5,
-  0.75, 0.
-- the defaults (travel 2, compress 1, hold 1, recover 1): 2, 0.
-- travel 3, compress 2, hold 3, recover 4, a second shot while *λ* = 3 (during hold): after the
-  last 3 shown before the rise, 4.5, 6, 6, 6, 6, 5.25, 4.5, 3.75, 0.
-- travel 8, compress 8, hold 2, recover 2, a second shot 3 ticks after the first (during
-  compress): 1, 2, 3, …, 11 (one more per tick, for 3 + 8 ticks), 11, 11, 7, 0.
-- In general, a shot that lands in a compress phase with step *s_c* leaves the rise going at
-  *s_c* per tick and makes it last *t_c′* ticks from that shot's first cycle tick, so with the first and
-  last shot *n_s* ticks apart, each shot within *t_c′* − 1 ticks of the one before, the peak is
-  about *(n_s + t_c′) × s_c*. A shot that lands in a hold
-  at *λ* = *λ_r* raises the hold level to about *λ_r + ℓ*.
+Examples using invented values:
+- travel 3, compress 2, hold 3, recover 4: 1.5, 3, 3, 3, 3, 2.25, 1.5, 0.75, 0.
+- the same with hold 1: 1.5, 3, 3, 2.25, 1.5, 0.75, 0; hold 2:
+  1.5, 3, 3, 3, 2.25, 1.5, 0.75, 0.
+- absent-key defaults (travel 2, compress 1, hold 1, recover 1): 2, 2, 0.
+- refire at travel 3: compress ticks stay at 3, then the new hold and recovery follow.
+- travel 8, compress 8, hold 2, recover 2, refire at slide 3: new compress ticks
+  3.625, 4.25, 4.875, 5.5, 6.125, 6.75, 7.375, 8, then 8, 8, 4, 0.
 
-The part is drawn shifted by *−λ* model units along the turret's forward axis; the shift is not
-rounded to whole pixels before the transform (the pixel position then follows F5).
+The turret shift is *−λ_turret* along its forward axis; its accompanying barrel shift
+is *−(λ_turret + λ_barrel)*. Form the sum at 53-bit precision and store as F0 specifies.
+No shift rounds to whole pixels before F5.
 
 **F8. Section overlap priorities (claims 23, 24; Q-0210, Q-0215 questions 1–6).** Nearest depths are single-precision
 view-space values under F0, in model units, compared exactly without tolerance or conversion
@@ -1257,11 +1116,10 @@ shadow's draw point. Write *Q₀₀, Q₁₀, Q₀₁* for the corners (min x, m
 > *Δ_i = trunc(256 × (Q₁₀ − Q₀₀) / Nx)*, *Δ_j = trunc(256 × (Q₀₁ − Q₀₀) / Ny)*,
 
 all per component. The column *(i, j)* lands at *p = o + i Δ_i + j Δ_j* = *(px, py)*, with each component
-reduced modulo 65536 on its own (no carry between them, unlike F5). If the file lists the column
-as present (claim 30), voxel-buffer pixel *(⌊px / 256⌋ mod 256, ⌊py / 256⌋ mod 256)* and the pixel
-immediately to its right are marked, with the same rule at buffer column 255 as claim 24 (the
-right-hand pixel is column 0 of the next row; past the last row the result is unspecified and our
-engine drops that pixel). Every marked pixel takes one value, which the shadow treatment
+formed independently with exact signed integer arithmetic, no wrapping or carry.
+For a present column, mark *(⌊px / 256⌋, ⌊py / 256⌋)* and
+*(⌊px / 256⌋ + 1, ⌊py / 256⌋)*, floors toward negative infinity. The image contains
+both, with no next-row wrap (lead-confirmed departure, MS-24 engine conformance). Every marked pixel takes one value, which the shadow treatment
 darkens.
 
 ## Constants
@@ -1279,19 +1137,17 @@ darkens.
 | Forced shade, normals 253–255 | 16 | shade index | Claim 20 |
 | Pixels per lepton *ρ* | 0.16572815467691362 | model units / lepton | Vehicles only |
 | Building turret shift divisor | 8 | leptons per model unit | Integer, truncated |
-| voxel-image coordinate period | 256 | pixels per axis | Wrap behaviour, not a storage dimension |
 | voxel-image coordinate origin shift | 128, 128 | pixels | F5, F6 |
 | Rows kept from a lighting table file | 128 | rows | Our engine's limit; a departure for files with more rows (claim 38) |
 | Copy margin | 4 | pixels | Each side |
-| Clear-area extension | 1 | pixel | On the right and at the bottom of the previous copy rectangle (claim 34) |
 | Sub-pixel precision | 1/256 | pixel | F5 |
-| Depth levels | 256 | levels (0 … 255) | Claim 24 |
+| Depth-level spacing | 1 | model unit per level | Signed unwrapped depth; empty sentinel below every numeric depth (claim 24) |
 | Shadow shift | +3 (2.9999964) | pixels, screen x | Claim 31 |
 | Aircraft-like shadow scale | 1/2 | dimensionless (scale factor) | Claim 31 |
 | Normal tables | 16 / 36 / 64 / 245 | entries | Modes 1 / 2 / 3 / 4; see below |
 | Sine table | 8192 per turn | entries | F1 |
 | Turret recoil defaults | travel 2, compress 1, hold 1, recover 1 | model units, ticks | Absent-key defaults; each absent barrel value defaults to the type's turret value, again in every rules layer that has the type's section (claim 27, `quirks.barrel_recoil_layer_reset`) |
-| Shortest hold that holds | 2 | ticks | A hold of 1 or less gives no hold tick (F7, `quirks.recoil_hold_one_skipped`) |
+| Shortest hold that holds | 1 | tick | Every positive imported hold is honoured (F7) |
 | Barrel elevation turn rate | 3 | turn rate *ω* (Terms; nominally 256 facing units per tick per unit of *ω*) | Claim 6; a turn of *Δ* facing units takes ⌊\|Δ\| / 768⌋ ticks (F9) |
 | Negative-angle table bias | 2 | table steps (1/8192 turn) | F1, `quirks.table_trig_negative_bias` |
 | Level-body tolerance | 0.005 | radians | Claim 26: pitch or roll of this size or more counts as an unsettled tilt; compared in floating point |
@@ -1695,37 +1551,29 @@ a direction vector of about unit length; its components are dimensionless.
 | State | Event | Result |
 |---|---|---|
 | idle (*λ* = 0) | the building fires and its travel ℓ is not 0 | compressing; the first compress tick is the shot tick or the next one (F7) |
-| compressing | each of its *t_c′* ticks | λ grows by the compress step *s_c* (F7) |
-| compressing, *t_h* ≥ 2 | its last tick ends | holding, from the next tick |
-| compressing, *t_h* ≤ 1 | its last tick ends | recovering, from the next tick: no hold tick at all (`quirks.recoil_hold_one_skipped`). With the defaults (2, 1, 1, 1) λ is 2 in the first tick and 0 in the second |
+| compressing | each of its *t_c′* ticks | λ moves toward ℓ with F7's bounded step; last tick reaches ℓ |
+| compressing, *t_h* ≥ 1 | its last tick ends | holding, from the next tick |
+| compressing, *t_h* ≤ 0 | its last tick ends | recovering, from the next tick, with no hold |
 | holding | each of its *t_h* ticks | λ unchanged |
 | holding | its last tick ends | recovering, from the next tick |
 | recovering | each of its *t_r′* ticks but the last | λ grows by the recover step *s_r*, which has the opposite sign to ℓ (F7) |
 | recovering | its last tick | λ becomes exactly 0; idle |
-| compressing, holding or recovering | the building fires again | compressing, with λ kept as it is: a full compress phase of *t_c′* ticks adds about ℓ to the current λ, and the last recover tick later drops λ to 0 from about *λ + ℓ / t_r′* (`quirks.recoil_refire_accumulates`) |
+| compressing, holding or recovering | building fires again | compressing from current λ toward ℓ over *t_c′* ticks, bounded by travel; hold and recovery restart afterward |
 
 Turret and barrel each have their own cycle with their own imported values; both start on the
 same shot.
 
-**S2. Depth-buffered mode (claims 24, 32, 34), with `quirks.depth_mode_leak` on.** One global on/off state, off at program start
-and not reset by a new drawn frame or a new game. Its draw-driven changes follow the table
-below. It decides how every fresh draw of a voxel
-part, and of a projectile or debris drawn as a voxel model, is made, whatever the type, and
-whether any fresh draw (shadows included) sets the depth plane to 0 over its clear area.
+**S2. Depth mode (claims 24, 32, 34).** Starts off; scoped to one fresh part draw.
 
 | State | Event | Result |
 |---|---|---|
-| off | a fresh draw of a part (body, turret or barrel) of a depth-option type starts | on for that draw; off again once it is finished |
-| off | a fresh draw of a depth-option type's shadow | on: that shadow is itself made in the depth-buffered mode, so its own clear sets the depth plane to 0 over its clear area (claim 34); stays on after the shadow is finished |
-| on | a fresh draw of a part of a depth-option type starts | stays on during that draw |
-| on | a fresh draw of a part of a depth-option type is finished | off |
-| on | a fresh draw of a depth-option type's shadow | stays on |
-| on | any other fresh draw (a part or shadow of a type without the option, a projectile or debris), or any reused image | stays on |
-| either | a new drawn frame starts, or a new game starts | unchanged |
+| off | fresh depth-option part starts | on for that draw, empty comparison depth everywhere |
+| on | that part finishes | off |
+| off | shadow, non-depth part, projectile, debris or reused image | remains off |
+| off | new drawn frame or game | remains off |
 
-With `quirks.depth_mode_leak` off, the mode is off between draws and is on only during a
-fresh depth-option part draw. Every shadow uses it off and leaves depth unchanged during
-ordinary clearing. The first fresh draw still clears both planes in full (claim 34).
+All fresh draws clear colour completely. Non-depth draws preserve depth except for
+claim 34's initial full clear. These are lead-confirmed departures (MS-9/MS-18).
 
 **Ordering consequences.**
 - Within one part outside depth-buffered mode: claim 23's section overlap priority and
@@ -1737,16 +1585,12 @@ ordinary clearing. The first fresh draw still clears both planes in full (claim 
   barrel cover the body where they overlap it. Parts never depth-test against each other.
 - The shadow belongs to the object's own drawing, in its own render layer and list position,
   not to a separate ground-layer pass (S-0102, claim 18). A vehicle's freshly made shadow
-  excludes its completed part image, so its qualifying own-body overlap is undarkened.
-  cached exclusions can differ from the current part image (claim 39).
+  excludes its current completed part image on every appearance, including reuse,
+  so its qualifying own-body overlap remains undarkened (claim 39).
 
 ## Edge cases and quirks
 
 Every switch defaults to the original (YR) behaviour described; "Fixed" gives the alternative.
-
-- **`quirks.voxel_shadow_cached_cutouts`** (default: on). A vehicle shadow retains the own-image
-  exclusions from the draw that made its cached image (claim 39). Fixed: retain the unmasked
-  footprint for reuse and exclude the current completed part image on every shadow appearance.
 
 - **`quirks.vpl_unloaded_rows_blank`** (default: on). Rows that the lighting table file does not
   supply (claim 38) read as zero, so their voxels draw transparent pixels (claim 19), and a missing or truncated file does not stop
@@ -1769,21 +1613,6 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   stale shade. Fixed: treat as shade 16.
 - **`quirks.voxel_single_pixel`** (default: on). One pixel per voxel, so magnified sections show holes.
   Fixed: fill the voxel's projected box.
-- **`quirks.voxel_buffer_wrap`** (default: on). The positions of voxels wrap around the 256-pixel buffer
-  (claim 22): a voxel past one edge is written near the opposite edge. For a part whose voxels lie
-  inside their section boxes this happens only when the part is at least about 250 pixels wide or
-  tall, and from a width or height of 249 pixels (*w₀* or *h₀*, F6) its copy rectangle is larger
-  than the buffer. Voxels outside their section boxes, which only malformed model files produce
-  (claims 35 and 36), can wrap in a part of any size. Fixed: clip, that is drop every voxel whose
-  position lies outside the buffer, or enlarge the buffer so that no voxel wraps (lead question).
-  What a wrapped voxel leaves for later draws follows `quirks.voxel_colour_partial_clear`.
-- **`quirks.voxel_colour_partial_clear`** (default: on). Before a fresh draw the colour plane is
-  cleared over the clear area only, or as a whole when that area does not fit in the buffer
-  (claim 34). A pixel that the previous fresh draw wrote outside this clear area, which only voxels
-  outside their section boxes produce, stays in the buffer and shows in a later part's image if
-  that image's copy rectangle covers it. Fixed: every fresh draw starts on a fully transparent
-  colour plane, so a part's image holds only its own voxels. Only malformed model files are
-  affected.
 - **`quirks.barrel_elevation_quantised`** (default: on). The barrel's elevation shows only in 32-step
   (11.25°) increments, and the fire angle is taken modulo 256. Fixed: continuous pitch.
 - **`quirks.building_turret_shift_eighths`** (default: on). Building turrets convert the turret displacement
@@ -1791,24 +1620,6 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   Fixed: *d_b = δ × ρ*, rounded to single precision as for vehicles (F3). The order is kept: the
   turret still moves along its own forward axis, because a building has no separate body facing
   to move along. No switch is proposed for a vehicle-style order.
-- **`quirks.barrel_pivot_frame_mixup`** (default: on). The barrel pitches about the turret-frame point *−t*
-  (claim 10), where *t* is the turret's translation in its parent frame. In world terms the pivot
-  sits at distance *|t|* from the turret origin, in a direction that turns with twice the body
-  angle plus the turret's relative angle (vehicles) or with twice the turret angle (buildings).
-  Fixed: pivot at the turret origin, or at an imported pivot.
-- **`quirks.voxel_cache_frame_mod32`** (default: on). The HVA frame enters the image-cache keys
-  of claim 26 reduced, not whole: the body key holds the body frame modulo 32, and the vehicle
-  turret key (through *v*), the building turret key and the key of a building's barrel drawn
-  without a turret (claim 37) hold the frame modulo 256. A vehicle barrel, and a building barrel
-  drawn with a turret, use the turret's key and so its reduced turret frame. Two draws whose other
-  key components agree and whose frames agree after the reduction share one image: the first one
-  made is shown for both, so a body with more than 32 HVA frames shows frame *f* where *f* + 32*m*
-  (*m* a whole number) was asked for, once frame *f* has been cached at that key, and a turret with
-  more than 256 frames likewise for *f* + 256*m*. Fixed: every one of these keys holds the whole frame
-  number (and, with `quirks.voxel_cache_alt_turret_frame` on, *v* is formed from the whole turret
-  frame *f*: *v = f* while the alternative-model state is off, *v* = 2⌊*f* / 2⌋ + 1 while it is on).
-- **`quirks.turret_recoil_leaves_barrel`** (default: on). Building turret recoil does not carry the barrel
-  with it. Fixed: barrel follows turret recoil.
 - **`quirks.vehicle_no_recoil`** (default: on). Vehicle recoil settings are read but have no visual effect.
   Fixed: apply F7 to vehicle turret and barrel.
 - **`quirks.shadow_frame_zero`** (default: on). Shadows always use HVA frame 0. Fixed: current body frame.
@@ -1820,10 +1631,6 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   instead of −90°, and one at 12 (south-east) by −44.912° instead of −45°.
   A turret rotated clockwise relative to its body is likewise 0.088° short, and so is a raised
   barrel. Fixed: exact rounding.
-- **`quirks.voxel_x_carry_into_y`** (default: on). Outside the depth-buffered mode, a voxel's y position
-  gains 1/256 pixel for every whole 65536 in the sum *U* of its x-position terms, each taken in
-  0 … 65535 (F5): *py* gains *⌊U / 65536⌋*. With a negative x step nearly every term adds one,
-  so over a large section some voxels move down by one pixel. Fixed: independent components.
 - **`quirks.voxel_mode0_misread`** (default: on). Claim 35. A section with normal mode 0 is drawn unlit,
   and its column data is read as one value per voxel. A standard file, where every voxel holds a
   colour index and a normal index, is then misread: normal indices show as colours, and after the
@@ -1838,36 +1645,9 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   Fixed: depth-test between sections.
 - **`quirks.voxel_depth_double_width`** (default: on). With the depth option every voxel is two pixels wide.
   Fixed: one pixel per voxel, as without the option.
-- **`quirks.barrel_cache_ignores_elevation`** (default: on). A barrel image drawn with a turret is
-  looked up and stored under the key of the turret image of the same draw (claim 26), in the
-  type's store of barrel images; a building's barrel drawn without a turret uses the key of
-  claim 37. None of these keys holds the barrel elevation. A barrel draw whose key is found shows
-  the stored image, made with the 32-step elevation *e₃₂* (claim 6) of the draw that stored it,
-  whatever *e₃₂* is now; it stays so, for every object of the type, until the caches are emptied
-  (claim 26). This applies to vehicle barrels (which change elevation after placement, claim 6)
-  and to building barrels outside recoil (a running recoil cycle makes a building's turret and
-  barrel images fresh, claim 26). Fixed: every barrel key also holds *e₃₂*, so a barrel image is
-  reused only by a draw at the same 32-step elevation; turret keys are unchanged.
 - **`quirks.barrel_frame_zero`** (default: on). Barrels drawn together with a turret always use HVA
   frame 0 (claim 16; a building barrel without a turret is not affected, claim 37). Fixed: use the
   turret's frame.
-- **`quirks.depth_mode_leak`** (default: on). Claim 32 and S2: a fresh draw of the shadow of a
-  depth-option type is itself made in the depth-buffered mode, so its own clear sets the depth plane
-  to 0 over its clear area (claim 34), and it leaves the mode on.
-  Every later fresh draw (parts, shadows, projectiles and debris, of any type) is then made in the
-  depth-buffered mode, until the next fresh draw of a part (body, turret or barrel) of a
-  depth-option type ends; that end switches the mode off. The mode is kept across drawn frames and
-  games. **Fixed (Q-0056):** a shadow never switches the mode on, whether or not its type has
-  the depth option. The mode starts off, is on only during a fresh depth-option part draw,
-  and is off between draws, drawn frames and games. Reused images do not change it. No fresh
-  part of a type without the option, and no projectile or debris, uses the depth-buffered mode.
-  Every fresh shadow's ordinary clear leaves the depth plane unchanged. Its footprint pixels
-  and copy rectangle stay the same (claims 30, 31, 34), but later depth-tested parts can differ
-  because the shadow did not clear their retained depths.
-  **Initialisation exception:** the first fresh draw after program start clears both planes
-  completely, even if it is a shadow made with the mode off (claim 34). The original shadow
-  clear is tested by MS-18 (e); its off-state replay checks our engine's chosen alternative,
-  not a selectable mode of the oracle.
 - **`quirks.voxel_topdown_column_origin`** (default: on). Claim 36. Malformed columns, whose runs do not add
   up to exactly *Nz* cells (the condition of the importer's warning, claim 36). Three things
   happen in the original:
@@ -1903,49 +1683,9 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   the requested configurations, not every possible mixed-depth tie. Fixed: a stable sort, ascending
   nearest depth with tied sections in file order (file order A, B, C at depths 2, 2, 1 then draws C,
   A, B).
-- **`quirks.voxel_cache_alt_turret_frame`** (default: on). A vehicle turret's cache key, and so
-  the key of the barrel drawn with it, holds one frame value *v* in place of both the turret frame
-  and the alternative-model state (claim 26): with *f* the turret frame modulo 256 (the whole
-  frame if `quirks.voxel_cache_frame_mod32` is off), *v = f* while the state is off and
-  *v* = 2⌊*f* / 2⌋ + 1 while it is on. Two draws whose other key components agree and that give the
-  same *v* share one image. So, with the state on, turret frames 2*k* and 2*k* + 1 share an image,
-  and both share it with frame 2*k* + 1 drawn with the state off; turret frame 2*k* drawn with the
-  state off has its own. The body key holds the alternative-model state as a component of its own,
-  with no such collision. Only a type with both the turret flag and the alternative-body option
-  can show it (claim 12). Fixed: the turret key holds the alternative-model state and *f* as two
-  separate components, so draws share a turret image only when both agree.
-- **`quirks.voxel_depth_zero_hidden`** (default: on). In the depth-buffered mode the depth plane is set to
-  0 (over the clear area, claim 34) and the test is strict, so a voxel whose depth is 0 is never drawn; depths also wrap modulo
-  256, so a part deeper than 256 pixels compares wrapped depths (claim 24). Fixed: start the
-  plane below every possible depth and compare unwrapped depths.
 - **`quirks.shadow_double_width`** (default: on). Every column of the shadow footprint marks two pixels side
   by side (claim 30, F10). Fixed: one pixel per column.
 
-- **`quirks.voxel_depth_plane_partial_clear`** (default: on). The depth plane is never reset as a
-  whole after the first fresh draw of the program (claim 34). A fresh draw made with the
-  depth-buffered mode on sets it to 0 over that draw's clear area only (columns *x₀ … x₀ + w* and
-  rows *y₀ … y₀ + h* of the previous fresh draw's copy rectangle, claim 34) and leaves every other
-  pixel's depth as it was; a fresh draw made with the mode off leaves the whole depth plane as it
-  was. So after a draw made with the mode off, the next depth-buffered draw meets the depths of
-  the depth-buffered draw before it outside its own, smaller clear area, and loses the voxels there
-  whose depth is not greater than the stored one (claim 24). Fixed: every fresh draw made with the
-  mode on has comparison depth 0 at every image coordinate before its voxels contribute.
-  draws made with the mode
-  off still leave it as it is, and the colour plane is cleared as claim 34 gives in both states.
-- **`quirks.alt_body_turret_model`** (default: on). Two cases of the alternative-body option
-  without an alternative body to draw (claim 12), both while none of the vehicle's spawned
-  aircraft is docked. A type with both the turret flag and the option has no alternative body
-  file, and draws its turret model in the body's place, posed as the body. A turretless type with
-  the option whose alternative body did not load draws no body at all. Fixed: draw the main body
-  whenever there is no alternative body to draw.
-- **`quirks.recoil_hold_one_skipped`** (default: on). A recoil hold duration of 1 gives no hold tick, the
-  same as 0, while a hold of 2 or more holds for that many ticks; no setting holds for exactly
-  one tick (claim 27, F7). Fixed: hold for *t_h* ticks for every *t_h* ≥ 1.
-- **`quirks.recoil_refire_accumulates`** (default: on). A shot during a running recoil cycle adds a full
-  travel distance to the current recoil slide, so repeated shots slide the part farther and
-  farther, and the cycle ends with a jump to 0 (claim 27, S1). Fixed: a shot during a cycle
-  compresses from the current recoil slide up to the travel distance in *t_c′* ticks, and the
-  recoil slide never exceeds the travel distance.
 - **`quirks.barrel_recoil_layer_reset`** (default: on). After every rules layer that has a section
   for a type, each of the barrel's four recoil values is that layer's own barrel key if it has one,
   and otherwise the turret's corresponding value as it stands after that layer (claim 27). A barrel value set by an earlier rules layer is therefore lost whenever a later rules layer has
@@ -1962,6 +1702,27 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   root the stored input follows the switch, as every store does, while the final cut of the
   result stays a truncation. Example: F2's row z, x entry becomes 0.611342072 instead of 0.611342013.
 
+### Lead-confirmed presentation departures
+
+The project lead confirmed each original bug below as a presentation-only departure.
+Each is fixed unconditionally, with no quirk switch.
+
+- Original reused shadows retained old own-image cutouts instead of excluding the current pose (claim 39).
+- Original voxel positions wrapped at image edges and reappeared on the opposite side (claim 22).
+- Original partial colour clearing let unrelated earlier models contaminate fresh images (claim 34).
+- Original barrel pivots wandered with twice the parent angle due to a misplaced coordinate frame (claim 10).
+- Original frame keys reduced modulo 32 or 256 substituted earlier motion frames (claims 26 and 37).
+- Original building turret recoil left its barrel behind (claim 27).
+- Original horizontal position arithmetic carried into vertical position, moving some pixels down (F5).
+- Original barrel keys omitted elevation, freezing an earlier pitch (claims 6, 26 and 37).
+- Original depth-option shadows enabled depth mode for unrelated later draws, frames and games (claim 32).
+- Original turret keys combined alternative-model state with frame parity, colliding across models and frames (claim 26).
+- Original depth-zero voxels failed the strict test and wrapped depths reversed coverage order (claim 24).
+- Original partial depth clearing let unrelated stale depths suppress fresh voxels (claim 34).
+- Original missing-alternative-body cases drew the turret as the body or omitted the body entirely (claim 12).
+- Original recoil hold duration one skipped its only hold tick (claim 27).
+- Original refiring added another full travel distance, causing unbounded visual drift and a final jump (F7).
+
 ## Import mapping
 
 All keys are optional and are read per vehicle, aircraft or building type. "Rules [type]"
@@ -1977,7 +1738,7 @@ own name, even when the type's image names a different section.
 | `TurretRecoil` | Rules [type] | boolean | no | Enables S1 for buildings (claims 27, 28) |
 | `TurretTravel`, `TurretCompressFrames`, `TurretHoldFrames`, `TurretRecoverFrames` | Rules [type] | integers | 2, 1, 1, 1 | F7 for the turret |
 | `BarrelTravel`, `BarrelCompressFrames`, `BarrelHoldFrames`, `BarrelRecoverFrames` | Rules [type] | integers | the turret's corresponding value; in each rules layer that has the type's section, an absent barrel key takes the turret's value as it stands after that layer, replacing any barrel value from an earlier rules layer (claim 27, `quirks.barrel_recoil_layer_reset`) | F7 for the barrel |
-| `UseBuffer` | Art [type] | boolean | no | Per-type depth buffering (claims 24, 32); in the original, a fresh shadow of the type also clears depth and leaves the mode on. The off-state policy of `quirks.depth_mode_leak` is not imported from this key (Q-0056). |
+| `UseBuffer` | Art [type] | boolean | no | Per-type depth buffering for fresh part draws only (claims 24 and 32); shadows never enable it. |
 | `ShadowIndex` | Art [image] | integer | 0 | Shadow section (claim 29) |
 | `NoShadow` | Rules [type] | boolean | no | Suppresses the shadow (claim 31); no-shadow control for claim 39 |
 | `ConsideredAircraft` | Rules [type] | boolean | no | Half-size shadow (claim 31) |
@@ -1987,10 +1748,6 @@ own name, even when the type's image names a different section.
 | `TurretCount` | Rules [type] | integer | 0 | Turret count; above 0 makes a multi-turret type unless the type has rotating-barrel weapon stages (Terms, claim 12) |
 | `IsGattling` | Rules [type] | boolean | no | Rotating-barrel weapon stages; here only its effect on the multi-turret rule (claim 12) |
 | `UseTurretShadow` | Art [image], vehicles | boolean | no | Read, no effect (`quirks.no_turret_shadow`) |
-
-The engine option `quirks.depth_mode_leak` has no rules-file or art-file key. Its default is on.
-With it off, a shadow never enables depth buffering; only fresh depth-option parts use it
-(claim 32). The imported per-type depth option remains independent of the engine switch.
 
 **Importer warnings.** The importer warns, naming the file and the place in it, in these cases. A
 warning never changes the imported result (glossary, *importer warning*), and the warnings do not
@@ -2007,13 +1764,9 @@ depend on the state of any quirk switch.
 | A lighting table file with *R* below 32 or above 128 | the file | 38 |
 | A lighting table file with data after its last row | the file | 38 |
 
-The importer finds the model cases by reading each column as claims 35 and 36 describe. Three
-cases give no warning, because they depend on the pose or size of an object at the moment of
-drawing and not on the file alone, so the importer cannot tell in general whether they will
-occur: the right-hand pixel written below the last buffer row (claim 24 and the shadow marking of claim 30, F10), a copy
-rectangle larger than the voxel buffer (claim 22) and a clear area that does not fit in it
-(claim 34). Our engine's result in each is the one the claim gives. This follows the glossary's
-*unspecified* entry, which asks for an importer warning only where the cause is in the data.
+The importer finds model cases by reading columns as claims 35 and 36 describe.
+No old buffer-edge, oversized-copy or failed-clear-fit condition gives an extra warning:
+claims 22 and 34 enlarge images and fully initialise fresh draws.
 
 No additional INI keys select section ties, mode-0 spans or the own-image exclusion.
 The following model-file concepts supplement the key mapping; absence is governed by
@@ -2041,8 +1794,10 @@ the named test data. A screen recorder with read-only tick counts supplies captu
 scripted input acts only through normal mouse and keyboard controls. Record the display path
 used (glossary, *display path* and *measurement setup*).
 
-- **Golden image** means a pixel comparison between the original's screenshot and our engine's
-  render of the same scene, built from this spec.
+- **Golden image** compares the original's screenshot with an engine rendering for
+  unchanged behaviour. For lead-confirmed departures, engine-conformance comparisons
+  instead test this spec's mathematical prediction, not the original's buggy pixels.
+  In mixed scenarios, oracle backing covers only unchanged portions.
 - **Runs and initial state.** Rendering is deterministic, so one run per variant is enough.
   Unless a scenario explicitly carries effects between games, each variant starts with a fresh
   program session, not merely a new game. This provides off depth mode and no earlier images
@@ -2111,10 +1866,11 @@ used (glossary, *display path* and *measurement setup*).
     both sides of it,
   - the barrel rises as claim 6 says (default fire angle): turret directions first drawn in the
     first tick after placement show it level, and directions first drawn from the second tick on
-    show it one step above level (earlier images stay cached, `quirks.barrel_cache_ignores_elevation`),
-  - a zero golden-image diff, with the pivot at *−t* (claim 10) and the barrel in HVA frame 0.
-- *Falsified if:* the barrel pivots about the turret origin, the overlap rule differs, or a
-  direction first drawn from the second tick on shows the barrel level.
+    show it one step above level, including directions already cached at level,
+  - the image matches claim 10's turret-origin pivot and barrel frame 0. Pivot and
+    current-elevation reuse checks are lead-confirmed departures, engine conformance.
+- *Falsified if:* the barrel pivots away from the turret origin, overlap differs, or
+  a second-tick-or-later appearance retains an earlier level pitch.
 
 **MS-3 HVA, scale, HVA frames (claims 13–16).**
 - *Setup:* a stock unit with a multi-frame body HVA (for example a walking voxel unit or an
@@ -2126,7 +1882,9 @@ used (glossary, *display path* and *measurement setup*).
   - any barrel part stays in HVA frame 0.
 - *Falsified if:* section parts drift from their predicted spots, or a barrel animates.
 
-**MS-3b Frame collisions and the turret frame (claims 16, 26; `quirks.voxel_cache_frame_mod32`).**
+**MS-3b Complete cache frames and turret frames (claims 16, 26).** Complete-key
+checks are engine conformance for lead-confirmed departures; frame selection remains
+an unchanged oracle-checkable rule.
 - *Test data:*
   - test models for one stock turreted vehicle type,
   - a body HVA of 40 frames, in which one small marker section takes a different, clearly
@@ -2137,24 +1895,23 @@ used (glossary, *display path* and *measurement setup*).
   cache-disable option added to the test image's art section.
 - *Observable:* the marker position and the turret frame in each capture.
 - *Expected:*
-  - With caching, once frames 0–7 have been drawn at that facing, body frames 32–39 show the
-    marker positions of frames 0–7.
-  - With the cache-disable option, frames 32–39 show their own positions.
+  - With or without caching, frames 32–39 show their own marker positions,
+    never the positions of frames 0–7.
   - Whenever the body frame *f_b* is non-zero, the turret shows frame *f_b mod 3*.
-- *Falsified if:* frames 32–39 show their own positions while caching is on, or show frames 0–7
-  under the cache-disable option, or the turret frame does not follow the body frame while
+- *Falsified if:* frames 32–39 substitute frames 0–7 under either cache setting,
+  or the turret frame does not follow the body frame while
   *f_b ≠ 0*.
-- *Second model set (turret frame modulo 256).* The same type gets a body HVA and a turret HVA of
+- *Second model set (complete turret frame).* The same type gets a body HVA and a turret HVA of
   260 frames each, and the turret, like the body, has a small marker section that takes a
   different, clearly visible position in each frame. The same procedure, for more than 260
   walk-counter steps, with and without the cache-disable option.
-  - *Expected:* with caching, turret frames 32–39 show their own marker positions (the turret key
-    keeps turret frames up to 255 apart, unlike the body key), and turret frames 256–259 show the
-    positions of turret frames 0–3. Under the cache-disable option every turret frame shows its
-    own position.
-  - *Falsified if:* with caching, turret frames 256–259 show their own positions or frames 32–39
-    show the positions of frames 0–7; or, under the cache-disable option, any turret frame shows
-    another frame's position.
+  - *Expected:* every body/turret frame shows its own marker, including 32–39 and
+    256–259, under both cache settings.
+  - *Falsified if:* a requested frame substitutes any other marker.
+- *Building rendering fixture:* In engine conformance, render a building turret with
+  a 260-frame marker HVA at applicable frames 0–259, then repeat with caching disabled.
+  Supply frames directly to the rendering test, not the oracle simulation. Every
+  requested marker must match; frames 256–259 substituting 0–3 falsifies complete keys.
 
 **MS-3c Turret frames from the animation-frame counter (claim 16).**
 - *Test data:*
@@ -2191,9 +1948,9 @@ used (glossary, *display path* and *measurement setup*).
     with nothing else on screen.
 - *Observable:* pixel crops.
 - *Expected:*
-  - an exact golden-image match, including the 1-pixel artefacts of `quirks.voxel_x_carry_into_y`,
-    claim 21's within-section pixel priority and claim 23's section priority (section ties
-    are tested separately in MS-5b),
+  - exact agreement with F5's independent-coordinate prediction, claim 21's voxel
+    priority and claim 23's section priority (ties in MS-5b); removed carry artefacts
+    are lead-confirmed departures checked against this spec, not oracle pixels,
   - the depth-option type shows 2-pixel-wide voxels.
 - *Falsified if:* any repeated golden-image mismatch remains with the model and pose verified,
   including a systematic one-pixel shift, a wrong within-section overlap winner, or coverage
@@ -2206,7 +1963,7 @@ used (glossary, *display path* and *measurement setup*).
   has one well-formed section and exactly two occupied cells with distinct nontransparent
   output colours X and Y. Choose bounds and HVA scale so F5 maps both to the same left
   image pixel and, in depth mode, the same nonzero comparison depth. Check these conditions
-  separately for each mode, including the non-depth carry. The copy rectangle contains
+  separately for each mode, with independent components in both. The copy rectangle contains
   both output pixels. There is no third voxel whose right-hand write can interfere.
 - *Fixtures:* Define the cells by distances from the farthest corner. Use three pairs:
   X at (0, 1, 0) with Y at (1, 0, 1), X at (1, 0, 0) with Y at (0, 0, 1),
@@ -2222,8 +1979,8 @@ used (glossary, *display path* and *measurement setup*).
   then probes replacement of Y's larger depth without a test at that neighbour.
 - *Procedure and observable:* Restart the program for every fixture, pose and mode.
   Capture the first visible drawn frame losslessly and record the common pixel's colour.
-  Run once without the depth option and once with it. The fresh-program initial depth
-  is 0; no shadow or previous part draw can change it.
+  Run once without the depth option and once with it. Each fresh depth-mode image
+  starts empty, below every numeric voxel depth; no shadow contributes depth.
 - *Expected:* the common pixel shows X without depth buffering and Y with it. The
   depth-mode right-hand pixel also shows Y. Repeat the non-depth fixtures with X's
   lighting-table output changed to 0 by a named test table, leaving Y nonzero: the common
@@ -2242,8 +1999,8 @@ not contain the one pattern in which F8 and a stable sort differ, so this scenar
   test type) gets test models, one model at a time (Common setup, *Giving a stock type test
   models*). The test map override section also gives it the no-shadow option, so no shadow
   overlaps the crop. No type with the depth option is on the map. For each model the game program
-  is started afresh (not only a new game), so the depth-buffered mode is off (claim 32: it carries
-  over between games, and only the start of the program sets it off).
+  is started afresh to exclude earlier cached images. Corrected depth mode stays off
+  outside fresh depth-option part draws (claim 32).
   - **Tie model (T1).** Three sections, in this file order:
     - *A:* a solid block of a few cells in every direction (for example 4 × 4 × 4 cells, every
       cell a voxel, with bounds of about one model unit per cell, claim 15), every voxel with
@@ -2278,7 +2035,9 @@ not contain the one pattern in which F8 and a stable sort differ, so this scenar
   depth-option object, or a missing first-drawn-frame capture. A wider silhouette alone is
   not a setup error: with those controls satisfied, it is a rasterisation falsifier.
 
-**MS-6 Building voxel turret (claims 5, 6, 9, 10, 11, 26, 27; `quirks.recoil_hold_one_skipped`, `quirks.recoil_refire_accumulates`, `quirks.barrel_recoil_layer_reset`).**
+**MS-6 Building voxel turret (claims 5, 6, 9–11, 26, 27).** Pivot, barrel-following,
+one-tick holds and bounded refire are lead-confirmed departures, engine conformance.
+Direction, shift, overlap and layer imports remain oracle-checkable.
 - *Setup:*
   - a stock building with a voxel turret and a barrel: one with both a turret model and a barrel
     model, that is, a turret-animation name that has a late "TUR" in the sense of S-0007
@@ -2337,29 +2096,27 @@ not contain the one pattern in which F8 and a stable sort differ, so this scenar
   - **Directions.** 32 turret directions.
   - **Turret shift.** The turret sits 2 model units forward (−1 for *δ = −12*) along its own
     facing, so it circles the anchor as it turns.
-  - **Barrel.** It pitches about the turret-frame point *−t* (golden image), and its pitch
-    takes only 32-step values.
+  - **Barrel.** It pitches about the turret origin in 32-step values.
   - **Recoil.** After the shot, the turret's recoil slide over successive ticks is 1.5, 3, 3, 3,
     3, 2.25, 1.5, 0.75, 0 model units (F7, S1). The sequence starts on the shot tick or the next
-    one (which of the two is not fixed here). The barrel follows its own cycle (here the same
-    values), and turret recoil leaves the barrel in place.
-  - **Hold runs.** Hold 1: 1.5, 3, 2.25, 1.5, 0.75, 0. Hold 2: 1.5, 3, 3, 3, 2.25, 1.5, 0.75, 0.
-    Defaults: 2 in one tick, then 0, so the recoiled pose shows in exactly one tick (F7, `quirks.recoil_hold_one_skipped`).
-  - **Negative travel.** The same magnitudes as the base sequence (1.5, 3, 3, 3, 3, 2.25, 1.5,
-    0.75, 0), with turret and barrel sliding forward along the turret's forward axis instead of
-    back.
-  - **Hold refire.** A staircase: in the 2 ticks after each shot's cycle starts, the
-    recoil slide rises by 1.5 per tick, so each shot raises the hold level by 3 (3, 6, 9 after
-    three shots); it then holds. After the last shot: 2 ticks of rise to the top level *λ_top*,
-    12 ticks at *λ_top*, then *λ_top* − 0.75, *λ_top* − 1.5, *λ_top* − 2.25, and then 0 in the
-    next tick (a jump of *λ_top* − 2.25).
-  - **Compress refire.** The recoil slide rises by 1 per tick without a break from the first
-    shot until 8 ticks after the last shot's cycle starts, so its peak is *n_s* + 8, where *n_s* is
-    the number of ticks between the first and the last shot. It then holds for 2 ticks, shows
-    *n_s* + 4 for one tick and then 0. With two shots 3 ticks apart: 1, 2, …, 11, 11, 11, 7, 0 (F7).
+    one (not fixed here). Each barrel cycle has the same sequence, but its displayed
+    displacement is twice the turret slide, following both cycles. Add a run with
+    barrel travel zero: it still follows turret recoil.
+  - **Hold runs.** Hold 1: 1.5, 3, 3, 2.25, 1.5, 0.75, 0; hold 2:
+    1.5, 3, 3, 3, 2.25, 1.5, 0.75, 0. Defaults: each cycle slides 2, 2, 0.
+  - **Negative travel.** Each cycle has the base sequence's magnitudes (1.5, 3, 3,
+    3, 3, 2.25, 1.5, 0.75, 0), with negative slides. The turret moves forward and
+    the accompanying barrel moves forward by the sum of both cycle magnitudes.
+  - **Hold refire.** Each cycle stays at travel 3; after the last shot, two compress
+    ticks at 3, twelve hold ticks at 3, then 2.25, 1.5, 0.75, 0.
+  - **Compress refire.** Restart uses F7's remaining-distance step and never exceeds
+    travel 8. From slide 3: new compress ticks 3.625, 4.25, 4.875, 5.5, 6.125,
+    6.75, 7.375, 8, then 8, 8, 4, 0. Also verify refire during recovery, using
+    *(8 − λ_r) / 8* as the new step.
   - **Layer runs.** *Control:* the turret does not recoil, and the barrel's per-tick recoil slides
-    are 1.5, 3, 3, 3, 3, 2.25, 1.5, 0.75, 0. *Turret only:* turret and barrel both slide 3, 6, 6,
-    6, 6, 4.5, 3, 1.5, 0 (the barrel takes the map's turret values). *Section only:* neither the
+    are 1.5, 3, 3, 3, 3, 2.25, 1.5, 0.75, 0. *Turret only:* each cycle slides
+    3, 6, 6, 6, 6, 4.5, 3, 1.5, 0 (barrel takes turret values); the barrel image
+    displacement is twice that because it follows the turret too. *Section only:* neither the
     turret nor the barrel recoils (the barrel takes the turret's travel 0).
   - **Overlap (claim 11).** The overlap shows *Y* (barrel drawn second) at 32-step turret facings
     5–19, and *X* (turret drawn second) at 21–31 and 0–3. Facings 4 and 20 straddle a 4-step
@@ -2371,14 +2128,14 @@ not contain the one pattern in which F8 and a stable sort differ, so this scenar
     turret,
   - there are more than 32 turret directions,
   - the per-tick recoil slides depart from the sequences above,
-  - with hold 1 or the defaults, the full travel shows in two or more successive ticks, or never,
+  - hold 1 fails to provide exactly one hold tick or defaults differ from 2, 2, 0,
   - with negative travel, the parts slide back, or do not move,
-  - in a refire run, the recoil slide never exceeds the travel distance (3 or 8), or restarts
-    from 0 at a later shot, or ends by stepping down smoothly to 0 instead of jumping to 0 from
-    *λ_top* − 2.25 (hold refire) or *n_s* + 4 (compress refire),
-  - the barrel moves with the turret's recoil,
+  - a refiring cycle exceeds its travel magnitude, restarts from zero instead of its
+    current slide, or differs from the remaining-distance formula,
+  - the barrel fails to follow turret recoil in addition to its own cycle,
   - in the control layer run, the barrel does not recoil or the turret does (the base rules copy
-    was not read); in the turret-only run, the barrel slides 1.5, 3, 3, 3, 3, 2.25, 1.5, 0.75, 0,
+    was not read); in the turret-only run, the barrel's own cycle keeps 1.5, 3, 3, 3, 3,
+    2.25, 1.5, 0.75, 0,
     or in the section-only run, the barrel recoils at all (in both cases the barrel kept the base
     rules copy's values, as the fixed behaviour of `quirks.barrel_recoil_layer_reset` would),
   - in the overlap run, any facing other than 4 and 20 shows the other colour, or the same colour
@@ -2433,87 +2190,40 @@ not contain the one pattern in which F8 and a stable sort differ, so this scenar
   - the test-model shadow lacks the present columns without voxels, shows the empty columns, or
     is one pixel per column.
 
-**MS-9 Depth-mode leak (claims 26, 31, 32; S2).** The scenario forces a window that stays open whatever
-the order in which objects are drawn, so its outcome does not depend on S-0102.
-- *Test data:*
-  - **Opener V:** one stock turretless vehicle type that casts a shadow gets the depth option (in
-    the art section named after the type) and the shadow-cache-disable option (in its image's
-    art section). Its part caches stay on. Parked, its parts are reused, so after its first
-    drawn frame nothing of V switches the mode off, while its shadow, drawn fresh in every drawn
-    frame, switches it on.
-  - **Closer U:** a second stock vehicle type, one with a turret, gets the depth option and, in
-    the test map override section, the no-shadow option, so it can only switch the mode off.
-  - **Watchers W:** stock vehicle types without the depth option.
-- *Setup:* a fresh game (empty image caches). The map places one U, parked, and one W. V is
-  created later by a map trigger, inside the visible area, and stays parked. No object of any
-  other depth-option type exists during the run; a run in which one appears (for example, built
-  by the computer player) is discarded. U's body and turret keep their facings until phase 4,
-  and V never turns (checked on the captures).
-- *Procedure:* capture every drawn frame, in four phases.
-  - *Phase 1, no opener.* W turns to a facing it has not shown before.
-  - *Phase 2, opener present.* A map trigger creates V. Once V has been drawn in at least two
-    drawn frames, W turns to another new facing, and a map trigger creates a vehicle of a
-    second watcher type, at a facing never drawn before.
-  - *Phase 3, opener gone.* A map trigger removes V from the map. W turns to another new facing.
-  - *Phase 4, closer.* U's turret turns to a direction it has not shown before, while U's body
-    keeps its facing (for example, through an attack order on a target in range). From the
-    drawn frame after U's turret first moves, W turns to another new facing.
-  - Finally W turns back to its phase 2 facing and then to its phase 1 facing.
-- *Observable:* for each watcher image, whether its voxels are two pixels wide and its sections
-  are drawn nearest first. Golden images are rendered both ways. A watcher image made in the
-  depth look can also lack some voxels where an earlier depth-buffered draw left greater depths
-  (claim 34, `quirks.voxel_depth_plane_partial_clear`); the look is judged on the pixels that do show.
-- *Expected:*
-  - phase 1: the normal look,
-  - phase 2: the depth look, for W and for the second watcher,
-  - phase 3: still the depth look (no part of a depth-option type has been drawn fresh since),
-  - phase 4: the normal look (U's fresh turret draw switched the mode off, and nothing switches
-    it on again),
-  - on the way back, the phase 2 facing shows the depth look again and the phase 1 facing the
-    normal look: these images are reused (claim 26).
-- *Control:* the same run with V also given the no-shadow option. Every phase shows the normal
-  look.
-- *Off-state engine replay (Q-0056):* replay the main run, projectile run and game-change run
-  on our engine with `quirks.depth_mode_leak` off, from fresh program state and empty caches.
-  Every watcher image in every phase, including revisited facings, and every projectile image
-  has the normal look. The watcher in the new game also has the normal look. Depth-option
-  parts still use the depth look during their own fresh draws; their shadows never open a
-  window. Any depth look in a watcher or projectile falsifies this off-state rule. MS-18 (e)'s
-  off-state replay separately discriminates whether a shadow's own clear changes depth.
-- *Projectile run (claim 32, projectiles and debris).* In phase 3 of the main run, and in phase 3
-  of the control, a stock unit whose weapon fires a projectile drawn as a voxel model fires once
-  at a target on screen (no depth-option type fires). The projectile is judged like a watcher
-  image: in the main run its voxels are two pixels wide, in the control one pixel wide.
-- *Game-change run (claim 32, carry-over between games).* The main run is stopped in phase 3,
-  with the window open, and a new game is started in the same program session on a map that
-  places one W at a facing W did not show in the first game. No object of a depth-option type
-  exists in the new game (a run in which one appears is discarded), and nothing in it attacks.
-  Expected: W's first image there has the depth look, as does every other image first made in
-  the new game.
-  The same with the control's first game: the normal look.
-- *Falsified if:*
-  - phase 2 or phase 3 shows the normal look,
-  - in the projectile run, the main run's projectile has one-pixel voxels or the control's has
-    two-pixel voxels,
-  - in the game-change run, W shows the normal look after the main run's first game, or the depth
-    look after the control's,
-  - phase 4 shows the depth look (as it would if only a body draw, not a turret draw, switched
-    the mode off),
-  - a facing seen again on the way back changes its look,
-  - the control shows the depth look in any phase.
+**MS-9 Depth-mode isolation (claims 26, 31–33; S2).** Engine conformance for a
+lead-confirmed departure, not a comparison with the original bug.
+- *Setup:* Common setup. Named art copies give depth-option turretless V fresh shadows
+  every drawn frame, depth-option turreted U no shadow, and watchers W no depth option.
+  V/U keep part caching enabled. No other voxel objects enter the observed area.
+- *Procedure:* At speed 6 capture W at new facings before V appears by map trigger,
+  while V is parked, after V is removed, and after U turns to an uncached turret
+  direction. Revisit W's earlier facings. Repeat with V's shadow suppressed. Fire a
+  stock voxel-model projectile from a non-depth shooter. Start a second game in the
+  same program session with only W visible at an uncached facing. One run per variant,
+  lossless tick-labelled captures, director and other mods off.
+- *Observable:* W/projectile pixel width and section overlap against claims 21–24's
+  renders; U/V part images as positive controls.
+- *Expected:* W and projectiles always have their ordinary non-depth look, including
+  reused directions and the new game. U/V parts alone have the depth look. Shadow
+  freshness, presence or suppression never changes W.
+- *Falsified if:* any W/projectile inherits depth mode or carries an inherited look
+  into another game. Wrong type options, changed pose or missing captures make the
+  affected comparison inconclusive.
 
-**MS-10 Barrel cache and elevation (claims 6, 26; `quirks.barrel_cache_ignores_elevation`).**
+**MS-10 Barrel cache and elevation (claims 6, 26).** Current-pitch reuse is engine
+conformance for a lead-confirmed departure, not an oracle comparison.
 - *Setup:* a fresh game. One stock vehicle with a barrel part is placed by the map at a fixed
   facing, with its turret not turning. A few ticks later, a second vehicle of the same type is
   placed at a different facing.
 - *Procedure:* capture both, then turn the first vehicle's turret through new directions.
 - *Observable:* the barrel pitch of both vehicles.
-- *Expected:* as long as the first vehicle's turret does not move, its barrel looks level at
-  its initial key, because that cached image was made before the elevation rose. Directions
-  first drawn later show the raised barrel.
-- *Falsified if:* every barrel image shows the current elevation.
+- *Expected:* Every appearance shows current 32-step elevation, at unchanged and
+  new turret directions, independently for both vehicles.
+- *Falsified if:* a barrel retains level pitch after its elevation changes.
 
-**MS-11 Alternative bodies and switchable turrets (claims 12, 26; `quirks.voxel_cache_alt_turret_frame`).**
+**MS-11 Alternative bodies and switchable turrets (claims 12, 26).** Missing-body
+fallback and collision-free reuse are lead-confirmed departures, engine conformance.
+Other model-selection checks remain oracle-checkable.
 - *Setup:*
   - a vehicle type with the alternative-body option that carries spawned aircraft (a stock one
     if any exists; otherwise set the option with a test map override section, and supply its
@@ -2558,34 +2268,36 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
     alternative body while none is, at the same facing,
   - the multi-turret vehicle shows the turret and barrel models of its selected turret index,
   - the rotating-barrel vehicle always shows its ordinary turret,
-  - the turreted spawner, while none is docked, shows its turret model in the body's place,
-    posed as the body, with the turret drawn as usual,
-  - with caching, while none is docked, body frames 2 and 3 show one and the same turret image.
-    After a spawned aircraft has docked again, body frame 3 still shows that image, while body
-    frame 2 shows turret frame 2 (`quirks.voxel_cache_alt_turret_frame`),
+  - the turreted spawner keeps its main body and draws its turret normally,
+  - with caching, body frames 2 and 3 show turret frames 2 and 3 respectively in
+    both docking states, with no wrong-frame substitution,
   - under the cache-disable option, every body frame *f_b* from 1 to 3 shows turret frame *f_b*,
   - every spawner's shadow keeps the main body's footprint throughout, whatever is drawn in the
     body's place,
-  - the missing-file spawner shows its main body while a spawned aircraft is docked and no body
-    at all, only its shadow, while none is,
+  - the missing-file spawner keeps its main body and shadow in both docking states,
   - the type-id vehicle shows its main body throughout the run without the option, and, in the
     run with it, its alternative body while none is docked and its main body otherwise.
 - *Falsified if:*
   - the body does not switch with the docking state at the held facing,
   - the turret model does not follow the selected turret index at the held facings,
   - the rotating-barrel vehicle shows a test turret model,
-  - the turreted spawner keeps its own body while none is docked,
-  - with caching, body frames 2 and 3 show different turret images while none is docked,
-  - with caching, after a spawned aircraft has docked again, body frame 3 shows a turret image
-    other than the one body frames 2 and 3 shared while none was docked, or body frame 2 does not
-    show turret frame 2,
+  - the turreted spawner substitutes a turret for its main body,
+  - body frame 2 or 3 shows the wrong turret frame under caching in either state,
   - under the cache-disable option, a body frame from 1 to 3 shows another turret frame,
   - a spawner's shadow changes shape when the body is replaced,
-  - the missing-file spawner keeps its main body, or loses its shadow, while none is docked,
+  - the missing-file spawner loses its main body or shadow while none is docked,
   - the type-id vehicle shows its alternative body in the run without the option, or keeps its
     main body while none is docked in the run with it.
 
-**MS-12 Depth-buffer details (claim 24; `quirks.voxel_depth_zero_hidden`).**
+- *Separate-state key fixture:* In engine conformance, use MS-17's stale-normal
+  turret and probe P at fixed facings and one fixed applicable frame. Cache the
+  state-off turret with P supplying row 26, then change P to row 1 and render state
+  on. It must show row 1; returning off must show cached row 26. Row 26 in both
+  states falsifies their separate key component. No oracle state is altered.
+
+**MS-12 Depth-buffer details (claim 24).** Empty initial depth and unwrapped-depth
+checks are lead-confirmed departures, engine conformance; tie and right-hand-write
+coverage still test unchanged original behaviour.
 - *Test data:* one stock vehicle type (the test type) gets test models, one model at a time, and
   the depth option in the art database copy. The test map override section also gives it the
   no-shadow option, and no other depth-option type is on the map. For each model the game program
@@ -2602,21 +2314,24 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
     294 model units along its x axis, with voxels only in the half of the cells at the min-x
     end. It is drawn at body facing 12 (south-east), where its x axis is turned toward the
     viewer, about 30° from the view axis, so depth changes quickly along it. Fine-tune the length so that, by claim 24, the farthest voxel's depth is 0 and
-    the next voxel's is not.
+    the next voxel's is not. Isolate that marker in image x/y so no nearer voxel
+    can legitimately cover it.
   - **Two-pixel test.** Two small overlapping sections, arranged so that the right-hand pixel of
     a farther voxel drawn first is later reached by a nearer voxel's left pixel, and the reverse.
 - *Observable:* pixel crops at a fixed body facing (east, except where stated).
 - *Expected:*
   - **Equal depths.** Only colour *Y* shows. Under the reversed order the second section is
     drawn first, and at equal depth the first drawn stays.
-  - **Depth 0.** The rod's farthest voxels, those whose claim 24 depth is 0, are missing.
+  - **Depth 0.** Isolated zero-depth voxels appear. Add negative-depth isolated
+    markers and a coincident pair at depths 255 and 256, verified from F5: negative
+    markers pass empty coordinates and depth 256 wins the pair.
   - **All three models.** The golden image matches claim 24 exactly. Renders that test both
     pixels, use "greater or equal", keep the last drawn, or draw the sections in claim 23 order
     each differ from the capture in at least one pixel.
-- *Falsified if:* colour *X* shows anywhere in the equal-depth model, the depth-0 voxels appear,
-  or one of the alternative renders matches the capture where claim 24 does not.
+- *Falsified if:* X shows in the equal-depth model, an isolated zero/negative marker
+  disappears, depth 255 wins over 256, or verified tie/right-write coverage disagrees.
 
-**MS-13 Grid geometry (claims 13, 14, 15, 22).** The wrap of claim 22 is tested by MS-24 (c), not here.
+**MS-13 Grid geometry (claims 13–15, 22).** Enlarged no-wrap images are tested by MS-24.
 - *Test data:* one stock vehicle type gets test models, one at a time (no depth option).
   - **HVA scale.** Two sections, the first with scale factor 1, the second with scale factor 2.
     The HVA moves the second section 10 model units along model +x in every frame.
@@ -2641,7 +2356,8 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
 **MS-14 Barrel elevation timing (claim 6, F9).**
 - *Test data:* a test map override section sets the fire angle of one stock vehicle type with a
   barrel part to 20. The art database copy gives that type's image the cache-disable option, so
-  that every drawn frame shows the current elevation (`quirks.barrel_cache_ignores_elevation` cannot hide it).
+  that every drawn frame is fresh. Repeat with caching on as a current-pitch
+  engine-conformance check, expecting the same sequence.
 - *Procedure:* the map places one such vehicle, with its turret not turning. Per-tick captures
   from the first tick the vehicle is drawn.
 - *Observable:* the barrel's 32-step pitch in each capture (0 = level, 1 = 11.25° up, 2 = 22.5°
@@ -2791,92 +2507,24 @@ the order in which objects are drawn, so its outcome does not depend on S-0102.
   - its shade follows P's, or shows a row other than *VPL(26, χ)*, once B stands on the flat
     ground beyond.
 
-**MS-18 Depth plane between draws (claims 31, 32, 34; `quirks.voxel_depth_plane_partial_clear`).**
-Every judged outcome comes from drawn frames in which at most two fresh draws alternate, so it does
-not depend on the order in which objects are drawn within a drawn frame.
-- *Test data:* stock turretless vehicle types get test models. None of them has a turret, and
-  nothing else on the map has a voxel model.
-  - **The probe P** gets the cache-disable option (in its image's art section), the no-shadow
-    option (test map override section) and the depth option, so it is drawn fresh in every drawn
-    frame and draws nothing else. Its model is one flat layer of isolated voxels, spaced so that
-    their pixels are at least 3 pixels apart on screen, spread over about 60 × 60 pixels, with no
-    voxel of depth 0 (as in MS-12).
-  - **The spoiler S** gets the cache-disable and no-shadow options, and no depth option. Its
-    model is a single voxel, so its copy rectangle is about 9 × 9 pixels.
-  - **The shadow spoiler D** gets a single-voxel model and the shadow-cache-disable option (in
-    its image's art section), and keeps its part caches and its shadow; no depth option. Parked,
-    its part images are reused after its first drawn frame (claim 26), while its shadow is drawn
-    fresh in every drawn frame, so from then on its only fresh draw is its shadow. The shadow's
-    footprint is one column, so its copy rectangle is about 9 × 9 pixels around the buffer
-    centre (F10, F6).
-  - **The watcher probe W** is P's model on a type without the depth option, with the
-    cache-disable and no-shadow options.
-  - **The opener V** is MS-9's opener: the depth option, the shadow-cache-disable option, part
-    caches on, parked.
-- *Setup:* the program is started afresh before each run (claim 34: the depth plane carries over
-  between games), then a game on the common map. All objects are parked and on screen.
-- *Runs:*
-  - **(a) Spoiler.** The map places P and S. A map trigger later removes S. Control: the same
-    with S also given the depth option.
-  - **(b) Shadow spoiler.** The map places P and D. Control: the same with D's
-    shadow-cache-disable option left out, so that its shadow image is reused while D stays
-    parked.
-  - **(c) Shadow inside a window.** The map places W and D. A map trigger creates V; once V has
-    been drawn in at least two drawn frames, a map trigger removes V from the map. While V is
-    present, three objects are drawn fresh, and those drawn frames are not judged.
-  - **(e) Depth-option shadow clear.** The map places P and D, with D also given the depth
-    option. Park both before judging captures, so D's body image is reused and its only fresh
-    draw is its shadow. Control: D without the depth option, as in (b). This tests the
-    original's shadow clear. Also replay this run and its control on our engine with
-    `quirks.depth_mode_leak` off from fresh program state and empty caches. This second
-    comparison is engine conformance, not an oracle measurement of the design choice.
-  - **(d) New game.** Game 1: the map places P alone, at body facing 8; capture a few drawn
-    frames. Then a new game is started in the same program session. Its map places S alone, and
-    a map trigger later creates P at body facing 8. A run in which any other object with a voxel
-    model appears in either game (starting units included) is discarded.
-- *Procedure:* capture every drawn frame.
-- *Observable:* which of P's or W's voxels show, and in (c) whether W's voxels are two pixels
-  wide.
-- *Expected:* the *patch* below is the set of probe voxels whose left pixel lies inside the
-  spoiler's copy rectangle widened by one column on the right and one row below, at the same
-  voxel-buffer position (the clear area of the probe's next fresh draw; claim 34, F6). On screen it is about 10 × 10 pixels around the point
-  of the probe's image that the buffer centre maps to.
-  - (a) While S is present, from P's second fresh draw on, P shows only the patch; every other
-    voxel of P is missing. After S is removed, from P's second fresh draw on, P shows all its
-    voxels. In the control P shows all its voxels from its second fresh draw on.
-  - (b) From D's third drawn frame on, P shows only the patch of D's shadow: the shadow's copy
-    rectangle is the next draw's clear area, and the shadow, made with the mode off, leaves the
-    depth plane as it is. In the control P shows all its voxels from D's third drawn frame on,
-    because D then makes no fresh draw.
-  - (c) Before V appears, W shows all its voxels, one pixel wide. From W's second fresh draw after
-    V is removed, W shows the depth look (two-pixel-wide voxels; the window stays open, claim 32)
-    and all its voxels: inside the window D's shadow is made with the mode on, so its clear sets
-    the depth plane to 0 over W's previous copy rectangle, widened as claim 34 gives, before every
-    draw of W.
-  - (e) From D's third drawn frame on, P shows all its voxels: every fresh shadow of D clears
-    depth over P's previous copy rectangle, widened as claim 34 gives. This holds whichever
-    object is drawn first. The control shows only the shadow's patch, as in (b).
-    In the off-state engine replay, both runs show only the shadow's patch: every shadow
-    leaves depth unchanged during ordinary clearing, even when D has the depth option.
-    The first fresh draw's full initial clear still occurs; only later captures are judged.
-  - (d) In game 1, P shows all its voxels from its second fresh draw on. In game 2, P's first
-    image already shows only the patch of S: the depths P left in game 1 are still in the depth
-    plane, at the same voxel-buffer positions.
-- *Falsified if:*
-  - (a) with S present P shows voxels outside the patch (the depth plane was reset more widely),
-    P shows no voxel at all, P stays incomplete after S is gone, or the control loses voxels,
-  - (b) P shows all its voxels while D's shadow is drawn fresh (a shadow's copy rectangle does not
-    become the next clear area), or P stays incomplete in the control (the shadow is drawn fresh
-    although its key is cached),
-  - (c) after V is removed W loses the voxels outside the patch of D's shadow (inside a window a
-    shadow of a type without the option leaves the depth plane as it is), or W's voxels are one
-    pixel wide,
-  - (d) P's first image in game 2 shows all its voxels (the depth plane was cleared between the
-    games),
-  - (e) P loses voxels outside the shadow's patch while D has the depth option, or the control
-    shows all its voxels. The former would contradict enabling the mode before the shadow's
-    own depth clear. In the off-state engine replay, P showing voxels outside the patch
-    from D's third drawn frame on in either run falsifies the chosen alternative.
+**MS-18 Complete fresh-depth initialisation (claims 24, 32, 34).** Engine conformance
+for lead-confirmed departures, not an oracle measurement of their corrections.
+- *Setup:* Common setup, named models on stock turretless types. Probe P has the depth
+  option, disabled part caching and no shadow; isolated voxels spread over 60 × 60
+  pixels, at least three pixels apart, depths verified from F5. S is a single-voxel
+  non-depth model, no shadow, caching disabled. D is a single-voxel model with part
+  caching enabled and fresh shadows every drawn frame. Nothing else visible has voxel art.
+- *Procedure:* At speed 6 capture P alone, P with S, and P with D. Repeat with S/D's
+  depth option enabled and D's shadow caching enabled; remove spoilers by map trigger.
+  Start a second game in the same program session after P appeared in the first,
+  and capture P's first image there. One run per variant, lossless tick-labelled captures.
+- *Observable:* P's qualifying pixels compared with the P-alone rendering.
+- *Expected:* All variants show the same complete P pixel set, from the first draw
+  onward and in the new game. No small previous rectangle limits clearing; a shadow
+  changes neither P's mode nor coverage. Zero/negative-depth markers pass empty pixels.
+- *Falsified if:* unrelated earlier draws suppress a verified marker or a fresh shadow
+  changes coverage. Non-depth depth preservation and the initial full clear remain
+  specified but cannot be distinguished by screenshots after full fresh-depth reset.
 
 **MS-19 Normal mode 0 (claim 35; `quirks.voxel_mode0_misread`).**
 - *Test data:* one stock turretless vehicle type gets test models, each with one section of
@@ -2949,8 +2597,8 @@ not depend on the order in which objects are drawn within a drawn frame.
 - *Procedure:* a fresh game. The defence stands idle for a few hundred ticks, then attacks a target
   that moves around it, then a stationary target that survives many shots. Per-tick captures, from
   before the first shot until well after the last.
-  In the reuse run the defence fires at the stationary target only, so that its direction stays
-  the same.
+  In the reuse run the defence fires at the stationary target only. Compare captures
+  with both direction and 32-step elevation unchanged, since both enter its key.
 - *Observable:* the barrel image per 32-step direction and per tick, and the marker position; in
   the reuse run, the palette index of the barrel's pixels in each drawn frame.
 - *Expected:*
@@ -2958,7 +2606,8 @@ not depend on the order in which objects are drawn within a drawn frame.
     anchor: no shift with the turret displacement, and a pitch about the model origin. The pivot
     shows only while the barrel is pitched, so this comparison uses captures in which it visibly
     is: the 32-step pitch is read from the capture, and both pivots are rendered at that pitch.
-  - Reuse run: while the direction stays the same, the barrel's pixels keep one row, during
+  - Reuse run: while direction and elevation stay the same, the barrel's pixels keep
+    one row, during
     recoil cycles too, although P's row changes (the image is reused). In the control the
     barrel's row follows P's row, allowing for one drawn frame of lag.
   - Before the first attack the marker shows frame 0 in every capture. It changes only while the
@@ -2973,8 +2622,16 @@ not depend on the order in which objects are drawn within a drawn frame.
   - the marker stays at frame 0 throughout a long attack, or changes before the first attack,
   - the anchor run moves the image by any other amount,
   - in the reuse run, the barrel's row follows P's row during a recoil cycle at an unchanged
-    direction (drawn fresh, as the fixed behaviour of `quirks.barrel_only_no_recoil` would), or
+    direction and elevation (drawn fresh, as `quirks.barrel_only_no_recoil` off would), or
     in the control it does not follow P's row.
+
+- *Complete-key rendering variants:* In engine conformance, give this barrel-only
+  model a 260-frame marker HVA. At one facing and elevation request frames 0–259,
+  with caching on and off. Every frame must show its own marker, including 256–259.
+  At one fixed frame request level and raised pitch under both cache settings: each
+  image must show current elevation. A substituted marker or frozen pitch falsifies
+  claims 26 and 37. These rendering fixtures supply pose inputs directly; they do
+  not advance the oracle attack counter or modify oracle elevation.
 
 **MS-22 Use of the lighting table file (claim 38).** The parts of the file named below (row count, remap range start and end, extra value, palette, rows) are located as S-0013 gives.
 - *Test data:* the MS-4 stock vehicle on flat ground, drawn with named test copies of the lighting
@@ -3062,77 +2719,35 @@ MS-22.
   store no depth (or write nothing). In (i), second-game captures that match the stock file's
   mean that the file is read again for a new game.
 
-**MS-24 Colour clear and residue (claims 22, 34, 36; `quirks.voxel_colour_partial_clear`, `quirks.voxel_buffer_wrap`, `quirks.voxel_topdown_column_origin`).**
-The outcome does not depend on the order in which the two objects are drawn within a drawn frame:
-each is drawn fresh once per drawn frame and nothing else is drawn fresh, so the fresh draws
-alternate between them, and every fresh draw of the screen follows a fresh draw of the streak.
-Below, a streak's *widened rectangle* is its copy rectangle widened as claim 34 gives: the clear
-area of the screen's next fresh draw.
-- *Test data:* two stock turretless vehicle types get test models, the cache-disable option (in
-  their images' art sections) and the no-shadow option (test map override section), so that both
-  are drawn fresh in every drawn frame and draw nothing else. Neither has the depth option. All
-  sections have normal mode 1, an identity HVA unless stated, and voxels whose colour and normal
-  indices the VPL maps to non-zero indices, a different one for each model.
-  - **The streak (A).** One section of 1 × 1 × 4 cells with bounds 1 × 1 × 1 model units, so each
-    cell is 1/4 model unit tall (claim 15). Its single column has two pairs of runs: 0 empty cells
-    and 128 voxels, then 0 empty cells and 132 voxels. The runs cover 260 cells, and the first
-    pair boundary at which the count is congruent to *Nz* = 4 modulo 256 is the end of the second
-    pair, so the column ends with its own runs (claim 36). Drawn bottom-up (claim 21), its voxels
-    reach cell 259, about 56 pixels above the section box (claim 15, F2), inside the buffer.
-  - **The upside-down streak (A⁻).** A with MS-19's second HVA, which turns the section upside
-    down, so that it is drawn top-down (claim 21).
-  - **The screen (B).** One section holding a single voxel, with a grid and bounds chosen (with
-    F5 and F6) so that its copy rectangle fits in the buffer and contains every pixel that the
-    streaks A, A⁻, A′ and A‴ write, and its voxel's pixel lies off those pixels.
-  - **The wide streaks (A′ and A‴).** A, plus a second section whose columns are all marked empty,
-    whose bounds make the part's overall bounding box exactly *w₀* = 247 pixels wide for A′ and
-    *w₀* = 246 for A‴ (F6), with *h₀* small enough (at most 246) that most of the streak lies
-    above the copy rectangle, placed so that the streak still lies inside the buffer. A′'s widened rectangle then does not fit in the buffer (*x₀ + w* = 256), while A‴'s does
-    (*x₀ + w* = 255), and both copy rectangles fit in the buffer (claim 34).
-  - **The wrapping streak (A″).** A with bounds 1 × 1 × 4 model units, so each cell is 1 model
-    unit tall and the streak reaches about 225 pixels above the section box: it passes the
-    buffer's top row and goes on from the bottom rows upward (claim 22). A″'s copy rectangle
-    fits in the buffer.
-  - **The tall screen (B″).** Like B, with bounds chosen so that its copy rectangle fits in the
-    buffer and contains the rows near the bottom of the buffer that A″'s wrapped voxels reach.
-- *Setup:* the program is started afresh before each run, so that no claim 32 window is open, and
-  a game is started on the common map. The map places one streak and its screen, parked, both on
-  screen, and no other object with a voxel model. Runs: (a) A with B, (b) A′ with B, (c) A″ with
-  B″, (d) A‴ with B, (e) A⁻ with B, (f) a new game: first as (a); then a map trigger removes B,
-  and after a few drawn frames of A alone a new game is started in the same program session, on a
-  map that places only B. A run of (f) in which any other object with a voxel model appears in the
-  new game (starting units included) is discarded.
-- *Procedure:* capture both objects in successive drawn frames.
-- *Observable:* the pixels of both images, compared with golden images.
-- *Expected:* from the second drawn frame on every capture matches its golden image.
-  Run (f) additionally tests B's first image in the new game, as specified below. In particular:
-  - (a): A's image shows the streak's lowest part, up to the top edge of A's copy rectangle and
-    no further. B's image shows its own voxel and the part of A's streak that lies outside A's
-    widened rectangle, from the row above A's copy rectangle to the streak's top, at the voxel-buffer
-    positions A wrote (so placed by F6 for B's image). The streak pixels inside A's widened
-    rectangle do not show in B's image.
-  - (b): B's image shows its own voxel only, because the whole colour plane is cleared before
-    each draw of B.
-  - (c): B″'s image shows, besides its own voxel and, as far as its copy rectangle reaches, the
-    unwrapped part of the streak outside A″'s widened rectangle, the wrapped part of the streak, rising
-    from the bottom rows of the buffer at the positions F5 gives modulo 256.
-  - (d): B's image shows the streak pixels outside A‴'s widened rectangle, as in (a).
-  - (e): the column's visible output extends from cell 3 downward through the grid's bottom face, 256 cells lower
-    than its runs give (claim 36). Because the section is upside down, that part of the streak
-    rises on screen beyond the box face that is at the top in this pose, as in (a). B's image
-    shows the streak pixels outside A⁻'s widened rectangle.
-  - (f): in the first game, as (a). In the new game, B's first image shows its own voxel and the
-    streak pixels outside A's widened rectangle, as in (a), because the colour plane kept what A left
-    there. From B's second fresh draw on it shows its own voxel only, because B's own clear area
-    contains every streak pixel.
-- *Falsified if:* in (a) B's image shows no streak pixel, or shows streak pixels inside A's widened
-  rectangle (A's own image tells whether the voxels beyond cell *Nz* − 1 are drawn at all); in (b) B's
-  image shows any streak pixel; in (d) it shows none (the fit test is stricter than claim 34
-  gives); in (c) B″'s image shows no wrapped streak pixel near the bottom of the buffer, or shows
-  it at other positions; in (e) the streak runs from the box the other way on screen (the
-  column placed by its runs' cell indices, with no shift); in (f) B's first image in the new
-  game shows no streak pixel (the colour plane was cleared between the games), or a later image of
-  B there still shows one; or any capture differs from its golden image.
+**MS-24 Colour isolation, enlarged images and malformed columns (claims 22, 34, 36).**
+Colour/no-wrap checks are engine conformance for lead-confirmed departures; the
+260-cell column relation still tests the original's malformed-column quirk.
+- *Setup:* Common setup, two stock turretless types with named models, no shadows,
+  no depth option and disabled part caches. A has one 1 × 1 × 4-cell section, bounds
+  1 × 1 × 1 model units, normal mode 1, two run pairs with zero empty cells and
+  128 then 132 voxels. Total 260 ends at claim 36's first qualifying pair boundary.
+  B has one voxel of another output colour and a copy rectangle covering A's logical
+  out-of-box positions, with B's voxel elsewhere. Nothing else visible has voxel art.
+- *Variants:* A upside down by a half-turn HVA about model x; A with bounds stretched
+  to 1 × 1 × 4 model units; A with an empty section enlarging its copy width to
+  246, 247 and 300 pixels. Also use a well-formed sparse model whose bounds and
+  occupied markers extend beyond 256 image pixels on both axes, with a copy rectangle
+  containing all markers. Repeat with the depth option and with an enlarged shadow
+  footprint. Isolate markers at image column 255 to probe right-pixel adjacency.
+- *Procedure:* At speed 6 capture both objects over successive drawn frames, once per
+  variant. Remove B and draw A alone, then start a new game in the same session with
+  B alone; capture its first image. Record marker positions, colours and copy bounds
+  losslessly, against F5/F6 predictions.
+- *Expected:* B always shows only its own voxel, even on the first new-game image.
+  A copies only its own rectangle; its column reaches cell 259 bottom-up and starts
+  at cell 3 extending downward top-down (claim 36). Enlarge A's copy rectangle with
+  an empty section to observe out-of-box column markers in A itself. The well-formed
+  large model shows all markers at signed unwrapped positions, including negative
+  image coordinates, with no artificial edge clipping. Column 255's right pixel is
+  column 256 in the same row, for depth-mode parts and shadows alike.
+- *Falsified if:* B contains A-coloured residue, a verified marker wraps to an opposite
+  edge or clips at 256, or a right write changes rows. Contrary column cell positions
+  separately falsify claim 36, retaining its warning and malformed-column quirk.
 
 **MS-25, requested section ties (claims 23, 24, F8).** Common setup, named test VXL/HVA
 files and art database copy as in MS-5b, caching disabled, shadows suppressed, speed index 2.
@@ -3194,8 +2809,9 @@ grid, with a visible colour at a non-overlapping pixel outside the bounding box 
 the copy margin. Outside depth mode it contributes nothing; in depth mode it contributes
 if its depth test passes. The oracle's eventual beyond-data continuation is not an expected
 result. A mode-0 depth fixture of height 255 with an empty count below 255 must prepare
-normally, unlike the unspecified non-depth case. Fixed-state clipping
-and bounded reading are tested in engine-conformance replays, not selectable oracle modes.
+normally, unlike the unspecified non-depth case. Grid-cell clipping with the
+malformed-column switch off and bounded reading are tested in engine-conformance
+replays, not selectable oracle modes; neither clips at an image-buffer edge.
 
 Golden-image comparisons of vehicle shadows in the earlier scenarios include claim 39's
 own-image exclusions; an unmasked footprint calculation alone predicts only its potential
@@ -3212,21 +2828,17 @@ rule. Expected: each own-body overlap pixel equals its no-shadow control, while 
 footprint pixels outside the own image are darkened. Darkened own pixels in fresh-shadow
 runs, or a reversal for hovering or ramps, falsify claim 39.
 
-For reuse, enable shadow caching only. Frame 0 has a hole at a known shadow-marked pixel.
-frame 1 fills it. Capture frame 0 first, then move enough to select frame 1 without changing
-body facing or ramp key. Verify the frame with an asymmetric marker. Expected: the newly
-filled qualifying pixel is darkened by the reused shadow, but not in the fresh-shadow
-control. Reverse the frame order after program restart: the filled-frame exclusion
-persists as a shadow gap when the hole appears. A second object of the same type and key
-showing frame 1 after the first made frame 0's shadow inherits that shadow pattern.
-Changed key, invalidated cache or wrong frame voids the reuse sub-run; contrary pixels with
-verified matching inputs falsify retention or sharing. These captures distinguish retained
-cutouts from an unconditional shadow-before-body or shadow-after-body drawing rule.
-Repeat the hole-to-filled reuse run with a hovering unit, then cause it to rock while it
-keeps the shadow key and filled frame. Expected: once its shadow is made fresh while
-rocking, the filled pixel is undarkened, matching the cache-disabled control. Continued
-cached darkening with independently verified rocking and unchanged frame falsifies the
-unsettled-shadow freshness of claim 31.
+For reuse, enable shadow caching only. Frame 0 has a hole at a shadow-marked pixel,
+frame 1 fills it. Capture 0 first, then move to select 1 without changing facing or
+ramp key; verify with an asymmetric marker. This comparison is engine conformance
+for the lead-confirmed departure, not an oracle check. The filled own pixel stays
+undarkened, matching the fresh-shadow control. Reverse frame order: the hole must
+let the qualifying footprint darken the scene, with no old-pose gap. A second object
+sharing the footprint must exclude its own current image, not inherit the first
+object's cutouts. Repeat with hovering resting and rocking poses: fresh and reused
+footprints have the same current exclusions. Wrong frame or changed key makes reuse
+inconclusive; darkened own pixels or persistent old cutouts otherwise falsify the fix.
+Rocking freshness itself is no longer distinguishable by this corrected-output test.
 
 **MS-28, larger mixed-depth ties (claim 23, Q-0215 question 7).** This is an
 investigation of an `unmeasured` general relation, not a claim that a finite table
@@ -3284,10 +2896,6 @@ settles every section count.
 - **Shadow on a cache miss.** When a shadow image is not yet cached, the shadow sometimes appears
   to be skipped for that draw instead of made. In which situations, and whether a shadow can be
   missing for one drawn frame, has not been determined.
-- **Oversized parts.** How a copy rectangle extending outside image coordinates 0–255 on
-  either axis (claims 22 and 25) reaches the screen has not been determined.
-  Until it is, the screen image of such a part cannot be predicted. The wrap itself and the
-  residue of claim 34 do not depend on it (MS-24).
 - **Turret frame of multi-turret types.** Which HVA frame the turret models of a multi-turret
   type are drawn in (claims 12, 16) has not been determined.
 - **Animation-frame counter.** Exactly how attacking advances the counter that picks turret
@@ -3317,12 +2925,5 @@ settles every section count.
 - **Image invalidation.** Claim 26 keeps reuse for a whole game in our engine, while the
   original can invalidate earlier images together at an event not specified here. Is that
   departure, with no switch, acceptable?
-- **Buffer-edge cases and importer warnings.** The importer warns about the model-file cases of
-  claims 12, 35 and 36 (Import mapping, *Importer warnings*) and not about the three pose- or
-  size-dependent cases of claims 22, 24 and 34 and F10. Should the importer also warn when a
-  model's own size already guarantees an oversized copy rectangle (claim 22)?
-- **Fixed behaviour of two quirk switches.** Each offers two alternatives; which one does the
-  switch select when turned off?
-  - `quirks.voxel_buffer_wrap`: clip, or enlarge the buffer.
-  - `quirks.barrel_pivot_frame_mixup`: the turret origin, or an imported pivot (no pivot key is in
-    Import mapping yet).
+Image enlargement and turret-origin pitching are now settled by the lead as
+unconditional presentation fixes, with no extra pivot import or oversized-image warning.
