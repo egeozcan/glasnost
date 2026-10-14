@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use super::TypeRef;
 use super::tech::{self, Answer};
 use crate::rules::Kind;
-use crate::world::{HouseId, HouseRole, Object, ObjectId, Pos, World};
+use crate::world::{HouseId, HouseRole, Object, ObjectId, World};
 
 /// Progress steps per item (S-0403 claim 1).
 // spec: S-0403 Constants (54 progress steps per item)
@@ -116,9 +116,6 @@ pub struct Item {
     pub remaining: i32,
     /// The tick the item became done (S-0411 claim 9).
     pub done_tick: Option<i32>,
-    /// A place order found a releasing building whose exit was blocked: the
-    /// building retries by itself (S-0404 claim 7).
-    pub exit_retry: bool,
 }
 
 impl Item {
@@ -213,6 +210,9 @@ pub struct Rules {
     pub wall: F64,
     /// The maximum number of queued types per line (S-0404 claim 3).
     pub max_queued: i32,
+    /// The pose direction of an aircraft released onto a dock, 1/256 turns
+    /// (S-0404 claim 13).
+    pub pose_dir: i32,
     /// The separate-aircraft flag (S-0404 claim 2).
     pub separate_aircraft: bool,
     /// The pad aircraft types (S-0404 claim 2).
@@ -369,6 +369,8 @@ impl Rules {
             wall: dv(&g.wall_build_speed_coefficient, single("0.5")),
             // spec: S-0404 Constants (maximum queued types absent: 5)
             max_queued: g.maximum_queued_objects.unwrap_or(5),
+            // spec: S-0404 Constants (pose direction absent: 0)
+            pose_dir: g.pose_dir.unwrap_or(0),
             // spec: S-0404 Import mapping (SeparateAircraft absent: no)
             separate_aircraft: g.separate_aircraft.unwrap_or(false),
             pad_aircraft: g
@@ -788,6 +790,21 @@ pub fn item_object(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
         .map(|i| i.object)
 }
 
+/// Whether an object is the object of a line's item (S-0404 claim 11).
+pub fn is_item_object(w: &World, id: ObjectId) -> bool {
+    w.econ
+        .lines
+        .lines
+        .iter()
+        .any(|l| l.item.as_ref().is_some_and(|i| i.object == id))
+}
+
+/// Whether an item's object still exists and is alive: a defeat's hit can
+/// kill it in production (S-0414 claim 15).
+fn item_alive(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.health > 0)
+}
+
 /// Removes the lines with neither an item nor a queued type (S-0404 claim
 /// 1: such a line ceases to exist).
 fn cleanup(w: &mut World) {
@@ -832,6 +849,10 @@ fn start_item(w: &mut World, li: usize, t: TypeRef, forced: bool) {
     } else {
         Hold::None
     };
+    if let Some(o) = w.obj_mut(object) {
+        // spec: S-0402 Terms (the start price, recorded on the produced object)
+        o.econ.start_price = Some(p);
+    }
     let tick = w.tick;
     w.econ.lines.lines[li].item = Some(Item {
         t,
@@ -847,7 +868,6 @@ fn start_item(w: &mut World, li: usize, t: TypeRef, forced: bool) {
         waiting: false,
         remaining: r,
         done_tick: None,
-        exit_retry: false,
     });
 }
 
@@ -899,10 +919,12 @@ fn cancel_item(w: &mut World, li: usize) {
 
 /// Deletes an item's object, which is off the map (S-0404 claim 6), after
 /// S-0407's event (g).
-fn delete_item_object(w: &mut World, id: ObjectId) {
+pub(crate) fn delete_item_object(w: &mut World, id: ObjectId) {
     if w.obj(id).is_some_and(|o| !o.on_map) {
         tech::object_ends(w, id);
         w.objects.remove(&id);
+        // spec: S-0414 claim 15 (an object that ceases to exist at once, for the cancellation exception)
+        super::victory::object_deleted(w, id);
     }
 }
 
@@ -935,8 +957,8 @@ fn put_on_hold(w: &mut World, li: usize, hold: Hold) {
 
 /// Row 6 of S-0203: every production line, in creation order (S-0404
 /// claim 1), makes its step when one is due (S-0403 claim 1, S-0404
-/// claim 4). Then the factory buildings whose exit was blocked retry their
-/// release (S-0404 claim 7).
+/// claim 4). Then the released units on their way out of their factory
+/// buildings (S-0404 claim 13, interim of request Q-0120).
 pub fn part(w: &mut World) {
     let tick = w.tick;
     // spec: S-0404 claim 1 (all lines of all houses in creation order)
@@ -970,21 +992,8 @@ pub fn part(w: &mut World) {
         }
         pay(w, house, x);
     }
-    let retries: Vec<(HouseId, TypeRef)> = w
-        .econ
-        .lines
-        .lines
-        .iter()
-        .filter_map(|l| {
-            l.item
-                .as_ref()
-                .filter(|i| i.exit_retry)
-                .map(|i| (l.house, i.t))
-        })
-        .collect();
-    for (house, t) in retries {
-        release(w, house, t);
-    }
+    // Q-0120 (interim: the way out of a released unit ends in the production part)
+    super::release::leaving_part(w);
 }
 
 /// Applies a build order (S-0404 claim 3).
@@ -1097,6 +1106,14 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
         return;
     }
     let Some(cell) = cell else { return };
+    let alive = w.econ.lines.lines[li]
+        .item
+        .as_ref()
+        .is_some_and(|i| item_alive(w, i.object));
+    if !alive {
+        // Q-0193 (interim: a building item killed in production, S-0414 claim 15, waits for its line's deletion)
+        return;
+    }
     // spec: S-0404 claim 7 (a done building waits for a place order with a cell; S-0406 places it)
     if !super::placement::place_building(w, house, t, cell) {
         return;
@@ -1126,9 +1143,7 @@ pub fn place(w: &mut World, house: HouseId, t: TypeRef, cell: Option<CellXY>) {
 /// marked primary, else the last the house acquired.
 pub fn releasing_building(w: &World, house: HouseId, t: TypeRef) -> Option<ObjectId> {
     // spec: S-0404 Terms (could release: switched on, could make without the tech-tree rule) and S-0411 claim 14 (not a factory queued to be sold)
-    let base = |b: &Object| {
-        switched_on(b) && tech::could_make(w, b, t, false) && !tech::queued_to_be_sold(b)
-    };
+    let base = |b: &Object| switched_on(b) && tech::could_make(w, b, t, false);
     let mut cands = factories(w, house, |b| {
         base(b) && (t.kind != Kind::Aircraft || dock_free(w, b.id))
     });
@@ -1162,27 +1177,30 @@ fn release(w: &mut World, house: HouseId, t: TypeRef) {
     else {
         return;
     };
+    if !item_alive(w, object) {
+        // spec: S-0404 claim 13 (a unit that cannot be put on the map: failed, cancelled with the refund as claim 7 says)
+        // Q-0193 (interim: an item killed by a destruction hit counts as such a unit)
+        cancel_item(w, li);
+        start_next(w, li, None);
+        cleanup(w);
+        return;
+    }
     // spec: S-0404 claim 7 (no releasing building: the order does nothing and the item stays done)
     let Some(factory) = releasing_building(w, house, t) else {
-        if let Some(i) = w.econ.lines.lines[li].item.as_mut() {
-            i.exit_retry = false;
-        }
         return;
     };
-    let Some(cell) = exit_cell(w, factory, object) else {
-        // spec: S-0404 claim 7 (a blocked exit: the unit stays done and the building retries by itself)
-        if let Some(i) = w.econ.lines.lines[li].item.as_mut() {
-            i.exit_retry = true;
-        }
-        return;
-    };
-    let p = Pos::centre(cell, 0);
-    let z = w.surface_at(p.x, p.y);
-    // The facing of a released unit belongs to the structures specs (Q-0120): a placeholder.
-    crate::objects::place(w, object, Pos::new(p.x, p.y, z), 0);
+    // spec: S-0404 claim 7 (the chosen building releases the unit by claim 13)
+    let outcome = super::release::release(w, factory, object);
     let Some(li) = find_line(w, house, lk) else {
         return;
     };
+    if outcome != super::release::Outcome::Released {
+        // spec: S-0404 claim 7 (busy or failed: the item is cancelled with the refund of claim 6 and the line goes on as after that cancel; nothing is retried)
+        cancel_item(w, li);
+        start_next(w, li, None);
+        cleanup(w);
+        return;
+    }
     w.econ.lines.lines[li].item = None;
     // spec: S-0407 claim 10 (a unit released by a factory raises its type's ever-built count)
     tech::count_built(w, house, t);
@@ -1193,28 +1211,6 @@ fn release(w: &mut World, house: HouseId, t: TypeRef) {
     cleanup(w);
 }
 
-/// The cell a released unit is put in (S-0404 claim 7: the structures
-/// specs own exits). No approved spec gives a factory's exit, so this is
-/// the placeholder of request Q-0120: the nearby-cell search of S-0212
-/// (claim 25, its scatter use) around the cell just beyond the foundation's
-/// far corner. `None` stands for a blocked exit.
-fn exit_cell(w: &mut World, factory: ObjectId, unit: ObjectId) -> Option<CellXY> {
-    w.note("Q-0120: a released unit leaves its factory by a placeholder exit (the nearby-cell search beyond the foundation)");
-    let f = w.obj(factory)?;
-    let (top, (fw, fh)) = (f.pos.cell(), f.foundation);
-    let centre = CellXY::new(top.x + fw, top.y + fh);
-    let class = w
-        .obj(unit)
-        .and_then(|u| w.rules().unit(u.kind, u.type_index))
-        .and_then(|u| u.class);
-    crate::regions::ensure(w);
-    crate::path::nearby(
-        w,
-        centre,
-        crate::path::NearbyUse::Scatter { class, deck: false },
-    )
-}
-
 /// The factory check of S-0404 claim 8 for a house's line of `lk`.
 /// `exclude`: a building about to leave the map.
 pub fn check_line(w: &mut World, house: HouseId, lk: LineKind, exclude: Option<ObjectId>) {
@@ -1223,8 +1219,7 @@ pub fn check_line(w: &mut World, house: HouseId, lk: LineKind, exclude: Option<O
     };
     let can = |w: &World, t: TypeRef, on: bool| {
         !factories(w, house, |b| {
-            // spec: S-0404 claim 8 (could make: the build-limit answer with the production allowance, not the full tech tree)
-            // Q-0190 (interim: a factory building queued to be sold still counts)
+            // spec: S-0404 claim 8 (could make: the build-limit answer with the production allowance, not the full tech-tree; a factory building being sold or queued to be sold counts in no test, Terms)
             Some(b.id) != exclude && (!on || switched_on(b)) && tech::could_make_limit_only(w, b, t)
         })
         .is_empty()
@@ -1304,7 +1299,7 @@ pub fn factory_removed(w: &mut World, house: HouseId, b: ObjectId) {
         if l.house == house
             && l.kind.factory_kind() == kind
             && let Some(t) = l.item.as_ref().map(|i| i.t)
-            // Q-0190 (interim: a factory building queued to be sold still counts)
+            // spec: S-0404 claim 8 and Terms (a factory building being sold or queued to be sold counts in no test)
             && factories(w, house, |x| x.id != b && tech::could_make(w, x, t, false)).is_empty()
         {
             // spec: S-0404 claim 8 (removed for good: no other factory could make the item: cancelled as after a cancel)

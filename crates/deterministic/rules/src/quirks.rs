@@ -723,6 +723,10 @@ pub struct Quirks {
     // spec: S-0402 claim 5
     #[serde(default = "on")]
     pub zero_load_period_stalls: bool,
+    /// A harvester whose refinery breaks off contact while it unloads, with nothing queued, stays in unload until an order gives it a behaviour.
+    // spec: S-0402 claim 11
+    #[serde(default = "on")]
+    pub unload_without_contact_stalls: bool,
     /// The slave miner's kick delay wraps when added to the tick number.
     // spec: S-0402 claim 14
     #[serde(default = "on")]
@@ -755,6 +759,10 @@ pub struct Quirks {
     // spec: S-0404 claim 10
     #[serde(default = "on")]
     pub unstartable_queue_head_stalls: bool,
+    /// The infantry exit search uses each foundation's fixed exit list, gaps and repeats included.
+    // spec: S-0404 claim 13
+    #[serde(default = "on")]
+    pub foundation_exit_lists: bool,
     /// A blackout of length d counts as 0 output in at most d − 1 house updates.
     // spec: S-0405 claim 6
     #[serde(default = "on")]
@@ -939,6 +947,10 @@ pub struct Quirks {
     // spec: S-0414 claim 9; S-0412
     #[serde(default = "on")]
     pub defeat_during_end_delay: bool,
+    /// Immediate deletions by one destruction hit of a defeat or surrender skip later objects.
+    // spec: S-0414 claim 15
+    #[serde(default = "on")]
+    pub defeat_cancellation_skip: bool,
     /// A deploying vehicle cannot deploy onto its own house's wall.
     // spec: S-0415 claim 3
     #[serde(default = "on")]
@@ -1158,6 +1170,7 @@ impl Default for Quirks {
             thinning_hits_waypoint_only: true,
             refinery_distance_wraps: true,
             zero_load_period_stalls: true,
+            unload_without_contact_stalls: true,
             slave_kick_delay_wraps: true,
             multiple_factory_counts_all: true,
             build_step_period_cap: true,
@@ -1166,6 +1179,7 @@ impl Default for Quirks {
             forced_start_player_hold: true,
             defence_line_partial_factory_check: true,
             unstartable_queue_head_stalls: true,
+            foundation_exit_lists: true,
             blackout_one_short: true,
             shared_control_centre_count: true,
             wall_exception_skips_ground: true,
@@ -1212,6 +1226,7 @@ impl Default for Quirks {
             short_game_first_three_base_units: true,
             vehicle_buildings_keep_nobody_alive: true,
             defeat_during_end_delay: true,
+            defeat_cancellation_skip: true,
             deploy_refuses_own_walls: true,
             failed_packup_keeps_vehicle: true,
             packup_sound_on_sale: true,
@@ -1635,6 +1650,10 @@ impl Quirks {
             ),
             ("refinery_distance_wraps", self.refinery_distance_wraps),
             ("zero_load_period_stalls", self.zero_load_period_stalls),
+            (
+                "unload_without_contact_stalls",
+                self.unload_without_contact_stalls,
+            ),
             ("slave_kick_delay_wraps", self.slave_kick_delay_wraps),
             (
                 "multiple_factory_counts_all",
@@ -1652,6 +1671,7 @@ impl Quirks {
                 "unstartable_queue_head_stalls",
                 self.unstartable_queue_head_stalls,
             ),
+            ("foundation_exit_lists", self.foundation_exit_lists),
             ("blackout_one_short", self.blackout_one_short),
             (
                 "shared_control_centre_count",
@@ -1767,6 +1787,7 @@ impl Quirks {
                 self.vehicle_buildings_keep_nobody_alive,
             ),
             ("defeat_during_end_delay", self.defeat_during_end_delay),
+            ("defeat_cancellation_skip", self.defeat_cancellation_skip),
             ("deploy_refuses_own_walls", self.deploy_refuses_own_walls),
             (
                 "failed_packup_keeps_vehicle",

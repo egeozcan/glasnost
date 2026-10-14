@@ -143,8 +143,7 @@ pub struct TypeTech {
     pub upgrade: bool,
     /// The sidebar tab, 0 to 3 for the first to fourth (S-0004 claim 11).
     pub tab: u8,
-    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3). Not imported
-    /// yet: always no (interim Q-0123).
+    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3).
     pub considered_aircraft: bool,
     /// The naval flag (S-0004 claim 11 rule 3).
     pub naval: bool,
@@ -278,6 +277,8 @@ impl Rules {
                         tab,
                         // spec: S-0004 Import mapping (naval = Naval; absent: no)
                         naval: u.combat.naval.unwrap_or(false),
+                        // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft; absent: no)
+                        considered_aircraft: u.econ.considered_aircraft.unwrap_or(false),
                         ..Default::default()
                     };
                     econ_fields(&u.econ, &mut t);
@@ -736,7 +737,8 @@ fn answer_with(w: &World, house: HouseId, t: TypeRef, production_exception: bool
 /// asks that). S-0404's own *could make* is `could_make_limit_only`.
 pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
     let r = w.rules();
-    if b.kind != Kind::Building || !b.on_map || being_sold(b) {
+    // spec: S-0404 Terms (a factory building on the map, neither being sold nor queued to be sold, S-0407 Terms)
+    if b.kind != Kind::Building || !b.on_map || being_sold(b) || queued_to_be_sold(b) {
         return false;
     }
     let Some(br) = r.buildings.get(b.type_index as usize) else {
@@ -775,10 +777,10 @@ pub fn could_make(w: &World, b: &Object, t: TypeRef, tech: bool) -> bool {
 /// (b): tech-tree condition, power and docks left out; not being sold or
 /// queued to be sold).
 fn factory_condition(w: &World, house: HouseId, t: TypeRef) -> bool {
-    // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold)
+    // spec: S-0407 claim 1 (b) (a factory not being sold or queued to be sold: S-0404's could make)
     w.objects
         .values()
-        .any(|b| b.owner == Some(house) && could_make(w, b, t, false) && !queued_to_be_sold(b))
+        .any(|b| b.owner == Some(house) && could_make(w, b, t, false))
 }
 
 /// A qualifying factory for a type (S-0407 Terms): a factory building of
@@ -890,6 +892,7 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     for tab in hh.icons.iter_mut() {
         tab.retain(|i| !gone.contains(&i.t));
     }
+    // Q-0196 (interim: S-0004 claim 11's 76-item cap is not applied; every offered type is shown)
     for (icon, key) in added {
         let tab = &mut hh.icons[usize::from(key.tab)];
         // spec: S-0004 claim 11 (an item already shown is not added twice)
@@ -984,7 +987,7 @@ fn sorts_before(
     match a.cmp(&b) {
         std::cmp::Ordering::Less => true,
         std::cmp::Ordering::Greater => false,
-        // Q-0123 (interim: display names are not imported, so they compare equal)
+        // Seam: display names (S-0004 claim 11 rule 6) are text the simulation does not import yet, so they compare equal.
         // spec: S-0004 claim 11 rule 6 (equal names: the newly added item first; quirks.sidebar_tie_newest_first)
         std::cmp::Ordering::Equal => tie_newest_first,
     }
@@ -1030,11 +1033,11 @@ pub fn could_make_limit_only(w: &World, b: &Object, t: TypeRef) -> bool {
 }
 
 /// Whether a factory building may serve a new start, a queue request, a
-/// resume or a release (S-0411 claim 14): it could make `t` (S-0404 Terms)
-/// and is not queued to be sold either.
+/// resume or a release (S-0411 claim 14): it could make `t` (S-0404 Terms,
+/// which already leaves out a building queued to be sold).
 pub fn could_start(w: &World, b: &Object, t: TypeRef) -> bool {
-    // spec: S-0411 claim 14 (a factory queued to be sold is excluded from new starts, queue requests, resumes and releases; request Q-0190)
-    could_make_limit_only(w, b, t) && !queued_to_be_sold(b)
+    // spec: S-0411 claim 14 (a factory queued to be sold is excluded from new starts, queue requests, resumes and releases) and S-0404 Terms
+    could_make_limit_only(w, b, t)
 }
 
 /// The house's part of the house update for the tech tree (S-0407 claim 12):

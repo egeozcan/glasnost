@@ -60,6 +60,19 @@ fn claim_1_naval_kind() {
     assert!(!offered(&w, t(&w, Kind::Vehicle, "BOAT")));
 }
 
+// spec: S-0407 Import mapping (Factory: S-0003 claim 21; a recognised word that names no production kind makes no factory of a kind)
+// spec: S-0003 claim 21 (the object-instance words are not aliases for the type-kind words)
+#[test]
+fn claim_1_object_category_is_no_factory() {
+    let mut r = ruleset();
+    add_building(&mut r, "CAMP", factory("infantry_object"));
+    let mut w = game(&r);
+    building(&mut w, "CAMP", 0, 0, 0);
+    step(&mut w);
+    step(&mut w);
+    assert!(!offered(&w, t(&w, Kind::Infantry, "GRUNT")));
+}
+
 // spec: S-0407 claim 1 (c) (T2 run 4: no qualifying factory: not offered until a recheck finds one; then it stays)
 #[test]
 fn claim_1_qualifying_factory() {

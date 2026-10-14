@@ -476,5 +476,7 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
         // Request Q-0130: the behaviour that follows the construction is not stated; guard, as a pre-placed building's (S-0009 claim 40).
         ob.beh.force(Behaviour::Guard, tick, stale);
     }
+    // spec: S-0402 claim 18 (the grand opening, at the end of the build-up in the building's own turn: its free unit)
+    crate::econ::harvest::grand_opening(w, id);
     CONSTRUCTION_DELAY
 }

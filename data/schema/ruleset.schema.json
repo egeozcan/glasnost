@@ -2201,6 +2201,22 @@
           ],
           "default": null
         },
+        "cloning": {
+          "description": "Buildings: `Cloning`, a cloning building (S-0404 Terms, claim 14);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "considered_aircraft": {
+          "description": "Units: `ConsideredAircraft`, the counts-as-aircraft flag of the\nsidebar order (S-0004 claim 11 rule 3); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "defenses_cost_bonus": {
           "description": "Buildings: `DefensesCostBonus`, the cost bonus *β* for defences, a single (S-0404 claim 2); absent: 1.0.",
           "anyOf": [
@@ -2233,7 +2249,31 @@
           }
         },
         "dock_unload": {
-          "description": "Buildings: `DockUnload` (S-0402 claim 10); absent: no.",
+          "description": "Buildings: `DockUnload`, a dock-unload refinery (S-0402 Terms, claim 10); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "door_first": {
+          "description": "Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim\n13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "door_second": {
+          "description": "Buildings: `NODBarracks`, the second barracks door kind (S-0404\nclaim 13); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "door_third": {
+          "description": "Buildings: `YuriBarracks`, the third barracks door kind (S-0404\nclaim 13); absent: no.",
           "type": [
             "boolean",
             "null"
@@ -2255,6 +2295,20 @@
             "null"
           ],
           "default": null
+        },
+        "exit_coord": {
+          "description": "Buildings: `ExitCoord`, the exit displacement in leptons (S-0404\nTerms, claim 13); absent: (0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
         },
         "extra_power": {
           "description": "Buildings: `ExtraPower` (S-0405 claims 1, 2 and 16); absent: 0.",
@@ -2775,6 +2829,14 @@
             "null"
           ],
           "default": null
+        },
+        "weeder": {
+          "description": "Buildings: `Weeder`, the weed-flag building of S-0402 claim 13's\nidle step-off; absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -3137,6 +3199,15 @@
           "items": {
             "type": "string"
           }
+        },
+        "pose_dir": {
+          "description": "`[AudioVisual] PoseDir`, the pose direction of an aircraft released\nonto a dock in 1/256 turns (S-0404 claim 13); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "prerequisite_barracks": {
           "description": "`[General] PrerequisiteBarracks`, the members of the generic group BARRACKS, building type keys (S-0407 claim 8 b); absent: empty.",
@@ -5667,6 +5738,11 @@
           "type": "boolean",
           "default": true
         },
+        "defeat_cancellation_skip": {
+          "description": "Immediate deletions by one destruction hit of a defeat or surrender skip later objects.",
+          "type": "boolean",
+          "default": true
+        },
         "defeat_during_end_delay": {
           "description": "A house defeated during the end delay loses (the person-played house's win turns into a loss and restarts the delay).",
           "type": "boolean",
@@ -5839,6 +5915,11 @@
         },
         "forced_start_player_hold": {
           "description": "A forced start with no switched-on factory starts on a player hold when the house can pay P ÷ 54.",
+          "type": "boolean",
+          "default": true
+        },
+        "foundation_exit_lists": {
+          "description": "The infantry exit search uses each foundation's fixed exit list, gaps and repeats included.",
           "type": "boolean",
           "default": true
         },
@@ -6539,6 +6620,11 @@
         },
         "unit_changes_no_recheck": {
           "description": "Unit entries, departures, owner changes and removals below the limit call for no recheck.",
+          "type": "boolean",
+          "default": true
+        },
+        "unload_without_contact_stalls": {
+          "description": "A harvester whose refinery breaks off contact while it unloads, with nothing queued, stays in unload until an order gives it a behaviour.",
           "type": "boolean",
           "default": true
         },

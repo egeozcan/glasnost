@@ -21,6 +21,7 @@ pub mod placement;
 pub mod power;
 pub mod production;
 pub mod radar;
+pub mod release;
 pub mod resource;
 pub mod sell;
 pub mod setup;
@@ -76,6 +77,10 @@ pub struct ObjectEcon {
     pub harvest: Option<harvest::HarvestState>,
     /// A refinery's docks (S-0402).
     pub dock: Option<harvest::DockState>,
+    /// A produced object's start price (S-0402 Terms, S-0404 claim 2): its
+    /// price when its production started; none for an object not produced.
+    #[serde(default)]
+    pub start_price: Option<i32>,
     /// Deploying or packing up (S-0415).
     pub deploy: deploy::DeployState,
     /// A building's construction state (S-0108, S-0406 claim 1).
@@ -87,6 +92,10 @@ pub struct ObjectEcon {
     pub counted: victory::Counted,
     /// A secret lab's secret type (S-0407 claims 4 and 14).
     pub secret: Option<TypeRef>,
+    /// A released unit on its way out of its factory building (S-0404
+    /// claim 13).
+    #[serde(default)]
+    pub leaving: Option<release::Leaving>,
 }
 
 /// The world's economy state (M5a), one field per topic.

@@ -55,6 +55,16 @@ fn refund_override(w: &World, t: TypeRef) -> i32 {
 /// The refund a house receives for an object of type `t` (S-0408 claim 1,
 /// F1).
 pub fn refund(w: &World, house: HouseId, t: TypeRef) -> i32 {
+    refund_at(w, house, t, false)
+}
+
+/// The refund of S-0408 claim 1 with the refund percentage taken as 1: the
+/// amount *P*, or the refund-override form (S-0402 claim 18's free unit).
+pub fn refund_whole(w: &World, house: HouseId, t: TypeRef) -> i32 {
+    refund_at(w, house, t, true)
+}
+
+fn refund_at(w: &World, house: HouseId, t: TypeRef, whole: bool) -> i32 {
     let mode = w.rules().mode;
     // spec: S-0408 claim 1 (a and b of S-0404 claim 2 as they stand now)
     let (a, b) = crate::econ::production::cost_factors(w, house, t);
@@ -78,8 +88,8 @@ pub fn refund(w: &World, house: HouseId, t: TypeRef) -> i32 {
         .houses
         .get(usize::from(house.0))
         .is_some_and(|h| h.role == HouseRole::Player);
-    if !player {
-        // spec: S-0408 F1 and claim 1 (the neutral and special houses receive P)
+    if !player || whole {
+        // spec: S-0408 F1 and claim 1 (the neutral and special houses receive P) and S-0402 claim 18 (the percentage taken as 1)
         return p;
     }
     // spec: S-0408 Terms and F1 (r narrowed to single precision when used)
@@ -397,12 +407,11 @@ pub fn buildup_ticks(w: &World, t: u32) -> i32 {
     (n - 1).saturating_mul(db).max(0)
 }
 
-/// Whether any unit is docked with a building (S-0408 Terms). Seam: the
-/// services that make such links (docking at refineries, repair depots,
-/// pads) are other topics'; none is linked yet.
+/// Whether any unit is docked with a building (S-0408 Terms): a harvester
+/// holding a dock slot and contact (S-0402). Seam: the other services that
+/// make such links (repair depots, pads) are other topics'.
 fn any_docked(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    !crate::econ::harvest::docked(w, id).is_empty()
 }
 
 /// The selling behaviour's processing (S-0408 claims 5, 6 and 16; S-0415
@@ -430,8 +439,9 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
                 sell_upgrade(w, id, u);
                 return SELLING_DELAY;
             }
-            // spec: S-0408 claim 6 (first processing: docked units told to leave; a bunkered vehicle let out; burning animations end)
-            w.note("S-0408 claim 6: docked units, bunkered vehicles and burning animations are other topics' (seams)");
+            // spec: S-0408 claim 6 (first processing: docked units told to leave; a bunkered vehicle let out; burning animations end) and S-0402 claim 11 (a refinery's harvesters)
+            crate::econ::harvest::refinery_sold(w, id);
+            w.note("S-0408 claim 6: bunkered vehicles, other docked services and burning animations are other topics' (seams)");
             if sale.packs {
                 // spec: S-0415 claim 9 (at the sale's first processing the type's deploy sound at the building's position)
                 w.effects.push(Effect::Sound {

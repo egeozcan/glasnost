@@ -860,6 +860,34 @@ fn claim_8_removed_for_good() {
     assert_eq!(credits(&w, 0), 1_000_000);
 }
 
+// spec: S-0404 claim 8 and Terms (P8 run 11: a factory building queued to be sold counts in no test; the start of the sale is no event, so the item keeps stepping and paying; a check run by another event judges without it and cancels with the refund)
+#[test]
+fn claim_8_factory_being_sold() {
+    let (mut w, b, grunt) = barracks_game(&ruleset());
+    w.obj_mut(b)
+        .unwrap()
+        .beh
+        .queue(Some(glasnost_sim::rules::Behaviour::Selling));
+    let p = item(&w, 0, grunt).unwrap().progress;
+    let c = credits(&w, 0);
+    for _ in 0..20 {
+        step(&mut w);
+    }
+    assert!(w.obj(b).is_some_and(|o| o.on_map));
+    assert!(
+        item(&w, 0, grunt).unwrap().progress > p,
+        "it keeps stepping"
+    );
+    assert!(credits(&w, 0) < c, "and paying");
+    w.obj_mut(b)
+        .unwrap()
+        .beh
+        .queue(Some(glasnost_sim::rules::Behaviour::Selling));
+    production::check_line(&mut w, HouseId(0), LineKind::Infantry, None);
+    assert!(line(&w, 0, grunt).is_none());
+    assert_eq!(credits(&w, 0), 1_000_000);
+}
+
 // spec: S-0404 claim 9 (P9 (a): a prerequisite destroyed in the turn pass of tick n: both orders issued and applied in tick n; the item refunded, the queued copy removed)
 #[test]
 fn claim_9_unbuildable() {
@@ -1124,4 +1152,361 @@ fn claim_12_no_orders_no_production() {
         step(&mut w);
     }
     assert!(w.econ.lines.lines.is_empty());
+}
+
+// --- Claim 13 and 14: releasing a unit from a factory building ---
+
+use glasnost_map::CellXY;
+use glasnost_sim::econ::release::{self, Outcome};
+use glasnost_sim::rules::Behaviour;
+use glasnost_sim::world::{ObjectId, Pos, Target, World};
+
+/// A new unit of `name` for house 0, off the map (S-0404 claim 11).
+fn new_unit(w: &mut World, kind: Kind, name: &str) -> ObjectId {
+    let ti = w.rules().index_of(kind, name).unwrap();
+    objects::create(w, kind, ti, Some(HouseId(0)))
+}
+
+/// The top-left cell of a building.
+fn top_left(w: &World, b: ObjectId) -> CellXY {
+    w.obj(b).unwrap().pos.cell()
+}
+
+fn spawn_at(w: &mut World, kind: Kind, name: &str, c: CellXY) -> ObjectId {
+    glasnost_sim::testkit::spawn(w, kind, name, 0, c, 0)
+}
+
+fn facing_to(from: Pos, to: Pos) -> u16 {
+    let f = glasnost_num::geom::direction(i64::from(to.x - from.x), i64::from(to.y - from.y), true);
+    (glasnost_num::geom::n_step(f, 256) * 256) as u16
+}
+
+// spec: S-0404 claim 13 (P12 part a: the ground vehicle appears at the top-left cell centre plus the exit displacement, facing 16384, and K starts unloading; with (0, 0, 0) at the foundation centre)
+#[test]
+fn claim_13_ground_exit_point() {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("WARFACT").unwrap().econ.exit_coord = Some([100, 60, 0]);
+    let mut w = game(&r);
+    let k = building(&mut w, "WARFACT", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    let tl = Pos::centre(top_left(&w, k), 0);
+    let o = w.obj(tank).unwrap();
+    assert!(o.on_map);
+    assert_eq!((o.pos.x, o.pos.y), (tl.x + 100, tl.y + 60));
+    assert_eq!(w.body_facing(tank), 16384);
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Unload));
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "WARFACT", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    let c = w.reference_point(k);
+    let o = w.obj(tank).unwrap();
+    assert_eq!((o.pos.x, o.pos.y), (c.x, c.y));
+}
+
+// spec: S-0404 claim 13 (P12 part b: an unloading ground factory passes the release to an idle twin of its type, switched off or not; with none, or only another type, busy)
+#[test]
+fn claim_13_ground_busy_and_hand_off() {
+    let mut r = ruleset();
+    add_building(&mut r, "WARFACT2", factory("vehicle"));
+    let mut w = game(&r);
+    let k = building(&mut w, "WARFACT", 0, 0, 0);
+    let other = building(&mut w, "WARFACT2", 0, 6, 0);
+    let first = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, first), Outcome::Released);
+    let second = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, second), Outcome::Busy);
+    assert!(!w.obj(second).unwrap().on_map);
+    assert_eq!(w.obj(other).unwrap().beh.current, Some(Behaviour::Guard));
+    let twin = building(&mut w, "WARFACT", 0, -6, 0);
+    switch(&mut w, twin, false);
+    assert_eq!(release::release(&mut w, k, second), Outcome::Released);
+    assert_eq!(w.obj(second).unwrap().pos, w.reference_point(twin));
+    assert_eq!(w.obj(twin).unwrap().beh.current, Some(Behaviour::Unload));
+}
+
+// spec: S-0404 claim 7 (a busy release cancels the item with the refund at once and starts the next queued type; nothing is retried) and S-0407 claim 10 (no ever-built count)
+#[test]
+fn claim_7_busy_release_cancels() {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("JEEP").unwrap().cost = Some(50);
+    let mut w = game(&r);
+    let k = building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let jeep = t(&w, Kind::Vehicle, "JEEP");
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: jeep }));
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    let obj = item(&w, 0, jeep).unwrap().object;
+    run_to_done(&mut w, 0, jeep, 200).expect("done");
+    // K is still letting an earlier vehicle out when the automatic place order applies.
+    let earlier = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, earlier), Outcome::Released);
+    let before = credits(&w, 0);
+    production::place(&mut w, HouseId(0), jeep, None);
+    assert!(w.obj(obj).is_none(), "the cancelled unit is deleted");
+    assert_eq!(credits(&w, 0), before + 50);
+    let i = item(&w, 0, tank).unwrap();
+    assert!(!i.done());
+    assert_eq!(
+        glasnost_sim::econ::tech::ever_built(&w, HouseId(0), jeep),
+        0
+    );
+}
+
+// spec: S-0404 claim 13 (P12 part c: a naval factory's exit cell is the first cell beyond the foundation toward the rally point when it is water and empty; otherwise the nearby-cell search; facing 16384 and a move to the rally point)
+#[test]
+fn claim_13_naval_exit() {
+    let run = |block: bool| {
+        let mut w = game(&ruleset());
+        let k = building(&mut w, "NAVYARD", 0, 0, 0);
+        let tl = top_left(&w, k);
+        let rally = Target::Cell(CellXY::new(tl.x + 10, tl.y + 1));
+        w.obj_mut(k).unwrap().guard_spot = Some(rally);
+        let exit = CellXY::new(tl.x + 2, tl.y + 1);
+        w.cells.grid.get_mut(exit).unwrap().land = glasnost_map::terrain::land::WATER;
+        if block {
+            spawn_at(&mut w, Kind::Vehicle, "TANK", exit);
+        }
+        let boat = new_unit(&mut w, Kind::Vehicle, "BOAT");
+        assert_eq!(release::release(&mut w, k, boat), Outcome::Released);
+        let o = w.obj(boat).unwrap();
+        assert_eq!(w.body_facing(boat), 16384);
+        assert_eq!(o.dest, Some(rally));
+        (o.pos.cell(), o.pos.x.rem_euclid(256), exit)
+    };
+    let (cell, sub, exit) = run(false);
+    assert_eq!((cell, sub), (exit, 128));
+    let (cell, _, exit) = run(true);
+    assert_ne!(cell, exit);
+}
+
+// spec: S-0404 claim 13 (P12 part d: the infantry appears in the foundation cell next to the first free listed cell, facing its rounded direction, and walks out to it; with every listed cell blocked, failed)
+#[test]
+fn claim_13_infantry_exit_list() {
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let tl = top_left(&w, k);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    let exit = CellXY::new(tl.x, tl.y + 2);
+    let inside = CellXY::new(tl.x, tl.y + 1);
+    let o = w.obj(grunt).unwrap();
+    assert_eq!(o.pos.cell(), inside);
+    assert_eq!(o.dest, Some(Target::Cell(exit)));
+    assert_eq!(o.contact, Some(k));
+    assert_eq!(
+        w.body_facing(grunt),
+        facing_to(w.reference_point(k), Pos::centre(exit, 0))
+    );
+    // spec: S-0404 claim 13 (P12 part f: every docking place in contact: busy)
+    let second = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, second), Outcome::Busy);
+    // The next listed cell when the first is blocked.
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    spawn_at(&mut w, Kind::Building, "HUT", exit);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    let o = w.obj(grunt).unwrap();
+    assert_eq!(o.pos.cell(), CellXY::new(tl.x + 1, tl.y + 1));
+    assert_eq!(o.dest, Some(Target::Cell(CellXY::new(tl.x + 1, tl.y + 2))));
+    // Every listed cell blocked: failed.
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    for (a, b) in release::exit_list(2, 2, false, true) {
+        spawn_at(
+            &mut w,
+            Kind::Building,
+            "HUT",
+            CellXY::new(tl.x + a, tl.y + b),
+        );
+    }
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Failed);
+    assert!(!w.obj(grunt).unwrap().on_map);
+}
+
+// spec: S-0404 claim 13 (P12 part e: the door cell is tried first and the exit displacement is added only there)
+#[test]
+fn claim_13_door_cells() {
+    for (door, cell) in [(0, (1, 2)), (1, (2, 2)), (2, (2, 1))] {
+        let mut r = ruleset();
+        let b = r.sim.buildings.get_mut("BARRACKS").unwrap();
+        b.econ.exit_coord = Some([10, 20, 0]);
+        match door {
+            0 => b.econ.door_first = Some(true),
+            1 => b.econ.door_second = Some(true),
+            _ => b.econ.door_third = Some(true),
+        }
+        let mut w = game(&r);
+        let k = building(&mut w, "BARRACKS", 0, 0, 0);
+        let tl = top_left(&w, k);
+        let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+        assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+        let exit = CellXY::new(tl.x + cell.0, tl.y + cell.1);
+        let inside = Pos::centre(CellXY::new(tl.x + cell.0.min(1), tl.y + cell.1.min(1)), 0);
+        let o = w.obj(grunt).unwrap();
+        assert_eq!(o.dest, Some(Target::Cell(exit)), "door kind {door}");
+        assert_eq!((o.pos.x, o.pos.y), (inside.x + 10, inside.y + 20));
+        // With the door cell blocked, the list's first cell, without the displacement.
+        let mut w = game(&r);
+        let k = building(&mut w, "BARRACKS", 0, 0, 0);
+        spawn_at(&mut w, Kind::Building, "HUT", exit);
+        let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+        assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+        let o = w.obj(grunt).unwrap();
+        let first = Pos::centre(CellXY::new(tl.x, tl.y + 1), 0);
+        assert_eq!((o.pos.x, o.pos.y), (first.x, first.y));
+    }
+}
+
+// spec: S-0404 Edge cases (quirks.foundation_exit_lists: the 4 × 3 list never tries the cells beside the right edge; off, the full ring does)
+#[test]
+fn claim_13_quirk_foundation_exit_lists() {
+    for exact in [true, false] {
+        let mut r = ruleset();
+        r.sim.buildings.get_mut("BARRACKS").unwrap().foundation = Some([4, 3]);
+        r.globals.quirks.foundation_exit_lists = exact;
+        let mut w = game(&r);
+        let k = building(&mut w, "BARRACKS", 0, 0, 0);
+        let tl = top_left(&w, k);
+        for (a, b) in release::ring(4, 3) {
+            if a != 4 || !(0..=2).contains(&b) {
+                spawn_at(
+                    &mut w,
+                    Kind::Building,
+                    "HUT",
+                    CellXY::new(tl.x + a, tl.y + b),
+                );
+            }
+        }
+        let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+        let out = release::release(&mut w, k, grunt);
+        if exact {
+            assert_eq!(out, Outcome::Failed);
+        } else {
+            assert_eq!(out, Outcome::Released);
+            // The ring's cells beside the right edge, from the bottom row upwards.
+            assert_eq!(
+                w.obj(grunt).unwrap().dest,
+                Some(Target::Cell(CellXY::new(tl.x + 4, tl.y + 2)))
+            );
+        }
+    }
+}
+
+// spec: S-0404 claim 13 (the aircraft row: docked at K facing the pose direction × 256 with a rally move; no dock: a dock-bound type fails, any other enters from the local area's edge facing 0 at (Sx + r, Sy + r))
+#[test]
+fn claim_13_aircraft() {
+    let mut r = ruleset();
+    r.sim.general.economy.pose_dir = Some(96);
+    let mut w = game(&r);
+    let k = building(&mut w, "AIRPAD", 0, 0, 0);
+    let rally = Target::Cell(CellXY::new(top_left(&w, k).x + 5, top_left(&w, k).y));
+    w.obj_mut(k).unwrap().guard_spot = Some(rally);
+    let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
+    assert_eq!(release::release(&mut w, k, plane), Outcome::Released);
+    assert_eq!(w.body_facing(plane), 96 * 256);
+    assert_eq!(w.obj(plane).unwrap().dest, Some(rally));
+    // No docking place: the edge entry.
+    let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
+    let taken = w.rng.taken();
+    assert_eq!(
+        release::aircraft(&mut w, k, plane, false),
+        Outcome::Released
+    );
+    let fp = *w.cells.footprint();
+    let s = release::edge_start(fp.local, fp.width, w.reference_point(k).cell());
+    let c = w.obj(plane).unwrap().pos.cell();
+    let d = c.x - s.x;
+    assert_eq!(c.y - s.y, d);
+    assert!((0..=fp.local[3]).contains(&d));
+    assert_eq!(w.body_facing(plane), 0);
+    assert_eq!(w.obj(plane).unwrap().dest, Some(rally));
+    if fp.local[3] > 0 {
+        assert!(w.rng.taken() > taken);
+    }
+    // A dock-bound type fails.
+    let mut r = r.clone();
+    r.sim.aircraft.get_mut("PLANE").unwrap().econ.airport_bound = Some(true);
+    let mut w = game(&r);
+    let k = building(&mut w, "AIRPAD", 0, 0, 0);
+    let plane = new_unit(&mut w, Kind::Aircraft, "PLANE");
+    assert_eq!(release::aircraft(&mut w, k, plane, false), Outcome::Failed);
+}
+
+// spec: S-0404 claim 14 (P12 part g: each cloning building, in acquisition order, gets a copy released by the infantry row, each with its creation draw; none when the original is busy)
+#[test]
+fn claim_14_cloning() {
+    let mut r = ruleset();
+    let mut vat = plain(100);
+    vat.econ.cloning = Some(true);
+    add_building(&mut r, "VAT", vat);
+    let mut w = game(&r);
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let v1 = building(&mut w, "VAT", 0, -8, 0);
+    let v2 = building(&mut w, "VAT", 0, 8, 0);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    let taken = w.rng.taken();
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    assert!(w.rng.taken() >= taken + 2);
+    let ti = w.rules().index_of(Kind::Infantry, "GRUNT").unwrap();
+    let grunts: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Infantry && o.type_index == ti && o.on_map)
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(grunts.len(), 3);
+    // The copies, in creation order, leave the first and then the second cloning building.
+    let copies: Vec<ObjectId> = grunts.into_iter().filter(|&g| g != grunt).collect();
+    assert_eq!(w.obj(copies[0]).unwrap().contact, Some(v1));
+    assert_eq!(w.obj(copies[1]).unwrap().contact, Some(v2));
+    // The original busy: no copies.
+    let before = w.objects.len();
+    let again = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, again), Outcome::Busy);
+    assert_eq!(w.objects.len(), before + 1);
+}
+
+// spec: S-0404 claim 13 (the unit keeps K's rally point as its later destination) and Q-0120 (interim: once on its exit cell it breaks contact and moves on to it)
+#[test]
+fn claim_13_way_out() {
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "BARRACKS", 0, 0, 0);
+    let tl = top_left(&w, k);
+    let rally = Target::Cell(CellXY::new(tl.x + 1, tl.y + 6));
+    w.obj_mut(k).unwrap().guard_spot = Some(rally);
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    for _ in 0..200 {
+        step(&mut w);
+        if w.obj(grunt).unwrap().econ.leaving.is_none() {
+            break;
+        }
+    }
+    let o = w.obj(grunt).unwrap();
+    assert!(o.econ.leaving.is_none());
+    assert_eq!(o.contact, None);
+    assert_eq!(o.dest, Some(rally));
+    // A ground factory's unloading ends once its vehicle is out.
+    let mut w = game(&ruleset());
+    let k = building(&mut w, "WARFACT", 0, 0, 0);
+    let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+    for _ in 0..300 {
+        step(&mut w);
+        if w.obj(k).unwrap().beh.current != Some(Behaviour::Unload) {
+            break;
+        }
+    }
+    assert_eq!(w.obj(k).unwrap().beh.current, Some(Behaviour::Guard));
+    assert_eq!(w.obj(tank).unwrap().contact, None);
+    let cell = w.obj(tank).unwrap().pos.cell();
+    let tl = top_left(&w, k);
+    assert!(!(tl.x..tl.x + 2).contains(&cell.x) || !(tl.y..tl.y + 2).contains(&cell.y));
 }

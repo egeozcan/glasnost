@@ -423,7 +423,7 @@ pub fn new_game(
     if !setup.sandbox {
         // spec: S-0412 claim 14 (the rest of game start after the starting units, all before tick 0)
         // spec: S-0202 claim 14 (the crate placement and the secret-lab choices come before the game-start pass)
-        // Q-0192 (interim: S-0202 claim 14's order, although S-0412 claim 14 calls the secret-lab draws the last of game start)
+        // spec: S-0412 claim 14 (starting units, crates, secret labs, end-of-loading tags, then the game-start tile-animation draws) and S-0407 claim 14
         crate::econ::setup::start_game(&mut w);
     }
 

@@ -67,6 +67,10 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
                 || (cur == Some(Behaviour::Attack) && o.target.is_none())
                 || (o.beh.queued == Some(Behaviour::Guard) && o.beh.allowance);
             let below = o.pos.z < w.surface_at(o.pos.x, o.pos.y);
+            // spec: S-0215 claim 11 (letting out under its own unload processing) and S-0402 claim 11 (a harvester in the unloading state is not ready to change)
+            if crate::econ::harvest::in_unloading_state(w, id) {
+                return false;
+            }
             !(moving(w, id) && !below && !excused)
         }
         Kind::Building => o.beh.ready_mark,
@@ -548,6 +552,8 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         {
             standard_delay(w, id)
         }
+        // Q-0120 (interim: a factory building's unloading has no processing rule of its own, S-0215 claim 4's delay; the production part ends it)
+        (Some(Behaviour::Unload), Kind::Building) => NO_RULE_DELAY,
         // spec: S-0408 claim 16 (selling: a processing delay of 1, no draw)
         (Some(Behaviour::Selling), Kind::Building) => crate::econ::sell::process_selling(w, id),
         // spec: S-0108 claim 5 (construction ends when the build-up does; request Q-0130)

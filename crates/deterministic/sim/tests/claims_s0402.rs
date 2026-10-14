@@ -14,7 +14,8 @@ use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use harvest_common::*;
 
 /// The refinery's top-left cell: REFN covers (−6 … −4, −1 … 1) from the
-/// middle; its docking cell (provisional, Q-0140) is (−3, 0).
+/// middle; its docking cell, (3, 1) from the top-left cell (S-0402 claim
+/// 10), is (−3, 0).
 fn refinery_cell() -> CellXY {
     at(-6, -1)
 }
@@ -152,6 +153,9 @@ fn claim_2_10_enter_order() {
     let o = w.obj(h).unwrap();
     assert_eq!(o.contact, Some(refn));
     assert_eq!(o.pos.cell(), dock_cell());
+    // spec: S-0402 claim 10 rows 3 and 4 (turned on the docking cell to exactly 16384 before unload is queued)
+    assert_eq!(w.body_facing(h), 16384);
+    assert!(harvest::state_of(&w, h).tethered);
 }
 
 // spec: S-0402 claim 3 and claim 13 (no building of a dock type: guard queued, 1 tick)
@@ -546,15 +550,451 @@ fn claim_11_no_building_west() {
     assert_eq!(harvest::load(&w, h), vec![4, 0]);
 }
 
-// spec: S-0402 claim 11 (not in contact: stops and falls back to rest; provisional guard, Q-0142)
+// spec: S-0402 claim 11 row 1 and Edge cases (quirks.unload_without_contact_stalls: contact lost while unloading, nothing queued: it stays in unload with its load; off: it falls back as if unload were not current and starts at once)
 #[test]
-fn claim_11_not_in_contact() {
+fn claim_11_quirk_unload_without_contact_stalls() {
+    for on in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.unload_without_contact_stalls = on;
+        let mut w = game(&r);
+        let (_, h) = docked(&mut w, vec![4, 0], 16384);
+        until(&mut w, 100, |w| harvest::state_of(w, h).unloading).expect("unloading");
+        w.obj_mut(h).unwrap().contact = None;
+        testkit::run(&mut w, 30);
+        assert!(!harvest::state_of(&w, h).unloading);
+        assert_eq!(harvest::load(&w, h), vec![4, 0]);
+        if on {
+            assert_eq!(current(&w, h), Some(Behaviour::Unload));
+            assert_eq!(w.obj(h).unwrap().beh.queued, None);
+        } else {
+            assert_ne!(current(&w, h), Some(Behaviour::Unload));
+        }
+    }
+}
+
+// spec: S-0402 claim 11 (an order while unloading breaks off contact and frees the slot in the same tick; the order starts at the next processing of unload; the unpaid load is kept)
+#[test]
+fn claim_11_order_while_unloading() {
     let r = ruleset();
     let mut w = game(&r);
-    let (_, h) = docked(&mut w, vec![4, 0], 16384);
-    w.obj_mut(h).unwrap().contact = None;
-    until(&mut w, 30, |w| current(w, h) != Some(Behaviour::Unload)).expect("rest");
-    assert_eq!(w.obj(h).unwrap().dest, None);
+    unblock(&mut w);
+    let (refn, h) = docked(&mut w, vec![4, 3], 16384);
+    until(&mut w, 100, |w| harvest::load(w, h) == vec![0, 3]).expect("first payment");
+    let other = place_vehicle(&mut w, "HARV", 0, at(0, 4), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, other, false), None);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(4, 4))),
+        }
+    ));
+    // The order is carried out in the next tick: contact and slot go at once.
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(h).unwrap().contact, None);
+    assert!(harvest::docked(&w, refn).is_empty());
+    assert_eq!(harvest::choose_refinery(&mut w, other, false), Some(refn));
+    until(&mut w, 5, |w| current(w, h) == Some(Behaviour::Move)).expect("move");
+    assert!(!harvest::state_of(&w, h).unloading);
+    assert_eq!(harvest::load(&w, h), vec![0, 3]);
+}
+
+/// The ruleset with REFN given a build-up, so that it can be sold.
+fn sellable_ruleset() -> glasnost_rules::schema::Ruleset {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("REFN").unwrap().econ.buildup = Some(true);
+    r
+}
+
+// spec: S-0402 claim 11 (refinery sold while unloading: leaves the unloading state, scatters, harvest started, the unpaid load kept, contact broken off)
+#[test]
+fn claim_11_refinery_sold_while_unloading() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let (refn, h) = docked(&mut w, vec![4, 3], 16384);
+    until(&mut w, 100, |w| harvest::load(w, h) == vec![0, 3]).expect("first payment");
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Sell { actor: refn }
+    ));
+    until(&mut w, 10, |w| w.obj(h).unwrap().contact.is_none()).expect("contact broken off");
+    assert_eq!(current(&w, h), Some(Behaviour::Harvest));
+    assert!(!harvest::state_of(&w, h).unloading);
+    assert_eq!(harvest::load(&w, h), vec![0, 3]);
+}
+
+// spec: S-0402 claim 11 (refinery sold while the harvester is still in enter: guard queued, it scatters, contact broken off)
+#[test]
+fn claim_11_refinery_sold_while_entering() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(0, 4), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        ..Default::default()
+    });
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    until(&mut w, 30, |w| w.obj(h).unwrap().contact == Some(refn)).expect("contact");
+    assert_eq!(current(&w, h), Some(Behaviour::Enter));
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Sell { actor: refn }
+    ));
+    until(&mut w, 10, |w| w.obj(h).unwrap().contact.is_none()).expect("contact broken off");
+    let o = w.obj(h).unwrap();
+    assert!(
+        o.beh.queued == Some(Behaviour::Guard) || o.beh.current == Some(Behaviour::Guard),
+        "{:?}",
+        o.beh
+    );
+    assert_eq!(harvest::load(&w, h), vec![5, 0]);
+}
+
+// spec: S-0402 claim 11 (finishing with a destination and a queued behaviour other than harvest: leaves the unloading state, starts it, keeps contact)
+#[test]
+fn claim_11_finishing_with_destination() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let (refn, h) = docked(&mut w, vec![0, 0], 16384);
+    until(&mut w, 100, |w| harvest::state_of(w, h).finishing).expect("finishing");
+    let o = w.obj_mut(h).unwrap();
+    o.dest = Some(Target::Cell(at(4, 4)));
+    o.beh.queue(Some(Behaviour::Move));
+    until(&mut w, 5, |w| current(w, h) == Some(Behaviour::Move)).expect("move");
+    assert!(!harvest::state_of(&w, h).unloading);
+    assert_eq!(w.obj(h).unwrap().contact, Some(refn));
+}
+
+// spec: S-0402 claim 10 and Constants (the docking cell is (3, 1) from the top-left cell, independent of the foundation size)
+#[test]
+fn claim_10_docking_cell_of_another_foundation() {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("REFN").unwrap().foundation = Some([2, 2]);
+    let mut w = game(&r);
+    let tl = refinery_cell();
+    let refn = place_building(&mut w, "REFN", 0, tl);
+    let h = place_vehicle(&mut w, "HARV", 0, at(0, 4), 0);
+    unblock(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    until(&mut w, 600, |w| current(w, h) == Some(Behaviour::Unload)).expect("unload");
+    assert_eq!(
+        w.obj(h).unwrap().pos.cell(),
+        CellXY::new(tl.x + 3, tl.y + 1)
+    );
+}
+
+// spec: S-0402 claim 10 and Edge cases (a refinery that is not a dock-unload refinery agrees to contact but never directs the harvester: it stays in enter, unpaid)
+#[test]
+fn claim_10_not_a_dock_unload_refinery() {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("REFN").unwrap().econ.dock_unload = None;
+    let mut w = game(&r);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(-2, 2), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        phase: Phase::Returning,
+        ..Default::default()
+    });
+    harvest_now(&mut w, h);
+    let c0 = w.houses[0].credits;
+    until(&mut w, 300, |w| current(w, h) == Some(Behaviour::Enter)).expect("enter");
+    testkit::run(&mut w, 400);
+    assert_eq!(current(&w, h), Some(Behaviour::Enter));
+    assert_eq!(w.obj(h).unwrap().contact, Some(refn));
+    assert_eq!(w.houses[0].credits, c0);
+    assert_eq!(harvest::load(&w, h), vec![5, 0]);
+}
+
+// spec: S-0402 claim 10 row 1 (switched off: refused; not tethered, contact broken off and rest; tethered, contact kept)
+#[test]
+fn claim_10_row_1_refusal() {
+    for tethered in [false, true] {
+        let r = ruleset();
+        let mut w = game(&r);
+        let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+        let cell = if tethered { dock_cell() } else { at(0, 4) };
+        let h = place_vehicle(&mut w, "HARV", 0, cell, 0);
+        w.obj_mut(h).unwrap().contact = Some(refn);
+        w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+            load: vec![5, 0],
+            ..Default::default()
+        });
+        w.obj_mut(refn).unwrap().econ.dock = Some(DockState { holders: vec![h] });
+        let t = w.tick;
+        w.obj_mut(h).unwrap().beh.force(Behaviour::Enter, t, true);
+        if tethered {
+            until(&mut w, 60, |w| harvest::state_of(w, h).tethered).expect("tethered");
+        }
+        w.obj_mut(refn).unwrap().econ.building.switched_off = true;
+        until(&mut w, 60, |w| current(w, h) != Some(Behaviour::Enter)).expect("enter ends");
+        if tethered {
+            // A tethered harvester keeps its contact and goes on to the other rows.
+            assert_eq!(w.obj(h).unwrap().contact, Some(refn));
+            assert_eq!(current(&w, h), Some(Behaviour::Unload));
+        } else {
+            assert_eq!(w.obj(h).unwrap().contact, None);
+        }
+    }
+}
+
+// spec: S-0402 claim 8 (connected: the harvester's cell and the refinery's reference-point cell in the same reach region; a refinery on a plateau it cannot reach is no candidate)
+#[test]
+fn claim_8_connectivity() {
+    let r = ruleset();
+    let west = at(-2, 0).x;
+    let mut w = game_with_map(&r, &[], 7, |m| {
+        for y in 0..=2 * SIZE {
+            for x in 0..=2 * SIZE {
+                if let Some(c) = m.cells.get_mut(CellXY::new(x, y))
+                    && x < west
+                {
+                    c.level = 4;
+                }
+            }
+        }
+    });
+    let near = place_building(&mut w, "REFN", 0, refinery_cell());
+    let far = place_building(&mut w, "REFN", 0, at(8, -1));
+    let h = place_vehicle(&mut w, "HARV", 0, at(0, 0), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, h, false), Some(far));
+    // One on the plateau is chosen.
+    let up = place_vehicle(&mut w, "HARV", 0, at(-8, 3), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, up, false), Some(near));
+}
+
+// spec: S-0402 claim 9 (the queueing search: with the default shift the queueing cell is a foundation cell, so the result is (x0, y0 − 1) on open ground)
+#[test]
+fn claim_9_queueing_search_default_shift() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let holder = place_vehicle(&mut w, "HARV", 0, dock_cell(), 16384);
+    w.obj_mut(holder).unwrap().contact = Some(refn);
+    w.obj_mut(refn).unwrap().econ.dock = Some(DockState {
+        holders: vec![holder],
+    });
+    let h = place_vehicle(&mut w, "HARV", 0, at(8, 0), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        phase: Phase::Returning,
+        ..Default::default()
+    });
+    harvest_now(&mut w, h);
+    until(&mut w, 30, |w| w.obj(h).unwrap().dest.is_some()).expect("a destination");
+    let tl = refinery_cell();
+    assert_eq!(
+        w.obj(h).unwrap().dest,
+        Some(Target::Cell(CellXY::new(tl.x, tl.y - 1)))
+    );
+}
+
+// spec: S-0402 claim 13 (the idle step-off: off the refinery-flag building's cell to the nearby-cell search's cell, then guard)
+#[test]
+fn claim_13_idle_step_off() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    // A harvester standing on the refinery's own cell (as one left there would).
+    let on = CellXY::new(refinery_cell().x + 1, refinery_cell().y + 1);
+    let h = place_vehicle(&mut w, "HARV", 0, on, 0);
+    let _ = refn;
+    harvest_now(&mut w, h);
+    let start = w.obj(h).unwrap().beh.start_tick;
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        phase: Phase::Idle,
+        harvest_start: Some(start),
+        ..Default::default()
+    });
+    // spec: S-0402 claim 13 (the destination: the search's cell around the reference point's cell, outside the building)
+    harvest::process_harvest(&mut w, h);
+    assert_eq!(w.obj(h).unwrap().beh.queued, Some(Behaviour::Guard));
+    let Some(Target::Cell(d)) = w.obj(h).unwrap().dest else {
+        panic!("a cell destination");
+    };
+    let tl = refinery_cell();
+    assert!(!(tl.x..tl.x + 3).contains(&d.x) || !(tl.y..tl.y + 3).contains(&d.y));
+    assert!((d.x - (tl.x + 1)).abs() <= 2 && (d.y - (tl.y + 1)).abs() <= 2);
+}
+
+// spec: S-0402 claim 12 (virtual purifiers: none for player houses; the neutral and special houses take the second entry, difficulty index 1; a short list counts 0)
+#[test]
+fn claim_12_virtual_purifiers() {
+    let mut r = ruleset();
+    r.sim.general.economy.ai_virtual_purifiers = Some(vec![3, 2, 1]);
+    let w = testkit::game_with_non_players(&r, SIZE, 7);
+    for (h, n) in [(0, 0), (1, 0), (2, 2), (3, 2)] {
+        assert_eq!(harvest::purifier_count(&w, HouseId(h)), n);
+    }
+    r.sim.general.economy.ai_virtual_purifiers = Some(vec![3]);
+    let w = testkit::game_with_non_players(&r, SIZE, 7);
+    assert_eq!(harvest::purifier_count(&w, HouseId(2)), 0);
+}
+
+/// The ruleset with FACT (2 × 2, cost 1000, free unit HARV of cost 400).
+fn free_unit_ruleset() -> glasnost_rules::schema::Ruleset {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("HARV").unwrap().cost = Some(400);
+    let mut b = building(2, 2);
+    b.cost = Some(1000);
+    b.econ.free_unit = Some("HARV".into());
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("FACT".into());
+    r.sim.buildings.insert("FACT".into(), b);
+    r
+}
+
+fn vehicles(w: &World) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.kind == glasnost_sim::rules::Kind::Vehicle)
+        .map(|o| o.id)
+        .collect()
+}
+
+// spec: S-0402 claim 18 (the grand opening at the end of the build-up gives the free unit; a pre-placed building gets none)
+#[test]
+fn claim_18_free_unit_at_the_grand_opening() {
+    let r = free_unit_ruleset();
+    let mut w = game(&r);
+    let f = place_building(&mut w, "FACT", 0, at(0, 0));
+    testkit::run(&mut w, 5);
+    assert!(vehicles(&w).is_empty(), "pre-placed: none");
+    let t = w.tick;
+    w.obj_mut(f)
+        .unwrap()
+        .beh
+        .force(Behaviour::Construction, t, true);
+    until(&mut w, 400, |w| !vehicles(w).is_empty()).expect("the free unit");
+    assert_eq!(vehicles(&w).len(), 1);
+}
+
+// spec: S-0402 claim 18 and Constants (first place: south of the reference point's cell, facing 49152; blocked: the search's cell, facing 40960; harvest started at once)
+#[test]
+fn claim_18_free_unit_places() {
+    let r = free_unit_ruleset();
+    let mut w = game(&r);
+    let f = place_building(&mut w, "FACT", 0, at(0, 0));
+    let rc = w.reference_point(f).cell();
+    let (dx, dy) = glasnost_sim::regions::STEPS[4];
+    let first = CellXY::new(rc.x + dx, rc.y + dy);
+    harvest::grand_opening(&mut w, f);
+    let v = vehicles(&w);
+    assert_eq!(v.len(), 1);
+    assert_eq!(w.obj(v[0]).unwrap().pos.cell(), first);
+    assert_eq!(w.body_facing(v[0]), 49152);
+    assert_eq!(current(&w, v[0]), Some(Behaviour::Harvest));
+    assert_eq!(w.obj(v[0]).unwrap().owner, Some(HouseId(0)));
+    // The first place blocked: a searched place.
+    let mut w = game(&r);
+    let f = place_building(&mut w, "FACT", 0, at(0, 0));
+    place_building(&mut w, "HUT", 1, first);
+    harvest::grand_opening(&mut w, f);
+    let v = vehicles(&w);
+    assert_eq!(v.len(), 1);
+    assert_ne!(w.obj(v[0]).unwrap().pos.cell(), first);
+    assert_eq!(w.body_facing(v[0]), 40960);
+    // spec: S-0402 claim 18 (the second place: the search with the no-overlay condition, which passes over the ore nearer the top-left cell)
+    let mut ore = Vec::new();
+    for dy in -2..=3 {
+        for dx in -2..=3 {
+            if !((0..2).contains(&dx) && (0..2).contains(&dy)) {
+                ore.push((at(dx, dy), ORE, 5));
+            }
+        }
+    }
+    let mut w = game_with_ore(&r, &ore, 7);
+    let f = place_building(&mut w, "FACT", 0, at(0, 0));
+    place_building(&mut w, "HUT", 1, first);
+    harvest::grand_opening(&mut w, f);
+    let v = vehicles(&w);
+    assert_eq!(v.len(), 1);
+    let c = w.obj(v[0]).unwrap().pos.cell();
+    assert_eq!(stage(&w, c), None, "{c:?}");
+    assert_eq!(w.body_facing(v[0]), 40960);
+}
+
+// spec: S-0402 claim 18 (no place accepts the unit: it is removed and the owner gets the refund with the percentage taken as 1)
+#[test]
+fn claim_18_free_unit_refund() {
+    let r = free_unit_ruleset();
+    // A small map whose every other cell holds a hut of Beta: no place is clear.
+    let mut w = testkit::game_with(&r, 6, 7);
+    let f = testkit::spawn(
+        &mut w,
+        glasnost_sim::rules::Kind::Building,
+        "FACT",
+        0,
+        testkit::mid(6, 0, 0),
+        0,
+    );
+    let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        if w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .is_empty()
+        {
+            testkit::spawn(&mut w, glasnost_sim::rules::Kind::Building, "HUT", 1, c, 0);
+        }
+    }
+    let c0 = w.houses[0].credits;
+    let n = w.objects.len();
+    harvest::grand_opening(&mut w, f);
+    assert!(vehicles(&w).is_empty());
+    assert_eq!(w.objects.len(), n);
+    assert_eq!(w.houses[0].credits - c0, 400);
+}
+
+// spec: S-0402 claim 18 (a produced building of a player house whose start price is not 0 and not above C gets none; above C, or 0, or a neutral owner: it does)
+#[test]
+fn claim_18_free_unit_start_price() {
+    let r = free_unit_ruleset();
+    // C = 1000 − 400 = 600 (S-0408 F2).
+    for (owner, price, expect) in [
+        (0, Some(600), 0),
+        (0, Some(1), 0),
+        (0, Some(601), 1),
+        (0, Some(0), 1),
+        (0, None, 1),
+        (2, Some(600), 1),
+    ] {
+        let mut w = testkit::game_with_non_players(&r, SIZE, 7);
+        let f = place_building(&mut w, "FACT", owner, at(0, 0));
+        w.obj_mut(f).unwrap().econ.start_price = price;
+        harvest::grand_opening(&mut w, f);
+        assert_eq!(vehicles(&w).len(), expect, "{owner} {price:?}");
+    }
 }
 
 // spec: S-0402 claim 12 and F3 (B′ = trunc(RZ(RZ(RZ(V × M) × a) + B)); the bonus x = RZ₂₄(RZ(nₚ × b) × a))
@@ -593,17 +1033,6 @@ fn claim_12_income_factor() {
     w.houses[0].credits = 0;
     harvest::pay(&mut w, refn, 0, 10);
     assert_eq!(w.houses[0].credits, 375);
-}
-
-// spec: S-0402 claim 12 (virtual purifiers: none for player houses; the neutral and special houses' list position is provisional, Q-0143)
-#[test]
-fn claim_12_virtual_purifiers() {
-    let mut r = ruleset();
-    r.sim.general.economy.ai_virtual_purifiers = Some(vec![3, 2, 1]);
-    let w = testkit::game_with_non_players(&r, SIZE, 7);
-    for h in 0..4 {
-        assert_eq!(harvest::purifier_count(&w, HouseId(h)), 0);
-    }
 }
 
 // spec: S-0402 claim 13 (the computer-controlled guard rule for the neutral and special houses; the no-field record stops it; human houses stay)

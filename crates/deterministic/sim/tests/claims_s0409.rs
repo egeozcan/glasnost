@@ -366,6 +366,30 @@ fn claims_12_13_pending_and_sweep() {
     assert!(!shroud::pending(&w, A, c(1, 0)));
 }
 
+// spec: S-0409 claim 15 (r5, V13 B2's repeat without satellite loss: a sight arriving over an already explored, surrounded pending cell cancels its mark, so the cell stays explored at the sweep)
+#[test]
+fn claim_15_sight_arrival_cancels_pending() {
+    let mut w = game(&rules());
+    spawn(&mut w, Kind::Building, "GAP", 1, 0, 0);
+    step(&mut w);
+    step(&mut w);
+    let e = spawn(&mut w, Kind::Vehicle, "EYE5", 0, 1, 0);
+    step(&mut w);
+    while w.tick % 120 == 0 || w.tick % 120 > 100 {
+        step(&mut w);
+    }
+    glasnost_sim::objects::remove(&mut w, e);
+    assert!(shroud::pending(&w, A, c(1, 0)));
+    let _second = spawn(&mut w, Kind::Vehicle, "EYE1", 0, 1, 0);
+    step(&mut w);
+    assert!(!shroud::pending(&w, A, c(1, 0)));
+    while w.tick % 120 != 0 {
+        step(&mut w);
+    }
+    step(&mut w);
+    assert!(shroud::explored(&w, A, c(1, 0)));
+}
+
 // spec: S-0409 claim 11 and Edge cases (quirks.gap_radius_wrap: a radius field of 200 covers nothing, 260 reads 4)
 #[test]
 fn claim_11_gap_radius_wrap() {

@@ -102,6 +102,10 @@ pub struct EconFields {
     /// Vehicles: `PoweredUnit` (S-0405 claim 13); absent: no.
     #[serde(default)]
     pub powered_unit: Option<bool>,
+    /// Units: `ConsideredAircraft`, the counts-as-aircraft flag of the
+    /// sidebar order (S-0004 claim 11 rule 3); absent: no.
+    #[serde(default)]
+    pub considered_aircraft: Option<bool>,
     /// Aircraft: `AirportBound` (S-0407 claim 16); absent: no.
     #[serde(default)]
     pub airport_bound: Option<bool>,
@@ -140,9 +144,34 @@ pub struct EconFields {
     /// Buildings: `OrePurifier` (S-0402 Terms, claim 12); absent: no.
     #[serde(default)]
     pub ore_purifier: Option<bool>,
-    /// Buildings: `DockUnload` (S-0402 claim 10); absent: no.
+    /// Buildings: `DockUnload`, a dock-unload refinery (S-0402 Terms, claim 10); absent: no.
     #[serde(default)]
     pub dock_unload: Option<bool>,
+    /// Buildings: `Weeder`, the weed-flag building of S-0402 claim 13's
+    /// idle step-off; absent: no.
+    #[serde(default)]
+    pub weeder: Option<bool>,
+    /// Buildings: `ExitCoord`, the exit displacement in leptons (S-0404
+    /// Terms, claim 13); absent: (0, 0, 0).
+    // spec: S-0404 Import mapping (ExitCoord: an integer triple)
+    #[serde(default)]
+    pub exit_coord: Option<[i32; 3]>,
+    /// Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim
+    /// 13); absent: no.
+    #[serde(default)]
+    pub door_first: Option<bool>,
+    /// Buildings: `NODBarracks`, the second barracks door kind (S-0404
+    /// claim 13); absent: no.
+    #[serde(default)]
+    pub door_second: Option<bool>,
+    /// Buildings: `YuriBarracks`, the third barracks door kind (S-0404
+    /// claim 13); absent: no.
+    #[serde(default)]
+    pub door_third: Option<bool>,
+    /// Buildings: `Cloning`, a cloning building (S-0404 Terms, claim 14);
+    /// absent: no.
+    #[serde(default)]
+    pub cloning: Option<bool>,
     /// Buildings: `FactoryPlant`, grants cost bonuses (S-0404 claim 2);
     /// absent: no.
     #[serde(default)]
@@ -581,6 +610,10 @@ pub struct EconGeneral {
     /// claim 8); absent: 0.03.
     #[serde(default)]
     pub savour_delay: Option<Decimal>,
+    /// `[AudioVisual] PoseDir`, the pose direction of an aircraft released
+    /// onto a dock in 1/256 turns (S-0404 claim 13); absent: 0.
+    #[serde(default)]
+    pub pose_dir: Option<i32>,
     /// `[CombatDamage] C4Warhead`, a warhead key (S-0414 claim 5); absent:
     /// none.
     #[serde(default)]
