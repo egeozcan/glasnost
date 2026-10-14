@@ -2,7 +2,7 @@
 id: S-0006
 title: Rules layering
 topic: rules-import
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -52,7 +52,7 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
 
    An empty layer (a game-mode layer as above, or a language rules file with no section) changes no rules value, but it is still an applied layer: every animation that is not first created after that layer's animation reading gets one type read in it, from the art file (Terms; claim 8). So under stock data an animation that the base rules' animation list names has three type reads in every multiplayer or skirmish game, whether or not the mode's file can be resolved, and two in a campaign mission (base rules and map). The mission-named file adds none that counts in the mission (claim 14). A valid language rules file, or one with no section, adds one. The consequence of the count belongs to S-0007 (claim 2).
 
-   Where more than one applicable layer gives the same key, the value from the highest-precedence layer is the value held after layering (claims 3 to 5 give the exact rule). Type data and game-wide data start differently:
+   Where more than one applicable layer gives the same key, the value from the highest-precedence layer is the value held after layering (claims 2 to 5 give the exact rule, including exceptions). Type data and game-wide data start differently:
    - Every type registry except the tiberiums' starts each skirmish empty, so it holds only the types created for this game (S-0004, claims 1 and 3); tiberiums carry over (claim 10). The original's deferred campaign exception is sides newly created by the mission-named file: they remain ahead of the base rules' sides for that mission (claim 14; S-0004, claims 1 and 9). No side of the previous game survives. This exception records original context only; campaigns and network games are out of scope for the skirmish milestone.
    - Game-wide sections are not cleared. Each game-wide key starts the game with the value the previous game of the session left (the engine default in the session's first game), as changed by the mission-named file in a campaign mission (claim 14), and keeps it unless a layer of this game gives the key (claim 10). The exceptions restored at every game start are listed in claim 10.
 
@@ -62,6 +62,7 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
 
 2. **A layer may override any section.** A later layer can change every game-wide section and every type section, with these exceptions:
    - The maximum number of players is taken from the base rules only. A later layer cannot change it.
+   - In the colour-definition section, a later layer's entry for a name already defined keeps the earlier definition, comparing names without regard to letter case. It creates no additional definition or position. New names append in layer and entry order. S-0103 claim 5 owns this rule and `quirks.colour_redefinition_ignored` (default on = keep the first definition; off = replace its value while keeping its position).
    - The language rules file cannot change the colour-adjustment table at a position that the base rules' table gives (see below). Game-mode and map layers can change it.
    - Tiberiums read their sections only from layers whose tiberium list names them (S-0004, claim 10). A tiberium section in a layer without a matching list entry is ignored.
 
@@ -76,10 +77,10 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
    So nothing a previous game's game-mode file or map put into the table survives into the next game, unlike other game-wide values (claim 10). The game-mode and map layers then change the table by position as above. A section with more than 16 entries is bad data. In the original, the entries after the 16th overwrite other rules values; which values change is *unspecified*. This is a *departure*: our engine ignores every entry after the 16th, and the importer warns.
 
    Sections a layer doesn't contain leave the state unchanged. A type whose section is absent from a layer is not touched in that layer.
-   - Backing: `measurable` for sampled type-section overrides, the game-mode and map colour-adjustment table, and the tiberium rule (A, M, N). `unmeasured` for overriding every remaining section individually: these scenarios sample the general rule, not every consumer; topic specs must test their own keys. `measurable` for the language rules file's part of the colour-adjustment rule (scenario S). `unmeasured` for the maximum number of players: it limits the lobby, which is set up before later layers are read, and no later effect has been identified (open question 6). `unmeasured` for an overlong colour-adjustment section: the original supplies no stable defined result to compare; ignoring the excess and warning is our design departure.
+   - Backing: `measurable` for sampled type-section overrides, the game-mode and map colour-adjustment table, and the tiberium rule (A, M, N). `unmeasured` for overriding every remaining section individually: these scenarios sample the general rule, not every consumer; topic specs must test their own keys. `measurable` for the language rules file's part of the colour-adjustment rule (scenario S). `unmeasured` for the maximum number of players: it limits the lobby, which is set up before later layers are read, and no later effect has been identified (open question 6). `unmeasured` for an overlong colour-adjustment section: the original supplies no stable defined result to compare; ignoring the excess and warning is our design departure. The colour-definition exception is `measurable` by S-0103 scenario PF for retention across later layers and case-insensitive names; appending new names without extra positions for duplicates is `unmeasured` for the reason S-0103 claim 5 gives.
    - Confidence: high
 
-3. **An absent key keeps the held value.** Within a section that a layer contains, each key that is given replaces the held value. Each key that is absent keeps the held value (Terms):
+3. **An absent key keeps the held value.** Subject to claim 2's section-specific exceptions, within a section that a layer contains, each key that is given replaces the held value. Each key that is absent keeps the held value (Terms):
    - in a type section, the value an earlier layer of this game gave, or the engine default of its kind if none did; for a tiberium, if none did, the value the previous game of the session left (claim 10), as changed by the mission-named file in a campaign mission (claim 14), and the engine default only for a tiberium first created in this game, as changed by the mission-named file where claim 14 applies,
    - in a game-wide section, the value an earlier layer of this game gave, or else the value the previous game of the session left (claim 10), as changed by the mission-named file in a campaign mission (claim 14). It is the engine default only until a layer of the session, or a mission-named file, first sets the key (claim 10).
 
@@ -185,7 +186,9 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
 
 10. **Game-wide values and tiberiums carry over between games in one session.** The rules state is kept for the whole session. A game start rebuilds the type registries other than the tiberiums' (S-0004, claim 1), but it does not reset game-wide values or tiberiums. Each layer then changes only what it gives (claims 3 to 5).
 
-    **Game-wide values.** This holds for every game-wide section (general settings, combat damage, AI settings, audio-visual settings, jump-jet controls, crate rules, radiation, special weapons, multiplayer dialog settings and the like), and for every kind of key in them: numbers, flags, text, lists and type references. Every game-wide key that the base rules give, or a language rules file that passes its check, is restored at every game start. A game-wide key that neither of them gives, but that an earlier game's game-mode layer or map set, keeps that value in every later game of the same session, until a layer sets it again. So the absent-key default of a game-wide key holds only in the session's first game, or until a layer first sets the key. A fresh program start clears the carry-over. The carry-over also reaches a later game in a mode whose file does not give the key: a game in one mode can change the rules of a later game in another mode. A campaign mission's mission-named file leaves game-wide values behind in the same way (claim 14). Stock game-mode files give no game-wide key that the stock base rules lack, and stock data has no mission-named file (S-0002, claim 6), so with stock files a carry-over can come only from a map.
+    Colour definitions are rebuilt for each game under S-0103 claims 3 and 5, rather than carrying over as game-wide values below.
+
+    **Game-wide values.** Apart from those colour definitions, this holds for every game-wide section (general settings, combat damage, AI settings, audio-visual settings, jump-jet controls, crate rules, radiation, special weapons, multiplayer dialog settings and the like), and for every kind of key in them: numbers, flags, text, lists and type references. Every game-wide key that the base rules give, or a language rules file that passes its check, is restored at every game start. A game-wide key that neither of them gives, but that an earlier game's game-mode layer or map set, keeps that value in every later game of the same session, until a layer sets it again. So the absent-key default of a game-wide key holds only in the session's first game, or until a layer first sets the key. A fresh program start clears the carry-over. The carry-over also reaches a later game in a mode whose file does not give the key: a game in one mode can change the rules of a later game in another mode. A campaign mission's mission-named file leaves game-wide values behind in the same way (claim 14). Stock game-mode files give no game-wide key that the stock base rules lack, and stock data has no mission-named file (S-0002, claim 6), so with stock files a carry-over can come only from a map.
 
     These game-wide values are restored at every game start whatever earlier games did:
     - the colour-adjustment table, which depends only on this game's layers, never on earlier games (claims 2 and 12),
@@ -299,13 +302,13 @@ The layered value *v* of a key *k* in a section *s*, after layers *L₁ … Lₙ
 >
 > With `quirks.persist_global_overrides` off, the value that the previous game left is replaced by the engine default for every game-wide key, so *v₀* is the engine default, or in a campaign mission the value after the mission-named file has been applied to it. With `quirks.mission_rules_before_reset` off, the mission-named file does not enter *v₀*; it is one of the layers *L₁ … Lₙ*, after the language rules file (claim 14).
 
-For a type section, the layers considered are only those in which the type reads its section (claim 7). For a tiberium, only the layers whose tiberium list has an entry for it count (S-0004, claim 10). The colour-adjustment table follows claims 2 and 12 instead of this formula, and so does the maximum number of players (base rules only). Terrain type strength follows claim 5's unset-strength fill instead: after any layer containing its section, a resulting integer strength of −1 health points becomes that layer's game-wide tree strength. This exact copy uses no arithmetic or rounding.
+For a type section, the layers considered are only those in which the type reads its section (claim 7). For a tiberium, only the layers whose tiberium list has an entry for it count (S-0004, claim 10). Colour definitions follow S-0103 claim 5 instead of this formula: the first definition of a name wins by default (claim 2). The colour-adjustment table follows claims 2 and 12 instead of this formula, and so does the maximum number of players (base rules only). Terrain type strength follows claim 5's unset-strength fill instead: after any layer containing its section, a resulting integer strength of −1 health points becomes that layer's game-wide tree strength. This exact copy uses no arithmetic or rounding.
 
 Layering selects values. Its only arithmetic is the truncation of the light values in claim 5, where *t* is the held value in thousandths, an integer, and *k* = trunc(*t* / 1000) is an integer division rounding toward zero:
 
 > *t*′ = 1000 × *k* for the extra-light values. For the building light values, *t*′ = 1000 × *k* when *k* ≥ 0 and *t*′ = 1000 × *k* + 1 when *k* < 0 (the conversion of a written value of S-0104, claim 12, applied to *k* whole units). Units: thousandths.
 
-In the original both values are computed in double-precision floating point and truncated toward zero. The results are exactly the integers above whatever way the floating-point operations round, so they do not depend on the round-toward-zero mode. No other rounding applies. Each value keeps the number domain of its key, stated in the topic specs. The reset values 1.0, 0.02 and 0.03 of the difficulty sections, 100 % for warhead modifiers and 100 % for land-type multipliers are floating-point numbers in the original (100 % is stored as 1.0).
+For the building light values, this formula assumes that S-0104 claim 12 converts a written value *v* as trunc(*v* × 1000 + 0.1), with truncation toward zero. S-0104 claim 12 must be aligned to state that rule in the same hand-off. Under that conversion, a written whole-unit value gives the integer results above regardless of how the floating-point operations round, so they do not depend on the round-toward-zero mode. No other rounding applies. Each value keeps the number domain of its key, stated in the topic specs. The reset values 1.0, 0.02 and 0.03 of the difficulty sections, 100 % for warhead modifiers and 100 % for land-type multipliers are floating-point numbers in the original (100 % is stored as 1.0).
 
 ## Constants
 
@@ -337,7 +340,8 @@ In the original both values are computed in double-precision floating point and 
 | State | Event | Result |
 |---|---|---|
 | any | game starts | every type registry except the tiberiums' holds only the types created for this game; game-wide values and tiberiums are those the previous game left (claim 10), as changed by the mission-named file in a campaign mission (claim 14) and then by this game's layers; the colour-adjustment table holds only what claim 2 gives. The layers, from lowest to highest precedence: base, language (if present and it passes its check, or holds no section), game-mode layer (every multiplayer and skirmish game, empty when the mode's file cannot be resolved; skipped if a language rules file with sections fails its check, claim 12), map |
-| key given in a later layer | layer applied | value replaced |
+| ordinary key given in a later layer | layer applied | value replaced |
+| colour name already defined, ignoring letter case | later layer applied | earlier definition and its position kept by default (claim 2; S-0103 claim 5) |
 | key absent, section present, ordinary key | layer applied | held value kept |
 | key given with its "not given" value (claim 3), section present, any key | layer applied | held value kept |
 | key absent, section present, reset-on-override key | layer applied | value set to its reset value (a fixed value, or the turret's value for a barrel value) |
@@ -350,12 +354,13 @@ In the original both values are computed in double-precision floating point and 
 
 Observable ordering:
 - Where they give the same key, a map's values win over the game-mode file's, and the mode file's over the base rules', except the maximum number of players, which only the base rules give, and a tiberium's section in a layer whose tiberium list has no entry for it, which is ignored (claim 2).
-- A valid language rules file's values beat the base rules' (except at the colour-adjustment table positions that the base rules give, claim 2) and lose to the game-mode file's and the map's.
+- A valid language rules file's values beat the base rules' (except at the colour-adjustment table positions that the base rules give, claim 2) and lose to the game-mode file's and the map's. Colour definitions are another exception to both override statements: by default the first definition of a name wins, ignoring letter case (claim 2; S-0103 claim 5).
 - Player houses see the final country values of all layers.
 - The lobby lists the modes in ascending mode number; a mode number shared by several modes refers to the first of them (claim 13, `quirks.mode_number_first_wins`).
 
 ## Edge cases and quirks
 
+- `quirks.colour_redefinition_ignored`: S-0103 claim 5 owns the colour-definition exception and both switch settings (claim 2).
 - `quirks.override_resets_keys`: claim 5.
 - `quirks.persist_global_overrides`: claim 10.
 - `quirks.persist_tiberium_overrides`: claim 10; its effect on a tiberium's starting value is in the Formulas and on the mission-named file in claim 14.
@@ -391,6 +396,7 @@ Keys and sections named in this spec:
 |---|---|
 | maximum number of players (base rules only) | `[Maximums]` `Players` |
 | colour-adjustment table | `[ColorAdd]`: each entry's value is red, green, blue; key names are ignored, only the entry's position counts |
+| colour-definition section | `[Colors]`: each key names a definition, compared ignoring case; value parsing and defaults are in S-0103 Import mapping. An existing name keeps its earlier definition by default (claim 2; S-0103 claim 5) |
 | parent country | `ParentCountry` in a country's section; when absent in a layer that has the section, it becomes the country's own name |
 | warhead damage modifiers | `Verses` in a warhead's section; when absent in a layer that has the section, `100%` × 11 |
 | difficulty sections | `[Easy]`, `[Normal]`, `[Difficult]` |
@@ -414,6 +420,8 @@ Keys and sections named in this spec:
 | a mode-list entry (claim 13) | key: the mode number (decimal); value: up to five comma-separated items, name label, tooltip label, game-mode file name, map filter, flag (`false` = off) |
 
 ## Measurement scenarios
+
+The colour-definition exception in claim 2 uses S-0103 scenario PF: its named map, game-mode and valid language test files re-define the non-player houses' colour with exact and mixed-case names. Its pixel recording, reference-ramp expectation and falsifier apply here; no completed measurement is claimed.
 
 All active scenarios use game speed 2, one human-controlled test house and one bystander computer player isolated from the observed area, unless a scenario requires the computer house's difficulty row. The observed area consists of all cells containing the named test objects and their paths or effects. Void any run with an unnamed bystander object entering or affecting that area, or bystander defeat before observation ends. Director and mods are off apart from each scenario's named test data; the executable remains stock. A video capture, scripted input and the read-only recorder may be used as described; no patched launcher is required.
 
