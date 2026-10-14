@@ -377,7 +377,7 @@ Interim rules and gaps:
     - `selected` for the first object each input selects (claim 17);
     - `ordered` for a click that gave orders (claim 18, F6). The repair vehicle (`FV`) repairing plays the repair response; an attack with a secondary weapon by a non-elite object plays its secondary-weapon response;
     - `key` for the guard, stop and scatter commands (claim 19);
-    - `cue(UiCue)` for the interface sounds (claim 24, S-0410 claim 3, S-0416 claim 4) and the building placement sound. Under claim 24 the start, queue, resume, hold and cancel clicks play the build click with their announcement (start, queue and resume all request the building entry, Q-0340). A busy production line gives only the unable-to-comply announcement, and a refused placement click only the cannot-deploy-here announcement. A scroll click past the strip's end plays the refusal sound.
+    - `cue(UiCue)` for the interface sounds (claim 24, S-0410 claim 3, S-0416 claim 4) and the building placement sound. Under claim 24 the start, queue, resume, hold and cancel clicks play the build click with their announcement (start and resume request the training entry for infantry and the building entry for any other kind; a queued copy on an already active line requests no announcement). A busy production line gives only the unable-to-comply announcement, and a refused placement click only the cannot-deploy-here announcement. A scroll click past the strip's end plays the refusal sound.
   - every frame, `set_view` (the view's origin and size, with S-0101's projection) and `frame(now_ms, unsync)`, which runs the audio passes and pumps the output.
 
   Game-side choices and the mixer's per-instance draws all take raw values from the client's one unsynchronised stream (S-0202 claim 11, S-0701 claim 30). `frame` and `service` lend that stream to the mixer for the pass and take it back.
@@ -402,26 +402,26 @@ S-0701 answers these earlier interim rules:
 - Q-0263, which files hold the samples (claim 34), except for which copy of a name listed twice wins;
 - Q-0332, the building damage and death sounds (claim 37);
 - Q-0325, the announcement entries, files and level (claim 36, Import mapping, claims 34 and 35);
-- Q-0338, the repair-response vehicle (Import mapping, revision 3).
+- Q-0338, the repair-response vehicle (Import mapping, revision 3);
+- Q-0326, the primary, elite, undeploy and death response keys (Import mapping, revision 5);
+- Q-0328, the responder and selection order (claim 18);
+- Q-0330, the initial game-wide sound references and speak delay (claim 38);
+- Q-0334, the delay and pitch-shift token forms (claim 2);
+- Q-0335, selecting another house's object (claim 17);
+- Q-0336, key-command sounds (claim 19);
+- Q-0337, the turret rotation sound's end (claim 23);
+- Q-0340, the training and building announcements (claim 28).
 
 Provisional rules of the audio, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
 | `bank::SoundBank::add_idx` | when the index lists a name twice, the first copy wins | Q-0263 |
-| `Audio::tick`, `Audio::ordered` | the primary and elite weapon response, undeploy response and death response keys are not read. Such an attack order uses the attack list, deployed infantry's unload or deploy order plays nothing, and a death plays only the death sound list | Q-0326 |
 | `Audio::tick` | a weapon report plays entry 0 of the weapon's list, with no draw | Q-0327 |
-| `Audio::ordered`, `play` | the selection is kept in selection order. The responder is the most recently selected object of a positive-primary-damage type, else the earliest selected. It responds when the click gave it an order | Q-0328 |
 | `mixer` | a delayed instance plays the immediate mode's partition, keeps one body sample across loops, takes no startup draw and has no waits | Q-0329 |
-| `Audio::tick`, `names` | an absent game-wide sound key plays nothing. With no speak delay, the low-funds announcement is raised once | Q-0330 |
 | `Audio::tick` (F7) | the radar event's zoom-in phase lasts 0 ticks. The events are kept for announcements only | Q-0331 |
 | `mixer` | the crowded master level reaches its target at once | Q-0333 |
-| `catalog::pair` | the two numbers of delay and pitch shift are split on spaces, tabs and commas. A missing or unreadable second number repeats the first | Q-0334 |
-| `Audio::selected` | selecting any other house's object takes the selection draw and stays silent | Q-0335 |
-| `play` | a guard, stop or scatter key sounds once per press, and only when it issued orders | Q-0336 |
-| `Audio::tick` | the turret rotation sound starts while the turret turns and finishes its loop pass once it stops, with no grace counter | Q-0337 |
 | `play::Play::scroll_icons` | a scroll click plays the refusal sound only when it cannot move the strip at all | Q-0339 |
-| `Audio::cue` | every start, queue and resume click requests the building entry; the training entry is never requested | Q-0340 |
 
 ## Game client (M5b)
 

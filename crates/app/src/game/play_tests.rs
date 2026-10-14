@@ -103,7 +103,7 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
     p.cameo_click(0, Button::Left, false);
     assert!(
-        p.cues.contains(&UiCue::BuildStarted),
+        p.cues.contains(&UiCue::BuildStarted { infantry: false }),
         "the click started the item: {:?}",
         p.cues
     );
@@ -154,6 +154,21 @@ fn box_selection_takes_own_mobile_objects() {
     }
     p.select_box(&[], false);
     assert!(p.selection.is_empty());
+}
+
+/// spec: S-0701 claim 19 and scenario D4 (no command sound for an empty selection; one per press for a nonempty one, whether or not anything was ordered)
+#[test]
+fn key_commands_sound_once_per_press_for_a_nonempty_selection() {
+    let mut p = start();
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Stop);
+    assert!(p.keys.is_empty());
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    p.key(KeyCommand::Stop);
+    p.key(KeyCommand::Guard);
+    assert_eq!(p.keys, [KeyCommand::Stop, KeyCommand::Guard]);
 }
 
 /// spec: S-0701 claim 24 (the strip scrolled past its end: the refusal sound); interim: Q-0339 (a click that cannot move the strip)

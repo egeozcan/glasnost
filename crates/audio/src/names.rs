@@ -49,6 +49,17 @@ pub struct TypeSounds {
     /// `VoiceSecondaryWeaponAttack`, the normal secondary-weapon response
     /// (S-0701 F6).
     pub voice_secondary_attack: Option<String>,
+    /// `VoicePrimaryWeaponAttack`, the normal primary-weapon response
+    /// (S-0701 F6).
+    pub voice_primary_attack: Option<String>,
+    /// `VoicePrimaryEliteWeaponAttack` (S-0701 F6).
+    pub voice_primary_elite_attack: Option<String>,
+    /// `VoiceSecondaryEliteWeaponAttack` (S-0701 F6).
+    pub voice_secondary_elite_attack: Option<String>,
+    /// `VoiceUndeploy`, the undeploy response (S-0701 F6).
+    pub voice_undeploy: Option<String>,
+    /// `VoiceDie`, the local death response list (S-0701 claim 20).
+    pub voice_die: Vec<String>,
     /// `VoiceEnter` (S-0701 F6).
     pub voice_enter: Option<String>,
     /// `VoiceCapture` (S-0701 F6).
@@ -103,8 +114,10 @@ pub enum Announcement {
     UnitReady,
     /// Unit lost (S-0701 claim 28).
     UnitLost,
-    /// Building, training (S-0411 claim 12; S-0701 claim 28).
+    /// Building: start or resume of any non-infantry kind (S-0411 claim 12; S-0701 claim 28).
     Building,
+    /// Training: start or resume of infantry (S-0411 claim 12 and Import mapping; S-0701 claim 28).
+    Training,
     /// On hold (S-0411 claim 12; S-0701 claim 28).
     OnHold,
     /// Cancelled (S-0411 claim 12; S-0701 claim 28).
@@ -136,6 +149,7 @@ impl Announcement {
             Self::UnitReady => "EVA_UnitReady",
             Self::UnitLost => "EVA_UnitLost",
             Self::Building => "EVA_Building",
+            Self::Training => "EVA_Training",
             Self::OnHold => "EVA_OnHold",
             Self::Cancelled => "EVA_Canceled",
             Self::UnableToComply => "EVA_UnableToComply",
@@ -407,6 +421,12 @@ impl SoundNames {
                     voice_attack: l("VoiceAttack"),
                     voice_special_attack: l("VoiceSpecialAttack"),
                     voice_secondary_attack: f("VoiceSecondaryWeaponAttack"),
+                    // spec: S-0701 Import mapping (`Voice` + `PrimaryWeaponAttack`, `Voice` + `PrimaryEliteWeaponAttack`, `Voice` + `SecondaryEliteWeaponAttack`, `Voice` + `Undeploy`, `Voice` + `Die`)
+                    voice_primary_attack: f("VoicePrimaryWeaponAttack"),
+                    voice_primary_elite_attack: f("VoicePrimaryEliteWeaponAttack"),
+                    voice_secondary_elite_attack: f("VoiceSecondaryEliteWeaponAttack"),
+                    voice_undeploy: f("VoiceUndeploy"),
+                    voice_die: l("VoiceDie"),
                     voice_enter: f("VoiceEnter"),
                     voice_capture: f("VoiceCapture"),
                     voice_harvest: f("VoiceHarvest"),

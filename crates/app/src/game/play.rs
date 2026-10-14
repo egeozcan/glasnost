@@ -343,10 +343,19 @@ impl Play {
         let w = &self.game.world;
         self.selection.retain(|&id| targeting::selectable(w, id));
         let list = targeting::key_command(w, self.local, &self.selection, cmd);
-        // interim: Q-0336 (a key command sounds once per press, and only when it issued orders)
-        if self.issue(list) > 0 {
-            self.keys.push(cmd);
+        // spec: S-0701 claim 19 (an empty selection requests no command sound)
+        if self.selection.is_empty() {
+            return;
         }
+        let local = self.local;
+        for o in list {
+            // spec: S-0701 claim 19 (a failed issuance exits the command without its sound, even after earlier orders)
+            if !self.game.issue(local, o) {
+                return;
+            }
+        }
+        // spec: S-0701 claim 19 (one sound per press after a nonempty selection, however many objects were ordered, even none)
+        self.keys.push(cmd);
     }
 
     /// The cheer command (S-0213 table T2, claim 19).
@@ -443,12 +452,18 @@ impl Play {
         };
         let held = glasnost_sim::econ::sidebar::icon_state(w, self.local, t)
             .is_some_and(|s| s.on_hold);
+        // spec: S-0411 claim 12 (training for infantry, building for every other kind)
+        let infantry = t.kind == glasnost_sim::rules::Kind::Infantry;
+        // spec: S-0411 claim 12 (an already active line: the click adds a queued copy)
+        let active = glasnost_sim::econ::production::line_of(w, self.local, t)
+            .is_some_and(|l| l.item.is_some());
         match sidebar::click(w, self.local, t, click, shift) {
             Action::Order(o) => {
                 // spec: S-0411 claim 12 (start, queue, resume, hold and cancel clicks play interface sounds)
                 let cue = match &o {
-                    Order::Build { .. } if held => Some(UiCue::BuildResumed),
-                    Order::Build { .. } => Some(UiCue::BuildStarted),
+                    Order::Build { .. } if held => Some(UiCue::BuildResumed { infantry }),
+                    Order::Build { .. } if active => Some(UiCue::BuildQueued),
+                    Order::Build { .. } => Some(UiCue::BuildStarted { infantry }),
                     Order::Hold { .. } => Some(UiCue::BuildHeld),
                     Order::Cancel { .. } | Order::CancelAll { .. } => Some(UiCue::BuildCancelled),
                     _ => None,
