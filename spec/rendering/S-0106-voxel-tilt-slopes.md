@@ -2,7 +2,7 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -19,8 +19,8 @@ supersedes: []
 The 21 slope shapes a cell can have, the height of the terrain surface at any point of a cell, and
 how a voxel-drawn unit is tilted to match the slope it stands on: the fixed tilt of each shape, the
 three-tick transition when the shape under a unit changes, which locomotors tilt the body, and the
-tilt of voxel shadows. Together with S-0105 this fixes the body transform *D* of a voxel unit on any
-cell when the unit is not rocking. Rocking, and the causes of pitch and roll, belong to the vehicle
+tilt of voxel shadows. Together with S-0105 this fixes the body transform *D* of a voxel unit
+on the ground layer when the unit is not rocking. Rocking, and the causes of pitch and roll, belong to the vehicle
 specs. This spec covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
@@ -113,9 +113,10 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    The cell's centre height, which much of the game uses as "the height of the cell", is *H* at
    (128, 128): ℓ × 104 + 52 for edge slopes and saddle shapes, ℓ × 104 for corner slopes and
    ℓ × 104 + 104 for valley and steep slopes (for ℓ ≥ 0).
-   - Backing: `measurable` (scenario T1) for its sampled positions. Exact arithmetic at
-     unsampled positions is `unmeasured`: T1 does not exhaust all in-cell positions for every
-     shape; equivalent values at its samples cannot distinguish formulas elsewhere.
+   - Backing: `measurable` (scenario T1). Each recorded position tests F1, including its
+     truncation and clipping. A finite run confirms only its samples, not an exhaustive
+     equivalence over all positions; absence of exhaustive sampling does not make the
+     remaining surface heights unobservable.
    - Confidence: high (the formula reproduces the original's arithmetic exactly for all 21
      shapes); medium that every ground object stands exactly at *H* (the movement specs own which
      objects follow the surface, and how)
@@ -140,7 +141,7 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    | 1 … 4 (edge) | 29.3115° | arctan(1/√6) ≈ 22.21° |
    | 5 … 12 (corner and valley) | 21.3574° | 30° |
    | 13 … 16 (steep) | 29.3115° | 30° |
-   | 0 and 17 … 20 | none (identity) | 0 / not planar |
+   | 0 and 17 … 20 | none (identity) | 0 for flat terrain / saddle tile geometry unresolved |
 
    So edge slopes tilt the body more steeply than their surface, and corner and valley slopes less
    steeply (`quirks.slope_tilt_angles`). A corner slope and the valley slope with the same uphill
@@ -186,13 +187,10 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    running starts a new transition from the old *current* shape, not from the orientation drawn at
    that moment, so the drawn tilt jumps (`quirks.tilt_transition_restart_jump`). When the unit is
    placed on the map, its current and previous shapes are both set to the shape of its cell and no
-   transition runs, so it starts settled. Whether the unit is moving does not matter.
-   - Backing: `measurable` for ordinary transitions (T3) and settled placement (T2's
-     placement part and T6). Restarting a transition before it ends is `unmeasured`: T3's
-     stock-speed route does not produce two shape changes less than 3 ticks apart, and no
-     scenario here forces that case. Independence from motion is also `unmeasured`: no
-     scenario here changes the shape under a stationary unit. Tilt on a bridge deck is
-     `unmeasured`: no scenario here puts a sloped ground cell beneath an occupied deck.
+   transition runs, so it starts settled. This claim covers ground-layer units only.
+   A stationary unit whose cell changes shape and a unit on a bridge deck are left open.
+   - Backing: `measurable` for ordinary transitions (T3), settled placement (T2's
+     placement part and T6), and interrupted transitions (T11's restart part).
    - Confidence: high
 
 7. **Drawn tilt during a transition.** In the drawn frames of tick *t*<sub>0</sub> + *j*, for
@@ -207,10 +205,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    *t*<sub>0</sub> + 3 the tilt snaps from the two-thirds orientation to the table transform. For
    example, driving from flat ground onto an edge slope the drawn tilt is 0°, 9.756°, 19.600°, then
    29.3115°. During the transition S-0105 claim 26 draws every part fresh.
-   - Backing: `measurable` (scenario T3) for flat-to-edge transitions and their timing.
-     Other shape pairs, F3's near-equal linear case, and exact component values that
-     produce identical pixels are `unmeasured`: T3 exercises only flat and shape 1,
-     and its captures cannot distinguish pixel-equivalent arithmetic.
+   - Backing: `measurable` (T3 and T11's pair part) for transition images and timing,
+     including a change between equal orientations. Exact component values that produce
+     identical pixels are `unmeasured`, for the arithmetic reason of claim 4.
    - Confidence: high for the three-tick timing and the interpolation endpoints; high for the
      intermediate rotations (the sample values below follow from F3 and tables C3 and S-0105 F1),
      and medium for which tick's drawn frames show *j* = 0 (whether the drawn frames of tick
@@ -221,15 +218,15 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    (left factor) and the body's 32-step rotation of S-0105 claim 3 (right factor). The tilt therefore does not depend on the body facing.
    The body's ramp state (S-0105 claim 26) is the shape whose tilt it shows: *s*<sub>c</sub> for
    the tilting locomotors, and the shape of the cell under the unit for a powered-down hovering
-   unit and for a tunnelling unit in its surface state. A body drawn without slope tilt by any
-   other locomotor, or by a powered hovering unit, has no ramp state. So an image made on one shape
-   is never reused on another shape, although shapes 5 … 8 and 9 … 12 give identical images.
+   unit and for a tunnelling unit in its surface state. Walking, mechanical walking,
+   drop-pod, teleporting, jumpjet and powered hovering bodies have no ramp state.
+   Full reuse keys for flying and rocket bodies remain open in S-0105; no complete key
+   for those bodies is asserted here. For a body with ramp state, an image made on one
+   shape is never reused on another, although shapes 5 … 8 and 9 … 12 give identical images.
    - Backing: `measurable` (T2 for driving, T6 for tunnelling and naval, T7 for hovering)
-     for the settled transform and rejection of a flat image on shapes 1 … 16. Reuse being
-     separated between shapes with identical transforms is `unmeasured`: identical body
-     pixels do not distinguish their reuse classes, and these scenarios include no
-     fresh-draw side-effect probe. The absence of a ramp reuse class for untilted bodies
-     is `unmeasured` for the same reason.
+     for the settled transform and rejection of a flat image on shapes 1 … 16. T12 tests
+     separate reuse classes for equal-transform shapes and reuse across shapes for
+     untilted bodies, through fresh-draw shading rather than silhouette alone.
    - Confidence: high
 
 9. **Rocking.** While a unit with the driving or naval locomotor rocks, its body transform is built
@@ -239,11 +236,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    never a slope, and a hovering unit shows no slope tilt while it rocks (claim 5). That a rocking
    body of the driving or naval locomotor is drawn fresh is S-0105 claim 26's claim (claim 13 for
    the other locomotors); this claim adds only that the tilt of *p* stays in the transform.
-   - Backing: `measurable` for driving (T2's rocking part). The naval case, and the
-     exclusion of slope tilt while hovering or jumpjet units rock, are `unmeasured`: T2
-     rocks only a driving vehicle, and T9 rocks the other subjects only on flat ground.
-     Retaining an intermediate tilt while rocking is `unmeasured`: no scenario here
-     combines rocking with a running transition. Exact composition belongs to the vehicle specs.
+   - Backing: `measurable` (T2's rocking part and T11's rocking part) for driving,
+     naval, hovering and jumpjet cases, including rocking during a transition.
+     Exact pitch/roll composition remains outside this claim and belongs to the vehicle specs.
    - Confidence: medium
 
 10. **No per-type opt-out.** The vehicle types' imported tilter flag is read (Import mapping) but
@@ -255,8 +250,8 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
 
 ### Shadows
 
-11. **Shadow tilt.** For every locomotor, whenever a voxel shadow is drawn, the shadow transform
-    *S* of S-0105 claim 30 is *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>), where *s* is the slope
+11. **Shadow tilt.** For every locomotor, whenever a voxel shadow is drawn, the transform of its
+    unmasked footprint, *S* of S-0105 claim 30, is *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>), where *s* is the slope
     shape of the cell that contains the unit's centre (its height ignored), taken at the moment of
     the draw: there is no transition, and the unit's own tilt state is not used. So the shadow of a
     walking, teleporting or powered hovering unit on a slope is tilted although its body is not,
@@ -265,6 +260,11 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
     shape. One exception: an aircraft with the flying locomotor whose type has the dropship flag
     (Import mapping) always gets the flat shadow (*s* taken as 0). For aircraft, which of the
     aircraft's facings gives *θ*<sub>body</sub> belongs to the aircraft specs (Open questions).
+    These tilt assertions describe the unmasked footprint, not every darkened screen pixel.
+    A fresh vehicle shadow excludes its completed own-part image; a reused one retains the
+    exclusions from the image that made it (S-0105 claim 39), which can reflect an earlier pose
+    or another object of the same type and key. This spec changes neither that exclusion rule
+    nor its switch `quirks.voxel_shadow_cached_cutouts`, owned by S-0105.
     - Backing: `measurable`: scenario T4 for the driving, teleporting, hovering, jumpjet, flying
       and rocket locomotors, T6 for the walking, mechanical walking, drop-pod, tunnelling and naval
       locomotors, T3 for the shadow during a transition and T8 for the dropship exception
@@ -275,7 +275,7 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
 12. **Shadow images and the cache.**
     - **Ramp state of the shadow.** The ramp state in a shadow's image-cache key (S-0105 claim 31)
       is the *s* of claim 11, for every locomotor (always 0 for an aircraft with the dropship
-      flag). So a shadow footprint made on flat ground is never reused on a slope.
+      flag). So an unmasked shadow footprint made on flat ground is never reused on a slope.
       - Backing: `measurable` (scenario T3 and T6: a shadow already made on flat ground at the
         same facing must not reappear on a slope)
       - Confidence: high
@@ -292,15 +292,15 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
       locomotor, whose shadow stays cached while it rocks), so S-0105 claim 33's statement about
       stock play still holds; the unsettled-shadow case needs data that gives the depth-buffer
       option to a vehicle with one of those locomotors.
-      - Backing: `unmeasured`. With the ramp state in the key as above, the key covers every input
-        of the footprint, so a fresh and a reused shadow have the same pixels (S-0105 claim 31).
-        With `quirks.depth_mode_leak` on (the default), the only observable difference is the
-        side effect of a fresh shadow of a depth-option type (S-0105 claim 32). Whenever a shadow
-        is unsettled this way, the same unit's body, turret and barrel are drawn fresh as well
-        (S-0105 claim 26, and claim 13 here), and a fresh draw of a depth-option part closes the
-        window again. Whether the window reaches another
-        object's draw therefore depends on a draw order within and across objects that no spec
-        fixes yet (S-0105 claim 33).
+      - Backing: `measurable` for hovering, driving and naval shadow freshness and
+        non-retention through own-image exclusions (T10's rocking, transition and return
+        parts). The key covers every input of the unmasked footprint, so fresh and reused
+        unmasked footprints have the same pixels, but their vehicle own-image exclusions
+        can differ (S-0105 claims 31 and 39). Exemption from an original cache-miss skip
+        remains `unmeasured`: the skip's enabling condition is unknown in S-0105, so
+        no practical comparison can force that condition while changing only settledness.
+        Depth-mode effects are S-0105 claims 32 and 34's measurable rules; no claim here
+        predicts which other object's draw falls within a window.
       - Confidence: high
 
 13. **Fresh bodies of other locomotors.** Besides the driving and naval cases of S-0105 claim 26,
@@ -364,16 +364,15 @@ level in leptons. The exact arctangents would be 29.88° and 22.11°. The tilt o
 claim 4 (29.3115°, 21.3574°) differs again from *τ* because the three rotations are made with table
 trigonometry. Constants table C4 gives the resulting matrices.
 
-**F3. Interpolated tilt (claim 7).** With *q*<sub>0</sub> = *q*<sub>s<sub>p</sub></sub>,
-*q*<sub>1</sub> = *q*<sub>s<sub>c</sub></sub> (table C3) and *t* = *p* stored in single precision:
+**F3. Interpolated tilt (claim 7).** Let *q*<sub>0</sub> = *q*<sub>s<sub>p</sub></sub>, *q*<sub>1</sub> = *q*<sub>s<sub>c</sub></sub> (table C3), and *t* = *p* stored in single precision. Let *δ* be the four-component dot product *q*<sub>0</sub> · *q*<sub>1</sub>, stored in single precision. Define the interpolation weights by
 
-> *δ* = *q*<sub>0</sub> · *q*<sub>1</sub> (four-component dot product, stored in single precision)
+> *(*k*<sub>0</sub>, *k*<sub>1</sub>)* = (*1 − t*, *t*) when *1 − δ ≤ 10⁻⁵*,
 >
-> (*k*<sub>0</sub>, *k*<sub>1</sub>) = (1 − *t*, *t*) when 1 − *δ* ≤ 10⁻⁵
+> otherwise, let *θ* = acos<sub>t</sub>(*δ*) and set
 >
-> (*k*<sub>0</sub>, *k*<sub>1</sub>) = (sin((1 − *t*)·*θ*) / sin *θ*, sin(*t*·*θ*) / sin *θ*), with *θ* = acos<sub>t</sub>(*δ*), when 1 − *δ* > 10⁻⁵
+> *k*<sub>0</sub> = sin((*1 − t*)·*θ*) / sin *θ*,   *k*<sub>1</sub> = sin(*t*·*θ*) / sin *θ*.
 >
-> *q* = *k*<sub>0</sub>·*q*<sub>0</sub> + *k*<sub>1</sub>·*q*<sub>1</sub>, each component stored in single precision, not renormalised.
+> The interpolated orientation is *q* = *k*<sub>0</sub>·*q*<sub>0</sub> + *k*<sub>1</sub>·*q*<sub>1</sub>, with each component stored in single precision and without renormalisation.
 
 The sines are table sines (S-0105 F1). acos<sub>t</sub>(*x*) = π/2 − *S*(⌊2048(*x* + 1)⌋), with π/2
 in double precision, where *S*(*m*), for *m* = 0 … 4096, is the exact arcsine of *m*/2048 − 1
@@ -503,8 +502,9 @@ which does not give exact zeros at multiples of π/2 (S-0105 F1). They are part 
 
 ## State and ordering
 
-Tilt state of a unit with a tilting locomotor (claims 6 to 8). *σ* is the slope shape of the cell
-that contains the unit's centre.
+Ground-layer tilt state of a unit with a tilting locomotor (claims 6 to 8), excluding
+stationary cell-shape changes and multiple-border crossings left open below.
+*σ* is the slope shape of the cell that contains the unit's centre.
 
 | State | Event | Result |
 |---|---|---|
@@ -516,23 +516,27 @@ that contains the unit's centre.
 Rocking (claim 9) is not part of this state: the rows hold whether or not the unit rocks. A body
 is *settled* in S-0105's sense when no transition is running and it does not rock.
 
-**Observable consequence:** If a unit's centre crosses two cell borders within one tick,
-the slope shape in the intervening cell has no effect on its tilt state. Backing: `unmeasured`:
-ordinary stock speeds do not produce this crossing, and no scenario here forces it. Confidence: high.
+The table specifies the shape observed at a tick, not the sampling of an unobserved cell
+crossed between ticks. Multiple-border crossings are left open below. Backing and confidence
+for the table are those of claims 6 and 7.
 
 ## Edge cases and quirks
 
 All switches default to the original behaviour.
 
 - **`quirks.slope_tilt_angles`.** Original: edge slopes tilt the body by 29.3115° and corner and
-  valley slopes by 21.3574° (claim 4), steeper and shallower than their surfaces as drawn. Fixed:
-  each shape tilts the body to the angle of its surface as drawn (Terms, level height in model
-  units). *R*<sub>s</sub> and *q*<sub>s</sub> are built exactly as in F2 and C3, with the same
+  valley slopes by 21.3574° (claim 4), steeper and shallower than their surfaces as drawn.
+  Proposed fixed behaviour, pending the lead choice below: each shape uses its surface's
+  nominal drawn angle (Terms, level height in model units). This is a nominal input angle,
+  not a promise of an exact final up-axis angle after table trigonometry.
+  *R*<sub>s</sub> and *q*<sub>s</sub> are built exactly as in F2 and C3, with the same
   *α*<sub>s</sub>, the same table trigonometry and the same single-precision stores, but with
   *τ* = arctan(1/√6) (0.38759669 rad, 22.2077°) for shapes 1 … 4 and *τ* = arctan(1/√3) = π/6 rad
   (30°) for shapes 5 … 16, both taken exactly in double precision instead of from the table
-  arctangent. Lean directions, transitions and shadows are unchanged. Whether the fixed angles
-  should instead be the arctangents in leptons is a Question for the project lead.
+  arctangent. Shapes 0 and 17 … 20 stay untilted. The same replacement *R*<sub>s</sub>
+  is used for shadows under claim 11: the shadow-tilt rule and transition duration do not
+  change, but the body and shadow angles both change. This paragraph is a proposal,
+  not a resolved design choice; the lepton-space alternative remains with the project lead.
 - **`quirks.negative_level_floor_raised`.** Original: below level 0 the surface is 1 lepton higher
   than 104ℓ (claim 3). Fixed: *B*(ℓ) = 104ℓ for every level.
 - **`quirks.tilt_transition_restart_jump`.** Original: a shape change during a transition restarts
@@ -570,8 +574,9 @@ Game speed 2, resolution 800 × 600, director and mods off except for the explic
 test data. The observed area is the test cells and routes; one bystander computer player is kept
 outside it, with the glossary's void rule. Manual play or scripted input and tick-indexed image
 capture are used; no change to a harness is required by this spec.
-*Runs:* 1 per scenario, except T6 uses one run per named locomotor. Every comparison is made against values that this spec gives for what the
-same run records (positions, cells, facings, ticks), so a second run would test nothing new. Where
+*Runs:* one per scenario part and control, except T6 uses one per named locomotor,
+T11 uses one per tested pair or locomotor, and T12 one per locomotor and shape pair. Repeat only void
+or inconclusive runs. Every comparison uses the recorded positions, cells, facings and ticks. Where
 an event that a scenario needs may fail to happen, the scenario says what is recorded instead.
 
 *Renders* below are golden images made with S-0105's pipeline and the transforms of this spec at
@@ -582,6 +587,11 @@ render, but with *τ* = arctan(104/256) for shapes 1 … 4 and *τ* = arctan(208
 5 … 16). A *C4 shadow render* is
 S-0105 claim 30's footprint with *S* = *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>). The *flat image*
 of a unit is its capture on flat ground at the same facing.
+
+Shadow shape comparisons in T3, T4, T6 and T7 use that unmasked footprint only as the set
+of potential shadow pixels. Golden images also apply S-0105 claim 39's vehicle own-image
+exclusions, including retained exclusions when reused; screen darkening follows S-0102.
+A missing or retained pixel explained by those rules does not falsify the slope transform.
 
 **T1. Surface height (claims 1 to 3).**
 - *Setup:* a map with one cell of each slope shape 1 … 20 at height level 2, each surrounded by
@@ -685,11 +695,11 @@ of a unit is its capture on flat ground at the same facing.
   The yes-flag vehicle is a control against a failed slope setup, not a pixel-for-pixel comparison
   between two different models.
 
-**T6. Locomotors that stock data gives to no voxel unit (claims 5, 6 and 11).**
+**T6. Test locomotor assignments and naval transitions (claims 5, 6 and 11).**
 - *Setup:* the map of T1 and the route of T3. Named test data: for each run, a test-map override
   section sets the locomotor field of one stock voxel vehicle type that has the driving locomotor
-  to another locomotor, in turn walking, mechanical walking, drop-pod, tunnelling and naval, and
-  changes nothing else. In each run the map places vehicles of that type on a shape-1 cell, on a
+  to another locomotor, in turn walking, mechanical walking, drop-pod, tunnelling and naval.
+  Apart from the naval legality controls below, it changes nothing else. In each run the map places vehicles of that type on a shape-1 cell, on a
   shape-5 cell and on flat ground, each at body facings 0 and 8.
 - *Procedure:* capture every placed vehicle after placement. Naval run: a further vehicle of the
   type drives T3's route, captured on every tick. Tunnelling run: the vehicle on the shape-1 cell is
@@ -713,10 +723,12 @@ of a unit is its capture on flat ground at the same facing.
 - *Falsified if:* a walking, mechanical walking or drop-pod body is tilted; a drawn shadow is flat
   on a slope cell; the naval vehicle is placed flat on a slope or its route differs from T3; the
   tunnelling vehicle is placed flat on a slope, shows a slope tilt while digging or surfacing, or passes through intermediate tilts after surfacing.
-- *If a run cannot be made:* if the game refuses to place a vehicle with a locomotor that its
-  type's other fields do not expect, or a vehicle with the naval locomotor does not move over land,
-  record that. The rows of claims 5 and 11 for that locomotor then rest on the reading of the
-  original alone, and their confidence drops to medium.
+- *If a run cannot be made:* if the game refuses placement or movement, record that as
+  inconclusive, not confirmation. For the naval run, named test-map data also gives the
+  subject the amphibious movement zone and a nonzero land multiplier on the route's land
+  type, without changing its naval locomotor. Verify placement and movement before judging
+  tilt. If these controls still cannot make the required pose, that locomotor's affected
+  subclaim is `unmeasured` for the demonstrated setup limitation, with medium confidence.
 
 **T7. A powered-down hovering unit (claim 5).**
 - *Setup:* the map of T1. A house owns the building on which a stock voxel hovering vehicle type
@@ -755,18 +767,141 @@ of a unit is its capture on flat ground at the same facing.
   gets a single-section test body model with normal mode 1, filled with voxels of normal index 85
   and one colour index *χ*, and keeps caching on, so its body pixels show whether each image is
   fresh (it follows P) or reused (it keeps the row it was made with).
-- *Setup:* a flat test map with P and three subjects, each given the test model by named test
-  data: a stock voxel hovering vehicle type, a stock voxel vehicle of a jumpjet type, and the
-  tunnelling vehicle of T6. Nothing else on the map is drawn as a voxel model.
-- *Procedure:* P turns back and forth without stopping. The hovering vehicle and the jumpjet are
-  each hit by a stock weapon whose warhead rocks its target, and the tunnelling vehicle is ordered
-  to a cell far enough away that it digs in. One capture per drawn frame.
+- *Setup:* a flat test map with P and subjects, each given the test model by named test
+  data: a stock voxel hovering vehicle type, a stock voxel vehicle of a jumpjet type,
+  the tunnelling vehicle of T6, and separate driving and naval subjects. The naval subject
+  uses T6's legality controls. Nothing else on the map is drawn as a voxel model.
+- *Procedure:* P turns back and forth without stopping. The hovering, jumpjet, driving
+  and naval subjects are each hit by a stock weapon whose warhead rocks its target.
+  The tunnelling vehicle is ordered far enough away that it digs in. Driving and naval
+  subjects also traverse T11's slow shape-pair route while P keeps turning. One capture
+  per drawn frame. Use a separate run for each subject and a cache-disabled subject control.
 - *Observable:* the palette index of each subject's body pixels, drawn frame by drawn frame, against P's.
-- *Expected:* while a subject visibly rocks or changes its digging pitch, its body's row follows
-  P's row (allowing one drawn frame of lag): each image is fresh. Once it is still again, its row
-  stops following P.
-- *Falsified if:* a subject's row stays fixed while the subject visibly rocks or changes pitch.
-  (A subject that does not rock when hit tests nothing, and that is recorded.)
+- *Expected:* while a subject visibly rocks, changes digging pitch, or runs a driving/naval
+  tilt transition, its body's row follows P's row (allowing one drawn frame of lag): each
+  image is fresh. Once settled at a previously captured facing, shape and HVA frame,
+  its row no longer follows P. The cache-disabled control keeps following P.
+- *Falsified if:* a subject's row stays fixed while it visibly rocks, changes digging
+  pitch or runs a verified tilt transition, while the cache-disabled control follows P.
+  No rocking when hit, indistinguishable probe rows or no accepted movement tests nothing
+  for that part and is recorded as inconclusive.
+
+**T10. Hovering-shadow freshness (claim 12).**
+- *Setup and procedure:* run S-0105 MS-27's hovering hole-to-filled reuse comparison and
+  its cache-disabled control, using its named two-frame test body and unchanged shadow key.
+  Use that scenario's skirmish setup, speed index 2 and bystander void rule at 800 × 600.
+  Body caching is disabled, shadow caching enabled except in the fresh-shadow control.
+  After the filled frame appears, cause the hovering unit to rock without changing the
+  body frame, body facing or ramp shape. One run and its control, with tick-indexed captures.
+- *Observable:* the qualifying own-body overlap pixel, the frame's asymmetric marker and
+  visible rocking. Confirm that the shadow key and filled frame remain unchanged.
+- *Expected:* before rocking, the newly filled pixel is darkened by the retained shadow
+  cutout pattern. While rocking, it is undarkened, matching the fresh-shadow control:
+  the shadow now excludes the current completed own-part image.
+- *Driving/naval rocking parts:* repeat with a driving vehicle, then T6's naval subject,
+  on flat ground and settled shape 1. Use the same two-frame model, body-cache-disabled
+  setting, frame marker and fixed facing. Judge only pixels that remain within the
+  unmasked footprint and current own image during the recorded rocking pose.
+- *Transition part:* use T11's driving and naval routes. Before travel, a separate
+  same-type vehicle settled on the destination shape makes a frame-0 shadow there.
+  Verify that a frame-1 subject settled on that shape at the same facing inherits the
+  old cutout, then have another frame-1 subject enter that shape in a transition.
+  Expected: throughout its transition, qualifying filled pixels match the fresh-shadow
+  control rather than the preloaded cutout, despite the matching shadow key.
+- *Return part:* after rocking or the transition ends, make a non-rocking frame-1
+  subject use the same key again. Expected: it recovers the old frame-0 cutout, not the
+  transient fresh exclusion. This tests that the unsettled shadow did not replace the
+  stored image. Verify the original cutout on a settled control before and after.
+- *Falsified if:* cached darkening continues during verified rocking or a transition
+  with unchanged frame and matching shadow key; or the settled return shows the
+  transient exclusion although the settled controls still show the old cutout.
+  A changed key, invalidated cache, absent rocking, wrong frame, or absence of a
+  qualifying overlap pixel voids that part. In the cache-disabled control, each judged
+  pixel must be undarkened; otherwise the overlap or scene-depth setup is invalid.
+- *Empty-key part:* in a separate program run, let a frame-0 subject first use a shadow
+  key only while unsettled. After it settles, a frame-1 subject uses that key at the
+  same facing and shape. Expected: its qualifying filled pixel is undarkened once the
+  settled shadow appears, since no transient frame-0 cutout was stored. Darkening by
+  that frame-0 cutout falsifies non-storage. Record a skipped first settled appearance
+  separately; it does not test the unknown miss-skip rule.
+
+**T11. Shape-pair transitions, restarts and rocking (claims 6, 7 and 9).**
+- *Setup:* named test files are copies of theater tile files whose plain tile cells
+  differ only in their slope codes. Use otherwise passable terrain at a common height
+  level, outside the theater's ramp-smoothing ranges, so traffic does not replace the
+  test shapes. The deliberately mismatched artwork is not a surface-height test.
+  Record the loaded shape of each route cell. Use a long asymmetric voxel body, no
+  turret, and two locomotor runs: driving and naval, with T6's naval legality controls.
+- *Pair part:* drive across a border from a settled shape to another, allowing at
+  least 3 ticks on each side. Cover every ordered pair of distinct shapes 0 … 20,
+  including 5 to 9, whose orientations coincide. Record centre cell, facing, tick,
+  body and shadow in every drawn frame. Expected: F3 at fractions 0, 1/3 and 2/3,
+  then F2's destination tilt, with immediate destination shadow tilt. For 5 to 9 the
+  near-equal interpolation case is used, not an angular sweep. Any different visible
+  pose or duration falsifies the corresponding pair. Identical pixels cannot decide
+  between different arithmetic yielding that image.
+- *Restart part:* use consecutive shapes 0, 1 and 4. Named test-map data increases
+  only the subject's speed until the recorder verifies that entry into shape 4
+  follows entry into shape 1 by 1 or 2 ticks. Start settled on shape 0. Expected:
+  on the second crossing, the body shows the orientation of shape 1, not the
+  partially tilted flat-to-1 pose. It then follows F3 from 1 to 4 for a new 3-tick
+  transition. Falsified by a continuous continuation from the interrupted pose,
+  or by retaining the first transition's settling deadline. If the required
+  crossings are not achieved, record the actual intervals and do not judge restart.
+- *Rocking part:* on shape 1 and on flat ground, compare driving and naval subjects,
+  a powered-down hovering subject, and a jumpjet subject. A named test-map weapon
+  rocks the subjects with a small amplitude, without moving or destroying them.
+  The recorder reads pitch and roll in radians as well as positions and tick numbers.
+  Judge captures with a verified angle at least 0.005 radians and both absolute
+  angles at most 0.01 radians. Use matching flat-ground controls at those angles and
+  facings, and calibrated long-axis features to separate a slope-sized bias from
+  the small rocking. Expected: driving/naval keep the approximately 29.31° slope
+  bias in their up axes, whereas hovering and jumpjet match the flat-ground rocking
+  control with no slope-sized bias. During a driving/naval flat-to-1 transition,
+  arrange a hit so small rocking is still present at fraction 1/3 or 2/3. Expected:
+  the up-axis bias is approximately 9.76° or 19.60°, respectively, not zero or the
+  full 29.31°. A discrepancy exceeding 2° after projection calibration falsifies
+  the appropriate inclusion/exclusion rule. This tolerance tests presence of slope
+  tilt, not exact composition of pitch and roll. No qualifying amplitude, missed
+  timing, rejected placement or a control that cannot resolve 2° makes that part
+  inconclusive, not confirmation. Scripted input can time the hit; it never writes the rocking state.
+
+**T12. Equal-transform reuse classes (claim 8).**
+- *Setup:* use S-0105 MS-17's named body and shade probe P. The subject's body uses
+  normal mode 1, with out-of-table normal index 85 and colour index χ. P disables
+  caching and sets that index's shade at fixed facing 8 or 16. Verify that these
+  two probe facings give distinguishable palette rows before judging any result.
+  Choose χ so its two rows remain distinguishable after the scene's palette treatment.
+  Start with shape 5 and shape 9, supplied by T11's named tile files. Repeat for
+  pairs 6/10, 7/11 and 8/12, and for every pair of distinct shapes among 0 and
+  17 … 20, whose fixed transforms also coincide. Keep the
+  subject's body facing, HVA frame and alternative-model state unchanged in judged
+  captures. Test driving, naval, surface-state tunnelling and powered-down hovering
+  subjects; also test untilted walking, mechanical walking, drop-pod, teleporting,
+  jumpjet and powered hovering subjects, in separate runs. Use T6's locomotor overrides
+  and placement controls where needed.
+- *Procedure:* place two same-type subjects, one on shape 5 and one on shape 9,
+  far enough apart that their images cannot be drawn in the same view. With P at
+  facing 8, view and capture only the settled shape-5 subject, making an image with
+  row A. Turn P to facing 16 and verify its new row B. Remove P from the view before
+  each judged subject capture, so it cannot obscure that subject's shade effect.
+  Pan to reveal the shape-9 subject for the first time, then return to shape 5.
+  No subject need move; this also permits powered-down hovering and drop-pod tests.
+  A recorder verifies the common facing and HVA frame. Run a cache-disabled control.
+- *Observable:* subject body palette indices, P's stable row, body facing and frame,
+  loaded shape, and settledness. For a repeated pair, replace shape 5 and shape 9
+  below by that pair's first and second shapes.
+- *Expected:* tilting subjects show A on the first shape-5 capture, B on settled
+  shape 9, and A on returning to shape 5. Thus identical transforms still have
+  different reuse classes. Every untilted subject keeps A on both shapes: its
+  body has no shape component in reuse. Every cache-disabled control follows
+  B once P changes, on either shape.
+- *Falsified if:* a settled tilting subject keeps A on shape 9 with the unchanged
+  inputs, or an untilted subject instead adopts B there. A return that adopts B
+  while an independent same-key settled control still shows A also falsifies reuse.
+  A changed body frame/facing, global invalidation, loss of the powered-down/surface
+  state, inability to return with the same key, or indistinguishable rows makes
+  that part inconclusive, not evidence for either reuse rule.
 
 ## Open questions
 
@@ -779,9 +914,11 @@ of a unit is its capture on flat ground at the same facing.
 - Which events switch a hovering unit off and on, which height its powered test uses, and which
   states of the tunnelling locomotor count as its surface state (claim 5). This belongs to the
   vehicle specs.
-- Whether a unit on a high bridge deck is tilted by the slope shape of the ground cell under the
-  deck. The tilting locomotors take the shape of the cell that contains the unit's centre, which
-  for a deck cell is the ground cell below it. No scenario here tests it.
+- Whether a stationary unit reacts to a change of its cell's slope shape, and whether
+  a unit on a high bridge deck tilts to the ground cell below it. These cases are not
+  fixed by claim 6 or the state table in this revision.
+- Whether a cell crossed between two recorded ticks can affect tilt when a unit crosses
+  multiple borders in one tick. No rule for that sampling is asserted here.
 - Whether any sloped cell exists that a ship can enter with stock data. If none does, a ship's tilt
   state never leaves flat in stock play, and only T6's test data shows claim 6 for the naval
   locomotor.
