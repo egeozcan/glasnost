@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -181,10 +181,17 @@ are out of scope.
    turn. S-0406 claim 15 owns construction handover: in uninterrupted play a zero-delay range
    hands over one tick after the first construction processing, including the default range of a
    type without a build-up sprite. For the positive-delay multi-stage case, handover occurs on the
-   report tick. The first construction processing's relation to placement or deploy, positive-delay
-   single-stage ranges and non-positive stage counts remain unresolved; the expression above is
-   not a duration measured from placement. Selling
-   replays the same *n* build-up frames at the same delay, backwards except for gates (claim 4). The construction delay is never
+   report tick. S-0406 claim 17 gives the first construction processing relative to placement or
+   deploy. In uninterrupted play a placed building with at least 2 stages and positive delay shows
+   its build-up twice: stage 0 appears again one tick after the first completion report, and
+   handover follows the second run (`quirks.placed_buildup_twice`, owned by S-0406). From placement
+   tick *T*, the restart is at *T* + (*n* − 1) × *d_b* + 1 and handover is at
+   *T* + 2(*n* − 1) × *d_b* + 1. Positive-delay ranges with one stage or fewer never report
+   completion (S-0406 claim 18, including `quirks.single_stage_buildup_never_completes`).
+   Selling uses the same range and delay, backwards except for gates (claim 4), but need not play
+   the full range: a type naming a vehicle to pack into, without a guard spot, can complete on
+   advancing stage 23 before the last stage (S-0408 claim 17). That claim owns sale completion
+   timing; no build-up sprite uses S-0408 claim 4 instead of a build-down. The construction delay is never
    game-speed normalised when the state is entered (but see claim 6 for the wrap).
 
    The construction range is set whenever the build-up sprite is loaded, with *B* as it is held at
@@ -202,9 +209,9 @@ are out of scope.
    build-up. When the file does not resolve, the building has no build-up sprite (S-0007 claim 12),
    and the range keeps its earlier value.
    - Backing: `measurable` (B1 for positive-delay ordinary build-up, B13 for gates, B19 for
-     theater-flag build-up; S-0406 PL11 a to c for report-to-handover timing and zero-delay
-     completion). Positive-delay single-stage and non-positive-count completion remain
-     `unmeasured`: their stage/report behaviour is unresolved. Failed reload retaining the range
+     theater-flag build-up; S-0406 PL11 a to f for placement/deploy timing, the two placed
+     build-up runs, zero-delay completion and ranges that never complete; S-0408 S10 for
+     stage-23 sale completion). Failed reload retaining the range
      is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
    - Confidence: high (the delay), medium (the exact tick of the switch to the body sprite, and the
      theater-flag rule, which stock data does not use)
@@ -517,10 +524,10 @@ are out of scope.
     undamaged building requests frame 0. With *D* = 0 both request frame 0. The door image is drawn at the image
     anchor of claim 8 with the depth bias of S-0102. Outside unloading, and for a building without
     a door sprite, no door image is drawn.
-    **Joint hand-off requirement.** S-0102's Terms must define the door sprite as drawn throughout
-    unloading, including the closed state; its current definition excludes closed. Its claim 13
-    already describes the object-pass door image as drawn while unloading. Hand off that Terms
-    correction with this claim, without changing its depth rule.
+    **Joint hand-off confirmation.** S-0102's current Terms already define the door sprite as
+    drawn throughout unloading, including the closed state, and its claim 13 describes the
+    object-pass door image while unloading. Hand off mutually consistent revisions together,
+    without changing the depth rule.
     - Backing: `measurable` (B10 for presence throughout unloading and absence outside it).
       The positive-stage frame rule and damaged-door variant are `measurable` (B10).
       Non-positive stage counts and negative or high out-of-range door frames are `measurable`
@@ -860,17 +867,20 @@ expected numbers are computed from the type's own fields at measurement time.
     build-up frame is shown, the build-up frame sequence while selling, and whether the invisible
     type shows any body, bib or shadow.
   - Runs: one per building and speed.
-  - Expected: (*n* − 1) × trunc(*B* × 900 / *n*) ticks after the first construction processing
-    for uninterrupted play (S-0406 claim 15), the same tick count at both speeds. Each build-up frame before the last is shown for
-    trunc(*B* × 900 / *n*) ticks as F1 computes it. Selling shows the build-up frames from last to first
-    at the same delay. The invisible type shows no body, bib or shadow, but its slot animations
-    appear.
-  - Falsified if: the pre-last-frame periods depend on game speed or differ from F1, selling
-    plays forwards, or the invisible type shows any body, bib or shadow or hides its named slot.
-    Record the first construction processing separately from placement; their relation remains
-    unresolved in S-0406. The test
-    does not by itself discriminate arithmetic rounding unless the imported *B* and sprite
-    count give different integer delays under the two modes.
+  - Expected: with *d_b* from F1 and placement tick *T*, the last stage first appears at
+    *R* = *T* + (*n* − 1) × *d_b*. Stage 0 reappears on *R* + 1, the first construction
+    processing tick, and the body sprite appears at *T* + 2(*n* − 1) × *d_b* + 1 in
+    uninterrupted play (S-0406 claims 15 and 17). Both speeds give the same tick counts.
+    Each pre-last stage lasts *d_b* ticks in each run; the first run's last stage shows for
+    one tick only. Selling runs backwards at the same delay until completion under S-0408
+    claim 17, including its stage-23 exception for a packing-capable type without a guard spot.
+    The invisible type shows no body, bib or shadow, but its slot animations appear.
+  - Falsified if: placement shows only one build-up run, the restart or handover differs from
+    those ticks, the pre-last-frame periods depend on game speed or differ from F1, selling
+    plays forwards or continues beyond its specified completion, or the invisible type shows
+    any body, bib or shadow or hides its named slot. Record placement, the first report and
+    the restart separately. The test does not by itself discriminate arithmetic rounding unless
+    the imported *B* and sprite count give different integer delays under the two modes.
 - **B2 (claims 2, 12).**
   - Setup: one building with slot animations that have damaged names, one occupiable building with
     occupied-variant slot animations, a weapon of known damage, and repair available.
@@ -1162,28 +1172,27 @@ expected numbers are computed from the type's own fields at measurement time.
     count produces a request other than the stated 0 or −2, the unmarked damaged copy gains a
     damage term, or the count-10 frames differ from F8.
 
-Construction report-to-handover timing and zero-delay completion in claim 5 use S-0406
-scenario PL11 a to c, including its setup, read-only per-tick observables and falsification
-criteria. Positive-delay single-stage runs there are exploratory, not a completion prediction.
+Construction timing in claim 5 uses S-0406 scenario PL11 a to f, including its setup,
+read-only per-tick observables and falsification criteria: placed buildings show two runs,
+deployed buildings restart at their first construction processing, zero-delay ranges complete,
+and positive-delay ranges of one stage or fewer never complete. Stage-23 sale completion uses
+S-0408 scenario S10, with its setup, observables and falsification criteria.
 
 The free-unit effect of claim 11 is measured by S-0402 scenario H13, parts a to f, with that
 scenario's setup, observables and falsification criteria; no separate unit-placement rule is
 specified here.
 
-## Cross-spec changes required at joint hand-off
+## Joint hand-off consistency
 
-- **S-0102, Terms, door sprite:** replace its opening/open/closing-only description with
-  visibility throughout unloading, including closed, citing claim 23 here. Its claim 13 depth row
-  stays unchanged. This is a required correction to the current approved and working-draft Terms.
+- **S-0102, Terms, door sprite:** the current definition agrees with claim 23: visibility
+  throughout unloading, including closed. Hand off consistent revisions of both specs together.
+  No Terms correction or depth-rule change is needed.
 
 ## Open questions
 
 - Which behaviours put a building into the *active*, *full*, *aux-1* and *aux-2* states, and when
   the *pre-production*, *production*, *special* and *upgrade* slots start, is for the production,
   repair and upgrade specs. Only the image-frame mechanics are fixed here.
-- S-0406 claim 15 owns construction handover, including zero-delay completion. Its Open
-  questions retain the relation of first construction processing to placement or deploy and
-  positive-delay single-stage/non-positive-count cases; claim 5 here does not resolve them.
 - S-0405 claim 5 identifies the drain blackout of claim 14. A separate special-outage slot
   measurement during that blackout remains wanted.
 - Types marked as laser-fence posts or firestorm-wall sections take their body frame from a
