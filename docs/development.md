@@ -273,6 +273,8 @@ Combat lives in `glasnost_sim::combat`, driven from the tick pipeline and the be
 - **Seams.** Not modelled yet, each left where its topic plugs in: garrisons and bunkers, transports and open-topped passengers, cloaking and disguise, berserk, mind control, spawned aircraft and flight (`weapon::in_air` is false), parasites, crates, bridges (deck damage), smudges, particles, animation playback (a weapon that waits for an animation detonates at once), sides (no survivors are created; the crew type is the technician), the production cost factors (1.0), the map's inert and harvester-immune flags, turret-locked weapons (not imported), the weapon cursor flags of S-0214 rows I17 and I18, and economy, production, power and shroud (S-04xx, M5). Where a behaviour or combat rule asks an M5a topic (slave miners and the harvesters' guard rules of S-0402, available credits and payment of S-0404, short of power of S-0405, adjusted cost and refund of S-0408, the defeated state of S-0414), it calls `glasnost_sim::seams`. The harvesters' guard rule, short of power, available credits, payment, the adjusted cost, the refund and the defeated state are connected to their M5a topics; the slave group's parts answer "the other topic's condition does not hold" until their topics fill them in.
 - **Claim ledgers.** `docs/m4-claims/S-03xx.md` lists every claim of each combat spec as tested, seam, partly or not implemented, with the tests that check it (`crates/deterministic/sim/tests/claims_s03*.rs`, each citing `// spec: S-xxxx claim N`). `testkit::combat_ruleset` and `testkit::game_with` give the invented combat ruleset and an empty-map game for such tests.
 
+Q-0236 is answered by S-0312 claim 16: a killed aircraft with an empty explosion list shows no animation and takes no draw (`combat::death::kill`).
+
 Q-0230 and Q-0237 are answered by S-0307 claims 21 and 25: an outside-area alternative fails a non-winged actor's clear-cell region test, a *winged* actor's clear-cell test accepts without the occupancy, region, land and wall tests (`combat::range::approach_search`), and after the close-range shortcut an actor of any locomotor but walking gets only the destination (`approach::shortcut`).
 
 Provisional rules of combat, each tied to a request:
@@ -280,7 +282,6 @@ Provisional rules of combat, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
-| `combat::death` (aircraft) | a killed aircraft whose type has an empty explosion list shows no animation and takes no draw (S-0312 claim 16 leaves it unknown) | Q-0236 |
 
 ## Simulation (M5a: economy and base building)
 
