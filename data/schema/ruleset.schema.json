@@ -5984,6 +5984,11 @@
           "type": "boolean",
           "default": true
         },
+        "damaging_entry_cursor_retained": {
+          "description": "Hovering an engineer over a building above its capture threshold retains the preceding cursor; off: it uses the capture cursor of table C.",
+          "type": "boolean",
+          "default": true
+        },
         "death_weapon_unplaced_projectile": {
           "description": "The death weapon's projectile tests use its unplaced default position.",
           "type": "boolean",
@@ -6126,6 +6131,11 @@
         },
         "elite_occupant_skips_occupy_weapon": {
           "description": "An elite occupant without an elite occupying weapon fires its own primary.",
+          "type": "boolean",
+          "default": true
+        },
+        "empty_box_release_click": {
+          "description": "An unmodified band box with no live screen candidate falls through to a click at its release pixel; off: it clears the selection.",
           "type": "boolean",
           "default": true
         },
@@ -6899,8 +6909,23 @@
           "type": "boolean",
           "default": true
         },
+        "teleport_aircraft_ground_reservation": {
+          "description": "A teleporting aircraft reserves its landing cell's ground object-present flag, keeps it through deck placement and clears only actual deck occupancy on removal; off: reserve and clear only the eventual landing layer.",
+          "type": "boolean",
+          "default": true
+        },
+        "teleport_infantry_ground_reservation": {
+          "description": "A teleporting infantry unit's ground standing-position reservation is left behind by deck placement, and a later destination choice clears by its actual position and height; off: the reservation moves to the actual landing surface at the jump.",
+          "type": "boolean",
+          "default": true
+        },
         "teleport_infantry_negative_level_entry": {
           "description": "A teleporting infantry unit's landing entry check takes a cell at terrain level −6 or lower as clear without testing terrain or occupants; off: the ordinary landing entry check applies.",
+          "type": "boolean",
+          "default": true
+        },
+        "teleport_vehicle_ground_reservation": {
+          "description": "A teleporting vehicle reserves the ground record of its landing cell even on a high bridge, remembers that point for later clearing and keeps the ground reservation through deck placement, which also marks deck; off: reserve and clear the eventual landing layer only.",
           "type": "boolean",
           "default": true
         },

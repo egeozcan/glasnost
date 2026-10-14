@@ -153,6 +153,18 @@ pub struct Quirks {
     // spec: S-0208 claim 19 and Edge cases
     #[serde(default = "on")]
     pub teleport_infantry_negative_level_entry: bool,
+    /// A teleporting infantry unit's ground standing-position reservation is left behind by deck placement, and a later destination choice clears by its actual position and height; off: the reservation moves to the actual landing surface at the jump.
+    // spec: S-0208 claim 19 and Edge cases
+    #[serde(default = "on")]
+    pub teleport_infantry_ground_reservation: bool,
+    /// A teleporting vehicle reserves the ground record of its landing cell even on a high bridge, remembers that point for later clearing and keeps the ground reservation through deck placement, which also marks deck; off: reserve and clear the eventual landing layer only.
+    // spec: S-0207 claim 20 a, e and Edge cases; S-0209 claim 1
+    #[serde(default = "on")]
+    pub teleport_vehicle_ground_reservation: bool,
+    /// A teleporting aircraft reserves its landing cell's ground object-present flag, keeps it through deck placement and clears only actual deck occupancy on removal; off: reserve and clear only the eventual landing layer.
+    // spec: S-0207 claim 20 a, e and Edge cases; S-0209 claim 1
+    #[serde(default = "on")]
+    pub teleport_aircraft_ground_reservation: bool,
     /// The hard-coded cow type's idle action can scatter it.
     // spec: S-0107 claim 14; S-0208
     #[serde(default = "on")]
@@ -387,6 +399,14 @@ pub struct Quirks {
     // spec: S-0214 claim 6
     #[serde(default = "on")]
     pub permadisguise_attack_cursor: bool,
+    /// An unmodified band box with no live screen candidate falls through to a click at its release pixel; off: it clears the selection.
+    // spec: S-0214 claim 19 and Edge cases
+    #[serde(default = "on")]
+    pub empty_box_release_click: bool,
+    /// Hovering an engineer over a building above its capture threshold retains the preceding cursor; off: it uses the capture cursor of table C.
+    // spec: S-0214 claim 21 and Edge cases
+    #[serde(default = "on")]
+    pub damaging_entry_cursor_retained: bool,
     /// Queued move and attack move are processed as sleep.
     // spec: S-0215 claim 5
     #[serde(default = "on")]
@@ -1145,6 +1165,9 @@ impl Default for Quirks {
             slow_walker_stall: true,
             walker_bridge_destination_deck: true,
             teleport_infantry_negative_level_entry: true,
+            teleport_infantry_ground_reservation: true,
+            teleport_vehicle_ground_reservation: true,
+            teleport_aircraft_ground_reservation: true,
             cow_idle: true,
             infantry_facing_sector_skew: true,
             unchecked_substitute: true,
@@ -1203,6 +1226,8 @@ impl Default for Quirks {
             cheer_memory_spans_session: true,
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
+            empty_box_release_click: true,
+            damaging_entry_cursor_retained: true,
             queued_move_sleeps: true,
             override_suspends_queued: true,
             refused_override_retargets: true,
@@ -1457,6 +1482,18 @@ impl Quirks {
                 "teleport_infantry_negative_level_entry",
                 self.teleport_infantry_negative_level_entry,
             ),
+            (
+                "teleport_infantry_ground_reservation",
+                self.teleport_infantry_ground_reservation,
+            ),
+            (
+                "teleport_vehicle_ground_reservation",
+                self.teleport_vehicle_ground_reservation,
+            ),
+            (
+                "teleport_aircraft_ground_reservation",
+                self.teleport_aircraft_ground_reservation,
+            ),
             ("cow_idle", self.cow_idle),
             (
                 "infantry_facing_sector_skew",
@@ -1598,6 +1635,11 @@ impl Quirks {
             (
                 "permadisguise_attack_cursor",
                 self.permadisguise_attack_cursor,
+            ),
+            ("empty_box_release_click", self.empty_box_release_click),
+            (
+                "damaging_entry_cursor_retained",
+                self.damaging_entry_cursor_retained,
             ),
             ("queued_move_sleeps", self.queued_move_sleeps),
             ("override_suspends_queued", self.override_suspends_queued),
