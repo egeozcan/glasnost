@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327]
 supersedes: []
 ---
 
@@ -325,7 +325,20 @@ original's recording modes are retained as deferred context, not implementation 
     - **The creation draw.** Every creation of an infantry, vehicle, aircraft or building object
       takes one raw value, whatever else that creation draws, at the moment the object is created.
       Creating an object is not the same as its entering play (S-0203): the draw is taken even for
-      an object that never enters play. Where the creation falls:
+      an object that never enters play.
+      **Creation-derived report value (Q-0327).** Our engine retains the low 16 bits of
+      this existing draw as an unsigned integer *r* = *x* mod 65536, in 0 … 65535,
+      where *x* is the creation's raw value. This exact integer reduction involves no
+      rounding and no additional draw. The value belongs to the object's persistent
+      simulation state: saved games preserve it, loading restores it, and the
+      deterministic state hash includes it. Presentation can obtain it for pre-placed,
+      starting, newly created and restored objects, even if presentation begins after
+      creation. Gameplay rules do not consult it, and sound choices do not feed back
+      into simulation. S-0701 claims 21 and 32 own the report selection from this value,
+      including exceptions. Retaining it must not replace the variant with zero or
+      reconstruct it using another draw. Persistence and hashing are a design contract
+      of our engine, not an additional claim about the original's save or hash format.
+      Where the creation falls:
       - *Map loading.* A pre-placed object is created when its map entry is read, so its creation
         draw comes before the draws of its own tag (S-0011, claim 34) and before any draw its
         placement takes. An entry that names no house of the game (S-0009, claim 27) or an unknown
@@ -526,6 +539,8 @@ original's recording modes are retained as deferred context, not implementation 
       | Part | Backing |
       |---|---|
       | The creation draw is taken when an object is created | `measurable` (R5 b; R8 G for its exact count) |
+      | Creation-derived report value: low-bit reduction and fixed normal report selection | `measurable` (S-0701 F2), high confidence |
+      | Our engine retains, saves, restores and hashes the report value and exposes it to presentation without another draw | `unmeasured` design contract (Q-0327), high confidence; this is a requirement of our engine, not an oracle claim |
       | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
       | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
       | Lightning sound choice: stream, count, guards and position within a strike | `measurable` (S-0701 F6); high confidence for stream/count/order, medium for the same-point guard |
