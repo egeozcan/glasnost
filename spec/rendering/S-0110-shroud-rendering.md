@@ -2,7 +2,7 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
