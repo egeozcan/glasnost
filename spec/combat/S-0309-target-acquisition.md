@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -745,6 +745,8 @@ this spec:
     removed, including its destination, target and engaged mark. This refresh is not part of
     the per-tick start of S-0215 claim 11. The infantry or vehicle rest table of S-0215 claims
     14 and 15 judges the state after the refresh: its row 1 applies only if the memory survives.
+    S-0215 claim 13 also specifies how the common fall-back destination rows and route-generated
+    orders interact with this refreshed state.
     Resuming the attack move ends the engaged mark and has this effect:
 
     | Memory holds | Result |
