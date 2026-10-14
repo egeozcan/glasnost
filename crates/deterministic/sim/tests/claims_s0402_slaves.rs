@@ -893,3 +893,24 @@ fn s0203_claim_12_delivery_removal_counts_before_master() {
     assert!(delivered > 0);
 }
 
+// spec: S-0208 claim 4 and S-0402 claim 21 (an emerging slave starts facing 0, map north, whatever its master's facing)
+#[test]
+fn s0208_claim_4_emergence_faces_north() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = testkit::spawn(&mut w, Kind::Building, "SMB", 0, at(0, -1), 16384);
+    assert_ne!(w.obj(b).unwrap().body.value(w.tick), 0);
+    let mut seen = 0;
+    for _ in 0..40 {
+        let before = on_map(&w, b);
+        testkit::run(&mut w, 1);
+        for s in on_map(&w, b) {
+            if !before.contains(&s) {
+                assert_eq!(w.obj(s).unwrap().body.value(w.tick), 0);
+                seen += 1;
+            }
+        }
+    }
+    assert_eq!(seen, SLAVES);
+}
+

@@ -880,7 +880,8 @@ fn emerge(w: &mut World, id: ObjectId) {
     };
     let t = w.tick;
     let stale = stale(w);
-    let facing = o.body.value(t);
+    // spec: S-0402 claim 21 and S-0208 claim 4 (every successful emergence starts with facing 0, map north, independent of the master's facing)
+    let facing: glasnost_num::geom::Facing = 0;
     // spec: S-0402 claim 21 (offers in reverse initial creation order)
     for (i, m) in g.members.iter().enumerate().rev() {
         let Some(s) = m.id else { continue };
