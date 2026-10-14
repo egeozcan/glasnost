@@ -140,7 +140,8 @@ pub async fn load(
         pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
         PaletteQuirks::default(),
     );
-    // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start)
+    // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start);
+    // S-0103 Terms and claim 8 (ore and gem overlays use it; later theater loads leave it)
     palettes.set_startup_resource(
         pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
     );

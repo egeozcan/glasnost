@@ -145,12 +145,16 @@ pub struct PaletteState {
     pub unit: Palette,
     /// Tile palette: terrain tiles.
     pub tile: Palette,
-    /// Theater palette (no drawn object in S-0103 uses it).
+    /// Theater palette of the loaded theater. No drawing is established to
+    /// use it directly (S-0103 Open questions); the ore and gem overlays use
+    /// [`PaletteState::resource`], the temperate theater palette read at
+    /// program start (S-0103 Terms and claim 8).
     pub theater: Palette,
     /// Anim palette, read once per session.
     pub anim: Palette,
     /// The palette of the start-up resource table: the temperate theater
-    /// palette as read once at program start (S-0112 Terms, claim 2); all
+    /// palette as read once at program start (S-0112 Terms, claim 2;
+    /// S-0103 Terms: later theater loads do not change it); all
     /// black until [`PaletteState::set_startup_resource`].
     pub resource: Palette,
     /// The palette of the start-up mine table: the snow unit palette file as
@@ -612,6 +616,21 @@ mod tests {
         let mut s = PaletteState::at_program_start(Some(&file_of(3)), None, off);
         s.start_game(Theater::Lunar, |_| None);
         assert_eq!(s.unit.colors[0], Rgb8::new(12, 12, 12));
+    }
+
+    /// spec: S-0103 Terms (theater palette) and claim 8 (the ore and gem palette is the temperate
+    /// theater palette read at program start; later theater loads do not change it); S-0112 Terms
+    #[test]
+    fn startup_resource_survives_theater_loads() {
+        let q = PaletteQuirks::default();
+        let mut s = PaletteState::at_program_start(Some(&file_of(3)), Some(&file_of(1)), q);
+        s.set_startup_resource(Some(&file_of(7)));
+        assert_eq!(s.resource.colors[0], Rgb8::new(28, 28, 28));
+        // Two theater loads, the second reading a temperate theater palette of other values.
+        s.start_game(Theater::Snow, |_| Some(file_of(2)));
+        s.start_game(Theater::Temperate, |_| Some(file_of(9)));
+        assert_eq!(s.theater.colors[0], Rgb8::new(36, 36, 36));
+        assert_eq!(s.resource.colors[0], Rgb8::new(28, 28, 28));
     }
 
     /// spec: S-0103 claim 10

@@ -199,8 +199,6 @@ mod notes {
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
-    pub const GATE_DAMAGED: &str =
-        "a damaged gate's body frame needs its gate-stage count (S-0108 claim 2): drawn undamaged";
     pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
     pub const NO_VPL: &str = "no voxel lighting table, or one shorter than its header and palette (S-0013 claim 4): every row reads as zero, so every voxel writes a transparent pixel (S-0105 claims 19 and 38)";
@@ -1084,7 +1082,10 @@ impl Builder<'_> {
             {
                 continue;
             }
-            // spec: S-0112 claim 1 (a deck cell: one whose overlay is at a bridge position)
+            // spec: S-0112 claim 1 (a deck cell: one where an overlay at a bridge position was
+            // placed). The viewer draws the cells after loading, where such a cell holds its
+            // bridge type or a veinhole marker that replaced it; row 1 wins for the marker either
+            // way, so testing the overlay held gives the same rows.
             let deck = DECK_BRIDGES.contains(&o);
             let table_row = overlay_table_row(o, flags, deck);
             let d = cell.overlay_data;
@@ -1536,7 +1537,7 @@ impl Builder<'_> {
         ]; // spec: S-0108 Import mapping (foundation vocabulary)
         let read = |section: &[u8]| {
             let v = self.p.art.value(section, b"Foundation")?;
-            // spec: S-0108 Import mapping (text cut to 31 characters, compared ignoring case)
+            // spec: S-0108 Import mapping (text cut to 31 bytes, compared ignoring case)
             let v = value::text(v, 31);
             Some(
                 WORDS
@@ -1679,17 +1680,19 @@ impl Builder<'_> {
             .art_value(Kind::Buildings, i, b"AnimIdle")
             .map(|v| value::int_tuple_or::<3>(v, [0, 1, 0]).0)
             .unwrap_or([0, 1, 0]);
-        let k = idle[0].max(0) as usize;
+        // spec: S-0108 claim 3 (a negative start is kept: a negative index draws nothing)
+        let k = idle[0];
         let occupiable = rule_bool(self.import, Kind::Buildings, i, b"CanBeOccupied", false);
         let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
         let (damaged, badly) = condition;
-        // spec: S-0108 claim 2 (occupiable: 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or
-        // below, damaged above; gate: 0, damaged G + 1; others: k, damaged k + 1 in the idle state)
-        let f = if occupiable {
+        // spec: S-0108 claim 2 (outside construction the occupiable rule comes before the stationary
+        // gate rule: occupiable 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or below,
+        // damaged above; a gate 0, damaged G + 1; others k, damaged k + 1 in the idle state)
+        let f: i32 = if occupiable {
             // spec: S-0108 Import mapping (TechLevel absent: 255)
             let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
             // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule)
-            usize::from(occupiable_hurt(
+            i32::from(occupiable_hurt(
                 tech,
                 damaged,
                 badly,
@@ -1697,41 +1700,52 @@ impl Builder<'_> {
             ))
         } else if gate {
             if damaged {
-                self.note(notes::GATE_DAMAGED);
+                // spec: S-0108 Import mapping (GateStages, an art key: integer, absent 9)
+                let g = self
+                    .art_value(Kind::Buildings, i, b"GateStages")
+                    .and_then(value::integer)
+                    .unwrap_or(9);
+                g.saturating_add(1)
+            } else {
+                0
             }
-            0
         } else {
-            k + usize::from(damaged)
+            k.saturating_add(i32::from(damaged))
         };
+        let n_i = i32::try_from(n).unwrap_or(i32::MAX);
         // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋), quirks.building_frame_clamp_to_shadow)
-        let body_frame = drawn_body_frame(f, n, &ViewQuirks::default());
+        let body_frame = drawn_body_frame(f, n_i, &ViewQuirks::default());
+        // spec: S-0108 claim 3, F2 (an index below 0 or at or past N draws nothing)
+        let frame_of = |x: i32| usize::try_from(x).ok().filter(|&x| x < n);
         let normal_z = self
             .art_value(Kind::Buildings, i, b"NormalZAdjust")
             .and_then(value::integer)
             .unwrap_or(0);
         // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib)
         // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes)
-        if let Some(item) = self.place_sprite(
-            &sprite,
-            body_frame,
-            anchor,
-            DepthTest::Writer,
-            ItemDepth::Profile {
-                profile: Profile::Upright,
-                bias: -lz - 2 + normal_z,
-                companion: None,
-            },
-            Paint::Lit(row),
-            Group::Buildings,
-            true,
-            Some(object),
-        ) {
+        if let Some(frame) = frame_of(body_frame)
+            && let Some(item) = self.place_sprite(
+                &sprite,
+                frame,
+                anchor,
+                DepthTest::Writer,
+                ItemDepth::Profile {
+                    profile: Profile::Upright,
+                    bias: -lz - 2 + normal_z,
+                    companion: None,
+                },
+                Paint::Lit(row),
+                Group::Buildings,
+                true,
+                Some(object),
+            )
+        {
             items.push(item);
         }
         // spec: S-0108 claim 9 (shadow frame F + ⌊N/2⌋ unless the type suppresses shadows; none past the sprite)
-        let shadow = body_frame + n / 2;
+        let shadow = frame_of(body_frame.saturating_add(n_i / 2));
         if !rule_bool(self.import, Kind::Buildings, i, b"NoShadow", false)
-            && shadow < n
+            && let Some(shadow) = shadow
             && let Some(item) = self.place_sprite(
                 &sprite,
                 shadow,
@@ -1752,10 +1766,12 @@ impl Builder<'_> {
             items.push(item);
         }
         // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
+        // spec: S-0108 claim 3 (a negative bib index draws nothing; one past the bib sprite neither)
         if let Some(bib) = art.building_sprites.get("bib").cloned()
+            && let Ok(bib_frame) = usize::try_from(f)
             && let Some(item) = self.place_sprite(
                 &bib,
-                f,
+                bib_frame,
                 anchor,
                 DepthTest::Writer,
                 // spec: S-0102 claim 13 (bib: −L(z) − 3, flat, writes)

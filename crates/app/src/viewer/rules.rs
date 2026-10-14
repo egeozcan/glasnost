@@ -27,8 +27,11 @@ pub enum RulesAction {
 }
 
 /// The palette a type's own art is drawn with (S-0103 claim 8), from its
-/// kind and art flags; `None` where the spec leaves it open (overlays,
-/// terrain objects, smudges) or for sidebar icons.
+/// kind and art flags; `None` for overlays, terrain objects and smudges,
+/// whose palette S-0112 claims 1 to 3 choose per cell (a deck cell's ore
+/// takes the tile table, other ore and gems the start-up resource table:
+/// S-0103 claim 8), so no one palette fits a file preview, or for sidebar
+/// icons.
 fn palette_of(tree: &Node, kind: &str, name: &str, image: &str) -> Option<PaletteChoice> {
     let flag = |section: &str, key: &str| {
         tree.get("art_sections")
