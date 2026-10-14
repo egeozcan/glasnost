@@ -306,6 +306,8 @@ impl Play {
                     Some(o) => {
                         self.issue(vec![o]);
                     }
+                    // spec: S-0408 claim 18 (a no-sell or no-repair click adds no battlefield text)
+                    None if m != Mode::Power => {}
                     None => self.say("Nothing to do there."),
                 }
             }
@@ -546,8 +548,8 @@ impl Play {
             Action::Place(t) => self.tool = Tool::Place(t),
             Action::Refused => {
                 // spec: S-0411 claims 4 and 12; S-0701 claim 24 (a busy production line: the unable-to-comply announcement only)
+                // spec: S-0411 claim 17 (no battlefield text for the refusal)
                 self.cues.push(UiCue::BuildRefused);
-                self.say("Cannot build that now.");
             }
             Action::Nothing => {}
         }
