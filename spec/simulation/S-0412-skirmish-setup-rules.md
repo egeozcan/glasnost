@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -606,10 +606,7 @@ resolution").
   unspecified in the original, and our engine then draws again until the index names a country (a
   departure; the importer warns when the rules list fewer than ten countries). Off: uniform among
   the countries the setup offers.
-- **The build bar's switch** (claim 9 a) is not this spec's: S-0407 claim 7 owns the rule, and
-  whether it gets a quirk switch is S-0407's to decide (proposed name
-  `quirks.superweapon_setting_tests_first_only`; original: only a building type's first superweapon
-  is tested).
+- **The build bar's switch** (claim 9 a) is owned by S-0407 claim 7. Proposed shared quirk switch: `quirks.superweapon_setting_tests_first_only`, default on (YR behavior: with the superweapon setting off, only a building type's first superweapon is tested). With the switch off, the first and second superweapons are both tested. Confirm this switch and its alternative in the S-0407 joint hand-off; this spec states only the setup-setting behavior owned here.
 - **`quirks.crate_count_humans_only`** (claim 10). Original: only human participants count, so a
   skirmish starts with max(*C*<sub>min</sub>, 1) crates, capped by *C*<sub>max</sub> (in our engine
   max(*C*<sub>min</sub>, 0) when the skirmish has no human participant, claim 10). Off: every
@@ -979,9 +976,13 @@ There is no assertion that the recalculation is the final loading-draw group:
 S-0202 claim 14 also owns subsequent resource-glint draws. Neither question of Q-0192 is
 left open. This ordering does not supply downstream particle or smudge draw counts and
 must never be used to treat them as zero. S-0202 claim 15 supplies creation-draw rules.
-Approved revision 12 and the current revision 13 draft contain them, with scenario R14
-proposed rather than measured. Sign-off must confirm that
-extension and update any coordination note that still calls those creation counts unresolved.
+Approved S-0202 revision 14 and its current draft contain them, with scenario R14
+proposed rather than measured. Claim 14 here agrees with their claim 14 and S-0009's
+current loading-order table, including cleanup before the late phase and the unchanged
+position of game-start recalculation when starting units are absent or stop early.
+Joint sign-off must recheck the exact versions handed off. This confirmation neither
+resolves simultaneous production-start draw assignment (S-0404 claim 11) nor specifies
+later particle updates; those are separate from creation-draw composition.
 
 S-0414 claims 1, 2, 6, 9 and 10 own the defeat-test, end-test and end-delay rules used
 by claim 11: observer houses are set aside, insignificant and not-scored base-unit vehicles
