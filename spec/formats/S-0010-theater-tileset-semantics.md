@@ -2,7 +2,7 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -34,6 +34,8 @@ generator are out of scope.
 *overlay data value*, *archive*, *resolve*, *loose file*, *rules database*, *game start*, *session*,
 *quirk switch*, *departure*, *importer warning*, *unspecified*, *unsynchronised random stream* (with
 *draw*), *battlefield view*, *world pixel* and *measurement setup* are used as in the glossary.
+*Resource glint* is S-0202's animation selected for a resource cell during game-start setup,
+not a tile animation. *Cell animation* is the overlay-attached animation of S-0009 and S-0202.
 *Slope shape* and *surface height* are defined by S-0106. *View pixel* and *view origin* are
 S-0101's (claim 5 and its formula F1). The *land
 type* rules of a cell (its *land recompute*, the *cliff-back setting*, the *own-land-type flag*) are
@@ -428,21 +430,29 @@ this spec owns its rules. The terms below are specific to this spec.
     type reflects the tile held when that recalculation began, normally the tile chosen by the
     first recalculation (claims 10 and 11), even if the second recalculation chose another tile.
     This intermediate land type lasts until the cell is recalculated again, no later than the
-    game-start recalculation. The only stated intervening reader is the skirmish setup's placement
-    of starting units; the backing for that interval remains `unmeasured` as given below.
+    game-start recalculation. The skirmish setup's placement of starting units reads this
+    intermediate terrain; the backing for that interval remains `unmeasured` as given below.
+    The unused-house cleanup follows the second whole-map recalculation and precedes the late
+    start-position phase (S-0009 claim 28). Removing grounded objects can recalculate their
+    occupied cells, including a building's foundation cells, and start a missing tile animation
+    there; its draws belong to cleanup, not to either whole-map pass (S-0202 claim 14).
 
-    **Game-start results.** After the map is loaded and the skirmish setup has placed its starting
-    units (S-0412), but before the first tick, every legal cell has undergone one further terrain
-    recalculation. At the first tick, a cell's land type reflects the tile held when this
+    **Game-start results.** After starting-unit setup, initial crates, secret-lab choices and
+    end-of-loading tags (S-0412 claim 14), but before the first tick, every legal cell has
+    undergone one further terrain recalculation. This position is unchanged when starting-unit
+    setup places no units or stops early. At the first tick, a cell's land type reflects the tile held when this
     recalculation began—the tile chosen by the second load recalculation if nothing recalculated
     the cell in between—and remains so until the cell's next recalculation. The tile chosen by the
-    game-start recalculation supplies its land type only from then on. Starting-unit placement
-    and animation effects can cause intervening recalculations; claims 7 and 8 and S-0211 apply
+    game-start recalculation supplies its land type only from then on. Cleanup, starting-unit
+    placement and animation effects can cause intervening recalculations; claims 7 and 8 and S-0211 apply
     to each event, including the overlay and unusable-tile exceptions. A stray tile number written
     by the second load recalculation is the no-tile marker by the first tick unless the cell is
     of the overlay case (claim 7). This recalculation may start tile animations (claim 19), and
     bridge spans (claim 25) are found after these game-start results are established. In play, a
-    recalculation uses the neighbours' shapes that are current at that event.
+    recalculation uses the neighbours' shapes that are current at that event. Resource-glint
+    setup follows the game-start recalculation and can create further animations and take
+    further scenario-stream draws before tick 0 (S-0202 claim 14). Glints are not tile
+    animations; this pass is not an exhaustive final-draw boundary for loading.
     - Backing, by part:
 
       | Part | Backing |
@@ -451,6 +461,9 @@ this spec owns its rules. The terms below are specific to this spec.
       | The land type between the second pass and the game-start pass | `unmeasured`: only the skirmish setup's placement of starting units reads it, and the tiles of the two passes differ only in rare smoothing cases that no starting position is known to meet |
       | The game-start terrain and animation outcomes | `measurable` (scenario R1 part D, whose plus centre plays as clear land at the first tick, and scenario G4 part C, whose animation is present at the first frame); the exact count of whole-map recalculations is `unmeasured`, because these final outcomes do not distinguish extra recalculations once the terrain is stable |
       | At the first tick, without an intervening recalculation, the land type reflects the second pass's tile | `measurable` (scenario R1 parts D2 and E, through the cell that holds a stray tile number at the first tick and still plays as the land of the tile the game-start pass found there, until its next recalculation) |
+      | Cleanup's position and conditional tile-animation starts | S-0202 claim 14 owns the rule and its `unmeasured` backing: no discriminating no-computer-player skirmish fixture is established |
+      | Game-start pass after crates, secret labs and end-of-loading tags, including no-unit and early-stop cases | `measurable` through S-0202 scenario R10 variants A and B |
+      | Subsequent resource-glint setup | S-0202 claim 14 owns the rule, confidence and backing, with scenario R13 |
       | The two load milestones and the first pass's results being in place before the map's terrain objects and units are placed | `unmeasured`: the proposed screenshots do not count recalculations or isolate object-placement effects during loading (the open question below asks whether placing map objects recalculates their cells) |
 
     - Confidence: medium (the three passes and their order are certain; that the smoothed ramp tiles
@@ -639,14 +652,16 @@ this spec owns its rules. The terms below are specific to this spec.
       one in that time, a later recalculation starts no second one, however the tile has changed
       since. A cell that has started none can start one at
       any later recalculation in which the tile it holds at the beginning qualifies, for example a
-      tile that smoothing left in the cell at an earlier recalculation. After a map load, the
-      tile animations of this claim that remain are exactly those that the second pass of claim 12
-      starts: at most one per cell, that of the tile the first pass left in the cell. None that the
-      first pass started survives loading, even in a cell where the second pass starts none. The
-      game-start pass of claim 12 then starts one in each cell that has started none since the
-      second pass and whose tile, as the second pass left it, qualifies (scenario G4 part C). So at
-      the first tick a cell carries at most one tile animation: the one the second pass started
-      there, or else the one the game-start pass started.
+      tile that smoothing left in the cell at an earlier recalculation. Immediately after the
+      second pass, the tile animations of this claim that remain are exactly those that this
+      pass starts: at most one per cell, that of the tile the first pass left in the cell. None
+      that the first pass started survives loading, even in a cell where the second pass starts
+      none. Subsequent cleanup or placement recalculations can start a missing animation under
+      the same rule (claim 12; S-0202 claim 14). The game-start pass then starts one in each
+      cell that has started none since the second pass and whose tile at that event qualifies.
+      Without an intervening recalculation, this is the tile the second pass left (scenario G4
+      part C). At the first tick a cell has started at most one tile animation since the second
+      pass, whether in that pass, an intervening recalculation or the game-start pass.
     - **Where.** The animation is placed at the world position (X, Y, *z*) of the formula *Tile
       animation position* (Formulas): the cell's centre, moved by the ground displacement that S-0101's
       screen-to-ground formula (F6) gives for the world pixel (*dx*, *dy*), at the height of the
@@ -660,7 +675,12 @@ this spec owns its rules. The terms below are specific to this spec.
     - **Depth.** The animation takes the tile's depth adjustment.
     - **Draws.** A tile animation is created with no loop delay, and its creation takes the draws
       that S-0202 (claim 10, *animation creation draws*) lists, at the moment it starts, during
-      map loading too.
+      map loading too. In the game-start pass these creations occur in visiting order,
+      after starting units, crates, secret labs and end-of-loading tags (claim 12; S-0202
+      claim 14 and scenario R10). Low-bridge markers and their direct end-row and piece
+      writes start no overlay cell animations, but their cell recalculations can start tile
+      animations. S-0202 claims 10 and 14 own these exclusions and the piece-choice draw
+      preceding its tile-animation draws, with scenarios R8 H and R12.
     - **How it is created.** When a qualifying terrain recalculation starts a tile animation, its start event occurs immediately, including during map loading. The animation runs the number of passes specified by its type's loop count, without an additional repeat factor. It does not start from a trigger. Its start event therefore has its start sound and resource-chain reaction. Every effect of the start event, and the middle event that it produces when μ = 0 (S-0109 claim 14), occurs at the position given under **Where**: the chain reaction acts on the cell containing that position, which may differ from the tile cell when the displacement crosses a cell edge, and the height test of S-0109 claim 14 uses that position's height above the terrain. The start events of animations started in the first pass of claim 12 also occur, and their effects remain after those animations are removed. S-0109 and the specs for those effects own their details and draws. S-0202 claim 15 owns immediate crater timing: a tile animation started by overlay placement's recalculation acts before the overlay data stream is read, whereas one first started in the first whole-map pass acts on the imported data, and the second and game-start passes act later still. The data stream overwrites overlay data but does not restore an overlay type exhausted by an earlier crater request.
 
     These are S-0103's and S-0104's *terrain animations*; how they play belongs to S-0109 (animation
@@ -679,6 +699,7 @@ this spec owns its rules. The terms below are specific to this spec.
       | The boundary of that case | `unmeasured`: G4 part D tests only displacements far beyond the view, not either boundary |
       | The depth adjustment and animation fields' absent-key and plain-image-only rules | `unmeasured`: no scenario part varies these independently; G4's examples use explicit attaches-to values and standard depth |
       | The creation draws | `measurable` through S-0202's scenario R8, part F |
+      | Conditional cleanup starts and low-bridge exclusions of cell animations, not tile animations | S-0202 claim 14 owns the rules, confidence and backing: cleanup is `unmeasured`; bridge exclusions are `measurable` through R12, with R8 H for a piece's tile animation |
       | The creation parameters: the start event at creation, at the displaced position, with the chain reaction in the cell under that position; passes from the type's loop count | `measurable` (scenario G4 part F, named test data) |
       | The start events of first-pass animations keep their effects | `measurable` (scenario G4 part F, run 2) |
       | Immediate crater timing relative to the overlay data stream and recalculation passes | S-0202 claim 15 owns the rule, confidence and `measurable` backing (its scenario R14 part C) |
@@ -1121,8 +1142,8 @@ as in claim 13); east is towards *x* + 1, south towards *y* + 1. Unit: sub-tile 
   | Pass | Works on | Its results are in place when | Consequences |
   |---|---|---|---|
   | First | the terrain stream (S-0009 claim 7), the map's tunnel definitions (S-0009, read set) and the overlays | the map's terrain objects and units are placed | ore that a map puts on a cell of shape 5 or more is already gone then (S-0211 claim 7); an intermediate ramp result need not be the final loaded result (claim 12) |
-  | Second | the same, with the map's terrain objects and units placed | the game-start pass begins | ramp smoothing sees every neighbour's shape from the first pass, which corrects the first pass's view (claim 12, scenario L2); the tile animations that survive loading are this pass's (claims 12 and 19) |
-  | Game start | the same, with the skirmish setup's starting units placed | the first tick | absent intervening recalculations, land types reflect the second pass's tiles; non-overlay-case stray tile numbers become the no-tile marker; tile animations start in cells that have started none since the second pass (claims 10, 12 and 19); the bridge spans of claim 25 are found right after it |
+  | Second | the same, with the map's terrain objects and units placed | unused-house cleanup begins | ramp smoothing sees every neighbour's shape from the first pass, which corrects the first pass's view (claim 12, scenario L2); this pass replaces earlier tile animations; cleanup or placement recalculations may later start missing ones (claims 12 and 19) |
+  | Game start | terrain after starting-unit setup, initial crates, secret-lab choices and end-of-loading tags, even with no starting units or early-stop placement | the first tick | absent intervening recalculations, land types reflect the second pass's tiles; non-overlay-case stray tile numbers become the no-tile marker; tile animations start in visiting order in cells that have started none since the second pass (claims 10, 12 and 19); the bridge spans of claim 25 are found right after it; subsequent resource-glint setup can take further draws before tick 0 (S-0202 claim 14) |
 - The 8 × 8 variant pattern is built at most once per session in the original (claim 14).
   Our engine rebuilds it per map load, the documented departure owned by S-0202 claim 11.
 - The bridge spans and the bridge-body marks of low spans are set once at game start, right after
