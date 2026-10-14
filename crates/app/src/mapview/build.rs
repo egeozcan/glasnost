@@ -424,6 +424,10 @@ pub struct Painter {
     /// Each type's image cache of voxel part and shadow images (S-0105
     /// claims 26, 31), as scene images with their offsets.
     voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
+    /// Vehicle shadows with the current part image excluded, by unmasked
+    /// shadow image and part images, for `quirks.voxel_shadow_cached_cutouts`
+    /// off (S-0105 claim 39): bounded by the cached images it combines.
+    cutouts: BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
     /// The voxel buffer kept between fresh voxel draws, with the
     /// depth-buffered mode (S-0105 claims 32, 34).
     canvas: voxel::VoxelCanvas,
@@ -2411,12 +2415,7 @@ impl Builder<'_> {
     /// Adds a voxel part image to the scene: its index and offset from the
     /// draw point (S-0105 claim 25, F6).
     fn add_part(&mut self, img: &voxel::PartImage) -> Option<(u32, [i32; 2])> {
-        let image = IndexedImage::new(img.width, img.height, img.pixels.clone()).ok()?;
-        if image.width() == 0 || image.height() == 0 {
-            return None;
-        }
-        let id = self.built.scene.add_image(image);
-        Some((id, [img.offset[0] as i32, img.offset[1] as i32]))
+        add_part_image(&mut self.built.scene, img)
     }
 
     /// A voxel part image placed at `point` (S-0105 claim 25, F6; S-0102 F2:
@@ -2506,39 +2505,46 @@ impl Builder<'_> {
         let object = m.object;
         let mut items = Vec::new();
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
-        if !rule_bool(self.import, kind, idx, b"NoShadow", false) {
+        let shadow = (!rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
             let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
             let aircraft_like = rule_bool(self.import, kind, idx, b"ConsideredAircraft", false);
-            let file = body_file.clone();
-            // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground)
-            let key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
-            if let Some(part) = self.cached_part(kind, idx, key, |b| {
-                let body = b.voxel_model(&file)?;
-                // spec: S-0105 claim 32 (quirks.depth_mode_leak: a depth-option type's fresh shadow
-                // switches the mode on; off, it never does)
-                b.p.canvas.draw_shadow(
-                    &body,
-                    section,
-                    &pose().shadow,
-                    0,
-                    aircraft_like,
-                    depth_buffered,
-                    &q,
-                )
-            }) {
-                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing);
-                // before the body, which covers it: interim for a vehicle (Q-0213)
-                items.push(Self::part_item(
-                    part,
-                    point,
-                    u,
-                    Paint::Shadow,
-                    Group::Shadows,
-                    object,
-                ));
-                self.note(notes::VOXEL_SHADOW_POINT);
-            }
+            (section, aircraft_like)
+        });
+        // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground)
+        let shadow_key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
+        let shadow_file = body_file.clone();
+        let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
+            let body = b.voxel_model(&shadow_file)?;
+            // spec: S-0105 claim 32 (quirks.depth_mode_leak: a depth-option type's fresh shadow
+            // switches the mode on; off, it never does)
+            b.p.canvas.draw_shadow(
+                &body,
+                section,
+                &pose().shadow,
+                0,
+                aircraft_like,
+                depth_buffered,
+                &q,
+            )
+        };
+        // An aircraft's shadow comes before the body, which covers it.
+        if kind != Kind::Vehicles
+            && let Some(s) = shadow
+            && let Some(part) = self.cached_part(kind, idx, shadow_key, |b| draw_shadow(b, s))
+        {
+            // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's
+            // own drawing; it never paints over its own aircraft)
+            items.push(Self::part_item(
+                part,
+                point,
+                u,
+                Paint::Shadow,
+                Group::Shadows,
+                object,
+            ));
+            self.note(notes::VOXEL_SHADOW_POINT);
         }
+        let mut placed = Vec::new();
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
         let body_frame = 0;
         // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state off: claim 12 is not drawn)
@@ -2555,6 +2561,7 @@ impl Builder<'_> {
                 &q,
             )
         }) {
+            placed.push(part);
             // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
             items.push(Self::part_item(
                 part,
@@ -2607,6 +2614,7 @@ impl Builder<'_> {
                     b.p.canvas
                         .draw_part(&model, frame, &draw, vpl.as_ref(), depth_buffered, &q)
                 }) {
+                    placed.push(part);
                     items.push(Self::part_item(
                         part,
                         point,
@@ -2618,8 +2626,121 @@ impl Builder<'_> {
                 }
             }
         }
+        // spec: S-0105 claim 39 (a vehicle's shadow is made after its parts and excludes the
+        // completed part image; it darkens the scene after the parts have contributed)
+        if kind == Kind::Vehicles
+            && let Some(s) = shadow
+        {
+            let cached = self
+                .p
+                .voxels
+                .get(&(kind, idx))
+                .is_some_and(|c| c.get(&shadow_key).is_some());
+            let fresh = (!cached).then(|| draw_shadow(self, s));
+            let part = vehicle_shadow(
+                &mut self.built.scene,
+                self.p.voxels.entry((kind, idx)).or_default(),
+                &mut self.p.cutouts,
+                shadow_key,
+                &placed,
+                q.voxel_shadow_cached_cutouts,
+                fresh,
+            );
+            if let Some(part) = part {
+                // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
+                items.push(Self::part_item(
+                    part,
+                    point,
+                    u,
+                    Paint::Shadow,
+                    Group::Shadows,
+                    object,
+                ));
+                self.note(notes::VOXEL_SHADOW_POINT);
+            }
+        }
         items
     }
+}
+
+/// Adds a voxel part or shadow image to `scene`: its index and offset from
+/// the draw point (S-0105 claim 25, F6). An empty image adds nothing.
+fn add_part_image(scene: &mut Scene, img: &voxel::PartImage) -> Option<PlacedPart> {
+    let image = IndexedImage::new(img.width, img.height, img.pixels.clone()).ok()?;
+    if image.width() == 0 || image.height() == 0 {
+        return None;
+    }
+    let id = scene.add_image(image);
+    Some((id, [img.offset[0] as i32, img.offset[1] as i32]))
+}
+
+/// A scene image placed as a voxel part, back as a part image.
+fn placed_image(scene: &Scene, (id, offset): PlacedPart) -> voxel::PartImage {
+    let image = &scene.images[id as usize];
+    voxel::PartImage {
+        width: image.width(),
+        height: image.height(),
+        pixels: image.pixels().to_vec(),
+        offset: [i64::from(offset[0]), i64::from(offset[1])],
+        copy_size: [i64::from(image.width()), i64::from(image.height())],
+    }
+}
+
+/// A vehicle shadow's appearance (S-0105 claims 31, 39). `fresh` is the
+/// newly drawn unmasked footprint on a cache miss (`None` when the type's
+/// cache holds `key`); `parts` are this draw's completed body, turret and
+/// barrel images.
+///
+/// With `cached_cutouts` (`quirks.voxel_shadow_cached_cutouts`) a fresh
+/// shadow excludes `parts` and is cached so, and a reused one keeps the
+/// exclusions it was made with, whatever the current parts. Without it the
+/// cache keeps the unmasked footprint and every appearance excludes the
+/// current parts.
+fn vehicle_shadow(
+    scene: &mut Scene,
+    cache: &mut voxel::ImageCache<Option<PlacedPart>>,
+    cutouts: &mut BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
+    key: voxel::ImageKey,
+    parts: &[PlacedPart],
+    cached_cutouts: bool,
+    fresh: Option<Option<voxel::PartImage>>,
+) -> Option<PlacedPart> {
+    let exclude = |scene: &Scene, mut img: voxel::PartImage| {
+        let images: Vec<voxel::PartImage> = parts.iter().map(|&p| placed_image(scene, p)).collect();
+        let refs: Vec<&voxel::PartImage> = images.iter().collect();
+        voxel::exclude_own_image(&mut img, &refs);
+        img
+    };
+    let made = match fresh {
+        Some(img) => {
+            // spec: S-0105 claim 39 (quirks.voxel_shadow_cached_cutouts: the exclusions become
+            // part of the cached image; off, the cache keeps the unmasked footprint)
+            let img = if cached_cutouts {
+                img.map(|i| exclude(scene, i))
+            } else {
+                img
+            };
+            let part = img.and_then(|i| add_part_image(scene, &i));
+            cache.insert(key, part);
+            part
+        }
+        // spec: S-0105 claims 31, 39 (a reused shadow is not recomputed)
+        None => cache.get(&key).copied().flatten(),
+    };
+    if cached_cutouts {
+        return made;
+    }
+    let unmasked = made?;
+    // spec: S-0105 Edge cases and quirks (quirks.voxel_shadow_cached_cutouts off: exclude the
+    // current completed part image on every appearance)
+    let ids = (unmasked.0, parts.iter().map(|p| p.0).collect());
+    if let Some(p) = cutouts.get(&ids) {
+        return *p;
+    }
+    let img = exclude(scene, placed_image(scene, unmasked));
+    let part = add_part_image(scene, &img);
+    cutouts.insert(ids, part);
+    part
 }
 
 /// A type's fire angle (S-0105 claim 6, Import mapping: `FireAngle`,
@@ -2722,6 +2843,7 @@ impl Painter {
             rows: Rows::default(),
             images: BTreeMap::new(),
             voxels: BTreeMap::new(),
+            cutouts: BTreeMap::new(),
             canvas,
             models: BTreeMap::new(),
             vpl: None,
@@ -2938,4 +3060,88 @@ pub fn tile_radar_colours(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod shadow_tests {
+    use super::*;
+
+    /// A synthetic part image: `w × h` at `offset`, pixels `px`.
+    fn img(w: u32, h: u32, offset: [i64; 2], px: &[u8]) -> voxel::PartImage {
+        voxel::PartImage {
+            width: w,
+            height: h,
+            pixels: px.to_vec(),
+            offset,
+            copy_size: [i64::from(w), i64::from(h)],
+        }
+    }
+
+    /// A 4 × 1 footprint at (0, 0), every pixel marked.
+    fn footprint() -> voxel::PartImage {
+        img(4, 1, [0, 0], &[voxel::SHADOW_MARK; 4])
+    }
+
+    fn pixels(scene: &Scene, p: Option<PlacedPart>) -> Vec<u8> {
+        scene.images[p.unwrap().0 as usize].pixels().to_vec()
+    }
+
+    /// spec: S-0105 claim 39 (a fresh vehicle shadow excludes its own completed part image;
+    /// reuse keeps the exclusions, quirks.voxel_shadow_cached_cutouts on)
+    #[test]
+    fn cached_cutouts_are_kept_on_reuse() {
+        let mut scene = Scene::default();
+        let mut cache = voxel::ImageCache::default();
+        let mut cutouts = BTreeMap::new();
+        let key = voxel::shadow_key(voxel::RAMP_FLAT, 0);
+        // Part image A covers screen x = 1; B covers x = 2 instead.
+        let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
+        let b = add_part_image(&mut scene, &img(1, 1, [2, 0], &[9])).unwrap();
+        let m = voxel::SHADOW_MARK;
+        let first = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[a],
+            true,
+            Some(Some(footprint())),
+        );
+        assert_eq!(pixels(&scene, first), [m, 0, m, m]);
+        // Same key, part B: the cached shadow is reused with A's cutout.
+        let again = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], true, None);
+        assert_eq!(again, first);
+    }
+
+    /// spec: S-0105 claim 39 and Edge cases and quirks (quirks.voxel_shadow_cached_cutouts
+    /// off: the current completed part image is excluded on every appearance)
+    #[test]
+    fn uncached_cutouts_follow_the_current_parts() {
+        let mut scene = Scene::default();
+        let mut cache = voxel::ImageCache::default();
+        let mut cutouts = BTreeMap::new();
+        let key = voxel::shadow_key(voxel::RAMP_FLAT, 0);
+        let a = add_part_image(&mut scene, &img(1, 1, [1, 0], &[9])).unwrap();
+        let b = add_part_image(&mut scene, &img(2, 1, [2, 0], &[0, 9])).unwrap();
+        let m = voxel::SHADOW_MARK;
+        let first = vehicle_shadow(
+            &mut scene,
+            &mut cache,
+            &mut cutouts,
+            key,
+            &[a],
+            false,
+            Some(Some(footprint())),
+        );
+        assert_eq!(pixels(&scene, first), [m, 0, m, m]);
+        // The cache holds the unmasked footprint.
+        assert_eq!(pixels(&scene, *cache.get(&key).unwrap()), [m; 4]);
+        let second = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], false, None);
+        // B's transparent pixel at x = 2 excludes nothing; its pixel at x = 3 does.
+        assert_eq!(pixels(&scene, second), [m, m, m, 0]);
+        // The same parts again reuse the masked image: the scene does not grow.
+        let n = scene.images.len();
+        let third = vehicle_shadow(&mut scene, &mut cache, &mut cutouts, key, &[b], false, None);
+        assert_eq!((third, scene.images.len()), (second, n));
+    }
 }

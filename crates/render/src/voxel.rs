@@ -167,6 +167,12 @@ pub struct VoxelQuirks {
     /// switches the mode on and is always made with it off; the mode is on
     /// only during a fresh depth-option part draw.
     pub depth_mode_leak: bool,
+    /// `quirks.voxel_shadow_cached_cutouts` (claim 39): a vehicle shadow
+    /// keeps the own-image exclusions of the draw that made its cached
+    /// image, shared by every object of the type with the same shadow key.
+    /// Off: the cached shadow is the unmasked footprint, and every
+    /// appearance excludes the current completed part image.
+    pub voxel_shadow_cached_cutouts: bool,
 }
 
 impl Default for VoxelQuirks {
@@ -197,13 +203,14 @@ impl Default for VoxelQuirks {
             voxel_depth_plane_partial_clear: true,
             voxel_colour_partial_clear: true,
             depth_mode_leak: true,
+            voxel_shadow_cached_cutouts: true,
         }
     }
 }
 
 impl VoxelQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 24] {
+    pub fn named(&self) -> [(&'static str, bool); 25] {
         [
             ("table_trig_negative_bias", self.table_trig_negative_bias),
             ("hva_scale_first_section", self.hva_scale_first_section),
@@ -252,6 +259,10 @@ impl VoxelQuirks {
             (
                 "voxel_colour_partial_clear",
                 self.voxel_colour_partial_clear,
+            ),
+            (
+                "voxel_shadow_cached_cutouts",
+                self.voxel_shadow_cached_cutouts,
             ),
         ]
     }
@@ -2224,6 +2235,29 @@ pub fn draw_shadow(
     .map(|(img, _)| img)
 }
 
+/// Excludes a vehicle's own image from its shadow (S-0105 claim 39): every
+/// shadow pixel at a screen position (relative to the shared draw point)
+/// where any of `parts`, the completed body, turret and barrel images, is
+/// non-transparent becomes transparent. Each of a column's two pixels is
+/// tested on its own; the scene's depth test plays no part.
+pub fn exclude_own_image(shadow: &mut PartImage, parts: &[&PartImage]) {
+    let w = shadow.width as usize;
+    for (i, px) in shadow.pixels.iter_mut().enumerate() {
+        if *px == 0 {
+            continue;
+        }
+        let x = shadow.offset[0] + (i % w) as i64;
+        let y = shadow.offset[1] + (i / w) as i64;
+        // spec: S-0105 claim 39 (a non-transparent part pixel at the same screen position excludes the shadow pixel)
+        if parts
+            .iter()
+            .any(|p| p.at_screen(x, y).is_some_and(|v| v != 0))
+        {
+            *px = 0;
+        }
+    }
+}
+
 /// [`draw_shadow`] into the colour plane `colour` as it stands (no
 /// clearing), returning the image and its unclipped copy rectangle.
 fn draw_shadow_into(
@@ -3930,6 +3964,29 @@ mod tests {
     }
 
     // --- Shadows ---
+
+    /// spec: S-0105 claim 39 (each shadow pixel is excluded on its own where any completed part
+    /// image is non-transparent at the same screen position)
+    #[test]
+    fn shadow_excludes_own_image() {
+        let part = |w: u32, offset: [i64; 2], px: &[u8]| PartImage {
+            width: w,
+            height: 1,
+            pixels: px.to_vec(),
+            offset,
+            copy_size: [i64::from(w), 1],
+        };
+        let m = SHADOW_MARK;
+        // Shadow at screen x = 10 … 15, row 4.
+        let mut shadow = part(6, [10, 4], &[m, m, m, m, m, 0]);
+        // A body covering x = 11 (its x = 12 is transparent), a turret covering x = 14 … 15.
+        let body = part(2, [11, 4], &[7, 0]);
+        let turret = part(2, [14, 4], &[3, 3]);
+        // A barrel on another row excludes nothing.
+        let barrel = part(6, [10, 5], &[5; 6]);
+        exclude_own_image(&mut shadow, &[&body, &turret, &barrel]);
+        assert_eq!(shadow.pixels, [m, 0, m, m, 0, 0]);
+    }
 
     /// spec: S-0105 claim 31, Formulas F10 (shift −6 × L_x stored truncated)
     #[test]
