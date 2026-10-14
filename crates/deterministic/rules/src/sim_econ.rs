@@ -149,6 +149,7 @@ pub struct EconFields {
     pub weeder: Option<bool>,
     /// Buildings: `ExitCoord`, the exit displacement in leptons (S-0404
     /// Terms, claim 13); absent: (0, 0, 0).
+    // spec: S-0404 Import mapping (ExitCoord: an integer triple)
     #[serde(default)]
     pub exit_coord: Option<[i32; 3]>,
     /// Buildings: `GDIBarracks`, the first barracks door kind (S-0404 claim

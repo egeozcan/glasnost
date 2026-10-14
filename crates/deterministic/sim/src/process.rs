@@ -547,6 +547,8 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         {
             standard_delay(w, id)
         }
+        // Q-0120 (interim: a factory building's unloading has no processing rule of its own, S-0215 claim 4's delay; the production part ends it)
+        (Some(Behaviour::Unload), Kind::Building) => NO_RULE_DELAY,
         // spec: S-0408 claim 16 (selling: a processing delay of 1, no draw)
         (Some(Behaviour::Selling), Kind::Building) => crate::econ::sell::process_selling(w, id),
         // spec: S-0108 claim 5 (construction ends when the build-up does; request Q-0130)
