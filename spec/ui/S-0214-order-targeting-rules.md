@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0081]
+requests: [Q-0081, Q-0277]
 supersedes: []
 ---
 
@@ -22,7 +22,8 @@ which of the selected objects decides the cursor, how each selected object then 
 click for itself, and which order of S-0213 each action produces. The rules depend on the kind of
 the acting object, its type's abilities, the relation of the target to it and the modifier keys
 held. These are input rules. They decide which orders are created, never how an order is applied
-(S-0213).
+(S-0213). This revision also covers battlefield pointer images and ordinary band-box selection.
+Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -40,8 +41,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 *destroyable-cliff role* of a theater's tiles is S-0010's.
 
 - **Action.** The result of resolving a click for one selected object: one of the actions of
-  table A, or *nothing*. The cursor shape the original shows for an action is presentation, and
-  this spec does not specify it.
+  table A, or *nothing*. The cursor image is presentation, specified by claims 21 and 22.
+  it does not change the action or the resulting order.
 - **Acting house.** The house whose input is being resolved: the local player's house for a
   person's clicks. An *AI house* (glossary) is held to the same rules: when its order is checked
   against this spec, it is the acting house, and every rule below that names the local player
@@ -71,7 +72,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   succession widens that to the whole map. Which physical key plays it is the player's key
   binding.
 - **Counted modifiers.** When force-fire and force-select are both held, every rule of this spec
-  except claim 5 treats both as not held. "Held" below always means counted in this way.
+  for resolving an action except claim 5 treats both as not held. "Held" in the action tables
+  means counted in this way. Band-box selection reads force-select independently (claim 19).
 - **Attack-move mode.** A one-click mode that the attack-move button of the original's optional
   command bar switches on (claim 5). While it is on, the attack-move gesture counts as held.
 - **Armed.** The object has a weapon in the weapon slot it currently uses: its first slot, or for
@@ -90,9 +92,20 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   object's weapon slots is below 0 (S-0308, claim 15, which states the same difference). The two
   can differ, for example for a type that switches to a healing weapon only through its weapon
   number (S-0308's example). Every row below that names a healing actor uses this test.
-- **Selection order.** The order of objects in the current selection, not necessarily the order
-  in which the player selected them. Claim 12 defines it. It decides the representative's
-  tie-break, the order of issued orders and which object can acknowledge a click.
+- **Selection order.** Positive-primary-damage types first, newest-added first, followed by
+  other types, oldest-added first. The primary weapon is the type's normal first weapon, not
+  the weapon the object currently chooses. Claim 12 gives the addition and removal rules.
+  This order decides representative ties, order issuance and order acknowledgements.
+- **Band box.** The screen-aligned rectangle dragged with the primary battlefield mouse
+  button. Its endpoints and inclusion test are F6. It selects by one screen point per object,
+  not by intersection with the object's image or foundation.
+- **Box point.** The point used for a band box: for a mobile object, its drawing origin in the
+  battlefield view, including world-height lift, rather than its ground shadow or the centre
+  of its visible pixels. Normal standing objects use the projection of their position
+  (S-0101 F1 and claim 5). Transient drawing displacements are discussed under Open questions.
+  A building uses its position projected with height lift, not the extent of its foundation.
+- **Cursor hot spot.** The point of a cursor image that coincides with the pointer's input
+  pixel. Cursor frames below are numbered from 0 in the imported cursor image.
 - **Selection response, special-attack response.** Separate kinds of spoken line. Selection
   responses accompany selection (S-0701 claim 17); special-attack responses acknowledge order
   kinds without their own response kind (claim 14; S-0701 claim 18). Each list is ordered as its
@@ -579,6 +592,92 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenario T13)
     - Confidence: high
 
+18. **Beginning a band box (Q-0278 part 1).** A primary-button press in the battlefield can
+    start a selection drag when sell, repair, power, building-placement and superweapon
+    targeting modes are off. After a pointer-motion input with F6 distance greater than
+    4 pixels, release is handled as a band box rather than an ordinary click, subject to
+    claim 19's empty-box exception. The distance is from the original press pixel, not
+    from the previous motion event; the box remains anchored at that press pixel. Returning
+    closer after crossing the threshold does not turn it back into a click. Once dragging,
+    the moving endpoint is limited to the battlefield view's last pixel on each axis.
+    Route-editing and beacon interactions are not ordinary selection drags here.
+    - Backing: `measurable` (Scenario T14)
+    - Confidence: high for the threshold and anchor; medium for the mode exclusions
+
+19. **Objects and modifiers in an ordinary band box (Q-0278 parts 2, 3 and 5).** The released
+    rectangle includes its four edges (F6). It takes own selectable infantry, vehicles and
+    aircraft whose box point lies inside, provided they are in play, not already selected,
+    not deactivated, not controlled by a slave master and not held in a tank bunker. A unit
+    tethered to a building is excluded while its cell holds that building. Thus ordinary
+    harvesters have no type-level exemption, but a harvester docking at a refinery can be
+    excluded by this tether test. Aircraft are tested at their lifted drawing origin, not
+    the shadow below them. Ordinary buildings are excluded, but vehicle-like buildings
+    can be taken if they meet the same eligibility tests. Enemy and allied objects are
+    never added by an ordinary box. A selectable object being erased still cannot be added
+    (the normal selection exclusion of claim 16).
+
+    Without force-select, a box containing at least one live box candidate clears the old
+    selection before adding eligible objects. The clearing test is broader than eligibility:
+    even an enemy or an ordinary building inside can make the old selection clear while
+    nothing new is selected. With force-select, eligible objects are added, not toggled:
+    already-selected objects remain selected. Force-move and force-fire do not otherwise
+    change this ordinary box selection; holding force-fire with force-select still adds,
+    regardless of the counted-modifier rule for actions. A type-select drag instead expands
+    the types encountered through claim 12's type-selection rule, and is silent (S-0701
+    claim 17).
+
+    If there is no live box candidate inside, an unmodified box does not clear the selection:
+    its release continues as the ordinary release click at the final pixel. With force-select
+    it performs no such fallback. See the empty-box quirk below. There is no additional
+    shroud-cell test when the box is released: eligible own candidates are not rejected
+    just because their cells are shrouded. Objects omitted from the current screen candidates
+    cannot be taken; this is not a search of all objects in the rectangle's ground area.
+    - Backing: `measurable` (Scenario T14)
+    - Confidence: high for ownership, point inclusion and add-not-toggle; medium for state
+      exclusions, type-select interaction and shroud
+
+20. **Box capacity is not a selection limit (Q-0278 part 4).** The original admits at most
+    500 screen candidates in one drawn frame, shared by box selection and pointing at
+    objects. This is a candidate limit, not a limit of 500 own selected units: other kinds
+    and other owners can consume places. An ordinary box release can therefore add no more than
+    500 objects, and often fewer. The selection itself has no fixed count limit; separate
+    clicks or additive boxes can grow it beyond 500. The 128 pending-order limit of S-0213
+    claim 2 is independent: selecting an object does not reserve an order place. Additions
+    use claim 12's selection order; S-0701 claim 17 gives the response only to the first
+    successful addition, not necessarily the eventual first object in selection order.
+    Which objects win the screen-candidate limit in a crowded mixed view remains open.
+    - Backing: `measurable` (Scenario T15)
+    - Confidence: high for both limits being separate; medium for observable crowded-view
+      outcomes until candidate admission order is settled
+
+21. **Battlefield cursor images (Q-0277 parts 1 and 3, battlefield actions).** Table C gives
+    the cursor frames for every action in table A, outside route-point editing. A range is
+    inclusive. Unless stated otherwise the hot spot is at the image's centre on both axes.
+    Shroud can change the action under claims 9 and 11 before this presentation rule applies.
+    Table C's shrouded column describes any action that still reaches presentation with a
+    shrouded target, not permission to issue an order. In particular *nothing* shows the
+    ordinary arrow, and an illegal move has a dedicated refusal image: there is no single
+    universal no-action cursor. Damaging entry retains the previous cursor image rather
+    than choosing a fresh capture image (quirk below). Sell, repair and power input offers
+    are still claim 13's; their images are included in table C.
+    - Backing: `measurable` (Scenario T16, with the existing targeting scenarios)
+    - Confidence: high for frame assignments; medium for shrouded cases not normally reachable
+
+22. **Cursor frames, hot spot and time (Q-0277 part 2, battlefield cursors).** Cursor images
+    and palette are imported as listed below. Animated ranges in table C advance one frame
+    whenever the original's 16-millisecond presentation clock has advanced at least
+    4 clock units since the previous advance. The clock is real time, independent of game
+    speed, not simulation ticks. One update advances at most one frame, wrapping to the
+    first frame; delayed updates do not skip frames to catch up. Changing cursor kind
+    starts at its first frame and restarts the interval. Repeating the same kind does not
+    restart it. Static rows stay on their one frame. The centre hot spot is
+    (⌊width/2⌋, ⌊height/2⌋) pixels in the cursor image's full canvas; the ordinary arrow
+    uses (0, 0). This is not the centre of the opaque pixels or of an individual frame's
+    cropped bounding box. Our interface measures the same intervals with its own real-time
+    input/display clock; no clock value affects simulation state.
+    - Backing: `measurable` (Scenario T16)
+    - Confidence: high
+
 ## Formulas
 
 > **F1 (representative distance).** *d* = ⌊*r*(*n*)⌋, *n* = (*x*ₒ − *x*ₜ)² + (*y*ₒ − *y*ₜ)² +
@@ -623,9 +722,20 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > outside a list takes no choice draw. These counts exclude sound playback's own draws
 > (S-0701). Integer arithmetic, no rounding, no rejection of values.
 
+> **F6 (drag threshold and box).** For integer screen displacements Δ*x*, Δ*y* from the
+> button-press pixel, *d* = ⌊*r*(Δ*x*² + Δ*y*²)⌋ pixels, using the table square root of
+> S-0204 F1. The original forms the squared sum in double precision and truncates the root
+> toward zero. Drag begins exactly when *d* > 4. For press (*a*, *b*) and final endpoint
+> (*c*, *e*), an integer box point (*x*, *y*) is inside exactly when
+> min(*a*, *c*) ≤ *x* ≤ max(*a*, *c*) and min(*b*, *e*) ≤ *y* ≤ max(*b*, *e*).
+> Endpoint limiting and these comparisons are exact integer operations, without rounding.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
+| Drag threshold | 4 | pixels of truncated table-root distance | Claim 18, F6; strictly greater starts the drag |
+| Screen candidates | 500 | objects per drawn frame | Claim 20; not the selected-object limit |
+| Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
 |---|---|---|---|
 | Type-select double press | 500 | milliseconds | Claim 12. Press times are whole milliseconds; a second press counts when its time minus the first press's time is at most 500. Input only. |
 | Full health | 1 | health ratio | Tables I and V. The original fixes the threshold at 1 and does not read it from data. |
@@ -633,6 +743,45 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Passenger land-speed limit | 0.01 | land multiplier (a factor; 1 = unchanged speed) | Row VD7 and Formulas F4; a first passenger whose multiplier on the cell's land type is strictly below it counts as unable to move there (not on water). A data value of exactly 0.01 counts as below it, because the original stores the multiplier in single precision (Formulas F4) |
 
 ## State and ordering
+
+| Input state | Event | Result |
+|---|---|---|
+| No drag armed, ordinary battlefield mode | Primary-button press | Drag armed at the press pixel |
+| Drag armed | Motion with F6 distance at most 4 pixels | Still armed, ordinary click remains possible |
+| Drag armed | Motion with F6 distance above 4 pixels | Box active, anchored at press pixel |
+| Box active | Motion | Box endpoint changes; returning near the anchor does not disarm it |
+| Box active | Primary-button release | Selection result of claim 19; box ends |
+
+**Table C: battlefield cursor frames** (claims 21 and 22). These are frame numbers in the
+imported cursor image, not action numbers. All multi-frame rows animate with claim 22's interval.
+“Arrow” means static frame 0, hot spot (0, 0).
+
+| Action | Revealed target | Shrouded target |
+|---|---|---|
+| nothing, idle | arrow | arrow |
+| select, toggle select | 18–30 | arrow |
+| move | 31–40 | 31–40 |
+| no-move | 41 | 31–40 if the first selected object's type permits shroud moves, otherwise 41 |
+| attack | 53–57 only with one selected unit or building whose weapon is in range of the target; otherwise 58–62 | 31–40 |
+| harvest | 58–62 | arrow |
+| enter, capture, recycle, enter tunnel | 89–98 | arrow |
+| deploy, area attack | 110–118 | arrow |
+| no-deploy | 119 | 119 |
+| no-enter, no-enter tunnel | 99 | 99 |
+| repair building, repair vehicle | 150–169 | arrow |
+| no-repair | 190 | 190 |
+| repair switch | 170–189 | 190 |
+| sell | 129–138 | 149 |
+| no-sell | 149 | 149 |
+| power switch, no-power, heal, patrol, tote | 384 | 384 |
+| sabotage, demolish, detonate | 309–318 | arrow |
+| area guard | 68–72 | 68–72 |
+| bomb | 204 (static) | arrow |
+| no-bomb | 41 | arrow |
+| disarm bomb | 369 (static) | 369 (static) |
+| airstrike | 480–487 | arrow |
+| attack-move to a place, attack-move on a target | 404–412 | 404–412 |
+| damaging entry | unchanged previous cursor | arrow |
 
 **Table A: actions.** Our own names for the actions, for reference in the other tables.
 
@@ -1063,7 +1212,7 @@ Ordering consequences:
   original's cursor shows as a refused move, and it produces a move order to a nearby cell found
   by the search of claim 11 (on an object, to the object itself when the search finds none),
   except where part 1 of table M gives no order. Only the cursor suggests otherwise, and the
-  cursor is presentation, which this spec does not specify (Terms, *action*). So the table
+  cursor is presentation (claims 21 and 22). So the table
   definition of *no-move* (table A: "a move that the cursor shows as not possible") is the whole
   rule, and a rule set that wants *no-move* to give no order changes table M, not a switch.
   Confidence: medium; `measurable` by Scenarios T7 and T10.
@@ -1133,6 +1282,16 @@ Ordering consequences:
 - **Representative distance.** Formulas F1. Ties between selected objects are rare. Our engine
   computes the same value with the table square root of S-0204 (`quirks.table_root_distance`
   there).
+
+- **Empty box release.** `quirks.empty_box_release_click` (default: original). An unmodified
+  box with no live screen candidate falls through to a click at its release pixel instead of
+  clearing the selection. Off: every unmodified box replaces the selection with its eligible
+  contents, so an empty box clears it and creates no battlefield order. Additive empty boxes
+  remain inert. Backing: `measurable` (T14), confidence high.
+- **Damaging-entry cursor retention.** `quirks.damaging_entry_cursor_retained` (default:
+  original). Hovering an engineer over a building above its capture threshold retains the
+  preceding cursor rather than choosing a new image; the action and capture order do not
+  change. Off: it uses the capture cursor of table C. Backing: `measurable` (T16), confidence high.
 
 ## Import mapping
 
@@ -1208,7 +1367,10 @@ Ordering consequences:
 | Vehicle type `Weeder` | eats weeds (row VC2) | boolean (S-0003) | no |
 | Vehicle and building types, `ResourceGatherer` and `ResourceDestination` | gathers and processes resources itself: both set (rows VC2, BC2); a resource-gathering vehicle: the first (row GC9) | boolean (S-0003) | no (both keys) |
 | Building type `Explodes` | the exploding-type case that awaits removal in claim 16; destruction and the sale case are S-0312 claim 21's | boolean (S-0003) | no |
-| Object type `Selectable` | type permits selection (Terms, claim 16); destruction does not clear this type property | boolean (S-0003) | yes |
+| Object type `Selectable` | type permits click and box selection (Terms, claims 16 and 19); destruction does not clear this type property | boolean (S-0003) | yes |
+| Cursor image `MOUSE.SHA` | table C's frame numbers and full canvas dimensions | sprite image, resolved by S-0005; frame encoding follows the sprite format | no replacement file is specified if missing |
+| Cursor palette `MOUSEPAL.PAL` | cursor colours | 256-entry palette, S-0103 | no replacement palette is specified if missing |
+| Box threshold, candidate count and cursor timing | claims 18, 20 and 22 | engine constants, not imported keys | F6 and Constants |
 | Object type `Immune` | immune target (rows I27, V6, AC5, AC9, B8) | boolean (S-0003) | no |
 | Object type `LegalTarget` | legal target (claim 6 (a), attackable cell) | boolean (S-0003) | yes |
 | Object type `Bombable` | accepts bombs (row I19) | boolean (S-0003) | yes |
@@ -1749,6 +1911,69 @@ by absence of the first primary order, another primary order after the designati
 applied, a primary order from the no-factory control, loss of the guard-spot order in either
 independently rally-capable variant, or a rally order from the category alone. The measurement procedure supplies the specified input and records the listed orders and imported category under the measurement setup. These named-data variants are not stock-data measurements.
 
+**Scenario T14: band boxes (claims 18 and 19, Q-0278).** Use the usual isolated stock-data
+map, 800×600, speed 6, director and mods off. Place own infantry, ordinary tanks, harvesters,
+aircraft on the ground and in flight, an ordinary building and a vehicle-like building, plus
+an enemy tank. Use scripted input and video plus a read-only selection/order recorder. One
+run per sub-case; repeat ambiguous input samples.
+- From a fixed press pixel, move by (4, 0), (3, 3), (5, 0) and (4, 4) pixels in separate runs.
+  Expected: the first two remain clicks, the latter two begin boxes under F6. After beginning
+  a box, move back inside the threshold and release: it remains a box. Test the same object
+  with a box edge through its drawing origin and then one pixel beyond it; expect inclusive
+  origin membership, not image intersection. Repeat with an airborne aircraft, enclosing
+  its lifted origin but not its shadow, then its shadow but not its origin.
+- Enclose the mixed group. Expect only eligible own mobile objects and the vehicle-like
+  building, not the ordinary building or enemy. Repeat while the harvester is tethered at
+  its refinery, and while a slave is controlled by its master: neither is added. Existing
+  own selected units outside the box are removed without force-select and retained with it.
+  Already-selected units inside an additive box remain selected, rather than toggling off.
+  Hold force-fire together with force-select: expect the same additive selection.
+- With a tank selected outside the box, enclose only the enemy tank or ordinary building:
+  expect the old selection cleared and none added. Enclose a completely empty open region
+  and release over a reachable empty cell: expect the old tank retained and a move order
+  from the fallback click. Repeat with force-select: old selection retained, no order.
+  With the empty-box quirk off on our engine, the unmodified case clears and gives no order.
+- A named test-map trigger shrouds an own test unit's cell without removing it. Release a
+  box while the read-only recorder confirms the cell shrouded and its screen candidate
+  present: expect it selected. If no such interval exists, this sub-test is inconclusive,
+  not evidence of a release-time shroud gate. Repeat a type-select drag over two own unit
+  types with same-type units elsewhere on screen: expect the type expansion of claim 12
+  and no response, rather than only the units inside the box.
+Any differing threshold, membership, modifier effect, empty-box result or additional
+shroud-only refusal falsifies the corresponding claim. Record press and motion samples:
+the threshold can be crossed between displayed frames.
+
+**Scenario T15: selection capacity (claim 20, Q-0278 part 4).** At speed 6 and 800×600 on
+an isolated map, director and mods off, pre-place 520 own selectable mobile units in two
+non-overlapping groups that can be viewed separately. Select 300 in one view, scroll, then
+add 220 in the other with force-select. Record selection count, not how many obey a move
+click. Expected: 520 can be selected. In a separate run show all 520 at once and box the
+whole view: at most 500 can be newly selected; other screen candidates can lower that
+count. Repeat with 130 individually selected units and issue an order: only 128 can have
+orders pending, as S-0213 O2 tests independently. A selection that cannot exceed 500 across
+views, or a single ordinary box admitting more than 500 objects, falsifies the count claims.
+The identities omitted in a crowded mixed view are recorded without an expected order
+until the admission-order open question is settled.
+
+**Scenario T16: cursor images (claims 21 and 22, Q-0277).** Use the usual 800×600 isolated
+map with speed indices 2 and 6 in separate runs, director and mods off. Reuse T3–T10's
+actor/target pairs to obtain every table C action; named test-map overrides are only those
+already needed by those scenarios. Hover without clicking, capture the pointer including
+its input pixel, and compare each displayed image to the user's cursor-image frames.
+Expected: table C's range and hot spot. For attack, compare a single shooter in range,
+the same shooter out of range, and a two-shooter selection: only the first uses 53–57.
+For damaging entry, first hover open ground and then the above-threshold building, and
+repeat after hovering a capture target: expect the previous image retained. On our engine
+with the retention quirk off, expect 89–98 instead. Record otherwise reachable shrouded
+cases separately; do not infer cursor assignments from an order that was never offered.
+Record ten advances of select, move and attack cursors at both speeds, with a wall-clock
+video timestamp and presentation-update times. Expected: one frame per qualifying
+4-unit clock interval, wrap at the range end, no restart on unchanged hover, first frame
+on kind change, and no game-speed scaling. A deliberately delayed display update advances
+only one frame. Any frame outside its range, wrong hot spot, simulation-tick pacing or
+multi-frame catch-up falsifies the corresponding rule. Unreachable table C cases remain
+unconfirmed by this run rather than being forced with modified executable behaviour.
+
 **Coverage of table M.** Each case gives its order in these steps. *Move*, *no-move*: Scenarios T2, T7
 and T10 (lines I9, I27 and V6, self). *Attack-move to a place* and *attack-move on a target*: T3.
 *Attack*: T2, T6 and T10. *Enter*: T6 and T10 (lines x1 and *shared state*). *Capture*, *damaging entry* and
@@ -1791,6 +2016,15 @@ Rows with no step, `unmeasured`, each for a reason.
   disguise and the disguise as scenery (reasons in claim 6).
 
 ## Open questions
+
+- Q-0278: exact box points during transient mobile drawing displacements, and admission
+  order at the 500 screen-candidate limit, are not fully specified. Normal origin inclusion,
+  ownership, modifiers, thresholds and counts are specified by claims 18–20; T14 and T15
+  can discriminate the remaining point and overflow details. The request is not fully closed.
+- Q-0277's edge-scroll cursors and radar's choice of cursor are companion-spec parts
+  (S-0213 and S-0410). Building-placement hover images belong with S-0406's placement
+  display. Claims 21 and 22 answer this spec's ordinary battlefield and sidebar-mode parts.
+  Route-point editing cursor substitutions are not covered by table C.
 
 - Tables AC and B, and the building cell table BC, are low confidence throughout. Their steps are
   in Scenarios T6 and T10 (the list after Scenario T10 gives the rows that are `unmeasured`, each
