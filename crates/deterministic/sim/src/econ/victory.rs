@@ -49,6 +49,8 @@ pub struct HouseResult {
     /// Entries onto the map of each not-scored vehicle type as this
     /// house's (S-0407 Terms reads it; S-0414 claim 4).
     pub unscored: BTreeMap<u32, i32>,
+    /// The result screen's counters (claims 21 to 23).
+    pub stats: super::stats::Stats,
 }
 
 /// An object's part in the counts (S-0414 claim 4).

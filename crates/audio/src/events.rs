@@ -37,6 +37,7 @@ const MOVE_GRACE: i32 = 3; // spec: S-0701 claim 23 and Constants (3 ticks)
 const LOW_FUNDS: i32 = 100; // spec: S-0701 claim 28 and Constants (below 100 credits)
 /// Ticks per minute of the speak delay: N(⌊k × 900⌋) (S-0701 Constants).
 const SPEAK_DELAY_TICKS: i64 = 900; // spec: S-0701 claim 28 and Constants (N(⌊k × 900⌋) ticks)
+const SPEAK_DELAY_INITIAL_TICKS: i32 = 1800; // spec: S-0701 claim 38 (the low-funds repeat initially 2 game minutes: N(1800) ticks)
 /// The level of a credit tick's request: one half (S-0416 Constants).
 const CREDIT_TICK_LEVEL: i32 = FULL / 2; // spec: S-0416 claim 4; S-0701 claim 35 (half volume: request level 8192)
 /// Anchors of turret sounds are offset from those of movement sounds.
@@ -54,10 +55,19 @@ pub enum UiCue {
     RadarOn,
     /// The local player's radar became unavailable (S-0410 claim 3).
     RadarOff,
-    /// A sidebar click started or queued an item (S-0411 claim 12).
-    BuildStarted,
+    /// A sidebar click started an item on an idle line (S-0411 claim 12).
+    BuildStarted {
+        /// The item is infantry.
+        infantry: bool,
+    },
     /// A sidebar click resumed an item (S-0411 claim 12).
-    BuildResumed,
+    BuildResumed {
+        /// The item is infantry.
+        infantry: bool,
+    },
+    /// A sidebar click added a queued copy to an already active line
+    /// (S-0411 claim 12).
+    BuildQueued,
     /// A sidebar click held an item (S-0411 claim 12).
     BuildHeld,
     /// A sidebar click cancelled an item (S-0411 claim 12).
@@ -66,8 +76,12 @@ pub enum UiCue {
     BuildRefused,
     /// A placement click refused by its tests (S-0411 claim 10, S-0406).
     PlacementRefused,
-    /// The sidebar strip asked to scroll past its end (S-0701 claim 24).
+    /// A page request at the sidebar strip's requested end (S-0701 claim
+    /// 24, S-0411 claim 18).
     StripEnd,
+    /// An accepted page request of the sidebar strip (S-0701 claim 24,
+    /// S-0411 claim 18).
+    StripScroll,
     /// A building item became done (S-0411 claims 9 and 12).
     ConstructionComplete,
     /// The local player's house placed a building (S-0701 claim 23).
@@ -139,7 +153,6 @@ pub struct Audio {
     ranks: BTreeMap<ObjectId, Rank>,
     radar: Vec<RadarEvent>,
     low_funds_after: Option<i32>,
-    low_funds_spoken: bool,
     low_power: bool,
     now_ms: i64,
 }
@@ -193,7 +206,6 @@ impl Audio {
             ranks: BTreeMap::new(),
             radar: Vec::new(),
             low_funds_after: None,
-            low_funds_spoken: false,
             low_power: false,
             now_ms: 0,
         }
@@ -281,7 +293,6 @@ impl Audio {
         self.ranks.clear();
         self.radar.clear();
         self.low_funds_after = None;
-        self.low_funds_spoken = false;
         self.low_power = false;
     }
 
@@ -584,6 +595,11 @@ impl Audio {
             Sound::CannotDeploy if mine => self.announce(Announcement::CannotDeploy),
             // spec: S-0408 claim 11; S-0701 claim 28 (unit sold)
             Sound::UnitSold if mine => self.announce(Announcement::UnitSold),
+            // spec: S-0701 claim 24; S-0404 claim 3 (a request refused at application: the game-wide refusal sound, the local player's house only)
+            Sound::QueueRefused if house.is_some() && house == self.local => {
+                let s = self.names.scold.clone();
+                self.play_in(w, s.as_deref(), Where::Screen);
+            }
             Sound::UnitReady => {
                 let Some(t) = of else { return };
                 // spec: S-0701 claim 23 (the type's creation sound, else the game-wide one of its kind; any owner)
@@ -655,8 +671,11 @@ impl Audio {
                 }
             }
             HitResult::NowDead => {
-                // The death response list's key is unnamed (Q-0326): no death response.
-                // spec: S-0701 claim 20 (now dead: for every owner one death sound (F5), at the object, positional)
+                // spec: S-0701 claim 20 (now dead: the local player's object first chooses one death response (F5), at the object, positional)
+                if local && let Some(e) = self.choose(&ts.voice_die, unsync) {
+                    self.request(Some(w), e, Where::Fixed(pos), FULL);
+                }
+                // spec: S-0701 claim 20 (then, for every owner, one death sound (F5), at the object, positional)
                 if let Some(e) = self.choose(&ts.die_sound, unsync) {
                     self.request(Some(w), e, Where::Fixed(pos), FULL);
                 }
@@ -882,7 +901,7 @@ impl Audio {
                     .filter(|i| self.mixer.is_alive(*i));
                 match (turning, live) {
                     // spec: S-0701 claim 23 (the rotation sound as an attached sound while the turret turns)
-                    // interim: Q-0337 (requested while turning with no live instance; finishes its loop pass once stopped)
+                    // spec: S-0701 claim 23 (a turning sample with no instance of its own starts a fresh one, even while an earlier one still finishes; a non-turning sample asks it to end looping, no grace counter, no cut)
                     (true, None) => {
                         if let Some(i) = self.request(
                             Some(w),
@@ -937,7 +956,6 @@ impl Audio {
         let low = production::available_credits(w, local) < LOW_FUNDS;
         if low
             && self.low_funds_after.is_none_or(|t| tick >= t)
-            && !self.low_funds_spoken
             && owns(&|i| {
                 r.buildings.get(i as usize).is_some_and(|b| {
                     matches!(
@@ -948,26 +966,24 @@ impl Audio {
             })
         {
             self.announce(Announcement::LowFunds);
-            match self.names.speak_delay {
-                Some(k) => {
-                    // spec: S-0701 claim 28 (the countdown restarts at N(⌊k × 900⌋) ticks)
-                    let b = k
-                        .mul_rz(
-                            &glasnost_ini::binfloat::Binary::from_i64(
-                                glasnost_ini::binfloat::Format::Double,
-                                SPEAK_DELAY_TICKS,
-                            ),
+            let b = match self.names.speak_delay {
+                // spec: S-0701 claim 28 (the countdown restarts at N(⌊k × 900⌋) ticks)
+                Some(k) => k
+                    .mul_rz(
+                        &glasnost_ini::binfloat::Binary::from_i64(
                             glasnost_ini::binfloat::Format::Double,
-                        )
-                        .trunc_to_i64()
-                        .unwrap_or(0)
-                        .clamp(0, i64::from(i32::MAX)) as i32;
-                    let n = glasnost_sim::infantry::normalised(b, w.game_speed);
-                    self.low_funds_after = Some(tick.saturating_add(n));
-                }
-                // interim: Q-0330 (no SpeakDelay: raised once, never repeated)
-                None => self.low_funds_spoken = true,
-            }
+                            SPEAK_DELAY_TICKS,
+                        ),
+                        glasnost_ini::binfloat::Format::Double,
+                    )
+                    .trunc_to_i64()
+                    .unwrap_or(0)
+                    .clamp(0, i64::from(i32::MAX)) as i32,
+                // spec: S-0701 claim 38 (no SpeakDelay in any layer: initially 2 game minutes, so N(1800) ticks)
+                None => SPEAK_DELAY_INITIAL_TICKS,
+            };
+            let n = glasnost_sim::infantry::normalised(b, w.game_speed);
+            self.low_funds_after = Some(tick.saturating_add(n));
         }
         // spec: S-0701 claim 28 (low power: output below a positive drain, one of the first three construction-building types owned; once per episode)
         let lp = power::low_power(w, local);
@@ -992,13 +1008,20 @@ impl Audio {
         });
         // Our engine has no enslaved or deactivated objects yet, so the
         // normal list always applies (claim 17).
-        // spec: S-0701 claim 17 and 31 (one raw value, entry x mod n; a passive house's object takes it and stays silent)
-        // interim: Q-0335 (any other house's object takes the draw too)
-        let e = self.choose(&ts.voice_select, unsync);
-        // spec: S-0701 claim 16 (only the local player's objects respond)
-        if o.owner.is_some() && o.owner == self.local {
+        let own = o.owner.is_some() && o.owner == self.local;
+        let passive = o
+            .owner
+            .is_some_and(|h| glasnost_sim::econ::setup::passive(w, h));
+        if own {
+            // spec: S-0701 claims 17 and 31 (one raw value, entry x mod n; an empty list takes none)
+            let e = self.choose(&ts.voice_select, unsync);
+            // spec: S-0701 claim 16 (only the local player's objects respond)
             self.respond(id, e);
+        } else if passive {
+            // spec: S-0701 claim 17 (a passive house's object takes the raw value but gives no response)
+            let _ = self.choose(&ts.voice_select, unsync);
         }
+        // spec: S-0701 claim 17 (an ordinary other house's object, enemy or allied, takes no draw and gives no response)
     }
 
     /// The order response of a battlefield click (claim 18, F6).
@@ -1010,7 +1033,7 @@ impl Audio {
         click: &ClickResult,
         unsync: &mut Rng,
     ) {
-        // interim: Q-0328 (the responder is the most recently selected positive-primary-damage object, else the earliest selected; it responds when the click gave it an order)
+        // spec: S-0701 claim 18 (the first object in selection order: positive-primary-damage objects go to the front when selected, others to the end; so the most recently selected such object, else the earliest selected; no order to it, no response)
         let positive = |id: ObjectId| {
             veterancy::type_combat(w, id)
                 .and_then(|tc| tc.slots[0])
@@ -1066,8 +1089,12 @@ impl Audio {
                     match (slot, elite) {
                         // spec: S-0701 Import mapping (`VoiceSecondaryWeaponAttack`, the normal secondary-weapon response)
                         (1.., false) => self.single(ts.voice_secondary_attack.as_ref()),
-                        // interim: Q-0326 (the primary and elite weapon responses' keys are unnamed: the attack list)
-                        _ => None,
+                        // spec: S-0701 Import mapping (`Voice` + `SecondaryEliteWeaponAttack`)
+                        (1.., true) => self.single(ts.voice_secondary_elite_attack.as_ref()),
+                        // spec: S-0701 Import mapping (`Voice` + `PrimaryWeaponAttack`)
+                        (0, false) => self.single(ts.voice_primary_attack.as_ref()),
+                        // spec: S-0701 Import mapping (`Voice` + `PrimaryEliteWeaponAttack`)
+                        (0, true) => self.single(ts.voice_primary_elite_attack.as_ref()),
                     }
                 };
                 // spec: S-0701 F6 (then the attack list)
@@ -1095,14 +1122,14 @@ impl Audio {
             } => self
                 .single(ts.voice_harvest.as_ref())
                 .or_else(|| self.choose(&ts.voice_move, unsync)),
-            // spec: S-0701 F6 (unload, deploy: the deploy response; deployed infantry's undeploy response has an unnamed key, Q-0326)
+            // spec: S-0701 F6 (unload, deploy: deployed infantry's undeploy response, otherwise the deploy response; no fallback)
             Order::Behaviour {
                 behaviour: Behaviour::Unload,
                 ..
             }
             | Order::Deploy { .. } => {
                 if o.kind == Kind::Infantry && deployed_infantry(o) {
-                    None
+                    self.single(ts.voice_undeploy.as_ref())
                 } else {
                     self.single(ts.voice_deploy.as_ref())
                 }
@@ -1154,11 +1181,17 @@ impl Audio {
                 None
             }
             // spec: S-0701 claim 24 (the production-feedback clicks play the game-wide build click; their announcements, claim 28)
-            UiCue::BuildStarted | UiCue::BuildResumed => {
-                // interim: Q-0340 (every start, queue and resume click requests the building entry; training is never requested)
-                self.announce(Announcement::Building);
+            UiCue::BuildStarted { infantry } | UiCue::BuildResumed { infantry } => {
+                // spec: S-0701 claim 28 and S-0411 claim 12 (start and resume: training for infantry, building for every other kind)
+                self.announce(if infantry {
+                    Announcement::Training
+                } else {
+                    Announcement::Building
+                });
                 screen(self, self.names.gui_build.clone())
             }
+            // spec: S-0701 claim 28 and S-0411 claim 12 (a queued copy on an already active line: the build click, no new announcement)
+            UiCue::BuildQueued => screen(self, self.names.gui_build.clone()),
             UiCue::BuildHeld => {
                 self.announce(Announcement::OnHold);
                 screen(self, self.names.gui_build.clone())
@@ -1179,6 +1212,8 @@ impl Audio {
             }
             // spec: S-0701 claim 24 (the sidebar strip scrolled past its end: the game-wide refusal sound)
             UiCue::StripEnd => screen(self, self.names.scold.clone()),
+            // spec: S-0701 claim 24 and S-0411 claim 18 (an accepted page request: the tab-scroll sound)
+            UiCue::StripScroll => screen(self, self.names.gui_tab.clone()),
             // spec: S-0701 claim 23 (the game-wide building placement sound, a screen sound)
             UiCue::BuildingPlaced => screen(self, self.names.building_slam.clone()),
         }

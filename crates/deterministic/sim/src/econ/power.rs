@@ -432,6 +432,47 @@ pub fn totals(w: &World, house: HouseId) -> (i32, i32) {
         .map_or((0, 0), |h| (h.econ.power.output, h.econ.power.drain))
 }
 
+/// The meter's scale *B* (claim 19, F4): the sum of base output and base
+/// drain of the house's buildings, without health scaling, upgrades,
+/// passengers, switching or blackouts.
+pub fn meter_base(w: &World, house: HouseId) -> i32 {
+    w.objects
+        .values()
+        .filter(|o| o.kind == Kind::Building && o.owner == Some(house) && o.on_map && o.health > 0)
+        .filter_map(|o| bp(w, o.type_index))
+        // spec: S-0405 claim 19 (B: base output plus base drain, nothing else)
+        .fold(0i32, |a, b| a.wrapping_add(b.output).wrapping_add(b.drain))
+        .max(0)
+}
+
+/// The settled power meter (claim 19, F4) for a display capacity of `n`
+/// bands (*n* > 1), scale `b` and totals `o` and `d`: the occupied capacity
+/// *A* and the supplied, near-shortage and further-shortage extents in
+/// bands, as doubles before any quantisation.
+// spec: S-0405 F4 (three extents: supplied, near shortage, further shortage)
+pub fn meter(b: i32, o: i32, d: i32, n: i32, mode: Rounding) -> (i32, [F64; 3]) {
+    let f = |x: i64| F64::from_i64(x, mode);
+    // spec: S-0405 F4 (q = trunc(RZ₅₃(RZ₅₃(400 / RZ₅₃(B + 400)) × N)); Constants: meter scale constant 400)
+    let q = f(400)
+        .div(f(i64::from(b)).add(f(400), mode), mode)
+        .mul(f(i64::from(n)), mode)
+        .to_i32_common();
+    // spec: S-0405 F4 (A = N − min(N − 1, max(0, q)), integer clamps)
+    let a = n - (n - 1).min(q.max(0));
+    // spec: S-0405 F4 (U = max(0, D − O), V = min(U, 100), W = U − V, T = max(O, D)); Constants: near-shortage interval 100
+    let u = (i64::from(d) - i64::from(o)).max(0);
+    let v = u.min(100); // spec: S-0405 Constants (near-shortage interval 100)
+    let wv = u - v;
+    let t = i64::from(o.max(d));
+    if t <= 0 {
+        // spec: S-0405 F4 (T = 0: the supplied extent is A, both shortage extents 0)
+        return (a, [f(i64::from(a)), F64::ZERO, F64::ZERO]);
+    }
+    let ext = |x: i64| f(i64::from(a)).mul(f(x).div(f(t), mode), mode);
+    // spec: S-0405 F4 (supplied RZ₅₃(A × RZ₅₃(O / T)), near RZ₅₃(A × RZ₅₃(V / T)), further RZ₅₃(A × RZ₅₃(W / T)))
+    (a, [ext(i64::from(o.max(0))), ext(v), ext(wv)])
+}
+
 /// The power part of a house's update (claims 4 to 7 and 11): a running
 /// timed blackout that ends here ends first; then a due house works out its
 /// power. Returns whether the totals changed (S-0410 claim 2).

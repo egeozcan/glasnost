@@ -292,8 +292,9 @@ fn selection_response_draw() {
     let want = format!("Yes{}", x % 3);
     assert_eq!(heard(&mut a, 0), [want]);
     a.mixer_mut().clear();
+    // spec: S-0701 claim 17 and scenario D3 (an ordinary other house's object: no draw, no response)
+    assert!(!glasnost_sim::econ::setup::passive(&w, w.obj(theirs).unwrap().owner.unwrap()));
     a.selected(&w, theirs, &mut u);
-    r.raw();
     assert_eq!(u, r);
     a.tick(&w, &[], &mut u);
     assert!(heard(&mut a, 100).is_empty());
@@ -332,7 +333,7 @@ fn order_responder() {
         a.tick(&w, &[], &mut u);
         heard(a, now)
     };
-    // interim: Q-0328 (the selection order from selection times)
+    // spec: S-0701 claim 18 (the selection order from selection times)
     assert_eq!(
         said(&mut a, &[cart, tank, buggy], all(&[cart, tank, buggy]), 0),
         ["TankGo"]
@@ -384,7 +385,7 @@ fn order_response_table() {
     };
     assert_eq!(say(&mut a, &w, b(Behaviour::Move, false), &mut u), ["Go"]);
     assert_eq!(say(&mut a, &w, b(Behaviour::Attack, true), &mut u), ["Go"]);
-    // spec: S-0701 F6 (weapon 0 chosen: not the secondary-weapon response); interim: Q-0326 (the primary response key is unnamed: the attack list)
+    // spec: S-0701 F6 (weapon 0 chosen: not the secondary-weapon response; no primary response: the attack list)
     assert_eq!(
         say(&mut a, &w, b(Behaviour::Attack, false), &mut u),
         ["Hit"]
@@ -423,7 +424,7 @@ fn order_response_table() {
             voice_capture: None,
             voice_harvest: None,
             voice_deploy: None,
-            ..full
+            ..full.clone()
         },
     );
     a.set_names(n);
@@ -438,6 +439,23 @@ fn order_response_table() {
     );
     let none: Vec<String> = Vec::new();
     assert_eq!(say(&mut a, &w, Order::Deploy { actor: tank }, &mut u), none);
+    // spec: S-0701 F6 and Import mapping (`Voice` + `PrimaryWeaponAttack`: weapon 0, not elite, the single response before the attack list)
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            voice_primary_attack: Some("Mend".into()),
+            ..full.clone()
+        },
+    );
+    a.set_names(n);
+    let before = u.taken();
+    assert_eq!(
+        say(&mut a, &w, b(Behaviour::Attack, false), &mut u),
+        ["Mend"]
+    );
+    assert_eq!(u.taken(), before, "a single response takes no draw");
 }
 
 // spec: S-0701 F6 (attack by the repair-response vehicle with a weapon of negative damage: the game-wide repair-vehicle response)
@@ -616,6 +634,37 @@ fn death_sound() {
     assert_eq!(heard(&mut a, 0), [format!("Boom{}", x % 2)]);
 }
 
+// spec: S-0701 claim 20 and Import mapping (`Voice` + `Die`: the local player's death response, chosen before the any-owner death sound)
+#[test]
+fn local_death_response() {
+    let w = world();
+    let t = tref(&w, Kind::Vehicle, "CRUSHER");
+    let mut a = audio(&w, &["Boom0", "Last"]);
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            voice_die: strings(&["Last"]),
+            die_sound: strings(&["Boom0"]),
+            ..TypeSounds::default()
+        },
+    );
+    a.set_names(n);
+    let mut u = Rng::new(9);
+    let before = u.taken();
+    a.tick(&w, &[hit(&w, t, 0, HitResult::NowDead, None)], &mut u);
+    assert_eq!(u.taken(), before + 2, "one choice for each list");
+    let mut got = heard(&mut a, 0);
+    got.sort();
+    assert_eq!(got, ["Boom0", "Last"]);
+    a.mixer_mut().clear();
+    let before = u.taken();
+    a.tick(&w, &[hit(&w, t, 1, HitResult::NowDead, None)], &mut u);
+    assert_eq!(u.taken(), before + 1, "another house: the death sound only");
+    assert_eq!(heard(&mut a, 100), ["Boom0"]);
+}
+
 // spec: S-0701 claim 37 (a building without its own damage sound: the game-wide one at now yellow and now red; with an empty death list: the game-wide death sound)
 #[test]
 fn building_fallback_sounds() {
@@ -788,7 +837,20 @@ fn turret_sound() {
     w.obj_mut(tank).expect("tank").rotation_sample = true;
     a.tick(&w, &[], &mut u);
     assert_eq!(heard(&mut a, 0), ["Whirr"]);
-    w.obj_mut(tank).expect("tank").rotation_sample = false;
+    // spec: S-0701 claim 23 (successive turning samples keep the existing instance)
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 1);
+    // spec: S-0701 claim 23 and scenario F12 (a non-turning sample asks it to end looping, no grace, no cut)
+    w.tick += 10_000;
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 1, "still finishing its pass");
+    // spec: S-0701 claim 23 (a later turning sample starts a fresh instance; the finishing one is not cut)
+    let tick = w.tick;
+    let o = w.obj_mut(tank).expect("tank");
+    o.turret.t0 = tick;
+    o.turret.duration = 100;
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 2);
     w.tick += 10_000;
     a.tick(&w, &[], &mut u);
     render(&mut a, 100);
@@ -865,23 +927,26 @@ fn building_and_promotion_sounds() {
     assert_eq!(heard(&mut a, 300), ["Elite"]);
 }
 
-// spec: S-0701 claim 24 (production-feedback clicks: the build click; the strip past its end: the refusal sound); S-0416 claim 4 and S-0701 claim 35 (credit ticks at request level 8192)
+// spec: S-0701 claim 24 and S-0411 claim 18 (production-feedback clicks: the build click; a page request at the strip's end: the refusal sound; an accepted one: the tab-scroll sound); S-0416 claim 4 and S-0701 claim 35 (credit ticks at request level 8192)
 #[test]
 fn interface_sounds() {
     let w = world();
-    let mut a = audio(&w, &["Click", "Nope", "Up", "Down"]);
+    let mut a = audio(&w, &["Click", "Nope", "Up", "Down", "Tab"]);
     let mut n = SoundNames::default();
     n.gui_build = Some("Click".into());
     n.scold = Some("Nope".into());
+    n.gui_tab = Some("Tab".into());
     n.credit_ticks = strings(&["Up", "Down"]);
     a.set_names(n);
     let mut now = 0;
     for (c, want) in [
-        (UiCue::BuildStarted, "Click"),
-        (UiCue::BuildResumed, "Click"),
+        (UiCue::BuildStarted { infantry: false }, "Click"),
+        (UiCue::BuildQueued, "Click"),
+        (UiCue::BuildResumed { infantry: true }, "Click"),
         (UiCue::BuildHeld, "Click"),
         (UiCue::BuildCancelled, "Click"),
         (UiCue::StripEnd, "Nope"),
+        (UiCue::StripScroll, "Tab"),
         (UiCue::CreditTick { rising: true }, "Up"),
         (UiCue::CreditTick { rising: false }, "Down"),
     ] {
@@ -897,6 +962,27 @@ fn interface_sounds() {
         assert_eq!(a.mixer().placement(i), Some((level, crate::mixer::CENTRE)));
     }
     assert_eq!(CREDIT_TICK_LEVEL, 8192);
+}
+
+// spec: S-0701 claim 24 and S-0404 claim 3 (a production request refused as it is applied: the game-wide refusal sound, the local player's house only)
+#[test]
+fn queue_refusal_at_application() {
+    let w = world();
+    let mut a = audio(&w, &["Nope"]);
+    let mut n = SoundNames::default();
+    n.scold = Some("Nope".into());
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let refused = |h: u8| Effect::Sound {
+        sound: Sound::QueueRefused,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: None,
+    };
+    a.tick(&w, &[refused(1)], &mut u);
+    assert!(heard(&mut a, 100).is_empty());
+    a.tick(&w, &[refused(0)], &mut u);
+    assert_eq!(heard(&mut a, 200), ["Nope"]);
 }
 
 // spec: S-0701 claim 24 (a busy line: only unable to comply; a refused placement: only cannot deploy here; no interface sound)
@@ -1002,6 +1088,26 @@ fn announcing(w: &World, roles: &[(Announcement, &str)]) -> Audio {
     a
 }
 
+// spec: S-0701 claim 28 and scenario F11; S-0411 claim 12 (start and resume request training for infantry, building for every other kind; a queued copy on an active line requests neither)
+#[test]
+fn production_announcement_kinds() {
+    let w = world();
+    let mut now = 0;
+    for (cue, role, want) in [
+        (UiCue::BuildStarted { infantry: true }, Announcement::Training, true),
+        (UiCue::BuildStarted { infantry: true }, Announcement::Building, false),
+        (UiCue::BuildResumed { infantry: false }, Announcement::Building, true),
+        (UiCue::BuildResumed { infantry: false }, Announcement::Training, false),
+        (UiCue::BuildQueued, Announcement::Building, false),
+        (UiCue::BuildQueued, Announcement::Training, false),
+    ] {
+        let mut a = announcing(&w, &[(role, "Say")]);
+        a.cue(cue);
+        now += 1000;
+        assert_eq!(announced(&mut a, now), want, "{cue:?} with only {role:?}");
+    }
+}
+
 // spec: S-0701 claim 27 (one at a time, more than 500 ms after the previous start); claim 26 (the local player's voice set)
 #[test]
 fn announcements_one_at_a_time() {
@@ -1015,7 +1121,7 @@ fn announcements_one_at_a_time() {
     );
     let set = a.voice_set();
     assert!(set < 3);
-    a.cue(UiCue::BuildStarted);
+    a.cue(UiCue::BuildStarted { infantry: false });
     a.service(1000, &mut Rng::new(1));
     assert!(a.mixer().speaking());
     // A standard request while one plays and the place is empty waits.
@@ -1147,9 +1253,18 @@ fn low_funds() {
     spawn(&mut w, Kind::Building, "BARR", 0, 0, 0);
     a.tick(&w, &[], &mut u);
     assert!(announced(&mut a, 2000));
-    // interim: Q-0330 (no speak delay: once)
+    // spec: S-0701 claim 38 and scenario A5 (no speak delay: initially 2 game minutes, a countdown of N(1800) ticks)
     a.tick(&w, &[], &mut u);
     assert!(!announced(&mut a, 3000));
+    let initial = glasnost_sim::infantry::normalised(1800, w.game_speed);
+    let t0 = w.tick;
+    w.tick = t0 + initial - 1;
+    a.tick(&w, &[], &mut u);
+    assert!(!announced(&mut a, 3500));
+    w.tick = t0 + initial;
+    a.tick(&w, &[], &mut u);
+    assert!(announced(&mut a, 4000));
+    w.tick = t0;
     // With a speak delay of one minute the countdown restarts at N(900).
     let mut b = base_audio(&w);
     let mut n = SoundNames::default();

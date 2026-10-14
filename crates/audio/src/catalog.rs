@@ -283,21 +283,36 @@ fn placement(stored: &[u8]) -> Option<Placement> {
     any.then_some(p)
 }
 
-/// One or two integers *a* [*b*], *b* = *a* when only one is given.
-///
-/// The separator between the two is not stated by S-0701; interim (Q-0334):
-/// spaces, tabs or commas.
+/// One or two integers *a* [*b*], *b* = *a* when only one token is given
+/// (S-0701 claim 2).
 fn pair(stored: &[u8], in_force: (i32, i32)) -> (i32, i32) {
-    // interim: Q-0334 (the separator of the two numbers)
+    // spec: S-0701 claim 2 (tokens separated only by spaces, tabs or newlines; commas are not separators)
     let mut it = stored
-        .split(|&b| b == b' ' || b == b'\t' || b == b',')
+        .split(|&b| b == b' ' || b == b'\t' || b == b'\n' || b == b'\r')
         .filter(|w| !w.is_empty());
-    let Some(a) = it.next().and_then(value::integer) else {
+    let Some(a) = it.next().map(leading_int) else {
         return in_force;
     };
-    // spec: S-0701 claim 2 (b = a when only one is given)
-    let b = it.next().and_then(value::integer).unwrap_or(a);
+    // spec: S-0701 claim 2 (b = a when only one token is given; tokens after the second are ignored)
+    let b = it.next().map_or(a, leading_int);
     (a, b)
+}
+
+/// A token's leading signed decimal digits, trailing text ignored; 0
+/// without leading digits (S-0701 claim 2).
+fn leading_int(token: &[u8]) -> i32 {
+    let (neg, rest) = match token.first() {
+        Some(b'-') => (true, &token[1..]),
+        Some(b'+') => (false, &token[1..]),
+        _ => (false, token),
+    };
+    let mut v: i64 = 0;
+    for &d in rest.iter().take_while(|b| b.is_ascii_digit()) {
+        // spec: S-0701 claim 2 (signed decimal digits; saturated at the 32-bit range, which no stated value reaches)
+        v = (v * 10 + i64::from(d - b'0')).min(i64::from(i32::MAX) + 1);
+    }
+    let v = if neg { -v } else { v };
+    v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
 impl SoundCatalog {
@@ -670,5 +685,21 @@ mod tests {
         assert!(p("B").local);
         assert!(!p("C").shroud);
         assert!(p("D").shroud);
+    }
+
+    // spec: S-0701 claim 2 and scenario E4 (two space/tab/newline tokens, leading signed digits, no comma separator)
+    #[test]
+    fn claim_2_delay_and_pitch_token_forms() {
+        assert_eq!(pair(b"40,80", (9, 9)), (40, 40));
+        assert_eq!(pair(b"40, 80", (9, 9)), (40, 80));
+        assert_eq!(pair(b"40 x 80", (9, 9)), (40, 0));
+        assert_eq!(pair(b"10 20 30", (9, 9)), (10, 20));
+        assert_eq!(pair(b"40ms 80", (9, 9)), (40, 80));
+        assert_eq!(pair(b"400\t800", (9, 9)), (400, 800));
+        assert_eq!(pair(b"-50,-50", (9, 9)), (-50, -50));
+        assert_eq!(pair(b"x", (9, 9)), (0, 0));
+        let c = cat("[SoundList]\n0=A\n\n[A]\nDelay=40 x 80\nFShift=-50,-50\n");
+        let a = c.entry(c.resolve("A").unwrap());
+        assert_eq!((a.delay, a.fshift), ((40, 0), (-50, -50)));
     }
 }

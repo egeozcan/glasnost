@@ -103,7 +103,7 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
     p.cameo_click(0, Button::Left, false);
     assert!(
-        p.cues.contains(&UiCue::BuildStarted),
+        p.cues.contains(&UiCue::BuildStarted { infantry: false }),
         "the click started the item: {:?}",
         p.cues
     );
@@ -118,6 +118,16 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
         .flat_map(|dy| (-8..=8).map(move |dx| CellXY::new(yard.x + dx, yard.y + dy)))
         .find(|&c| p.preview(c).is_some_and(|(_, ok)| ok))
         .expect("a legal cell near the base");
+    // spec: S-0406 claims 6 and 20; S-0701 claim 24 (a refused click: the announcement cue, placement mode kept, no battlefield text)
+    let messages = p.messages.len();
+    let far = (-40..=40)
+        .flat_map(|dy| (-40..=40).map(move |dx| CellXY::new(yard.x + dx, yard.y + dy)))
+        .find(|&c| p.preview(c).is_some_and(|(_, ok)| !ok))
+        .expect("a refused cell");
+    p.click_map(Button::Left, None, far, Modifiers::default());
+    assert!(p.cues.contains(&UiCue::PlacementRefused));
+    assert_eq!(p.tool, Tool::Place(t));
+    assert_eq!(p.messages.len(), messages);
     p.click_map(Button::Left, None, spot, Modifiers::default());
     assert_eq!(p.tool, Tool::Select, "placement mode ends");
     // spec: S-0701 claim 23 (the placement sound)
@@ -135,7 +145,7 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
             .any(|o| matches!(o, Order::Place { cell: Some(_), .. }))
     );
     // The end screen is not there while the game runs.
-    assert!(p.end(60).is_none());
+    assert!(p.end().is_none());
 }
 
 fn start_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Play {
@@ -202,6 +212,21 @@ fn claim_19_ineligible_candidates_still_clear() {
     assert!(p.selection.is_empty());
 }
 
+/// spec: S-0701 claim 19 and scenario D4 (no command sound for an empty selection; one per press for a nonempty one, whether or not anything was ordered)
+#[test]
+fn key_commands_sound_once_per_press_for_a_nonempty_selection() {
+    let mut p = start();
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Stop);
+    assert!(p.keys.is_empty());
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    p.key(KeyCommand::Stop);
+    p.key(KeyCommand::Guard);
+    assert_eq!(p.keys, [KeyCommand::Stop, KeyCommand::Guard]);
+}
+
 /// spec: S-0214 claim 19 (with force-select eligible objects are added, not toggled: a selected one inside stays selected, and ineligible candidates clear nothing)
 #[test]
 fn claim_19_force_select_adds() {
@@ -248,17 +273,60 @@ fn claim_19_empty_box_switch_off() {
     assert!(p.game.replay().orders.is_empty());
 }
 
-/// spec: S-0701 claim 24 (the strip scrolled past its end: the refusal sound); interim: Q-0339 (a click that cannot move the strip)
+/// spec: S-0411 claim 18 and S-0701 claim 24 (all icons fit: the page buttons are disabled, no request and no sound)
 #[test]
-fn scrolling_past_the_strip_end_cues_the_refusal_sound() {
+fn page_requests_on_a_fitting_strip_are_silent() {
     let mut p = start();
     p.cues.clear();
     p.scroll_icons(-1, 4);
+    p.scroll_icons(1, 4);
     assert_eq!(p.scroll, 0);
-    assert_eq!(p.cues, [UiCue::StripEnd]);
-    p.cues.clear();
-    p.scroll_icons(0, 4);
     assert!(p.cues.is_empty());
+}
+
+/// spec: S-0411 claim 18 and S-0701 claim 24 (an overflowing strip: a request at its requested end gives the refusal sound; an accepted one moves a page, clamped at the end, with the tab-scroll sound; the wheel moves one row silently)
+#[test]
+fn page_requests_and_wheel_on_an_overflowing_strip() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| {
+        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+    });
+    p.tab_click(0);
+    // Five icons on the shown tab, one row visible: N = 5, R = 1, E = 2.
+    let icons = &mut p.game.world.houses[usize::from(p.local.0)].econ.tech.icons[0];
+    let first = icons[0].clone();
+    while icons.len() < 5 {
+        icons.push(first.clone());
+    }
+    p.cues.clear();
+    p.scroll_icons(-1, 1);
+    assert_eq!((p.scroll, p.cues.clone()), (0, vec![UiCue::StripEnd]));
+    p.cues.clear();
+    p.scroll_icons(1, 1);
+    p.scroll_icons(1, 1);
+    assert_eq!(p.scroll, 2);
+    assert_eq!(p.cues, [UiCue::StripScroll, UiCue::StripScroll]);
+    p.cues.clear();
+    p.scroll_icons(1, 1);
+    assert_eq!((p.scroll, p.cues.clone()), (2, vec![UiCue::StripEnd]));
+    // Two rows visible from the top row 2 of 3: partial page accepted, clamped.
+    p.scroll = 0;
+    p.cues.clear();
+    p.scroll_icons(1, 2);
+    assert_eq!((p.scroll, p.cues.clone()), (1, vec![UiCue::StripScroll]));
+    p.cues.clear();
+    p.wheel_icons(-3, 1);
+    assert_eq!(p.scroll, 2);
+    p.wheel_icons(-1, 1);
+    assert_eq!(p.scroll, 2);
+    p.wheel_icons(7, 1);
+    assert_eq!(p.scroll, 1);
+    assert!(p.cues.is_empty(), "the wheel is silent");
 }
 
 /// spec: S-0414 claim 11 (surrender), S-0414 (the outcome ends the game)
@@ -268,9 +336,31 @@ fn surrender_ends_the_game_with_an_end_screen() {
     step_until(&mut p, 10, |p| p.world().tick >= 4);
     p.surrender();
     step_until(&mut p, 2000, |p| p.outcome.is_some());
-    let end = p.end(60).expect("an end screen");
+    let end = p.end().expect("an end screen");
     assert_eq!(end.headline(), "DEFEAT");
     assert!(!p.running());
+    // spec: S-0414 claims 19 and 23 (the displayed scores are fixed once play has stopped)
+    let local = p.local;
+    assert!(glasnost_sim::econ::stats::of(p.world(), local).shown.is_some());
+}
+
+/// spec: S-0414 claim 23 and Formulas (the active clock counts ⌊v/16⌋ − ⌊u/16⌋ per active interval; paused or unfocused time and time after play stops are not counted)
+#[test]
+fn result_duration_counts_active_clock_units() {
+    let mut p = start();
+    p.clock(0, true);
+    p.clock(959, true);
+    assert_eq!(p.clock_units, 59);
+    p.clock(2000, false);
+    p.clock(5000, true);
+    p.clock(5016, true);
+    assert_eq!(p.clock_units, 60);
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.surrender();
+    step_until(&mut p, 2000, |p| p.outcome.is_some());
+    p.clock(9000, true);
+    assert_eq!(p.clock_units, 60);
+    assert_eq!(p.end().unwrap().duration(), (0, 0, 1));
 }
 
 /// spec: S-0213 claim 25 (status lines: deadline = clock count + 480 in 16 ms units, removed when the count is strictly greater; six shared lines, oldest first, the oldest evicted at capacity; a later message appends rather than refreshing; the clock runs on regardless of ticks)
@@ -285,7 +375,7 @@ fn s0213_claim_25_status_lines() {
     let mut p = start();
     p.messages.clear();
     p.update_messages(16 * 100 + 15);
-    assert_eq!(p.clock, 100);
+    assert_eq!(p.status_clock, 100);
     p.say("one");
     assert_eq!(p.messages[0].until, 580);
     p.update_messages(16 * 580);

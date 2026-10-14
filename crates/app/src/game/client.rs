@@ -31,7 +31,7 @@ use super::install::{self, Install};
 use super::paint::Painter;
 use super::play::Button;
 use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
-use crate::mapview::live::{Pacer, period_ms};
+use crate::mapview::live::Pacer;
 
 /// Asynchronous work the client asks for.
 pub enum Job {
@@ -382,6 +382,16 @@ impl Client {
         }
     }
 
+    /// A mouse-wheel event with the sign of its vertical delta (S-0411
+    /// claim 18).
+    pub fn wheel(&mut self, delta: i32) {
+        if self.shell.screen == Screen::Game
+            && let Some(s) = self.session.as_mut()
+        {
+            s.wheel(delta);
+        }
+    }
+
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.gesture();
@@ -501,6 +511,9 @@ impl Client {
         s.clock_ms = now_ms;
         // spec: S-0213 claim 25 (status lines expire at display updates, also while paused or unfocused)
         s.play.update_messages(now_ms);
+        // spec: S-0414 claim 23 (the active clock pauses for the options menu and lost focus)
+        let active = !s.paused && self.focused;
+        s.play.clock(now_ms, active);
         // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
         if !s.ticking() || !self.focused {
             self.pacer.reset();
@@ -541,7 +554,7 @@ impl Client {
             });
             a.frame(now_ms, &mut self.unsync);
         }
-        if let Some(end) = s.play.end(period_ms(s.speed)) {
+        if let Some(end) = s.play.end() {
             self.shell.game_over(end);
         }
     }

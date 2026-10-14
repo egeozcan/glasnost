@@ -92,6 +92,9 @@ pub enum Prereq {
     Group(Group),
     /// An upgrade type (claim 8 (c)).
     Upgrade(u32),
+    /// An unrecognised name kept as an unmet entry
+    /// (`quirks.prerequisite_names_dropped` off, claim 8 (d)).
+    Unmet,
 }
 
 /// The tech-tree fields of one type.
@@ -121,6 +124,9 @@ pub struct TypeTech {
     /// A building type whose first superweapon may be disabled from the
     /// setup screen (claim 7).
     pub disableable_sw: bool,
+    /// A building type whose second superweapon may be disabled from the
+    /// setup screen (claim 7, `quirks.superweapon_setting_tests_first_only` off).
+    pub disableable_sw2: bool,
     /// A building type on the tech-lab list (claims 6 and 7).
     pub tech_lab: bool,
     /// A building type with the radar flag (claim 6).
@@ -221,8 +227,10 @@ impl Rules {
                     if let Some(g) = Group::from_word(n) {
                         return Some(Prereq::Group(g));
                     }
-                    // spec: S-0407 claim 8 (d) (a name that is neither a group word nor a building type is dropped)
-                    let b = find(&buildings, n)?;
+                    let Some(b) = find(&buildings, n) else {
+                        // spec: S-0407 claim 8 (d) (a name that is neither a group word nor a building type is dropped; quirks.prerequisite_names_dropped off: it remains an unmet entry)
+                        return (!r.globals.quirks.prerequisite_names_dropped).then_some(Prereq::Unmet);
+                    };
                     if upgrade_of(&buildings[b as usize]) {
                         Some(Prereq::Upgrade(b))
                     } else {
@@ -297,13 +305,17 @@ impl Rules {
             .map(|n| {
                 let b = s.buildings.get(n).cloned().unwrap_or_default();
                 let e = &b.econ;
-                let disableable_sw = e.super_weapon.as_ref().is_some_and(|sw| {
-                    // spec: S-0407 Import mapping (DisableableFromShell absent: no)
-                    s.superweapons
-                        .iter()
-                        .find(|(k, _)| k.eq_ignore_ascii_case(sw))
-                        .is_some_and(|(_, v)| v.disableable_from_shell.unwrap_or(false))
-                });
+                let disableable = |f: &Option<String>| {
+                    f.as_ref().is_some_and(|sw| {
+                        // spec: S-0407 Import mapping (DisableableFromShell absent: no)
+                        s.superweapons
+                            .iter()
+                            .find(|(k, _)| k.eq_ignore_ascii_case(sw))
+                            .is_some_and(|(_, v)| v.disableable_from_shell.unwrap_or(false))
+                    })
+                };
+                let disableable_sw = disableable(&e.super_weapon);
+                let disableable_sw2 = disableable(&e.super_weapon2);
                 let fixed_secret = [
                     (Kind::Infantry, &e.secret_infantry, &infantry),
                     (Kind::Vehicle, &e.secret_unit, &vehicles),
@@ -325,6 +337,7 @@ impl Rules {
                     insignificant: b.combat.insignificant.unwrap_or(false),
                     owners: owners(&b.owner),
                     disableable_sw,
+                    disableable_sw2,
                     tech_lab: tech_labs.contains(&i),
                     // spec: S-0407 claim 6 (radar flag; power field, absent 0)
                     radar: e.radar.unwrap_or(false),
@@ -641,9 +654,10 @@ pub fn conditions_refuse(w: &World, house: HouseId, t: TypeRef) -> bool {
     if f.stolen.iter().zip(flags).any(|(&need, has)| need && !has) {
         return true;
     }
-    // spec: S-0407 claim 7 (superweapons off: a disableable first superweapon refuses, unless on the tech-lab list)
+    // spec: S-0407 claim 7 (superweapons off: a disableable first superweapon refuses, unless on the tech-lab list; quirks.superweapon_setting_tests_first_only off: the second field too)
+    let second = !w.rules().quirks.superweapon_setting_tests_first_only && f.disableable_sw2;
     if t.kind == Kind::Building
-        && f.disableable_sw
+        && (f.disableable_sw || second)
         && !f.tech_lab
         && !crate::econ::setup::superweapons_allowed(w)
     {
@@ -684,6 +698,8 @@ fn prereq_met(w: &World, house: HouseId, p: Prereq) -> bool {
                 })
         }
         Prereq::Upgrade(u) => upgrade_met(w, house, u),
+        // spec: S-0407 claim 8 (d) (quirks.prerequisite_names_dropped off: never met)
+        Prereq::Unmet => false,
     }
 }
 

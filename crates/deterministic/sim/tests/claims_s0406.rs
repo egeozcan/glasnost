@@ -613,6 +613,30 @@ fn claim_5_explored_ground() {
     assert!(!placement::place_legal(&w, B, tr(&w, "HUT"), c(1, 0)));
 }
 
+// spec: S-0406 claim 5 and PL6 e (the 8-cell 3 × 3 word: the shroud test includes the rectangle's missing cell (2, 1))
+#[test]
+fn claim_5_missing_cell_is_shroud_tested() {
+    let r = rules();
+    let mut w = game(&r);
+    let refy = ty(&w, "REFY");
+    let at = |dx: i32, dy: i32| c(-9 + dx, 6 + dy);
+    let p = glasnost_sim::world::Pos::centre(at(1, 1), 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, A, p, 4);
+    assert!(placement::explored(&w, A, refy, at(0, 0)));
+    // Only the missing cell (2, 1) is shrouded again; the eight covered cells stay explored.
+    let i = w.cells.idx(at(2, 1)).expect("on the map");
+    let marks = w.econ.shroud.houses[usize::from(A.0)].as_mut().expect("player house");
+    let kept = marks.marks[i];
+    marks.marks[i] = 0;
+    for cell in placement::foundation_cells(&w, refy, at(0, 0)) {
+        assert!(glasnost_sim::econ::shroud::explored(&w, A, cell));
+    }
+    assert!(!glasnost_sim::econ::shroud::explored(&w, A, at(2, 1)));
+    assert!(!placement::explored(&w, A, refy, at(0, 0)));
+    w.econ.shroud.houses[usize::from(A.0)].as_mut().expect("player house").marks[i] = kept;
+    assert!(placement::explored(&w, A, refy, at(0, 0)));
+}
+
 // spec: S-0406 claim 6 (claims 4 and 5 are not judged again when the order is applied)
 #[test]
 fn claim_6_not_judged_at_application() {
@@ -849,8 +873,17 @@ fn claim_1_place_order_through_production() {
             cell: Some(testkit::mid(e::SIZE, -6, 0)),
         },
     );
+    w.effects.clear();
     e::step(&mut w);
     assert!(e::item(&w, 0, plant).is_some_and(|i| i.done_tick.is_some()));
+    // spec: S-0404 claim 7 (placement refused by its cell tests as it is applied: the cannot-deploy-here announcement for its house)
+    {
+        use glasnost_sim::combat::effects::{Effect, Sound};
+        assert!(w.effects.iter().any(|x| matches!(
+            x,
+            Effect::Sound { sound: Sound::CannotDeploy, house: Some(h), .. } if *h == A
+        )));
+    }
     let at = testkit::mid(e::SIZE, -3, 0);
     assert!(placement::place_legal(&w, A, plant, at));
     let objects = w.objects.len();

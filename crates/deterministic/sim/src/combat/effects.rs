@@ -105,6 +105,9 @@ pub enum Sound {
     /// A produced unit left its factory (S-0701 claims 23 and 28): `of` is
     /// the unit's type, `pos` the factory's position.
     UnitReady,
+    /// A queue request refused as it is applied, by the queue limit or the
+    /// build limit (S-0404 claim 3, S-0701 claim 24).
+    QueueRefused,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

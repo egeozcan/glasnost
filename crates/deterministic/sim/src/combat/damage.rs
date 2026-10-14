@@ -792,6 +792,8 @@ fn credit(w: &mut World, id: ObjectId, hit: &Hit) {
         (_, Some(h)) => (None, Some(h)),
         (None, None) => (None, None),
     };
+    // spec: S-0414 claims 21 and 22 (the result screen's kills, losses and destruction score)
+    crate::econ::stats::destruction(w, id, object);
     crate::combat::veterancy::destruction_credited(w, id, object, house);
 }
 

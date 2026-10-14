@@ -1618,6 +1618,8 @@ pub fn pay(w: &mut World, refinery: ObjectId, tib: usize, amount: i32) {
     // spec: S-0402 F3 (a, a whole number held as a single)
     let a = F64::from_i64(i64::from(amount), m).to_f32(m).to_f64();
     let np = purifier_count(w, owner);
+    // spec: S-0414 claim 22 (the incoming resource amount a adds to the running score)
+    super::stats::resource(w, owner, a);
     let house = &mut w.houses[usize::from(owner.0)];
     // spec: S-0402 claim 12 (credits go straight into the balance; no storage caps them)
     house.credits = paid(v, mult, a, house.credits, m);
@@ -1630,6 +1632,8 @@ pub fn pay(w: &mut World, refinery: ObjectId, tib: usize, amount: i32) {
     if x.gt(F64::ZERO) {
         // spec: S-0402 F3 (when x > 0, a second payment with x in place of a)
         house.credits = paid(v, mult, x, house.credits, m);
+        // spec: S-0414 claim 22 (a purifier bonus amount is a separate score update)
+        super::stats::resource(w, owner, x);
     }
 }
 

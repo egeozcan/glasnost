@@ -13,13 +13,11 @@ use crate::draw::{DrawList, Rgba, colour};
 use crate::geom::{Point, Rect};
 use crate::widget::{self, Targets};
 
-/// The most player slots the screen shows. Interim (Q-0281): the colour
-/// slots are 0 … 7 (S-0412 claim 7), so at most eight players can hold
-/// distinct colours.
-pub const MAX_SLOTS: usize = 8;
-/// Team numbers offered. Interim (Q-0281): S-0412 Terms says "a small set
-/// of team numbers" without a count; we offer teams 1 … 4.
-pub const TEAMS: u8 = 4;
+/// The most player rows the screen shows: one human row and up to seven
+/// computer rows (S-0412 claim 15).
+pub const MAX_SLOTS: usize = 8; // spec: S-0412 claim 15 (at most eight rows)
+/// Team numbers offered besides no team (S-0412 claim 15 and Terms).
+pub const TEAMS: u8 = 4; // spec: S-0412 claim 15 (no team and four distinct teams)
 
 /// The values and ranges the screen offers, read from the rules by the
 /// client.
@@ -40,8 +38,7 @@ pub struct SetupRules {
     pub flags: [bool; 5],
     /// The game-speed index the control starts at (S-0201 claim 7).
     pub game_speed: u8,
-    /// The countries offered (interim, Q-0281: the non-passive countries
-    /// other than the neutral and special houses, in registration order).
+    /// The countries offered (S-0412 claim 15), in registration order.
     pub countries: Vec<String>,
     /// The swatch of each colour slot 0 … 7 (S-0103 claim 10).
     pub colours: Vec<Rgba>,
@@ -208,6 +205,14 @@ fn cycle_opt(v: Option<usize>, d: i32, n: usize) -> Option<usize> {
     if j == 0 { None } else { Some(j as usize - 1) }
 }
 
+/// The player rows a map offers (S-0412 claim 15): its start-waypoint
+/// count (`MapEntry::starts`, S-0009 claim 23), at most [`MAX_SLOTS`].
+/// Listed maps have at least two starts, so the random-map player-count
+/// fallback for a count of zero never applies; with no map, every row.
+fn rows(map: Option<&MapEntry>) -> usize {
+    map.map_or(MAX_SLOTS, |m| (m.starts as usize).min(MAX_SLOTS))
+}
+
 impl Setup {
     /// The screen's first state: the person in slot 1, one AI in slot 2,
     /// every value at the rules' default.
@@ -351,6 +356,13 @@ impl Setup {
                         s.start = None;
                     }
                 }
+                // spec: S-0412 claim 15 (computer rows beyond the new map's row count are emptied and hidden)
+                let rows = rows(maps.get(self.map));
+                for s in self.slots.iter_mut().skip(rows) {
+                    if s.kind == SlotKind::Ai {
+                        *s = Slot::closed();
+                    }
+                }
             }
             SetupHit::Kind(i, d) if i > 0 => {
                 // The first row is always the person's (interim UI rule).
@@ -449,7 +461,8 @@ impl Setup {
             d.text_left(Rect::new(x0 + cx, y, cw, 12), name, colour::DIM);
         }
         y += 14;
-        for (i, s) in self.slots.iter().enumerate() {
+        // spec: S-0412 claim 15 (only the map's player rows are shown)
+        for (i, s) in self.slots.iter().enumerate().take(rows(maps.get(self.map))) {
             let row = Rect::new(x0, y, 600, 16);
             d.fill(
                 row,
@@ -815,6 +828,33 @@ mod tests {
         assert_eq!(g.seed, 7);
         // The same lobby seed resolves the same way.
         assert_eq!(game_setup(&l, &sim, &r.countries, 7, 99).unwrap(), g);
+    }
+
+    // spec: S-0412 claim 15 (the map's start-waypoint count gives the rows shown; switching to a map with fewer rows empties and hides the computer slots beyond them; no team and four teams)
+    #[test]
+    fn claim_15_rows_follow_the_map() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        // Map B: four rows, a computer in the fourth.
+        s.apply(&SetupHit::Map(1), &r, &maps());
+        s.slots[3].kind = SlotKind::Ai;
+        let (_, t) = s.view((800, 600), &r, &maps(), None);
+        assert!(t.rect_of(&SetupHit::Kind(3, 1)).is_some());
+        assert!(t.rect_of(&SetupHit::Kind(4, 1)).is_none());
+        // Back to map A: two rows.
+        s.apply(&SetupHit::Map(1), &r, &maps());
+        assert_eq!(s.slots[3].kind, SlotKind::Closed);
+        assert_eq!(s.slots[1].kind, SlotKind::Ai);
+        let (_, t) = s.view((800, 600), &r, &maps(), None);
+        assert!(t.rect_of(&SetupHit::Kind(1, 1)).is_some());
+        assert!(t.rect_of(&SetupHit::Kind(2, 1)).is_none());
+        // No team, then teams 1 … 4, then no team again.
+        let mut teams = Vec::new();
+        for _ in 0..5 {
+            s.apply(&SetupHit::Team(0, 1), &r, &maps());
+            teams.push(s.slots[0].team);
+        }
+        assert_eq!(teams, [Some(1), Some(2), Some(3), Some(4), None]);
     }
 
     #[test]

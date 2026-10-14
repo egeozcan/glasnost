@@ -1,6 +1,7 @@
 //! The end screen: every player's result (S-0414 claim 7) and the counts
 //! the world keeps.
 
+use glasnost_sim::econ::stats;
 use glasnost_sim::econ::victory::{Outcome, Verdict};
 use glasnost_sim::world::{HouseId, World};
 
@@ -17,13 +18,13 @@ pub struct EndRow {
     pub local: bool,
     /// Won (S-0414 claim 7).
     pub won: bool,
-    /// Objects built: the sum of the ever-built counts (S-0407 Terms).
+    /// The built total (S-0414 claim 20).
     pub built: i32,
-    /// Objects destroyed, credited (S-0302 claim 16).
+    /// Kills (S-0414 claim 21).
     pub kills: i32,
-    /// Objects lost.
+    /// Losses (S-0414 claim 21).
     pub losses: i32,
-    /// Score from kill values (S-0311 claim 7).
+    /// The displayed score (S-0414 claim 23).
     pub score: i32,
 }
 
@@ -32,42 +33,55 @@ pub struct EndRow {
 pub struct End {
     /// The tick in which the game is over (S-0414 claims 8 and 9).
     pub ticks: i32,
-    /// The game time in milliseconds at the game's paced period.
-    pub millis: i64,
+    /// The result duration's active time in 16-ms clock units, *E* of
+    /// S-0414's Formulas.
+    pub units: i64,
     /// The rows in house order (S-0414 claim 7).
     pub rows: Vec<EndRow>,
 }
 
 impl End {
-    /// Reads the end screen from the world and its outcome. `period_ms` is
-    /// the paced period of one tick (S-0201 claim 4).
+    /// Reads the end screen from the world and its outcome, with `units`
+    /// of active play time (S-0414 claim 23).
     pub fn from_world(
         w: &World,
         outcome: &Outcome,
         local: Option<HouseId>,
-        period_ms: i64,
+        units: i64,
     ) -> Self {
         let rows = outcome
             .results
             .iter()
             .map(|&(h, v)| {
                 let house = &w.houses[h.0 as usize];
+                let st = stats::of(w, h);
                 EndRow {
                     name: house.name.clone(),
                     local: Some(h) == local,
                     won: v == Verdict::Win,
-                    built: house.econ.tech.ever_built.values().sum(),
-                    kills: house.combat.kills,
-                    losses: house.combat.losses,
-                    score: house.combat.score,
+                    // spec: S-0414 claim 20 (the built total)
+                    built: stats::built_total(w, h),
+                    // spec: S-0414 claims 19 and 21 (read after play stops)
+                    kills: st.kills,
+                    losses: st.losses,
+                    // spec: S-0414 claim 23 (the displayed score; b = max(p, 0) before it is fixed)
+                    score: st.shown.unwrap_or_else(|| stats::displayed(st.score, None)),
                 }
             })
             .collect();
         Self {
             ticks: outcome.over,
-            millis: i64::from(outcome.over.max(0)) * period_ms,
+            units,
             rows,
         }
+    }
+
+    /// The displayed duration as hours, minutes and seconds (S-0414
+    /// claim 23 and Formulas).
+    pub fn duration(&self) -> (i64, i64, i64) {
+        // spec: S-0414 Formulas, result duration (T = min(⌊E/60⌋, 359999); hours ⌊T/3600⌋, minutes ⌊(T mod 3600)/60⌋, seconds T mod 60)
+        let t = (self.units.max(0) / 60).min(359_999);
+        (t / 3600, (t % 3600) / 60, t % 60) // spec: S-0414 Formulas, result duration
     }
 
     /// The headline for the local player.
@@ -99,13 +113,8 @@ impl End {
             head,
             if good { colour::GOOD } else { colour::BAD },
         );
-        let secs = self.millis / 1000;
-        let time = format!(
-            "Game time {}:{:02} ({} ticks)",
-            secs / 60,
-            secs % 60,
-            self.ticks
-        );
+        let (hh, mm, ss) = self.duration();
+        let time = format!("Game time {hh}:{mm:02}:{ss:02} ({} ticks)", self.ticks);
         d.text_centred(
             Rect::new(outer.x, outer.y + 46, outer.w, 14),
             &time,
@@ -168,7 +177,7 @@ mod tests {
     fn end(local_won: bool) -> End {
         End {
             ticks: 900,
-            millis: 900 * 32,
+            units: 0,
             rows: vec![
                 EndRow {
                     name: "Player".into(),
@@ -192,6 +201,20 @@ mod tests {
         }
     }
 
+    // spec: S-0414 claim 23 and Formulas (60 clock units of 16 ms make one displayed second, truncated; capped at 99:59:59)
+    #[test]
+    fn claim_23_duration() {
+        let mut e = end(true);
+        e.units = 59;
+        assert_eq!(e.duration(), (0, 0, 0));
+        e.units = 60;
+        assert_eq!(e.duration(), (0, 0, 1));
+        e.units = 60 * 3725;
+        assert_eq!(e.duration(), (1, 2, 5));
+        e.units = i64::MAX;
+        assert_eq!(e.duration(), (99, 59, 59));
+    }
+
     #[test]
     fn headline_follows_the_local_result() {
         // spec: S-0414 claim 7 (every player house has a result)
@@ -207,7 +230,7 @@ mod tests {
         let (d, t) = end(true).view((800, 600), None);
         let texts = d.texts();
         assert!(texts.contains(&"Computer"));
-        assert!(texts.contains(&"Game time 0:28 (900 ticks)"));
+        assert!(texts.contains(&"Game time 0:00:00 (900 ticks)"));
         let r = t.list[0].0;
         assert_eq!(t.hit(r.centre()), Some(()));
     }

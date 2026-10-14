@@ -1107,8 +1107,8 @@ pub fn apron(w: &World, k: ObjectId) -> Option<CellXY> {
     let (a, bb) = match list.get(10) {
         Some(&p) => p,
         None if short => {
-            // spec: S-0417 Edge cases (the 2 × 1 and 1 × 2 words: (32767, 32767); the 1 × 1, 3 × 3 refinery, 6 × 4 and 0 × 0 words: (0, 0))
-            if matches!((fw, fh), (2, 1) | (1, 2)) {
+            // spec: S-0417 Edge cases (by the original list's length L: L = 10 gives (32767, 32767), L < 10 gives (0, 0); engine constants)
+            if list.len() == 10 {
                 (32767, 32767)
             } else {
                 (0, 0)
@@ -1506,7 +1506,7 @@ pub fn arrival(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     let here = o.pos.cell();
     if o.kind == Kind::Infantry {
-        // spec: S-0417 claim 10 (a tethered infantry unit reports clear on its next cell-arrival update; no run-away reply)
+        // spec: S-0417 claim 10 and S-0208 claim 23 (a tethered infantry unit reports clear on its first standing-position arrival; no run-away reply)
         report(w, id);
         return;
     }

@@ -488,6 +488,15 @@ impl Session {
         self.drag = None;
     }
 
+    /// A mouse-wheel event, anywhere over the game (S-0411 claim 18).
+    pub fn wheel(&mut self, delta: i32) {
+        if self.paused {
+            return;
+        }
+        let rows = Layout::new(self.screen).rows();
+        self.play.wheel_icons(delta, rows);
+    }
+
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.pointer = Some(p);
@@ -556,7 +565,8 @@ impl Session {
             }
             Some(HudHit::Tab(i)) => self.play.tab_click(i),
             Some(HudHit::Cameo(n)) => self.play.cameo_click(n, b, mods.force_select),
-            Some(HudHit::Scroll(d)) => {
+            // spec: S-0411 claim 18 (a page button acts on release over the button after a press there)
+            Some(HudHit::Scroll(d)) if self.targets.hit(p) == Some(HudHit::Scroll(d)) => {
                 let rows = Layout::new(self.screen).rows();
                 self.play.scroll_icons(d, rows);
             }
