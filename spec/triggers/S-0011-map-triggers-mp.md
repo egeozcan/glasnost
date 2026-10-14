@@ -2,13 +2,13 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0269]
+requests: [Q-0269, Q-0510]
 supersedes: []
 ---
 
@@ -40,7 +40,10 @@ the request takes 6 bales, so a stage-6 cell becomes stage 0 rather than empty.
 Confirm the S-0201 pointers after I4, including its win-action fixture assumption.
 Those pointers add no campaign rules. Check claim 18's arrival-timing pointers with S-0207 claim 22/D24 for driving and
 own-locomotor teleporting, and S-0208 claim 22/W14 for ordinary walking.
-Check the other companion revisions together too.
+Check the other companion revisions together too. Claim 19 now admits S-0312 claims 30 and 31's
+hidden-slave notifications without a slave killing hit, including true sale (S-0408 claim 10a)
+and temporary-group cleanup during successful pack-up (S-0415 claim 10). Hand these passages
+off together; hidden-slave tag attachment remains an unmeasured setup boundary.
 
 ## Terms
 
@@ -421,8 +424,9 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     - Confidence: medium (low for the bridge rule, the capture case and the other entries)
 
 19. **Destroyed-by-anything.** A killing hit on an object carrying a tag raises that tag with
-    this code, with the dying object as causing object. The event is satisfied in every such
-    raise and is latchable (claim 9). S-0312 claim 29 owns the death timing and destruction-raise
+    this code, with the dying object as causing object. The no-hit destruction cases below
+    also raise it; a killing hit is not a prerequisite of the event itself. The event is
+    satisfied in every such raise and is latchable (claim 9). S-0312 claim 29 owns the killing-hit timing and destruction-raise
     groups: their actions and draws take effect within the killing hit, before death debris,
     passengers and death weapons, not at final removal. The raises themselves take no draw.
 
@@ -448,12 +452,52 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     Infantry still showing a death sequence keep their tag unless evaluation or another
     detachment removed it, but are no longer present objects for claims 24 and 27. Completing
     that sequence and removing the infantry produce no new destroyed-by-anything raise.
-    - Backing: `measurable` (scenario T7 for counts and latches; S-0312 D20 for timing,
-      deferred deaths and retained infantry tags). Separately supplied attacking-house
+    This is an ordinary final-removal rule, not a rule that every destruction without a hit
+    lacks notifications.
+
+    **Hidden slaves without their own killing hit (Q-0510).** When a hidden slave is
+    destroyed as its group ends, it receives the common group, with itself as causing object,
+    before its removal, without receiving damage. This applies when the master takes its
+    death effects after a killing hit (S-0312 claim 30), when removal ends its remaining,
+    untransferred group without a killing hit (S-0312 claim 31), when a true sale removes
+    the master (S-0408 claim 10a), and when successful pack-up discards the return vehicle's
+    temporary hidden slaves before transferring the old working group (S-0312 claim 31 and
+    S-0415 claim 10). The master's known attacker enables the common group's three
+    preliminary raises in the killing-hit case. The other three cases have no attacker
+    and omit those raises. Destroyed-by-anything and its following outside-subset raise
+    occur in all four cases, provided the slave still exists and carries the tag.
+    Successful transfer of the old working group is not destruction of its surviving slaves.
+    Earlier group-ending events and the exact cleanup tick retain the boundaries of the
+    cited claims; this claim does not replace their attribution or timing rules.
+
+    Claims 8 to 12 apply unchanged: there is no hidden-slave exemption from evaluation,
+    latching, repeat types, action ordering, detachment or same-tag nested-raise suppression.
+    A fresh repeating tag with only destroyed-by-anything, no prior latch and actions that
+    leave the slave and tag alone fires twice for one hidden slave, with or without an
+    attacker: the first firing latches the event and the following outside-subset raise
+    fires it again. With persistent latching off it fires once. A one-time tag fires once
+    and detaches; all-carriers tags use their actual carrier count under claim 10, not a
+    special hidden-slave count. If the tag was already latched, preliminary raises with an
+    attacker can also fire it. A raise suppressed by claim 12 fires nothing and sets no
+    latch. Removal after these notifications produces no second group.
+
+    **Other no-hit destructions.** Hidden slaves are not the only such case: destruction of
+    an exploding object's passengers under S-0312 claim 5 also gives tagged passengers
+    destruction notifications without a hit on each passenger. Their object kind decides
+    the common and extra-vehicle groups above; the transport's known attacker supplies the
+    attribution. The passenger's own notifications precede its removal and the transport's
+    death weapon. The same evaluation and repeat rules apply. This is a confirmed additional
+    case, not an exhaustive inventory of removals. Removal alone must not be treated as a
+    universal destruction raise, nor must every no-hit notification be suppressed.
+    - Backing: `measurable` (scenario T7 for killing-hit counts and latches; S-0312 D20 for
+      timing, deferred deaths and retained infantry tags; T25 A for tagged exploding-transport
+      passengers). Hidden-slave notifications and their firing counts are `unmeasured`:
+      no established data-only setup attaches a tag to a generated slave; T25 B is a
+      conditional proposal, not an established fixture. Separately supplied attacking-house
       attribution and actions that remove the dying object during the raises inherit
       S-0312 claim 29's `unmeasured` boundary
-    - Confidence: high for the groups, counts and timing; medium for latches and the
-      retained-infantry and hijacker/carry-over cases
+    - Confidence: high for the groups, killing-hit counts and timing; medium for latches,
+      no-hit notifications and their counts, and the retained-infantry and hijacker/carry-over cases
 
 20. **Bridge destroyed in a tagged cell.** When a bridge is destroyed, each cell of the destroyed
     part that carries a tag raises that tag with this code. The event is satisfied in every such
@@ -1103,7 +1147,7 @@ but not specified in this revision.
 | 36 | variable set | variable number | yes | no | 22 |
 | 37 | variable clear | variable number | yes | no | 22 |
 | 47 | game time | *v* trigger time units | yes | no | 16 |
-| 48 | destroyed by anything | unused | no | yes (latchable) | 19 |
+| 48 | destroyed by anything, including claim 19's no-hit destructions | unused; no attacker parameter or killing-hit requirement | no | yes (latchable) | 19 |
 | 51 | random delay | *v* trigger time units; each arming uses F2, with satisfaction-caused draws before actions (claim 15) | yes | no | 14, 15 |
 | 60 | type exists | count, with kind 2 type name | yes | no | 21 |
 | 61 | type does not exist | kind 2 type name | yes | no | 21 |
@@ -1152,6 +1196,17 @@ are not part of I4's supported subset.
 | 100, 117 | plain and freezing radar-movie actions | number slot, ignored in skirmish; S-0201 claim 11 and its Import mapping. Campaign behaviour is out of scope |
 | 110 | pause action | number slot; S-0201 claim 10, including its departures, warnings and Import mapping |
 | 127 | chrono flash | number slot; S-0201 claim 11, including its quirk rules, warnings and Import mapping |
+
+**No-hit destruction mapping (claim 19).** These are not new sale or pack-up event codes.
+
+| User data | Feeds | Form | Absent |
+|---|---|---|---|
+| Map `[Tags]` repeat type, `[Triggers]`, `[Events]` code 48 and `[Actions]` | evaluation and firing for tagged no-hit victims, including hidden slaves and passengers | existing I1 to I4 forms; repeat integers 0, 1 and 2 keep claim 10's meanings | no attached tag: no tag raises; no special generated-slave tag-attachment key is established |
+| Destruction notification codes, engine constants rather than imported settings | the ordered common group of claim 19, including hidden slaves | with known attacker: 6, 4, 7, 48, 29; without: 48, 29. Only code 48's event meaning is in this subset | not configurable; subsequent raises require the victim still to exist and carry the tag |
+
+This mapping inherits claim 19's backing and confidence; it does not establish a means of
+attaching a tag to generated slaves. The slave-group and conversion data remain owned by
+S-0312 claims 30 and 31, S-0408 claim 10a and S-0415 claim 10.
 
 **Import evidence coverage.** The effects and action slots in I3/I4 inherit the backings of their
 named claims. Splitting, missing trigger-field defaults, ID-only links and short action-reference
@@ -1707,8 +1762,46 @@ using named test maps removed afterwards.
   count, just as the control without the extra comma: empty items do not reserve a field.
   *Falsified if:* the extra comma disables it or prevents loading.
 
+**Scenario T25 (claim 19; Q-0510).**
+- *A, tagged passenger control:* common skirmish setup, speed index 3, director and mods off.
+  Pre-place one ordinary infantry unit with a fresh repeating tag whose only event is
+  destroyed-by-anything and whose action counts on the calibrated durable counter. Its
+  trigger owner country is unplayed; it has no timer or polling event. Load it into an
+  exploding, non-open-topped transport using normal input. Verify with the read-only recorder that it still
+  carries the tag. Keep the counter beyond all death-weapon damage. Kill the transport with
+  one known attacker, then repeat in a fresh game using a separate polled tag's lethal
+  explosion at its waypoint, with no attacker. Use one passenger only and a non-crashing
+  transport so the destruction path is unambiguous. Record passenger health before cleanup,
+  its removal tick, counter health loss and transport death-weapon effects. Run 5 valid
+  trials per attribution. *Expected:* two calibrated counter firings for the passenger in
+  the transport's destruction tick, before the death weapon, with or without an attacker.
+  No separate hit on the passenger and no later removal firing occur. A one-time-tag control
+  gives one firing. *Falsified if:* a valid run gives another count or a later notification.
+  Tag loss on loading, counter damage from another source or a trace too coarse to resolve
+  the ordering makes the corresponding test inconclusive.
+- *B, conditional hidden-slave test:* no data-only generated-slave tag-attachment fixture
+  is established. Do not write into the running game to create one. If such a fixture is
+  found, use A's tag, counter and recorder under the common setup, recording that exactly
+  one hidden slave carries the fresh tag. Repeat the master's killing-hit case of S-0312
+  claim 30, remaining-group removal of S-0312 claim 31, true sale of S-0408 claim 10a,
+  and temporary-group cleanup on successful pack-up of S-0415 claim 10. Use 5 valid runs
+  per case, with the counter and tag unaffected by other actions. *Expected:* two firings
+  before that slave's removal in each case; only the killing-hit case with a known attacker
+  has the three preliminary raises, which do not fire a fresh destroyed-by-anything trigger.
+  No hit or second final-removal group occurs. The old working slaves survive successful
+  transfer. A one-time-tag variant gives one firing; on our engine only, persistent latching
+  off gives one repeating firing. *Falsified if:* the original gives any other valid count,
+  a slave hit, or a second removal group. A shared previously latched tag does not test
+  these fresh-tag counts. Until tag attachment is established this is an unmeasured proposal,
+  not measurable backing; losses or disappearing slaves alone cannot test notifications.
+
 ## Open questions
 
+- **No-hit notification coverage.** Claim 19 lists confirmed cases, not every possible
+  deletion or ownership transition. Generated-slave tag attachment remains unestablished
+  (Q-0510; conditional T25 B). Earlier erasure and environmental-sinking group-ending
+  attribution and never-placed production masters retain S-0312 claims 30 and 31's open
+  boundaries; this revision assigns them no new raise or firing count.
 - **Cleanup draw measurement.** A discriminating skirmish fixture for cleanup's phase order
   and conditional tile-animation draws is not established (claim 34; S-0202 claim 14).
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets

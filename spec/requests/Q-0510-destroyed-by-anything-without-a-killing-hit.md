@@ -1,9 +1,9 @@
 ---
 id: Q-0510
 title: S-0011 claim 19 still limits destroyed-by-anything to a killing hit, while S-0312 r16 and S-0408 r15 raise it for hidden slaves without one
-status: open
+status: answered
 related: [S-0011, S-0312, S-0408, S-0415]
-answered-by: []
+answered-by: [S-0011]
 ---
 
 ## Need
