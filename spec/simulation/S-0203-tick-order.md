@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -401,16 +401,20 @@ skirmishes only; network games and campaigns are out of scope.
 7. **Orders take effect after the turn pass.** In a single-player game an order that the player
    gives in the cycle that runs tick *n* (S-0201, *cycle*) takes effect after every object's turn
    in tick *n* and after the production lines of tick *n* (claim 8), and before any object's turn in
-   tick *n* + 1. The objects it concerns first act on it in their turns of tick *n* + 1. How several
+   tick *n* + 1, if that next tick runs. The objects it concerns first act on it in their turns of
+   tick *n* + 1; orders in the final tick still take effect, but there is no next turn (S-0414
+   claims 8 and 16). How several
    orders of the same tick are ordered among themselves is S-0213, claim 3. The drawn frame made
    before tick *n* + 1 (S-0201, claim 6) already shows what the order changes at once, such as a
    selection's new destination marker, but no object has yet moved because of it. The orders also
-   come after the houses' updates of tick *n* (claim 8). The only known consequence of that place
+   come after the houses' updates of tick *n* (claim 8). A surrender order therefore causes no
+   surrender destruction until the next tick's house update (S-0414 claim 11). Another consequence
    is the draw order of claim 1: carrying out an order can take draws from the scenario random
    stream (for example by creating objects or firing a superweapon), and so can a house's update.
    - Backing: `measurable` (scenario O2 for the turn pass; scenario O7, part C, for the production
-     lines; O13 for the drawing order after row 5); for the place after the houses, claim 1's
-     row-7 draw-order backing (`unmeasured`)
+     lines; O13 for the drawing order after row 5; S-0414 scenario V8 for surrender after the
+     houses, and V12 part c for orders in the final tick); for the row-7 draw order, claim 1's
+     backing (`unmeasured`)
    - Confidence: high for the turn pass and for the place after the houses; medium for the
      production lines
 
@@ -426,8 +430,27 @@ skirmishes only; network games and campaigns are out of scope.
    - **Houses.** Each house's own update also comes after the turn pass of the same tick. A house
      matter decided in the house update therefore sees what the turn pass did. One example is the
      raise of a house's tags in every eighth tick (S-0011, claim 35): it sees a trigger variable that
-     an object's turn set earlier in the same tick. What else a house's update does belongs to the
-     economy, production and superweapon specs.
+     an object's turn set earlier in the same tick. S-0414 claims 1, 10 and 11 own the defeat
+     tests and surrender destruction in this part: a defeat's end test still counts later houses
+     that have not yet failed their own tests in this tick. S-0414 claim 15 owns the destruction
+     hit and death-draw order across object kinds, including off-map objects and its cancellation
+     exception. This is creation order, not claim 3's order of entering play, and these removals
+     occur outside the turn pass, so cost no object a turn under claim 10.
+   - **Within a house update and in the final tick.** S-0414 claim 16 owns the observable ordering:
+     ordinary power and radar work do not see surrender or defeat destruction from that same
+     update, but its due tech-tree recheck and sidebar cancellation orders do. Defeat's forced
+     radar-on effect remains immediate. At the start of the houses' part of the final tick,
+     pending results and expiry become committed under S-0414 claims 8 and 16; later defeat
+     tests cannot change them. All remaining house updates and the orders still run. S-0414
+     identifies the common cutoff for all houses as a design extension of the original's
+     local-player result. Other house-wide work belongs to the economy, production and
+     superweapon specs.
+     - Backing: `measurable` (S-0414 scenarios V7, V8, V11 and V12) for the original's
+       consequences; `unmeasured` for the common per-house commitment, a design rule that the
+       original's local-player-only result cannot confirm. Claim 10 backs the no-turn-skip rule.
+     - Confidence: S-0414's high for destruction creation order and within-update ordering,
+       medium for cancellation skips, same-tick results and final-tick commitment; high for
+       removals outside the turn pass costing no turn, as in claim 10.
    - **Draw order among them.** A house's update can take draws from the scenario random stream, so
      its place is fixed by the draw order of claim 1: the houses come after the production lines,
      one after another in house order (S-0009, claim 19), and before the orders (claim 7). No draw
@@ -547,11 +570,13 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 | 15 | Blast rings (the superweapon specs own them) | 5 | Draw order | Claim 1 |
 | 16 | Crate respawns, in skirmish games with crates on (the crate rules own them) | 15 | Draw order | Claim 1 |
 | 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
-| 7 | Houses, one after another in house order | 6 | A house's tag raise sees what the turn pass of the same tick changed; draw order | Claim 8, scenario O7 part B |
+| 7 | Houses, one after another in house order; final-tick results committed at this part's start (S-0414 claim 16) | 6 | A house's tag raise and defeat test see the turn pass; later houses' defeats are not yet known to an earlier end test; power/radar and tech-tree consequences follow S-0414 claim 16; draw order | Claim 8, scenario O7 part B; S-0414 scenarios V7, V11 and V12 |
 | 8 | Orders given in this tick's cycle | 7 | Objects act on the orders from the next tick; a hold order does not stop a progress step of this tick; draw order | Claims 7 and 8, scenarios O2 and O7 part C |
 
-After the last part of the tick, the tick number grows by 1, unless the tick ends the game (S-0201,
-claim 1). Work that other specs own, that this table does not list and that takes no draws from the
+After the last part of the tick, the tick number grows by 1, except in the final tick (S-0201,
+claim 1; S-0414 claims 8 and 16). That tick still runs every part, including orders after the
+houses; commitment of the result is earlier, at the start of row 7, not after the full tick.
+Work that other specs own, that this table does not list and that takes no draws from the
 scenario random stream has no place here (claim 1).
 
 **An object's place in the update order:**
