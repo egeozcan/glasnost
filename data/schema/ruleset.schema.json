@@ -183,6 +183,24 @@
           ],
           "default": null
         },
+        "middle_frame": {
+          "description": "μ: half the image-frame count of the sprite of the type's last\nsprite-found moment, 0 when none was found (S-0109 claims 14 and\n25); absent when the import had no art.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "num_particles": {
+          "description": "`NumParticles`: particles requested per middle event (S-0109 claim\n14); absent 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "random_rate": {
           "description": "`RandomRate`: the random rate pair (ρ₁, ρ₂), a −1 already replaced by\nthe end held (S-0109 claim 3).",
           "type": [
@@ -206,9 +224,9 @@
           "default": null
         },
         "spawns_particle": {
-          "description": "`SpawnsParticle` names a particle type: a middle-event effect.",
+          "description": "`SpawnsParticle`: the particle type the middle event requests, by\ntype name (S-0109 claim 14, S-0202 claim 15).",
           "type": [
-            "boolean",
+            "string",
             "null"
           ],
           "default": null
@@ -5381,6 +5399,67 @@
       "type": "object",
       "additionalProperties": false
     },
+    "ParticleType": {
+      "description": "A particle type's fields that its creation draws read (S-0202 claim 15\nand Import mapping).",
+      "type": "object",
+      "properties": {
+        "behaves_like": {
+          "description": "`BehavesLike`: `gas`, `smoke`, `fire`, `spark` or `railgun`; absent\nfor no recognised behaviour.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "color_count": {
+          "description": "The number of colours of `ColorList` (absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "max_ec": {
+          "description": "`MaxEC`: the lifetime field (absent 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "start_color1": {
+          "description": "`StartColor1`, components 0 … 255 (absent black).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "start_color2": {
+          "description": "`StartColor2`, components 0 … 255 (absent black).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
     "ProjectileType": {
       "description": "A projectile's simulation fields.",
       "type": "object",
@@ -6993,6 +7072,13 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/OverlayType"
+          }
+        },
+        "particles": {
+          "description": "Particle types by type name (S-0202 claim 15).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ParticleType"
           }
         },
         "projectiles": {

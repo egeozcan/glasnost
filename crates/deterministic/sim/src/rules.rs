@@ -415,12 +415,34 @@ pub struct AnimRules {
     pub random_delay: (i32, i32),
     /// A bouncing type: the bouncer or the meteor flag (S-0109 Terms).
     pub bouncing: bool,
-    /// Its start event can take draws that are not taken yet: a resource
-    /// chain reaction (S-0401 claim 20, the economy topic's seam) or the
-    /// middle event's particles and smudges (S-0109 claim 14, request
-    /// Q-0182). The importer carries no image-frame counts, so μ (S-0109
-    /// claim 25) is not known and every type with one of the effects counts.
-    pub start_effects: bool,
+    /// μ, the middle image frame (S-0109 claims 14 and 25); `None` when the
+    /// import had no art to find it from.
+    pub mu: Option<i32>,
+    /// The particles its middle event requests: the particle type's draw
+    /// fields and the count (S-0109 claim 14, S-0202 claim 15); `None` for
+    /// no particle type.
+    pub particles: Option<(ParticleRules, i32)>,
+    /// The scorch flag (S-0109 claim 14).
+    pub scorch: bool,
+    /// The crater flag (S-0109 claim 14).
+    pub crater: bool,
+    /// The resource-chain-reaction flag (S-0109 claim 13, S-0401 claim 20).
+    pub chain_reaction: bool,
+}
+
+/// A particle type's creation-draw fields (S-0202 claim 15 and Import
+/// mapping).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ParticleRules {
+    /// Smoke behaviour: the starting-speed raw value.
+    pub smoke: bool,
+    /// Railgun behaviour: the lifetime modulus is 10.
+    pub railgun: bool,
+    /// The lifetime field, the modulus of other behaviours.
+    pub max_ec: i32,
+    /// A nonempty colour list with a nonblack starting colour: the
+    /// starting-colour draw.
+    pub colour_draw: bool,
 }
 
 /// The stage delay d of a rate value ρ (S-0109 F1).
@@ -1100,11 +1122,29 @@ impl SimRules {
                     random_delay: (d1p, d2p),
                     // spec: S-0109 Terms (a bouncing type: the bouncer flag or the meteor flag)
                     bouncing: a.bouncer.unwrap_or(false) || a.is_meteor.unwrap_or(false),
-                    // spec: S-0109 claims 13 and 14 (the start event's chain reaction and middle-event effects)
-                    start_effects: a.tiberium_chain_reaction.unwrap_or(false)
-                        || a.scorch.unwrap_or(false)
-                        || a.crater.unwrap_or(false)
-                        || a.spawns_particle.unwrap_or(false),
+                    mu: a.middle_frame,
+                    particles: a.spawns_particle.as_ref().map(|p| {
+                        let t = s.particles.get(p).cloned().unwrap_or_default();
+                        let behaves = t.behaves_like.as_deref();
+                        // spec: S-0202 Import mapping (StartColor1, StartColor2 black at type creation)
+                        let lit =
+                            |c: Option<[i32; 3]>| c.is_some_and(|c| c.iter().any(|&x| x != 0));
+                        let rules = ParticleRules {
+                            smoke: behaves == Some("smoke"),
+                            railgun: behaves == Some("railgun"),
+                            // spec: S-0202 Import mapping (MaxEC: 1 at type creation)
+                            max_ec: t.max_ec.unwrap_or(1),
+                            // spec: S-0202 claim 15 (the colour draw: a nonempty colour list and a nonzero component in either starting colour)
+                            colour_draw: t.color_count.unwrap_or(0) > 0
+                                && (lit(t.start_color1) || lit(t.start_color2)),
+                        };
+                        // spec: S-0202 Import mapping (NumParticles absent 0)
+                        (rules, a.num_particles.unwrap_or(0))
+                    }),
+                    // spec: S-0109 Import mapping (Scorch, Crater, TiberiumChainReaction: booleans, absent no)
+                    scorch: a.scorch.unwrap_or(false),
+                    crater: a.crater.unwrap_or(false),
+                    chain_reaction: a.tiberium_chain_reaction.unwrap_or(false),
                 }
             })
             .collect();

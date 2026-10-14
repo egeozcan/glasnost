@@ -1070,18 +1070,60 @@ fn starting_unit_gate_and_vein_fields() {
     assert_eq!(s.overlays["VEIN"].is_veins, Some(true));
 }
 
-/// spec: S-0109 Import mapping and claim 3 (an animation type's random rate pair, −1 keeping that end; the bouncing flags, the chain reaction and the middle-event effects)
+/// spec: S-0109 Import mapping and claim 3 (an animation type's random rate pair, −1 keeping that end; the bouncing flags, the chain reaction and the middle-event effects); S-0202 Import mapping and S-0004 claim 2 (SpawnsParticle names a particle type, <none> none, none a type called none while quirks.particle_none_is_a_name is on; NumParticles an integer)
 #[test]
 fn animation_fields() {
-    let base = "[Animations]\n0=SPARK\n1=ROCK\n";
-    let art = "[SPARK]\nRandomRate=-1,30\nTiberiumChainReaction=yes\n[ROCK]\nIsMeteor=yes\nSpawnsParticle=none\n";
+    let base = "[Animations]\n0=SPARK\n1=ROCK\n2=DUST\n[Particles]\n0=Puff\n";
+    let art = "[SPARK]\nRandomRate=-1,30\nTiberiumChainReaction=yes\nSpawnsParticle=PUFF\nNumParticles=3\n\
+               [ROCK]\nIsMeteor=yes\nSpawnsParticle=<none>\n[DUST]\nSpawnsParticle=none\n";
     let (s, _) = sim(base, "", art);
     let spark = &s.animations["SPARK"];
     assert_eq!(spark.random_rate, Some([0, 30]));
     assert_eq!(spark.tiberium_chain_reaction, Some(true));
+    assert_eq!(spark.spawns_particle.as_deref(), Some("Puff"));
+    assert_eq!(spark.num_particles, Some(3));
+    // No art lookup ran: μ is unknown.
+    assert_eq!(spark.middle_frame, None);
     let rock = &s.animations["ROCK"];
     assert_eq!(rock.is_meteor, Some(true));
     assert_eq!(rock.spawns_particle, None);
+    assert_eq!(
+        s.animations["DUST"].spawns_particle.as_deref(),
+        Some("none")
+    );
+}
+
+/// spec: S-0202 Import mapping and claim 15 (a particle type's BehavesLike, case-insensitive, unrecognised giving none; MaxEC kept over an empty later value, zero warning unless railgun; ColorList from the last section read only; StartColor1 and StartColor2 byte triples keeping the held components)
+#[test]
+fn particle_fields() {
+    let base = "[Particles]\n0=Fog\n1=Beam\n2=Odd\n\
+                [Fog]\nBehavesLike=SMOKE\nMaxEC=0\nColorList=(1,2,3),(4,5,6)\nStartColor1=1,2,3\n\
+                [Beam]\nBehavesLike=Railgun\nMaxEC=0\nColorList=(1,1,1)\n\
+                [Odd]\nBehavesLike=Wobble\nMaxEC=7\n";
+    let map = "[Fog]\nMaxEC=\nStartColor1=9\n[Beam]\nBehavesLike=Spark\n";
+    let (s, w) = sim(base, map, "");
+    let fog = &s.particles["Fog"];
+    // The map's section of Fog omits BehavesLike, which an override resets (S-0006 claim 5).
+    assert_eq!(fog.behaves_like, None);
+    assert_eq!(fog.max_ec, Some(0));
+    // The map's section of Fog gives no colour list: empty.
+    assert_eq!(fog.color_count, None);
+    assert_eq!(fog.start_color1, Some([9, 2, 3]));
+    assert_eq!(fog.start_color2, None);
+    let beam = &s.particles["Beam"];
+    assert_eq!(beam.behaves_like.as_deref(), Some("spark"));
+    assert_eq!(beam.color_count, None);
+    let odd = &s.particles["Odd"];
+    assert_eq!(odd.behaves_like, None);
+    assert_eq!(odd.max_ec, Some(7));
+    assert!(warned(&w, "particle Fog: MaxEC 0"));
+    // Beam's behaviour in force is spark, so its zero lifetime field warns too.
+    assert!(warned(&w, "particle Beam: MaxEC 0"));
+    let (s, w) = sim(base, "", "");
+    assert_eq!(s.particles["Fog"].behaves_like.as_deref(), Some("smoke"));
+    assert_eq!(s.particles["Fog"].color_count, Some(2));
+    assert_eq!(s.particles["Beam"].color_count, Some(1));
+    assert!(!warned(&w, "particle Beam: MaxEC 0"));
 }
 
 /// spec: S-0215 Import mapping (ApproachTargetResetMultiplier, an integer in [General]; CanApproachTarget, a type boolean; absent keeps the held value)
