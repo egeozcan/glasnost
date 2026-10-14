@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580]
 supersedes: []
 ---
 
@@ -278,7 +278,7 @@ screen rows.
       and ordinary-terrain shadow terms use the scenarios assigned in claim 13). The excluded
       above-deck shadow is `unmeasured` for the reason in claim 20.
     - Confidence: high for body anchoring; the per-kind biases retain claim 13's confidence
-12. **Depth profile per drawing.** Ground-lying images (projectile sprites and shadows, the other shadows drawn as sprites,
+12. **Depth profile per drawing.** Ground-lying images (the vehicle harvesting sprite of S-0402 claim 5a, projectile sprites and shadows, the other shadows drawn as sprites,
     flat animations, ore and gems, overlays whose type is drawn flat, the building bib, under-door
     sprites and door sprite) use the flat profile; vehicles, infantry, aircraft, voxel models, building
     bodies, terrain objects, walls, overlays whose type is not drawn flat, and ordinary and stacked
@@ -289,7 +289,7 @@ screen rows.
     profile near a bridge while its column factor is 0 (claim 13). Smudges have no profile: they take no part in the depth test
     (claim 25).
     - Backing: `measurable` (scenarios D8, D11, D15; voxel shadows D23 (c); vehicles drawn as
-      sprites D33 (a)); the too-big vehicle is `unmeasured` (claim 13)
+      sprites D33 (a); harvesting sprite D43); the too-big vehicle is `unmeasured` (claim 13)
     - Confidence: high for the profiles of vehicles, infantry, aircraft, building bodies,
       projectiles, overlays, voxel shadows, animations and terrain objects (trees), and for the flat
       profile of the bib and the under-door sprites (their biases are medium, claim 13); low for
@@ -304,6 +304,7 @@ screen rows.
 
     | Drawing | Depth bias (final) | Profile | Writes depth |
     |---|---|---|---|
+    | vehicle harvesting sprite (S-0402 claim 5a) | the vehicle's *U* − 2 | flat | no |
     | vehicle drawn as a sprite, *h* = 0 | *U* − 2 | upright | no |
     | vehicle drawn as a sprite, *h* not 0 | −*L(z)* − 2 (*U* does not apply) | upright | no |
     | vehicle drawn as a sprite whose type is too big to fit under a bridge, while it is near a bridge and its column factor (claim 14) is 0 | *U* − 18 | flat | no |
@@ -350,6 +351,17 @@ screen rows.
     pixels, which it therefore never darkens (claim 27). The vertical draw shift is in pixels and
     counts as depth units here.
 
+    **Harvesting sprite.** Its canvas is centred at the displaced draw point of S-0402
+    claim 5a, not at the vehicle's centre. Its flat row depth is F2's *d*(*r*) + *U* − 2,
+    using the vehicle's *U*, not a new adjustment evaluated at the displaced anchor.
+    No companion depth image applies. Each non-transparent pixel passes only when its
+    depth is strictly less than the stored depth, and never writes depth. Terrain,
+    overlays and building writers can therefore hide it, including a cutoff across
+    its image rather than the nearly whole-image acceptance of an upright profile.
+    Other units do not depth-occlude it: their overlap follows the vehicle's place in
+    the layer list. S-0402 claim 5a already settles its order before both the vehicle's
+    shadow and body, so qualifying shadow pixels can darken it.
+
     **Which unloading image is drawn.** While a building is unloading, its body is drawn as follows:
 
     | Unloading unit's type | Art names a roof-deploying sprite | Art names a deploying sprite | Body drawn as |
@@ -373,7 +385,8 @@ screen rows.
     exactly *h* depth units relative to the preceding copy. The original instead reduces it by
     *h* + ⌊*h*/2⌋ per copy, making upper copies excessively near; this drawing-only defect is
     fixed without a quirk switch. The corrected reduction is tested by D40 against this spec.
-    - Backing: `measurable`. Coverage by row: infantry body with *h* = 0 and the own shadow of
+    - Backing: `measurable`. Coverage by row: vehicle harvesting sprite D43,
+      infantry body with *h* = 0 and the own shadow of
       infantry D8, D15, D31; generic shadow of infantry with *h* > 0 D25 (b) (placement only)
       and D31 (e), on ordinary terrain only; voxel units
       D7, D9, D10 (relative tests only); voxel shadow D23 (profile; its bias only relative to the
@@ -407,7 +420,8 @@ screen rows.
         compared with the remembered body; the remembered animation's absolute bias is not
         isolated by D17, which tests compositing against the finished depth buffer (claim 16),
         not its bias independently of the remembered body depth.
-    - Confidence: high for projectile sprites, overlays, overlay shadows, animations, building bodies, infantry
+    - Confidence: high for the harvesting sprite's profile, bias, placement and reader-only test,
+      and for projectile sprites, overlays, overlay shadows, animations, building bodies, infantry
       bodies, the own shadows of sprite units, the smudge row, non-animated terrain objects and their
       shadows, and the −*L(z)* term; medium for the rows with *h* not 0, the generic infantry shadow,
       vehicles drawn as sprites, voxel units, the voxel shadow, the voxel turret row and its absent-key
@@ -1401,6 +1415,8 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
 | rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
 | rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21), or the voxel shadow (claim 18; S-0105 claim 31) | boolean | no |
 | art, vehicle image | `DisableShadowCache`, `DisableVoxelCache` | reuse controls for D23 (d); full mapping and defaults owned by S-0105 | boolean | S-0105 Import mapping |
+| game data file | `OREGATH.SHP` | harvesting sprite depth-tested as a flat reader with the vehicle's *U* − 2 (claim 13); eligibility, frame, anchor, light and before-shadow order are S-0402 claim 5a | sprite file, ordinary asset precedence of S-0005 claim 1 | fixed asset selection; no per-type substitute |
+| none | none | harvesting sprite profile, −2 bias and absence of depth writes (claim 13) | engine constants, no animation-type depth or flatness keys read | flat reader; vehicle terrain-fudge keys above still feed *U* |
 | none | none | vehicle own-image exclusion has no ordering key (claim 18); S-0105 claim 39 owns the current-image masking rule and model inputs | not applicable | exclude the current completed image on every appearance, including reuse |
 | rules, vehicle type | `SmallVisceroid`, `LargeVisceroid` | either one suppresses the own shadow of a vehicle drawn as a sprite (claim 21) | boolean | no |
 | rules, vehicle type | `TooBigToFitUnderBridge` | the *U* − 18 flat row near a bridge (claim 13) | boolean | no |
@@ -2308,7 +2324,36 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     computed F2 probe acceptance to distinguish plain upright depth from a constant
     zero-valued companion anchor. Director and mods remain off except the named files.
 
+- **D43, harvesting sprite depth (claims 12 and 13; Q-0580 question 3).**
+  Common setup, one stock vehicle harvester loading in a resource cell; capture all
+  eight facing groups over at least one 15-tick display cycle apiece. Use the fixed
+  sprite's frame rectangle and S-0402 claim 5a's displaced point to predict each
+  pixel's screen row. Repeat beside a foreground wall and a cliff edge, then a
+  building with a bib, with both partially occluded and unobstructed loading cells.
+  Compute the writer depths from claims 9 and 13 and the harvesting depths from F2
+  with the vehicle's *U* − 2. Record lossless screenshots and tick/facing, comparing
+  only harvesting pixels outside the vehicle body and its shadow.
+  Expected: pixels show exactly where their flat depth is strictly less than the
+  writer depth, including row cutoffs against upright writers. An upright profile,
+  a vehicle-centred placement or an adjustment recomputed at the displaced point
+  must not predict the observed cutoff better. Any accepted equal-depth pixel or
+  different cutoff falsifies the claim. Where stock image coverage is too small
+  to distinguish profiles, repeat with a named test copy of the fixed sprite having
+  a broad opaque patch and unchanged canvas/anchor; remove it afterwards.
+  For reader-only behaviour, overlap a second vehicle after the harvester in the
+  ground list, choosing qualifying pixels whose depths are farther than the
+  harvesting pixels but nearer than the terrain. Expected: those second-vehicle
+  pixels still show. Confirm in an engine scene fixture that adding or removing
+  the harvesting sprite leaves the depth buffer identical. A later reader rejected
+  solely by harvesting pixels, or a changed depth buffer, falsifies no-write.
+  S-0402 claim 5a's shadow-order scenario separately checks shadow darkening.
+
 ## Open questions
+
+Q-0580 is fully answered between S-0402 claim 5a (questions 1, 2 and 4,
+with its anchor formula) and this spec's claim 13 and D43 (question 3).
+Claim 13 previously had no row for this sprite; the generic vehicle and animation
+rows were not a substitute. No part remains open between these two specs.
 
 Q-0520 is fully answered by claim 33, the shared-file Import mapping and D42.
 Claims 31 and 33 already distinguished readable empty coverage from failed input,
