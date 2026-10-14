@@ -575,7 +575,7 @@ pub fn cursor_shroud_result(w: &World, house: HouseId, t: u32, cursor: CellXY) -
 
 /// Whether a factory building of `house` could make building type `t`
 /// without the tech-tree rule (S-0406 claim 1, S-0404 Terms): on the map,
-/// not being sold, a factory of buildings, sharing an owner country with
+/// neither being sold nor queued to be sold, a factory of buildings, sharing an owner country with
 /// the type.
 pub fn factory_could_make(w: &World, house: HouseId, t: u32) -> bool {
     let r = w.rules();
@@ -588,8 +588,9 @@ pub fn factory_could_make(w: &World, house: HouseId, t: u32) -> bool {
             && o.owner == Some(house)
             && o.on_map
             && o.health > 0
-            // spec: S-0404 Terms via S-0406 claim 1 (a building being sold cannot make)
-            && o.beh.seen() != Some(Behaviour::Selling)
+            // spec: S-0404 Terms via S-0406 claim 1 (a building being sold or queued to be sold cannot make)
+            && !crate::econ::tech::being_sold(o)
+            && !crate::econ::tech::queued_to_be_sold(o)
             && r.buildings[o.type_index as usize].factory
                 == Some(crate::rules::FactoryKind::Building)
             // spec: S-0404 Terms (its type's owner countries share one with the item type's)

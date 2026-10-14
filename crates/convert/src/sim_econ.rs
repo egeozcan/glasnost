@@ -714,6 +714,7 @@ impl Builder<'_> {
                 }
                 self.building_art_econ(&mut econ, index, t);
                 self.upgrade_sale_warnings(t);
+                self.deploy_facing_warning(t);
                 if let Some(word) = self.factory_kind(t) {
                     rec.put("factory", jsonc::string(word.to_string()));
                 }
@@ -833,6 +834,20 @@ impl Builder<'_> {
                     show(&n)
                 ));
             }
+        }
+    }
+
+    /// The importer warning of S-0415 Edge cases and S-0406 Import mapping:
+    /// a deploy facing outside 0 … 255 never lets a vehicle deploy into the
+    /// type.
+    fn deploy_facing_warning(&mut self, t: &TypeRec) {
+        let d = fold(t.keys.get(&b"DeployFacing"[..]), None, |v, _| value::integer(v));
+        // spec: S-0415 Edge cases and S-0406 claim 16 (a deploy facing outside 0 … 255 prevents deployment; the importer warns)
+        if let Some(d) = d.filter(|d| !(0..=255).contains(d)) {
+            self.warn(0, 0, format!(
+                "buildings {} DeployFacing {d}: outside 0 … 255, so no vehicle ever deploys into it (S-0415 Edge cases; S-0406 claim 16)",
+                show(&t.name)
+            ));
         }
     }
 

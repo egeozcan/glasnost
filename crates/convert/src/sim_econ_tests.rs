@@ -278,6 +278,17 @@ fn weeder_and_the_dock_unload_warning() {
     );
 }
 
+// spec: S-0415 Edge cases and S-0406 Import mapping (a DeployFacing outside 0 … 255 gets an importer warning)
+#[test]
+fn deploy_facing_out_of_range_warning() {
+    let base = "[BuildingTypes]\n0=DFA\n1=DFB\n2=DFC\n[DFA]\nDeployFacing=256\n[DFB]\nDeployFacing=-1\n[DFC]\nDeployFacing=255\n";
+    let (s, w) = import(base, "");
+    assert_eq!(s.buildings["DFA"].econ.deploy_facing, Some(256));
+    let df: Vec<&String> = w.iter().filter(|m| m.contains("DeployFacing")).collect();
+    assert_eq!(df.len(), 2, "{w:?}");
+    assert!(df.iter().all(|m| !m.contains("DFC")), "{df:?}");
+}
+
 // spec: S-0408 Edge cases (warnings for a non-turret upgrade with PowersUpToLevel 2 or 3 and for Upgrades above 3)
 #[test]
 fn upgrade_sale_warnings() {
