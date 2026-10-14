@@ -102,8 +102,11 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
 /// reference point, and the target is kept. An ordinary walking infantry
 /// unit is given an immediate walking target in its own cell, chosen again
 /// with the selected point `p` as the desired point and its own entry
-/// released. Any other actor only gets the destination (interim, request
-/// Q-0237).
+/// released. An actor of any other locomotor (S-0307 claim 25) only gets
+/// the destination: the immediate request towards `p` changes no movement
+/// point and reserves no standing position. Walk state exists only for the
+/// walking locomotor, so the test is one of locomotor, not of kind or class.
+// spec: S-0307 claim 25 (non-walking locomotors: destination only, no movement point, no reservation, no extra draw)
 fn shortcut(w: &mut World, id: ObjectId, p: Pos, c: glasnost_map::CellXY) {
     use crate::world::Layer;
     let Some(o) = w.obj(id).cloned() else { return };

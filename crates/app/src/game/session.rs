@@ -36,6 +36,7 @@ use glasnost_vfs::{FileRef, Vfs};
 
 use super::paint::Painter;
 use super::play::{Button, Play, Tool, local_house};
+use super::scroll::{self, EdgeScroll};
 use crate::mapview::build::{self, GameMode, Inputs, Options};
 use crate::mapview::cover;
 use crate::mapview::live::{self, Live};
@@ -51,11 +52,6 @@ const ICON_SPRITES: u32 = 1000;
 /// A left-button drag longer than this (in either direction) is a box
 /// selection. Interim (Q-0278).
 pub const DRAG_START: i32 = 4;
-/// Pixels the view scrolls per drawn frame at an edge or with an arrow
-/// key. Interim (Q-0279).
-pub const SCROLL_STEP: i32 = 16;
-/// How close to a window edge the pointer scrolls. Interim (Q-0279).
-pub const EDGE: i32 = 4;
 
 /// The 64-bit FNV-1a hash of a map file: the map's name in replays, so
 /// that no map is named by its title (our own identifier).
@@ -94,9 +90,11 @@ pub struct Session {
     icons: BTreeMap<TypeRef, IndexedImage>,
     /// Sprite ids of the registered icons.
     icon_ids: BTreeMap<TypeRef, u32>,
-    /// The icon palette's RGBA (interim, Q-0275).
+    /// The icon palette's RGBA (S-0103 claim 13).
     icon_palette: Option<[u8; 1024]>,
     pointer: Option<Point>,
+    /// Edge momentum and its retained direction (S-0101 F9).
+    edge: EdgeScroll,
     press: Option<(Point, Button)>,
     /// The last drawn sidebar's targets.
     targets: Targets<HudHit>,
@@ -144,18 +142,16 @@ impl Session {
         )
         .await;
         let icons = read_icons(vfs, &loaded).await;
-        let icon_palette = loaded
+        // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
+        let icon_file = loaded
             .assets
-            .get(crate::mapview::combat::OVERLAY_PALETTE)
-            .and_then(|b| glasnost_fmt::pal::Palette6::parse(b).ok())
-            .map(|p| {
-                // spec: S-0103 claim 2 (a palette file's components through the load rule)
-                let pal = glasnost_render::palette::palette_from_file(
-                    &p,
-                    &glasnost_render::palette::PaletteQuirks::default(),
-                );
-                pal.to_rgba8()
-            });
+            .get(glasnost_render::palette::ICON_PALETTE_FILE)
+            .and_then(|b| glasnost_fmt::pal::Palette6::parse(b).ok());
+        let icon_missing = icon_file.is_none();
+        let icon_palette = Some(icon_rgba(&glasnost_render::palette::icon_palette_565(
+            icon_file.as_ref(),
+            &glasnost_render::palette::PaletteQuirks::default(),
+        )));
         let scene = std::mem::take(&mut loaded.built.scene);
         let mut problems = std::mem::take(&mut loaded.problems);
         let Some(live) = loaded.live.as_mut() else {
@@ -163,6 +159,13 @@ impl Session {
                 .pop()
                 .unwrap_or_else(|| "the game did not start".into()));
         };
+        if icon_missing {
+            // spec: S-0103 claim 13 (our engine's departure: black icons and an importer warning naming the file)
+            problems.push(
+                "CAMEO.PAL: the sidebar icon palette cannot be read; icons are drawn black (S-0103 claim 13)"
+                    .into(),
+            );
+        }
         live.clear_scripts();
         let setup: GameSetup = live.setup.clone();
         let catalogue = live
@@ -205,6 +208,7 @@ impl Session {
             icon_ids: BTreeMap::new(),
             icon_palette,
             pointer: None,
+            edge: EdgeScroll::default(),
             press: None,
             targets: Targets::new(),
             pause_targets: Targets::new(),
@@ -293,27 +297,36 @@ impl Session {
         }
     }
 
-    /// The edge scroll for the pointer's position (interim, Q-0279).
-    pub fn edge_scroll(&self) -> (i32, i32) {
-        let Some(p) = self.pointer else {
-            return (0, 0);
+    /// One unfrozen cycle's scrolling (S-0101 claims 12 to 14): the edge
+    /// request of F9 plus the held arrows' (left, right, up, down), added
+    /// before F5 limits the centre. `edge` is false while edge scrolling is
+    /// suppressed (no focus).
+    pub fn scroll_cycle(&mut self, now_ms: u64, held: [bool; 4], edge: bool) {
+        let pointer = self.pointer.filter(|_| edge).map(|p| (p.x, p.y));
+        let f = self.loaded.map.footprint;
+        let size = self.view_size();
+        let centre = self.centre;
+        // spec: S-0101 F9 (a one-pixel request in the direction blocked by F5)
+        let blocked = |d: (i32, i32)| {
+            limit_centre(
+                (centre.0 + d.0, centre.1 + d.1),
+                size,
+                f.width,
+                f.local,
+                &ProjectionQuirks::default(),
+            ) == centre
         };
-        let (w, h) = self.screen;
-        let sx = if p.x < EDGE {
-            -SCROLL_STEP
-        } else if p.x >= w - EDGE {
-            SCROLL_STEP
-        } else {
-            0
-        };
-        let sy = if p.y < EDGE {
-            -SCROLL_STEP
-        } else if p.y >= h - EDGE {
-            SCROLL_STEP
-        } else {
-            0
-        };
-        (sx, sy)
+        let e = self.edge.cycle(
+            pointer,
+            self.screen,
+            scroll::DEFAULT_SCROLL_INDEX,
+            self.loaded.scroll_multiplier,
+            now_ms,
+            blocked,
+        );
+        let a = scroll::arrows(held);
+        // spec: S-0101 claim 14 (mouse and arrow requests add before the next view position, subject to F5)
+        self.scroll((e.0 + a.0, e.1 + a.1));
     }
 
     /// The map view.
@@ -669,6 +682,17 @@ fn brackets(d: &mut DrawList, cx: i32, cy: i32, hw: i32, hh: i32) {
 /// Reads and decodes frame 0 of every buildable type's sidebar icon
 /// (S-0007 claims 22 and 25: the main icon; the alternate one needs
 /// infiltration, which no skirmish of M5b has).
+/// The icon palette's 5-6-5 pixels as the painter's RGBA (S-0103 claim 13:
+/// what a packed pixel shows; entry 0 is transparent through the sprite).
+fn icon_rgba(p: &[u16; 256]) -> [u8; 1024] {
+    let mut out = [0u8; 1024];
+    for (dst, &c) in out.as_chunks_mut::<4>().0.iter_mut().zip(p.iter()) {
+        let (r, g, b) = glasnost_render::compose::expand565(c);
+        *dst = [r, g, b, 255];
+    }
+    out
+}
+
 async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<TypeRef, IndexedImage> {
     let mut out = BTreeMap::new();
     let Some(rules) = loaded.rules.as_deref() else {

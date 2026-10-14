@@ -395,7 +395,7 @@ const BARREL_KEYS: [(&str, &str); 4] = [
     ("BarrelRecoverFrames", "TurretRecoverFrames"),
 ];
 
-/// Building light keys stored as ⌊v × 1000 + 0.1⌋ (S-0104 claim 12).
+/// Building light keys stored as trunc(v × 1000 + 0.1) (S-0104 claim 12).
 // spec: S-0104 claim 12, S-0006 Import mapping (building light values)
 const BUILDING_LIGHT_KEYS: [&str; 4] = [
     "LightIntensity",
@@ -510,11 +510,12 @@ fn is_not_given(form: NotGivenForm, stored: &[u8]) -> bool {
     }
 }
 
-/// ⌊v × 1000 + 0.1⌋ truncated toward zero, in double precision rounded
-/// toward zero (S-0104 claim 12, Formulas "Precision of decimal
+/// trunc(v × 1000 + 0.1) toward zero, v the single-precision decimal
+/// widened to double, each step in double precision rounded toward zero (S-0104 claim 12, Formulas "Precision of decimal
 /// conversions"). `None` when the value has no number (S-0003 claim 8: our
 /// engine keeps the value in force).
 pub fn building_light_thousandths(stored: &[u8]) -> Option<i64> {
+    // spec: S-0104 claim 12 (r18: v is the single-precision decimal of S-0003 claim 6, widened to double; a `%` value stays the double of S-0003 claim 7)
     let Decimal::Value { value, .. } = value::decimal(stored, DecimalField::Double) else {
         return None;
     };

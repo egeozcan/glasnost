@@ -16,10 +16,18 @@ fn file(name: &str, text: &str) -> InputFile {
 }
 
 fn import(base: &str, art: &str) -> (SimData, Vec<String>) {
+    import_full(base, "", art)
+}
+
+fn import_with_map(base: &str, map: &str) -> (SimData, Vec<String>) {
+    import_full(base, map, "")
+}
+
+fn import_full(base: &str, map: &str, art: &str) -> (SimData, Vec<String>) {
     let inputs = Inputs {
         base: Some(file("rules.ini", base)),
         mode: Some(file("mode.ini", "")),
-        map: Some(file("test.map", "")),
+        map: Some(file("test.map", map)),
         art: Some(file("art.ini", art)),
         ..Inputs::default()
     };
@@ -353,4 +361,67 @@ fn considered_aircraft_flag() {
     assert_eq!(s.vehicles["CARA"].econ.considered_aircraft, Some(true));
     assert_eq!(s.vehicles["CARB"].econ.considered_aircraft, None);
     assert_eq!(s.aircraft["PLANEA"].econ.considered_aircraft, Some(false));
+}
+
+/// spec: S-0003 claim 23, rows C21 to C23 and scenario V18 (the virtual-purifier, extra-credit and computer-timer lists: decimal-prefix items, an unreadable non-empty item 0 in its place, empty items none, 511-byte limit, item warnings; a present value replaces the whole list, missing or empty keeps it) (Q-0234)
+#[test]
+fn economy_integer_list_items() {
+    for key in ["AIVirtualPurifiers", "MultiplayerAICM", "AIHateDelays"] {
+        let read = |base: &str, map: &str| {
+            let (s, w) = import_with_map(base, map);
+            let g = &s.general.economy;
+            let v = match key {
+                "AIVirtualPurifiers" => g.ai_virtual_purifiers.clone(),
+                "MultiplayerAICM" => g.multiplayer_aicm.clone(),
+                _ => g.ai_hate_delays.clone(),
+            };
+            (v, w)
+        };
+        let one = |text: &str| read(&format!("[General]\n{key}={text}\n"), "");
+        let v = |text: &str| one(text).0;
+        assert_eq!(v("5,abc,9"), Some(vec![5, 0, 9]), "{key}");
+        assert_eq!(v("5,$10,9"), Some(vec![5, 0, 9]), "{key}");
+        assert_eq!(v("5,10h,9"), Some(vec![5, 10, 9]), "{key}");
+        assert_eq!(v("5,0x10,9"), Some(vec![5, 0, 9]), "{key}");
+        assert_eq!(v("5,,7,9"), Some(vec![5, 7, 9]), "{key}");
+        assert_eq!(v("5, ,9"), Some(vec![5, 0, 9]), "{key}");
+        assert_eq!(v("5,4294967303,9"), Some(vec![5, 7, 9]), "{key}");
+        assert_eq!(v("10%"), Some(vec![10]), "{key}");
+        // Text beyond byte 127 is read.
+        assert_eq!(
+            v(&format!("5{}7,9", ",".repeat(130))),
+            Some(vec![5, 7, 9]),
+            "{key}"
+        );
+        // Claim 3's warnings apply item by item; a clean list does not warn.
+        let warns = |text: &str| {
+            one(text)
+                .1
+                .iter()
+                .any(|m| m.contains(key) && m.contains("claims 1, 3, 4 and 23"))
+        };
+        assert!(warns("5,abc,9"), "{key}");
+        assert!(warns("5,10h,9"), "{key}");
+        assert!(warns("5,4294967303,9"), "{key}");
+        assert!(!warns("5,7,9"), "{key}");
+        // Layer retention: absent and empty keep the whole list; a present
+        // value replaces it, and only commas replace it with an empty list.
+        let base = format!("[General]\n{key}=5,4,9\n");
+        assert_eq!(read(&base, "").0, Some(vec![5, 4, 9]), "{key}");
+        assert_eq!(
+            read(&base, &format!("[General]\n{key}=\n")).0,
+            Some(vec![5, 4, 9]),
+            "{key}"
+        );
+        assert_eq!(
+            read(&base, &format!("[General]\n{key}=5,abc,9\n")).0,
+            Some(vec![5, 0, 9]),
+            "{key}"
+        );
+        assert_eq!(
+            read(&base, &format!("[General]\n{key}=,,,\n")).0,
+            Some(vec![]),
+            "{key}"
+        );
+    }
 }

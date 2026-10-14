@@ -121,7 +121,14 @@ fn elevation(w: &World, firer: ObjectId, t: Target, projectile_elevation: bool) 
     // spec: S-0307 F2 (k = trunc(Δh / I))
     let k = int::div(dh, g.elevation_increment);
     let f = F64::from_i64(i64::from(k), mode).mul(g.elevation_bonus, mode);
-    let fp = f.min(g.elevation_cap);
+    // spec: S-0307 Edge cases (quirks.negative_elevation_cap: the cap as it is; off: max(0, c) in F2)
+    let cap = if r.quirks.negative_elevation_cap {
+        g.elevation_cap
+    } else {
+        g.elevation_cap.max(F64::ZERO)
+    };
+    // spec: S-0307 F2 (f′ = min(f, c))
+    let fp = f.min(cap);
     // spec: S-0307 F2 (t = trunc(f′) in range, −2⁶³ otherwise)
     let t = match fp.trunc_i128() {
         Some(v) if (i128::from(i64::MIN)..=i128::from(i64::MAX)).contains(&v) => v as i64,
@@ -446,6 +453,10 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         _ => crate::teleport::mark_cell(w, id).into_iter().collect(),
     };
     let clear = |w: &World, cell: CellXY| -> bool {
+        // spec: S-0307 claims 15 and 21 (winged class: the clear-cell test accepts without the region, occupancy, height, land or wall tests; the range, detour and primary usable-area tests still apply)
+        if u.class == Some(glasnost_rules::sim::LocomotionClass::Winged) {
+            return true;
+        }
         // spec: S-0307 claim 19 (a high-bridge cell reads its deck occupancy, the deck bypassing the land multiplier; other cells the ground)
         let deck = w.high_bridge(cell);
         let layer = if deck { Layer::Deck } else { Layer::Ground };

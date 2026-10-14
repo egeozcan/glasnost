@@ -1551,10 +1551,10 @@ enum Step {
 
 /// The steps of one column, in drawing order (S-0105 claims 21, 35, 36).
 ///
-/// In normal mode 0 this grouping is claim 35's colour-height relation,
-/// except that top-down each group's empty count is applied after its
-/// colours, which claim 35's table (MS-19 (b)) requires and its relation
-/// contradicts for a later span (MS-26): interim (Q-0216).
+/// In normal mode 0 this grouping is claim 35's colour-height relation:
+/// bottom-up a span's empty count precedes its colours, top-down it follows
+/// them and affects only later spans, for every span with no first-span
+/// exception (r10, Q-0216).
 ///
 /// With `quirks.voxel_topdown_column_origin` on, a column is read in groups
 /// from its first value (bottom-up) or its last value backward (top-down):
@@ -1651,8 +1651,8 @@ fn column_steps(
                 end = start;
             }
             // the span's opening count, then the empty count (VXL layout, glasnost_fmt::vxl); in
-            // mode 0 claim 35's (e, b, aₙ₋₁ … a₀, n), the empty count applied after the colours as
-            // claim 35's table has it: interim (Q-0216)
+            // mode 0 claim 35's (e, b, aₙ₋₁ … a₀, n)
+            // spec: S-0105 claim 35 (top-down d = Cᵣ₋₁ + l: the empty count follows the colours, every span, Q-0216)
             let Some(at) = end.checked_sub(2) else {
                 break;
             };
@@ -1887,9 +1887,11 @@ fn wrap(v: i64) -> u64 {
 /// The sections of a part from lowest to highest overlap priority (claim
 /// 23, F8): `depths[s]` is the nearest view-space depth of section `s`
 /// (file order); the result lists sections in drawing order. Distinct
-/// depths ascend, F8's six tie rows hold and a part whose sections all
-/// share one depth keeps file order. Other mixed-depth ties are open in
-/// S-0105; the exchange order used for them is an interim rule (Q-0215).
+/// depths ascend, F8's fourteen tie rows hold, the result depends only on
+/// the exact comparison relations, and a part whose sections all share one
+/// depth keeps file order. Other mixed-depth ties are open in S-0105
+/// (`unmeasured`, Q-0215 question 7); the exchange order used for them is
+/// an interim rule.
 /// With `quirks.voxel_section_sort_ties` off, a stable ascending sort.
 pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
     let mut pi: Vec<usize> = (0..depths.len()).collect();
@@ -1900,8 +1902,8 @@ pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
         pi.sort_by(|&a, &b| (depths[a] + 0.0).total_cmp(&(depths[b] + 0.0)));
         return pi;
     }
-    // spec: S-0105 F8 (distinct depths ascend; the six tie rows and all-equal parts in file
-    // order give the painter priorities of its table); other mixed ties: interim (Q-0215)
+    // spec: S-0105 F8 (distinct depths ascend; the fourteen tie rows and all-equal parts in
+    // file order give the painter priorities of its table); other mixed ties: interim (Q-0215 question 7)
     for t in 0..pi.len() {
         let mut chain = vec![t];
         let mut min = depths[pi[t]];
@@ -3724,29 +3726,66 @@ mod tests {
         assert!(o.windows(2).all(|w| d[w[0]] <= d[w[1]]));
     }
 
-    /// spec: S-0105 claims 23 and 24, Formulas F8 (every row of the overlap-priority table:
-    /// painter priority, and the depth-mode contributing order as its reverse; an all-equal
-    /// part of any size in file order)
+    /// spec: S-0105 claims 23 and 24, Formulas F8 (every row of the overlap-priority table,
+    /// r10's eight added rows included: painter priority, and the depth-mode contributing order
+    /// as its reverse; the result depends only on the exact relations, not the gaps; an
+    /// all-equal part of any size in file order)
     #[test]
     fn section_order_f8_table() {
-        let rows: [(&[f32], &[usize], &[usize]); 6] = [
+        let rows: [(&[f32], &[usize], &[usize]); 14] = [
             (&[2.0, 2.0], &[0, 1], &[1, 0]),
             (&[2.0, 2.0, 1.0], &[2, 1, 0], &[0, 1, 2]),
             (&[2.0, 2.0, 2.0], &[0, 1, 2], &[2, 1, 0]),
             (&[2.0, 2.0, 2.0, 2.0], &[0, 1, 2, 3], &[3, 2, 1, 0]),
             (&[2.0, 2.0, 1.0, 1.0], &[2, 3, 0, 1], &[1, 0, 3, 2]),
             (&[1.0, 2.0, 2.0], &[0, 1, 2], &[2, 1, 0]),
+            // r10 (Q-0215 questions 1 to 6)
+            (&[2.0, 1.0, 1.0], &[1, 2, 0], &[0, 2, 1]),
+            (&[2.0, 1.0, 2.0], &[1, 0, 2], &[2, 0, 1]),
+            (&[1.0, 2.0, 1.0], &[0, 2, 1], &[1, 2, 0]),
+            (&[1.0, 1.0, 2.0], &[0, 1, 2], &[2, 1, 0]),
+            (&[2.0, 2.0, 2.0, 1.0], &[3, 1, 2, 0], &[0, 2, 1, 3]),
+            (&[2.0, 1.0, 1.0, 1.0], &[1, 2, 3, 0], &[0, 3, 2, 1]),
+            (&[2.0, 1.0, 2.0, 1.0], &[1, 3, 2, 0], &[0, 2, 3, 1]),
+            (&[2.0, 1.0, 1.0, 2.0], &[1, 2, 0, 3], &[3, 0, 2, 1]),
         ];
         for (depths, painter, depth_mode) in rows {
             let mut o = section_order(depths, &q());
             assert_eq!(o, painter, "{depths:?}");
             o.reverse();
             assert_eq!(o, depth_mode, "{depths:?}");
+            // r10: only the exact relations count, not the gaps between depths.
+            let spread: Vec<f32> = depths.iter().map(|d| d * d * 40.0 - 7.5).collect();
+            assert_eq!(section_order(&spread, &q()), painter, "{spread:?}");
         }
         for n in 1..9 {
             let all: Vec<usize> = (0..n).collect();
             assert_eq!(section_order(&vec![7.0; n], &q()), all);
         }
+    }
+
+    /// spec: S-0105 claim 21 (r11: within a section, of the voxels on one
+    /// pixel the greatest (n_y, n_x, n_z) supplies it without depth
+    /// buffering; with it, equal comparison depths favour the smallest
+    /// tuple under claim 24's strict test)
+    #[test]
+    fn within_section_pixel_priority() {
+        // One column of two cells; model z feeds neither screen position
+        // nor depth, so both cells land on one pixel at one depth.
+        let col = encode_column(&[(0, 50, 0), (1, 51, 0)], 2);
+        let s = section([1, 1, 2], [0.0; 3], [1.0, 1.0, 2.0], 1, vec![Some(col)]);
+        let m = model(vec![s]);
+        let flat = mat([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ]);
+        let painter = draw_model(&m, 0, &flat, None, false, &q()).unwrap();
+        assert_eq!(painter.opaque().iter().map(|p| p.1).collect::<Vec<_>>(), [51]);
+        let depth = draw_model(&m, 0, &flat, None, true, &q()).unwrap();
+        // Two-pixel output in depth mode; both show the smaller tuple.
+        assert!(!depth.opaque().is_empty());
+        assert!(depth.opaque().iter().all(|p| p.1 == 50));
     }
 
     /// spec: S-0105 claim 23 (the section with the farthest nearest point
@@ -3950,8 +3989,8 @@ mod tests {
         assert_eq!(got, [x, x]);
     }
 
-    /// spec: S-0105 claim 35 (MS-19 (b): bottom-up and top-down groups; the top-down row is
-    /// the one request Q-0216 sets against the colour-height relation)
+    /// spec: S-0105 claim 35 (MS-19 (b): bottom-up and top-down groups; top-down Y at cell
+    /// e + 1 and X at cell e, r10)
     #[test]
     fn mode0_groups_both_directions() {
         let (x, yv, z) = (90, 9, 7);
@@ -3990,7 +4029,9 @@ mod tests {
     }
 
     /// spec: S-0105 claim 35 (MS-26's general mode-0 columns, invented values: spans, the
-    /// prefix boundary and the bounded-data stop in both drawing directions)
+    /// prefix boundary and the bounded-data stop in both drawing directions; r10, Q-0216: the
+    /// two-span top-down row at cells 4, 3, 2, 1 and the three-span row with no first-span
+    /// exception)
     #[test]
     fn mode0_general_columns() {
         let q = q();
@@ -4000,10 +4041,16 @@ mod tests {
             up(&[0, 2, 10, 11, 90, 1, 2, 20, 21, 91], 5),
             [(0, 10), (1, 11), (3, 20), (4, 21)]
         );
-        // MS-26's top-down two-span row: its first span agrees with every reading; where the
-        // second span lands is the contradiction of request Q-0216.
-        let two = down(&[1, 91, 21, 20, 2, 0, 90, 11, 10, 2], 5);
-        assert_eq!(two[..2], [(4, 10), (3, 11)]);
+        // MS-26's top-down two-span row (Q-0216's discriminator).
+        assert_eq!(
+            down(&[1, 91, 21, 20, 2, 0, 90, 11, 10, 2], 5),
+            [(4, 10), (3, 11), (2, 20), (1, 21)]
+        );
+        // The three-span row with nonzero empty counts.
+        assert_eq!(
+            down(&[1, 92, 30, 1, 2, 91, 21, 20, 2, 1, 90, 10, 1], 8),
+            [(7, 10), (5, 20), (4, 21), (1, 30)]
+        );
         assert_eq!(up(&[0, 2, 10, 11, 90, 0, 1, 20, 91], 2), [(0, 10), (1, 11)]);
         assert_eq!(
             down(&[0, 91, 20, 1, 0, 90, 11, 10, 2], 2),

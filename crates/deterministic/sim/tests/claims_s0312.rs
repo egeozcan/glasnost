@@ -1567,3 +1567,211 @@ fn claim_21_destroyed_sale_stops() {
     assert!(w.obj(id).is_none(), "removed in its own next turn");
     assert_eq!(w.houses[0].credits, credits, "no sale refund");
 }
+
+// spec: S-0312 claim 16 (an empty explosion list: no aircraft-specific animation and no draw, no fallback to the destruction list; the same on the ground)
+#[test]
+fn claim_16_empty_explosion_list() {
+    let mut r = rules();
+    r.sim.aircraft.get_mut("PLANE").unwrap().combat.destroy_anim = names(&["DX1", "DX2"]);
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Aircraft, "PLANE", 0, 0, 0);
+    w.effects.clear();
+    let before = w.rng.clone();
+    kill(&mut w, id);
+    assert!(anims(&w).is_empty(), "{:?}", anims(&w));
+    assert_eq!(w.rng, before, "no list-pick draw");
+    assert!(w.obj(id).is_none());
+}
+
+// ---------------------------------------------------------------- claim 29
+
+mod destruction_triggers {
+    use super::*;
+    use glasnost_map::triggers::{Action, Event, TagDef, TriggerDef, Triggers};
+    use std::sync::Arc;
+
+    /// One tag `TAG` (repeat type `repeat`) over one trigger whose only event
+    /// is destroyed-by-anything (48) with the given actions.
+    fn triggers(repeat: i32, actions: Vec<Action>) -> Triggers {
+        Triggers {
+            triggers: vec![TriggerDef {
+                events: vec![Event {
+                    code: 48, // spec: S-0312 Import mapping (event code 48, destroyed by anything)
+                    kind: 0,
+                    value: 0,
+                    type_name: None,
+                }],
+                actions,
+                ..TriggerDef::created(b"T".to_vec())
+            }],
+            tags: vec![TagDef {
+                id: b"TAG".to_vec(),
+                repeat,
+                name: Vec::new(),
+                first: Some(0),
+                chain: vec![0],
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// A sound-at-a-waypoint action (S-0011 claims 32 and 33), whose effect
+    /// shows when the action has run.
+    fn sound() -> Action {
+        Action {
+            code: 99,
+            kind: 7,
+            name: b"Bell".to_vec(),
+            number: -1,
+            waypoint: 0,
+            ..Default::default()
+        }
+    }
+
+    fn game_with_triggers(r: &Ruleset, t: Triggers) -> World {
+        let mut m = testkit::empty_map(SIZE);
+        m.triggers = t;
+        glasnost_sim::load::new_game(
+            Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-test")),
+            &m,
+            testkit::catalogue(),
+            &testkit::setup(11),
+        )
+        .expect("synthetic game loads")
+    }
+
+    fn tagged(w: &mut World, kind: Kind, name: &str, dx: i32) -> ObjectId {
+        let id = spawn(w, kind, name, 0, dx, 0);
+        glasnost_sim::triggers::object_tag(w, id, Some(b"TAG"));
+        id
+    }
+
+    /// A lethal hit from a known attacker of house 1.
+    fn by(w: &mut World) -> Hit {
+        let a = spawn(w, Kind::Vehicle, "NEIGH", 1, 6, 6);
+        Hit {
+            attacker: Some(a),
+            house: w.obj(a).unwrap().owner,
+            ..lethal()
+        }
+    }
+
+    // spec: S-0312 claim 29 (the destruction raises happen in the killing hit after health reaches 0 and before the death debris: the fired action's effect precedes the first debris animation)
+    #[test]
+    fn claim_29_trigger_action_before_debris() {
+        let mut r = rules();
+        let c = &mut r.sim.vehicles.get_mut("VICTIM").unwrap().combat;
+        c.min_debris = Some(2);
+        c.max_debris = Some(3);
+        c.debris_anims = names(&["DA"]);
+        let mut w = game_with_triggers(&r, triggers(0, vec![sound()]));
+        let id = tagged(&mut w, Kind::Vehicle, "VICTIM", 0);
+        w.effects.clear();
+        kill(&mut w, id);
+        let bell = w
+            .effects
+            .iter()
+            .position(|e| matches!(e, Effect::Trigger { code: 99, .. }))
+            .expect("the action ran");
+        let debris = w
+            .effects
+            .iter()
+            .position(|e| matches!(e, Effect::Anim { name, .. } if name == "DA"))
+            .expect("debris");
+        assert!(bell < debris, "trigger {bell}, debris {debris}");
+        assert!(w.obj(id).is_none());
+    }
+
+    /// The firings of a repeating destroyed-by-anything tag at one death.
+    fn firings(r: &Ruleset, kind: Kind, name: &str, attacker: bool) -> u64 {
+        let mut w = game_with_triggers(r, triggers(2, vec![]));
+        let id = tagged(&mut w, kind, name, 0);
+        let hit = if attacker { by(&mut w) } else { lethal() };
+        let f0 = w.triggers.fired;
+        damage::apply(&mut w, id, hit);
+        w.triggers.fired - f0
+    }
+
+    // spec: S-0312 claim 29 and scenario D20 (with the persistent latch, a vehicle killed by a known attacker gives seven firings and four without, against two for infantry, aircraft and buildings)
+    #[test]
+    fn claim_29_vehicle_extra_group() {
+        let r = rules();
+        assert_eq!(firings(&r, Kind::Vehicle, "VICTIM", true), 7);
+        assert_eq!(firings(&r, Kind::Vehicle, "VICTIM", false), 4);
+        for (kind, name) in [
+            (Kind::Infantry, "TECH"),
+            (Kind::Aircraft, "PLANE"),
+            (Kind::Building, "HUT"),
+        ] {
+            assert_eq!(firings(&r, kind, name, true), 2, "{name}");
+            assert_eq!(firings(&r, kind, name, false), 2, "{name}");
+        }
+    }
+
+    // spec: S-0312 Edge cases (quirks.vehicle_destruction_extra_raises off: only the common group, two firings for a vehicle)
+    #[test]
+    fn quirk_vehicle_destruction_extra_raises_off() {
+        let mut r = rules();
+        r.globals.quirks.vehicle_destruction_extra_raises = false;
+        assert_eq!(firings(&r, Kind::Vehicle, "VICTIM", true), 2);
+        assert_eq!(firings(&r, Kind::Vehicle, "VICTIM", false), 2);
+    }
+
+    // spec: S-0312 claim 29 (a supplied attacking house without an attacker: only the common group)
+    #[test]
+    fn claim_29_supplied_house_gives_only_the_common_group() {
+        let r = rules();
+        let mut w = game_with_triggers(&r, triggers(2, vec![]));
+        let id = tagged(&mut w, Kind::Vehicle, "VICTIM", 0);
+        let f0 = w.triggers.fired;
+        damage::apply(
+            &mut w,
+            id,
+            Hit {
+                house: Some(glasnost_sim::world::HouseId(1)),
+                ..lethal()
+            },
+        );
+        assert_eq!(w.triggers.fired - f0, 2);
+    }
+
+    // spec: S-0312 claim 29 (deferred deaths: a delayed-kill building raises on its initial lethal hit, before its health is restored to 1; a cyborg's crippling makes no raise)
+    #[test]
+    fn claim_29_deferred_deaths() {
+        let r = delay_rules();
+        let mut w = game_with_triggers(&r, triggers(0, vec![sound()]));
+        let id = tagged(&mut w, Kind::Building, "HUT", 0);
+        w.effects.clear();
+        assert_eq!(
+            damage::apply(&mut w, id, delay_hit(&r, 0)),
+            HitResult::PostMortem
+        );
+        assert_eq!(w.obj(id).unwrap().health, 1);
+        assert!(
+            w.effects
+                .iter()
+                .any(|e| matches!(e, Effect::Trigger { code: 99, .. }))
+        );
+        let r = cyborg_rules(200);
+        let mut w = game_with_triggers(&r, triggers(2, vec![]));
+        let id = tagged(&mut w, Kind::Infantry, "BORG", 0);
+        let f0 = w.triggers.fired;
+        assert_eq!(
+            damage::apply(&mut w, id, hit_with(warhead(&r, "W1"), 1000)),
+            HitResult::NowRed
+        );
+        assert_eq!(w.triggers.fired, f0, "the crippling fires nothing");
+        damage::apply(&mut w, id, hit_with(warhead(&r, "W1"), 1000));
+        assert_eq!(w.triggers.fired - f0, 2, "the later lethal hit fires normally");
+    }
+}
+
+// spec: S-0312 claim 2 and scenario D2 (strength 203: the first hit leaves 50 health, not 51, the quarter truncated toward zero)
+#[test]
+fn claim_2_cyborg_crippled_truncates() {
+    let r = cyborg_rules(203);
+    let mut w = game(&r);
+    let id = spawn(&mut w, Kind::Infantry, "BORG", 0, 0, 0);
+    damage::apply(&mut w, id, hit_with(warhead(&r, "W1"), 1000));
+    assert_eq!(w.obj(id).unwrap().health, 50);
+}

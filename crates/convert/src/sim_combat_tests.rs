@@ -619,7 +619,7 @@ fn every_combat_key_resolves() {
                 Form::Dec => format!("{k}={dec}\n"),
                 Form::Text | Form::Ref(_) => format!("{k}=N{k}\n"),
                 Form::Refs(_) | Form::Texts => format!("{k}=A{k},B{k}\n"),
-                Form::Ints | Form::Maxima => format!("{k}=1,2\n"),
+                Form::Maxima => format!("{k}=1,2\n"),
             })
             .collect()
     }

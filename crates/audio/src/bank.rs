@@ -197,7 +197,7 @@ pub const DATA_FILE: &str = "audio.bag"; // spec: S-0701 Import mapping (`AUDIO.
 pub async fn discover(vfs: &Vfs) -> (SoundBank, DiscoverReport) {
     let mut bank = SoundBank::new();
     let mut report = DiscoverReport::default();
-    // spec: S-0701 claim 34 (one bank: its index file and data file through the ordinary file lookup of S-0005)
+    // spec: S-0701 claim 34 and S-0005 claim 10a (one named bank: its index file and data file each resolved on its own through the ordinary file lookup; no other bank is searched)
     let Some(idx_ref) = vfs.resolve(INDEX_FILE) else {
         return (bank, report);
     };
