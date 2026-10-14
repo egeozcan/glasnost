@@ -2280,10 +2280,18 @@ fn search_failure_of_a_neutral_unit_queues_area_guard() {
             o.beh.queued = None;
             o.dest = Some(Target::Cell(cell(5, 0)));
         }
+        // spec: S-0215 claim 38 (the neutral or special house's centre choice, then the final search on the same tick)
+        let mut v = w.clone();
+        let expected = if human {
+            None
+        } else {
+            let c = glasnost_sim::base::selected_centre(&mut v, w.obj(id).unwrap().owner.unwrap());
+            c.and_then(|c| path::give_up_destination(&mut v, id, c))
+        };
         path::failed(&mut w, id, Search::SearchFailed, false);
         let o = w.obj(id).unwrap();
-        // The house's centre choice is open in S-0215 (interim, request Q-0312).
-        assert_eq!(o.dest, None);
+        assert_eq!(o.dest, expected.map(Target::Cell), "human {human}");
+        assert_eq!(format!("{:?}", w.rng), format!("{:?}", v.rng));
         assert_eq!(o.beh.queued, Some(want), "human {human}");
         assert_ne!(o.beh.current, Some(Behaviour::Move));
     }

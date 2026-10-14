@@ -122,9 +122,9 @@ pub fn game_over(w: &World, house: HouseId) -> bool {
 
 /// The centre that a neutral or special house's choice supplies for the
 /// destination of a unit that gave up after a failed search (S-0212 claim
-/// 23a). The choice belongs to S-0215 and is still open there, so no centre
-/// is supplied and the unit gets no destination (interim, request Q-0312).
-pub fn give_up_centre(_w: &mut World, _id: ObjectId) -> Option<glasnost_map::CellXY> {
-    // spec: S-0212 claim 23a (no result leaves the destination absent; the centre choice is open in S-0215: interim, request Q-0312)
-    None
+/// 23a): the house-selected centre of S-0215 claim 38.
+pub fn give_up_centre(w: &mut World, id: ObjectId) -> Option<glasnost_map::CellXY> {
+    let h = w.obj(id)?.owner?;
+    // spec: S-0215 claim 38 and F11 (the central choice, with its ranged and raw draws, for infantry and vehicles whatever their weapons)
+    crate::base::selected_centre(w, h)
 }

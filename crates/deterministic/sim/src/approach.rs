@@ -30,7 +30,7 @@ fn point(w: &World, t: Target) -> Pos {
 }
 
 /// ρ₃ between two points (S-0215 F4).
-fn rho3(w: &World, a: Pos, b: Pos) -> i64 {
+pub(crate) fn rho3(w: &World, a: Pos, b: Pos) -> i64 {
     let r = w.rules();
     let (dx, dy, dz) = (
         i64::from(a.x - b.x),
