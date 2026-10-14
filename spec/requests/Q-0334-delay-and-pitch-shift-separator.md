@@ -1,9 +1,9 @@
 ---
 id: Q-0334
 title: What separates the two numbers of a sound entry's delay and pitch shift
-status: open
+status: answered
 related: [S-0701]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

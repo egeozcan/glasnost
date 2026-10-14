@@ -1,9 +1,9 @@
 ---
 id: Q-0332
 title: When the game-wide building damage and building death sounds play
-status: open
+status: answered
 related: [S-0701, S-0302]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need
