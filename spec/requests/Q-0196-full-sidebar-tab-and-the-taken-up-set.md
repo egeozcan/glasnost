@@ -3,7 +3,7 @@ id: Q-0196
 title: What a type suppressed by a full sidebar tab is for the taken-up set, order legality and removal orders
 status: answered
 related: [S-0004, S-0404, S-0407, S-0411]
-answered-by: [S-0411]
+answered-by: [S-0411, S-0407]
 ---
 
 ## Need
