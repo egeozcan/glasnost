@@ -48,7 +48,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 13 | approved | — |
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 8 | approved | — |
 | [S-0204](simulation/S-0204-coordinates-distance-facing.md) | Coordinates, distance and facing | simulation | 7 | approved | — |
-| [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 8 | approved | — |
 | [S-0210](movement/S-0210-crushing.md) | Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing) | movement | 17 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 15 | approved | — |
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 7 | approved | — |
@@ -98,3 +97,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 18 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 19 | approved | — |
 | [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 16 | approved | — |
+| [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 9 | approved | — |

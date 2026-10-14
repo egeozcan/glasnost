@@ -2,7 +2,7 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -379,6 +379,24 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
       facing error, claim 9 already sets the body target to that direction). No scenario can arrange
       that coincidence reliably, as with claim 5's exception.
     - Confidence: high for the behaviour; low for how often play reaches it
+
+### Rotation sampling for sound
+
+17. **A rotation sample is not a sound's lifetime.** For a vehicle whose type has a turret,
+    each tick that processes the turret rules records whether the turret is turning after all
+    applicable rows of claim 9 have taken effect. This *rotation sample* uses the current-tick
+    turning definition in Terms, not the previous-tick re-aim gate. It includes spinning turrets,
+    even though those never count as turning for that gate. A turn that completes at once gives
+    a nonturning sample; a turn of positive duration begun by the rows gives a turning sample.
+    A turn that begins and ends entirely between samples is not reported as turning.
+
+    The vehicle's sound update uses the latest rotation sample, rather than testing its facing
+    again. Thus a sampled turn can request a rotation sound even if it has since ended. Starting,
+    ending looping, continuation and overlap of audible instances belong to S-0701 claim 23.
+    Finishing a turn does not imply that its current sound sample is cut at once. This claim
+    establishes sampling for vehicles only, not aircraft or buildings.
+    - Backing: `measurable` (scenario R12; S-0701 scenario F12 for instance lifetime)
+    - Confidence: high for vehicle sampling and the distinction from the re-aim gate
 
 ## Formulas
 
@@ -856,6 +874,25 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   tolerances than 2048 and 4096; a turret that turns towards 0 shows that the turret-locked row did
   not win (claim 9). A run in which the vehicle moves or its body turns is invalid and says nothing
   about the tolerances.
+
+**R12. Vehicle rotation samples (claim 17).**
+- *Setup:* the flat map, vehicle and own targets of R4, at game speed 1, with the same named
+  test rules file and a bystander computer player kept outside the observed area. Add a named
+  test sound file giving the vehicle a long looping rotation entry as in S-0701 F12. A read-only
+  recorder logs tick number, turret facing, target facing, rotation samples and sound requests.
+- *Procedure:* run a: order an attack with turn rate 1 and follow the turn through completion.
+  Run b: repeat with turn rate 127, so this turn completes at once. Run c: use R6 run a's
+  spinning-turret setup at turn rate 1. Run each twice; capture audio as in S-0701 F12.
+- *Observable:* the rotation sample alongside the turn's duration and the sound request that
+  uses it; distinguish requests from audible sample endings.
+- *Expected:* run a's sample is turning from the tick that starts the positive-duration turn
+  through the tick before its completion, and nonturning at completion. Run b never samples
+  this instantaneous turn as turning. Run c samples turning despite the spinning turret's
+  re-aim gate never counting it as turning. Sound requests follow the latest sample, and
+  instance endings follow S-0701 claim 23 rather than cutting the current audio sample.
+- *Falsified if:* a sample follows the previous-tick re-aim gate instead of current turning,
+  an instantaneous turn supplies a turning sample, or spinning suppresses the sample. Void a
+  run if another target or an unnamed bystander object changes the observed turn.
 
 ## Open questions
 
