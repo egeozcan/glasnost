@@ -1,9 +1,9 @@
 ---
 id: Q-0217
 title: The start-event draws of an animation created during play
-status: open
+status: answered
 related: [S-0109, S-0202, S-0312, S-0401]
-answered-by: []
+answered-by: [S-0202]
 ---
 
 ## Need

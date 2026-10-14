@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0018, Q-0046, Q-0101, Q-0182]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217]
 supersedes: []
 ---
 
@@ -28,13 +28,14 @@ low-bridge and vein placement rules they depend on) and the creation draws of an
 S-0412 claim 14: game-start tile-animation draws follow starting units, crates,
 secret-lab choices and end-of-loading tags. The cleanup and low-bridge refinements
 remain in force. S-0109 claims 14 and 25 own the middle-event gates and sprite-derived μ.
-Claim 15 here now supplies the downstream map-load particle and smudge creation draws.
+Claim 15 here supplies the downstream particle and smudge creation draws at map load
+and during play, including immediate middle events (Q-0217).
 Coordination text that still calls those creation counts unresolved must be updated,
 not replaced with zero-draw assumptions. S-0404 claim 11 agrees with claim 10's
 production-start creation timing, but leaves simultaneous production-start draw order open.
 S-0401 claim 20 must align its trigger-played suppression wording with S-0109 claim 13:
 the creation start event can react, while later start events are suppressed. S-0011 claim 36
-must distinguish the now-specified map-load composition from still-unresolved later particle effects.
+must distinguish the specified middle-event composition from still-unresolved later particle updates.
 
 ## Terms
 
@@ -494,7 +495,7 @@ original's recording modes are retained as deferred context, not implementation 
       | The animation is a bouncing type (S-0109, Terms) | Three raw values for starting motion, followed by three ranged draws R(−65535, 65535), each of which may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
       | The animation is created with no loop delay (S-0109, claim 11) | Its start event (S-0109, claim 13) happens immediately. When μ = 0, the start event first produces the middle-event draws (S-0109, claim 14), then the type's resource-chain-reaction effects. The specs of those effects (particles, scorch marks, craters and the chain reaction) own their draws. |
 
-      A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the map-load middle-event gates, sprite-derived μ and particle-before-choice ordering. Claim 15 below completes the requested particle and smudge creation draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
+      A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the middle-event gates, sprite-derived μ and particle-before-choice ordering at map load and during play. Claim 15 below completes the requested particle and smudge creation draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
     - Backing, by part:
 
       | Part | Backing |
@@ -676,11 +677,33 @@ original's recording modes are retained as deferred context, not implementation 
       resource-glint draw rule; medium for cleanup's recalculations and their conditional
       tile-animation draws
 
-15. **Immediate middle-event effects at map load (Q-0182).** S-0109 claims 14 and 25 already
-    answer the event gates, sprite-derived μ, particle-before-choice ordering and removal of
+15. **Middle-event draw composition at map load and during play (Q-0182, Q-0217).**
+    S-0109 claims 13, 14 and 25 already answer the immediate event with no loop delay and
+    μ = 0, event gates, sprite-derived μ, particle-before-choice ordering and removal of
     up to 6 resource levels for a crater request. S-0312 claim 26 already answers the smudge
     footprint fit test, registration-order candidates, ranged selection and draw-free placement.
-    The following completes their composition for tile and cell animations created during loading.
+    The following completes their composition, equally during loading and during play.
+
+    An animation created during play with no loop delay and μ = 0 takes the same
+    middle-event draws, in the same order, as one created during loading. Its creator
+    (a weapon, teleport, death, debris, trigger or terrain effect) does not change that rule.
+    All draws below use the scenario random stream, not the unsynchronised random stream.
+    They follow any stage-delay and bouncing creation draws of claim 10, and precede any
+    start-event resource chain reaction. There is no extra phase-dependent draw or omitted
+    effect. Equal incoming stream states, animation data and relevant cell state give equal
+    outcomes and consumption; different fitting smudges or resource state can of course
+    change the conditional groups and selection bounds. The same composition applies when
+    a middle event occurs later in playback under S-0109 claim 14; subsequent particle
+    updates are not particle creation and remain outside this spec.
+
+    The smudge height gate is also the same in both phases: for integer world position
+    (X, Y, Z), test Z − H(X, Y) < 30 leptons, with H the terrain surface height at that
+    actual position under S-0106 claims 2 and 3, including its in-cell displacement and
+    their rounding. The subtraction and comparison are integer operations, with no new
+    rounding. The test is not against the creator's cell centre or a bridge deck. Negative
+    height above terrain passes, exactly 30 leptons fails. This gate suppresses the
+    scorch-or-crater choice and smudge request, not the preceding particle groups; its
+    complete flag cases and choice rule belong to S-0109 claim 14.
 
     **Particles.** Each requested particle takes the following scenario-stream draws, in table
     order. One particle's entire group precedes the next particle's group. No particle-system
@@ -746,14 +769,16 @@ original's recording modes are retained as deferred context, not implementation 
     smudge-type draw. The subsequent start-event chain reaction
     remains S-0401 claim 20's rule, after the whole immediate middle event.
     - Backing: `measurable` (R14 A for particles, B for smudge forms and dimensions, C for
-      data-stream ordering and conditional recalculation). The zero-divisor failure and
+      data-stream ordering and conditional recalculation, D for the same composition during
+      play and later playback, E for the shared height test). The zero-divisor failure and
       retaining its raw value are `unmeasured` here: R14 excludes that crash case; the
       deterministic replacement is S-0205's design departure. Negative lifetime divisors
       are also `unmeasured`: R14 A uses positive divisors only. The exhaustive assertion that
       no map state can change a particle creation group is `unmeasured`: R14 tests named
       terrain, overlay, occupation and theater variants, not every possible map state
     - Confidence: high for particle draw forms, gates and order, smudge candidate preferences
-      and data-stream ordering; medium for absence of further placement draws and conditional
+      and data-stream ordering, the phase-independent event composition and terrain-height
+      test; medium for absence of further placement draws and conditional
       resource-removal recalculation composition
 
 ## Formulas
@@ -1039,8 +1064,8 @@ puts there. The placement rules of claim 10 read these keys:
 | `RandomRate` | an animation type's art section | two integers | no random rate; −1 preserves that end | creation stage-delay draw, S-0109 claim 3; applies equally to tile animations started by cleanup or the game-start pass |
 | `TileNNAnim`, `TileNNAttachesTo` | theater section named by the tileset's `SetName` | animation-type name and integer sub-tile index; NN is the tile number within its set | no animation, attaches-to −1 (never starts) | tile-animation eligibility for cleanup and game-start recalculations; full mapping and placement fields belong to S-0010 claim 19 and its Import mapping |
 | `TiberiumChainReaction` | an animation type's art section | boolean | no | start-event chain-reaction draws, S-0401 claim 20; no resource means no chain-reaction draws |
-| `SpawnsParticle`, `NumParticles` | an animation type's art section | particle-type name, integer count | no particle type, 0 | requested particle groups in claim 15; event gates belong to S-0109 claim 14 |
-| `Scorch`, `Crater`, `ForceBigCraters` | an animation type's art section | boolean each | no each | smudge kind request and large-crater selection form in claim 15 |
+| `SpawnsParticle`, `NumParticles` | an animation type's art section | particle-type name, integer count | no particle type, 0 | requested particle groups in claim 15 at map load and during play; event gates belong to S-0109 claim 14 |
+| `Scorch`, `Crater`, `ForceBigCraters` | an animation type's art section | boolean each | no each | smudge kind request and large-crater selection form in claim 15 at map load and during play; shared terrain-height gate belongs to S-0109 claim 14 |
 | `BehavesLike` | a particle type's rules section | case-insensitive name: Gas, Smoke, Fire, Spark or Railgun; at most 31 text bytes | no recognised behaviour (also for an unrecognised name or omitted key) | Smoke adds the speed raw value; Railgun uses lifetime modulus 10, every other value uses the lifetime field |
 | `MaxEC` | a particle type's rules section | signed integer | 1 at type creation; omitted or empty layered values keep the previous value | lifetime variation modulus for non-railgun particles; zero warns (claim 15) |
 | `ColorList` | a particle type's rules section | comma-separated parenthesised RGB triples, at most 511 text bytes; integer components reduced modulo 256 | empty, also when omitted or empty in a later layer | nonempty list enables the conditional starting-colour draw |
@@ -1051,7 +1076,10 @@ puts there. The placement rules of claim 10 read these keys:
 
 Smudge type kind flags and footprint dimensions are imported by S-0312 claim 26 and its
 Import mapping; morphable tile eligibility is imported by S-0010. The visible image-frame
-bounds are sprite data (S-0109 claim 25), not rules values.
+bounds and frame count determining μ are sprite data (S-0109 claim 25), not rules values.
+The no-loop-delay creation condition is supplied by the creating feature, not an additional
+INI field. Terrain height for claim 15 is imported terrain geometry under S-0010 and S-0106,
+with no separate loading or play-time height setting.
 
 The contained resource value used for glint eligibility comes from the resource cell and the
 resource value field imported by S-0401, not from the glint frequency.
@@ -1134,42 +1162,60 @@ The recorder is part of the measurement setup (the project lead has approved it)
   has probability far below 1 % if the seed changes per launch). *Falsified if* any two launches
   repeat the pattern, or the pattern is the same every launch.
 - **R5, range rule, unit-interval value and the creation draw (claims 4, 6, 10).** (a) A test map
-  with no computer players and nothing that moves or animates. With the random-state recorder, read the
-  stream position at every tick. Control interval: for the first 300 ticks the map holds no
-  infantry. *Expected:* the position does not advance in any of those ticks (this shows that no
-  other system draws every tick on this map). *Falsified if* it advances, in which case the
-  scenario must first remove the cause. Then a trigger places one infantry of the human house that
-  has idle animations; leave it standing idle for 3 game minutes. From the recorded state, compute
-  the raw values that each idle attempt takes (S-0107, claim 14: a timer draw R(0, 2147483646), then
-  *r* = R(0, 10), then δ = R(0, 7) when the outcome is a turn) under claim 4's rule, including
-  rejected values. *Expected:* at every tick where the position advances, it advances by exactly
-  the predicted count; the infantry's visible outcome matches the predicted *r* and δ; and the next
-  idle attempt comes at the tick that S-0107's timer formula gives from the predicted unit-interval
-  value. *Falsified if* any advance differs from the prediction (for example by counting one raw
-  value per ranged draw, or none for rejections), or an attempt comes at another tick. (b) At the
-  tick the infantry is placed, *expected:* the position advances by at least one (its creation
-  draw; R8 G checks the exact count of a creation, where nothing else draws). *Falsified if* the
-  position does not advance in that tick. (c) *Production.* The same map, with the human house
-  also owning a power plant and an infantry-producing building from the start, both pre-placed.
-  The control interval must still show no advance with them in place (otherwise the part is
+  with one human house and one distant bystander computer player, kept out of the observed area
+  under the glossary's bystander void rule. The observed area contains nothing that moves or
+  animates except the named test infantry. With the random-state recorder, read the stream
+  position at every tick and predict/account for the bystander's and any other unrelated draws
+  under their owning specs; a tick whose unrelated draws cannot be accounted for is void for
+  the stream comparison. Control interval: for the first 300 ticks the observed area holds no
+  infantry. *Expected:* after accounting for the bystander's and other identified unrelated
+  draws, there is no unexplained advance attributable to the observed area in any of those
+  ticks. *Falsified if* an unexplained advance remains, in which case the scenario must first
+  remove or account for its cause. Then a trigger places one infantry of the human house that
+  has idle animations; leave it standing idle for 3 game minutes. From the recorded state,
+  compute the raw values that each idle attempt takes (S-0107, claim 14: a timer draw
+  R(0, 2147483646), then *r* = R(0, 10), then δ = R(0, 7) when the outcome is a turn) under
+  claim 4's rule, including rejected values. Also predict the guard behaviour-processing delay
+  draws and their timing under S-0215 claims 6 and 24. *Expected:* at every non-void tick where
+  the position advances, it advances by exactly the predicted count after accounting for the
+  bystander's and other unrelated draws; the infantry's visible outcome matches the predicted
+  *r* and δ; the idle timer expires after the length S-0107's timer formula gives from the
+  predicted unit-interval value; and, if expiry falls between guard processings or eligibility
+  conditions are not met, the next idle attempt occurs at the first subsequent guard processing
+  that meets all of S-0107 claim 14's conditions. *Falsified if* any unexplained advance remains,
+  any advance differs from the prediction (for example by counting one raw value per ranged
+  draw, or none for rejections), an outcome differs from the prediction, or an attempt occurs
+  before expiry or at a processing other than the first eligible one. (b) At the tick the
+  infantry is placed, *expected:* after accounting for other predicted draws, the position
+  advances by at least one (its creation draw; R8 G checks the exact count of a creation,
+  where nothing else draws). *Falsified if* the position shows no advance attributable to the
+  creation draw in that tick. (c) *Production.* The same map, with the human house also owning
+  a power plant and an infantry-producing building from the start, both pre-placed. The control
+  interval must still show no unexplained advance with them in place (otherwise the part is
   inconclusive). After the control interval, scripted input starts the production of one
-  infantry unit. *Expected:* the position advances by at least one in the tick the production
-  begins (the unit's creation draw), before the unit leaves the building. *Falsified if* the
-  position does not advance in that tick (for example because the creation draw comes only when
-  the finished unit leaves the building).
+  infantry unit. *Expected:* after accounting for unrelated draws, the position advances by
+  at least one in the tick the production begins (the unit's creation draw), before the unit
+  leaves the building. *Falsified if* there is no advance attributable to that creation in
+  that tick (for example because the draw comes only when the finished unit leaves the building).
 - **R6, unsynchronised draws stay out of game state (claim 11).** (a) The map and recorder of R5 (a),
-  with two infantry instead of one. 4 runs of 2 game minutes: in 2 runs keep the infantry selected
-  and click them repeatedly so that they give voice responses (each response takes draws from the
-  unsynchronised stream); in 2 runs never select them. *Expected:* in every run the per-tick
-  advance of the scenario random stream equals R5's prediction from the idle attempts alone, and
-  ticks in which a voice response starts show no extra advance. *Falsified if* any voice response
-  coincides with an advance that the idle attempts do not explain.
+  with two infantry instead of one and the same distant bystander computer player. 4 runs of
+  2 game minutes: in 2 runs keep the infantry selected and click them repeatedly so that they
+  give voice responses (each response takes draws from the unsynchronised stream); in 2 runs
+  never select them. Predict and account for the bystander's and other unrelated draws, and
+  include the infantry behaviour-processing delay draws as in R5 (a). *Expected:* in every
+  non-void tick the per-tick advance of the scenario random stream equals R5's prediction from
+  the idle attempts and behaviour-processing delays, after accounting for the bystander's and
+  other unrelated draws; ticks in which a voice response starts show no extra advance of the
+  scenario random stream. *Falsified if* any unexplained advance remains, or a voice response
+  coincides with an advance that the predicted scenario-stream draws do not explain.
   (b) *Play uses.* With the random-state recorder reading the unsynchronised stream, on R5 (a)'s
-  map, where nothing else plays a sound, set off each of these once, at least 30 ticks apart: a
-  voice response (selecting a unit) and the start of a new music track when the previous one
-  ends (with the music set to random play). 3 runs. *Expected:* the unsynchronised
-  stream's position advances in the tick each effect starts. *Falsified if* an effect starts in a
-  tick in which the unsynchronised stream does not advance.
+  map, where nothing else in the observed area plays a sound, set off each of these once, at
+  least 30 ticks apart: a voice response (selecting a unit) and the start of a new music track
+  when the previous one ends (with the music set to random play). Account separately for any
+  bystander or other unrelated presentation draws; void a tick whose unrelated draws cannot
+  be accounted for. 3 runs. *Expected:* the unsynchronised stream's position has an advance
+  attributable to each effect in the tick it starts. *Falsified if* an effect starts with no
+  advance attributable to it after accounting for unrelated draws.
 - **R7, network checksum draws (claim 12; kept for the future multiplayer spec, not required of the skirmish engine).** Two machines in a network game on R5 (a)'s map,
   with the random-state recorder on one machine (it reads that machine's stream; both machines hold the
   same state). During the control interval, *expected:* the position advances by exactly 2 in
@@ -1439,7 +1485,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   recorded. Checkpoints, not just the first-tick animation count, distinguish animations
   removed later and unrelated setup draws.
 
-- **R14, map-load middle-event composition (claim 15; Q-0182).** Small purpose-made skirmish
+- **R14, middle-event composition at map load and during play (claim 15; Q-0182, Q-0217).** Small purpose-made skirmish
   map, speed 4, one human and one bystander computer player on an isolated remote start island.
   Keep the observed area away from starting units. Director and mods off except named test
   map overrides, a test art file, one-frame test sprites (μ = 0), and a test smudge list.
@@ -1504,6 +1550,41 @@ The recorder is part of the measurement setup (the project lead has approved it)
     An overlay type restored by data alone, reduction on the wrong side of the data-stream
     milestone, or a smudge choice made before the conditional tile-animation draws falsifies
     the claim. Void a fixture in which its intended creation checkpoint is not reached.
+  - **D, during-play composition.** Use the same animation and particle data as A and B,
+    now created by a named test weapon's detonation animation at a recorded tick. Its
+    animation has no loop delay and μ = 0. Repeat the no-particle, smoke and railgun cases,
+    both colour-draw gates, counts 1 and 2, both smudge flags, size thresholds and candidate
+    counts 0, 1 and several. In a separate game create the same named type through the
+    play-animation trigger action; its creation event must not omit the middle-event draws.
+    Record the incoming and outgoing stream state at the animation creation, particle creation
+    outcomes and cell state. Predict/account for weapon, projectile, trigger, bystander and
+    other unrelated draws under their owning specs; void a comparison with unaccounted draws.
+    Expected: the event consumes A/B's groups in their stated order from its own incoming
+    state, including rejected ranged values, not merely the stage-delay and bouncing draws.
+    Particle outcomes and the smudge choice match the prediction. Repeat C's exhausted and
+    nonexhausted resource fixtures during play, including missing/already-started tile animation
+    and marked/unmarked neighbour controls. Expected: any conditional recalculation-animation
+    and neighbour-offer draws still precede smudge selection; no data stream subsequently
+    overwrites the during-play levels. Add a chain-reaction-enabled creation with resource
+    remaining, accounting for S-0401 claim 20's draws after the complete middle event, and
+    one whose crater exhausts the cell: the latter has no subsequent reaction draws.
+    Finally use a multi-frame sprite with μ > 0 and record the middle event at its first
+    eligible playback advance instead of creation; predict the same event composition there.
+    Five fresh launches per variant, same setup and recorders as A/C. Different group order,
+    an omitted group during play, a phase-dependent extra draw, a wrong resource result, or
+    a chain-reaction draw before middle-event completion falsifies the claim.
+  - **E, shared terrain-height gate.** At creation during loading and during play, use an
+    animation requesting particles and both smudge kinds, with μ = 0 and no loop delay.
+    Use flat raised ground and a slope, two in-cell positions whose S-0106 surface heights
+    differ, and a position above a bridge deck. Record actual (X, Y, Z) and H(X, Y), not just
+    the source object's cell. Named fixtures give Z − H values −1, 29 and 30 leptons.
+    Five fresh launches per fixture, recorders and unrelated-draw accounting as D.
+    Expected: particle groups occur at every height; −1 and 29 permit the kind-choice draw
+    and any eligible smudge selection, while 30 permits neither. At deck height the test
+    still uses terrain H, not deck height. Resource removal happens only on a permitted
+    crater request. A result based on cell-centre, creator-cell or deck height, or a height
+    gate that differs between loading and play, falsifies the claim. Smudge placement may
+    fail its fit test on slopes or overlays; that does not erase the kind-choice draw.
 
 ## Open questions
 
@@ -1515,7 +1596,9 @@ The recorder is part of the measurement setup (the project lead has approved it)
   S-0109 claim 25. For Q2b, S-0109 claims 14 and 25 cover map-load event gates and the
   particle-before-choice ordering. Claim 15 completes Q-0182's particle creation draws,
   smudge forms and map-data timing. These effects must not be treated as taking zero draws
-  during map loading; subsequent particle updates remain outside this spec.
+  during map loading. Claim 15 and R14 D/E also answer all of Q-0217: creation-time
+  middle events during play use the same scenario-stream composition and terrain-height
+  test. Subsequent particle updates remain outside this spec.
 - Whether any of the unsynchronised random stream's users that were classified only briefly
   changes game state. In internet games, two draws are taken under a condition on the local
   player's house (the same kind of condition as claim 12's extra draw) and could not be tied to a
