@@ -192,6 +192,38 @@ fn li(l: Layer) -> usize {
     }
 }
 
+/// The house of the infantry unit that marked most recently among those
+/// still holding a position in the record, or none (S-0209 Edge cases).
+fn most_recent_house(o: &Occupancy) -> Option<HouseId> {
+    o.marks
+        .iter()
+        .flatten()
+        .filter_map(|m| match m.by {
+            Marker::Infantry(_, h) => Some((m.seq, h)),
+            Marker::Terrain(_) => None,
+        })
+        .max()
+        .map(|(_, h)| h)
+}
+
+/// The house-clearing rule after an infantry mark is cleared (S-0209
+/// claim 1 and Edge cases).
+fn settle_house(o: &mut Occupancy, q: OccupancyQuirks) {
+    // spec: S-0209 claim 1 (the house goes to none only when no side position stays taken)
+    let none_left = if q.side_positions_only {
+        !position::SIDES.iter().any(|&p| o.taken(p))
+    } else {
+        // spec: S-0209 Edge cases (switch off: cleared only when no standing position is taken)
+        o.marks.iter().all(Option::is_none)
+    };
+    if none_left {
+        o.house = None;
+    } else if !q.stale {
+        // spec: S-0209 Edge cases (`quirks.occupancy_house_stale` off: the most recent infantry still holding a position)
+        o.house = most_recent_house(o);
+    }
+}
+
 impl Cells {
     /// Cells for a grid.
     pub fn new(grid: CellGrid) -> Self {
@@ -359,31 +391,23 @@ impl Cells {
                 cleared = true;
             }
         }
-        if !cleared {
+        if cleared {
+            settle_house(o, q);
+        }
+    }
+
+    /// Standing position `p` of a cell layer is cleared whoever marked it,
+    /// as an infantry unit clears its entry by its actual position (S-0208
+    /// claim 19, `quirks.teleport_infantry_ground_reservation`); the
+    /// house-clearing rule of an infantry mark applies (S-0209 claim 1).
+    pub fn clear_position(&mut self, c: CellXY, l: Layer, p: u8, q: OccupancyQuirks) {
+        let Some(o) = self.occ_mut(c, l) else {
             return;
-        }
-        // spec: S-0209 claim 1 (the house goes to none only when no side position stays taken)
-        let none_left = if q.side_positions_only {
-            !position::SIDES.iter().any(|&p| o.taken(p))
-        } else {
-            // spec: S-0209 Edge cases (switch off: cleared only when no standing position is taken)
-            o.marks.iter().all(Option::is_none)
         };
-        if none_left {
-            o.house = None;
-        } else if !q.stale {
-            // spec: S-0209 Edge cases (`quirks.occupancy_house_stale` off: the most recent infantry still holding a position)
-            o.house = o
-                .marks
-                .iter()
-                .flatten()
-                .filter_map(|m| match m.by {
-                    Marker::Infantry(_, h) => Some((m.seq, h)),
-                    Marker::Terrain(_) => None,
-                })
-                .max()
-                .map(|(_, h)| h);
+        if let Some(m) = o.marks.get_mut(usize::from(p)) {
+            *m = None;
         }
+        settle_house(o, q);
     }
 
     /// A terrain object marks the side positions of its pattern (S-0209
@@ -409,14 +433,20 @@ impl Cells {
         }
     }
 
-    /// A terrain object's marks are cleared; the infantry house is left as
-    /// it is (S-0209 claim 1).
-    pub fn clear_terrain(&mut self, c: CellXY, id: ObjectId) {
+    /// A terrain object's marks are cleared. The infantry house is left as
+    /// it is, even when the last side position is freed (S-0209 claim 1);
+    /// with `quirks.occupancy_house_stale` off it is recomputed (S-0209
+    /// Edge cases).
+    pub fn clear_terrain(&mut self, c: CellXY, id: ObjectId, q: OccupancyQuirks) {
         if let Some(o) = self.occ_mut(c, Layer::Ground) {
             for m in o.marks.iter_mut() {
                 if matches!(m, Some(Mark { by: Marker::Terrain(who), .. }) if *who == id) {
                     *m = None;
                 }
+            }
+            if !q.stale {
+                // spec: S-0209 Edge cases (switch off: clearing a terrain object's marks recomputes the house regardless of the remaining side positions)
+                o.house = most_recent_house(o);
             }
         }
     }
@@ -502,6 +532,51 @@ mod tests {
             },
         );
         assert_eq!(d.occ(x, Layer::Ground).unwrap().house, Some(HouseId(1)));
+    }
+
+    // spec: S-0209 claim 1 (clearing a terrain object's marks leaves the house unchanged, even when it frees the last side position) and Edge cases (`quirks.occupancy_house_stale` off: it recomputes the house regardless of the remaining side positions)
+    #[test]
+    fn terrain_clearing_and_the_house() {
+        let x = CellXY::new(8, 8);
+        for stale in [true, false] {
+            let q = OccupancyQuirks {
+                side_positions_only: true,
+                stale,
+            };
+            let mut c = cells();
+            c.mark_terrain(x, ObjectId(7), 1);
+            c.mark_infantry(x, Layer::Ground, position::LEFT, ObjectId(1), HouseId(0));
+            c.clear_infantry(x, Layer::Ground, ObjectId(1), q);
+            // The terrain mark keeps the house in force (stale on).
+            let after_infantry = c.occ(x, Layer::Ground).unwrap().house;
+            assert_eq!(after_infantry, stale.then_some(HouseId(0)));
+            c.mark_infantry(x, Layer::Ground, position::CENTRE, ObjectId(2), HouseId(1));
+            c.clear_terrain(x, ObjectId(7), q);
+            let rec = c.occ(x, Layer::Ground).unwrap();
+            assert!(!rec.taken(position::RIGHT));
+            // Stale on: unchanged although no side position is taken; off:
+            // the most recent infantry still holding a position.
+            assert_eq!(rec.house, Some(HouseId(1)), "stale {stale}");
+            c.clear_infantry(x, Layer::Ground, ObjectId(2), q);
+            c.mark_terrain(x, ObjectId(8), 1);
+            c.mark_infantry(x, Layer::Ground, position::LEFT, ObjectId(3), HouseId(0));
+            c.clear_infantry(x, Layer::Ground, ObjectId(3), q);
+            c.clear_terrain(x, ObjectId(8), q);
+            let house = c.occ(x, Layer::Ground).unwrap().house;
+            assert_eq!(house, stale.then_some(HouseId(0)), "stale {stale}");
+        }
+    }
+
+    // spec: S-0208 claim 19 (clearing by actual position clears the position whoever marked it, with the infantry house-clearing rule)
+    #[test]
+    fn clearing_a_position_whoever_marked_it() {
+        let x = CellXY::new(8, 8);
+        let mut c = cells();
+        c.mark_infantry(x, Layer::Deck, position::RIGHT, ObjectId(1), HouseId(0));
+        c.clear_position(x, Layer::Deck, position::RIGHT, Q);
+        let rec = c.occ(x, Layer::Deck).unwrap();
+        assert!(!rec.taken(position::RIGHT));
+        assert_eq!(rec.house, None);
     }
 
     // spec: S-0209 Edge cases (the house outlasts its infantry; `quirks.occupancy_house_stale` off)

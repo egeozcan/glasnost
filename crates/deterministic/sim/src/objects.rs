@@ -265,7 +265,7 @@ pub fn remove(w: &mut World, id: ObjectId) {
         }
         Kind::Terrain => {
             w.cells.leave(cell, Layer::Ground, id);
-            w.cells.clear_terrain(cell, id);
+            w.cells.clear_terrain(cell, id, q);
         }
         Kind::Infantry => {
             w.cells.leave(cell, o.layer, id);
@@ -286,14 +286,11 @@ pub fn remove(w: &mut World, id: ObjectId) {
         }
         Kind::Aircraft => {
             w.cells.leave(cell, o.layer, id);
-            // spec: S-0207 claim 20 (a) (a teleporting aircraft's object-present mark is on its landing point's cell until the jump)
-            let (mc, ml) = if o.teleport.is_some() {
-                crate::teleport::aircraft_mark(w, id)
-            } else {
-                (cell, o.layer)
-            };
-            if let Some(rec) = w.cells.occ_mut(mc, ml) {
-                rec.others = rec.others.saturating_sub(1);
+            // spec: S-0207 claim 20 (a) and (e) (a teleporting aircraft's object-present mark is on its landing point's cell until the jump; on the deck its removal clears the deck flag only)
+            for (mc, ml) in crate::teleport::removal_marks(w, id) {
+                if let Some(rec) = w.cells.occ_mut(mc, ml) {
+                    rec.others = rec.others.saturating_sub(1);
+                }
             }
         }
     }

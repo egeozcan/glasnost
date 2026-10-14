@@ -282,32 +282,129 @@ fn claim_19_refused_replacement_restores_the_present_entry() {
     );
 }
 
-// spec: S-0208 claim 19 (a ground-height departure onto a high-bridge cell chooses and reserves with the ground record; at the jump the unit is listed on the deck with deck height, S-0207 claim 20 e; the reservation then follows the deck listing: interim, request Q-0311)
-#[test]
-fn claim_19_low_departure_onto_a_high_bridge() {
-    let (mut w, id) = start(&scene());
+/// A world with BLINKER and a high-bridge cell `to`, the quirk set to `on`.
+fn bridge_world(on: bool) -> (World, ObjectId, CellXY) {
+    let mut s = scene();
+    s.ruleset
+        .globals
+        .quirks
+        .teleport_infantry_ground_reservation = on;
+    let (mut w, id) = start(&s);
     let to = cell(0, -6);
     let i = w.cells.idx(to).expect("cell");
     w.cells.deck[i] = true;
     w.cells.deck_entry[i] = true;
     w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::Y;
-    let deck_taken = |w: &World, p: u8| w.cells.occ(to, Layer::Deck).is_some_and(|r| r.taken(p));
+    (w, id, to)
+}
+
+fn deck_taken(w: &World, c: CellXY, p: u8) -> bool {
+    w.cells.occ(c, Layer::Deck).is_some_and(|r| r.taken(p))
+}
+
+/// The taken side positions of `c` in the ground and deck records.
+fn sides(w: &World, c: CellXY) -> (Vec<u8>, Vec<u8>) {
+    (
+        (2..=4).filter(|&p| taken(w, c, p)).collect(),
+        (2..=4).filter(|&p| deck_taken(w, c, p)).collect(),
+    )
+}
+
+/// The standing position class of the unit's own position.
+fn own_class(w: &World, id: ObjectId) -> u8 {
+    let (_, (u, v)) = standing(w, id);
+    walk::position_class(u, v, w.rules().quirks.top_position_counts_as_centre)
+}
+
+/// Runs until the unit stands in `c` and has finished phasing in.
+fn land(w: &mut World, id: ObjectId, c: CellXY) {
+    run_until(w, 10, |w| w.obj(id).unwrap().pos.cell() == c);
+    run_until(w, 400, |w| !glasnost_sim::teleport::phasing_in(w, id));
+}
+
+// spec: S-0208 claim 19 (a ground-height departure onto a high-bridge cell chooses and reserves with the ground record; at the jump the unit is listed on the deck with deck height, S-0207 claim 20 e; landing neither transfers the reservation nor marks the deck, Q-0311; a deck position marked by another occupant stays marked)
+#[test]
+fn claim_19_low_departure_onto_a_high_bridge() {
+    let (mut w, id, to) = bridge_world(true);
     order_move(&mut w, id, to);
     run(&mut w, 1);
-    let ground = (2..=4).filter(|&p| taken(&w, to, p)).count();
-    let deck = (2..=4).filter(|&p| deck_taken(&w, p)).count();
-    assert_eq!(
-        (ground, deck),
-        (1, 0),
-        "the reservation is in the ground record"
-    );
+    let (ground, deck) = sides(&w, to);
+    assert_eq!((ground.len(), deck.len()), (1, 0), "ground reservation");
+    let p = ground[0];
+    // Another occupant's mark at the same deck position.
+    let other = HouseId(1);
+    w.cells
+        .mark_infantry(to, Layer::Deck, p, ObjectId(9999), other);
     run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == to);
     let o = w.obj(id).unwrap();
     assert_eq!(o.layer, Layer::Deck);
-    let p = Pos::centre(to, 0);
-    assert_eq!(o.pos.z, w.surface_at(p.x, p.y) + 416);
+    let c = Pos::centre(to, 0);
+    assert_eq!(o.pos.z, w.surface_at(c.x, c.y) + 416);
     assert!(w.cells.list(to, Layer::Deck).contains(&id));
-    let ground = (2..=4).filter(|&p| taken(&w, to, p)).count();
-    let deck = (2..=4).filter(|&p| deck_taken(&w, p)).count();
-    assert_eq!((ground, deck), (0, 1));
+    assert_eq!(own_class(&w, id), p);
+    assert_eq!(sides(&w, to), (vec![p], vec![p]), "both marks stay");
+    let by = w.cells.occ(to, Layer::Deck).unwrap().marks[usize::from(p)]
+        .unwrap()
+        .by;
+    assert_eq!(
+        by,
+        glasnost_sim::cells::Marker::Infantry(ObjectId(9999), other),
+        "the deck mark is still the other occupant's"
+    );
+}
+
+// spec: S-0208 claim 19 (after the jump a later destination choice clears by the unit's actual position and height: the deck position, whoever marked it, leaving the ground mark; a successful choice marks the next landing point)
+#[test]
+fn claim_19_later_choice_clears_by_actual_position() {
+    let (mut w, id, to) = bridge_world(true);
+    order_move(&mut w, id, to);
+    run(&mut w, 1);
+    let p = sides(&w, to).0[0];
+    w.cells
+        .mark_infantry(to, Layer::Deck, p, ObjectId(9999), HouseId(1));
+    land(&mut w, id, to);
+    let next = cell(6, 0);
+    order_move(&mut w, id, next);
+    run(&mut w, 1);
+    assert_eq!(sides(&w, to), (vec![p], vec![]), "deck cleared, ground left");
+    assert_eq!(sides(&w, next).0.len(), 1, "the next landing point is marked");
+    run_until(&mut w, 10, |w| w.obj(id).unwrap().pos.cell() == next);
+    assert!(w.cells.list(to, Layer::Ground).is_empty());
+    assert!(w.cells.list(to, Layer::Deck).is_empty());
+    assert_eq!(sides(&w, to).0, vec![p], "a ground mark with no one listed");
+}
+
+// spec: S-0208 claim 19 (after the jump a refused choice marks the unit's current deck position)
+#[test]
+fn claim_19_refused_choice_after_the_jump_marks_the_deck() {
+    let (mut w, id, to) = bridge_world(true);
+    order_move(&mut w, id, to);
+    run(&mut w, 1);
+    let p = sides(&w, to).0[0];
+    land(&mut w, id, to);
+    assert_eq!(sides(&w, to), (vec![p], vec![]));
+    // A full destination cell refuses a cell destination.
+    let full = cell(6, 0);
+    for sub in 2..=4 {
+        w.cells
+            .mark_infantry(full, Layer::Ground, sub, ObjectId(9998), HouseId(1));
+    }
+    order_move(&mut w, id, full);
+    run(&mut w, 1);
+    assert_eq!(w.obj(id).unwrap().pos.cell(), to, "no jump");
+    assert_eq!(sides(&w, to), (vec![p], vec![p]));
+}
+
+// spec: S-0208 Edge cases (quirks.teleport_infantry_ground_reservation off: at the jump the reservation moves to the actual landing surface at the same standing position, and later clearing uses that deck entry)
+#[test]
+fn claim_19_ground_reservation_switch_off() {
+    let (mut w, id, to) = bridge_world(false);
+    order_move(&mut w, id, to);
+    run(&mut w, 1);
+    let p = sides(&w, to).0[0];
+    land(&mut w, id, to);
+    assert_eq!(sides(&w, to), (vec![], vec![p]));
+    order_move(&mut w, id, cell(6, 0));
+    run(&mut w, 1);
+    assert_eq!(sides(&w, to), (vec![], vec![]));
 }
