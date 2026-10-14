@@ -370,11 +370,12 @@ mod tests {
     fn claim_25_blank_leading_rows_are_not_shifted() {
         let font = tall_font(8, 8, 3);
         let rows = painted(&font, &[line("A")]);
-        for r in 0..3 {
-            assert!(rows[r].is_empty(), "row {r}");
-        }
-        for r in 3..8 {
-            assert_eq!(rows[r], [(r % 3) as i32], "row {r}");
+        for (r, row) in rows.iter().enumerate().take(8) {
+            if r < 3 {
+                assert!(row.is_empty(), "row {r}");
+            } else {
+                assert_eq!(*row, [(r % 3) as i32], "row {r}");
+            }
         }
     }
 
@@ -387,15 +388,14 @@ mod tests {
         let rows = painted(&font, &[line("A"), line("A")]);
         // Rows 19 to 24 hold the first line's rows 19 to 24 and the second
         // line's rows 0 to 5: both marks paint, neither clears the other.
-        for y in 19..25 {
+        for (y, row) in rows.iter().enumerate().take(25).skip(19) {
             let mut expect = vec![(y % 3) as i32, ((y - 19) % 3) as i32];
             expect.sort();
-            expect.dedup();
-            assert_eq!(rows[y], expect, "row {y}");
+            assert_eq!(*row, expect, "row {y}");
         }
         // The second line paints its rows 0 to 24 and nothing below them.
-        for y in 25..44 {
-            assert_eq!(rows[y], [((y - 19) % 3) as i32], "row {y}");
+        for (y, row) in rows.iter().enumerate().take(44).skip(25) {
+            assert_eq!(*row, [((y - 19) % 3) as i32], "row {y}");
         }
         assert!(rows[44..].iter().all(Vec::is_empty));
     }
