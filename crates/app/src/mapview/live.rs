@@ -35,7 +35,6 @@ use super::build::{
     rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
-use super::quirks::ViewQuirks;
 
 /// The flag that marks an [`glasnost_render::scene::Item::object`] code as
 /// a simulation object ID (the low 31 bits); codes without it index the
@@ -118,8 +117,8 @@ pub enum Entrant {
     Object(ObjectId),
 }
 
-/// The object pass's ground layer: a list kept nearly sorted by sort key
-/// (S-0102 claim 6).
+/// The object pass's ground layer: a list fully sorted by sort key for
+/// every drawn frame (S-0102 claim 6).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GroundLayer {
     list: Vec<(Entrant, i64)>,
@@ -153,37 +152,39 @@ impl GroundLayer {
         self.list.retain(|(x, _)| *x != e);
     }
 
-    /// The once-per-tick ordering transition, on the keys as they stood
-    /// before this tick's movement. One front-to-back pass of adjacent swaps
-    /// where the later entry's key is strictly smaller gives exactly the
-    /// drawing positions of claim 6's table (r11). With
-    /// `quirks.ground_layer_single_pass_sort` off, a full stable sort by key.
-    pub fn pass(&mut self, q: &ViewQuirks) {
-        if !q.ground_layer_single_pass_sort {
-            // spec: S-0102 Edge cases (quirks.ground_layer_single_pass_sort off: fully sorted every tick, stable, by key)
-            self.list.sort_by_key(|(_, k)| *k);
-            return;
-        }
-        // spec: S-0102 claim 6 (one ordering transition per tick; its drawing-position table is the result of one front-to-back adjacent-swap pass), Constants (ground-layer ordering transitions)
-        for i in 1..self.list.len() {
-            if self.list[i].1 < self.list[i - 1].1 {
-                self.list.swap(i, i - 1);
-            }
-        }
-    }
-
-    /// Appends an entrant at the end, unsorted (tests of claim 6's unsorted
-    /// case).
-    #[cfg(test)]
-    pub fn list_for_test_push(&mut self, e: Entrant, key: i64) {
-        self.list.push((e, key));
-    }
-
-    /// Records an entrant's new key (it takes effect in the next pass).
+    /// Records an entrant's new key (it takes effect at the next
+    /// [`GroundLayer::sort`]).
     pub fn set_key(&mut self, e: Entrant, key: i64) {
         if let Some(x) = self.list.iter_mut().find(|(x, _)| *x == e) {
             x.1 = key;
         }
+    }
+
+    /// Brings the layer up to date for a drawn frame: `members` are the
+    /// entrants of the frame with their current keys, in the order the
+    /// newcomers among them entered. Leavers are dropped, every member
+    /// takes its current key, newcomers go after the existing members, and
+    /// the whole list is sorted by key, stably.
+    pub fn update(&mut self, members: &[(Entrant, i64)]) {
+        self.list
+            .retain(|(e, _)| members.iter().any(|(m, _)| m == e));
+        for &(e, key) in members {
+            if self.contains(e) {
+                self.set_key(e, key);
+            } else {
+                // spec: S-0102 claim 6 (a newcomer follows existing equal-key objects)
+                self.list.push((e, key));
+            }
+        }
+        self.sort();
+    }
+
+    /// Fully orders the layer by key (S-0102 claim 6): a stable sort, so
+    /// equal-key entrants keep their previous relative order.
+    pub fn sort(&mut self) {
+        // spec: S-0102 claim 6 (fully ordered by increasing sort key in every drawn frame, using the keys
+        // of that frame; equal-key objects retain their previous relative order; a departure)
+        self.list.sort_by_key(|(_, k)| *k);
     }
 }
 
@@ -566,9 +567,9 @@ impl Live {
         &self.ground
     }
 
-    /// Runs one tick, then the ground layer's pass on the keys as they
-    /// stood before the tick, then records the new keys and the objects
-    /// that entered or left (S-0102 claim 6). Call [`Live::redraw`] after.
+    /// Runs one tick, then brings the ground layer up to date: the objects
+    /// that entered or left, the new keys, and a full sort on them (S-0102
+    /// claim 6). Call [`Live::redraw`] after.
     pub fn step(&mut self) {
         if self.failed.is_some() {
             return;
@@ -590,10 +591,9 @@ impl Live {
 
     /// What [`Live::step`] does after its tick, for a tick run elsewhere
     /// (the game client's `glasnost_ai::game::Game`): the ground layer's
-    /// pass, its members and keys, and the tick's presentation events
+    /// members, keys and order, and the tick's presentation events
     /// (taken out of the world: read them before).
     pub fn after_tick(&mut self) {
-        self.ground.pass(&ViewQuirks::default());
         self.sync_ground();
         self.take_effects();
     }
@@ -639,34 +639,24 @@ impl Live {
         self.counts.most_in_flight = self.counts.most_in_flight.max(self.world.projectiles.len());
     }
 
-    /// Brings the ground layer's members and keys up to date with the game.
+    /// Brings the ground layer's members and keys up to date with the game
+    /// and orders it for the next drawn frame (S-0102 claim 6).
     fn sync_ground(&mut self) {
-        let gone: Vec<Entrant> = self
+        let mut members: Vec<(Entrant, i64)> = self
             .ground
-            .order()
-            .filter(|e| match e {
-                Entrant::Object(id) => self.world.obj(*id).is_none_or(|o| !o.on_map),
-                Entrant::Static(_) => false,
-            })
+            .list
+            .iter()
+            .filter(|(e, _)| matches!(e, Entrant::Static(_)))
+            .copied()
             .collect();
-        for e in gone {
-            self.ground.leave(e);
-        }
-        let mobiles: Vec<(ObjectId, i64)> = self
-            .world
-            .objects
-            .values()
-            .filter(|o| o.kind.is_mobile() && o.on_map)
-            .map(|o| (o.id, mobile_key(o)))
-            .collect();
-        for (id, key) in mobiles {
-            let e = Entrant::Object(id);
-            if self.ground.contains(e) {
-                self.ground.set_key(e, key);
-            } else {
-                self.ground.enter(e, key);
-            }
-        }
+        members.extend(
+            self.world
+                .objects
+                .values()
+                .filter(|o| o.kind.is_mobile() && o.on_map)
+                .map(|o| (Entrant::Object(o.id), mobile_key(o))),
+        );
+        self.ground.update(&members);
     }
 
     /// The tick whose updates the picture shows: the last one that ran

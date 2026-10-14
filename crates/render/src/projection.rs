@@ -13,36 +13,28 @@ pub const TERRAIN_LIFT: i32 = 15; // spec: S-0101 Constants (terrain lift per le
 /// Leptons per height level (S-0101 Constants).
 pub const LEVEL_LEPTONS: i32 = 104; // spec: S-0101 Constants (leptons per height level)
 
-/// Object lift scale *k* (S-0101 F2), pixels per lepton.
-pub const LIFT_SCALE: f64 = 0.143_503_600_826_600_85; // spec: S-0101 F2 (k)
-
-/// Lift correction threshold (S-0101 F2).
-pub const LIFT_THRESHOLD: i32 = 728; // spec: S-0101 Constants (lift correction threshold)
-
 /// Cursor probe depth (S-0101 claim 10).
 pub const PROBE_DEPTH: i32 = 180; // spec: S-0101 Constants (cursor probe depth)
 
 /// Quirk switches of S-0101 implemented here. Each defaults to the
 /// original's behaviour (on).
 ///
+/// Claims 3, 6 and 8 are departures with no switch (S-0101 Edge cases,
+/// *Drawing and camera departures*): the exact height lift
+/// ([`height_lift`]), the drawn-extent test (the map pass skips the items
+/// whose bounds miss the view, `map_gpu`) and the centred oversized view
+/// ([`limit_centre`]).
+///
 /// Not here (listed in `docs/development.md`, *Named switches of specs
 /// whose behaviour is not implemented yet*):
-/// `quirks.screen_band_tests_position_only` (our renderer does none of
-/// claim 6's on-screen tests) and `quirks.screen_to_ground_not_exact_inverse`
-/// (no F6 lepton position is used; the cell under a pixel is F7's pixel
+/// `quirks.screen_to_ground_not_exact_inverse` (the off state's exact
+/// inverse is not implemented; the cell under a pixel is F7's pixel
 /// formula, the same in both settings).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ProjectionQuirks {
     /// `quirks.projection_truncates_toward_zero` (claim 2): both divisions
     /// by 256 of F1 truncate toward zero. Off: floor division.
     pub projection_truncates_toward_zero: bool,
-    /// `quirks.height_lift_float_scale` (claims 3 and 4, F2): the object
-    /// height lift is F2. Off: the exact scale ⌊15·z/104 + ½⌋.
-    pub height_lift_float_scale: bool,
-    /// `quirks.oversized_view_clamp` (claim 8): on an axis where the view
-    /// is larger than the local area, F5 gives the minimum below it and the
-    /// maximum otherwise. Off: the local area is centred in the view.
-    pub oversized_view_clamp: bool,
     /// `quirks.cursor_probe_depth_180` (claim 10, F8): the cursor probes
     /// 180 rows. Off: at least 15 × the map's highest height level.
     pub cursor_probe_depth_180: bool,
@@ -53,8 +45,6 @@ impl Default for ProjectionQuirks {
         // spec: S-0101 Edge cases and quirks (every switch defaults on)
         Self {
             projection_truncates_toward_zero: true,
-            height_lift_float_scale: true,
-            oversized_view_clamp: true,
             cursor_probe_depth_180: true,
         }
     }
@@ -62,14 +52,12 @@ impl Default for ProjectionQuirks {
 
 impl ProjectionQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 4] {
+    pub fn named(&self) -> [(&'static str, bool); 2] {
         [
             (
                 "projection_truncates_toward_zero",
                 self.projection_truncates_toward_zero,
             ),
-            ("height_lift_float_scale", self.height_lift_float_scale),
-            ("oversized_view_clamp", self.oversized_view_clamp),
             ("cursor_probe_depth_180", self.cursor_probe_depth_180),
         ]
     }
@@ -96,23 +84,12 @@ pub fn project_with(x: i32, y: i32, q: &ProjectionQuirks) -> (i32, i32) {
 }
 
 /// F2: the object height lift *L(z)* in pixels for a world height of `z`
-/// leptons, with the default switches. Rounding to nearest at the three
-/// inner steps gives the same result as the original's rounding toward
-/// zero at every height a map can produce (F2), so plain double arithmetic
-/// is used; the final conversion truncates toward zero.
+/// leptons, in exact integer arithmetic: the nearest integer to 15·z/104,
+/// ties toward positive infinity, negative heights included (claim 3, a
+/// departure with no switch).
 pub fn height_lift(z: i32) -> i32 {
-    height_lift_with(z, &ProjectionQuirks::default())
-}
-
-/// *L(z)* under the switches `q`.
-pub fn height_lift_with(z: i32, q: &ProjectionQuirks) -> i32 {
-    if !q.height_lift_float_scale {
-        // spec: S-0101 claim 3, Edge cases (quirks.height_lift_float_scale off: ⌊15·z/104 + ½⌋)
-        return (30 * i64::from(z) + 104).div_euclid(208) as i32;
-    }
-    // spec: S-0101 F2 (L(z) = trunc₀((z·k + [z ≥ 728]) + 0.5))
-    let corr = if z >= LIFT_THRESHOLD { 1.0 } else { 0.0 };
-    ((f64::from(z) * LIFT_SCALE + corr) + 0.5) as i32
+    // spec: S-0101 F2 (L(z) = ⌊15·z/104 + ½⌋ = ⌊(30·z + 104)/208⌋, exact rational arithmetic)
+    (30 * i64::from(z) + 104).div_euclid(208) as i32
 }
 
 /// The world pixel of a world point at height `z` (F1 with *L(z)*, claim
@@ -124,7 +101,7 @@ pub fn project_lifted(x: i32, y: i32, z: i32) -> (i32, i32) {
 /// F1 with *L(z)* under the switches `q`.
 pub fn project_lifted_with(x: i32, y: i32, z: i32, q: &ProjectionQuirks) -> (i32, i32) {
     let (qx, qy) = project_with(x, y, q);
-    (qx, qy - height_lift_with(z, q))
+    (qx, qy - height_lift(z))
 }
 
 /// The top corner of cell (x, y) at height level 0 (S-0101 F1:
@@ -150,13 +127,14 @@ pub fn view_origin(centre: (i32, i32), size: (i32, i32)) -> (i32, i32) {
 
 /// F5: limits a requested view centre for a map of width `map_width`
 /// (M_w) and local area `local` (V_x, V_y, V_w, V_h), with a view of
-/// `size`.
+/// `size`. An axis on which the view is oversized takes the local area's
+/// geometric centre, whatever the request (claim 8, a departure with no
+/// switch).
 pub fn limit_centre(
     requested: (i32, i32),
     size: (i32, i32),
     map_width: i32,
     local: [i32; 4],
-    q: &ProjectionQuirks,
 ) -> (i32, i32) {
     let (w, h) = size;
     let [vx, vy, vw, vh] = local;
@@ -165,17 +143,20 @@ pub fn limit_centre(
     let x_max = x_min + 60 * vw - w;
     let y_min = 15 * (map_width - 5 + 2 * vy) + h / 2;
     let y_max = y_min + 30 * vh + 135 - h;
-    let limit = |c: i32, m: i32, big: i32| {
-        if big < m && !q.oversized_view_clamp {
-            // spec: S-0101 Edge cases (quirk off: centre the local area in the view)
-            return (m + big) / 2;
+    let limit = |c: i32, m: i32, big: i32, centre: i32| {
+        if big < m {
+            // spec: S-0101 claim 8, F5 (an oversized axis, M < m, ignores the request and takes the
+            // local area's geometric centre)
+            return centre;
         }
         // spec: S-0101 F5 (m for c < m, min(c, M) otherwise)
         if c < m { m } else { c.min(big) }
     };
     (
-        limit(requested.0, x_min, x_max),
-        limit(requested.1, y_min, y_max),
+        // spec: S-0101 F5 (horizontal centre = 30·(2·V_x − M_w + V_w))
+        limit(requested.0, x_min, x_max, 30 * (2 * vx - map_width + vw)),
+        // spec: S-0101 F5 (vertical centre = 15·(M_w + 2·V_y + V_h))
+        limit(requested.1, y_min, y_max, 15 * (map_width + 2 * vy + vh)),
     )
 }
 
@@ -236,57 +217,111 @@ mod tests {
         assert_eq!(project(108, 100).0, 0);
     }
 
-    /// spec: S-0101 F2 (check values)
+    /// spec: S-0101 F2 (check values of the exact lift)
     #[test]
     fn lift_check_values() {
         for (z, l) in [
+            (-104, -15),
+            (-4, -1),
             (0, 0),
-            (3, 0),
-            (4, 1),
-            (103, 15),
-            (104, 15),
-            (727, 104),
-            (728, 105),
-            (1456, 210),
-            (1500, 216),
-            (2000, 288),
-            (2080, 299),
-            (3000, 432),
-            (3500, 503),
-            (-1, 0),
-            (-3, 0),
-            (-4, 0),
-            (-104, -14),
-            (400, 57),
+            (400, 58),
             (416, 60),
-            (1000, 145),
+            (1000, 144),
+            (2080, 300),
+            (3500, 505),
         ] {
             assert_eq!(height_lift(z), l, "L({z})");
         }
-        for level in 0..20 {
-            assert_eq!(height_lift(104 * level), 15 * level);
+    }
+
+    /// spec: S-0101 claim 3, F2, scenario M2 (f) (nearest integer, ties toward positive
+    /// infinity, negative heights included)
+    #[test]
+    fn lift_rounding() {
+        for (z, l) in [
+            (-53, -8),
+            (-52, -7),
+            (-51, -7),
+            (-4, -1),
+            (0, 0),
+            (51, 7),
+            (52, 8),
+            (53, 8),
+        ] {
+            assert_eq!(height_lift(z), l, "L({z})");
+        }
+        // The lifted point moves up by L(z).
+        assert_eq!(project_lifted(0, 0, 2080), (0, -300));
+    }
+
+    /// spec: S-0101 claims 3 and 4, F2 (objects at whole levels lift exactly like terrain, at
+    /// every level a map can hold, negative levels included)
+    #[test]
+    fn lift_whole_levels_match_terrain() {
+        for level in -128..=127 {
+            assert_eq!(
+                height_lift(LEVEL_LEPTONS * level),
+                TERRAIN_LIFT * level,
+                "level {level}"
+            );
         }
     }
 
-    /// spec: S-0101 F5 (ordinary clamp and the oversized-view rule)
+    /// spec: S-0101 F5 (ordinary clamp)
     #[test]
     fn scroll_limits() {
-        let q = ProjectionQuirks::default();
         let local = [2, 4, 26, 22];
         let (w, h) = (640, 400);
         let (x_min, y_min) = (320 + 30 * (4 - 30), 15 * (30 - 5 + 8) + 200);
         assert_eq!(
-            limit_centre((-99999, -99999), (w, h), 30, local, &q),
+            limit_centre((-99999, -99999), (w, h), 30, local),
             (x_min, y_min)
         );
         let x_max = x_min + 60 * 26 - w;
-        assert_eq!(limit_centre((99999, y_min), (w, h), 30, local, &q).0, x_max);
-        // Oversized: every request at or above the minimum gives the maximum.
-        let wide = (3000, h);
-        let m = 1500 + 30 * (4 - 30);
-        let big = m + 60 * 26 - 3000;
-        assert_eq!(limit_centre((m - 1, y_min), wide, 30, local, &q).0, m);
-        assert_eq!(limit_centre((m, y_min), wide, 30, local, &q).0, big);
+        let y_max = y_min + 30 * 22 + 135 - h;
+        assert_eq!(
+            limit_centre((99999, 99999), (w, h), 30, local),
+            (x_max, y_max)
+        );
+        assert_eq!(
+            limit_centre((x_min + 7, y_min + 9), (w, h), 30, local),
+            (x_min + 7, y_min + 9)
+        );
+    }
+
+    /// spec: S-0101 claim 8, F5 (an oversized axis takes the local area's geometric centre,
+    /// whatever the request; the other axis keeps its ordinary limits)
+    #[test]
+    fn oversized_view_is_centred() {
+        let local = [2, 4, 26, 22];
+        // Horizontal centre 30·(2·2 − 30 + 26) = 0, vertical centre 15·(30 + 8 + 22) = 900.
+        let (cx, cy) = (0, 900);
+        // Too wide (60·26 = 1560 < 3000), ordinary height.
+        let wide = (3000, 400);
+        let y_min = 15 * (30 - 5 + 8) + 200;
+        for rx in [-99999, -1, 0, 1, 99999] {
+            assert_eq!(limit_centre((rx, -99999), wide, 30, local), (cx, y_min));
+        }
+        // Too tall (30·22 + 135 = 795 < 800), ordinary width.
+        let tall = (640, 800);
+        let x_min = 320 + 30 * (4 - 30);
+        for ry in [-99999, 0, 900, 99999] {
+            assert_eq!(limit_centre((-99999, ry), tall, 30, local), (x_min, cy));
+        }
+        // At 795 rows the vertical axis is not oversized (M = m).
+        let exact = (640, 795);
+        let m = 15 * (30 - 5 + 8) + 397;
+        assert_eq!(limit_centre((0, 99999), exact, 30, local).1, m);
+        // Oversized on both axes: both fixed.
+        for r in [(-99999, -99999), (5, 5), (99999, 99999)] {
+            assert_eq!(limit_centre(r, (3000, 800), 30, local), (cx, cy));
+        }
+        // The centred view shows the local area's middle: its left edge lies as far left of
+        // the area's left edge as its right edge lies right of the area's right edge.
+        let left = 60 * 2 - 30 * 30;
+        let right = left + 60 * 26;
+        let ox = view_origin((cx, cy), wide).0;
+        assert_eq!(left - ox, ox + wide.0 - right);
     }
 
     /// spec: S-0101 F6 (exact rational arithmetic, truncation toward zero)
@@ -346,30 +381,6 @@ mod tests {
             let (cx, cy) = cell_centre(x, y);
             assert_eq!(project_with(cx, cy, &off), project_with(cx, cy, &on));
         }
-    }
-
-    /// spec: S-0101 claims 3 and 4, Edge cases (quirks.height_lift_float_scale)
-    #[test]
-    fn height_lift_switch() {
-        let on = ProjectionQuirks::default();
-        let off = ProjectionQuirks {
-            height_lift_float_scale: false,
-            ..on
-        };
-        assert_eq!(height_lift_with(2080, &on), 299);
-        assert_eq!(height_lift_with(2080, &off), 300);
-        assert_eq!(height_lift_with(-104, &on), -14);
-        assert_eq!(height_lift_with(-104, &off), -15);
-        assert_eq!(height_lift_with(3500, &off), 505); // ⌊504.8 + ½⌋
-        // Off: objects on whole levels stay aligned with the terrain at every level.
-        for level in -128..=127 {
-            assert_eq!(
-                height_lift_with(104 * level, &off),
-                15 * level,
-                "level {level}"
-            );
-        }
-        assert_eq!(project_lifted_with(0, 0, 2080, &off), (0, -300));
     }
 
     /// spec: S-0101 claim 10, Edge cases (quirks.cursor_probe_depth_180)

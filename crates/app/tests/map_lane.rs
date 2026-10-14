@@ -15,10 +15,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use glasnost_app::mapview::{build, find, load, png};
-use glasnost_render::compose::{ComposeQuirks, Frame};
-use glasnost_render::projection::{
-    ProjectionQuirks, cell_centre, limit_centre, project_lifted, view_origin,
-};
+use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
+use glasnost_render::projection::{cell_centre, limit_centre, project_lifted, view_origin};
 use glasnost_render::scene::{Filter, View};
 use glasnost_render::wgpu;
 use glasnost_vfs::source::{FileSource, Unopened};
@@ -80,7 +78,7 @@ fn gpu_scroll_ms(
         color.create_view(&Default::default()),
         depth.create_view(&Default::default()),
     );
-    let reference = Frame::reset_reference(origin.1);
+    let reference = DEPTH_REFERENCE;
     let t = Instant::now();
     for i in 0..frames {
         let view = View {
@@ -187,18 +185,12 @@ fn map_lane() {
                 project_lifted(lx, ly, 0)
             });
             let size = (1280, 720);
-            let centre = limit_centre(
-                centre,
-                size,
-                map.footprint.width,
-                map.footprint.local,
-                &ProjectionQuirks::default(),
-            );
+            let centre = limit_centre(centre, size, map.footprint.width, map.footprint.local);
             let origin = view_origin(centre, size);
             let view = View {
                 origin,
                 size: (size.0 as u32, size.1 as u32),
-                reference: Frame::reset_reference(origin.1),
+                reference: DEPTH_REFERENCE,
             };
             let t1 = Instant::now();
             let frame =
@@ -244,13 +236,12 @@ fn map_lane() {
                         (640, 400),
                         map.footprint.width,
                         map.footprint.local,
-                        &ProjectionQuirks::default(),
                     );
                     let origin = view_origin(c, (640, 400));
                     let v = View {
                         origin,
                         size: (640, 400),
-                        reference: Frame::reset_reference(origin.1),
+                        reference: DEPTH_REFERENCE,
                     };
                     let f = loaded.built.scene.compose(
                         &v,

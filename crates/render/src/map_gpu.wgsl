@@ -11,9 +11,8 @@ struct View {
     reference: i32,
     // Number of palette rows per column of the rows texture.
     rows_per_column: i32,
-    // 1 when the upright profile is anchored at the last visible row.
-    anchor_after_clip: i32,
-    pad: i32,
+    pad0: i32,
+    pad1: i32,
 };
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -123,15 +122,14 @@ fn fs_main(in: Varyings) -> Fragment {
         // Flat: d(r) + β.
         depth = row_depth(px.y) + in.place.z;
     } else if kind == 2u {
-        // Slope: Q(d(r₀) + β) − ⌊2j / 3⌋, r₀ the first visible row.
-        let r0 = max(top_left.y, 0);
+        // Slope: Q(d(r₀) + β) − ⌊2j / 3⌋, r₀ the first row of the
+        // rectangle before clipping (S-0102 F2: clipping removes pixels only).
+        let r0 = top_left.y;
         depth = quantise(row_depth(r0) + in.place.z) - (2 * (px.y - r0)) / 3;
     } else {
-        // Upright: Q(d(r₁) + β) − ⌊(r₁ − r) / 3⌋.
-        var r1 = top_left.y + height - 1;
-        if view.anchor_after_clip == 1 {
-            r1 = min(r1, view.size.y - 1);
-        }
+        // Upright: Q(d(r₁) + β) − ⌊(r₁ − r) / 3⌋, r₁ the last row of the
+        // rectangle before clipping (S-0102 F2).
+        let r1 = top_left.y + height - 1;
         depth = quantise(row_depth(r1) + in.place.z) - (r1 - px.y) / 3;
     }
     depth = clamp(depth, 0, 65535);

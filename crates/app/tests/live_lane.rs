@@ -24,8 +24,8 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use glasnost_app::mapview::{find, load, png};
-use glasnost_render::compose::{ComposeQuirks, Frame};
-use glasnost_render::projection::{ProjectionQuirks, limit_centre, project_lifted, view_origin};
+use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
+use glasnost_render::projection::{limit_centre, project_lifted, view_origin};
 use glasnost_render::scene::{Filter, View};
 use glasnost_sim::targeting::{ClickOn, Modifiers};
 use glasnost_sim::world::ObjectId;
@@ -125,18 +125,12 @@ fn env_num(name: &str, default: usize) -> usize {
 /// A 1280 × 720 view centred on world pixel `centre`, limited to the map.
 fn view_at(map: &glasnost_map::Map, centre: (i32, i32)) -> View {
     let size = (1280, 720);
-    let c = limit_centre(
-        centre,
-        size,
-        map.footprint.width,
-        map.footprint.local,
-        &ProjectionQuirks::default(),
-    );
+    let c = limit_centre(centre, size, map.footprint.width, map.footprint.local);
     let origin = view_origin(c, size);
     View {
         origin,
         size: (size.0 as u32, size.1 as u32),
-        reference: Frame::reset_reference(origin.1),
+        reference: DEPTH_REFERENCE,
     }
 }
 
@@ -299,13 +293,12 @@ fn live_maps_move_and_draw() {
                         (640, 400),
                         loaded.map.footprint.width,
                         loaded.map.footprint.local,
-                        &ProjectionQuirks::default(),
                     );
                     let origin = view_origin(c, (640, 400));
                     let v = View {
                         origin,
                         size: (640, 400),
-                        reference: Frame::reset_reference(origin.1),
+                        reference: DEPTH_REFERENCE,
                     };
                     let f = loaded.built.scene.compose(
                         &v,

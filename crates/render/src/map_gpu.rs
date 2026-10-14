@@ -37,8 +37,7 @@ struct ViewUniform {
     size: [i32; 2],
     reference: i32,
     rows_per_column: i32,
-    anchor_after_clip: i32,
-    pad: i32,
+    pad: [i32; 2],
 }
 
 #[repr(C)]
@@ -519,8 +518,7 @@ impl MapRenderer {
             size: [view.size.0 as i32, view.size.1 as i32],
             reference: view.reference,
             rows_per_column: self.rows_per_column as i32,
-            anchor_after_clip: i32::from(q.upright_depth_anchor_after_clip),
-            pad: 0,
+            pad: [0; 2],
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
@@ -532,6 +530,7 @@ impl MapRenderer {
                 continue;
             }
             let (l, t, r, b) = scene.bounds(item);
+            // spec: S-0101 F4b (an image is drawn iff its drawn extent meets the view; a bounds miss draws no pixel)
             if r <= ox || b <= oy || l >= ox + w || t >= oy + h {
                 continue;
             }
