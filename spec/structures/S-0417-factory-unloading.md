@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -27,14 +27,16 @@ and the draws of putting a released unit on the map (Open question 8). Claim 14 
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
 the search's no-draw rule; their untested cases remain qualified there.
 
-**Paired hand-off confirmations.** S-0404 revision 8 claim 13 fulfils the release hand-off:
-release queues *unload*, and contact-place count, infantry candidate acceptance and edge-entry
-nearby destination refer to claim 14 here. Initial-placement draws remain open. The current
-S-0212 table T5 includes the aircraft factory edge-entry-without-rally row with claim 14's
-parameters, and claim 25 uses the release tick to select its destination. The current S-0215
-claim 11 records that factory release and unloading neither set nor clear the ready mark,
-with start consequences owned by claim 2 here. Confirm these companion passages at sign-off.
-No further change to them is requested by this revision.
+**Paired hand-off confirmations.** S-0404 revision 9 claim 13 retains the fulfilled release
+hand-off: release queues *unload*, and contact-place count, infantry candidate acceptance and
+edge-entry nearby destination refer to claim 14 here. Nearby-search draws are resolved as none.
+Initial-placement draws remain open. S-0212 revision 25 table T5 includes the aircraft factory
+edge-entry-without-rally row with claim 14's parameters, and claim 25 uses the release tick to
+select its destination. S-0215 revision 21 claim 11 records that factory release and unloading
+neither set nor clear the ready mark, with start consequences owned by claim 2 here. Its claim 13
+and S-0207 revision 14 claim 21 jointly own restoration and retained teleporting state after
+claim 5's temporary drive. The decided apron off-state rules remain in Edge cases. Confirm
+these companion passages at sign-off. No further change to them is requested by this revision.
 
 ## Terms
 
@@ -149,8 +151,13 @@ The nearby-cell search is S-0212 claim 25. Door drawing is S-0108's, animation p
 
 5. **Sending u out.** A drive vehicle is put on T1 towards E's centre, without a path search
    from its present position. Tunnelling and teleporting vehicles temporarily receive driving
-   locomotion and use the same track; restoration belongs to S-0215 claim 13. If that temporary
-   replacement cannot be established, successful exit is not promised (Open question 4).
+   locomotion and use the same track; restoration belongs to S-0215 claim 13. S-0207 claim 21
+   owns the suspended teleporting state and its occupancy consequences: destinations accepted
+   while driving use driving movement, not the suspended teleporting movement, and restoration
+   alone neither resets that state nor moves an occupancy mark. Those rules inherit that claim's
+   backing and confidence, including its unmeasured pre-existing pending-jump and phasing-in
+   cases. If that temporary replacement cannot be established, successful exit is not promised
+   (Open question 4).
    Any other locomotor instead gets destination (*x*₀ + 4, *y*₀ + 1), independent of the
    foundation and its exit list. It moves by its own locomotor's rules. K sets u's speed fraction
    to 0.5 after this exit instruction in all these cases.
@@ -614,7 +621,22 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   a hovering vehicle following T1, a destination other than F4 for that hovering vehicle,
   or a speed fraction other than 0.5 immediately after the exit instruction. Initial fractional-progress ticks are S-0207's, not necessarily
   a complete first-point jump. Unavailable stock types remain untested.
-- **U7, speed.** Produce stock accelerating and non-accelerating drive types and record speed
+  For the teleporting vehicle, also record destination, suspended landing point, pending jump,
+  phasing-in state and expiry tick, and ground/deck occupancy marks before temporary driving,
+  throughout it and across restoration. Separate restoration itself from the other effects of
+  falling back to rest. Repeat with a scripted move order during temporary driving, scoring
+  only runs where it is accepted then. After restoration and fall-back finish, give a new
+  distant clear-cell move order. Expect destinations accepted while driving to leave the
+  suspended teleporting landing point and reservation unchanged; occupancy follows S-0209's
+  driving rules. Restoration alone neither resets teleporting state nor moves a mark. A newly
+  taken destination after restoration fixes a landing point and jumps under S-0207 claim 20.
+  A changed suspended landing point or teleport reservation due to a driving destination, a
+  state reset or occupancy action due solely to restoration, or driving rather than teleporting
+  for that post-restoration order falsifies the corresponding rule (S-0207 D23). Record any
+  factory-supplied destination before temporary driving starts: do not presume an empty
+  suspended state. No stock setup for a pre-existing pending jump or phasing-in state at
+  installation is established, so U6 does not score those conditional retention rules.
+- **U7, speed. Produce stock accelerating and non-accelerating drive types and record speed
   fractions, per-tick positions and arrival time. Calculate each prediction using its own imported
   speed, bonuses, S-0207 progress formula and T1. Expect 0.5 retained for accelerating types,
   1.0 on movement update for non-accelerating types, absent another effect. Falsifier: ordinary
