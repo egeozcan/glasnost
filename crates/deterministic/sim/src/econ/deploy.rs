@@ -426,7 +426,7 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     let strength = w.rules().unit(Kind::Vehicle, v).map_or(1, |u| u.strength);
     let health = handed_health(w, id, strength);
     let vid = crate::objects::create_converted(w, Kind::Vehicle, v, Some(house));
-    // spec: S-0402 claim 19a (the return vehicle creates its own initial hidden slaves, each with its creation draw, before the placement attempt and while the building's old group still exists, on success and refusal alike)
+    // spec: S-0402 claim 19a, S-0415 claims 10 and 11 and S-0202 claim 10 (the return vehicle creates its own initial hidden slaves, each with its creation draw, before the placement attempt and while the building's old group still exists, on success and refusal alike)
     super::slaves::created(w, vid);
     if let Some(ob) = w.obj_mut(vid) {
         // spec: S-0415 claim 10 and F2 (health max(1, trunc(r × S)); the building's experience)
@@ -444,7 +444,7 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         // spec: S-0415 claim 10 and S-0402 claims 25 and 28 (the building's one remembered destination, its guard spot, which an automatic pack-up set to the old top-left cell, is the vehicle's immediate destination)
         let dest = o.guard_spot;
         if let Some(temporary) = super::slaves::detach(w, vid) {
-            // spec: S-0402 claim 19a (successful placement destroys and removes the vehicle's newly created hidden slaves before the old group's transfer, with S-0312 claim 31's notifications; their draws are not undone)
+            // spec: S-0402 claim 19a and S-0415 claim 10 (successful placement destroys and removes the vehicle's newly created hidden slaves before the old group's transfer, with S-0312 claim 31's notifications and losses; their draws are not undone)
             super::slaves::end_removed(w, temporary);
         }
         if let Some(g) = group {
@@ -493,7 +493,7 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
         // spec: S-0402 claim 19a (with the quirk on the retained vehicle keeps its new hidden group, created before placement; removing the building ended only the old group)
         if !w.rules().quirks.failed_packup_keeps_vehicle {
             if let Some(temporary) = super::slaves::detach(w, vid) {
-                // spec: S-0402 claims 19a and 27 and S-0312 claim 31 (quirk off: the vehicle's new group is removed too, its creation draws already taken)
+                // spec: S-0402 claims 19a and 27, S-0415 claim 11 and Edge cases, S-0202 claim 10 and S-0312 claim 31 (quirk off: the vehicle's new group is removed too, its creation draws already taken)
                 super::slaves::end_removed(w, temporary);
             }
             // spec: S-0415 claim 11 and S-0402 claim 19a (quirk off: the refused vehicle does not remain)
