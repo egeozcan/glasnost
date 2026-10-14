@@ -385,9 +385,9 @@ fn retarget(w: &mut World, old: ObjectId, new: ObjectId, yard: bool) {
     }
 }
 
-/// The end of a pack-up (S-0415 claims 10 and 11): the vehicle appears at
+/// The end of a pack-up (S-0415 claims 10 to 12): the vehicle appears at
 /// the return cell and the building is removed, or the house receives the
-/// sale refund when the vehicle cannot be put on the map.
+/// sale refund when the return cell refuses the vehicle.
 pub fn pack_up(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let Some(o) = w.obj(id).cloned() else { return };
@@ -403,10 +403,14 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(vid) {
         // spec: S-0415 claim 10 and F2 (health max(1, trunc(r × S)); the building's experience)
         ob.health = health;
-        ob.combat.experience = o.combat.experience;
     }
     crate::objects::remove(w, id);
-    if can_stand(w, c) {
+    // spec: S-0415 claim 12 (the test is made before the vehicle inherits the building's experience or the guard spot)
+    let accepted = can_stand(w, vid, c);
+    if let Some(ob) = w.obj_mut(vid) {
+        ob.combat.experience = o.combat.experience;
+    }
+    if accepted {
         let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the cell centre)
         let tick = w.tick;
         if let Some(ob) = w.obj_mut(vid) {
@@ -441,15 +445,17 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Whether a vehicle can be put on the map in `c` at the end of a pack-up
-/// (S-0415 claim 11: for example, not where a building now stands). What
-/// else refuses is not stated (request Q-0132); our engine asks for a
-/// usable cell with no building and no vehicle claim.
-fn can_stand(w: &World, c: CellXY) -> bool {
-    w.cells.usable(c)
-        && w.cells
-            .occ(c, crate::world::Layer::Ground)
-            .is_some_and(|r| r.buildings == 0 && r.vehicles == 0)
+/// Whether the new vehicle `v` can be put on the map at the return cell
+/// `c` at the end of a pack-up (S-0415 claim 12). The packing building has
+/// been removed already, so it does not occupy the map for this test.
+fn can_stand(w: &World, v: ObjectId, c: CellXY) -> bool {
+    if !w.cells.usable(c) {
+        return false;
+    }
+    // spec: S-0415 claim 12 (ordinary ground-layer placement: no source height, no bridge-deck request)
+    let reference = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    // spec: S-0415 claim 12 (accepted exactly when the entry outcome of S-0209 claim 5 is clear, with no movement-step substitutions; any other outcome refuses)
+    crate::occupancy::vehicle_outcome(w, v, c, reference) == crate::occupancy::Outcome::Clear
 }
 
 /// The construction behaviour's processing delay (S-0406 claim 14).
