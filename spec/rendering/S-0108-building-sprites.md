@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -94,8 +94,8 @@ are out of scope.
   (claim 23). **Door-stage count** *D*: the type's imported door-stage field, an integer.
   **Damaged-door type:** a type whose art is marked as having damaged door frames.
 - **Door state:** the state of the building's door, one of *closed*, *opening*, *open* and
-  *closing*. When the door moves and how long a movement takes belong to the unloading behaviour of
-  the production spec. **Door progress** *q*: the completed fraction of the door's current movement,
+  *closing*. Factory door movement, timing and unloading behaviour belong to S-0417
+  (structures); the door-image rules remain here. **Door progress** *q*: the completed fraction of the door's current movement,
   from 0 to 1, and 1 when the door is not moving (Formulas F8).
 - **Theater flag, new-theater flag, theater refresh:** as in S-0007 (claims 11 and 12).
 
@@ -177,7 +177,13 @@ are out of scope.
    construction range *a* = 0, *c* = 1, *d* = 0. The build-up is reported finished on the tick on
    which the stage reaches *n* − 1, the last build-up frame, that is (*n* − 1) × *d_b* ticks after
    the state began when *n* ≥ 2 and *d_b* ≥ 1. This expression does not give the completion time
-   of a zero-delay range: its stage does not advance. The switch to the body sprite then follows the construction behaviour. Selling
+   of a zero-delay range: its stage does not advance, but it still reports completion on a building
+   turn. S-0406 claim 15 owns construction handover: in uninterrupted play a zero-delay range
+   hands over one tick after the first construction processing, including the default range of a
+   type without a build-up sprite. For the positive-delay multi-stage case, handover occurs on the
+   report tick. The first construction processing's relation to placement or deploy, positive-delay
+   single-stage ranges and non-positive stage counts remain unresolved; the expression above is
+   not a duration measured from placement. Selling
    replays the same *n* build-up frames at the same delay, backwards except for gates (claim 4). The construction delay is never
    game-speed normalised when the state is entered (but see claim 6 for the wrap).
 
@@ -196,9 +202,10 @@ are out of scope.
    build-up. When the file does not resolve, the building has no build-up sprite (S-0007 claim 12),
    and the range keeps its earlier value.
    - Backing: `measurable` (B1 for positive-delay ordinary build-up, B13 for gates, B19 for
-     theater-flag build-up). `unmeasured` for the completion report itself, zero-delay and
-     single-stage completion (no visible event separates the report from handover), and failed
-     reload retaining the range (B19 supplies the file; a missing sprite hides its range).
+     theater-flag build-up; S-0406 PL11 a to c for report-to-handover timing and zero-delay
+     completion). Positive-delay single-stage and non-positive-count completion remain
+     `unmeasured`: their stage/report behaviour is unresolved. Failed reload retaining the range
+     is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
    - Confidence: high (the delay), medium (the exact tick of the switch to the body sprite, and the
      theater-flag rule, which stock data does not use)
 
@@ -468,8 +475,8 @@ are out of scope.
       absence of every possible gameplay effect.
     - Confidence: high
 
-22. **Unloading sprites.** While a building is unloading a unit (the unload behaviour of the
-    production spec), the sprite depends on the unit being unloaded.
+22. **Unloading sprites.** While a building is unloading a unit (factory unloading belongs to
+    S-0417), the sprite depends on the unit being unloaded.
     - **Unit not marked jumpjet or balloon-hover:** when the type has a deploying sprite, it replaces
       the body sprite, with the depth adjustment −20 instead of the type's normal one. Without one,
       the body sprite stays.
@@ -853,14 +860,15 @@ expected numbers are computed from the type's own fields at measurement time.
     build-up frame is shown, the build-up frame sequence while selling, and whether the invisible
     type shows any body, bib or shadow.
   - Runs: one per building and speed.
-  - Expected: (*n* − 1) × trunc(*B* × 900 / *n*) ticks plus the construction behaviour's handover
-    delay, the same tick count at both speeds. Each build-up frame before the last is shown for
+  - Expected: (*n* − 1) × trunc(*B* × 900 / *n*) ticks after the first construction processing
+    for uninterrupted play (S-0406 claim 15), the same tick count at both speeds. Each build-up frame before the last is shown for
     trunc(*B* × 900 / *n*) ticks as F1 computes it. Selling shows the build-up frames from last to first
     at the same delay. The invisible type shows no body, bib or shadow, but its slot animations
     appear.
   - Falsified if: the pre-last-frame periods depend on game speed or differ from F1, selling
     plays forwards, or the invisible type shows any body, bib or shadow or hides its named slot.
-    The handover delay is recorded, not assigned a pass value here (Open questions). The test
+    Record the first construction processing separately from placement; their relation remains
+    unresolved in S-0406. The test
     does not by itself discriminate arithmetic rounding unless the imported *B* and sprite
     count give different integer delays under the two modes.
 - **B2 (claims 2, 12).**
@@ -1154,6 +1162,10 @@ expected numbers are computed from the type's own fields at measurement time.
     count produces a request other than the stated 0 or −2, the unmarked damaged copy gains a
     damage term, or the count-10 frames differ from F8.
 
+Construction report-to-handover timing and zero-delay completion in claim 5 use S-0406
+scenario PL11 a to c, including its setup, read-only per-tick observables and falsification
+criteria. Positive-delay single-stage runs there are exploratory, not a completion prediction.
+
 The free-unit effect of claim 11 is measured by S-0402 scenario H13, parts a to f, with that
 scenario's setup, observables and falsification criteria; no separate unit-placement rule is
 specified here.
@@ -1169,8 +1181,9 @@ specified here.
 - Which behaviours put a building into the *active*, *full*, *aux-1* and *aux-2* states, and when
   the *pre-production*, *production*, *special* and *upgrade* slots start, is for the production,
   repair and upgrade specs. Only the image-frame mechanics are fixed here.
-- The exact tick on which a finished build-up hands over to the body sprite depends on the
-  construction behaviour's polling, which is not traced (claim 5).
+- S-0406 claim 15 owns construction handover, including zero-delay completion. Its Open
+  questions retain the relation of first construction processing to placement or deploy and
+  positive-delay single-stage/non-positive-count cases; claim 5 here does not resolve them.
 - S-0405 claim 5 identifies the drain blackout of claim 14. A separate special-outage slot
   measurement during that blackout remains wanted.
 - Types marked as laser-fence posts or firestorm-wall sections take their body frame from a
