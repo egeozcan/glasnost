@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -266,8 +266,7 @@ and *subject to walls*. In addition:
     passengers have short weapons still passes the range test at its own weapon's range, while
     those other rules see the shorter value. The passengers' own range tests use their own weapons
     and the bonus of claim 5.
-    S-0306 claim 4 (its revision 6) defers to this current-weapon rule; its P3 f does not
-    distinguish the current weapon from the primary one.
+    The S-0306 draft's claim 4 specifies this current-weapon rule, including the weapon-number slot for a multi-weapon passenger and skipping a passenger without a current weapon. Its P3 f does not distinguish the current-weapon rule from a primary-only rule, so those passenger cases remain unmeasured there.
     - Backing: `measurable` (RG9 and RG10 for an ordinary armed passenger and the range test's
       non-use; scatter and scan consequences through S-0306 P3 and S-0309's scenarios).
       Backing: `unmeasured` for multi-weapon current-slot selection and missing passenger weapons,
@@ -1265,8 +1264,9 @@ not a valid run.
 
 ## Cross-spec changes required in this round
 
-- S-0306 claim 4's current-weapon rule and its bridge-mark question are applied in S-0306
-  revision 6, which is handed off with this revision.
+- S-0306 claim 4's current-weapon rule and its bridge-mark question are already applied in
+  approved revision 6; the current revision 7 draft retains both. No further correction to
+  S-0306 is required for those points.
 - S-0212 claim 25's failed-approach row may drop its non-close-range qualifier: claim 17's
   centre now covers close-range searches, and close-range infantry never have empty radii.
   Its parameters and other exclusions remain unchanged.
