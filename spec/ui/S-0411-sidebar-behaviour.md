@@ -2,13 +2,13 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0121, Q-0123]
+requests: [Q-0121, Q-0123, Q-0196]
 supersedes: []
 ---
 
@@ -25,18 +25,21 @@ is S-0407's; tab assignment and icon order are S-0004's (claim 11),
 production rules S-0404's, build times S-0403's and the credits display S-0416's.
 Network games and campaigns are out of scope.
 
-**Paired revisions.** S-0404 revision 6 supplies the application and cancellation-timing
+**Paired revisions.** S-0404 revision 7 supplies the application and cancellation-timing
 rules, excludes factories being sold or queued to be sold, and cancels a busy or failed unit
 release with a refund at the place order's application boundary (claims 7 and 13).
-S-0407 revision 7 distinguishes cancellation orders issued
+S-0407 revision 8 distinguishes cancellation orders issued
 at the recheck from their application at the tick's end, exempt held-item resume from the
 issue-time limit test, and retain the application-time limit test on queued starts (claims
 13 and 16). Its claim 17 owns simultaneous admission order, which can affect the existing
 icon order used by claim 13 below. Its T14 run 7 distinguishes the permanent-removal refund
 from the later sidebar cancellation boundary. The former per-tick-removal correction requests are resolved.
-Full-tab suppression remains S-0004 claim 11's rule: whether a suppressed type is offered for
-order legality, gains an icon when space opens, or gives cancellation orders on losing
-availability remains unresolved here and in S-0407. No cancellation or refill rule is inferred.
+Claim 15 answers Q-0196: full-tab suppression excludes a type from the offer, gives no
+removal orders for it, and retries admission only at a later recheck. S-0004 claim 11 retains
+capacity and sorting ownership. At joint hand-off, S-0004 claim 11 and Open question 7,
+S-0407 Terms, claims 1 and 17 and Open question 4, and S-0404 claim 9 must replace their
+unresolved full-tab passages with pointers to claim 15. Their admission rules must preserve
+its delayed refill rather than removing old icons before judging admission capacity.
 
 ## Terms
 
@@ -101,8 +104,8 @@ last recheck). In addition:
 
 2. **Icons appear and disappear.** An icon is added when its type becomes offered to the local
    player, except that an item becoming available while its tab is full is not shown (S-0004,
-   claim 11). This spec does not establish whether or when such an item is shown after a slot
-   opens. S-0407 claim 12 owns the recheck timing; S-0004 claim 11 owns capacity and placement.
+   claim 11). Claim 15 gives suppressed types' offer membership, later admission and lack of
+   removal orders. S-0407 claim 12 owns the recheck timing; S-0004 claim 11 owns capacity and placement.
    A shown icon is removed only
    when a recheck removes the type from the taken-up set. The removal and its cancellation orders
    occur in the house update containing that recheck: the first house update after a listed event
@@ -359,8 +362,8 @@ last recheck). In addition:
 
 13. **Several offers removed at one recheck (Q-0123).** For types with shown icons, the
     cancellation orders are given in tab order, first through fourth, irrespective of which tab
-    is displayed. No rule is asserted here for a type whose icon was suppressed by a full tab
-    (claim 2), including whether its loss of availability gives cancellation orders. Within a tab they
+    is displayed. A type still suppressed by a full tab gives no removal orders and has no
+    position in this ordering (claim 15). Within a tab they
     follow its existing icon order immediately before removal (S-0004 claim 11), including icons
     outside the visible scrolled portion. S-0407 claim 17 owns the admission order when several
     new offers appear together; it can affect that existing icon order without changing the
@@ -406,6 +409,53 @@ last recheck). In addition:
     - Backing: `measurable` (scenario S2 sale extensions; S4 e3)
     - Confidence: high (no sidebar orders at sale start, recheck timing); medium (continued
       progress, queued-sale factory exclusion and permanent-removal refund)
+
+15. **Full tabs, offers and later admission (Q-0196).** A suppressed production type is
+    absent from the taken-up set: eligibility without an icon is not an offer. In our engine a
+    starting, queuing or resuming build order for that type is therefore illegal, for every
+    player house, whoever issues it (claim 4; S-0404 claim 10). This is the capacity-aware
+    application of the existing project rule that the offer is the house's icon membership,
+    not a claim that the original's computer production tests sidebar membership.
+
+    Capacity is judged before the removals of that recheck. An icon still present at the
+    start of the recheck occupies a place for admission even if the same recheck will remove
+    it. With a full tab, losing a shown offer leaves a vacancy at that recheck but does not
+    give a suppressed type that vacancy then, nor in an ordinary later sidebar update.
+    At the next recheck, still-eligible suppressed types can gain places, provided a
+    qualifying factory of their kind exists (S-0407 Terms). There is no waiting-list priority:
+    retrying types compete with other newly eligible types in S-0407 claim 17's admission
+    order. Within one kind this is increasing registration index; across kinds sharing a
+    tab, the earliest acquired qualifying factory of each kind decides precedence.
+    Sorting position under S-0004 claim 11 is not admission priority. A retrying type
+    without a qualifying factory stays absent even when the tab has room.
+
+    More generally, the candidates for admission are the types with an allowed or at-limit
+    tech-tree answer presented by a qualifying factory. A newly added candidate also
+    occupies a place against later candidates in that recheck, even if S-0407 claim 1 (b)'s
+    factory-matching condition will remove it before the recheck finishes. Removal does
+    not let earlier or later suppressed candidates use that place in the same recheck.
+    After admission, shown types that fail claim 1 (a) or (b) are removed under claim 2.
+    Thus a tab can finish a recheck below capacity despite eligible suppressed types.
+    Rechecks are still caused only by S-0407 claim 12's events: a vacancy alone schedules
+    no extra recheck. Existing valid icons are not displaced by a better-sorting candidate.
+
+    A type that remains suppressed and loses availability gives neither a cancel nor a
+    cancel-all order. It has no place in claim 13's order because no icon is removed.
+    Independent cancellation by a production-line factory check remains S-0404 claim 8's
+    rule, not a suppression-removal order. Once a type gains an icon, its later removal
+    follows claims 2 and 13 normally.
+
+    In our engine the 76-entry limit is separate for each tab of each player house. Entries
+    outside the scrolled view count; a superweapon icon counts in its tab too (S-0004
+    claim 11). No place is shared between houses, and observing another house cannot
+    change its offers. Every-player admission and cancellation use the ordering that the
+    house would have as local player, as in claim 13.
+    - Backing: `measurable` (scenario S10) for suppression, retry timing, competing
+      admissions and absence of suppressed-type removal orders in the original's local
+      sidebar. `unmeasured` for the every-player capacity and order-legality extension:
+      it is a project rule, not an observable rule of the original's computer production.
+    - Confidence: high (capacity check and no suppressed-type removal orders); medium
+      (retry timing and its interaction with admission order); high (project-rule extension)
 
 ## Formulas
 
@@ -484,6 +534,9 @@ The sidebar reads no keys of its own. These delegated inputs matter to claims 13
 | `BuildLimit` (rules, type) | whether an intermediate queued start passes its limit test | signed 32-bit integer, 2³¹ − 1 when absent; S-0407 |
 | Sidebar ordering keys (S-0004 Import mapping) | cancellation order within a tab uses its existing icon order, not registration order | forms and absent defaults owned by S-0004; no new ordering key |
 | No data key | sale-start and queued-sale cancellation timing | behaviour of claims 2 and 14, not an imported delay |
+| No data key | per-house tab capacity and delayed refill | 76 entries per tab, an engine constant, not an imported limit or delay; claim 15 |
+| `BuildingTypes`, `InfantryTypes`, `VehicleTypes`, `AircraftTypes` (rules or map, section names) | same-kind priority for admission or retry into a vacancy | ordered type-name entries, keys do not determine the order; missing section adds no types; S-0004 claims 2 to 4 |
+| `TechLevel` (rules, type) | whether a candidate passes the tech-tree answer at a retry | signed integer, initially −1; S-0407 Import mapping; capacity does not override this answer |
 
 Build times and step payments retain S-0403's and S-0404's import mappings.
 
@@ -769,6 +822,48 @@ the time the script sent a button event, dates a click.
   differs despite unchanged factory and limit eligibility. If no transient recording is
   available, order recordings answer the order part only, not the intermediate-start part.
 
+**S10. Full-tab retries and suppressed losses (claim 15).**
+- Setup: the sidebar probe map supplies exactly 76 initially admitted ordinary-building
+  types, including shown type A with a dedicated prerequisite, and two further building
+  types B and C with another prerequisite. Give the house a qualifying construction yard,
+  ample credits and generous limits. Register B before C, but give C sorting keys that
+  would put it ahead of B on screen. Prevent other new first-tab candidates. Use the
+  common skirmish settings and an order recorder, plus tick-labelled screen capture.
+- Procedure: place the prerequisite of B and C while the tab is full. Confirm suppression.
+  Destroy A's prerequisite by a test trigger, leaving the yard and B/C eligibility intact.
+  Observe the resulting recheck and ten quiet ticks with no other recheck event. Then
+  place an unrelated defence, causing another recheck without adding a first-tab icon.
+  Repeat in a fresh run with C registered before B. Run each variant three times.
+- Observable: all first-tab entries including scrolled entries, their first-appearance
+  ticks, recheck ticks and removal-order issue ticks.
+- Expected: the full tab suppresses both B and C. A's removal recheck leaves 75 icons,
+  with neither retry appearing during that recheck or the quiet interval. The next
+  recheck admits only B in the first variant, only C in the reversed-registration
+  variant, reaching 76 icons. A better sorting key does not win the vacancy.
+- Suppressed-loss run: from the initial full state with B and C suppressed, destroy
+  their prerequisite, not A's. Expected: no cancellation order for B or C, no first-tab
+  vacancy and no change to its 76 icons. Later restore their prerequisite and free A's
+  place as above: the ordinary retry rules apply, with no priority from earlier attempts.
+- Candidate-retention control: start with 75 first-tab icons and a switched-on factory
+  of the building kind. Two further building types pass their tech-tree answers; the
+  lower-index one has owner-country eligibility that no owned building factory shares,
+  while the higher-index one has a matching factory. Give both no prerequisite beyond
+  the established ones. Cause a recheck by placing an unrelated defence. Expected:
+  the lower-index candidate leaves no final icon, the higher-index candidate is
+  suppressed, and the tab ends at 75. At a later recheck it repeats unless eligibility
+  changes. This isolates a newly admitted then removed candidate occupying capacity.
+- Falsified if: a suppressed type appears without a later recheck, a vacancy freed by
+  removal is refilled in that same recheck, priority follows sorting rather than the
+  stated admission order, a still-suppressed loss issues either removal order, or the
+  candidate-retention control admits its higher-index type. Void any run with an
+  intervening recheck event or unintended candidate. Losing an owned object alone
+  does not free its type's icon: the setup must actually remove its offer.
+- Extension checks on our engine only: give two player houses these factories and
+  prerequisites, with separate tab states. A build order naming a suppressed type must
+  be illegal and change no line or credits. A vacancy in one house must not admit a
+  type for the other. These check the project rule, not oracle behavior. No trigger or
+  recorder is assumed able to inject a production order into the original.
+
 ## Open questions
 
 1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
@@ -782,14 +877,13 @@ the time the script sent a button event, dates a click.
 6. Which sound, if any, the build-limit click, the darkened-icon click and the click on a lit
    aircraft icon with every dock taken play (claims 4 and 12, S3).
 7. Which look (lit or dark) the tab flash shows in each period (claim 11, S8).
-8. Q-0120 is only partly resolved by S-0404 claims 7 and 13: a busy or failed release
-   cancels with a refund, without retry. The remaining unloading and post-exit movement,
-   aircraft docking position and nearby destination, exact infantry exit-entry test and
-   release draw questions remain with S-0404. This spec adds no rules for those outcomes
-   and does not claim to answer the whole request.
-9. Whether a type suppressed by a full tab is offered for order legality, whether or when a type suppressed by a full tab gains an icon after a slot opens, and whether
-   losing availability while suppressed gives cancellation orders, are not established (claims
-   2 and 13). S-0004 F4 tests suppression, not these later outcomes.
+8. Q-0120 is partly resolved by S-0404 claims 7, 13 and 15: busy or failed release
+   cancels with a refund without retry, and claim 15 gives ordinary aircraft pad positions.
+   The remaining unloading and post-exit movement, take-off, nearby destination,
+   exact infantry exit-entry test, contact-count and placement/search-draw questions
+   belong to S-0417's follow-up. Specialised docking combinations remain outside the
+   verified pad-position rule. This spec adds no rules for those outcomes and does not
+   claim to answer the whole request. Q-0196's four questions are answered by claim 15.
 
 ## Questions for the project lead
 
