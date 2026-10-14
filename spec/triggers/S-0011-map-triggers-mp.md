@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,7 +25,11 @@ table I4, which do not extend this spec's supported subset.
 
 **Hand-off checks.** S-0003 claim 14's exceptions, S-0202's loading-draw table,
 S-0302's survivor rules and S-0409's all-player-house scope agree in their current texts.
-At sign-off, check claim 36 and scenario T21 against S-0109 claim 13, and hand the two
+At sign-off, hand claim 19 and T7 off with S-0312 claim 29/D20: normal repeating
+vehicle deaths give seven firings with an attacker and four without, common-only deaths
+give two, and latch-off gives two when the extra vehicle group remains enabled.
+Check claim 35 against S-0414 claim 18/V15 for within-update timing and continued raises
+after defeat. Check claim 36 and scenario T21 against S-0109 claim 13, and hand the two
 revisions off together: creation-time sound and resource chain reaction are enabled,
 and only later start events suppress them. S-0401 claim 20 must limit its trigger-played
 suppression to later start events in the same hand-off. Check claim 36's map-load composition
@@ -262,9 +266,10 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
    alias described below. So, after its first satisfaction, a
    latched event counts as satisfied in every later raise of its tag, of any code. Example: a
    repeating tag carried by two vehicles, with one trigger whose single event is
-   destroyed-by-anything. The first vehicle's destruction fires the trigger twice: in the
-   destroyed-by-anything raise, and again, by the latch, in the raise that follows it (claim 19).
-   After that the trigger fires again in every later raise of the tag, for example in each of the
+   destroyed-by-anything. A normal first vehicle's destruction fires the trigger seven times
+   with an attacker and four without (claim 19): its first destroyed-by-anything raise sets the
+   latch, so every remaining destruction raise fires it. A common-group-only death gives two
+   firings instead. After that the trigger fires again in every later raise of the tag, for example in each of the
    raises that every hit on the second vehicle causes (`quirks.persistent_event_latch`). Latches are kept per event position, and positions from 33
    on share the latch of the position 32 lower (`quirks.event_latch_aliasing`). Arming a timer
    clears the latch at each timer event's position; with aliasing on this also clears any
@@ -406,15 +411,40 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
      are pointers only, to the specs of those abilities
     - Confidence: medium (low for the bridge rule, the capture case and the other entries)
 
-19. **Destroyed-by-anything.** When an object that carries a tag is destroyed, whatever destroyed it,
-    its tag is raised with this code, with the object as causing object. The event is satisfied in
-    every such raise. It is latchable (claim 9). If the object still carries the tag after that
-    raise (the tag is repeating, or the trigger was not satisfied), the destruction raises the tag
-    once more, with a code outside this subset; when the destruction has an attacker, further raises
-    with codes outside this subset come before the destroyed-by-anything raise. These extra raises
-    evaluate condition events and latches (claim 8).
-    - Backing: `measurable` (scenario T7)
-    - Confidence: medium (medium for the raise after it, low for the raises before it)
+19. **Destroyed-by-anything.** A killing hit on an object carrying a tag raises that tag with
+    this code, with the dying object as causing object. The event is satisfied in every such
+    raise and is latchable (claim 9). S-0312 claim 29 owns the death timing and destruction-raise
+    groups: their actions and draws take effect within the killing hit, before death debris,
+    passengers and death weapons, not at final removal. The raises themselves take no draw.
+
+    The common group has three attacker-dependent raises outside this subset, followed by
+    destroyed-by-anything and one further outside-subset raise. Vehicles normally have an
+    additional earlier group: an attacker-dependent outside-subset raise, destroyed-by-anything
+    and its following outside-subset raise. Every raise evaluates condition events and latches
+    (claim 8). A raise that detaches or deletes the tag prevents further raises of that tag
+    from this object. Thus a fresh repeating trigger with destroyed-by-anything as its only
+    event fires seven times for a normal vehicle death with an attacker and four without,
+    while a common-group-only death fires twice. These are counts of firings within the
+    killing hit, not counts of ticks; earlier hit-related raises do not yet have this latch.
+    With persistent latching off and the extra vehicle group on, the same normal vehicle
+    death fires twice, once per destroyed-by-anything raise, and subsequent nonlethal hits
+    do not fire it. With the extra group off and persistent latching off, it fires once.
+
+    S-0312 claim 29 owns the common-only cases: a vehicle with a remembered hijacker type
+    when any definition in its tag has the carry-over flag, separately supplied attacking-house
+    attribution, and `quirks.vehicle_destruction_extra_raises` (default original; off omits
+    the extra vehicle group). It also owns deferred-death timing: a cyborg reprieve has no
+    destruction raise; a delayed-kill building raises on the initial lethal hit and again on
+    lethal expiry if still tagged; sinking and crashing do not postpone the killing-hit raises.
+    Infantry still showing a death sequence keep their tag unless evaluation or another
+    detachment removed it, but are no longer present objects for claims 24 and 27. Completing
+    that sequence and removing the infantry produce no new destroyed-by-anything raise.
+    - Backing: `measurable` (scenario T7 for counts and latches; S-0312 D20 for timing,
+      deferred deaths and retained infantry tags). Separately supplied attacking-house
+      attribution and actions that remove the dying object during the raises inherit
+      S-0312 claim 29's `unmeasured` boundary
+    - Confidence: high for the groups, counts and timing; medium for latches and the
+      retained-infantry and hijacker/carry-over cases
 
 20. **Bridge destroyed in a tagged cell.** When a bridge is destroyed, each cell of the destroyed
     part that carries a tag raises that tag with this code. The event is satisfied in every such
@@ -664,17 +694,24 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     later-registered tag are in force when an earlier-registered tag is evaluated. The
     owner-house raise evaluates every trigger of the tag like any other (claim 8), so condition events (elapsed
     time, game time, variables, type counts) and latches can fire in it, as well as the any-event
-    code. The assignment is made once and never changes. A defeated house stays in the house list and keeps
-    raising its tags, and a tag whose first trigger's owner country nobody plays is never raised
-    this way. A house also raises all its assigned tags, with a code outside this subset, each time
+    code. The assignment is made once and never changes. S-0414 claim 18 owns the
+    within-update timing: this raise sees that update's surrender destruction and defeat test,
+    including defeat destruction, after power and ordinary radar rechecks but before due
+    tech-tree work and its sidebar cancellation orders. It does not cause a second defeat
+    test in that update. A defeated house stays in house order and keeps raising its tags,
+    including in the update that defeats it and later eligible ticks during the end delay
+    (S-0414 claim 18/V15). A tag whose first trigger's owner country nobody plays is never
+    raised this way. A house also raises all its assigned tags, with a code outside this subset, each time
     it is told that one of its buildings is under attack; how often that happens belongs to the
     combat specs (a pointer only). That raise, too, evaluates condition events and latches.
-    - Backing: `measurable` (scenario T20, including variant C for house/tag order). Continued
-      raises after defeat and the under-attack raise are `unmeasured`: T20 does not defeat a
-      house or isolate attack notifications, and this subset does not control their timing.
+    - Backing: `measurable` (scenario T20, including variant C for house/tag order, and
+      S-0414 V15 for within-update timing and continued raises after defeat).
+      The under-attack raise is `unmeasured`: T20 does not isolate attack notifications,
+      and this subset does not control their timing.
       The position after all objects' updates is `unmeasured`: T20 compares house and poll
       effects, not movement effects in the same tick
-    - Confidence: medium (low for the reverse order within a house and for the under-attack raise)
+    - Confidence: high for within-update timing and continued raises after defeat,
+      medium otherwise (low for the reverse order within a house and for the under-attack raise)
 
 ### Animations at a waypoint
 
@@ -836,8 +873,12 @@ and within a row the draws come in the order listed. It merges S-0009's table "S
 resolution" with the draws of this spec, of S-0010, S-0109 and S-0202. S-0202 claim 10 owns the
 overlay, vein-pattern and animation-creation draws. Together with claim 15 it supplies the
 immediate start-event composition, including immediate middle-event particle creation,
-smudge selection and conditional resource-removal effects. These apply within each listed
-animation-creation group, not as a separate loading group. Subsequent particle updates are
+smudge selection and conditional resource-removal effects. The whole immediate middle
+event's effects and draws precede any start-event resource chain reaction (S-0109 claim 13
+and S-0401 claim 20/E17). The reaction's conditional neighbour-offer, child-animation, detonation
+and post-detonation terrain-recalculation draws inherit S-0401's composition, not a fixed
+additional draw count. These apply within each listed animation-creation group, not as a
+separate loading group. Subsequent particle updates are
 outside this table's established composition, not draw-free.
 A row marked "not established" names a point at which draws may happen that no spec yet lists. Draws at points the table does not
 name are not established either. Nothing else in the table fixes an order of internal work.
@@ -965,8 +1006,10 @@ Value fields, in order:
 | 5, 6, 7 | difficulty flags for positions 0, 1, 2 | integer, non-zero = set | clear |
 | 8 | carry-over flag | integer, non-zero = set | clear |
 
-The carry-over flag makes a tag pass from an infantry unit to the building it takes over, and changes
-what a vehicle's destruction raises in one case. Neither is part of this revision (Open questions).
+The carry-over flag makes a tag pass from an infantry unit to the building it takes over
+(capture use remains open). Its vehicle-destruction effect is owned by S-0312 claim 29 and
+its Import mapping: together with a remembered hijacker type, it suppresses the extra vehicle
+raise group, not the common group (claim 19).
 
 **Events** — section `[Events]`, key = trigger ID. Value: *n*, then *n* events. Each event is three
 items, its code, its parameter kind and its value, followed by a fourth item, the type name, exactly
@@ -1103,8 +1146,9 @@ syntax are `measurable` through T24 (confidence: high, except ID-only contexts: 
 The waypoint-letter decoding and its missing-item default are `measurable` through T17 D (confidence:
 high). The 24-byte event/type-name cut and 31-byte action-text cut are `unmeasured`: no scenario
 here contrasts long names/labels with their prefixes (confidence: medium). Parameter kinds unused
-by the covered effects and the carry-over flag's effects are `unmeasured`: no action/event in this
-subset supplies an observable for them (confidence: medium); their deferred effects remain open.
+by the covered effects and the carry-over flag's capture effect are `unmeasured`: no
+scenario here supplies an observable for them (confidence: medium); their deferred effects
+remain open. The flag's vehicle-destruction effect inherits S-0312 claim 29/D20's backing.
 The set membership of event codes outside this subset is `unmeasured`: these scenarios do not
 exercise the deferred codes (confidence: medium).
 Absent rules defaults are `unmeasured`: T16/T21 use the stock imported fields, not absent keys
@@ -1261,19 +1305,30 @@ at any destruction. *Falsified if:* any differs.
 **Scenario T7 (claims 9, 19).** *Setup:* two neutral vehicles V1 and V2 carry one repeating tag whose
 only trigger has the single event destroyed-by-anything and a count action. The human destroys V1, then
 hits V2 several times with a weapon too weak to destroy it. *Observable:* counter drops, against the
-ticks of the hits. *Expected:* two firings in the tick of V1's destruction (the destroyed-by-anything
-raise and the raise that follows it, claim 19), then at least one firing in the tick of each hit on V2
-(a hit raises the tag one or more times, and the latched trigger fires in each raise). Variant: the same
-with repeat type 0: one firing at V1's destruction and none afterwards. With
-`quirks.persistent_event_latch` off, which only our engine offers, one firing at V1's destruction and
-none at the hits. Variant C (latch aliasing): the trigger instead has 33 events, on the same repeating
+ticks of the hits. Use a fresh tag for each run and a count action that leaves both vehicles
+and their tag alone. *Expected:* seven firings within the tick of V1's destruction by the
+human's attacker, then at least one firing in the tick of each hit on V2 (the latch fires in
+every hit-related raise). A no-attacker variant uses a separate polled trigger's explosion
+at a waypoint (claim 28), lethal to V1 and far enough from V2 not to hit it: four firings.
+The explosion does not change V1's repeating counter tag; no counter action kills a carrier.
+S-0312 D20 supplies the common-group-only controls, including the remembered-hijacker plus
+carry-over-flag case: two firings, with or without an attacker. With
+`quirks.vehicle_destruction_extra_raises` off, which only our engine offers, the normal
+vehicle likewise gives two firings. Repeat type 0 instead gives one firing at V1's destruction
+and none afterwards. With `quirks.persistent_event_latch` off and the extra vehicle group
+on, which only our engine offers, the normal repeating vehicle gives two firings at its death
+and none at the later nonlethal hits. With both switches off it gives one death firing and
+none at those hits. Variant C (latch aliasing): the trigger instead has 33 events, on the same repeating
 tag: position 1 destroyed-by-anything, positions 2 to 32 any-event, and position 33 type-exists
 naming a type name that no type has (which is never judged true). *Expected* in variant C: no
 firing before V1's destruction; at least one firing in the tick of V1's destruction and in every
 later tick, because position 33 shares the latch that position 1 gets (the tag is polled, since
 its chain contains any-event). With `quirks.event_latch_aliasing` off, which only our engine offers,
-no firing at all. *Falsified if:* in the main run V1's destruction brings other than two firings or
-the ticks of the hits on V2 bring no drops, or a variant differs from its expectation.
+no firing at all. *Falsified if:* in the main run V1's destruction brings other than seven
+firings, the no-attacker run brings other than four, a common-only control brings other than
+two, the ticks of later hits on V2 bring no drops, or a variant differs from its expectation.
+Timing, deferred deaths and retained infantry tags are tested by S-0312 D20, not by this
+vehicle counter alone.
 Variant D (timer alias clearing): use position 1 destroyed-by-anything, positions 2 … 32
 any-event, and position 33 elapsed-time 1. Destroy V1 after tick 15, then hit V2 without killing
 it. *Expected:* one firing on V1's destruction, not two; no firings at later polls or V2 hits.
@@ -1644,8 +1699,8 @@ using named test maps removed afterwards.
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.
-- **Carry-over flag.** Its use in captures and in one vehicle-destruction case (Import mapping, I1) is
-  not specified.
+- **Carry-over flag in captures.** Its capture use (Import mapping, I1) is not specified here.
+  S-0312 claim 29 owns its vehicle-destruction use.
 - **Codes outside this subset.** Every event and action code not in tables I3 and I4 is parsed by
   Import mapping, and its meaning belongs to a later revision. That includes the extra latch rule
   (a few codes of the latchable set, the build-type events for example, latch on any repeat type)
@@ -1653,9 +1708,10 @@ using named test maps removed afterwards.
 - **Carrier count of a lost carrier.** Whether an object that is destroyed, or leaves the map
   otherwise, while it still carries a tag stops counting as a carrier of it (claims 2, 10 and 19).
   It matters for all-carriers tags.
-- **Re-raises outside the subset** (claim 8). The exact codes and conditions of the extra raises at a
-  carrier's destruction, at a unit's arrival, under a unit in the air every 16 ticks, at an attack
-  on a building (claim 35) and at team events.
+- **Re-raises outside the subset** (claim 8). The exact codes and conditions of extra raises
+  at a unit's arrival, under a unit in the air every 16 ticks, at an attack on a building
+  (claim 35) and at team events. S-0312 claim 29 and its Import mapping establish the
+  destruction groups; the out-of-subset events' full conditions remain deferred.
 - **Destroy attached objects on a cell.** What the action does to the cell that raised the tag.
 - **Type-exists name lookup across kinds** (claim 21). Which type the type-exists and
   type-does-not-exist events use when types of two kinds share a type name.
@@ -1663,5 +1719,6 @@ using named test maps removed afterwards.
   names the trigger definition with that registration index (Import mapping, I2), but this revision
   does not state the order in which trigger definitions are registered.
 - **Other cheering objects** (claim 29). What the cheer action does to non-infantry objects.
-- **Continued owner-house raises after defeat** (claim 35). T20 does not test defeat or the
-  frequency of building-under-attack notifications.
+- **Building-under-attack notification frequency** (claim 35). T20 does not isolate those
+  notifications. Continued owner-house raises after defeat are established by S-0414
+  claim 18/V15.
