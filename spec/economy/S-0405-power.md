@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0180]
+requests: [Q-0180, Q-0224]
 supersedes: []
 ---
 
@@ -120,14 +120,16 @@ house's own update in a tick, which comes after the turn pass and before orders 
    Otherwise its output is formed from its *raw output*: the type's base output, plus, for an
    absorbing building whose type's extra output is above 0, the extra output times
    *n*<sub>a</sub>, plus the base output of each upgrade it holds when its upgrade count is positive
-   (Terms, *upgrade positions*). When its upgrade count is 0, no recorded upgrade adds output. The
+   (Terms, *upgrade positions*). When its upgrade count is 0, no recorded upgrade adds output.
+   With a positive count, every recorded position contributes, including positions numbered above
+   the count; the count is a gate, not a limit on the positions counted (Q-0224). The
    building makes trunc(raw output × health ratio) (Formulas F1), so a raw output of 0 gives 0. A
    damaged power plant therefore makes less power in proportion to its health, rounded down, and a
    power plant at 0 health makes none. The extra output of a building that is not absorbing adds
    nothing; nothing in the original adds it. A pulse does not change the output: a power plant
    under a pulse is not in operation (claim 8) but keeps making its full output.
    - Backing: `measurable` (scenario W1, parts a to d, f and g; W7 for switched-off output,
-     W12 for upgrades); `unmeasured` for output at health 0 before removal (W1 tests health 1,
+     W12 for upgrades, parts f and g for Q-0224); `unmeasured` for output at health 0 before removal (W1 tests health 1,
      and destruction normally removes the plant before a separate total can be read).
    - Confidence: high (the formula, the switch, no effect of a pulse), medium (upgrades, absorbed
      passengers, the extra output of other buildings, being erased)
@@ -136,9 +138,11 @@ house's own update in a tick, which comes after the turn pass and before orders 
    it is the type's base drain, plus the base drain of each upgrade it holds when its upgrade count
    is positive (Terms, *upgrade positions*), plus the type's extra drain while the building's
    super-gap is active (claim 16). When its upgrade count is 0, no recorded upgrade adds drain.
+   With a positive count, every recorded position contributes, including positions numbered above
+   the count (Q-0224).
    Health does not change the drain: a damaged building needs as much power as an undamaged one. A pulse does not change it
    either.
-   - Backing: `measurable` (scenario W1, parts e, f and g; W7 for switching; W12 for upgrades).
+   - Backing: `measurable` (scenario W1, parts e, f and g; W7 for switching; W12 for upgrades, parts f and g for Q-0224).
      The super-gap extra drain is `unmeasured` for claim 16's reason.
    - Confidence: high (base drain, no health scaling, the switch), medium (upgrades, being erased)
 
@@ -431,7 +435,7 @@ house's own update in a tick, which comes after the turn pass and before orders 
     of 0. Unlike power orders, this initial-state rule does not exclude the firestorm-wall
     flag: a firestorm-wall type meeting either condition starts switched off with a map flag
     of 0, and one meeting neither starts switched on. The power-mode flag does not decide
-    this initial state. This rule differs from approved S-0009 claim 37, which currently says a zero flag starts every building switched off exactly as an in-play switch-off; S-0009 claim 37 must be revised in the same handoff to defer to this claim's conditional rule.
+    this initial state. S-0009 claim 40 already states this conditional initial-state rule and owns the map field's encoding.
 
     Later power orders follow claim 10 without an exception for map placement. A non-firestorm
     building that started switched off can be switched on by an applicable power-on order
@@ -550,7 +554,7 @@ remain through tick *n*, and the re-evaluation is in tick *n* + 1 (claim 7, S-04
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
-| Rules, building section, `Power` | base output (value ≥ 0) or base drain (−value, value < 0) (Terms, claims 1, 2) | integer | 0; a layer without the key keeps the value in force |
+| Rules, building section, `Power` | base output (value ≥ 0) or base drain (−value, value < 0), for the host and each upgrade type; upgrade contributions use claims 1 and 2's count gate, not a position limit (Q-0224) | integer | 0; a layer without the key keeps the value in force |
 | Rules, building section, `ExtraPower` | extra output (value ≥ 0) or extra drain (−value, value < 0) (Terms, claims 1, 2, 16) | integer | 0; keeps |
 | Rules, building section, `InfantryAbsorb`, `UnitAbsorb` | absorbing building (claim 1; the passenger rules are S-0312's) | boolean | no |
 | Rules, building section, `Powered` | needs-power flag (claim 8) | boolean | no |
@@ -856,6 +860,10 @@ switched off the house has full power (W3's second pair).
   level-less upgrades: a lower upgrade of output 10 and an upper upgrade of output 20 whose type
   has the turret flag of S-0408 claim 5. A second variant gives the lower upgrade drain 5 instead
   of output 10. No other building contributes output or drain in either variant.
+  Part (g) uses a fresh full-health P with three level-less upgrades: lower output 10,
+  middle output 20, and upper output 0 with the turret flag. A second variant gives the middle
+  upgrade drain 5 instead of output 20. A replacement level-less upgrade has output 30 and
+  no turret flag. No other building contributes power in these variants.
 - *Procedure:* (a) add the three upgrade types to P one at a time (S-0406 claim 12 gives how),
   reading *O* and *D* after each. (b) Add the four upgrade types to WT one at a time, reading *O*
   after each. (c) In a fresh run, give P all three upgrades and damage it to health 333.
@@ -865,8 +873,10 @@ switched off the house has full power (W3's second pair).
   (f) In each turret variant, read totals with both upgrades attached, sell the upper upgrade,
   then read settled totals, the upgrade count and the recorded positions. Give another sell
   order and observe whether the host begins its ordinary sale rather than selling the lower upgrade.
+  (g) In each three-upgrade variant, sell the upper turret upgrade, read settled totals, then
+  add the replacement upgrade and read settled totals, the count and recorded positions.
 - *Runs:* three per part and per variant.
-- *Observable:* *O* and *D* after each addition, damage or upgrade sale; in (f), also the count,
+- *Observable:* *O* and *D* after each addition, damage or upgrade sale; in (f) and (g), also the count,
   recorded upgrades and the host's ordinary sale, using the read-only recorder and scripted input.
 - *Expected:* (a) *O* 110, then 130; *D* 5 after the third, *O* still 130. (b) *O* 60, 80, 110 and
   110 again after the fourth. (c) *O* 86 and *D* 5: health scales all raw output, not drain.
@@ -876,9 +886,14 @@ switched off the house has full power (W3's second pair).
   *O* 120 and *D* 5. After it, both have *O* 100 and *D* 0, count 0, the lower position still
   recorded and the upper position empty. The next sale begins the host's ordinary sale in both
   variants (S-0408 claim 6).
+  (g) After the turret sale both variants have count 0, positions 1 and 2 retained, position 3
+  empty, *O* 100 and *D* 0. After the replacement, both have count 1 and the replacement
+  in position 1, with position 2 unchanged: the output variant has *O* 150 and *D* 0,
+  the drain variant has *O* 130 and *D* 5. Thus the position above the positive count contributes.
 - *Falsified if:* any sum differs from the expected value in its part, or in (f) the lower
   position is cleared, the count stays positive, its upgrade still contributes power, or the next
-  sale sells the lower upgrade instead of the host.
+  sale sells the lower upgrade instead of the host, or in (g) position 2 is cleared or fails to
+  contribute after the count becomes 1.
 
 **W13: map-requested power state (claim 18, Q-0180).**
 - *Setup:* a named test map defines full-health test building types: P with base output 100,

@@ -1,9 +1,9 @@
 ---
 id: Q-0224
 title: Do recorded upgrades count in power when the building's upgrade count is 0?
-status: open
+status: answered
 related: [S-0405, S-0408, S-0406]
-answered-by: []
+answered-by: [S-0405]
 ---
 
 ## Need
