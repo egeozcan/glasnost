@@ -1585,11 +1585,17 @@ fn s0415_claim_9_offered_yard_without_redeploy_is_sold_without_release() {
     let (_, gained, released, vehicles) = offered_yard_sold(false, true);
     assert!(gained > 0, "the ordinary sale refund");
     assert_eq!(vehicles, 0, "no returned vehicle");
-    assert!(!released, "no release with a guard spot under the default quirk");
+    assert!(
+        !released,
+        "no release with a guard spot under the default quirk"
+    );
     let (_, gained_off, released_off, vehicles_off) = offered_yard_sold(false, false);
     assert_eq!(gained_off, gained);
     assert_eq!(vehicles_off, 0);
-    assert!(released_off, "quirk off: a sale that does not pack up releases");
+    assert!(
+        released_off,
+        "quirk off: a sale that does not pack up releases"
+    );
     // Control: with the redeploy setting on, the same yard packs up and pays nothing.
     let (_, gained_on, released_on, vehicles_on) = offered_yard_sold(true, true);
     assert_eq!(gained_on, 0);
