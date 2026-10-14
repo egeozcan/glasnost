@@ -572,6 +572,37 @@ fn maximum_damage_of_zero_or_below() {
     }
 }
 
+// spec: S-0314 claim 1 and scenario H1 part c (a negative delivered amount bypasses a negative maximum)
+// spec: S-0302 claim 6 (revision 18: a negative maximum caps a positive amount made negative by its versus value, but not a negative delivered amount, which heals unchanged within healing reach)
+#[test]
+fn negative_maximum_skips_a_negative_delivered_amount() {
+    let mut r = testkit::combat_ruleset();
+    vehicle(&mut r, "BOX", |_| {});
+    warhead(&mut r, "W", |h| h.verses = every("1"));
+    warhead(&mut r, "NEG", |h| h.verses = every("-0.5"));
+    r.sim.general.max_damage = Some(-5);
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let t = put(&mut w, Kind::Vehicle, "BOX", BETA, 0);
+    set_health(&mut w, t, 500);
+    // A delivered −20 within reach: healed by 20, not capped at −5.
+    assert_eq!(
+        loss!(w, t, hit(-20, wh(&w, "W"))),
+        (-20, HitResult::Unaffected)
+    );
+    // A positive 100 made −50 by its versus value: min(−50, −5) = −50 heals by 50.
+    set_health(&mut w, t, 400);
+    assert_eq!(
+        loss!(w, t, hit(100, wh(&w, "NEG"))),
+        (-50, HitResult::Unaffected)
+    );
+    // A positive 4 made −2: min(−2, −5) = −5.
+    set_health(&mut w, t, 400);
+    assert_eq!(
+        loss!(w, t, hit(4, wh(&w, "NEG"))),
+        (-5, HitResult::Unaffected)
+    );
+}
+
 // spec: S-0302 claim 6 and F3 cases (iii) and (iv) (a negative amount heals by itself, ignoring the versus value, below 8 leptons only)
 #[test]
 fn healing_reaches_below_eight_leptons_only() {

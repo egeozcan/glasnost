@@ -282,6 +282,7 @@ Provisional rules of combat, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
+| `combat::heal` (automatic repair and sale) | no house repairs or sells a building by itself at any repair-and-sell threshold; only the repair and sell orders do (S-0314 claim 8 leaves the conditions after the skill-level gate open) | Q-0341 |
 
 ## Simulation (M5a: economy and base building)
 
