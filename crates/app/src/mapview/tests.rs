@@ -1792,7 +1792,8 @@ fn oversized_voxel_model_warns_once() {
         let mut model = synthetic_model();
         // The body section stretched along x.
         model.limbs[0].max[0] = F32Bits::new(stretch);
-        ctx.2.insert(b"carx.vxl", VxlWriter { model: &model }.write());
+        ctx.2
+            .insert(b"carx.vxl", VxlWriter { model: &model }.write());
         // Two cars facing differently: two body images and two shadows of the same model.
         let (b, _) = build_in(
             ctx,

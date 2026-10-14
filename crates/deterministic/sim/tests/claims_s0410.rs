@@ -260,7 +260,10 @@ fn claim_6_negative_centre_heights() {
     let at = |j: i32| CellXY::new(c.x + j, c.y + j);
     let p = |z: i32| Pos::new(256 * c.x + 128, 256 * c.y + 128, z);
     // −103: z = 0, the cell itself (truncation toward zero, not floor; no clamp to height 0).
-    assert_eq!(shroud::point_candidates_on(p(-103), true, true), (at(0), None));
+    assert_eq!(
+        shroud::point_candidates_on(p(-103), true, true),
+        (at(0), None)
+    );
     // −207: z = −1, k = 1: c − 1 and c. With only c + 1 explored the pixel is black, and the gap
     // test needs both c − 1 and c covered.
     assert_eq!(
@@ -268,7 +271,10 @@ fn claim_6_negative_centre_heights() {
         (at(-1), Some(at(0)))
     );
     // −311: z = −2, the one cell c + 1.
-    assert_eq!(shroud::point_candidates_on(p(-311), true, true), (at(1), None));
+    assert_eq!(
+        shroud::point_candidates_on(p(-311), true, true),
+        (at(1), None)
+    );
     // The pair switch off: k = 0, c and c + 1 (the both-covered replay shows ordinary terrain
     // when c + 1 is explored but not covered).
     assert_eq!(
@@ -278,7 +284,10 @@ fn claim_6_negative_centre_heights() {
     // The flat-grid switch off: the cell itself, whatever the height or the pair switch.
     for z in [-311, -207, -103, 0, 104, 207] {
         for pair in [true, false] {
-            assert_eq!(shroud::point_candidates_on(p(z), pair, false), (at(0), None));
+            assert_eq!(
+                shroud::point_candidates_on(p(z), pair, false),
+                (at(0), None)
+            );
         }
     }
     // The radar's tests on flat ground at levels −1, −2 and −3, against the explored cells.
@@ -302,7 +311,11 @@ fn claim_6_negative_centre_heights() {
         let want = !explored(a) && !b.is_some_and(explored);
         assert_eq!(minimap::cell_shrouded(&w, A, c), want, "{c:?}");
         assert_eq!(minimap::cell_shrouded_on(&w, A, c, true), want, "{c:?}");
-        assert_eq!(minimap::cell_shrouded_on(&w, A, c, false), !explored(c), "{c:?}");
+        assert_eq!(
+            minimap::cell_shrouded_on(&w, A, c, false),
+            !explored(c),
+            "{c:?}"
+        );
         if want {
             black += 1;
         } else {

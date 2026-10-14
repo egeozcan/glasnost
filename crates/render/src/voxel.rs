@@ -2054,7 +2054,9 @@ pub fn draw_model(
         .collect();
     // spec: S-0105 claim 22 (a part whose placement inputs, section bounds, transforms or derived
     // projection, are not finite is not drawn)
-    if !transforms.iter().all(Mat34::is_finite) || !corners.iter().flatten().flatten().all(|v| v.is_finite()) {
+    if !transforms.iter().all(Mat34::is_finite)
+        || !corners.iter().flatten().flatten().all(|v| v.is_finite())
+    {
         return None;
     }
     let bounds = Bounds::of(corners.iter().flatten())?;
@@ -4674,20 +4676,37 @@ mod tests {
             }
         }
         // Vertically too (rows are −y).
-        let tall = model(vec![filled([1, 1, 1], [0.0; 3], [1.0, 9000.0, 1.0], 1, 64, 0)]);
+        let tall = model(vec![filled(
+            [1, 1, 1],
+            [0.0; 3],
+            [1.0, 9000.0, 1.0],
+            1,
+            64,
+            0,
+        )]);
         let img = draw_model(&tall, 0, &Mat34::IDENTITY, None, false, &q()).unwrap();
         assert_eq!(img.copy_size, [9, 9008]);
         assert_eq!([img.width, img.height], [9, IMAGE_LIMIT as u32]);
         // Lands at trunc(−4500) − 4504 = −9004, shifted by ⌊(9008 − 4096)/2⌋ = 2456.
         assert_eq!(img.offset[1], -9004 + 2456);
         // A shadow footprint follows the same window.
-        let plate = model(vec![filled([2, 2, 1], [0.0; 3], [9000.0, 2.0, 1.0], 1, 51, 0)]);
+        let plate = model(vec![filled(
+            [2, 2, 1],
+            [0.0; 3],
+            [9000.0, 2.0, 1.0],
+            1,
+            51,
+            0,
+        )]);
         let s = draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, &q()).unwrap();
         assert!(s.exceeds_limit());
         assert_eq!(s.width, IMAGE_LIMIT as u32);
         let [w, _] = s.copy_size;
         let landed = (9000 + 2 * 3) / 2 - w / 2;
-        assert!((s.offset[0] - (landed + (w - IMAGE_LIMIT) / 2)).abs() <= 1, "{s:?}");
+        assert!(
+            (s.offset[0] - (landed + (w - IMAGE_LIMIT) / 2)).abs() <= 1,
+            "{s:?}"
+        );
     }
 
     /// spec: S-0105 claim 22 (non-finite placement: a part or shadow whose section bounds or

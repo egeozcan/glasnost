@@ -2597,10 +2597,9 @@ impl Builder<'_> {
                 continue;
             };
             if let Some(part) = self.cached_part(k, idx, key, |b| {
-                let img = b
-                    .p
-                    .canvas
-                    .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q);
+                let img =
+                    b.p.canvas
+                        .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q);
                 b.limit_checked(&file, role, key, img)
             }) {
                 items.push(Self::part_item(
@@ -3235,10 +3234,9 @@ impl Builder<'_> {
         let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
             let body = b.voxel_model(&shadow_file)?;
             // spec: S-0105 claim 32 (a shadow never enables depth mode, whatever the type's option)
-            let img = b
-                .p
-                .canvas
-                .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
+            let img =
+                b.p.canvas
+                    .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
             b.limit_checked(&shadow_file, "shadow", shadow_key, img)
         };
         // An aircraft's shadow comes before the body, which covers it.
@@ -3326,10 +3324,14 @@ impl Builder<'_> {
                     } else {
                         (p.turret, turret_frame)
                     };
-                    let img = b
-                        .p
-                        .canvas
-                        .draw_part(&model, frame, &draw, vpl.as_ref(), depth_buffered, &q);
+                    let img = b.p.canvas.draw_part(
+                        &model,
+                        frame,
+                        &draw,
+                        vpl.as_ref(),
+                        depth_buffered,
+                        &q,
+                    );
                     b.limit_checked(&file, part_name, key, img)
                 }) {
                     placed.push(part);
