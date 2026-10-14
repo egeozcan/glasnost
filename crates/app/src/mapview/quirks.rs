@@ -292,10 +292,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0108 claim 4: a sale's build-down is not drawn (a building being sold is drawn idle)",
     ),
     (
-        "building_wrap_normalisation",
-        "S-0108 claim 6: building body ranges are not played",
-    ),
-    (
         "turret_building_no_body_wrap",
         "S-0108 claim 6: building body ranges are not played",
     ),
