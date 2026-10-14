@@ -6079,6 +6079,11 @@
           "type": "boolean",
           "default": true
         },
+        "factory_unload_waits_ready_mark": {
+          "description": "A factory's release queues *unload* and its closing queues *guard*,\neach starting only at a per-tick start that finds the ready mark\nset; off: queueing either also sets the ready mark.",
+          "type": "boolean",
+          "default": true
+        },
         "failed_packup_keeps_vehicle": {
           "description": "The vehicle of a failed pack-up remains.",
           "type": "boolean",
@@ -6181,6 +6186,11 @@
         },
         "ground_detonation_misses_aircraft": {
           "description": "Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "harvester_failed_step_off_origin": {
+          "description": "An idle harvester whose step-off search finds no cell gets the\noff-map destination cell (0, 0); off: its destination is cleared.",
           "type": "boolean",
           "default": true
         },

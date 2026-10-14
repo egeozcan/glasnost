@@ -304,10 +304,8 @@ Provisional rules of M5a, each tied to a request:
 | `econ::release` (closing) | the processing that queues *guard* after unloading sets the ready mark, so *guard* starts at the second per-tick start of that tick | Q-0222 |
 | `econ::body::set_up` | a turreted building placed at game set-up also gets its ready mark, so its queued *guard* (S-0215 claim 1) becomes current at its first per-tick start; no rule of the specs is known to set it otherwise | Q-0241 |
 | `econ::release::arrival` | a vehicle's cell-arrival update is its reaching a track target (drive) and an infantry unit's is S-0208 claim 6's arrival tick | Q-0223 |
-| `econ::harvest::process_enter` | S-0402 claim 10's second route (a tethered harvester in *enter* finishing entering a cell whose step-direction-0 neighbour holds its refinery asks for *unload*, and scatters on a refusal) is not implemented; *unload* comes only from row 4 | Q-0197 |
 | `econ::release::ring` | with `quirks.foundation_exit_lists` off, a foundation without cells (0 × 0) has an empty exit list, as with the switch on | Q-0195 |
 | `econ::tech::recheck` (full tab) | S-0004 claim 11's 76-item cap is not applied: every offered type gets an icon and stays in the taken-up set | Q-0196 |
-| `econ::harvest` (the idle step-off) | when the step-off search of S-0402 claim 13 gives no cell, the harvester stays where it is, with no destination, and still queues *guard* (no draw) | Q-0194 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 | `econ::production`, `econ::release::clone_copies` | objects created on the same tick take their creation draws in application order: orders in arrival order, line starts in S-0404 claim 1's line order; cloning copies in acquisition order, each created and released before the next | Q-0226 |
 

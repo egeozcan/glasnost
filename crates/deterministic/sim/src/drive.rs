@@ -1167,6 +1167,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
+            // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
+            crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);
             return true;
         }
