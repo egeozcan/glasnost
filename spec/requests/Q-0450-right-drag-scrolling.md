@@ -3,7 +3,7 @@ id: Q-0450
 title: How does the view move during a right-button drag?
 status: answered
 related: [S-0214, S-0101]
-answered-by: [S-0101]
+answered-by: [S-0101, S-0214]
 ---
 
 ## Need

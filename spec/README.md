@@ -74,7 +74,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0209](movement/S-0209-occupancy-crowding.md) | Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests) | movement | 24 | approved | — |
 | [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 15 | approved | — |
 | [S-0408](economy/S-0408-sell-repair.md) | Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired) | economy | 14 | approved | — |
-| [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 23 | approved | — |
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 8 | approved | — |
 | [S-0410](ui/S-0410-radar-minimap.md) | Radar and minimap (when radar is available, what the radar map shows and how it is coloured) | ui | 14 | approved | — |
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 10 | approved | — |
@@ -98,3 +97,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0101](rendering/S-0101-isometric-projection.md) | Isometric projection, height lift, view position and scroll limits | rendering | 9 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 12 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 8 | approved | — |
+| [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 24 | approved | — |

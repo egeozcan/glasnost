@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452]
 supersedes: []
 ---
 
@@ -814,12 +814,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     an object order. Without a sampled crossing it is the right click of claim 26 or 28.
     Dragging with the right button therefore permits changing the view while retaining
     the selection. The scrolling rate, direction, pointer recentering and view limits are
-    companion rules of S-0101; this claim fixes only the gesture and release distinction.
-    The original's threshold depends on host drag metrics, not on imported game rules or
-    the scroll-speed setting. By decision of the project lead, our engine uses a fixed
-    metric of 4 pixels on each axis (the usual host default), so a right drag starts beyond
-    8 pixels on either axis; no universal numeric pixel threshold is asserted for the
-    original.
+    companion rules of S-0101 claim 16 and F10; its claim 17 owns the separate drag-scroll
+    cursor, not the edge-scroll images (Q-0450). This claim fixes only the gesture and
+    release distinction. The original's threshold depends on host drag metrics, not on
+    imported game rules or the scroll-speed setting. By decision of the project lead, our
+    engine uses a fixed metric of 4 pixels on each axis, so a right drag starts beyond
+    8 pixels on either axis; no universal numeric pixel threshold is asserted for the original.
     - Backing: `measurable` (Scenario T19)
     - Confidence: high for the axis test, strict comparison and latched release distinction
 
@@ -839,6 +839,32 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Backing: `measurable` (Scenario T20)
     - Confidence: high for cancellation versus deselection and placement-item retention,
       medium for route-editing interactions
+
+29. **Box addition order (Q-0452).** For an ordinary box, the successful additions retain
+    the relative order of the admitted candidates of claim 25 after restricting them to
+    the rectangle and claim 19's eligibility. This is the same order whether the box
+    replaces or adds to the selection, and regardless of drag direction. There is no
+    reversal, new position sort or creation-order sort of mobile candidates at release.
+    Each addition uses claim 12: the newly added positive-primary-damage objects therefore
+    end up in reverse candidate order at the front, while other newly added objects retain
+    candidate order at the end. In an additive box, already-selected objects are not
+    added again or moved to a new position. S-0701 claim 17's selection response belongs
+    to the earliest successful addition in candidate order, not the eventual first selected
+    object; that response rule is already specified there.
+
+    A type-select drag encounters its in-box live candidates in the same candidate order,
+    but its additions are grouped by encountered type rather than simply being the ordinary
+    box's eligible candidates. Types are expanded in the order of their first in-box
+    encounter. Within each type's on-screen expansion, additions retain the candidate order
+    of claim 25, including matching candidates outside the box. Already-selected objects
+    are not added again or repositioned, so encountering that type again does not reorder
+    its earlier additions. When claim 12's double-press widens the expansion to the whole
+    map, additions within each type instead follow creation order among surviving objects.
+    Claim 12's front/end rule still determines the final selection in both variants.
+    The type-select drag is silent under S-0701 claim 17, independently of these orders.
+    - Backing: `measurable` (Scenario T21; S-0701 claim 17 for response ownership and silence)
+    - Confidence: high for ordinary and on-screen type-expansion order; medium for whole-map
+      creation order
 
 ## Formulas
 
@@ -1573,6 +1599,8 @@ Ordering consequences:
 | Attack-move entry | claim 5 | held Ctrl+Shift, or the available command-bar button; no dedicated default keyboard command | gesture available without a command bar |
 | Mouse-button scheme | claims 26–28 | no game INI/settings key exchanges left selecting/order clicks with right deselect/cancel clicks | fixed left/right roles |
 | Right-drag threshold | claim 27, F8 | host drag metrics, not an INI/rules key; distinct from left-drag F6 | host-dependent in the original; ours is fixed at 4 pixels per axis (lead decision) |
+| Right-drag movement and image | S-0101 claims 16 and 17 | scrolling-method preference, scroll index and imported cursor asset as mapped there | S-0101 Import mapping |
+| Box addition order | claim 29 | candidate/drawing order and type expansion, not an imported selection-order key | no separate data field |
 | Transient box points and crowded-view admission | qualifications of claims 19 and 20 | drawing-state behaviour, not imported selection-distance or count keys | no additional imported default; unresolved details have settling scenarios |
 | Object type `Immune` | immune target (rows I27, V6, AC5, AC9, B8) | boolean (S-0003) | no |
 | Object type `LegalTarget` | legal target (claim 6 (a), attackable cell) | boolean (S-0003) | yes |
@@ -2405,6 +2433,45 @@ right click, retained mode after a non-drag click, extra ordinary deselection on
 exit, or mode cancellation after a classified drag falsifies the corresponding rule.
 Unavailable targeting modes are inconclusive; do not force otherwise unreachable
 mode combinations by changing the game's state.
+
+**Scenario T21: box addition and type-expansion order (claim 29, Q-0452).** Use an
+isolated revealed flat skirmish map, speed 6, 800×600, stock data, director and mods off,
+with one bystander computer player kept outside the test area under the glossary's void
+rule. Use scripted input, tick-labelled video with sound, and a read-only recorder of
+candidate identities, successful additions and the resulting selection order. Run each
+case three times, repeating a run if the candidate order changes during release.
+
+For an ordinary box, place own tanks, unarmed engineers and a vehicle-like building
+at distinct drawing sort keys, plus an ineligible ordinary building and an enemy unit.
+Keep well below candidate capacity. Record candidate order rather than assuming map
+placement order equals it. Box the group in both drag directions, first replacing an
+outside selection and then adding with force-select. Expected: successful additions
+are the eligible in-box subsequence in recorded candidate order. The building subgroup
+precedes mobiles. Positive-primary-damage additions reverse that order at the front,
+while others retain it at the end. Preselect one in-box unit before the additive run: it must
+not be repositioned or give a new selection response. Record the responding object's
+identity, not merely the eventual first selected object. Expect the earliest successful
+addition to own that response under S-0701 claim 17. Repeat with ground and airborne
+own mobile objects so layer order differs from creation order.
+
+For type expansion, label two selectable own types A and B, with candidate order
+A0, B0, A1, B1. Arrange a box containing only A1 and B1, with A0 and B0 elsewhere
+in the same view. Hold the type-select role once, not a double press, and release the
+box. Expected addition order: A0, A1, B0, B1, before claim 12's front/end transformation,
+with no selection response. Enclosing another A candidate must not reposition the already
+added A objects. Reverse which type has the first in-box encounter while keeping each
+type's recorded candidate order: the type groups reverse, not their within-type order.
+Repeat additively with A0 preselected. Then double-press the type-select role within
+claim 12's interval and repeat with same-type objects off screen whose creation order
+differs from drawing order. Expected: each encountered type expands map-wide in surviving
+creation order. Remove an early-created witness and create a later one in a separate
+run to test that surviving creation order is retained. Type-select runs remain silent.
+
+A different successful-addition sequence, change with drag direction, repositioning of
+an already-selected object, or speech from a later ordinary-box addition falsifies the
+corresponding rule. A type drag that merely retains interleaved candidate order across
+types, uses creation order for the on-screen expansion, uses drawing order map-wide,
+or gives a selection response falsifies its corresponding type-expansion rule.
 
 ## Open questions
 
