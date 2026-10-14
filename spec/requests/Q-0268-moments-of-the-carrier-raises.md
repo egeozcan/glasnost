@@ -3,7 +3,7 @@ id: Q-0268
 title: The moments of the entered-by and destroyed-by-anything raises
 status: answered
 related: [S-0011, S-0207, S-0208, S-0209, S-0312]
-answered-by: [S-0312, S-0207]
+answered-by: [S-0312, S-0207, S-0208]
 ---
 
 ## Need

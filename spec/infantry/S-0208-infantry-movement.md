@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 20
+revision: 21
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268]
 supersedes: []
 ---
 
@@ -67,7 +67,11 @@ agree with S-0212 claim 25's corresponding search-use row. Retain both texts tog
 including the distinct search deck mode and standing-position deck mode. The coordinated
 blocked-first-check rule belongs to S-0207 claim 15 and S-0212 claim 22, and failed-approach
 searches, including close-range failure, belong to S-0307 claim 17 and S-0212 claim 25.
-Neither changes this infantry teleport fallback.
+Neither changes this infantry teleport fallback. Claim 19 now answers Q-0311's
+post-jump infantry record lifecycle; it must be handed off with the matching S-0209
+occupancy pointer. Claim 22 answers Q-0268's ordinary walking arrival timing. Its
+teleport timing was already answered by S-0207 claim 22 in this round; destruction
+and death-sequence tag retention remain S-0312's answers, not movement rules.
 
 ## Terms
 
@@ -301,7 +305,7 @@ used by this spec:
 
    The chosen position is reserved at once: from the tick on which the walker chooses it, the
    occupancy record of the cell being entered shows that position as taken, and the walker's
-   standing position in the cell it is leaving is shown as free (S-0209 claim 1). A walker therefore
+   standing position in the cell it is leaving is shown as free (S-0209 claim 1). An ordinary walker therefore
    holds exactly one entry in the occupancy record at any time: its walking target while it has one,
    otherwise the position it stands on. One exception is the top position (claim 2, Edge
    cases): a unit at the top position and a unit at the centre of the same cell share the centre's
@@ -562,10 +566,13 @@ used by this spec:
     Consequences, from S-0212 claim 25 and S-0209 claim 1: the search does not give the cell the
     unit stands in while the unit's own standing position is marked there, but it can give the
     scatter centre cell itself when that is a walker's next cell and its record is empty. The
-    unit's own position is marked except in the case of Edge cases (the top position recorded as the
-    centre): a unit left at the top or the centre position after its cell-mate at the other of these
-    two positions has gone is not marked, and what the search then gives for its own cell is
-    S-0212's (claim 25). On open flat
+    unit's own position is normally marked, with two exceptions here: the top position
+    recorded as the centre (Edge cases), and claim 19's infantry teleport from a
+    ground-height chosen point onto a deck without a new deck mark. In the first case,
+    a unit left at the top or centre after its cell-mate at the other position has gone
+    is not marked. In either case what the search gives for its own cell is S-0212's
+    (claim 25), including its candidate-layer selection, not a blanket exclusion of
+    the unit's current cell. On open flat
     ground with no other units within 2 cells, an idle unit's search collects exactly the eight
     neighbours of its cell, all preferred, so the destination is the neighbour at position
     (*N* mod 8) of the search's collection order, where *N* is the tick number (Terms) of the tick
@@ -862,9 +869,30 @@ used by this spec:
 
     At the actual jump onto a high-bridge cell the infantry is listed on the deck and has
     deck height, regardless of the earlier position-choice mode (S-0207 claim 20 e).
-    Subsequent occupancy, scatter and movement use its deck status, not ground status
+    Subsequent occupancy checks, scatter and movement use its deck status, not ground status
     merely because the earlier reservation used ground. The teleporting locomotor still
     governs movement until some rule changes it; this is not a change to walking locomotion.
+
+    **Post-jump standing-position record (Q-0311).** Landing does not transfer the
+    infantry reservation or add a standing-position mark at its actual position. For a
+    ground-height chosen point followed by deck placement, the chosen position remains
+    taken in the landing cell's ground record. The deck record acquires no mark for it
+    at the jump, although the infantry is listed on the deck. A position already marked
+    on the deck by another occupant remains marked by that occupant. If the point was
+    chosen at deck height instead, its earlier deck reservation remains there normally.
+
+    On a later destination choice, after the completed jump, the old entry is cleared
+    using the infantry's actual position and height, not its former chosen ground-height
+    point. A deck departure therefore clears the corresponding deck position, even if
+    this infantry never marked it there, and leaves its ground mark taken. A successful
+    choice marks the next landing point as above; a refused choice marks the infantry's
+    current deck position. In the otherwise empty successful-next-jump case, the former
+    landing cell is left with a ground standing-position mark but no infantry listed on
+    either surface. Ground standing-position choices still treat that mark as taken.
+    These are plain taken/free entries, not counted reservations: clearing can also
+    clear a mark another infantry shares (S-0209 claim 1).
+    This mismatch is `quirks.teleport_infantry_ground_reservation` (Edge cases).
+    It is not the vehicle reservation rule of S-0207 claim 20 a.
 
     **Refused replacement before the jump (Q-0235).** When a new destination reaches this
     landing-point choice before an earlier chosen landing point has been jumped to, the
@@ -877,10 +905,11 @@ used by this spec:
     earlier landing point of non-infantry in S-0207 claim 20 b. It concerns a destination
     that reaches landing choice, not one rejected earlier by S-0207 claim 20 a's disabling
     conditions.
-    - Backing: `measurable` (scenario W11, especially parts d and h for Q-0235)
+    - Backing: `measurable` (scenario W11, especially parts d and h for Q-0235,
+      and part i for Q-0311's post-jump records and later clearing)
     - Confidence: high for position choice, record choice, reservation, refused replacement,
       the four behaviours, the cell/object distinction and draws; medium for the search
-      choices and combined bridge consequences
+      choices, post-jump record lifecycle and combined bridge consequences
 
 20. **Placement-time clearing is not owner-dependent.** When placement's fall-back to rest
     supplies a destination to an infantry unit with the teleporting locomotor, the destination
@@ -931,6 +960,34 @@ used by this spec:
     - Backing: `measurable` (scenario W13; S-0307 scenario RG23 backs the shortcut selection)
     - Confidence: high for the two distinct points and the second position choice; medium
       for the combined arrival and subsequent destination outcome
+
+### Cell-tag arrival
+
+22. **Walking cell-tag arrival timing (Q-0268 part 1).** An ordinary walking infantry
+    unit raises the current cell's entered-by tag during the arrival update on the
+    tick it snaps to its walking target under claim 6. Its position and height already
+    equal that target, and its walking target has been cleared. The arrival update
+    can clear its destination under claim 17 before the tag's actions, so those
+    actions observe the resulting destination, not necessarily the one held at the
+    start of the tick. S-0011 claim 18 supplies tag eligibility, including the
+    deck-only condition in a high-bridge cell.
+
+    Stopping is not required. Every intermediate standing-position arrival on an
+    uninterrupted walk can raise the cell's tag, even when the destination lies
+    farther away and the walker continues next tick. Reserving the next cell on the
+    asking tick, crossing the cell boundary between walking targets, and merely
+    being within the arrival radius after a physical step do not themselves raise
+    it. A same-cell standing-position arrival from claim 21 also runs this update.
+    If an entry interaction has already removed the infantry before the common
+    arrival update, no current-cell arrival raise is promised by this rule.
+
+    Infantry using their own teleporting locomotor instead follow S-0207 claim 22:
+    landing raises the tag in the jump tick after position, height and listing have
+    changed, not at reservation or at the end of phasing in. This does not change
+    claim 19's post-jump standing-position record rule.
+    - Backing: `measurable` (scenario W14; teleport timing also S-0207 scenario D24)
+    - Confidence: high for walking-target arrival versus reservation or boundary
+      crossing; medium for the combined observable ordering and same-cell case
 
 ## Formulas
 
@@ -1217,6 +1274,16 @@ W10).
 - **No early stop against non-mobile targets** (claim 17). A walker approaching a building or a
   cell always walks to its approach cell, even when it came into range earlier. It has no switch.
 
+- **Infantry teleport ground reservation left behind**
+  (`quirks.teleport_infantry_ground_reservation`, default: original). Claim 19's
+  ground mark survives deck placement without a matching new deck mark. A later
+  destination choice clears by actual deck height, leaving ground taken and
+  potentially clearing another infantry's deck mark. With the switch off, the
+  reservation moves to the actual landing surface at the jump, at the same standing
+  position: ground is released, deck is marked, and later clearing uses that deck
+  entry. This switch is separate from the vehicle switch because infantry landing
+  does not add the vehicle's placement-time occupation mark.
+
 ## Import mapping
 
 | User data | Feeds | Form | Absent |
@@ -1228,9 +1295,10 @@ W10).
 | Art, image section, `Crawls` | can crawl | boolean | yes (S-0107) |
 | Rules, infantry type section, `Cyborg`, `Fraidycat` | cyborg, fraidycat | boolean | no (S-0107) |
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
-| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's record choice and refused-replacement rule | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
+| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's pre- and post-jump record rules and refused-replacement rule | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
 | Rules, infantry type section, `SpeedType`, `MovementZone` | landing-search locomotion class and movement zone (claim 19) | named choices parsed by S-0211 Import mapping | S-0211's defaults and layering rules |
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
+| Map, `[CellTags]`, `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | cell-tag attachment and entered-by event/action eligibility at claim 22's arrival | map records and event/action parameters parsed by S-0009 and S-0011 | no attached tag or trigger when absent, as those specs give; arrival timing is an engine rule, not an imported delay |
 | Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
 | Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9), and landing surface heights, bridge recognition and occupancy-record selection (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
 
@@ -2048,6 +2116,13 @@ cases).**
   with ground infantry occupants nearby. Identify any destination supplied during placement,
   then compare that event with a later ordinary move, for human and non-player owners where
   placement can be arranged. Do not manufacture a destination by writing game state.
+  (i) On a level high bridge above enterable ground, start with an otherwise empty
+  landing cell. Teleport there from ground height and record its ground and deck
+  standing-position entries at fixation, after landing and after phasing in. Then
+  order another teleport to an empty ground cell. Record both entries of the former
+  landing cell through the next fixation and jump. Repeat with a deck-height
+  departure. Use an ordinary ground walker under the former landing cell to test
+  the residual ground position's availability. No recorder writes game state.
   (h) On flat ground give a move to empty cell *A*, then a replacement move to cell *B*
   with all three allied infantry side positions taken, using scripted ordinary input.
   Record each applied destination and movement update. A qualifying run must show *A*'s
@@ -2070,7 +2145,12 @@ cases).**
   while the independent initial entry check reads deck for every high-bridge cell.
   Thus a fully taken deck rejects the low-departure case even with free ground positions.
   Actual jump height and listing are on the deck in both successful cases, following
-  S-0207 claim 20 e; later scatter uses deck status. (h) *A*'s reservation is removed,
+  S-0207 claim 20 e; later scatter uses deck status. (i) For ground-height choice,
+  the ground position stays taken after landing and after the later successful
+  destination choice and departure. Deck remains unmarked by this infantry. The
+  ordinary ground walker cannot choose the residual taken position. For deck-height
+  choice, the deck reservation remains after landing and is cleared on the next
+  successful destination choice. (h) *A*'s reservation is removed,
   the departure-position entry is restored, the destination clears and no jump to *A*
   occurs, for both position refusal and entry refusal at *B*.
   (e) no connecting path is needed. (f) where placement supplies a destination, ground
@@ -2084,7 +2164,9 @@ cases).**
   difference in placement clearing, or refusal of the −6 cell with a free standing position
   while the default quirk is on. In d, using deck for the low-departure position choice,
   reserving in a record different from that specified, or a successful jump leaving the
-  infantry listed on ground falsifies the respective rule. In h, retaining *A* or its
+  infantry listed on ground falsifies the respective rule. In i, a transfer from
+  ground to deck, a new deck mark at landing, or clearing the old ground mark on the
+  next successful destination choice falsifies the ground-height lifecycle. In h, retaining *A* or its
   reservation, failing to restore the departure mark, or jumping to *A* falsifies the
   replacement outcome. A placement that supplies no destination is not evidence
   for or against claim 20.
@@ -2134,6 +2216,35 @@ cases).**
 - *Falsifiers:* movement directly to the target-cell centre instead of the in-cell position,
   replacing the destination with the attacker's cell, ignoring deck occupants in the second
   choice, or completion on that arrival despite neither claim 16 nor claim 17 holding.
+
+**Scenario W14: infantry entered-by timing (claim 22; Q-0268 part 1).**
+- *Setup:* a tiny clear skirmish map with human-owned stock walking infantry and one
+  bystander computer player kept away, speed index 2, director and mods off. Attach
+  independent one-time any-house entered-by tags to successive intermediate and
+  final cells. Each tag's action sets a distinct map variable. Include a level high
+  bridge with tagged ground/deck passage. Repeat each arrangement three times.
+- *Procedure:* order a walk past the tagged cells to a farther destination, then a
+  separate walk stopping at the final tagged cell. Record the tick, physical
+  position, walking target, occupancy reservation, destination and variable changes
+  with a read-only recorder. Compare the asking tick, boundary-crossing tick and
+  snap-to-standing-position tick. For the same-cell case use W13's successful
+  close-range shortcut, with the attacker's current cell tagged. For teleport use
+  W11's ground-to-deck setup with tagged departure-to-landing intermediate cells.
+- *Observable:* the first tick each variable changes and the unit's position,
+  height, destination and listing at that moment. If a destination-clearing arrival
+  can be arranged under claim 17, use a trigger action whose result reveals the
+  unit's destination or record it at the action's effect, not only at tick end.
+- *Expected:* a walking arrival fires in the snap tick, never at reservation or
+  mere boundary crossing. Intermediate cells fire even though the unit does not
+  stop its walk there. A same-cell shortcut arrival also fires. Ground passage
+  beneath a high bridge does not fire its cell tag, but deck arrival does. Where
+  claim 17 clears the destination, the tag's action observes it already cleared.
+  Teleport fires only at landing in the jump tick, not for intermediate cells or
+  on ending phasing in, independently of the ground mark left by claim 19.
+- *Falsifiers:* a variable change at reservation or boundary crossing before the
+  snap, a missing eligible intermediate arrival, or a tag action preceding the
+  stated destination clearing. A polled trigger firing later than the variable
+  change is not a falsifier: record the entered-by action itself.
 
 ## Open questions
 
