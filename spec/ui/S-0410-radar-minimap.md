@@ -2,7 +2,7 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
