@@ -8,7 +8,7 @@ An open-source reimplementation of the game engine for **Command & Conquer: Yuri
 
 **Milestone M5 (first playable game) is done.** You can play a 1v1 skirmish against our own computer opponent on stock multiplayer maps, natively and in the browser. A game runs from the main menu through skirmish setup (map, sides, countries, colours, starting credits and units) to the end screen and back. It has:
 
-- the economy: ore and gems, harvesting, refineries and power;
+- the economy: ore and gems, harvesting (slave miners included), refineries and power;
 - base building: production queues, placement, selling and repair, and the tech tree;
 - movement, pathfinding and combat for ground units and buildings;
 - shroud and radar;
@@ -23,8 +23,7 @@ The simulation is deterministic: integers only and one seeded random stream. Nat
 
 **Not there yet (M6 and later):**
 - aircraft, naval units, garrisons, bridges and superweapons;
-- the Yuri faction's slave-miner economy;
-- animation playback;
+- full animation playback;
 - multiplayer over the network.
 
 ## You need your own copy of the game
