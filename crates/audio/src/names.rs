@@ -130,6 +130,8 @@ pub enum Announcement {
     Defeat,
     /// A unit promoted, to either rank (S-0701 claim 36).
     Promoted,
+    /// The local player set a rally point (S-0701 claim 28).
+    RallySet,
 }
 
 impl Announcement {
@@ -156,6 +158,7 @@ impl Announcement {
             Self::RepairComplete => "EVA_UnitRepaired",
             Self::Defeat => "EVA_YouHaveLost",
             Self::Promoted => "EVA_UnitPromoted",
+            Self::RallySet => "EVA_NewRallyPointEstablished",
         }
     }
 }
@@ -641,6 +644,11 @@ mod tests {
         assert_eq!(
             n.announcement(Announcement::Promoted),
             Some("EVA_UnitPromoted")
+        );
+        // spec: S-0701 Import mapping (rally point set)
+        assert_eq!(
+            n.announcement(Announcement::RallySet),
+            Some("EVA_NewRallyPointEstablished")
         );
         let mut m = n.clone();
         m.set_announcement(Announcement::UnitSold, "Other");

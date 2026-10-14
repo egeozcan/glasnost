@@ -18,9 +18,7 @@
 //! firing rules' legality answer come from the combat module (M4), with its
 //! own seams (garrison occupants, upgrades); the weapon cursor flags of rows
 //! I17 and I18 are not imported; vehicles have no deploy state; the
-//! factory kinds of rows B9 to B12 and the factory search of a building's
-//! guard-spot order (S-0213 claim 20) are not applied yet (the clicked
-//! place is used); a carrier carries nothing. The rows that read these states are in place
+//! factory kinds of rows B9 to B12 are not applied yet; a carrier carries nothing. The rows that read these states are in place
 //! behind small predicates, so that the states plug in when their topics
 //! arrive. The nearby-cell search of claim 11 always uses the actor's reach
 //! region and own zone (S-0212 table T5's rows for a free mover's no-move
@@ -299,6 +297,47 @@ fn rally_capable(w: &World, id: ObjectId) -> bool {
         ) || b.raw.cloning.unwrap_or(false)
             || b.raw.unit_repair.unwrap_or(false)
     })
+}
+
+/// A factory of infantry, vehicles or aircraft (S-0213 claim 20 (c)).
+fn makes_units(w: &World, id: ObjectId) -> bool {
+    use crate::rules::FactoryKind as F;
+    building(w, id)
+        .is_some_and(|b| matches!(b.factory, Some(F::Infantry | F::Vehicle | F::Aircraft)))
+}
+
+/// The guard-spot cell of a building's click around `centre` (S-0213 claim
+/// 20; S-0212 claim 25, table T5's rally-point row), chosen at the click.
+fn rally_cell(w: &World, id: ObjectId, centre: CellXY) -> Option<CellXY> {
+    use glasnost_rules::sim::LocomotionClass as L;
+    let b = building(w, id)?;
+    // spec: S-0213 claim 20 (the zone by the building's type: naval, whatever it builds; not naval and a factory of aircraft; any other) and S-0212 table T5 (rally point: the matching locomotion class)
+    let (class, zone) = if b.raw.naval.unwrap_or(false) {
+        (L::Amphibious, MovementZone::AmphibiousCrusher)
+    } else if b.factory == Some(crate::rules::FactoryKind::Aircraft) {
+        (L::Winged, MovementZone::Fly)
+    } else {
+        (L::Foot, MovementZone::Normal)
+    };
+    // spec: S-0212 table T5 (rally point: the reach region of the building's own cell for that zone)
+    let reach = regions::reach_in(w, w.obj(id)?.pos.cell(), zone);
+    // spec: S-0212 table T5 (rally point: in deck mode when the centre is a bridge cell)
+    let deck = w.cells.idx(centre).is_some_and(|i| w.cells.deck[i]);
+    // spec: S-0212 table T5 (rally point: no height condition, no further test, no reference cell)
+    path::nearby(
+        w,
+        centre,
+        NearbyUse::Settings(path::NearbySettings {
+            class: Some(class),
+            zone,
+            reach: Some(reach),
+            deck,
+            height: false,
+            reference: None,
+            no_bridges: false,
+            no_overlay: false,
+        }),
+    )
 }
 
 /// Factory-marked (S-0214 Terms): any imported factory category other than
@@ -1758,12 +1797,17 @@ pub fn order(
             (Action::Attack, _) => behaviour(Behaviour::Attack, Some(target), None),
             // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; the unload orders of gap generators, absorbing buildings and garrisons are not modelled)
             (Action::Deploy, _) if factory_marked(w, id) => Some(Order::Primary { actor: id }),
-            // A guard-spot order: the factory search of S-0213 claim 20 waits for the factory vocabulary; the clicked place is used.
             (Action::Move, _) | (Action::Harvest, ClickOn::Cell(_)) if rally_capable(w, id) => {
-                Some(Order::GuardSpot {
-                    actor: id,
-                    spot: target,
-                })
+                let spot = match on {
+                    // spec: S-0213 claim 20 (a) (a cell: the cell the nearby-cell search finds around it when the click is made; none found, no order)
+                    ClickOn::Cell(c) => Target::Cell(rally_cell(w, id, c)?),
+                    // spec: S-0213 claim 20 (c) (a factory of infantry, vehicles or aircraft: a cell searched around the clicked object's cell; any other building: the object itself)
+                    ClickOn::Object(t) if makes_units(w, id) => {
+                        Target::Cell(rally_cell(w, id, w.obj(t)?.pos.cell())?)
+                    }
+                    ClickOn::Object(_) => target,
+                };
+                Some(Order::GuardSpot { actor: id, spot })
             }
             _ => None,
         };

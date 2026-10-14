@@ -87,6 +87,8 @@ pub enum UiCue {
     ConstructionComplete,
     /// The local player's house placed a building (S-0701 claim 23).
     BuildingPlaced,
+    /// The local player set a building's rally point (S-0701 claim 28).
+    RallySet,
 }
 
 /// The F7 radar-event kinds that announcements pass through.
@@ -1249,6 +1251,11 @@ impl Audio {
             UiCue::StripScroll => screen(self, self.names.gui_tab.clone()),
             // spec: S-0701 claim 23 (the game-wide building placement sound, a screen sound)
             UiCue::BuildingPlaced => screen(self, self.names.building_slam.clone()),
+            // spec: S-0701 claim 28 (rally point set: the local player's matching action; no throttle)
+            UiCue::RallySet => {
+                self.announce(Announcement::RallySet);
+                None
+            }
         }
     }
 }

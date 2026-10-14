@@ -966,4 +966,63 @@ mod r14 {
         );
         assert!(!spot(ids[3]), "a factory of aircraft");
     }
+
+    fn rally_spot(w: &World, b: ObjectId, on: ClickOn, mods: Modifiers) -> Option<Target> {
+        targeting::click(w, ALPHA, &[b], on, mods)
+            .orders
+            .iter()
+            .find_map(|o| match o {
+                Order::GuardSpot { spot, .. } => Some(*spot),
+                _ => None,
+            })
+    }
+
+    // spec: S-0213 claim 20 (a) (a rally point on a cell: the nearby-cell search's cell around the clicked cell, chosen at the click; open flat ground gives the clicked cell itself)
+    // spec: S-0212 claim 25, table T5 (rally point: foot class, zone normal, the building's reach region, no height condition, no reference cell)
+    #[test]
+    fn rally_on_open_ground_is_the_clicked_cell() {
+        let (w, ids) = buildings(&[("TESTBARR", Some("infantry"), false)]);
+        let on = ClickOn::Cell(cell(4, 5));
+        assert_eq!(
+            rally_spot(&w, ids[0], on, Modifiers::default()),
+            Some(Target::Cell(cell(4, 5)))
+        );
+    }
+
+    // spec: S-0213 claim 20 (a) (a blocked clicked cell is replaced by a usable cell near it)
+    // spec: S-0212 claim 25 (the search: the nearest ring with a qualifying cell; a building's cell does not qualify for foot)
+    #[test]
+    fn rally_on_a_building_cell_is_moved_beside_it() {
+        let (w, ids) = buildings(&[
+            ("TESTBARR", Some("infantry"), false),
+            ("TESTTERR", Some("terrain"), false),
+        ]);
+        let blocked = cell(2, 0);
+        let spot = rally_spot(&w, ids[0], ClickOn::Cell(blocked), Modifiers::default());
+        let Some(Target::Cell(c)) = spot else {
+            panic!("a guard spot on a cell: {spot:?}");
+        };
+        assert_ne!(c, blocked);
+        assert!((c.x - blocked.x).abs() <= 1 && (c.y - blocked.y).abs() <= 1);
+    }
+
+    // spec: S-0213 claim 20 (c) (a factory of infantry, vehicles or aircraft moved onto an object: a cell searched around the object's cell, not the object)
+    // spec: S-0214 row G7 (a rally-capable building with force-move held gets move on an object)
+    #[test]
+    fn rally_on_an_object_is_a_cell_near_it() {
+        let (w, ids) = buildings(&[
+            ("TESTBARR", Some("infantry"), false),
+            ("TESTTERR", Some("terrain"), false),
+        ]);
+        let fm = Modifiers {
+            force_move: true,
+            ..Default::default()
+        };
+        let spot = rally_spot(&w, ids[0], ClickOn::Object(ids[1]), fm);
+        let Some(Target::Cell(c)) = spot else {
+            panic!("a guard spot on a cell: {spot:?}");
+        };
+        let at = cell(2, 0);
+        assert!(c != at && (c.x - at.x).abs() <= 1 && (c.y - at.y).abs() <= 1);
+    }
 }

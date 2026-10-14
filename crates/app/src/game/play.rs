@@ -424,7 +424,15 @@ impl Play {
             self.selected.push(first);
         }
         self.selection = r.selection.clone().unwrap_or_else(|| sel.clone());
-        self.issue(r.orders.clone());
+        // spec: S-0701 claim 28 (rally point set: the local player's matching action, a building's guard-spot order of S-0213 claim 20)
+        let w = &self.game.world;
+        let rally = r.orders.iter().any(|o| {
+            matches!(o, Order::GuardSpot { actor, .. }
+                if w.obj(*actor).is_some_and(|b| b.kind == glasnost_sim::rules::Kind::Building))
+        });
+        if self.issue(r.orders.clone()) > 0 && rally {
+            self.cues.push(UiCue::RallySet);
+        }
         if !r.orders.is_empty() {
             self.acks.push((sel, r));
         }

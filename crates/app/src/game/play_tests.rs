@@ -727,3 +727,48 @@ fn s0411_claim_17_production_adds_no_status_line() {
     }
     assert!(p.messages.is_empty(), "{:?}", p.messages);
 }
+
+/// Diagnostic: a factory selected, a left click on a cell.
+// spec: S-0214 claim 26 and row BC5 (a left release on a cell with an own rally-capable factory selected gives the guard-spot order)
+// spec: S-0213 claim 20 (a) (the factory's guard spot is its rally point)
+// spec: S-0417 claim 8 (a vehicle factory's run-away reply sends the released vehicle to the rally point of a human house)
+// spec: S-0701 claim 28 (rally point set: the local player's announcement)
+#[test]
+fn a_left_click_sets_a_rally_point_that_new_vehicles_drive_to() {
+    let mut r = fixture::ruleset();
+    // spec: S-0417 Import mapping (`WeaponsFactory`: the vehicle factory kind)
+    r.sim.buildings.get_mut("FACT").unwrap().weapons_factory = Some(true);
+    let mut p = start_with(std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &r, "x",
+    )));
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let c = p.world().obj(mcv).unwrap().pos.cell();
+    let at = CellXY::new(c.x - 6, c.y - 6);
+    let fact = testkit::spawn(&mut p.game.world, Kind::Building, "FACT", p.local.0, at, 0);
+    p.click_map(Button::Left, Some(fact), at, Modifiers::default());
+    assert_eq!(p.selection, vec![fact]);
+    p.cues.clear();
+    let to = CellXY::new(at.x + 5, at.y + 8);
+    p.click_map(Button::Left, None, to, Modifiers::default());
+    assert_eq!(p.selection, vec![fact], "the order keeps the selection");
+    assert!(p.cues.contains(&UiCue::RallySet));
+    p.step();
+    assert_eq!(
+        p.world().obj(fact).unwrap().guard_spot,
+        Some(Target::Cell(to))
+    );
+    let gi = p.world().rules().index_of(Kind::Vehicle, "GUNR").unwrap();
+    p.game.world.houses[usize::from(p.local.0)].credits = 100_000;
+    let what = glasnost_sim::econ::TypeRef {
+        kind: Kind::Vehicle,
+        index: gi as u32,
+    };
+    assert_eq!(p.issue(vec![Order::Build { what }]), 1);
+    // The new vehicle reaches the rally point.
+    step_until(&mut p, 3000, |p| {
+        p.world().objects.values().any(|o| {
+            o.type_index == gi && o.kind == Kind::Vehicle && o.on_map && o.pos.cell() == to
+        })
+    });
+}

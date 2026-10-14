@@ -1017,6 +1017,16 @@ fn refusal_cues_are_announcements_only() {
     }
 }
 
+// spec: S-0701 claim 28 and Import mapping (rally point set: the local player's action requests its announcement, with no interface sound)
+#[test]
+fn rally_point_set_is_announced() {
+    let w = world();
+    let mut a = announcing(&w, &[(Announcement::RallySet, "Rally")]);
+    assert_eq!(a.cue(UiCue::RallySet), None);
+    assert!(heard(&mut a, 1000).is_empty());
+    assert!(a.mixer().speaking());
+}
+
 /// Adds announcement files of four frames for `samples` (S-0701 claim 34:
 /// the eight-character name plus `.wav`, apart from the sample bank).
 fn add_voices(a: &mut Audio, samples: &[String]) {
