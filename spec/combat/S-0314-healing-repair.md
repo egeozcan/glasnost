@@ -2,11 +2,11 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-12
+approved-on: 2026-10-14
 measurements: []
 requests: []
 supersedes: []
@@ -20,6 +20,9 @@ How objects regain health: healers, self-healing (one object, or every infantry 
 of a house), repair steps at a repair depot and a hospital, and building repair. This spec owns the
 timings, the step sizes, the step cost and the house-wide healing. The arithmetic of a healing hit is
 S-0302's, and the orders that send a unit to be healed are S-0213's and S-0214's.
+Only skirmish is covered; network games and campaigns are out of scope. For automatic building
+repair and sale this revision specifies only the skill-level gate, not the remaining eligibility
+conditions or their outcomes when the gate passes.
 
 ## Terms
 
@@ -78,10 +81,16 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
 ### Healers
 
-1. **A healing hit.** A healer's shot delivers a negative amount. S-0302 (claims 5, 6 and 11) gives
-   what it does: the amount is delivered unchanged, with no versus value, no falloff, no cap and no
-   defence applied to it, to a target within 8 leptons of the point of detonation (to no other
-   target), and it raises health by the amount's size, never above strength. The versus value of
+1. **A healing hit.** An ordinary projectile shot from a negative-damage healing weapon delivers
+   a negative amount. Subject to S-0302's hit-stopping rules (claim 8) and its undemolishable-building
+   exception (claim 7), S-0302 (claims 5, 6 and 11) gives what it does: the amount is unchanged,
+   with no versus scaling, falloff or defence multiplier applied to it, at a distance strictly
+   less than 8 leptons from the point of detonation. At 8 leptons or farther it changes no health.
+   A negative delivered amount bypasses the maximum-damage cap even when the maximum is negative
+   (H1 part c; S-0302 F3, cases iii and iv). This differs from a positive delivered amount made
+   negative by its versus value: that amount still takes the cap (S-0302 F3, case vi).
+   S-0302 claim 6's sentence about a negative maximum needs this explicit qualification; it must
+   not extend the cap to the negative-delivered-amount cases. A negative result raises health by its magnitude, never above strength. The versus value of
    the warhead against the target's armour class plays no part in the amount. It decides only
    whether the object is a legal target (a value of exactly 0 makes it an illegal target, S-0304,
    claim 1) and whether an automatic search may pick it (S-0304, claim 4; claim 2 here). There is no separate
@@ -92,21 +101,32 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    check gives its *illegal* answer. S-0310 (claim 11) owns which targets give *illegal* for a
    healer vehicle and for a healer infantry unit, and what the answer does to a vehicle's target.
    What the unit then does is the attack behaviour of S-0215. This spec adds no rule to that.
-   - Backing: `measurable` (S-0302 scenario D4 for the amount; scenario H1 here for the versus
-     split; S-0310 scenario T10 for the *illegal* answer)
+   - Backing: `measurable` (S-0302 D4 for the amount, D5 for the building exception and D26
+     for hit-stopping rules, H1 for the versus split and negative-maximum distinction,
+     and S-0310 T10 for the *illegal* answer).
+     The absence of separate healer-role type flags is `unmeasured`: observing H1's versus
+     selection cannot establish the absence of every other possible data flag.
    - Confidence: high
 
 2. **Which objects a healer picks by itself.** S-0309 (claim 6) owns this rule, and it is not
-   repeated here: a searcher that is a *healer for acquisition* (Terms; S-0308, claim 15) looks for
-   allied objects below full health of its own kind instead of enemies, with the landed-aircraft
-   exception for a healer vehicle and a search radius of 512 leptons under *guard*; the versus
+   repeated in full here: an infantry unit or vehicle that is a *healer for acquisition*
+   (Terms; S-0308, claim 15) looks for allied damaged objects instead of enemies. Infantry searches
+   for infantry; vehicles search for the objects S-0309 claim 5 includes in the vehicle search
+   class, including landed aircraft on open ground. The ordinary candidate rules and their
+   exceptions remain S-0309's, including its unmeasured aircraft exceptions. The search radius
+   under *guard* is 512 leptons; the versus
    value test of S-0304 (claim 4) applies as for every automatic search. The automatic searches use the healer for
-   acquisition, not S-0214's healer of claim 1: a type with a primary weapon of damage −3 and a
+   acquisition, not S-0214's healer of claim 1: an infantry type with a primary weapon of damage −3 and a
    secondary weapon of damage +3 has a mean weapon damage of 0, so it is not a healer for
    acquisition and searches for enemies, although its primary weapon heals. An enemy object is
-   never picked by a healer's automatic search.
-   - Backing: `measurable` (scenario H2 here; S-0309 scenario A12)
-   - Confidence: high (as S-0309, claim 6)
+   never picked by an infantry or vehicle healer for acquisition. Building healers do not get
+   that allied-only search modifier; what they pick, including whether they can pick an enemy,
+   remains open under S-0309 claim 6.
+   - Backing: `measurable` for the infantry and vehicle cases (H2; S-0309 A12).
+     Building-healer acquisition is `unmeasured`: the building's healing-weapon firing check
+     is not established, so no expected candidate outcome can be supplied (S-0309 claim 6).
+     The aircraft exceptions inherit S-0309 claim 6's stated unmeasured limitations.
+   - Confidence: high (infantry and vehicle main rule); low (building healer, as S-0309 claim 6)
 
 ### Repair steps
 
@@ -121,17 +141,22 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    | otherwise | the paying house pays the step cost, health becomes the strength; the step reports *done* |
 
    A step has the outcome of the first row whose condition holds, so a full-health object whose
-   paying house cannot pay reports *not needed*, not *cannot pay* (scenario H4, part b). A step cost of 0 is never refused for lack of money, even when the house has none. The paying house
+   paying house cannot pay reports *not needed*, not *cannot pay* (scenario H4, part b). A step cost of 0 is not refused at non-negative available credits, including 0. The
+   affordability comparison still applies if available credits are negative. The paying house
    is the owner of the repaired object. Through the orders of S-0214 a vehicle enters only an own
    depot, so the paying house and the depot's owner are then the same house.
-   - Backing: `measurable` (scenarios H3, H4 and H6)
+   - Backing: `measurable` at non-negative available credits (H3, H4 and H6). The affordability
+     test at a negative balance is `unmeasured`: no scenario here arranges a hospital entry at
+     such a balance, and vehicles have a positive step cost so cannot isolate the zero-cost case.
    - Confidence: high
 
 4. **Step size.** The step size of an infantry unit is the game-wide infantry repair step; for
    every other object it is the game-wide repair step. A step size below 1 counts as 1. In the
    original, building repair takes the game-wide repair step without this minimum; our engine applies
    the minimum there too (claim 8, Edge cases).
-   - Backing: `measurable` (scenario H3, part a; scenario H6, part b)
+   - Backing: `measurable` for depot and hospital steps (H3 parts a and d; H6 part b).
+     Aircraft repair steps are `unmeasured`: pad repair timing and a controllable step setup
+     remain open, so no scenario here isolates an aircraft step.
    - Confidence: high
 
 5. **Step cost.** The step cost of an infantry unit is always 0, whatever the repair percentage.
@@ -144,8 +169,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    *adjusted cost* that S-0408 owns (claim 2 and F2: the deductions for a free unit and for the
    pad aircraft, and the order in which its floor at 0 applies). That adjusted cost can be negative,
    and the step cost's minimum of 1 credit then still applies.
-   - Backing: `measurable` (scenario H3, parts a and c; scenario H5, part d; scenario H6, part a for the
-     infantry cost of 0)
+   - Backing: `measurable` (scenario H3, parts a and c; scenario H5, parts d and e; scenario H6, part a for the
+     infantry cost of 0; H11 for signed inputs and F2's truncations). The same formula for
+     an aircraft repair step is `unmeasured`: no scenario here isolates such a step while
+     landing-pad repair timing remains open.
    - Confidence: high (the formula, the minimum, 0 for infantry, no house or country factor),
      medium (the free-unit adjustment and the pad-aircraft deduction, S-0408 claim 2)
 
@@ -171,7 +198,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
        stays docked or is sent away is not known (Open questions).
    *The repair-complete announcement.* It belongs to the depot's owner: it is heard only when that
    house is the local player. It is also a radar event of one kind that depots and hospitals share
-   (claim 7), and like every radar event it is not shown, and so not announced, when an event of
+   (claim 7), and it is not shown, and so not announced, when an event of
    the same kind is already shown close by (S-0011, claim 32; the distance and how long an event
    counts belong to the interface specs). The low-funds announcement belongs to the depot's owner
    too: it is heard only when that house is the local player, and it is that house's available
@@ -191,7 +218,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    only*). It holds for no player house: the vehicles of an *AI house*, like a person's, follow the
    destination rule above, and our AI sends them on by ordinary orders.
    - Backing: `measurable` (scenario H4, parts a to f, for everything above except the next two
-     statements). `unmeasured` for the return to the guard spot of a non-player house: no input of
+     statements and the non-local-owner announcement conditions). The latter are `unmeasured`:
+     the other-owner attempt in H4 part f needs the original's computer player to dock a vehicle,
+     which normal player input cannot require; failure to dock is not evidence about sound.
+     `unmeasured` for the return to the guard spot of a non-player house: no input of
      the measurement setup makes a vehicle of the original's neutral or special house, or of its
      computer player, dock at a depot in a way that can be timed and recorded, and a player house
      never takes this path. It is justified as a rule recorded from the original's behaviour that the
@@ -216,11 +246,14 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    one radar-event kind shared with the depot, with its suppression); on *not needed* it is put out
    without them. *Not needed* is rare here: S-0214 (table I, row e4) refuses the order that sends a
    full-health infantry unit into a hospital, so it arises only when a unit reaches full health
-   while inside, which is not known to happen (Open questions). *Cannot pay* cannot happen here: the infantry step cost is always 0 and a cost of 0
-   is never refused (claim 3). The armory of S-0311 (claim 12) uses
+   while inside, which is not known to happen (Open questions). *Cannot pay* cannot happen here at non-negative available credits: the infantry step cost
+   is 0 (claim 3). A negative balance is not exercised by H6; that case is `unmeasured` because
+   no scenario here can arrange hospital entry for an infantry unit at such a balance. The armory of S-0311 (claim 12) uses
    the same infantry repair count, but counts it in processings instead of ticks (S-0311, Formulas
    F6).
-   - Backing: `measurable` (scenario H6, parts a to c). `unmeasured` for *not needed* in a hospital
+   - Backing: `measurable` (H6 parts a to c for own hospitals). Absence of feedback for another
+     owner's hospital is `unmeasured`: this scenario cannot order that owner's infantry to enter,
+     and spontaneous entry is not a reproducible setup. `unmeasured` for *not needed* in a hospital
      (put out without the sound and announcement): no input of the measurement setup is known that
      brings a full-health infantry unit into a hospital, and whether a unit inside can heal by
      another rule is open; H6 part d makes the attempt.
@@ -252,31 +285,46 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    - every human-controlled house has level 0,
    - an *AI house* has level 0 in our engine (glossary), where the original gives its computer
      player the rules' maximum level (absent-key default 5), which passes the gate at the default
-     threshold: the original's computer player repairs and sells by itself, and ours does not
-     (Edge cases, the original's computer player), and
+     threshold. The computer player's automatic outcomes are `unmeasured` here: H9 controls
+     no computer-owned building's state, so cannot test the further conditions; this is an
+     original-only note, not an exemption for our AI (Edge cases), and
    - the *neutral house* and the *special house* keep level 0, since the original gives the
      maximum only to the houses of computer players when the houses are set up (S-0209, claim 11); they keep the original's rules in our engine, so their level is 0 here too.
 
-   So with a threshold above 0 no house of a skirmish in our engine turns repair on or sells by
-   itself: only the repair order does. The rule's further conditions (the house's money against a
-   reserve, a random draw for selling, per-building states) are not specified here. With a
-   threshold of 0 or below the gate passes for every house, the neutral and special houses
-   included. What our engine does then is a question for the project lead (Edge cases; Questions
-   for the project lead), and scenario H9 records what the original does.
-   - Backing: `measurable` (scenarios H5 and H9, runs 1 to 3 for the levels of a human house, of
-     the neutral house and of the special house)
-   - Confidence: high (the step, its timing, its cost and the charge at full health); medium (that
-     the automatic rule is gated by the house skill level as stated; the level 0 of the neutral and
-     special houses, which S-0215 lists as an open question)
+   With a threshold above 0 the gate excludes every level-0 skirmish house. With a threshold of
+   0 or below the gate passes for every level-0 house, including human-controlled houses, AI
+   houses, the neutral house and the special house. Passing the gate is necessary, not sufficient:
+   it does not promise either a repair or a sale. The further conditions (available credits
+   against a reserve, random choices for selling and per-building states) remain an open
+   behavioural question, not a licence to disable the rule. This revision specifies no complete
+   automatic-start rule for the gate-passing case. The existing house policy remains unchanged:
+   AI houses follow human-controlled unit rules, and the neutral and special houses retain the
+   original's non-human rules (S-0215, Houses in our engine). There is no threshold-specific
+   departure or importer warning. H9 distinguishes the gate's exclusion from exploratory
+   observations when it passes. S-0408 claim 1 must limit its assertion that non-player houses
+   never sell automatically to the positive-threshold exclusion; claim 13 must point here for
+   the gate only, not promise complete automatic outcomes.
+   - Backing: `measurable` for periodic repair (H5) and the exclusion at a positive threshold
+     (H9 runs 1 and 3). House levels are `measurable` through S-0412 claim 3's K10 and S-0209 C7.
+     The exact absent threshold and the gate comparison in the gate-passing case are
+     `unmeasured` (H12 explains the default's limitation): without a specified
+     setup satisfying the further conditions, absence of repair or sale cannot distinguish a
+     failed gate from later ineligibility; H9 runs 2 and 4 are exploratory, not confirmation.
+   - Confidence: high (periodic repair and the skirmish house levels, S-0412 claim 3); medium
+     (the automatic rule's skill-level comparison)
 
 ### Self-healing
 
 9. **Self-healing objects.** An object whose type is self-healing, or which has the self-heal
    veterancy ability (S-0311, claim 3), gains 1 health at each tick whose tick number is a multiple
    of the building repair period *P*<sub>b</sub> (Formulas F1), provided its health is not 0 and
-   not equal to its strength. This holds for every kind of object, and it uses the same game-wide rate as
-   building repair. It is free.
-   - Backing: `measurable` (scenario H7)
+   not equal to its strength. This holds for infantry, vehicles, aircraft and buildings while
+   they take their ordinary object updates, and uses the same game-wide rate as building repair.
+   It is free. Objects out of play do not take these updates (S-0203); healing inside transports
+   and hospitals remains the separate open question below.
+   - Backing: `measurable` for living objects taking updates (H7). The health-0 exclusion is
+     `unmeasured`: no scenario here keeps a zero-health object in an ordinary living update
+     without destruction handling, which would confound the observation.
    - Confidence: high
 
 10. **House-wide self-healing.** Each building type has an infantry self-heal count and a vehicle
@@ -300,16 +348,18 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     Several buildings of a house add up: two such buildings double the amount, not the frequency.
     When claim 9 and this claim both apply to an object in one tick, the two gains add and the sum
     is capped at the strength: an object with health *H* at the start of the tick (0 < *H* < *S*)
-    and strength *S* ends the tick with health min(*H* + 1 + *a* × *T*, *S*) (Formulas F3, which
+    and strength *S*, with no other health-changing event in that tick, ends it with health
+    min(*H* + 1 + *a* × *T*, *S*) (Formulas F3, which
     also gives our engine's treatment of a negative *a*).
-    - Backing: `measurable` (scenario H8, parts a to d)
+    - Backing: `measurable` (H8 parts a to d, including the building-kind exclusion). The
+      health-0 exclusion is `unmeasured` for the same destruction-handling reason as claim 9.
     - Confidence: high (amounts, intervals, the kinds, the stacking); medium (the events that change
       the totals, the floor at removal, and that power plays no part)
 
 11. **Healing on resources has no effect.** The type flag and the game-wide value for healing on
     resource cells, and the resource-heal veterancy ability (S-0311, claim 5), change nothing in the
-    original, and our engine gives them no effect. The rules key for a healer search radius is
-    not read by the original either (Import mapping).
+    original, and our engine gives them no effect. The rules key for a healer search radius
+    has no observable effect on the search radius either (Import mapping).
     - Backing: `measurable` (scenario H10 here; S-0311 scenario X11 for the ability)
     - Confidence: medium
 
@@ -353,8 +403,12 @@ whenever 1 ≤ *R*ₛ ≤ *S*.
 The rounding follows the *round-toward-zero mode* of S-0205 (`quirks.chop_rounding`). Example: *C* =
 900, *S* = 600, *R*ₛ = 10, *p* = 0.25 gives *q* = 60, *c* = 15, step cost 3.
 
+F1's boundary and decimal examples are `measurable` in H11, confidence high. F2's integer
+quotients and final truncation are `measurable` in H3 and H11, confidence high.
+
 **F3, health after a tick of self-healing** (claims 9 and 10): all integers, exact arithmetic, so
-no rounding applies. *H* is the object's health at the start of the tick and *S* its strength.
+no rounding applies. This formula assumes no other health-changing event during that tick.
+*H* is the object's health at the start of the tick and *S* its strength.
 *g*<sub>9</sub> = 1 when claim 9 applies to the object in that tick, and 0 otherwise.
 *g*<sub>10</sub> = *a*′ × *T* when claim 10 applies to it in that tick (the tick number is a
 multiple of the object's self-heal interval *n* and its house's total *T* is above 0), and 0
@@ -408,15 +462,20 @@ An object with *H* = 0 or *H* = *S* at the start of the tick gains nothing from 
 
 An object that claims 9 and 10 both heal in one tick ends it with the health that F3 gives: the two
 gains add, and the sum is capped at the strength. The place of healing among the other work of a tick is S-0203's.
-Because claims 8, 9 and
-10 use tick numbers, all objects of a game heal on the same ticks, not on ticks counted from when
-each began healing.
+Claims 8 to 10 use the global tick number: objects sharing a period or interval have the same
+scheduled ticks, not schedules counted from when each began healing. Different intervals need
+not coincide. Depot and hospital steps instead use claim 6's and claim 7's entry-relative timing.
 
 ## Edge cases and quirks
 
+Original arithmetic edge claims below are `measurable` in H11 (and the named H3, H4, H5 and H8
+parts), confidence high unless their owning claim gives another confidence. Undefined outcomes
+outside the health domain are `unmeasured` for H11's stated reason. Our departures and quirk-off
+alternatives are design rules, not claims of oracle measurements.
+
 - **Periods below one tick** (departure). A building repair period *P*<sub>b</sub> of 0 (a rate
   whose size is below 1/900 of a game minute) makes the original stop with a program error at the
-  first self-healing or building-repair test, and so does a self-heal interval of 0 for the
+  first applicable self-healing or building-repair test, and so does a self-heal interval of 0 for the
   house-wide rule (S-0205 claim 3, integer division by zero). Our engine treats such a period or
   interval as 1 tick and the importer warns. A negative period or interval is no error: "a multiple
   of" then behaves as for its absolute value, reproduced, with an importer warning. A depot's or
@@ -464,15 +523,15 @@ each began healing.
   gain: health falls, with no check for death, so health can reach 0 or below, outside the health
   domain (S-0302, Terms), and the result is undefined. Our engine treats a negative amount as 0 (F3)
   and the importer warns.
-- **Automatic repair and sale with a threshold of 0 or below** (proposed design departure, pending
-  the lead's decision in Questions for the project lead). The original's gate of claim 8 then
-  passes for every house, human-controlled ones and the neutral and special houses included, and
-  the rule's further conditions are not specified. Proposed: our engine turns repair on only by
-  the repair order and never sells by itself, for every house including the neutral and special
-  ones, and the importer warns when the threshold is 0 or below.
-- **The original's computer player** also starts building repair by itself, passes the gate of
-  claim 8 at the default threshold, and has a difficulty delay for doing so; those rules belong to
-  its script system, which is out of scope. Our AI uses the repair order.
+- **Automatic repair and sale with a threshold of 0 or below.** The gate alone does not disable
+  the rule for any level-0 house (claim 8). No threshold-specific alternative, warning or new
+  quirk is specified. The remaining eligibility conditions are open; this spec must not be used
+  to infer that neutral or special houses never start repair or sell automatically.
+- **The original's computer player** passes claim 8's gate at the absent-key default maximum
+  level and threshold. Its strategy for repair or sale, including difficulty-related pacing,
+  is not specified here. Our AI can use ordinary repair and sell orders. This does not remove
+  any skill-gated unit rule that also reaches human-controlled houses at a lower threshold,
+  nor the retained original rules of neutral and special houses.
 
 ## Import mapping
 
@@ -487,7 +546,7 @@ each began healing.
 | Rules, `[General]`, `SelfHealInfantryFrames`, `SelfHealUnitFrames` | infantry and vehicle self-heal intervals *n*<sub>i</sub>, *n*<sub>v</sub> (claim 10) | integer, ticks | 1000; keeps |
 | Rules, `[General]`, `SelfHealInfantryAmount`, `SelfHealUnitAmount` | amounts *a*<sub>i</sub>, *a*<sub>v</sub> per source (claim 10) | integer; a negative value is read as 0 (Edge cases) | 1; keeps |
 | Rules, `[General]`, `TiberiumHeal`; type section, `TiberiumHeal` | nothing (claim 11) | decimal; boolean | — |
-| Rules, `[General]`, `HealScanRadius` | nothing: the original does not read this key (claim 11) | — | — |
+| Rules, `[General]`, `HealScanRadius` | nothing: no search-radius effect (claim 11) | ignored | — |
 | Rules, type section, `SelfHealing` | self-healing type (claim 9) | boolean | no |
 | Rules, type section, `Organic` | organic (claim 10) | boolean | yes for infantry types, no for vehicle, aircraft and building types |
 | Rules, building section, `InfantryGainSelfHeal`, `UnitsGainSelfHeal` | infantry and vehicle self-heal counts (claim 10) | integer (not a boolean: a value of 2 counts twice; a negative value is kept, or read as 0 with `quirks.negative_self_heal_counts` off, Edge cases) | 0 |
@@ -499,18 +558,34 @@ each began healing.
 
 ## Measurement scenarios
 
-All scenarios run under the measurement setup with named test files: a flat test map whose override
-sections set the game-wide fields and define the test types named. Health is read from a recorder
-of health values or from the health bar of a selected object, credits from the sidebar, timings in
-ticks with a recorder of the tick number. Any game speed (no timing here is speed-normalised).
+All scenarios run in skirmish under the glossary's measurement setup, director and mods off,
+with named test files: a flat test map whose override sections set the game-wide fields and
+define the test types named. Use game speed index 2 and 800 × 600 resolution; repeat each part
+three times unless it gives another count. One bystander computer player starts in an isolated
+area farthest from the test objects. The observed area contains all named test objects; apply
+its glossary void rule. There is no combat in that area except a hit a part explicitly requests.
+Disable both kinds of self-healing except where a part tests them, and use a positive automatic
+repair-and-sell threshold except in H9. Record exact health, credit balance and tick numbers
+with a read-only recorder; use scripted input for exact-tick orders where needed. Record sounds
+and announcements separately. No timing here is speed-normalised.
 
 **H1: healer kinds and amount (claim 1).** *Part a (kinds):* a healer infantry type whose warhead has 100 % against an
 infantry armour class and 0 % against a vehicle armour class, and a damaged infantry unit and a
 damaged vehicle of those classes, both own. Order the healer onto each. *Expected:* the infantry unit
-heals. The vehicle gives no heal cursor and is not healed. *Falsified if:* the vehicle heals.
+heals. The vehicle gives no heal cursor and is not healed. *Falsified if:* the vehicle heals,
+or the infantry cannot be ordered healed or does not heal.
 *Part b (amount):* give the warhead 50 % against the infantry class and a weapon damage of −20 and
 read the health after one hit on the damaged infantry unit. *Expected:* +20. *Falsified if:* +10 or
 any other amount (that would mean the versus value scales a healing hit).
+*Part c (negative delivered amount versus negative cap):* repeat part b on an own test infantry
+unit of strength 1000 at health 500, with maximum damage −30. Fire one ordinary projectile hit
+of damage −20 at distance 0. *Expected:* health 520, not 530. Repeat with maximum damage 0:
+health is still 520. In a separate run put a second damaged own infantry unit in the warhead's
+2-cell spread, more than 8 leptons from the impact point, and use maximum damage −30 again.
+*Expected:* the directly hit unit gains 20, the second gains nothing. *Falsified if:* the directly
+hit unit gains any other amount, or the second changes health. For comparison, S-0302 D3 part c
+uses positive delivered damage with a negative maximum and expects healing from the cap; it
+is a different case, not a prediction for a healing weapon.
 
 **H2: automatic healing targets (claim 2).** Part a runs with S-0309 scenario A12; the two must give the
 same results.
@@ -522,20 +597,26 @@ same results.
 - *Expected:* the own and the allied infantry at 1 and 1.5 cells; never the enemy, the vehicle, the
   unit at full health, or the unit at 3 cells (outside 2 cells). A second run in *area guard*
   heals the unit at 3 cells too.
-- *Falsified if:* the enemy, the vehicle or the full-health unit is healed; or the unit at 3 cells
-  is healed under *guard*.
+- *Procedure:* leave the healer under the named behaviour with no further orders for 600
+  ticks in each part; record target choices as well as health changes. Use unarmed test enemies
+  so they do not interrupt the observations. Repeat the stated behaviour and weapon variants.
+- *Falsified if:* the enemy, vehicle or full-health unit is picked for healing; the own or allied
+  injured infantry in reach is never healed; the unit at 3 cells is healed under *guard*; or that
+  unit is not healed in the *area guard* repeat.
 - *Part b (healer vehicle):* a healer vehicle in *area guard* whose warhead has 100 % against the
-  armour classes used. Around it, all damaged and own: a vehicle, an infantry unit, an aircraft
+  armour classes used and a projectile that is anti-air and anti-ground, as in S-0309 A12 c.
+  Around it, all damaged and own: a vehicle, an infantry unit, an aircraft
   landed on open ground and an aircraft on a landing pad. *Expected:* it heals the vehicle and the
   aircraft on open ground by itself, never the infantry unit or the aircraft on the pad.
-  *Falsified if:* the infantry unit or the aircraft on the pad is healed, or the aircraft on open
-  ground is not.
+  *Falsified if:* the infantry or pad aircraft is picked for healing, or the vehicle or open-ground
+  aircraft is not healed.
 - *Part c (healer for acquisition):* an infantry type with a primary weapon of damage −3 and a
   secondary weapon of damage +3 (mean 0), in *guard*, with a damaged own infantry unit and an enemy
-  infantry unit within range. *Expected:* it never heals the own unit by itself and attacks the
-  enemy. Repeat with a primary of −5 and a secondary of +3 (mean −1): it heals the own unit by
-  itself and never attacks the enemy. *Falsified if:* the first type heals by itself, or the
-  second one does not.
+  infantry unit within range. *Expected:* it never heals the own unit by itself and selects the
+  enemy as its target. Repeat with a primary of −5 and a secondary of +3 (mean −1): it picks
+  and heals the own unit and never picks the enemy. *Falsified if:* the first type picks the
+  own unit or fails to pick the enemy, or the second fails to pick and heal the own unit or
+  picks the enemy. The sign of health change on an enemy hit is not the acquisition observable.
 
 **H3: step size and cost (claims 3 to 5).** *Part a (steps):* a damaged own vehicle of a test type with cost 900 and
 strength 600, at health 300, docks on a repair depot; repair step 10, repair percentage 25 %, *repair* behaviour
@@ -552,26 +633,28 @@ factor both set to 2 in the test files. *Expected:* still −3 credits per step.
 and our engine, Edge cases). *Expected in the original:* each step adds 1 health (claim 4) and
 costs 1 credit (the maximum of F2 with a negative number of steps). Our engine would charge 2
 credits (F2, our engine); that departure is not measured here. *Falsified if:* the original's step
-adds another amount or costs 2 credits or more (that would mean the original guards a negative
-step as our engine does).
+adds another amount or costs anything other than 1 credit, including 2 (that would mean the
+original guards a negative step as our engine does).
 
 **H4: depot timing (claim 6, F1).** *Part a (timing):* as H3 part a with a vehicle repair rate of 0.125 game minutes and a
 *repair* behaviour rate of 0.015625 (*D* = 14). *Observable:* the tick of each step, counted from the
 tick the vehicle comes to rest. *Expected:* a step at once, the second 126 ticks later
 (14 + 113 − 1), then one every 113 ticks. With the vehicle repair rate absent (0.016): every 15
-ticks after the second. *Falsified if:* 112 ticks between later steps, or 14 at the absent rate
-(that would mean the depot uses the truncated period of building repair), or no step at rest. The
+ticks after the second. *Falsified if:* no step at rest, a second step other than 126 ticks
+later, or any later interval other than 113 ticks (15 at the absent rate). Intervals of 112 or
+14 would mean the depot uses the truncated building period. The
 tick on which the vehicle leaves the depot after the step that brings it to full health is recorded
 too.
 - *Part b (full health):* a vehicle at full health docks. *Expected:* it is sent away on the tick it
   comes to rest, with no step, no payment and no repair-complete announcement (the local player
   owns the depot). Repeat with the paying house at 0 credits. *Expected:* the same, sent away on the
-  tick it comes to rest. *Falsified if:* a charge, a wait of *D* ticks or more, or an
+  tick it comes to rest. *Falsified if:* a charge, departure on any later tick, or an
   announcement; or, in the repeat, the vehicle stays and the depot asks again *D* ticks later
   (that would mean *cannot pay* takes precedence over *not needed*).
 - *Part c (done, then not needed):* a vehicle one step short of full health docks. *Expected:* the
   settling step brings it to full health and pays once; it leaves on the second step, 126 ticks
-  later, with no further payment. *Falsified if:* it leaves at once, or a second payment is taken.
+  later, with no further payment. *Falsified if:* it leaves on any other tick, or a second
+  payment is taken.
 - *Part d (destination):* run with a rally point set on the depot and without. *Expected:* the
   vehicle moves to the rally point when there is one, and otherwise to a cell next to the depot.
   *Falsified if:* it stays on the depot or goes elsewhere.
@@ -593,15 +676,19 @@ too.
   is heard and the second is not, and both vehicles are sent away. *Run 3:* as run 2 with the
   depots 30 cells apart. *Expected:* both are heard. *Run 4:* a depot of a computer-played house
   allied with the local player, in view, repairing its own vehicle. *Expected:* no announcement for
-  its completion. *Falsified if:* run 2 is silent for the first or sounds for the second, run 3 is
-  silent for either, or run 4 is heard (the depot's owner is not the local player). Record the
+  its completion. Run 4 is exploratory: if no vehicle docks, it supplies no observation and the
+  non-local-owner condition remains `unmeasured` (claim 6).
+  *Falsified if:* run 1 is silent or announces at another step, run 2 is silent for the first
+  or sounds for the second, run 3 is silent for either, or, if completion is actually observed,
+  run 4 is heard (the depot's owner is not the local player). Record the
   largest distance and the longest gap at which run 2's second announcement stays silent: they are
   the suppression's distance and duration, for the interface specs.
 - *Part g (the moving step; the return to the guard spot):* both are `unmeasured` (claim 6). The
   attempt: after the settling step, order the docked vehicle to move on the tick a step falls due,
   and read the tick of its next health rise. *Expected:* a health rise on the first tick it stands
   still, the next *K*<sub>u</sub> ticks later; if the order ends the docking instead, the statement
-  stays `unmeasured`.
+  stays `unmeasured`. If docking persists through movement, a rise while moving, a delayed
+  rise after stopping or a later interval other than *K*<sub>u</sub> falsifies the rule.
 
 **H5: building repair (claim 8).** Building repair rate 0.016 (the absent-key default, so *P*<sub>b</sub> =
 14), a building type with cost 1000 and strength 1000, repair step 10, repair percentage 25 % (step
@@ -609,7 +696,9 @@ cost 2), the house has 1000 credits.
 - *Part a (steps):* the own building at health 500, repair turned on at a tick that is no
   multiple of 14. *Observable:* the tick numbers of the health rises, the credits. *Expected:* the
   first rise at the next multiple of 14, rises only on multiples of 14, each +10 at −2 credits.
-  Repair turns off at health 1000. A second run with 5 credits at the start: two steps are
+  Repair turns off at health 1000. Repeat starting at health 995: the last step adds only 5,
+  still charges 2 and turns repair off; any other gain, payment or later step falsifies the cap.
+  A second run with 5 credits at the start: two steps are
   paid (2 + 2), the third multiple of 14 finds 1 credit, nothing is paid and repair turns off.
   *Falsified if:* a rise on another tick, an amount other than +10 or −2, or a step paid with less
   money than its cost.
@@ -618,52 +707,73 @@ cost 2), the house has 1000 credits.
   charge. *Falsified if:* nothing is charged (a full-health test exists), or a second charge
   follows.
 - *Part c (step below 1):* the building at health 500, repair step −5. *Expected:* each step lowers the health by 5 and charges
-  1 credit (the original; our engine departs, Edge cases). *Falsified if:* health rises, or the
-  step is taken as 1.
+  1 credit (the original; our engine departs, Edge cases). *Falsified if:* any gain other than
+  −5, any cost other than 1 or a different repair tick.
 - *Part d (free unit):* a building type with cost 2000 that comes with a free unit of cost 800,
   strength 1000, repair step 10, repair percentage 25 %. *Expected:* each step costs 3 credits
-  (cost 2000 less 800, so *q* = 100, *c* = 12, 12 × 0.25 = 3). *Falsified if:* each step costs 5
-  (the free unit is not deducted).
+  (cost 2000 less 800, so *q* = 100, *c* = 12, 12 × 0.25 = 3). *Falsified if:* any cost other
+  than 3, including 5 (the free unit is not deducted).
+- *Part e (pad aircraft):* a building type with cost 2000, strength 1000, no free unit and two
+  pad aircraft types, each of cost 300. Turn the separate-aircraft setting off and make this
+  building the first dock of the first aircraft, as S-0408 claim 2 requires.
+  Repair step 10 and percentage 25 %. Damage the building and turn repair on.
+  *Expected:* 4 credits per step, from adjusted cost 1700, quotient 100, integer cost per step
+  17 and truncated percentage product 4. *Falsified if:* any other cost, including 5.
+  Repeat with both pad aircraft costs 2400, leaving adjusted cost −400: *expected:* 1 credit
+  per step from the minimum; any other cost falsifies that minimum.
 
 **H6: hospital (claim 7).** *Part a (steps):* an own infantry unit at health 10 of strength 100 enters an own
 hospital; infantry repair step 25, infantry repair rate 0.125, *repair* behaviour rate 0.015625
-(*D* = 14), credits 0. *Expected:* no step at entry; the first step about 126 ticks after entry
-(within one processing for the phase), then one every 113 ticks without paying (35, 60, 85), and it
-comes out after the fourth step, at 100.
-*Falsified if:* it pays, comes out after one step, or the interval between steps is not 113.
+(*D* = 14), credits 0. Record entry, the hospital's first repair processing afterward, each
+health rise and exit. *Expected:* no step at entry; the first step 126 ticks after that first
+processing, then one every 113 ticks without paying (35, 60, 85), and it comes out on the fourth
+step at 100. Entry alone does not fix the processing phase.
+*Falsified if:* any payment, wrong gain, step at entry, different first-step delay, interval
+other than 113, health above 100 or exit on a tick other than the fourth step.
 - *Part b (minimum step):* infantry repair step 0. *Expected:* each step restores 1 health.
   *Falsified if:* health does not rise, or rises by another amount.
 - *Part c (sound and announcement):* when the unit comes out at full health and the local player
   owns the hospital. *Expected:* the repair-complete sound and announcement are heard. Two own
   hospitals on adjacent cells, a unit leaving each within 10 ticks of the other: both sounds are
   heard, only the first announcement (claim 6, suppression; with the hospitals 30 cells apart, both
-  announcements). A hospital of another house: neither. *Falsified if:* either is heard for another
-  house's hospital, the sound is missing for the second adjacent hospital, or the second adjacent
-  announcement is heard.
+  announcements). *Falsified if:* an own completion lacks either feedback in isolation, the
+  sound is missing for the second adjacent hospital, the second adjacent announcement is heard,
+  or either distant announcement is missing. The other-owner condition is `unmeasured` as
+  claim 7 explains; a spontaneously observed completion at another house's hospital would
+  falsify it if either feedback is heard, but this part does not promise such a completion.
 
 - *Part d (not needed inside, an attempt):* claim 7's *not needed* is `unmeasured`. A self-healing
   infantry type at 1 health point below full is ordered into an own hospital (legal, since it is
-  hurt). *Observable:* its health after entry, and whether it is put out at its first step (about
-  126 ticks after entry) with no sound and no announcement. *Expected:* it reaches full health
-  inside through claim 9 before that step and is put out at the step without the sound or
-  announcement. If its health does not rise inside the hospital, the statement stays `unmeasured`
+  hurt). *Observable:* its health after entry, and whether it is put out at its first step
+  (126 ticks after the first hospital processing) with no sound or announcement. Try to find
+  a run in which it reaches full health inside before that step. *Conditional expected result:*
+  if full health is reached inside, it is put out at the step without sound or announcement. If full health inside is observed, ejection at another time, a sound or an
+  announcement falsifies the conditional rule. If its health does not rise inside the hospital,
+  the statement stays `unmeasured`
   and the observation answers the open question on healing inside.
 
-**H7: self-healing (claim 9).** A damaged own vehicle of a self-healing type and a damaged own
-building of a self-healing type, building repair rate 0.016 (the absent-key default). *Observable:* tick numbers of the health
-rises. *Expected:* +1 for each on tick numbers that are multiples of 14, until full. A third object,
+**H7: self-healing (claim 9).** A damaged own infantry unit, vehicle, landed aircraft and
+building, each of a self-healing type, building repair rate 0.016 (the absent-key default). *Observable:* tick numbers of the health
+rises and the credit balance. *Expected:* +1 for each on tick numbers that are multiples of 14,
+until full, with no payment. Stagger placement by several ticks: health rises must still coincide
+on the global multiples. Otherwise identical non-self-healing controls of each kind never rise.
+Another object,
 a vehicle with the self-heal ability on its veteran list placed with map veterancy 100, heals the
 same way; at veterancy 0 it does not. *Falsified if:* a rise happens on another tick or by another
-amount, the objects keep rising at full health, the veteran vehicle at veterancy 0 heals, or the
-veteran one at 100 does not.
+amount, a charge occurs, schedules shift with placement, a control heals, the objects keep
+rising at full health, the veteran vehicle at veterancy 0 heals, or the veteran one at 100 does not.
 
 **H8: house-wide healing (claim 10).** *Part a (amounts):* own damaged infantry, a damaged non-organic vehicle, a damaged
-organic vehicle and a damaged aircraft (landed). One own building with infantry self-heal count 1
+organic vehicle, a damaged aircraft (landed) and a damaged building, none individually
+self-healing. One own building with infantry self-heal count 1
 and vehicle self-heal count 1; intervals 40 and 60 ticks, amounts 10 and 3. *Expected:* the infantry
 and the organic vehicle gain 10 on tick numbers that are multiples of 40; the other vehicle 3 on
-multiples of 60; the aircraft nothing. Add a second such building: the gains become 20 and 6. Sell
+multiples of 60; the aircraft and damaged building nothing. Add a second such building: the gains become 20 and 6. Sell
 both: no more gains. Repeat with the buildings unpowered (power plant removed): same gains.
-*Falsified if:* frequency rather than amount doubles, the aircraft heals, or power changes it.
+*Falsified if:* any amount or tick differs, frequency rather than amount doubles, the aircraft
+or damaged building heals, healing continues after both sources are sold, or power changes it.
+Continue until the infantry and both vehicles reach full health: *expected:* no increase above
+strength and no charge; either falsifies the rule.
 - *Part b (capture):* capture one such building with an engineer. *Expected:* the gains of the
   former owner's objects stop and those of the captor's start, with the building's counts.
   Then destroy one such building of the captor's: its gains stop with it. *Falsified if:* the former
@@ -673,8 +783,8 @@ both: no more gains. Repeat with the buildings unpowered (power plant removed): 
   1, interval 40. *Observable:* whether a damaged infantry unit gains health at multiples of 40 after
   each placement and removal. *Expected:* it gains after the first placement (total 3), not after the
   second (−2), not after the removal of the first (0), and gains 5 per interval after the removal of
-  the second (5). *Falsified if:* it gains with the total at −2, or never gains at the end (that
-  would mean a floored sum). With the switch off (the count −5 read as 0), the unit gains after the
+  the second (5). *Falsified if:* any stage's gain differs from 3, 0, 0 and 5 respectively,
+  or a gain occurs outside a multiple of 40 (a missing final gain would mean a floored sum). With the switch off (the count −5 read as 0), the unit gains after the
   first placement and after the second (total 3), and not after the removal of the first (0) or of
   the second (0).
 - *Part d (both gains in one tick):* a damaged own non-organic vehicle of a self-healing type, one
@@ -683,20 +793,25 @@ both: no more gains. Repeat with the buildings unpowered (power plant removed): 
   below full health it becomes full, and never rises above the strength. *Falsified if:* it gains
   another amount, or ends above the strength.
 
-**H9: the skill-level gate of automatic building repair (claim 8).** A skirmish on the test map; the
-human house has 100 000 credits and two damaged buildings of a repairable type, and gives no repair
-order; no other house can attack. *Observable:* the buildings' health over 3000 ticks. *Run 1*
-(threshold at the absent-key default 3): *Expected:* it never rises. *Run 2* (the repair-and-sell
-threshold set to 0): *Expected:* repair starts by itself on at least one building, and the credits
-fall by the step cost at each rise. *Run 3 (neutral and special houses):* as run 1, with two
-damaged buildings of the repairable type pre-placed by the map for the neutral house and two for
-the special house (each house has 100 000 credits as far as the setup can give them; S-0009, claim
-27 for the owners of pre-placed objects). *Expected:* none of the four rises or is sold over 3000
-ticks. *Run 4:* as run 3 with the threshold 0. *Expected:* record whether a building of either
-house starts repair or is sold. *Falsified if:* run 1 shows a rise (the gate does not exclude a
-human house, and claim 8 needs a new revision), run 2 shows none (the gate is not the stated one),
-or run 3 shows a rise or a sale (a neutral or the special house has a skill level at least the
-threshold, contrary to S-0209, claim 11, and claim 8 needs a new revision).
+**H9: exclusion by the skill-level gate (claim 8).** The human house has 100 000 credits and two
+damaged buildings of a repairable type, with individual and house-wide self-healing disabled,
+and gives no repair or sell order. No map action heals, repairs or sells them. Record health,
+credits, repair state and whether each building is sold over 3000 ticks.
+- *Run 1:* threshold at the absent-key default 3, then repeat with threshold 1.
+  *Expected:* no automatic repair or sale. *Falsified if:* either occurs.
+- *Run 2 (exploratory):* repeat with threshold 0, then −1. Record whether repair or sale starts,
+  and the health and credits at each event. A start shows that a level-0 human house can reach
+  the rule; no start does not falsify the gate, since later conditions are still unknown.
+  This run does not back a promised automatic outcome.
+- *Run 3:* as run 1, also pre-place two damaged repairable buildings for each of the neutral
+  and special houses (S-0009 claim 27). Their starting credits follow S-0412 claim 2; do not
+  assume that the lobby gives them the human's money. *Expected:* none starts repair or is
+  sold. *Falsified if:* either event occurs for any of the four buildings. Their skill level
+  itself is independently tested by S-0412 K10 and S-0209 C7, not inferred from silence here.
+- *Run 4 (exploratory):* repeat run 3 with threshold 0, then −1. Record each non-player house's
+  available credits and any repair or sale. No outcome is promised while further conditions
+  remain open. Neither silence nor a start alone confirms those conditions. This run supplies
+  observations for that question, not a falsifier for a complete automatic rule.
 
 **H10: healing on resources and the healer search radius key (claim 11).** S-0311 scenario X11
 covers the veterancy ability and, in the same run, the type flag; it does not set the game-wide
@@ -712,6 +827,66 @@ value or the search radius key, which this scenario does.
   same results as H2 part a (under *guard*, the unit at 3 cells is never healed). *Falsified if:*
   either run differs from H2 part a, in particular if the unit at 3 cells is healed under *guard*.
 
+**H11: arithmetic boundaries and bad data (F1, F2, Edge cases).** Use the objects and ordinary
+repair orders of H3, H5, H6 and H8 as indicated; each variation is a fresh program run so a
+previous test field cannot persist. Stop negative-health tests before health reaches 0.
+- *Decimal timing:* set all three repair rates to the written decimal 0.1. *Expected:* building
+  steps on global multiples of 90 ticks; depot and hospital working steps 91 ticks apart.
+  Record the entry-relative phase separately using their first processing. Repeat with rates
+  0.125: period 112, working count 113. Any other period, count or phase than F1 and claims 6
+  and 7 falsifies those timings.
+- *Short working count:* set the vehicle and infantry rates to 0, then −0.125. *Expected:* a
+  working step every tick, the first working step *D* ticks after the settling step or first
+  hospital processing. Any larger interval or a program error falsifies the count's minimum.
+- *Zero periodic divisor:* in separate runs set the building repair rate to 0 for H5, then for
+  H7, and set each house-wide interval to 0 for an eligible H8 object. *Expected:* the original
+  stops with a program error at its first applicable periodic test; progression beyond that
+  test falsifies the claim. Our engine instead uses 1 tick and warns; that departure is not
+  an oracle prediction. Repeat each divisor with a negative value: use building rate −0.125
+  and house-wide interval −40. *Expected:* the same ticks as positive 112 and 40 respectively,
+  with no error. A different schedule or an error falsifies the negative-divisor rule.
+- *Cost divisions and minimum:* H3 vehicle, cost 1000, strength 605, step 10, repair percentage
+  written as 0.99. *Expected:* quotient 60, integer cost per step 16, payment 15 credits.
+  Any other payment, including 16 from delaying the integer truncations, falsifies F2.
+  Repeat with cost −1000 and percentage 25 %, then cost 1000 and percentage −25 %:
+  *expected:* 1 credit per step in both runs; any other payment falsifies the minimum.
+- *Cost division by zero:* separate H3 runs with repair step 0, and with strength 5 and step
+  10. *Expected:* the original stops with a program error when the depot first asks for a
+  repair step on the damaged vehicle. A successful step falsifies the asserted failure.
+  An infantry unit in H6 with infantry step 0 still heals by 1 for free (H6 part b); an error
+  there falsifies the infantry exemption. Our engine's repaired divisors are not measured here.
+- *Negative health gain:* H8 infantry at health 100, amount −3 and one positive source, interval
+  40. *Expected in the original:* health falls by 3 at the first multiple of 40 without a
+  charge; a positive or zero gain, another amount or another tick falsifies it. End the run
+  before health 0. H5 part c similarly records a negative building step. Behaviour beyond
+  leaving the normal health domain is `unmeasured`: no stable health-domain prediction can
+  be tested there. Our engine uses 0 for the negative self-heal amount and warns.
+
+**H12: absent-key defaults (Constants and Import mapping).** Use a named loose test copy of
+base rules plus the test map. Omit the tested key from every applied rules layer, start a fresh
+program for each test and retain the other H3, H5, H6 or H8 inputs. Record health, payment and
+tick numbers. For each omission the expected result is the owning claim's formula using the
+absent value from Constants; any different gain, payment, period or count falsifies that default.
+- Omit the game-wide repair step, infantry step and percentage one at a time in H3/H6: expected
+  step 5 for the vehicle, 1 for infantry, percentage 0.25 in F2, minimum costs unchanged.
+- Omit each repair rate: expected global building period 14 or working count 15 as appropriate.
+- In H8 omit each interval or amount separately: expected interval 1000 ticks or amount 1 per
+  positive source. Omit each building source count: that source contributes 0, so a house with
+  only that source heals nothing of its affected kind. Omit the self-healing flag in an H7
+  control with no ability: no individual healing. Omit the organic flag on an H8 vehicle:
+  expected the vehicle interval and amount, not the infantry ones.
+- Omit the depot flag from an otherwise identical test depot: no repair-depot entry cursor
+  or depot exchange. Omit the hospital flag from an otherwise identical test hospital: no
+  hospital-entry cursor or hospital exchange. A remaining respective cursor or exchange
+  falsifies the absent false flag. The organic defaults for infantry, aircraft and buildings
+  are `unmeasured` here: their kind already determines whether this spec applies a healing
+  total, so changing the organic flag cannot distinguish those defaults through its health
+  observations.
+- Omit the automatic threshold in H9 run 1: expected exclusion of the level-0 human, neutral
+  and special houses. This tests only the exclusion, not the exact numeric threshold; the
+  default threshold 3 is `unmeasured` here, because the only controlled skill level is 0 and
+  any positive threshold has the same observable consequence.
+
 ## Open questions
 
 - The exact phase of the second depot step and the first hospital step (±1 tick), and whether a
@@ -726,20 +901,9 @@ value or the search radius key, which this scenario does.
   passengers are in play and take turns (glossary, *in play*); no measurement has settled it for them.
 - How aircraft are repaired on their landing pads (the same repair step is believed to apply, at a
   timing not measured); a future aircraft spec.
-- The other conditions of the original's automatic building repair and sale, for a threshold of 0 or
-  below (claim 8, H9).
+- The remaining eligibility conditions and outcomes of automatic building repair and sale when
+  the skill-level gate passes (claim 8, H9 runs 2 and 4). Their reproduction must follow the
+  existing house policy; no departure has been chosen.
 - The distance and duration of the repeat suppression of the repair-complete announcement (claim 6,
   H4 part f), which the interface specs own.
-- Whether the neutral and special houses really keep skill level 0 in a skirmish (claim 8, H9 run
-  3); S-0215 lists the same question.
 
-## Questions for the project lead
-
-- **Automatic repair and sale at a skill threshold of 0 or below (claim 8).** The original's gate
-  passes for every house when the threshold is 0 or below, the neutral and special houses
-  included, and what the rule then does depends on conditions this spec does not specify (H9 runs 2
-  and 4 record it). Proposal: our engine never starts repair or a sale by itself, whatever the
-  threshold, for any house including those two (a departure, for them, from the lead's decision of 2026-10-10 that they keep the
-  original's rules; glossary, *AI house*, since the rule's conditions are unknown), and the importer warns for such a threshold. The alternative
-  is to reproduce the original's rule once H9 and a further measurement specify its conditions.
-  Which one?
