@@ -2,7 +2,7 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -144,12 +144,10 @@ and *quirk switch*.
      53-shade house-colour palette (S-0104 claims 3 and 17).
    - **Everything drawn with the cell's tile shade table takes the cell's tint**, as terrain does
      (S-0104 claim 3): bridge decks, crates, rubble, and every overlay of row 8, for example a
-     fence, track, rock or decoration whose type has none of the four flags. This answers S-0104's
-     open question on overlays and tile tints.
-     **Cross-spec change required at handoff:** S-0103 claim 8, its confidence statement and its
-     open questions must delegate the established ore and gem palette to this spec's start-up
-     resource table, rather than leave it unresolved. Its statement must respect this table's
-     deck-cell precedence and the shroud/glow shade-row changes above. The approved S-0103 claim 8 and its open questions still leave the ore and gem overlay palette unresolved. Update S-0103 in the same handoff as this spec, then check that the two agree.
+     fence, track, rock or decoration whose type has none of the four flags. S-0103 claim 8
+     and S-0104 claims 3 and 13 delegate overlay palette, tint and brightness precedence to this
+     table. The neutral-brightness resource rule applies only outside deck and marker cells.
+     Drawn deck overlays instead use the cell's tile shade table and scaled raised level.
    - Rows 3 and 5 depend on the type's flags and list position only, never on the theater.
    - **Deck cells.** The original makes a cell a deck cell only when it places in that cell an
      overlay type at one of the bridge list positions 24, 25, 237 and 238 (the positions of S-0009
