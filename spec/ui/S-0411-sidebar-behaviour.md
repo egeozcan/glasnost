@@ -2,7 +2,7 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -335,9 +335,21 @@ last recheck). In addition:
     ignored because its factory condition fails instead follows S-0406 claim 1: the item stays
     done and no sound plays. Refused placement requests the cannot-deploy-here announcement,
     not the game-wide refusal sound (claim 12; S-0701 claim 28). When it succeeds, placement mode ends.
-    A right click on the icon while it is ready gives a cancel order (claim 5), which also ends
-    placement mode.
-    - Backing: `measurable` (scenario S8, with its third run for the right-click cancel,
+    A battlefield right click without a scroll drag instead ends placement mode and removes
+    the carried outline, while retaining the completed item ready for placement. It gives no
+    place or cancel order and no refund. Clicking the ready icon again re-enters placement
+    mode. This differs from a right click on the sidebar icon while it is ready: that gives
+    a cancel order (claim 5), which also ends placement mode.
+
+    S-0214 claim 28 owns targeting-mode cancellation: a battlefield right click exits
+    repair, sell, power-switch, superweapon targeting, route-editing or beacon-placement
+    mode without the corresponding action or an additional ordinary deselection. A
+    classified right drag followed by release preserves the active mode, including building
+    placement; it neither cancels the completed item nor refunds it. S-0214 claim 27 owns
+    the distinction between a scroll drag and a right click.
+    - Backing: `measurable` (scenario S8, with its third run for the icon cancellation
+      and fourth run for battlefield exit and drag preservation; S-0214 scenario T20 for
+      the other targeting modes, and
       S-0406 PL1 for ignored placement with no factory, and its claim 6's scenarios for legality)
     - Confidence: medium
 
@@ -957,10 +969,14 @@ the time the script sent a button event, dates a click.
 - Procedure: first run: watch the first tab's button from the done tick; open the tab, click the
   icon, click an explored, adjacent cell blocked by an immovable object (legal order, failed
   placement), then a valid cell. Third run: click the icon (placement mode), then
-  right-click the icon.
+  right-click the icon. Fourth run: enter placement mode and right-click explored battlefield
+  ground without dragging; click the ready icon again, then make a classified right scroll
+  drag under S-0214 claim 27 and release. Finally place the retained building on a valid cell.
+  Repeat this fourth run three times, with scripted input and a recorder.
 - Observable: the tab button's look per drawn frame, with the tick number of each change; the sounds played from the done tick on,
   whether placement mode continues after the invalid click; in the third run whether placement mode
-  ends and the credits.
+  ends and the credits. In the fourth run record the outline, ready item, production orders,
+  credits delta, tab flashing and successful re-entry and later placement.
 - Expected: the construction-complete announcement plays and the button starts flashing when the item is done (claims 9 and 11; the exact tick is recorded for a later
   revision). With *t* the recorded flash-start tick, not an assumed done tick, the
   initial lit state is ⌊*t*/10⌋ + 1 even. Its first toggle is in tick
@@ -970,7 +986,11 @@ the time the script sent a button event, dates a click.
   sound, and placement mode continues; record the requested entry separately from playback.
   The valid click places the
   building and ends the mode. Second run: the superweapon's tab button flashes the same way. Third
-  run: placement mode ends, the item is cancelled and refunded.
+  run: placement mode ends, the item is cancelled and refunded. Fourth run: the battlefield
+  right click removes the outline but leaves the item ready and the tab flashing, with no
+  production order or credits change. Re-entry restores the outline; the scroll drag and
+  release retain placement mode and the ready item, with no cancellation or refund. The
+  final valid left click places the building normally.
 - Pause/restart controls: open the options menu during the initial state, then resume.
   Expected: neither countdown nor lit state advances while the game stands still.
   Keep a ready subject on the tab for at least 50 ticks: repeated readiness must not
@@ -984,7 +1004,9 @@ the time the script sent a button event, dates a click.
   the flash stays after its last subject is removed, the announcement is missing, placement mode ends after the
   invalid click, that click requests a different announcement or the game-wide refusal sound,
   valid placement fails to place or end the mode, the superweapon tab does not
-  flash, or the right click leaves placement mode on or fails to cancel and refund the item.
+  flash, or the third-run icon right click leaves placement mode on or fails to cancel and
+  refund the item. The fourth run is falsified by battlefield exit cancelling/refunding the
+  item, failure to re-enter and place it, or a classified right drag ending placement mode.
 
 **S9. Cancellation order for several types (claim 13).**
 - Setup: “sidebar probe map” overrides define infantry A and B with the same prerequisite and eligible
@@ -1163,8 +1185,8 @@ the time the script sent a button event, dates a click.
 
 ## Open questions
 
-1. Whether a right click on the battlefield, or a key, also leaves placement mode without cancelling
-   is not established.
+1. Battlefield right-click exit without item cancellation is resolved by claim 10 and
+   S-0214 claim 28. Whether a key also leaves placement mode without cancelling remains open.
 2. Cosmetic early clock anticipation is outside the look requirements under the lead's
    Interface looks decision of 2026-10-14; claim 8 fixes the production value.
 3. Resolved by claim 8: a done item's clock overlay is absent.
