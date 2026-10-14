@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -440,13 +440,24 @@ skirmishes only; network games and campaigns are out of scope.
    - **Within a house update and in the final tick.** S-0414 claim 16 owns the observable ordering:
      ordinary power and radar work do not see surrender or defeat destruction from that same
      update, but its due tech-tree recheck and sidebar cancellation orders do. Defeat's forced
-     radar-on effect remains immediate. At the start of the houses' part of the final tick,
+     radar-on effect remains immediate. S-0414 claim 18 places the assigned-tag raise in ticks
+     whose integer tick number is a multiple of 8, including tick 0: it sees that house's
+     surrender destruction and defeat test, including defeat destruction, from the same update.
+     Its actions can affect the due tech-tree recheck and sidebar cancellation orders in that
+     update, but newly due power or ordinary radar work waits for the next house update.
+     If a tag action removes the last qualifying object, no second defeat test runs in that
+     update: the next test is in the next tick. Defeated houses keep these raises in house order,
+     including the update that defeats them and later eligible ticks during the end delay.
+     Cleanup-removed houses have no update and raise nothing. The separate automatic unit-release
+     work stays owned by S-0411 claim 9; this adds no ordering for it.
+     At the start of the houses' part of the final tick,
      pending results and expiry become committed under S-0414 claims 8 and 16; later defeat
      tests cannot change them. All remaining house updates and the orders still run. S-0414
      identifies the common cutoff for all houses as a design extension of the original's
      local-player result. Other house-wide work belongs to the economy, production and
      superweapon specs.
-     - Backing: `measurable` (S-0414 scenarios V7, V8, V11 and V12) for the original's
+     - Backing: `measurable` (S-0414 scenarios V7, V8, V11, V12 and V15, with V13 for
+       cleanup absence and S-0011 T20 variant C for variable effects in house order) for the original's
        consequences; `unmeasured` for the common per-house commitment, a design rule that the
        original's local-player-only result cannot confirm. Claim 10 backs the no-turn-skip rule.
      - Confidence: S-0414's high for destruction creation order and within-update ordering,
@@ -584,7 +595,7 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 | 15 | Blast rings (the superweapon specs own them) | 5 | Draw order | Claim 1 |
 | 16 | Crate respawns, in skirmish games with crates on (the crate rules own them) | 15 | Draw order | Claim 1 |
 | 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
-| 7 | Houses, one after another in house order; final-tick results committed at this part's start (S-0414 claim 16) | 6 | A house's tag raise and defeat test see the turn pass; later houses' defeats are not yet known to an earlier end test; power/radar and tech-tree consequences follow S-0414 claim 16; draw order | Claim 8, scenario O7 part B; S-0414 scenarios V7, V11 and V12 |
+| 7 | Houses, one after another in house order; final-tick results committed at this part's start (S-0414 claim 16) | 6 | A house's tag raise and defeat test see the turn pass; later houses' defeats are not yet known to an earlier end test. Assigned-tag raises see own surrender and defeat effects; due tech-tree/sidebar work sees tag actions, but completed ordinary power/radar work does not (S-0414 claims 16 and 18). Defeated houses keep raises; cleanup-removed houses have no update. Draw order | Claim 8, scenario O7 part B; S-0414 scenarios V7, V11, V12, V13 and V15 |
 | 8 | Orders given in this tick's cycle | 7 | Objects act on the orders from the next tick; a hold order does not stop a progress step of this tick; draw order | Claims 7 and 8, scenarios O2 and O7 part C |
 
 After the last part of the tick, the tick number grows by 1, except in the final tick (S-0201,
@@ -1137,6 +1148,16 @@ start at that tick's end; the former sample must occupy the earlier stream posit
 intervening draws. Each requires three distinguishing observations; reversed assignment falsifies
 the rule. These tests do not measure the between-house order-boundary design extension or the
 separate row-6 versus row-7 draw comparison.
+
+**Assigned-tag raises within a house update (claim 8).** S-0414 V15 owns the shared
+measurement: a named test skirmish map, scripted input and a read-only recorder compare
+surrender in tick 7 with the assigned-tag raise in tick 8, then use a turn-pass gate to make
+a tag remove prerequisites or the last qualifying object in tick 16. Expected: the raise
+sees surrender and defeat, due tech-tree/sidebar work sees tag removals in that update,
+newly due power/radar work waits until tick 17, and a tag-caused last-object loss is tested
+for defeat in tick 17, not tick 16. Continued raises after defeat and cleanup absence use
+V15 part a and V13. Reversed timing or a missing eligible raise falsifies the corresponding
+rule; V15 specifies controls separating the ordinary poll from the owner-house raise.
 
 ## Open questions
 
