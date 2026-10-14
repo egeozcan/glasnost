@@ -579,6 +579,7 @@ impl Cache {
             group: Group::Effects,
             provisional: true,
             object: None,
+            stack: None,
         }
     }
 
@@ -611,6 +612,7 @@ impl Cache {
                     group: Group::Status,
                     provisional: false,
                     object,
+                    stack: None,
                 })
             })
             .collect()

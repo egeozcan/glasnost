@@ -525,10 +525,14 @@ impl MapRenderer {
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
         let mut list: Vec<Instance> = Vec::new();
         let mut batches: Vec<(Role, std::ops::Range<u32>)> = Vec::new();
-        for item in &scene.items {
-            if !filter.shows(item) {
-                continue;
-            }
+        // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
+        let copies = scene
+            .items
+            .iter()
+            .filter(|i| filter.shows(i))
+            .flat_map(|i| i.copies(oy));
+        for item in copies {
+            let item = &item;
             let (l, t, r, b) = scene.bounds(item);
             // spec: S-0101 F4b (an image is drawn iff its drawn extent meets the view; a bounds miss draws no pixel)
             if r <= ox || b <= oy || l >= ox + w || t >= oy + h {

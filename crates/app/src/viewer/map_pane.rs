@@ -894,7 +894,11 @@ impl MapPane {
                 max_level,
                 &q,
             );
-            (cell.0, cell.1, shown.scene.object_at(qx, qy, &filter))
+            (
+                cell.0,
+                cell.1,
+                shown.scene.object_at(qx, qy, view.origin.1, &filter),
+            )
         });
         let hover = self.hover;
         let mods = ui.input(|i| Modifiers {

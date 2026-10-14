@@ -1118,25 +1118,28 @@ fn slot_scene(options: &Options) -> Built {
 /// S-0102 claim 17 (a slot animation is an unattached animation in its type's layer, a depth
 /// reader; the slot's depth adjustment and y-sort replace the type's); S-0102 claim 13 (the
 /// animation rows: ordinary, flat, shadow); S-0102 claims 1 and 7 (layer order);
-/// S-0109 claims 1 and 10 (first image frame a; shadow frame f + ⌊N/2⌋, none for a flat type);
-/// S-0109 claim 19 (a detail field above the player's level is not drawn)
+/// S-0109 claims 1 and 10 (first image frame a; shadow frame f + ⌊N/2⌋, none for a flat type;
+/// the image before its shadow, the shadow at the unshifted point); S-0109 claim 26 (the image
+/// moved down by the vertical draw shift); S-0109 claim 19 (a detail field above the player's
+/// level is not drawn)
 #[test]
 fn slot_animations_of_a_placed_building() {
     let b = slot_scene(&low_detail());
     let slots: Vec<Item> = b.scene.items[b.scene.cell_pass_len..].to_vec();
     let px = |i: &Item| b.scene.images[i.image as usize].pixels()[0];
-    // SLOTA (ground: shadow, image), SLOTB (air: image only, flat types draw no shadow),
+    // SLOTA (ground: image, shadow), SLOTB (air: image only, flat types draw no shadow),
     // SLOTD and SLOTE (top, in entering order). SLOTC's detail field 1 is above the player's
     // level 0, SLOTF is in a slot the set-up does not start.
     assert_eq!(slots.len(), 5);
     assert!(slots.iter().all(|i| i.test == DepthTest::Reader));
     assert!(slots.iter().all(|i| i.group == Group::Buildings));
-    let (a_shadow, a, flat) = (slots[0], slots[1], slots[2]);
+    let (a, a_shadow, flat) = (slots[0], slots[1], slots[2]);
     // Anchor (−120, 240); displacement (30, 15) is (256, 0) leptons (F6), so the position
     // (1792, 2560, 0) projects to (−90, 255); the vertical draw shift 3 moves it to (−90, 258).
     // Canvas 20 × 20 centred there, frame at (9, 9).
     assert_eq!((a.x, a.y), (-90 - 10 + 9, 258 - 10 + 9));
-    assert_eq!((a_shadow.x, a_shadow.y), (a.x, a.y));
+    // The shadow stays on the unshifted point (−90, 255).
+    assert_eq!((a_shadow.x, a_shadow.y), (a.x, 255 - 10 + 9));
     // Image frame Start = 1 (pixel 2); the shadow frame 1 + ⌊6/2⌋ = 4 (pixel 5).
     assert_eq!((px(&a), px(&a_shadow)), (2, 5));
     assert_eq!(a_shadow.paint, Paint::Shadow);
@@ -1147,7 +1150,8 @@ fn slot_animations_of_a_placed_building() {
     // Flat row: 0 + 0 − L(0) − 3; its image frame 0.
     assert_eq!(bias(&flat), (Profile::Flat, -3));
     assert_eq!(px(&flat), 1);
-    assert!(slots.iter().all(|i| i.provisional));
+    // No request is open for these: none is translucent or tiled.
+    assert!(slots.iter().all(|i| !i.provisional && i.stack.is_none()));
 }
 
 /// spec: S-0102 claims 5 and 17 (the sort key is X + Y of the position plus the slot's y-sort;
@@ -1228,7 +1232,7 @@ fn slot_animation_palettes() {
         p => panic!("not lit: {p:?}"),
     };
     // SLOTA is drawn with its building: the body's own table and brightness.
-    assert_eq!(lit(&slots[1]), lit(&body));
+    assert_eq!(lit(&slots[0]), lit(&body));
     // SLOTD: the single-shade table of the first colour definition.
     assert_eq!(lit(&slots[3]).rows, 1);
     // SLOTE: the anim palette's table, 53 rows, not the house table.
@@ -1243,6 +1247,133 @@ fn slot_animation_detail_level() {
     let low = slot_scene(&low_detail());
     let n = |b: &Built| b.scene.items.len() - b.scene.cell_pass_len;
     assert_eq!((n(&high), n(&low)), (6, 5));
+}
+
+/// A synthetic SHP whose frame i is a column of `heights[i]` rows of pixel
+/// value i + 1, at (9, `tops[i]`) on a 20 × `canvas_height` canvas.
+fn shp_rects(canvas_height: u16, heights: &[u32], tops: &[u16]) -> Vec<u8> {
+    ShpWriter {
+        width: 20,
+        height: canvas_height,
+        frames: heights
+            .iter()
+            .zip(tops)
+            .enumerate()
+            .map(|(i, (&h, &y))| WriteFrame {
+                x: 9,
+                y,
+                image: IndexedImage::new(u32::from(h > 0), h, vec![(i + 1) as u8; h as usize])
+                    .unwrap(),
+                compression: 1,
+            })
+            .collect(),
+    }
+    .write()
+}
+
+/// The slot items of one neutral HUTX on (6, 10) whose active slot
+/// (displacement (30, 15), so its position projects to (−90, 255) as in
+/// [`slot_animations_of_a_placed_building`]) plays SLOTA, a ground-layer type
+/// with the art lines `section` and the sprite `sprite`.
+fn one_slot(section: &str, sprite: Vec<u8>) -> (Built, Vec<Item>) {
+    let rules = format!("{RULES}[Animations]\n0=SLOTA\n");
+    let art = format!(
+        "{ART}[HUTX]\nActiveAnim=SLOTA\nActiveAnimX=30\nActiveAnimY=15\n\
+         [SLOTA]\nLayer=ground\n{section}"
+    );
+    let mut ctx = context_full(&rules, &art);
+    ctx.0
+        .arts
+        .insert((Kind::Animations, 0), art_of("SLOTA", "slota.shp"));
+    ctx.2.insert(b"slota.shp", sprite);
+    let b = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+        &Options::default(),
+    )
+    .0;
+    let items = b.scene.items[b.scene.cell_pass_len..].to_vec();
+    (b, items)
+}
+
+/// spec: S-0109 claim 26 (an ordinary or flat animation's image is centred on its projected
+/// position moved down by its vertical draw shift v: up for a negative v; the slot displacement
+/// stays in the position, S-0108 claim 10); S-0109 claim 10 (a shadow type's shadow is drawn
+/// right after its image, at the unshifted point, without v; a flat type draws none);
+/// S-0102 claim 13 (the shift enters the image's bias, not the shadow's)
+#[test]
+fn slot_animation_draw_shift_and_shadow() {
+    let sprite = || shp((20, 20), 6, (2, 2), (9, 9));
+    for v in [0, 7, -7] {
+        let (_, items) = one_slot(&format!("Shadow=yes\nYDrawOffset={v}\n"), sprite());
+        let [image, shadow] = items[..] else {
+            panic!("image and shadow: {items:?}")
+        };
+        assert!(matches!(image.paint, Paint::Lit(_)));
+        assert_eq!(
+            shadow.paint,
+            Paint::Shadow,
+            "the shadow is drawn after the image"
+        );
+        assert_eq!((image.x, image.y), (-90 - 10 + 9, 255 + v - 10 + 9));
+        assert_eq!((shadow.x, shadow.y), (-90 - 10 + 9, 255 - 10 + 9));
+        assert_eq!(bias(&image), (Profile::Upright, v - 2));
+        assert_eq!(bias(&shadow), (Profile::Flat, -2));
+    }
+    // A flat shadow type: claim 26's image point, no shadow image frame.
+    let (_, items) = one_slot("Shadow=yes\nFlat=yes\nYDrawOffset=-7\n", sprite());
+    assert_eq!(items.len(), 1);
+    assert_eq!((items[0].x, items[0].y), (-91, 255 - 7 - 1));
+    assert_eq!(bias(&items[0]), (Profile::Flat, -7 - 3));
+}
+
+/// spec: S-0109 claim 27 (a tiled type: copies of its current image frame spaced by the stored
+/// rectangle height h of image frame 0, not the canvas or the current frame; the lowest copy
+/// centred at (pₓ, pᵧ − ⌊h/2⌋ + v); the count from the unshifted pᵧ − ⌊h/2⌋; no shadow image
+/// frame for a shadow type); S-0102 claim 13 (the tiled row: v + adjustment − L(z) − 50 − j·h)
+#[test]
+fn slot_animation_tiled_copies() {
+    for (h, v) in [(10, 0), (11, 0), (10, 7)] {
+        // Canvas 32 rows; frame 0 is h rows, the shown frame 1 (Start=1) is 14 rows at row 9.
+        let sprite = shp_rects(32, &[h, 14, h, 14], &[11, 9, 11, 9]);
+        let (b, items) = one_slot(
+            &format!("Tiled=yes\nShadow=yes\nStart=1\nYDrawOffset={v}\n"),
+            sprite,
+        );
+        assert_eq!(items.len(), 1, "one stack, no shadow image frame");
+        let it = items[0];
+        let h = h as i32;
+        // Image frame 1 (pixel 2), centred at (−90, 255 − ⌊h/2⌋ + v) on the 20 × 32 canvas.
+        assert_eq!(b.scene.images[it.image as usize].pixels()[0], 2);
+        assert_eq!((it.x, it.y), (-90 - 10 + 9, 255 - h / 2 + v - 16 + 9));
+        let stack = it.stack.expect("a stack");
+        assert_eq!((stack.spacing, stack.base_row), (h, 255 - h / 2));
+        assert_eq!(bias(&it), (Profile::Upright, v - 50));
+        // The view's top row at world row 0: C = ⌊(255 − ⌊h/2⌋) / h⌋ + 2, whatever v.
+        assert_eq!(stack.copies(0), (255 - h / 2) / h + 2);
+        let ys: Vec<i32> = it.copies(0).map(|c| c.y).take(3).collect();
+        assert_eq!(ys, [it.y, it.y - h, it.y - 2 * h]);
+        // Q-0480: the tiled palette exception is open; the item is marked.
+        assert!(it.provisional);
+        assert!(b.notes.iter().any(|n| n.contains("Q-0480")));
+    }
+}
+
+/// spec: S-0109 claim 27 (a zero-height first rectangle: one copy at (pₓ, pᵧ + v) and a warning
+/// naming the sprite, our engine's safe departure)
+#[test]
+fn slot_animation_tiled_zero_height() {
+    let sprite = shp_rects(32, &[0, 14], &[0, 9]);
+    let (b, items) = one_slot("Tiled=yes\nStart=1\nYDrawOffset=7\n", sprite);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].stack, None);
+    assert_eq!((items[0].x, items[0].y), (-91, 255 + 7 - 16 + 9));
+    assert!(
+        b.notes
+            .iter()
+            .any(|n| n.contains("slota.shp") && n.contains("zero-height"))
+    );
 }
 
 /// The map owners of `map_text` over the synthetic rules with `countries` added.

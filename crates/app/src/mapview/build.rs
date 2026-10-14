@@ -39,7 +39,7 @@ use glasnost_render::projection::{
     LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
     screen_to_ground,
 };
-use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
+use glasnost_render::scene::{Group, Item, ItemDepth, Scene, Stack};
 use glasnost_render::voxel::{self, VoxelQuirks};
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
 
@@ -212,10 +212,8 @@ mod notes {
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
-    pub const SLOT_ANIM_DRAW_POINT: &str = "a slot animation's draw point is taken as the screen pixel of its position moved down by its type's vertical draw shift (no spec gives an animation's draw point, S-0102 claim 19)";
-    pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20) has no spec";
-    pub const SLOT_ANIM_TILED: &str = "tiled (stacked) slot animations are drawn as one copy: the number of stacked copies (S-0102 claim 13) has no spec";
-    pub const SLOT_ANIM_SHADOW_ORDER: &str = "a slot animation's shadow image frame is drawn before its image: their order (S-0109 claim 10) has no spec";
+    pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20; S-0102 claim 32 and F8) is not implemented in the map viewer";
+    pub const SLOT_ANIM_TILED_PALETTE: &str = "tiled slot animation copies take the palette row of S-0103 claim 8 like any animation: the tiled palette exception that S-0109 refers to is not stated by S-0103 (Q-0480)";
     pub const NO_COMPANION: &str =
         "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
@@ -1127,6 +1125,7 @@ impl Builder<'_> {
             group,
             provisional,
             object,
+            stack: None,
         })
     }
 
@@ -1323,6 +1322,7 @@ impl Builder<'_> {
                     group: Group::Tiles,
                     provisional: false,
                     object: None,
+                    stack: None,
                 });
             };
             // spec: S-0010 claim 22 (every pixel of the diamond is painted, index 0 included)
@@ -2216,14 +2216,16 @@ impl Builder<'_> {
             let (dx, dy) = screen_to_ground(def.x, def.y);
             let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
             let lz = height_lift(z);
+            // spec: S-0109 claim 26 (the screen pixel of the position with the height lift; the slot's
+            // displacement is already in the position, S-0108 claim 10)
             let p = project_lifted(pos.0, pos.1, pos.2);
-            let point = (p.0, p.1 + t.y_draw_offset);
+            let v = t.y_draw_offset;
+            // spec: S-0109 claim 26 (the image is moved down by the type's vertical draw shift v)
+            let point = (p.0, p.1 + v);
             let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
-            if slots::first_translucency(&t, self.options.detail.number(), n) > 0 {
+            let translucent = slots::first_translucency(&t, self.options.detail.number(), n) > 0;
+            if translucent {
                 self.note(notes::SLOT_ANIM_TRANSLUCENT);
-            }
-            if t.tiled {
-                self.note(notes::SLOT_ANIM_TILED);
             }
             let frame = slots::first_frame(&t, n);
             let frame_of = |x: i32| {
@@ -2231,46 +2233,27 @@ impl Builder<'_> {
                     .ok()
                     .filter(|&x| (x as i64) < i64::from(n))
             };
+            // spec: S-0109 claim 27 (a tiled type draws a stack of copies of its current image frame)
+            let (image_point, stack) = if t.tiled {
+                self.note(notes::SLOT_ANIM_TILED_PALETTE);
+                self.tiled_placement(&sprite, p, v)
+            } else {
+                (point, None)
+            };
             let mut items = Vec::new();
-            // spec: S-0109 claim 10 (a shadow type also draws f + ⌊N/2⌋ as its shadow, unless flat or tiled)
-            if t.shadow
-                && !t.flat
-                && !t.tiled
-                && let Some(sf) = frame_of(frame.saturating_add(n / 2))
-            {
-                self.note(notes::SLOT_ANIM_SHADOW_ORDER);
-                if let Some(item) = self.place_sprite(
-                    &sprite,
-                    sf,
-                    point,
-                    DepthTest::Reader,
-                    // spec: S-0102 claim 13 (animation shadow: −2 − L(z), flat)
-                    ItemDepth::Profile {
-                        profile: Profile::Flat,
-                        bias: -2 - lz,
-                        companion: None,
-                    },
-                    Paint::Shadow,
-                    Group::Buildings,
-                    true,
-                    Some(object),
-                ) {
-                    items.push(item);
-                }
-            }
             // spec: S-0102 claims 13 and 17 (animation rows; the slot's depth adjustment replaces the type's)
             let (profile, bias) = if t.tiled {
-                (Profile::Upright, t.y_draw_offset + def.z_adjust - lz - 50)
+                (Profile::Upright, v + def.z_adjust - lz - 50)
             } else if t.flat {
-                (Profile::Flat, t.y_draw_offset + def.z_adjust - lz - 3)
+                (Profile::Flat, v + def.z_adjust - lz - 3)
             } else {
-                (Profile::Upright, t.y_draw_offset + def.z_adjust - lz - 2)
+                (Profile::Upright, v + def.z_adjust - lz - 2)
             };
             if let Some(f) = frame_of(frame)
-                && let Some(item) = self.place_sprite(
+                && let Some(mut item) = self.place_sprite(
                     &sprite,
                     f,
-                    point,
+                    image_point,
                     // spec: S-0102 claim 17 (slot animations are depth readers)
                     DepthTest::Reader,
                     ItemDepth::Profile {
@@ -2280,7 +2263,33 @@ impl Builder<'_> {
                     },
                     Paint::Lit(row),
                     Group::Buildings,
-                    true,
+                    translucent || t.tiled,
+                    Some(object),
+                )
+            {
+                item.stack = stack;
+                items.push(item);
+            }
+            // spec: S-0109 claim 10 (a shadow type also draws f + ⌊N/2⌋ as its shadow, unless flat or
+            // tiled: after the image, with nothing between, at the unshifted point p)
+            if t.shadow
+                && !t.flat
+                && !t.tiled
+                && let Some(sf) = frame_of(frame.saturating_add(n / 2))
+                && let Some(item) = self.place_sprite(
+                    &sprite,
+                    sf,
+                    p,
+                    DepthTest::Reader,
+                    // spec: S-0102 claim 13 (animation shadow: −2 − L(z), flat)
+                    ItemDepth::Profile {
+                        profile: Profile::Flat,
+                        bias: -2 - lz,
+                        companion: None,
+                    },
+                    Paint::Shadow,
+                    Group::Buildings,
+                    translucent,
                     Some(object),
                 )
             {
@@ -2304,8 +2313,45 @@ impl Builder<'_> {
         }
         if any {
             self.note(notes::SLOT_ANIMS_STILL);
-            self.note(notes::SLOT_ANIM_DRAW_POINT);
         }
+    }
+
+    /// The lowest copy's draw point and the stack of a tiled animation
+    /// whose sprite is `sprite`, projected at `p` with vertical draw shift
+    /// `v` (S-0109 claim 27). A zero-height first image frame gives one copy
+    /// at (pₓ, pᵧ + v) and a note naming the sprite.
+    fn tiled_placement(
+        &mut self,
+        sprite: &[u8],
+        p: (i32, i32),
+        v: i32,
+    ) -> ((i32, i32), Option<Stack>) {
+        // spec: S-0109 claim 27 (h: the stored rectangle height of image frame 0, not the canvas
+        // and not the current frame)
+        let h = self
+            .assets
+            .get(sprite)
+            .and_then(|b| Shp::parse(b).ok())
+            .and_then(|s| s.frames.first().map(|f| i32::from(f.height)))
+            .unwrap_or(0);
+        if h <= 0 {
+            // spec: S-0109 claim 27 (zero height: at most one copy at (pₓ, pᵧ + v), with a warning)
+            self.note(&format!(
+                "tiled animation sprite {} has a zero-height first image frame: drawn as one copy (S-0109 claim 27)",
+                String::from_utf8_lossy(sprite)
+            ));
+            return ((p.0, p.1 + v), None);
+        }
+        let half = h / 2; // spec: S-0109 claim 27 (⌊h/2⌋ for h > 0)
+        // spec: S-0109 claim 27 (copy j centred at (pₓ, pᵧ − ⌊h/2⌋ − j·h + v); the count uses the
+        // unshifted pᵧ − ⌊h/2⌋)
+        (
+            (p.0, p.1 - half + v),
+            Some(Stack {
+                spacing: h,
+                base_row: p.1 - half,
+            }),
+        )
     }
 
     /// The shade row of a building's slot animation of type `t` (S-0103
@@ -3006,6 +3052,7 @@ impl Builder<'_> {
             group,
             provisional: false,
             object: Some(object),
+            stack: None,
         }
     }
 

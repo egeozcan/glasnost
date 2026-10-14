@@ -493,7 +493,8 @@ impl Session {
             max_level,
             &q,
         );
-        let code = self.scene.object_at(qx, qy, &self.filter);
+        let top = self.view().origin.1;
+        let code = self.scene.object_at(qx, qy, top, &self.filter);
         let id = code.and_then(|c| {
             self.with_live(|live, _, _| live.object_of_code(c))
                 .flatten()

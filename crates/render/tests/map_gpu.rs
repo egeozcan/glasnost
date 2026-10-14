@@ -86,6 +86,7 @@ fn scene() -> Scene {
             group: Group::Tiles,
             provisional: false,
             object: None,
+            stack: None,
         });
     }
     let tall = s.add_image(image(20, 50, 40));
@@ -115,6 +116,7 @@ fn scene() -> Scene {
             group: Group::Buildings,
             provisional: false,
             object: None,
+            stack: None,
         });
     }
     // S-0102 claim 25: a smudge neither reads nor writes depth.
@@ -132,6 +134,7 @@ fn scene() -> Scene {
         group: Group::Smudges,
         provisional: false,
         object: None,
+        stack: None,
     });
     s
 }
@@ -321,6 +324,7 @@ fn overlapping_writer_shadows() {
         group: Group::Buildings,
         provisional: false,
         object: None,
+        stack: None,
     };
     s.items
         .push(item(ground, 0, 0, DepthTest::Writer, Paint::Row(0)));
