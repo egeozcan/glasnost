@@ -1,9 +1,9 @@
 ---
 id: Q-0500
 title: Which destination a field-seeking slave-master building is offered, and how a selling building refuses it
-status: open
+status: answered
 related: [S-0402, S-0415, S-0215, S-0213]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

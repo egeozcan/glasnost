@@ -409,7 +409,8 @@ mod tests {
 
     /// spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0, else ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2, with pᵧ
     /// from the view's top row: the highest copy's unshifted centre lies strictly above that row;
-    /// copies lowest first, h rows apart); S-0102 claim 13 (copy j's bias reduced by exactly j·h)
+    /// copies lowest first, h rows apart); S-0102 claim 13 and D40 (copy j's bias reduced by
+    /// exactly j·h)
     #[test]
     fn stack_copies_follow_the_view_top() {
         let s = Stack {
@@ -466,6 +467,24 @@ mod tests {
             ..item
         };
         assert_eq!(single.copies(-1000).count(), 1);
+        // D40's marker: h = 12 gives copy 1 the bias −50 − 12 and copy 2 −50 − 24, not the
+        // original's excessive −50 − 18 and −50 − 36 (S-0102 claim 13, a drawing-only departure).
+        let d40 = Item {
+            stack: Some(Stack {
+                spacing: 12,
+                base_row: 300,
+            }),
+            ..item
+        };
+        let biases: Vec<i32> = d40
+            .copies(0)
+            .take(3)
+            .map(|c| match c.depth {
+                ItemDepth::Profile { bias, .. } => bias,
+                ItemDepth::Tile { .. } => unreachable!(),
+            })
+            .collect();
+        assert_eq!(biases, [-50, -62, -74]);
     }
 
     /// spec: S-0109 claim 27 (the composite draws as many copies as the view's top row allows)

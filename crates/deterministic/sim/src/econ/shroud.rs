@@ -194,14 +194,12 @@ fn level(w: &World, c: CellXY) -> i32 {
     w.cells.cell(c).map_or(0, |x| i32::from(x.level))
 }
 
-/// The object height lift *L(z)* that S-0409 F2 takes from S-0101 F2, in
-/// the floating-point form S-0101 F2 gave before its revision 8. S-0101 now
-/// draws with an exact lift as a drawing departure; whether the sight
-/// centre (game state) follows it is open (Q-0460), so this keeps the
-/// previous form meanwhile.
+/// The simulation lift *L(Z)* of the sight centre (S-0409 F2), pixels: a
+/// floating-point lift distinct from S-0101 claim 3's exact drawing lift,
+/// because the centre decides explored cells (S-0409 claim 5).
 pub fn height_lift(z: i32, mode: Rounding) -> i32 {
-    let k = nearest_double("0.14350360082660085"); // spec: S-0101 F2 before revision 8 (k pixels per lepton), kept for S-0409 F2 until Q-0460
-    // spec: S-0101 F2 before revision 8 (L(z) = trunc(rz(rz(rz(z·k) + [z ≥ 728]) + 0.5))), until Q-0460
+    let k = nearest_double("0.14350360082660085"); // spec: S-0409 F2 (a, the binary64 constant nearest 0.14350360082660085 pixels per lepton)
+    // spec: S-0409 F2 (L(Z) = trunc(RZ(RZ(RZ(Z·a) + c(Z)) + 0.5)), c(Z) = 1 when Z ≥ 728, else 0)
     let step = i64::from(z >= 728);
     F64::from_i64(i64::from(z), mode)
         .mul(k, mode)
@@ -673,10 +671,33 @@ pub fn point_candidates(p: Pos, negative_odd_pair: bool) -> (CellXY, Option<Cell
     (at(k), Some(at(k - 1)))
 }
 
+/// [`point_candidates`] under the renderer's `quirks.shroud_on_flat_grid`
+/// (S-0110 Edge cases), for the radar, which shares it (S-0410 claim 6):
+/// off, the cell under the point (trunc(X / 256), trunc(Y / 256)) is the
+/// one candidate, whatever the height and the pair switch.
+pub fn point_candidates_on(
+    p: Pos,
+    negative_odd_pair: bool,
+    on_flat_grid: bool,
+) -> (CellXY, Option<CellXY>) {
+    if !on_flat_grid {
+        // spec: S-0110 Edge cases (quirks.shroud_on_flat_grid off: the point test uses the cell under
+        // the point directly; its direct-cell test takes precedence over the pair switch)
+        return (CellXY::new(p.x / 256, p.y / 256), None);
+    }
+    point_candidates(p, negative_odd_pair)
+}
+
 /// Whether a world point is shrouded for a house (S-0110 claim 8, with
 /// `quirks.shroud_point_cell_wrap` and `quirks.shroud_negative_odd_pair`).
 pub fn point_shrouded(w: &World, house: HouseId, p: Pos) -> bool {
-    let (a, b) = point_candidates(p, w.rules().quirks.shroud_negative_odd_pair);
+    point_shrouded_on(w, house, p, true)
+}
+
+/// [`point_shrouded`] under the renderer's `quirks.shroud_on_flat_grid`
+/// (S-0110 Edge cases; the radar shares it, S-0410 claim 6).
+pub fn point_shrouded_on(w: &World, house: HouseId, p: Pos, on_flat_grid: bool) -> bool {
+    let (a, b) = point_candidates_on(p, w.rules().quirks.shroud_negative_odd_pair, on_flat_grid);
     let cand = |c: CellXY| candidate_explored(w, house, c.x, c.y);
     // spec: S-0110 claim 8 (even u: one candidate; odd u: shrouded when neither of two is explored)
     !cand(a) && !b.is_some_and(cand)

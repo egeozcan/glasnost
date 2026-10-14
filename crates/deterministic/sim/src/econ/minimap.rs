@@ -370,14 +370,24 @@ pub fn inverted(c: RadarColour, bits: Bits) -> RadarColour {
 }
 
 /// Whether a cell is shrouded for the shown house, by S-0110's point test on
-/// the cell's centre at the cell's surface height there (claim 6); a cell
-/// that is not usable is not shrouded (claim 6, our engine's choice).
+/// the cell's centre at the cell's surface height there, heights below 0
+/// included (claim 6); a cell that is not usable is not shrouded (claim 6,
+/// our engine's choice).
 pub fn cell_shrouded(w: &World, h: HouseId, c: CellXY) -> bool {
+    cell_shrouded_on(w, h, c, true)
+}
+
+/// [`cell_shrouded`] under the renderer's `quirks.shroud_on_flat_grid`
+/// (claim 6: its direct-cell alternative takes precedence over the pair
+/// choice).
+pub fn cell_shrouded_on(w: &World, h: HouseId, c: CellXY, on_flat_grid: bool) -> bool {
     if !w.cells.usable(c) {
         return false;
     }
     let p = ground_centre(w, c);
-    crate::econ::shroud::point_shrouded(w, h, p)
+    // spec: S-0410 claim 6 (S-0110 claim 8's point test, signed heights, no clamp to 0;
+    // quirks.shroud_negative_odd_pair and the precedence of quirks.shroud_on_flat_grid off)
+    crate::econ::shroud::point_shrouded_on(w, h, p, on_flat_grid)
 }
 
 fn ground_centre(w: &World, c: CellXY) -> Pos {
@@ -406,23 +416,32 @@ fn friendly_gap_cells(w: &World, h: HouseId) -> std::collections::BTreeSet<u32> 
 /// projection of the point test (claim 6): with an odd number of height
 /// levels, both candidate cells must lie in one.
 pub fn cell_in_friendly_gap(w: &World, h: HouseId, c: CellXY) -> bool {
-    in_friendly_gap(w, h, c, &friendly_gap_cells(w, h))
+    in_friendly_gap(w, c, &friendly_gap_cells(w, h), true)
+}
+
+/// [`cell_in_friendly_gap`] under the renderer's
+/// `quirks.shroud_on_flat_grid` (claim 6).
+pub fn cell_in_friendly_gap_on(w: &World, h: HouseId, c: CellXY, on_flat_grid: bool) -> bool {
+    in_friendly_gap(w, c, &friendly_gap_cells(w, h), on_flat_grid)
 }
 
 fn in_friendly_gap(
     w: &World,
-    h: HouseId,
     c: CellXY,
     cells: &std::collections::BTreeSet<u32>,
+    on_flat_grid: bool,
 ) -> bool {
-    let _ = h;
     if !w.cells.usable(c) {
         return false;
     }
     let p = ground_centre(w, c);
-    // spec: S-0410 claim 6, S-0110 claim 8 (the point test's candidate cells, quirks.shroud_negative_odd_pair)
-    let (a, b) =
-        crate::econ::shroud::point_candidates(p, w.rules().quirks.shroud_negative_odd_pair);
+    // spec: S-0410 claim 6, S-0110 claim 8 (the same candidate cells as the shroud test, heights below
+    // 0 included, quirks.shroud_negative_odd_pair; quirks.shroud_on_flat_grid off takes precedence)
+    let (a, b) = crate::econ::shroud::point_candidates_on(
+        p,
+        w.rules().quirks.shroud_negative_odd_pair,
+        on_flat_grid,
+    );
     let inside = |c: CellXY| w.cells.idx(c).is_some_and(|i| cells.contains(&(i as u32)));
     // spec: S-0410 claim 6 (for odd z the gap test needs both candidate cells in a friendly gap field)
     inside(a) && b.is_none_or(inside)
@@ -652,6 +671,9 @@ pub struct View<'a> {
     pub flash_frame_time: i32,
     /// Bits per channel of the display surface.
     pub bits: Bits,
+    /// The renderer's `quirks.shroud_on_flat_grid` (S-0110 Edge cases),
+    /// which the radar's shroud and friendly-gap tests share (claim 6).
+    pub on_flat_grid: bool,
 }
 
 /// The radar colour of every pixel of the image (claim 6), row-major; the
@@ -693,10 +715,10 @@ pub fn compose(
                 continue;
             }
             let c = cell_at_pixel(g, img, p, q, shift);
-            if in_friendly_gap(w, h, c, &gaps) {
+            if in_friendly_gap(w, c, &gaps, view.on_flat_grid) {
                 // spec: S-0410 claim 6 (in a friendly gap field: the pixel's own terrain colour, halved)
                 out.push(halved(radar_colour(t, view.bits)));
-            } else if cell_shrouded(w, h, c) {
+            } else if cell_shrouded_on(w, h, c, view.on_flat_grid) {
                 // spec: S-0410 claim 6 (shrouded: black)
                 out.push([0, 0, 0]);
             } else {

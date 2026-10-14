@@ -46,14 +46,15 @@
 //!   voxel tilt spec; poses here are on flat ground;
 //! - alternative and multiple models (claim 12): the caller picks the
 //!   model (with the alternative-body option and no alternative body, the
-//!   main body, and the turret drawn as a turret);
-//! - images larger than [`IMAGE_LIMIT`] keep only a window of their copy
-//!   rectangle (interim, Q-0470).
+//!   main body, and the turret drawn as a turret).
 //!
 //! S-0105's lead-confirmed presentation departures (wrap, carry, partial
 //! clears, depth-mode leak, reduced frame keys, barrel keys without
 //! elevation, pivot mixup, recoil hold and refire, cached shadow cutouts)
-//! are fixed here with no switch.
+//! are fixed here with no switch. So are claim 22's bounded images
+//! (Q-0470): a part or shadow image keeps at most the centred
+//! [`IMAGE_LIMIT`] window of its copy rectangle, and an image whose
+//! placement is not finite is not drawn.
 
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
@@ -373,6 +374,12 @@ pub fn table_sqrt(x: f64) -> f32 {
 pub struct Mat34(pub [[f32; 4]; 3]);
 
 impl Mat34 {
+    /// Whether every entry is finite (S-0105 claim 22: a non-finite
+    /// placement is not drawn).
+    pub fn is_finite(&self) -> bool {
+        self.0.iter().flatten().all(|v| v.is_finite())
+    }
+
     /// The identity.
     pub const IDENTITY: Self = Self([
         [1.0, 0.0, 0.0, 0.0],
@@ -1684,11 +1691,10 @@ const IMAGE_ORIGIN: f64 = 128.0; // spec: S-0105 Constants (voxel-image coordina
 const COPY_MARGIN: i64 = 4; // spec: S-0105 claim 25, Constants (copy margin)
 /// Sub-pixel units per pixel (S-0105 F5).
 const SUBPIXEL: f64 = 256.0; // spec: S-0105 Formulas F5, Constants (sub-pixel precision)
-/// Largest side of the window of a copy rectangle an image keeps, pixels,
-/// centred on the voxel-image origin shift. S-0105 claim 22 enlarges images
-/// without a limit; this bound is an interim engine rule for malformed
-/// models (request Q-0470). No copy rectangle that fits is affected.
-pub const IMAGE_LIMIT: i64 = 4096; // interim: Q-0470 (no spec value yet)
+/// Largest retained side of a part or shadow image, pixels (S-0105 claim
+/// 22, F6): a larger copy rectangle keeps only a centred window of this
+/// size. No copy rectangle that fits is affected.
+pub const IMAGE_LIMIT: i64 = 4096; // spec: S-0105 claim 22, Constants (largest retained image side)
 /// The empty depth sentinel, logically −∞: below every numeric depth
 /// (S-0105 claim 24).
 const EMPTY_DEPTH: i64 = i64::MIN; // spec: S-0105 claims 24, 34 (empty sentinel below all numeric depths)
@@ -1701,7 +1707,7 @@ const FAR_CORNER_ORDER: [usize; 8] = [3, 1, 0, 2, 7, 5, 4, 6]; // spec: S-0105 c
 
 /// A finished part or shadow image: its copy rectangle (F6; claim 22, no
 /// wrap), and where it lands. Only a copy rectangle larger than
-/// [`IMAGE_LIMIT`] is cut to a window (interim, Q-0470).
+/// [`IMAGE_LIMIT`] is cut to its retained window (claim 22, F6).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PartImage {
     /// Width of `pixels`.
@@ -1713,13 +1719,20 @@ pub struct PartImage {
     pub pixels: Vec<u8>,
     /// Screen position of `pixels`' top-left corner relative to the draw
     /// point (claim 25, F6): *(trunc(c_x) − ⌊w/2⌋, trunc(c_y) − ⌊h/2⌋)*,
-    /// moved by any cut to the [`IMAGE_LIMIT`] window.
+    /// moved by any cut to the retained window (claim 22, F6).
     pub offset: [i64; 2],
     /// The copy rectangle's size *w × h* (F6), before any cut.
     pub copy_size: [i64; 2],
 }
 
 impl PartImage {
+    /// Whether the copy rectangle has a side greater than [`IMAGE_LIMIT`]
+    /// (S-0105 claim 22, Import mapping: the importer warns once per such
+    /// model).
+    pub fn exceeds_limit(&self) -> bool {
+        self.copy_size.iter().any(|&s| s > IMAGE_LIMIT)
+    }
+
     /// The pixel at `(x, y)` of the image, if inside.
     pub fn get(&self, x: u32, y: u32) -> Option<u8> {
         (x < self.width && y < self.height).then(|| self.pixels[(y * self.width + x) as usize])
@@ -1894,7 +1907,7 @@ fn copy_rect(bounds: &Bounds) -> CopyRect {
 /// One fresh image being drawn (S-0105 claims 22, 24, 34). Logical image
 /// coordinates are signed and unbounded (claim 22, F5); the colour of the
 /// copy rectangle (F6), the only part that reaches the screen, is stored,
-/// cut to the [`IMAGE_LIMIT`] window (interim, Q-0470). Every coordinate
+/// cut to its retained window (claim 22, F6). Every coordinate
 /// starts transparent and, in depth mode, with the empty depth (claim 34).
 ///
 /// In depth mode the comparison depth is kept for every coordinate whose
@@ -1924,14 +1937,13 @@ impl Raster {
     fn new(bounds: &Bounds) -> Self {
         let copy = copy_rect(bounds);
         let [x0, y0, w, h] = copy;
-        // interim: Q-0470 (at most an IMAGE_LIMIT window, centred on the origin shift)
-        let origin = IMAGE_ORIGIN as i64;
-        let (lo, hi) = (origin - IMAGE_LIMIT / 2, origin + IMAGE_LIMIT / 2);
-        let (sx0, sy0) = (x0.clamp(lo, hi), y0.clamp(lo, hi));
-        let (sx1, sy1) = (
-            x0.saturating_add(w).clamp(sx0, hi),
-            y0.saturating_add(h).clamp(sy0, hi),
-        );
+        // spec: S-0105 claim 22, Formulas F6 (retained window: u = min(w, 4096), v = min(h, 4096),
+        // corner (a + ⌊(w − u)/2⌋, b + ⌊(h − v)/2⌋); an odd extra pixel is discarded on the right
+        // or bottom)
+        let (u, v) = (w.min(IMAGE_LIMIT), h.min(IMAGE_LIMIT));
+        let sx0 = x0.saturating_add((w - u).div_euclid(2));
+        let sy0 = y0.saturating_add((h - v).div_euclid(2));
+        let (sx1, sy1) = (sx0.saturating_add(u), sy0.saturating_add(v));
         let len = ((sx1 - sx0) * (sy1 - sy0)) as usize;
         Self {
             copy,
@@ -2014,7 +2026,8 @@ impl Raster {
 /// Every draw starts fully transparent with every depth empty (claim 34),
 /// so no earlier draw affects it.
 ///
-/// Returns `None` for a model without sections.
+/// Returns `None` for a model without sections, and for a part whose
+/// placement is not finite (claim 22: not drawn).
 pub fn draw_model(
     model: &VoxelModel,
     frame: u32,
@@ -2039,8 +2052,18 @@ pub fn draw_model(
             })
         })
         .collect();
+    // spec: S-0105 claim 22 (a part whose placement inputs, section bounds, transforms or derived
+    // projection, are not finite is not drawn)
+    if !transforms.iter().all(Mat34::is_finite)
+        || !corners.iter().flatten().flatten().all(|v| v.is_finite())
+    {
+        return None;
+    }
     let bounds = Bounds::of(corners.iter().flatten())?;
     let centre = bounds.centre();
+    if !centre.iter().all(|v| v.is_finite()) {
+        return None;
+    }
 
     // Shade tables (claim 18).
     let shared = quirks.voxel_light_first_section_mode && quirks.voxel_light_ignores_hva;
@@ -2229,7 +2252,8 @@ pub const SHADOW_MARK: u8 = 1;
 /// own-image exclusion is [`exclude_own_image`]. Cloak state and the
 /// no-shadow option (claim 31) are the caller's to check. A shadow is never
 /// drawn in the depth-buffered mode (claim 32). Returns `None` if the
-/// section does not exist.
+/// section does not exist or the shadow's placement is not finite (claim
+/// 22: not drawn).
 pub fn draw_shadow(
     model: &VoxelModel,
     shadow_section: usize,
@@ -2276,8 +2300,15 @@ pub fn draw_shadow(
         q(false, true),
         q(true, true),
     );
+    // spec: S-0105 claim 22 (a shadow whose placement inputs are not finite is not drawn)
+    if !g.is_finite() || ![q00, q10, q01, q11].iter().flatten().all(|v| v.is_finite()) {
+        return None;
+    }
     let bounds = Bounds::of([&q00, &q10, &q01, &q11])?;
     let centre = bounds.centre();
+    if !centre.iter().all(|v| v.is_finite()) {
+        return None;
+    }
     let [sx, sy, _] = sec.size;
     // spec: S-0105 Formulas F10 (o, Δ_i, Δ_j)
     let o = [0, 1].map(|a| origin_units(q00[a], centre[a]));
@@ -4592,9 +4623,9 @@ mod tests {
         assert_eq!(px[0].1, 62);
     }
 
-    /// interim: Q-0470 (an image keeps at most an IMAGE_LIMIT window of a
-    /// larger copy rectangle, centred on the origin shift; the copy size
-    /// stays unclipped)
+    /// spec: S-0105 claim 22, Formulas F6 (Q-0470: a copy rectangle larger than 4096 pixels on a
+    /// side keeps the centred 4096-pixel window; the copy size stays unclipped and the retained
+    /// pixels keep their screen positions)
     #[test]
     fn oversized_copy_rectangle_is_cut_to_the_window() {
         let huge = model(vec![filled(
@@ -4608,15 +4639,100 @@ mod tests {
         for depth in [false, true] {
             let img = draw_model(&huge, 0, &Mat34::IDENTITY, None, depth, &q()).unwrap();
             assert_eq!(img.copy_size, [12008, 9]);
+            assert!(img.exceeds_limit());
             assert_eq!([img.width, img.height], [IMAGE_LIMIT as u32, 9]);
-            // The copy rectangle starts at image x 128 − 6000 − 4 and lands
-            // at screen x 6000 − 6004; the window's image columns
-            // −1920 … 2175 land at screen x 3952 … 8047. The voxels lie at
-            // screen x 4000, 8000 and 12000; the last is cut.
+            // The copy rectangle lands at screen x 6000 − 6004 = −4; the window keeps
+            // ⌊(12008 − 4096)/2⌋ = 3956 columns less on the left: screen x 3952 … 8047. The
+            // voxels lie at screen x 4000, 8000 and 12000; the last is cut.
             assert_eq!(img.offset[0], 3952);
             let xs: Vec<i64> = img.opaque().iter().map(|p| p.0[0]).collect();
             assert!(xs.contains(&4000) && xs.contains(&8000), "{xs:?}");
             assert!(xs.iter().all(|&x| x < 8048), "{xs:?}");
+        }
+    }
+
+    /// spec: S-0105 claim 22, Formulas F6 (retained window u = min(w, 4096), corner shifted by
+    /// ⌊(w − u)/2⌋: sides of 4096 or less unchanged, an odd extra pixel discarded on the right or
+    /// bottom, a million-pixel side kept to 4096 without moving the retained pixels), F10 (the
+    /// same for a shadow)
+    #[test]
+    fn claim_22_retained_window() {
+        // Model x from 0 to X: c = X/2, w = X + 8, the copy rectangle lands at
+        // trunc(X/2) − ⌊w/2⌋ = −4 for these X.
+        for (x, copy, offset) in [
+            (4088.0, 4096, -4),
+            (4089.0, 4097, -4),
+            (4090.0, 4098, -3),
+            (4091.0, 4099, -3),
+            (1_000_000.0, 1_000_008, -4 + (1_000_008 - 4096) / 2),
+        ] {
+            let m = model(vec![filled([1, 1, 1], [0.0; 3], [x, 1.0, 1.0], 1, 64, 0)]);
+            for depth in [false, true] {
+                let img = draw_model(&m, 0, &Mat34::IDENTITY, None, depth, &q()).unwrap();
+                assert_eq!(img.copy_size, [copy, 9], "X = {x}");
+                assert_eq!(img.exceeds_limit(), copy > IMAGE_LIMIT);
+                assert_eq!([img.width, img.height], [copy.min(IMAGE_LIMIT) as u32, 9]);
+                assert_eq!(img.offset[0], offset, "X = {x}");
+            }
+        }
+        // Vertically too (rows are −y).
+        let tall = model(vec![filled(
+            [1, 1, 1],
+            [0.0; 3],
+            [1.0, 9000.0, 1.0],
+            1,
+            64,
+            0,
+        )]);
+        let img = draw_model(&tall, 0, &Mat34::IDENTITY, None, false, &q()).unwrap();
+        assert_eq!(img.copy_size, [9, 9008]);
+        assert_eq!([img.width, img.height], [9, IMAGE_LIMIT as u32]);
+        // Lands at trunc(−4500) − 4504 = −9004, shifted by ⌊(9008 − 4096)/2⌋ = 2456.
+        assert_eq!(img.offset[1], -9004 + 2456);
+        // A shadow footprint follows the same window.
+        let plate = model(vec![filled(
+            [2, 2, 1],
+            [0.0; 3],
+            [9000.0, 2.0, 1.0],
+            1,
+            51,
+            0,
+        )]);
+        let s = draw_shadow(&plate, 0, &Mat34::IDENTITY, 0, false, &q()).unwrap();
+        assert!(s.exceeds_limit());
+        assert_eq!(s.width, IMAGE_LIMIT as u32);
+        let [w, _] = s.copy_size;
+        let landed = (9000 + 2 * 3) / 2 - w / 2;
+        assert!(
+            (s.offset[0] - (landed + (w - IMAGE_LIMIT) / 2)).abs() <= 1,
+            "{s:?}"
+        );
+    }
+
+    /// spec: S-0105 claim 22 (non-finite placement: a part or shadow whose section bounds or
+    /// transforms are not finite is not drawn; other finite parts are unaffected)
+    #[test]
+    fn claim_22_non_finite_placement_is_not_drawn() {
+        let good = model(vec![filled([1, 1, 1], [0.0; 3], [1.0; 3], 1, 50, 0)]);
+        let alone = draw_model(&good, 0, &Mat34::IDENTITY, None, false, &q()).unwrap();
+        for bad in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+            let m = model(vec![filled([1, 1, 1], [0.0; 3], [bad, 1.0, 1.0], 1, 50, 0)]);
+            for depth in [false, true] {
+                assert!(draw_model(&m, 0, &Mat34::IDENTITY, None, depth, &q()).is_none());
+            }
+            assert!(draw_shadow(&m, 0, &Mat34::IDENTITY, 0, false, &q()).is_none());
+            let t = mat([
+                [1.0, 0.0, 0.0, bad],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+            ]);
+            assert!(draw_model(&good, 0, &t, None, false, &q()).is_none());
+            assert!(draw_shadow(&good, 0, &t, 0, false, &q()).is_none());
+            // The finite part still draws, unchanged.
+            assert_eq!(
+                draw_model(&good, 0, &Mat34::IDENTITY, None, false, &q()).unwrap(),
+                alone
+            );
         }
     }
 

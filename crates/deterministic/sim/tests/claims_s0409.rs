@@ -203,6 +203,35 @@ fn claim_5_sight_centre() {
     assert!(!shroud::explored(&w, A, c(4, 2)));
 }
 
+// spec: S-0409 F2 (the simulation lift's check values L(0) = 0, L(104) = 15, L(727) = 104,
+// L(728) = 105, L(1976) = 285, L(2080) = 299, L(−104) = −14; at level 20 k = 9, not the exact
+// drawing lift's 10), claim 5 (Q-0460: the centre keeps the simulation lift)
+#[test]
+fn f2_simulation_lift() {
+    let mode = glasnost_num::Rounding::TowardZero;
+    for (z, l) in [
+        (0, 0),
+        (104, 15),
+        (727, 104),
+        (728, 105),
+        (1976, 285),
+        (2080, 299),
+        (-104, -14),
+    ] {
+        assert_eq!(shroud::height_lift(z, mode), l, "Z = {z}");
+    }
+    // Whole levels 0 … 19 lift 15 per level, so k = trunc(h / 2) there; level 20 gives k = 9.
+    for h in 0..20 {
+        assert_eq!(shroud::height_lift(104 * h, mode), 15 * h, "level {h}");
+    }
+    assert_eq!(shroud::height_lift(2080, mode) / 30, 9);
+    // The sight centre of a point at level 20 moves 9 cells, not 10.
+    let w = game(&rules());
+    let cells = shroud::sight_cells(&w, Pos::centre(c(20, 20), 2080), 1);
+    let want = shroud::sight_cells(&w, Pos::centre(c(11, 11), 0), 1);
+    assert_eq!(cells, want);
+}
+
 // spec: S-0409 Edge cases (quirks.building_sight_top_left off: centred on the reference point)
 #[test]
 fn claim_5_building_sight_reference_point() {

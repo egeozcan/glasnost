@@ -479,7 +479,7 @@ impl Gfx {
             device,
             &self.queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            color,
             &depth.create_view(&Default::default()),
             &r.scene,
             &r.view,

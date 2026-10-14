@@ -167,7 +167,7 @@ fn gpu_matches_cpu_reference() {
             &device,
             &queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            &color,
             &depth.create_view(&Default::default()),
             &s,
             &view,
@@ -278,7 +278,7 @@ fn sync_uploads_added_images_and_rows() {
         &device,
         &queue,
         &mut encoder,
-        &color.create_view(&Default::default()),
+        &color,
         &depth.create_view(&Default::default()),
         &full,
         &view,
@@ -351,7 +351,7 @@ fn overlapping_writer_shadows() {
             &device,
             &queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            &color,
             &depth.create_view(&Default::default()),
             &s,
             &view,
@@ -375,6 +375,213 @@ fn overlapping_writer_shadows() {
             }
         }
     }
+}
+
+/// spec: S-0102 claim 32, F8 (translucent drawings blend each packed channel
+/// with the colour already drawn, write no depth, and stack)
+///
+/// Overlapping translucent readers of all three codes over the synthetic
+/// scene, one partly hidden behind a writer, draw the same on the GPU as on
+/// the CPU, exactly.
+#[test]
+fn gpu_translucency_matches_cpu() {
+    use glasnost_render::compose::{Shade, Translucency};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let tall = s.items[12].image;
+    for (k, (code, x, y, bias)) in [
+        (1, 25, 15, 40),
+        (2, 35, 20, 40),
+        (3, 45, 10, 40),
+        (2, 15, 5, -60),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        s.items.push(Item {
+            image: tall,
+            x,
+            y,
+            test: DepthTest::Reader,
+            depth: ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias,
+                companion: None,
+            },
+            paint: Paint::Translucent(
+                Shade::new(k % 3, 1, 1000),
+                Translucency::from_code(code).unwrap(),
+            ),
+            group: Group::Buildings,
+            provisional: false,
+            object: None,
+            stack: None,
+        });
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    for (origin, size) in [((0, 0), (128, 72)), ((10, 4), (60, 50))] {
+        let view = View {
+            origin,
+            size,
+            reference: DEPTH_REFERENCE,
+        };
+        let filter = Filter::default();
+        let q = ComposeQuirks::default();
+        let cpu = s.compose(&view, &filter, &q).to_rgba();
+        assert_ne!(
+            cpu,
+            scene().compose(&view, &filter, &q).to_rgba(),
+            "the translucent drawings show"
+        );
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render(
+            &device,
+            &queue,
+            &mut encoder,
+            &color,
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+        );
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(a, b)| a[..3] != b[..3])
+            .count();
+        assert_eq!(differing, 0, "view at {origin:?}");
+    }
+}
+
+/// spec: S-0102 claim 31, F2, F5 (a companion depth image: every row takes the anchor value minus
+/// the signed sample; pixels outside its stored rectangle are not drawn and write no depth)
+///
+/// Writers and readers of all three profiles with companion images that
+/// cover them partly, over the synthetic scene, draw the same on the GPU as
+/// on the CPU, exactly, and a second companion added later reaches the GPU
+/// through `sync`.
+#[test]
+fn gpu_companion_matches_cpu() {
+    use glasnost_render::compose::SignedImage;
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let tall = s.items[12].image;
+    let bytes: Vec<u8> = (0..16 * 40)
+        .map(|i| [0, 64, 65, 66, 1, 200][i % 6])
+        .collect();
+    s.signed
+        .push(SignedImage::from_companion_bytes(16, 40, &bytes));
+    let companion_item = |profile, test, x, y, bias, signed: u32, cx, cy| Item {
+        image: tall,
+        x,
+        y,
+        test,
+        depth: ItemDepth::Profile {
+            profile,
+            bias,
+            companion: Some((signed, cx, cy)),
+        },
+        paint: Paint::Row(1),
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+        stack: None,
+    };
+    s.items.push(companion_item(
+        Profile::Upright,
+        DepthTest::Writer,
+        24,
+        12,
+        -10,
+        0,
+        28,
+        20,
+    ));
+    s.items.push(companion_item(
+        Profile::Flat,
+        DepthTest::Reader,
+        34,
+        18,
+        -40,
+        0,
+        30,
+        8,
+    ));
+    s.items.push(companion_item(
+        Profile::Slope,
+        DepthTest::Writer,
+        60,
+        2,
+        -5,
+        0,
+        64,
+        -10,
+    ));
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let check = |s: &Scene, r: &mut MapRenderer| {
+        for (origin, size) in [((0, 0), (128, 72)), ((20, 6), (50, 40))] {
+            let view = View {
+                origin,
+                size,
+                reference: DEPTH_REFERENCE,
+            };
+            let filter = Filter::default();
+            let q = ComposeQuirks::default();
+            let cpu = s.compose(&view, &filter, &q).to_rgba();
+            assert_ne!(
+                cpu,
+                scene().compose(&view, &filter, &q).to_rgba(),
+                "the companion drawings show"
+            );
+            let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+            let mut encoder = device.create_command_encoder(&Default::default());
+            r.render(
+                &device,
+                &queue,
+                &mut encoder,
+                &color,
+                &depth.create_view(&Default::default()),
+                s,
+                &view,
+                &filter,
+                &q,
+            );
+            queue.submit([encoder.finish()]);
+            let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+            let differing = cpu
+                .chunks(4)
+                .zip(gpu.chunks(4))
+                .filter(|(a, b)| a[..3] != b[..3])
+                .count();
+            assert_eq!(differing, 0, "view at {origin:?}");
+        }
+    };
+    check(&s, &mut r);
+    s.signed
+        .push(SignedImage::from_companion_bytes(8, 8, &[70; 64]));
+    s.items.push(companion_item(
+        Profile::Upright,
+        DepthTest::Reader,
+        40,
+        25,
+        -60,
+        1,
+        42,
+        40,
+    ));
+    r.sync(&device, &queue, &s)
+        .expect("the added companion fits");
+    check(&s, &mut r);
 }
 
 /// spec: S-0104 claim 15, S-0110 claim 5 (each pixel of a shaded drawing takes the row its
@@ -421,7 +628,7 @@ fn gpu_light_alpha_matches_cpu() {
             &device,
             &queue,
             &mut encoder,
-            &color.create_view(&Default::default()),
+            &color,
             &depth.create_view(&Default::default()),
             &s,
             &view,

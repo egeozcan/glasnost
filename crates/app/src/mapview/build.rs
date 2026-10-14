@@ -27,7 +27,10 @@ use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_he
 use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
 use glasnost_num::F64;
 use glasnost_num::geom::n_step;
-use glasnost_render::compose::{DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, row565};
+use glasnost_render::compose::{
+    COMPANION_WIDTH_LIMIT, CompanionBody, DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade,
+    SignedImage, Translucency, companion_origin, row565,
+};
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
 use glasnost_render::overlay::{
@@ -201,9 +204,24 @@ const DEFAULT_LIGHT_RADIUS: i32 = 5000; // spec: S-0104 Constants (building ligh
 /// Voxel lighting table file (S-0105 Import mapping).
 pub const VPL_FILE: &[u8] = b"voxels.vpl"; // spec: S-0105 Import mapping
 
+/// The shared building companion depth image file; its image frame 0 is the
+/// companion of every eligible building body.
+pub const COMPANION_FILE: &[u8] = b"BUILDNGZ.SHA"; // spec: S-0102 Import mapping, claim 31
+
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
 mod notes {
+    /// The warning of S-0105 claim 22 and Import mapping for a model whose
+    /// `role` image (a part name or "shadow") has a copy rectangle side
+    /// above 4096 pixels, at the pose `pose`.
+    pub fn voxel_too_large(file: &[u8], role: &str, pose: &str, copy: [i64; 2]) -> String {
+        format!(
+            "voxel model {}: its {role} image at {pose} has a {} × {} pixel copy rectangle; only the centred 4096 × 4096 pixel window is drawn (S-0105 claim 22). Poses not yet drawn are not checked",
+            String::from_utf8_lossy(file),
+            copy[0],
+            copy[1]
+        )
+    }
     pub const LIVE_SPRITE_VEHICLE: &str = "vehicles drawn as sprites keep no walk counter in the live game: a moving one is drawn with its standing frame, not the moving row (S-0102 claim 22)";
     pub const TILES_UNLOADED: &str = "no game was set up: tiles are drawn as the map stores them, before the load's terrain recalculation and smoothing (S-0010 claim 12)";
     pub const RUBBLE: &str = "rubble overlays outside a rubble cell draw nothing (S-0112 claim 5); rubble cells arise only in play";
@@ -212,9 +230,7 @@ mod notes {
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
-    pub const SLOT_ANIM_TRANSLUCENT: &str = "translucent slot animations are drawn opaque: the blend of a translucency code (S-0109 claim 20; S-0102 claim 32 and F8) is not implemented in the map viewer";
-    pub const NO_COMPANION: &str =
-        "building depth images (S-0102 F5): the shared file is not named by a spec: not used";
+    pub const NO_COMPANION: &str = "the building depth image file BUILDNGZ.SHA (S-0102 claim 31) is missing or its image frame 0 is unreadable: building bodies are drawn with the plain upright profile (S-0102 F2); recovery from a missing file is not specified (Q-0490)";
     pub const NO_RULES_HEALTH: &str = "the rules did not resolve: buildings are drawn undamaged (S-0009 claim 37 needs their strengths)";
     pub const UPGRADES: &str = "upgrades a map entry places (S-0009 claim 40) are not drawn: the building upgrade slots of S-0108 need animation playback";
     pub const AIRCRAFT_AIR: &str = "an aircraft on a cell outside the usable area is drawn landed: its flight height has no spec (S-0009 claim 38)";
@@ -646,6 +662,8 @@ pub fn wanted_files(
         }
     }
     out.insert(upper(VPL_FILE));
+    // spec: S-0102 claim 31 (the shared building companion depth image)
+    out.insert(upper(COMPANION_FILE));
     // spec: S-0111 Import mapping (the overlay sprites and palette of the status extras)
     for f in [
         super::combat::PIP_SPRITE,
@@ -685,6 +703,8 @@ pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
             slot_files(import, &art, idx, &mut out);
         }
     }
+    // spec: S-0102 claim 31 (the shared building companion depth image)
+    out.insert(upper(COMPANION_FILE));
     out
 }
 
@@ -783,6 +803,14 @@ pub struct Painter {
     vpl: Option<Option<Vpl>>,
     /// Tile files decoded once, by upper-case name.
     tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
+    /// The shared building companion depth image (S-0102 claim 31), once
+    /// read: its index in `Scene::signed` and its stored rectangle's canvas
+    /// column and row; `Some(None)` when the file or its frame 0 is missing.
+    companion: Option<Option<(u32, (i32, i32))>>,
+    /// Voxel models (upper-case file names) already warned about for an
+    /// image larger than the retained limit (S-0105 claim 22: once per
+    /// model).
+    oversized: BTreeSet<Vec<u8>>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -1492,9 +1520,8 @@ impl Builder<'_> {
                 && (flags.tiberium || rule_bool(self.import, k, idx, b"DrawFlat", true));
             // spec: S-0102 Constants (overlay depth bias: level + 4 for bridge decks)
             let depth_level = if deck { level + DECK_LEVELS } else { level };
-            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types;
-            // quirks.overlay_lift_exact_levels)
-            let lift = overlay_depth_lift(depth_level, &ViewQuirks::default());
+            // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types)
+            let lift = overlay_depth_lift(depth_level);
             let bias = if flat || flags.wall || rock || flags.tiberium {
                 -2 - lift
             } else {
@@ -1560,8 +1587,8 @@ impl Builder<'_> {
             };
             // spec: S-0102 claim 13 (an overlay's shadow: −2 − 15 × ℓ_s with ℓ_s the cell's level alone,
             // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
-            // (every overlay kind); S-0102 Edge cases (quirks.overlay_lift_exact_levels covers overlay shadows)
-            let shadow_bias = -2 - overlay_depth_lift(level, &ViewQuirks::default());
+            // (every overlay kind)
+            let shadow_bias = -2 - overlay_depth_lift(level);
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -1906,10 +1933,58 @@ impl Builder<'_> {
         doc.value(&image, key)
     }
 
+    /// The shared building companion depth image, read once into
+    /// [`Scene::signed`]: its index and its stored rectangle's canvas column
+    /// and row (S-0102 claim 31, F5). `None` when the file is missing or its
+    /// image frame 0 cannot be read.
+    fn companion_image(&mut self) -> Option<(u32, (i32, i32))> {
+        if self.p.companion.is_none() {
+            // spec: S-0102 claim 31 (image frame 0 of the shared file; its bytes are signed depth
+            // adjustments decoded by F5, neither colours nor transparency)
+            let read = self.assets.get(COMPANION_FILE).and_then(|bytes| {
+                let shp = Shp::parse(bytes).ok()?;
+                let f = *shp.frames.first()?;
+                let img = shp.decode_frame(0).ok()?;
+                Some((
+                    SignedImage::from_companion_bytes(img.width(), img.height(), img.pixels()),
+                    (i32::from(f.x), i32::from(f.y)),
+                ))
+            });
+            let entry = read.map(|(image, stored)| {
+                self.built.scene.signed.push(image);
+                ((self.built.scene.signed.len() - 1) as u32, stored)
+            });
+            self.p.companion = Some(entry);
+        }
+        self.p.companion.flatten()
+    }
+
+    /// The companion of the body of building type `i` drawn at draw point
+    /// `p` (S-0102 claim 31, F5: live constants, the art displacement
+    /// applied), and whether the body is provisional: an eligible body
+    /// without the shared file is drawn with plain F2 and noted (Q-0490).
+    fn body_companion(&mut self, i: usize, p: (i32, i32)) -> (Option<(u32, i32, i32)>, bool) {
+        let foundation = self.foundation(i);
+        // spec: S-0102 Import mapping (ZShapePointMove: two integers, default 0, 0)
+        let m = self
+            .art_value(Kind::Buildings, i, b"ZShapePointMove")
+            .map(|v| value::int_tuple_or::<2>(v, [0, 0]).0)
+            .unwrap_or([0, 0]);
+        let Some((id, stored)) = self.companion_image() else {
+            // spec: S-0102 F5 (foundations 8 or more cells wide use no companion)
+            let eligible = foundation.0 < COMPANION_WIDTH_LIMIT;
+            if eligible {
+                self.note(notes::NO_COMPANION);
+            }
+            return (None, eligible);
+        };
+        let origin = companion_origin(p, foundation, (m[0], m[1]), CompanionBody::Live, stored);
+        (origin.map(|(x, y)| (id, x, y)), false)
+    }
+
     /// Buildings in the cell pass (S-0108, S-0102 claims 13 and 16).
     fn structures(&mut self, ground: &mut Vec<GroundEntry>) {
         let list = self.map.objects.structures.clone();
-        let mut any = false;
         for (n, s) in list.iter().enumerate() {
             let p = &s.placed;
             let fields = self.map.objects.fields(ListKind::Buildings, n).clone();
@@ -1934,7 +2009,6 @@ impl Builder<'_> {
                 self.drop_object("building on a non-legal cell");
                 continue;
             };
-            any = true;
             let object = self.add_object(ObjectInfo {
                 kind: "building",
                 type_name: String::from_utf8_lossy(&p.type_name).into_owned(),
@@ -1958,9 +2032,6 @@ impl Builder<'_> {
                 i, &art, p.cell, cell.level, &p.owner, condition, facing, object, ground,
             );
             self.built.scene.items.extend(items);
-        }
-        if any {
-            self.note(notes::NO_COMPANION);
         }
     }
 
@@ -2062,6 +2133,10 @@ impl Builder<'_> {
             .art_value(Kind::Buildings, i, b"NormalZAdjust")
             .and_then(value::integer)
             .unwrap_or(0);
+        // spec: S-0102 claim 31, F5 (the body's companion depth image, placed from its draw point;
+        // a stationary body of a building that is neither under construction nor being sold, so
+        // the art displacement applies)
+        let (companion, body_provisional) = self.body_companion(i, anchor);
         // spec: S-0102 claim 16 (each building's group: body, then shadow, then bib)
         // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes)
         if let Some(frame) = frame_of(body_frame)
@@ -2073,11 +2148,11 @@ impl Builder<'_> {
                 ItemDepth::Profile {
                     profile: Profile::Upright,
                     bias: -lz - 2 + normal_z,
-                    companion: None,
+                    companion,
                 },
                 Paint::Lit(row),
                 Group::Buildings,
-                true,
+                body_provisional,
                 Some(object),
             )
         {
@@ -2100,7 +2175,7 @@ impl Builder<'_> {
                 },
                 Paint::Shadow,
                 Group::Shadows,
-                true,
+                false,
                 Some(object),
             )
         {
@@ -2123,7 +2198,7 @@ impl Builder<'_> {
                 },
                 Paint::Lit(row),
                 Group::Bibs,
-                true,
+                false,
                 Some(object),
             )
         {
@@ -2222,10 +2297,16 @@ impl Builder<'_> {
             // spec: S-0109 claim 26 (the image is moved down by the type's vertical draw shift v)
             let point = (p.0, p.1 + v);
             let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
-            let translucent = slots::first_translucency(&t, self.options.detail.number(), n) > 0;
-            if translucent {
-                self.note(notes::SLOT_ANIM_TRANSLUCENT);
-            }
+            // spec: S-0109 claim 20, S-0102 claim 32 and F8 (a nonzero translucency code blends the
+            // image's pixels with the colour already drawn; code 0 draws opaque)
+            let paint = match Translucency::from_code(i32::from(slots::first_translucency(
+                &t,
+                self.options.detail.number(),
+                n,
+            ))) {
+                Some(code) => Paint::Translucent(row, code),
+                None => Paint::Lit(row),
+            };
             let frame = slots::first_frame(&t, n);
             let frame_of = |x: i32| {
                 usize::try_from(x)
@@ -2259,9 +2340,9 @@ impl Builder<'_> {
                         bias,
                         companion: None,
                     },
-                    Paint::Lit(row),
+                    paint,
                     Group::Buildings,
-                    translucent,
+                    false,
                     Some(object),
                 )
             {
@@ -2285,9 +2366,11 @@ impl Builder<'_> {
                         bias: -2 - lz,
                         companion: None,
                     },
+                    // spec: S-0102 claim 32 (the shadow is never blended: plain halving, even
+                    // under a translucent image)
                     Paint::Shadow,
                     Group::Buildings,
-                    translucent,
+                    false,
                     Some(object),
                 )
             {
@@ -2457,15 +2540,19 @@ impl Builder<'_> {
         let bias = -lz + rule_int(self.import, k, idx, b"TurretAnimZAdjust", 0);
         // spec: S-0104 claim 13 (every part of an ordinary building: U of its top-left cell)
         let row = self.house_row(hsv, brightness);
-        let turret = art.voxels.get("turret").and_then(|f| self.voxel_model(f));
-        let barrel = art.voxels.get("barrel").and_then(|f| self.voxel_model(f));
+        let model_of = |b: &mut Self, part: &'static str| {
+            let file = art.voxels.get(part)?.clone();
+            b.voxel_model(&file).map(|m| (m, file, part))
+        };
+        let turret = model_of(self, "turret");
+        let barrel = model_of(self, "barrel");
         let mut items = Vec::new();
         // spec: S-0105 claim 16 (an animation-frame counter of 0 before any attack: frame 0)
         let counter = 0;
         let parts = match turret {
             Some(t) => {
                 let pose = voxel::building_turret_parts(facing, offset, elevation, &q);
-                let turret_frame = voxel::building_turret_frame(counter, t.frame_count() as u32);
+                let turret_frame = voxel::building_turret_frame(counter, t.0.frame_count() as u32);
                 // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
                 let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
                 // spec: S-0105 claim 26 (building turret key; the barrel's is the turret's
@@ -2495,7 +2582,7 @@ impl Builder<'_> {
             // kept with the barrel images under its facing, frame and elevation)
             None => {
                 let frame = barrel.as_ref().map_or(0, |b| {
-                    voxel::barrel_only_frame(counter, b.frame_count() as u32)
+                    voxel::barrel_only_frame(counter, b.0.frame_count() as u32)
                 });
                 vec![(
                     barrel,
@@ -2506,12 +2593,14 @@ impl Builder<'_> {
             }
         };
         for (model, draw, frame, key) in parts {
-            let Some(m) = model else {
+            let Some((m, file, role)) = model else {
                 continue;
             };
             if let Some(part) = self.cached_part(k, idx, key, |b| {
-                b.p.canvas
-                    .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q)
+                let img =
+                    b.p.canvas
+                        .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q);
+                b.limit_checked(&file, role, key, img)
             }) {
                 items.push(Self::part_item(
                     part,
@@ -2973,6 +3062,27 @@ impl Builder<'_> {
         m
     }
 
+    /// `img`, drawn from the model `file` in the role `role` at the image
+    /// key `key`, after warning once per model when its copy rectangle is
+    /// larger than the retained limit (S-0105 claim 22, Import mapping).
+    fn limit_checked(
+        &mut self,
+        file: &[u8],
+        role: &str,
+        key: voxel::ImageKey,
+        img: Option<voxel::PartImage>,
+    ) -> Option<voxel::PartImage> {
+        if let Some(i) = &img
+            && i.exceeds_limit()
+            // spec: S-0105 claim 22, Import mapping (one warning per model, not per pose, appearance or image role)
+            && self.p.oversized.insert(upper(file))
+        {
+            let note = notes::voxel_too_large(file, role, &format!("{key:?}"), i.copy_size);
+            self.note(&note);
+        }
+        img
+    }
+
     /// The voxel lighting table (S-0105 claims 19 and 38; its byte layout
     /// is S-0013's). A missing or too short file gives the
     /// empty table, whose rows all read as zero (claim 38,
@@ -3124,8 +3234,10 @@ impl Builder<'_> {
         let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
             let body = b.voxel_model(&shadow_file)?;
             // spec: S-0105 claim 32 (a shadow never enables depth mode, whatever the type's option)
-            b.p.canvas
-                .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q)
+            let img =
+                b.p.canvas
+                    .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
+            b.limit_checked(&shadow_file, "shadow", shadow_key, img)
         };
         // An aircraft's shadow comes before the body, which covers it.
         if kind != Kind::Vehicles
@@ -3153,14 +3265,15 @@ impl Builder<'_> {
         if let Some(part) = self.cached_part(kind, idx, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
-            b.p.canvas.draw_part(
+            let img = b.p.canvas.draw_part(
                 &body,
                 body_frame,
                 &pose().body,
                 vpl.as_ref(),
                 depth_buffered,
                 &q,
-            )
+            );
+            b.limit_checked(&body_file, "body", key, img)
         }) {
             placed.push(part);
             // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
@@ -3211,8 +3324,15 @@ impl Builder<'_> {
                     } else {
                         (p.turret, turret_frame)
                     };
-                    b.p.canvas
-                        .draw_part(&model, frame, &draw, vpl.as_ref(), depth_buffered, &q)
+                    let img = b.p.canvas.draw_part(
+                        &model,
+                        frame,
+                        &draw,
+                        vpl.as_ref(),
+                        depth_buffered,
+                        &q,
+                    );
+                    b.limit_checked(&file, part_name, key, img)
                 }) {
                     placed.push(part);
                     items.push(Self::part_item(
@@ -3430,6 +3550,8 @@ impl Painter {
             models: BTreeMap::new(),
             vpl: None,
             tile_files: BTreeMap::new(),
+            companion: None,
+            oversized: BTreeSet::new(),
         }
     }
 

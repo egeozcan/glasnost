@@ -74,10 +74,7 @@ fn gpu_scroll_ms(
     let mut r = MapRenderer::new(device, queue, scene, COLOR_FORMAT).unwrap();
     let size = (1280, 720);
     let (color, depth) = targets(device, size, COLOR_FORMAT);
-    let (cv, dv) = (
-        color.create_view(&Default::default()),
-        depth.create_view(&Default::default()),
-    );
+    let dv = depth.create_view(&Default::default());
     let reference = DEPTH_REFERENCE;
     let t = Instant::now();
     for i in 0..frames {
@@ -91,7 +88,7 @@ fn gpu_scroll_ms(
             device,
             queue,
             &mut enc,
-            &cv,
+            &color,
             &dv,
             scene,
             &view,

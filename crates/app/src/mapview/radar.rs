@@ -107,6 +107,8 @@ impl Radar {
             flash: &flash,
             flash_frame_time: 1, // nocite: no object flashes in the viewer yet
             bits: DISPLAY_BITS,
+            // spec: S-0410 claim 6 (the radar shares S-0110's quirks.shroud_on_flat_grid)
+            on_flat_grid: glasnost_render::shroud::ShroudQuirks::default().shroud_on_flat_grid,
         };
         let pixels = minimap::compose(
             w,

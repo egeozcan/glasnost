@@ -20,18 +20,27 @@ struct View {
 @group(0) @binding(2) var rows: texture_2d<f32>;
 // Light-alpha value of each view pixel (S-0104 claim 15, S-0110 claim 5).
 @group(0) @binding(3) var light_alpha: texture_2d<u32>;
+// The target's pixels drawn before a translucent item, under that item
+// (S-0102 claim 32).
+@group(0) @binding(4) var backdrop: texture_2d<f32>;
 
 struct Instance {
     // Atlas x, y, layer, and width | height << 16.
     @location(0) image: vec4<u32>,
     // World x, world y, depth bias, tile reference row (world).
     @location(1) place: vec4<i32>,
-    // Depth image atlas x, y, layer (0xFFFFFFFF: none), flags.
+    // Depth image atlas x, y, layer (0xFFFFFFFF: none), flags: bits 0 and 1
+    // the depth kind (tile, flat, slope, upright), bit 2 set for a profile
+    // drawing with a companion depth image, whose atlas slot x, y and layer
+    // are then x, y and z.
     @location(2) depth: vec4<u32>,
-    // Palette row (the table's first row when z > 0); 1 in y for a tile
-    // diamond (no transparent index); z the shade table's row count N for
-    // a drawing that reads the light-alpha values, else 0; w its rho.
+    // Palette row (the table's first row when z > 0); y: bit 0 set for a
+    // tile diamond (no transparent index), bits 1 and 2 the translucency
+    // code (S-0102 claim 32); z the shade table's row count N for a drawing
+    // that reads the light-alpha values, else 0; w its rho.
     @location(3) paint: vec4<u32>,
+    // The companion depth image's world x, y, width and height.
+    @location(4) companion: vec4<i32>,
 };
 
 struct Varyings {
@@ -40,6 +49,7 @@ struct Varyings {
     @location(1) @interpolate(flat) place: vec4<i32>,
     @location(2) @interpolate(flat) depth: vec4<u32>,
     @location(3) @interpolate(flat) paint: vec4<u32>,
+    @location(4) @interpolate(flat) companion: vec4<i32>,
 };
 
 @vertex
@@ -60,6 +70,7 @@ fn vs_main(@builtin(vertex_index) v: u32, inst: Instance) -> Varyings {
     out.place = inst.place;
     out.depth = inst.depth;
     out.paint = inst.paint;
+    out.companion = inst.companion;
     return out;
 }
 
@@ -102,7 +113,7 @@ fn fs_main(in: Varyings) -> Fragment {
     let top_left = in.place.xy - view.origin;
     let local = px - top_left;
     let index = textureLoad(atlas, vec2<i32>(in.image.xy) + local, i32(in.image.z), 0).r;
-    if index == 0u && !(in.paint.y == 1u && in_diamond(local.x, local.y)) {
+    if index == 0u && !((in.paint.y & 1u) == 1u && in_diamond(local.x, local.y)) {
         discard;
     }
 
@@ -110,7 +121,30 @@ fn fs_main(in: Varyings) -> Fragment {
     let kind = flags & 3u;
     let height = i32(in.image.w >> 16u);
     var depth: i32;
-    if kind == 0u {
+    if (flags & 4u) != 0u {
+        // S-0102 claim 31, F5: a pixel outside the companion's stored
+        // rectangle is not drawn and writes no depth.
+        let c = px - (in.companion.xy - view.origin);
+        if c.x < 0 || c.y < 0 || c.x >= in.companion.z || c.y >= in.companion.w {
+            discard;
+        }
+        var a = i32(textureLoad(atlas, vec2<i32>(in.depth.xy) + c, i32(in.depth.z), 0).r);
+        if a >= 128 {
+            a = a - 256;
+        }
+        // S-0102 F2: with a companion every row takes the anchor value (flat
+        // d(r₀) + β, slope Q(d(r₀) + β), upright d(r₁) + β), minus a.
+        let r0 = top_left.y;
+        var anchor: i32;
+        if kind == 1u {
+            anchor = row_depth(r0) + in.place.z;
+        } else if kind == 2u {
+            anchor = quantise(row_depth(r0) + in.place.z);
+        } else {
+            anchor = row_depth(r0 + height - 1) + in.place.z;
+        }
+        depth = anchor - a;
+    } else if kind == 0u {
         // Tile (S-0102 F3): e + d(t + 30).
         let t = in.place.w - view.origin.y;
         var e = 0;
@@ -145,6 +179,41 @@ fn fs_main(in: Varyings) -> Fragment {
     let y = row - column * view.rows_per_column;
     var out: Fragment;
     out.color = textureLoad(rows, vec2<i32>(column * 256 + i32(index), y), 0);
+    let code = (in.paint.y >> 1u) & 3u;
+    if code != 0u {
+        // S-0102 claim 32 and F8: blend the packed source channels with the
+        // packed channels already drawn there, each channel by itself.
+        let s = packed(out.color);
+        let d = packed(textureLoad(backdrop, px, 0));
+        out.color = vec4<f32>(
+            expand(blend(s.r, d.r, code), 5u),
+            expand(blend(s.g, d.g, code), 6u),
+            expand(blend(s.b, d.b, code), 5u),
+            1.0,
+        );
+    }
     out.depth = f32(depth) / 65536.0;
     return out;
+}
+
+// The 5-6-5 channels of a colour whose 8-bit channels widen them by
+// repeating their top bits (S-0103 claim 9; compose.rs expand565).
+fn packed(c: vec4<f32>) -> vec3<u32> {
+    let b = vec3<u32>(round(c.rgb * 255.0));
+    return vec3<u32>(b.r >> 3u, b.g >> 2u, b.b >> 3u);
+}
+
+// A channel of `bits` bits widened to 8 bits, as a unit float.
+fn expand(c: u32, bits: u32) -> f32 {
+    return f32((c << (8u - bits)) | (c >> (2u * bits - 8u))) / 255.0;
+}
+
+// S-0102 F8 for one channel: each division rounds down before the sum.
+fn blend(s: u32, d: u32, code: u32) -> u32 {
+    if code == 1u {
+        return 3u * (s / 4u) + d / 4u;
+    } else if code == 2u {
+        return s / 2u + d / 2u;
+    }
+    return s / 4u + 3u * (d / 4u);
 }

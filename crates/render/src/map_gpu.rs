@@ -47,6 +47,8 @@ struct Instance {
     place: [i32; 4],
     depth: [u32; 4],
     paint: [u32; 4],
+    /// The companion depth image's world x and y, width and height.
+    companion: [i32; 4],
 }
 
 /// Where an image sits in the atlas.
@@ -149,17 +151,56 @@ enum Role {
     Ignore,
     /// A shadow that stores its depth where it darkens (S-0102 claim 27).
     ShadowWriter,
+    /// Translucent drawings (S-0102 claim 32, F8) with the depth tests of
+    /// a tile, a writer, a reader and a drawing that ignores depth: the
+    /// shader blends with a copy of the target.
+    BlendTile,
+    BlendWriter,
+    BlendReader,
+    BlendIgnore,
+}
+
+/// Every role, in pipeline order.
+const ROLES: [Role; 10] = [
+    Role::Tile,
+    Role::Writer,
+    Role::Reader,
+    Role::Shadow,
+    Role::Ignore,
+    Role::ShadowWriter,
+    Role::BlendTile,
+    Role::BlendWriter,
+    Role::BlendReader,
+    Role::BlendIgnore,
+];
+
+impl Role {
+    /// The role's pipeline.
+    fn index(self) -> usize {
+        ROLES.iter().position(|&r| r == self).unwrap_or(0)
+    }
+
+    /// Whether the role blends with the target's earlier pixels in the
+    /// shader, so that it needs a copy of them.
+    fn translucent(self) -> bool {
+        matches!(
+            self,
+            Role::BlendTile | Role::BlendWriter | Role::BlendReader | Role::BlendIgnore
+        )
+    }
 }
 
 /// GPU resources for one scene.
 pub struct MapRenderer {
-    pipelines: [wgpu::RenderPipeline; 6],
+    pipelines: [wgpu::RenderPipeline; 10],
     bind_group: wgpu::BindGroup,
     layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
     instances: wgpu::Buffer,
     instance_capacity: usize,
     slots: Vec<Slot>,
+    /// Atlas slots of [`Scene::signed`].
+    signed_slots: Vec<Slot>,
     rows_per_column: u32,
     atlas: wgpu::Texture,
     atlas_layers: u32,
@@ -171,6 +212,9 @@ pub struct MapRenderer {
     alpha: (wgpu::Texture, (u32, u32)),
     /// Whether the light-alpha texture holds 127 everywhere.
     alpha_default: bool,
+    /// The copy of the target's pixels that a translucent drawing blends
+    /// with (S-0102 claim 32), of the light-alpha texture's size.
+    backdrop: wgpu::Texture,
 }
 
 /// Why the scene could not be uploaded.
@@ -198,13 +242,22 @@ impl MapRenderer {
     ) -> Result<Self, UploadError> {
         let limits = device.limits();
         let side = limits.max_texture_dimension_2d.min(4096);
+        // Indexed images, then the signed companion depth images (their bytes
+        // are the two's complement values).
         let sizes: Vec<(u32, u32)> = scene
             .images
             .iter()
             .map(|i| (i.width().max(1), i.height().max(1)))
+            .chain(
+                scene
+                    .signed
+                    .iter()
+                    .map(|i| (i.width.max(1), i.height.max(1))),
+            )
             .collect();
-        let (slots, packer) =
+        let (mut slots, packer) =
             pack(&sizes, side).ok_or_else(|| UploadError("an image exceeds the atlas".into()))?;
+        let signed_slots = slots.split_off(scene.images.len());
         let layers = packer.layers();
         if layers > limits.max_texture_array_layers {
             return Err(UploadError(format!(
@@ -219,10 +272,19 @@ impl MapRenderer {
             .min(limits.max_texture_array_layers)
             .max(2);
         let mut atlas = vec![0u8; side as usize * side as usize * layers as usize];
-        for (img, slot) in scene.images.iter().zip(&slots) {
+        let images = scene.images.iter().map(|i| (i.width(), i.pixels())).chain(
+            scene
+                .signed
+                .iter()
+                .map(|i| (i.width, bytemuck::cast_slice::<i8, u8>(&i.values))),
+        );
+        for ((width, pixels), slot) in images.zip(slots.iter().chain(&signed_slots)) {
             let base = slot.layer as usize * side as usize * side as usize;
-            for row in 0..img.height() as usize {
-                let src = &img.pixels()[row * img.width() as usize..][..img.width() as usize];
+            let width = width as usize;
+            if width == 0 {
+                continue;
+            }
+            for (row, src) in pixels.chunks_exact(width).enumerate() {
                 let dst = base + (slot.y as usize + row) * side as usize + slot.x as usize;
                 atlas[dst..dst + src.len()].copy_from_slice(src);
             }
@@ -297,9 +359,20 @@ impl MapRenderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let alpha = alpha_texture(device, queue, (1, 1));
+        let backdrop = backdrop_texture(device, (1, 1));
         let bind_group = bind_group(
             device,
             &layout,
@@ -307,6 +380,7 @@ impl MapRenderer {
             &atlas_texture,
             &rows_texture,
             &alpha,
+            &backdrop,
         );
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("map"),
@@ -318,7 +392,7 @@ impl MapRenderer {
             immediate_size: 0,
         });
         let attributes = wgpu::vertex_attr_array![
-            0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4, 3 => Uint32x4
+            0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4, 3 => Uint32x4, 4 => Sint32x4
         ];
         let make = |role: Role| {
             let (compare, write) = match role {
@@ -327,6 +401,10 @@ impl MapRenderer {
                 Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
                 Role::Ignore => (wgpu::CompareFunction::Always, false),
                 Role::ShadowWriter => (wgpu::CompareFunction::Less, true),
+                Role::BlendTile => (wgpu::CompareFunction::LessEqual, true),
+                Role::BlendWriter => (wgpu::CompareFunction::Less, true),
+                Role::BlendReader => (wgpu::CompareFunction::Less, false),
+                Role::BlendIgnore => (wgpu::CompareFunction::Always, false),
             };
             let blend =
                 matches!(role, Role::Shadow | Role::ShadowWriter).then_some(wgpu::BlendState {
@@ -373,14 +451,7 @@ impl MapRenderer {
                 cache: None,
             })
         };
-        let pipelines = [
-            make(Role::Tile),
-            make(Role::Writer),
-            make(Role::Reader),
-            make(Role::Shadow),
-            make(Role::Ignore),
-            make(Role::ShadowWriter),
-        ];
+        let pipelines = ROLES.map(make);
         let instance_capacity = 1024;
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("map instances"),
@@ -396,6 +467,7 @@ impl MapRenderer {
             instances,
             instance_capacity,
             slots,
+            signed_slots,
             rows_per_column,
             atlas: atlas_texture,
             atlas_layers: layers,
@@ -405,6 +477,7 @@ impl MapRenderer {
             rows: rows_texture,
             alpha: (alpha, (1, 1)),
             alpha_default: true,
+            backdrop,
         })
     }
 
@@ -419,42 +492,17 @@ impl MapRenderer {
         queue: &wgpu::Queue,
         scene: &Scene,
     ) -> Result<(), UploadError> {
-        if scene.images.len() < self.slots.len() {
+        if scene.images.len() < self.slots.len() || scene.signed.len() < self.signed_slots.len() {
             return Err(UploadError("the scene lost images".into()));
         }
         for img in &scene.images[self.slots.len()..] {
-            let (w, h) = (img.width(), img.height());
-            let slot = self
-                .packer
-                .place(w.max(1), h.max(1))
-                .filter(|s| s.layer < self.atlas_layers)
-                .ok_or_else(|| UploadError("the atlas is full".into()))?;
-            if w > 0 && h > 0 {
-                queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &self.atlas,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: slot.x,
-                            y: slot.y,
-                            z: slot.layer,
-                        },
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    img.pixels(),
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(w),
-                        rows_per_image: Some(h),
-                    },
-                    wgpu::Extent3d {
-                        width: w,
-                        height: h,
-                        depth_or_array_layers: 1,
-                    },
-                );
-            }
+            let slot = self.upload(queue, img.width(), img.height(), img.pixels())?;
             self.slots.push(slot);
+        }
+        for img in &scene.signed[self.signed_slots.len()..] {
+            let bytes = bytemuck::cast_slice::<i8, u8>(&img.values);
+            let slot = self.upload(queue, img.width, img.height, bytes)?;
+            self.signed_slots.push(slot);
         }
         if scene.rows.len() != self.row_count {
             let (rows, per_column) =
@@ -466,6 +514,7 @@ impl MapRenderer {
                 &self.atlas,
                 &rows,
                 &self.alpha.0,
+                &self.backdrop,
             );
             self.rows = rows;
             self.rows_per_column = per_column;
@@ -474,17 +523,58 @@ impl MapRenderer {
         Ok(())
     }
 
+    /// Places a `w` × `h` image of bytes `pixels` in the atlas's free space.
+    fn upload(
+        &mut self,
+        queue: &wgpu::Queue,
+        w: u32,
+        h: u32,
+        pixels: &[u8],
+    ) -> Result<Slot, UploadError> {
+        let slot = self
+            .packer
+            .place(w.max(1), h.max(1))
+            .filter(|s| s.layer < self.atlas_layers)
+            .ok_or_else(|| UploadError("the atlas is full".into()))?;
+        if w > 0 && h > 0 {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &self.atlas,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: slot.x,
+                        y: slot.y,
+                        z: slot.layer,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                pixels,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        Ok(slot)
+    }
+
     /// Records the scene for `view` into `encoder`, rendering into `target`
-    /// (a [`COLOR_FORMAT`] view of the view's size) with `depth` (a
-    /// [`DEPTH_FORMAT`] view of the same size). Returns the number of items
-    /// drawn.
+    /// (a [`COLOR_FORMAT`] texture of the view's size that can be copied
+    /// from, as [`targets`] makes it) with `depth` (a [`DEPTH_FORMAT`] view
+    /// of the same size). Returns the number of items drawn.
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
+        target: &wgpu::Texture,
         depth: &wgpu::TextureView,
         scene: &Scene,
         view: &View,
@@ -498,13 +588,19 @@ impl MapRenderer {
 
     /// [`Self::render`] with the light-alpha values `alpha` of the view's
     /// pixels, row by row (S-0110 claims 5 and 6; `None`: 127 everywhere).
+    ///
+    /// A translucent item (S-0102 claim 32) blends with the pixels drawn
+    /// before it: the pass ends before it, the target's pixels under it
+    /// are copied to the backdrop texture, and the pass resumes, so the
+    /// shader applies F8 to the packed channels exactly, as the CPU
+    /// reference does. This needs a target of [`COLOR_FORMAT`].
     #[allow(clippy::too_many_arguments)]
     pub fn render_lit(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
+        target: &wgpu::Texture,
         depth: &wgpu::TextureView,
         scene: &Scene,
         view: &View,
@@ -524,7 +620,9 @@ impl MapRenderer {
         let (ox, oy) = view.origin;
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
         let mut list: Vec<Instance> = Vec::new();
-        let mut batches: Vec<(Role, std::ops::Range<u32>)> = Vec::new();
+        // Runs of instances that share a pipeline; a translucent item is a
+        // run of its own, with the view rectangle it covers.
+        let mut batches: Vec<(Role, std::ops::Range<u32>, Option<[u32; 4]>)> = Vec::new();
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
         let copies = scene
             .items
@@ -540,6 +638,7 @@ impl MapRenderer {
             }
             let img = &scene.images[item.image as usize];
             let slot = self.slots[item.image as usize];
+            let mut companion_rect = [0; 4];
             let (role, flags, bias, reference_row, depth_slot) = match item.depth {
                 ItemDepth::Tile {
                     depth,
@@ -551,32 +650,54 @@ impl MapRenderer {
                     reference_row,
                     depth.map(|d| self.slots[d as usize]),
                 ),
-                ItemDepth::Profile { profile, bias, .. } => {
-                    let kind = match profile {
+                ItemDepth::Profile {
+                    profile,
+                    bias,
+                    companion,
+                } => {
+                    let mut kind = match profile {
                         Profile::Flat => 1,
                         Profile::Slope => 2,
                         Profile::Upright => 3,
                     };
+                    // spec: S-0102 F2, F5 (a companion depth image: bit 2 of the flags, its atlas
+                    // slot in the depth fields, its world rectangle in `companion`)
+                    let companion_slot = companion.map(|(i, cx, cy)| {
+                        let img = &scene.signed[i as usize];
+                        kind |= 4;
+                        companion_rect = [cx, cy, img.width as i32, img.height as i32];
+                        self.signed_slots[i as usize]
+                    });
                     let role = match (item.paint, item.test) {
                         // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
                         (Paint::Shadow, DepthTest::Writer) if q.cell_pass_shadows_write_depth => {
                             Role::ShadowWriter
                         }
                         (Paint::Shadow, _) => Role::Shadow,
+                        (Paint::Translucent(..), DepthTest::Reader) => Role::BlendReader,
+                        (Paint::Translucent(..), DepthTest::Tile) => Role::BlendTile,
+                        (Paint::Translucent(..), DepthTest::Writer) => Role::BlendWriter,
+                        (Paint::Translucent(..), DepthTest::Ignore) => Role::BlendIgnore,
                         (_, DepthTest::Reader) => Role::Reader,
                         (_, DepthTest::Tile) => Role::Tile,
                         (_, DepthTest::Writer) => Role::Writer,
                         (_, DepthTest::Ignore) => Role::Ignore,
                     };
-                    (role, kind, bias, 0, None)
+                    (role, kind, bias, 0, companion_slot)
                 }
             };
+            // `diamond` holds the diamond flag in bit 0 and the translucency
+            // code in bits 1 and 2.
             let (row, diamond, shade_rows, rho) = match item.paint {
                 Paint::Row(r) => (r as u32, 0, 0, 0),
                 // spec: S-0010 claim 22 (a diamond has no transparent index)
                 Paint::Diamond(r) => (r as u32, 1, 0, 0),
                 Paint::Lit(s) => (s.base, 0, u32::from(s.rows), u32::from(s.rho)),
                 Paint::LitDiamond(s) => (s.base, 1, u32::from(s.rows), u32::from(s.rho)),
+                // spec: S-0102 claim 32 (codes 1 to 3 blend by F8)
+                Paint::Translucent(s, t) => {
+                    (s.base, t.code() << 1, u32::from(s.rows), u32::from(s.rho))
+                }
                 Paint::Shadow => (0, 0, 0, 0),
             };
             let ds = depth_slot.unwrap_or(Slot {
@@ -594,11 +715,21 @@ impl MapRenderer {
                 place: [item.x, item.y, bias, reference_row],
                 depth: [ds.x, ds.y, ds.layer, flags],
                 paint: [row, diamond, shade_rows, rho],
+                companion: companion_rect,
             });
             let n = list.len() as u32;
+            if role.translucent() {
+                // The view pixels the item covers, which it blends with.
+                let x0 = (l - ox).max(0) as u32;
+                let y0 = (t - oy).max(0) as u32;
+                let x1 = (r - ox).min(w) as u32;
+                let y1 = (b - oy).min(h) as u32;
+                batches.push((role, n - 1..n, Some([x0, y0, x1 - x0, y1 - y0])));
+                continue;
+            }
             match batches.last_mut() {
-                Some((r, range)) if *r == role => range.end = n,
-                _ => batches.push((role, n - 1..n)),
+                Some((r, range, None)) if *r == role => range.end = n,
+                _ => batches.push((role, n - 1..n, None)),
             }
         }
         if list.len() > self.instance_capacity {
@@ -613,48 +744,83 @@ impl MapRenderer {
         if !list.is_empty() {
             queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&list));
         }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("map"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth,
-                // spec: S-0102 claim 8 (the depth buffer is filled with 65535 on a full redraw)
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(f32::from(crate::compose::DEPTH_CLEAR) / 65536.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.set_vertex_buffer(0, self.instances.slice(..));
-        pass.set_blend_constant(wgpu::Color {
-            r: 0.5,
-            g: 0.5,
-            b: 0.5,
-            a: 1.0,
-        });
-        for (role, range) in batches {
-            let i = match role {
-                Role::Tile => 0,
-                Role::Writer => 1,
-                Role::Reader => 2,
-                Role::Shadow => 3,
-                Role::Ignore => 4,
-                Role::ShadowWriter => 5,
-            };
-            pass.set_pipeline(&self.pipelines[i]);
+        let target_view = target.create_view(&Default::default());
+        let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
+            let mut pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("map"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &target_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: if first {
+                                wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                            } else {
+                                wgpu::LoadOp::Load
+                            },
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: depth,
+                        // spec: S-0102 claim 8 (the depth buffer is filled with 65535 on a full redraw)
+                        depth_ops: Some(wgpu::Operations {
+                            load: if first {
+                                wgpu::LoadOp::Clear(
+                                    f32::from(crate::compose::DEPTH_CLEAR) / 65536.0,
+                                )
+                            } else {
+                                wgpu::LoadOp::Load
+                            },
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    ..Default::default()
+                })
+                .forget_lifetime();
+            pass.set_bind_group(0, &self.bind_group, &[]);
+            pass.set_vertex_buffer(0, self.instances.slice(..));
+            pass.set_blend_constant(wgpu::Color {
+                r: 0.5,
+                g: 0.5,
+                b: 0.5,
+                a: 1.0,
+            });
+            pass
+        };
+        let mut pass = begin(encoder, true);
+        for (role, range, cover) in batches {
+            if let Some([x, y, cw, ch]) = cover {
+                // spec: S-0102 claim 32 (a translucent pixel blends with the already-painted
+                // destination: the pixels drawn so far are copied before the item is drawn)
+                drop(pass);
+                encoder.copy_texture_to_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: target,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d { x, y, z: 0 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &self.backdrop,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d { x, y, z: 0 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width: cw,
+                        height: ch,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                pass = begin(encoder, false);
+            }
+            pass.set_pipeline(&self.pipelines[role.index()]);
             pass.draw(0..6, range);
         }
+        drop(pass);
         list.len()
     }
 }
@@ -674,6 +840,7 @@ impl MapRenderer {
         let alpha = alpha.filter(|a| a.len() == n);
         if self.alpha.1 != size {
             let t = alpha_texture(device, queue, size);
+            let backdrop = backdrop_texture(device, size);
             self.bind_group = bind_group(
                 device,
                 &self.layout,
@@ -681,8 +848,10 @@ impl MapRenderer {
                 &self.atlas,
                 &self.rows,
                 &t,
+                &backdrop,
             );
             self.alpha = (t, size);
+            self.backdrop = backdrop;
             self.alpha_default = true;
         }
         let bytes = match alpha {
@@ -741,6 +910,25 @@ fn alpha_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: (u32, u32)) -
     )
 }
 
+/// The backdrop texture of a view of `size`: a copy of the target's pixels
+/// under a translucent item (S-0102 claim 32).
+fn backdrop_texture(device: &wgpu::Device, size: (u32, u32)) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("map backdrop"),
+        size: wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: COLOR_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    })
+}
+
 /// The palette-row texture of `scene` and its rows per column.
 fn rows_texture(
     device: &wgpu::Device,
@@ -797,6 +985,7 @@ fn bind_group(
     atlas: &wgpu::Texture,
     rows: &wgpu::Texture,
     alpha: &wgpu::Texture,
+    backdrop: &wgpu::Texture,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("map"),
@@ -825,6 +1014,12 @@ fn bind_group(
                 binding: 3,
                 resource: wgpu::BindingResource::TextureView(
                     &alpha.create_view(&wgpu::TextureViewDescriptor::default()),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(
+                    &backdrop.create_view(&wgpu::TextureViewDescriptor::default()),
                 ),
             },
         ],
@@ -898,7 +1093,7 @@ mod tests {
     }
 
     #[test]
-    fn instance_is_64_bytes() {
-        assert_eq!(std::mem::size_of::<Instance>(), 64);
+    fn instance_is_80_bytes() {
+        assert_eq!(std::mem::size_of::<Instance>(), 80);
     }
 }

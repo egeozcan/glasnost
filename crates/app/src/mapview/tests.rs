@@ -1062,16 +1062,128 @@ fn animated_terrain_object_in_the_object_pass() {
     assert!(vehicle.iter().all(|v| at(v) > at(shadow)));
 }
 
+/// A synthetic shared depth image file: canvas 50 × 40, image frame 0 a
+/// 6 × 4 rectangle at (3, 5) with the bytes 0, 64, 65, 66 repeated, image
+/// frame 1 a different constant.
+fn companion_file() -> Vec<u8> {
+    let frame = |values: Vec<u8>| WriteFrame {
+        x: 3,
+        y: 5,
+        image: IndexedImage::new(6, 4, values).unwrap(),
+        compression: 1,
+    };
+    ShpWriter {
+        width: 50,
+        height: 40,
+        frames: vec![
+            frame((0..24).map(|i| [0, 64, 65, 66][i % 4]).collect()),
+            frame(vec![99; 24]),
+        ],
+    }
+    .write()
+}
+
+/// The building items of one neutral HUTX on (6, 10) whose art section
+/// holds `hut_art`, with the shared depth image file when `file`.
+fn hut_items(hut_art: &str, file: bool) -> (Built, Vec<Item>) {
+    let art = format!(
+        "[HUTX]\nAnimIdle=1,1,0\n{hut_art}[MANX]\nSequence=MANSEQ\n[MANSEQ]\nReady=3,1,2\n\
+         [CARX]\nFacings=8\nWalkFrames=2\n"
+    );
+    let mut ctx = context_full(RULES, &art);
+    if file {
+        ctx.2.insert(b"buildngz.sha", companion_file());
+    }
+    let (b, _) = build_in(
+        ctx,
+        b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+        &Options::default(),
+    );
+    let items = items_of(&b, "building");
+    (b, items)
+}
+
+/// spec: S-0102 claim 31, F5 (every eligible body uses image frame 0 of the shared file, its bytes
+/// decoded as signed adjustments; its stored rectangle begins at (pₓ − Dₓ − c_z, pᵧ − Dᵧ − r_z) with
+/// the live constants (198, 446), D = K + m − (30(w − h), 15(w + h − 2)), and the art displacement
+/// ZShapePointMove); S-0102 claim 13 (the shadow and bib take none)
+#[test]
+fn building_body_companion() {
+    // The body's draw point: the top corner of cell (6, 10) at level 0.
+    let p = glasnost_render::projection::project_lifted(256 * 6, 256 * 10, 0);
+    for (hut_art, d) in [
+        // 2 × 2, no displacement: D = (198, 446 − 30).
+        ("Foundation=2x2\n", (198, 416)),
+        // 3 × 2, displacement (17, 23): D = (198 + 17 − 30, 446 + 23 − 45).
+        ("Foundation=3x2\nZShapePointMove=17,23\n", (185, 424)),
+    ] {
+        let (b, items) = hut_items(hut_art, true);
+        let body = items.iter().find(|i| i.group == Group::Buildings).unwrap();
+        let ItemDepth::Profile {
+            profile,
+            companion: Some((id, x, y)),
+            ..
+        } = body.depth
+        else {
+            panic!("{hut_art}: the body has a companion");
+        };
+        assert_eq!(profile, Profile::Upright);
+        // The stored rectangle's canvas origin (3, 5) moves it left and up.
+        assert_eq!((x, y), (p.0 - d.0 - 3, p.1 - d.1 - 5), "{hut_art}");
+        // Image frame 0, decoded by F5 (0 → 0, 64 → −1, 65 → 0, 66 → +1); not frame 1.
+        let img = &b.scene.signed[id as usize];
+        assert_eq!((img.width, img.height), (6, 4));
+        assert_eq!(img.values[..4], [0, -1, 0, 1]);
+        assert!(!body.provisional);
+        for i in items.iter().filter(|i| i.group != Group::Buildings) {
+            assert!(matches!(
+                i.depth,
+                ItemDepth::Profile {
+                    companion: None,
+                    ..
+                }
+            ));
+            assert!(!i.provisional);
+        }
+        assert!(!b.notes.iter().any(|n| n.contains("BUILDNGZ")));
+    }
+}
+
+/// spec: S-0102 F2, F5 (without the shared file the body is drawn with plain F2; recovery from a
+/// missing file is not specified, so the body is provisional and noted, Q-0490)
+#[test]
+fn building_body_without_companion_file() {
+    let (b, items) = hut_items("Foundation=2x2\n", false);
+    let body = items.iter().find(|i| i.group == Group::Buildings).unwrap();
+    assert!(matches!(
+        body.depth,
+        ItemDepth::Profile {
+            profile: Profile::Upright,
+            companion: None,
+            ..
+        }
+    ));
+    assert!(body.provisional);
+    assert!(b.scene.signed.is_empty());
+    assert!(b.notes.iter().any(|n| n.contains("Q-0490")));
+}
+
 /// The slot-animation test context: HUTX's art starts five slot animations
 /// (S-0108 claim 11) and names a special slot that the set-up never starts.
 fn slot_context() -> (glasnost_convert::Import, Catalogue, Assets) {
+    slot_context_with("")
+}
+
+/// The slot-animation test context with `extra` added to SLOTA's art section.
+fn slot_context_with(extra: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
     let rules =
         format!("{RULES}[Animations]\n0=SLOTA\n1=SLOTB\n2=SLOTC\n3=SLOTD\n4=SLOTE\n5=SLOTF\n");
     let art = format!(
         "{ART}[HUTX]\nActiveAnim=SLOTA\nActiveAnimX=30\nActiveAnimY=15\nActiveAnimZAdjust=-5\n\
          ActiveAnimYSort=40\nIdleAnim=SLOTB\nActiveAnimTwo=SLOTC\nActiveAnimThree=SLOTD\n\
          ActiveAnimFour=SLOTE\nSpecialAnim=SLOTF\n\
-         [SLOTA]\nLayer=ground\nShadow=yes\nStart=1\nYDrawOffset=3\nZAdjust=99\n\
+         [SLOTA]\nLayer=ground\nShadow=yes\nStart=1\nYDrawOffset=3\nZAdjust=99\n{extra}\
          [SLOTB]\nFlat=yes\nShadow=yes\n\
          [SLOTC]\nLayer=ground\nDetailLevel=1\n\
          [SLOTD]\nLayer=top\nAltPalette=yes\nShouldUseCellDrawer=no\n\
@@ -1152,6 +1264,38 @@ fn slot_animations_of_a_placed_building() {
     assert_eq!(px(&flat), 1);
     // No request is open for these: none is translucent or tiled.
     assert!(slots.iter().all(|i| !i.provisional && i.stack.is_none()));
+}
+
+/// spec: S-0109 claim 20 (a translucency field of 25, 50 or 75 gives code 1, 2 or 3, any other
+/// positive value 0); S-0102 claim 32 and F8 (a nonzero code draws the image with the blend, the
+/// shadow keeps the plain halving)
+#[test]
+fn translucent_slot_animation_blends() {
+    use glasnost_render::compose::Translucency;
+    for (field, code) in [
+        (25, Some(Translucency::Quarter)),
+        (50, Some(Translucency::Half)),
+        (75, Some(Translucency::ThreeQuarter)),
+        (40, None),
+    ] {
+        let b = build_in(
+            slot_context_with(&format!("Translucency={field}\n")),
+            b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+              [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+            &low_detail(),
+        )
+        .0;
+        let slots: Vec<Item> = b.scene.items[b.scene.cell_pass_len..].to_vec();
+        let (a, a_shadow) = (slots[0], slots[1]);
+        match (a.paint, code) {
+            (Paint::Translucent(_, t), Some(c)) => assert_eq!(t, c, "field {field}"),
+            (Paint::Lit(_), None) => {}
+            (p, c) => panic!("field {field}: paint {p:?}, expected code {c:?}"),
+        }
+        assert_eq!(a_shadow.paint, Paint::Shadow);
+        assert!(!a.provisional && !a_shadow.provisional);
+        assert!(!b.notes.iter().any(|n| n.contains("drawn opaque")));
+    }
 }
 
 /// spec: S-0102 claims 5 and 17 (the sort key is X + Y of the position plus the slot's y-sort;
@@ -1398,6 +1542,41 @@ fn slot_animation_tiled_palette() {
     assert_eq!((lit(&normal[0]).rows, lit(&normal[0]).rho), (53, neutral));
 }
 
+/// spec: S-0103 claim 8 (an untiled row-4 animation has only one shade row, so the normal-light
+/// flag cannot change its pixels)
+#[test]
+fn untiled_alt_palette_ignores_normal_light() {
+    use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
+    use glasnost_render::scene::{Filter, View};
+    let sprite = || shp((20, 20), 6, (2, 2), (9, 9));
+    let (plain_b, plain) = one_slot("ShouldUseCellDrawer=no\nAltPalette=yes\n", sprite());
+    let (normal_b, normal) = one_slot(
+        "ShouldUseCellDrawer=no\nAltPalette=yes\nUseNormalLight=yes\n",
+        sprite(),
+    );
+    let it = plain[0];
+    assert!(matches!(it.paint, Paint::Lit(s) if s.rows == 1));
+    let view = View {
+        origin: (it.x - 4, it.y - 4),
+        size: (12, 12),
+        reference: DEPTH_REFERENCE,
+    };
+    // Every light-alpha value over the drawing: the single row is taken whatever the brightness.
+    let alpha: Vec<u8> = (0..144).map(|i| (i * 7 % 256) as u8).collect();
+    let draw = |b: &Built| {
+        b.scene
+            .compose_lit(
+                &view,
+                &Filter::default(),
+                &ComposeQuirks::default(),
+                Some(alpha.clone()),
+            )
+            .to_rgba()
+    };
+    assert_eq!((normal[0].x, normal[0].y), (it.x, it.y));
+    assert_eq!(draw(&plain_b), draw(&normal_b));
+}
+
 /// spec: S-0109 claim 27 (a zero-height first rectangle: one copy at (pₓ, pᵧ + v) and a warning
 /// naming the sprite, our engine's safe departure)
 #[test]
@@ -1579,4 +1758,57 @@ fn owner_definition_and_radar_colour() {
     let radar = |o: &[u8]| super::build::owner_radar_colour(&import, &options, o, [5, 6, 5]);
     assert_eq!(radar(b"Americans"), [248, 56, 56]);
     assert_eq!(radar(b"Yuri"), [112, 116, 192]);
+}
+
+/// spec: S-0101 claim 3 and F2 (r10: the exact lift is the drawing lift only; the sight
+/// centre keeps S-0409 claim 5's floating-point simulation lift), S-0409 F2
+#[test]
+fn drawing_lift_is_not_the_sight_lift() {
+    use glasnost_render::projection::height_lift;
+    use glasnost_sim::econ::shroud;
+    let sim = |z| shroud::height_lift(z, glasnost_num::Rounding::TowardZero);
+    // Level 20: the drawing lift is 300 pixels, the simulation lift 299, so the sight
+    // centre moves trunc(299 / 30) = 9 cells, not 10.
+    assert_eq!(height_lift(2080), 300);
+    assert_eq!(sim(2080), 299);
+    assert_eq!(sim(2080) / 30, 9);
+    // Whole levels below 20 agree.
+    for h in 0..20 {
+        assert_eq!(height_lift(104 * h), sim(104 * h), "level {h}");
+    }
+}
+
+/// spec: S-0105 claim 22 and Import mapping (Q-0470: a model whose part or shadow image would
+/// have a copy-rectangle side above 4096 pixels gives one warning, naming the model file, not one
+/// per pose, appearance or image role; a model within the limit gives none)
+#[test]
+fn oversized_voxel_model_warns_once() {
+    use glasnost_fmt::bytes::F32Bits;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let notes = |stretch: f32| {
+        let mut ctx = context();
+        let car = ctx.0.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        car.voxels.insert("body".into(), b"carx.vxl".to_vec());
+        let mut model = synthetic_model();
+        // The body section stretched along x.
+        model.limbs[0].max[0] = F32Bits::new(stretch);
+        ctx.2
+            .insert(b"carx.vxl", VxlWriter { model: &model }.write());
+        // Two cars facing differently: two body images and two shadows of the same model.
+        let (b, _) = build_in(
+            ctx,
+            b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+              [Units]\n0=Neutral,CARX,256,6,9,64\n1=Neutral,CARX,256,7,9,192\n",
+            &Options::default(),
+        );
+        assert!(!items_of(&b, "vehicle").is_empty());
+        b.notes
+            .into_iter()
+            .filter(|n| n.contains("voxel model"))
+            .collect::<Vec<_>>()
+    };
+    let warned = notes(1.0e6);
+    assert_eq!(warned.len(), 1, "{warned:?}");
+    assert!(warned[0].contains("carx.vxl"), "{warned:?}");
+    assert!(notes(5.0).is_empty());
 }

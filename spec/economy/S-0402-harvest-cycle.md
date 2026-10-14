@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500]
 supersedes: []
 ---
 
@@ -276,12 +276,16 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    is not moving) and the cell of the refinery's reference point. A harvester whose heading-point
    cell lies outside the usable area counts as connected to every refinery. It takes the nearest candidate. The distance is measured as the square of the 2-D
    distance between the two reference points, an integer of leptons squared, *dx*² + *dy*², computed
-   as a signed 32-bit integer that wraps (Formulas F5, `quirks.refinery_distance_wraps`; Edge
-   cases). A primary building can override the nearest rule. The choice is made at two levels by
+   as a signed 32-bit integer that wraps by default (Formulas F5).
+   `quirks.refinery_distance_wraps` defaults to this original rule. With it off, the squared
+   distance is the exact non-negative integer *dx*² + *dy*², without wrapping or rounding.
+   Only this distance changes: both choice levels, eligibility, primary-building overrides
+   and tie rules below remain the same in either setting. A primary building can override
+   the nearest rule. The choice is made at two levels by
    the same rule:
    - within each dock type, among the owner's candidates of that type, ordered by holding order
-     (Terms); this gives the *best of the type*, when the type has a candidate; -
-   across types, among the bests of the types, ordered by the dock list; the best of a type
+     (Terms); this gives the *best of the type*, when the type has a candidate,
+   - across types, among the bests of the types, ordered by the dock list; the best of a type
      counts as a primary building when it is one.
 
    At each level: when no candidate is a primary building, the choice is the nearest, and a tie
@@ -294,7 +298,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    other harvesters does not accept; in the *waiting choice* (claim 9) slots are not looked at.
    - Backing: `measurable` (scenario H4 parts a, c and i; part c's production-order run and part j
      for the holding order of produced and captured buildings; part e for the wrap, `unmeasured` if
-     the original cannot load a map that large; part k for the connectivity cells)
+     the original cannot load a map that large; part k for connected versus disconnected
+     refineries). The heading-point/deck-specific connectivity cases and the outside-usable-area
+     exception are `unmeasured`: part k does not distinguish them from a test at the current
+     ground cell, and no legal-input setup reliably places a seeking harvester's heading point
+     outside the usable area. These cases need a separate reachable boundary setup.
    - Confidence: high for nearest-first and the slot test; medium for the two-level rule, the
      primary-building rule, the holding order (Terms) and the tie order that rests on it, and for
      the connectivity cells; low for the usable-area exception
@@ -454,10 +462,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     the start row; from that processing on the harvester is processed in every tick, so each
     payment, and the change to *finishing*, comes in the first tick, from then on, in which the
     counter has reached 900 × *D*. A harvester with an empty load becomes *finishing* only at a processing at which the
-    counter has reached 900 × *D*, as for a payment, so after its last payment it waits one more
-    interval of 900 × *D* before it becomes *finishing*.
+    counter has reached 900 × *D*, as for a payment, so after its last payment it waits
+    max(1, ⌈900 × *D*⌉) ticks before it becomes *finishing*.
 
-    So unloading takes one payment per tiberium carried, each ⌈900 × *D*⌉ ticks after the
+    So unloading takes one payment per tiberium carried, each max(1, ⌈900 × *D*⌉) ticks after the
     previous one, then one further such interval before *finishing*, and then the wait for the
     building's unloading animation (none when the building has no such animation data, so the
     harvester leaves in the tick after it became *finishing*). The docking and payment animations
@@ -499,7 +507,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     for a destination and a queued behaviour applies), but orders of S-0213 never reach it, since
     only a dock-unload refinery queues *unload* and an order breaks off that contact first.
     - Backing: `measurable` (scenario H1; its variant e for the three animations; H12 for the sale,
-      contact lost while unloading, an order while unloading and the free dock slot)
+      contact lost while unloading, an order while unloading and the free dock slot).
+      The order-ending route with contact kept is `unmeasured`: the orders in S-0213
+      break this contact before that route could be observed, and no other reachable
+      input is known to preserve it.
     - Confidence: high for the payment per tiberium and the dump threshold; medium for the exact
       tick of each payment and the 1-tick intervals, for the extra interval before *finishing* and
       for the one-tick difference of the first payment; medium for the unloading animation being
@@ -1016,7 +1027,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     |---|---|
     | At rest, building currently in *construction* or *selling* | Remains at rest; no field check or emergence. |
     | At rest, building in neither behaviour | Enters checking the field; no check or emergence in this update. |
-    | Field seeking, building | Uses the long scan and site search of claim 22. Failure puts the group at rest and records this tick as last-rest. Success offers the site as a building destination under its ordinary destination rules, queues *move* without an immediate start, and enters travelling. No emergence or field-check transition occurs in this update. |
+    | Field seeking, building | Uses the long scan and site search of claim 22. Failure puts the group at rest and records this tick as last-rest. Success offers the site under claim 27a, requests *move* without an immediate start, and enters travelling. No emergence or field-check transition occurs in this update. |
     | Travelling or retrying deployment, building | Enters at rest and records this tick as last-rest, without field search, deployment attempt or emergence. |
     | Working, building still in its construction state | Remains working; no check or emergence. |
     | Working, building outside its construction state | Enters checking the field; no check or emergence in this update. |
@@ -1034,11 +1045,53 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     the building's group at rest; a subsequent eligible update enters checking the
     field, and only a later update checks it. Construction or selling does not
     suppress the field-seeking or retrying rows themselves. A selling building can
-    refuse the destination and queued behaviour under its ordinary rules without
+    refuse the destination and queued behaviour under claim 27a without
     preventing the group's change to travelling.
     - Backing: `measurable` (H22, H25)
     - Confidence: high for absence of a group-wide pause and the state gates; medium for
       busy-state delivery and reachable selling-state variants
+
+27a. **The field-seeking building's site offer (Q-0500).** Claim 27's successful
+    search offers the shifted site cell of claim 24, not the unshifted footprint corner.
+    Its destination result is the first matching row:
+
+    | Building at the offer | Destination result |
+    |---|---|
+    | Currently in *selling* | Keeps its earlier guard spot, including an absent one. |
+    | Not in *selling*, and its type is a factory of infantry or vehicles, a cloning building, a repair depot or a construction yard | Replaces its guard spot with the site cell. |
+    | Any other building | Keeps its earlier guard spot, including an absent one. |
+
+    There is no separate movement destination on the building. Merely having an
+    undeploys-into type or a slave group does not qualify it for the replacement.
+    Construction state, power, owner and the construction-yard redeploy setting
+    add no exclusion to this offer. The retained or replaced guard spot is the
+    same remembered destination of claim 28, read by S-0415 claims 9 and 10 and
+    S-0408 claim 17. Consequently a later successful pack-up uses that spot,
+    not a hidden second copy of the offered site. This is not the guard-spot
+    order of S-0213 claim 20: that order can directly change the guard spot and
+    is not subject to this site's offer conditions.
+
+    Independently of destination acceptance, the group requests *move* without
+    an immediate start. Current *selling* refuses that request and preserves
+    the earlier queued behaviour (S-0215 claim 7). Otherwise ordinary queueing
+    applies even when the destination offer changed nothing. The group enters
+    travelling in either case. At its next update while still a building,
+    claim 27 puts it at rest; that transition does not clear the guard spot or
+    cancel the queued or current *move*.
+
+    An accepted *move* can become current through S-0215 claim 11's building
+    starts before that next group update, when readiness permits. Its building
+    processing does nothing, schedules the next processing 450 ticks later
+    and takes no draw (S-0215 claim 4 and table T1). It does not move the
+    building, request packing or clear its guard spot. Becoming current does
+    replace the previous behaviour, so its previous processing, such as
+    *guard*, no longer runs while *move* remains current. No automatic return
+    to *guard* accompanies the group's return to rest.
+    - Backing: `measurable` (H25, site-offer variants). Selling-state variants remain
+      `unmeasured` until a run reaches field seeking during current *selling* before
+      conversion; the proposed timing test alone does not establish that overlap.
+    - Confidence: high for the destination gates, retained state and no-op
+      processing; medium for reachable selling-state timing
 
 28. **Manual packing and order boundaries (Q-0414).** Stop and ordinary behaviour-order
     recall belong to S-0213 claim 8 and claim 5. They do not supply a building with the
@@ -1084,7 +1137,8 @@ nothing interrupting, bale *j* (*j* = 1, 2, …) is loaded at tick
 integers, ticks. A harvester of capacity *C* that starts empty on a field that never runs out has
 its last bale at tick *t*₀ + 19 + (*C* − 1)(9*L* + 1). It is full from then on, but the phase ends
 only at the next load step, in tick *t*₀ + 19 + *C*(9*L* + 1), when that step fails because the
-harvester is full; it is *returning* from the processing after that. For *L* ≤ 0 see Edge cases.
+harvester is full. That processing changes it to *returning*; refinery selection occurs no
+earlier than its following processing. For *L* ≤ 0 see Edge cases.
 
 **F2. Unload timing** (claim 11). Let unloading start at the processing in tick *u*₀ (facing east,
 in contact). The counter seen by a processing in tick *t* is *c* = *t* − *u*₀ − 1 until the first
@@ -1095,7 +1149,9 @@ has a processing, so the first payment comes in the first tick *t* ≥ *u*₀ + 
 > *t* − *u*₀ − 1 ≥ 900 × *D*, that is *t* = max(*u*₀ + *d*, *u*₀ + 1 + ⌈900 × *D*⌉),
 
 and each later payment in the first tick *t* with *t* − *u* ≥ 900 × *D*, that is *t* = *u* +
-⌈900 × *D*⌉, where *u* is the tick of the previous payment (every such tick has a processing). When the load is empty at such a
+max(1, ⌈900 × *D*⌉), where *u* is the tick of the previous payment. The minimum of 1 tick
+reflects the next processing: no second payment occurs in the same processing, including
+when the dump rate is zero or negative. When the load is empty at such a
 processing, the harvester becomes *finishing* instead of being paid. 900 × *D* is a double product
 of the double nearest 900 and *D*, exact for single *D* (S-0205, claim 9); the left side is an
 integer, and ⌈ ⌉ rounds the double up to an integer. For the absent-key default, a double, the
@@ -1123,13 +1179,17 @@ ratio = total / *C*, a double quotient. The harvester is full when ratio = 1.0, 
 quotient is 0 / 0, not a number: see Edge cases. Units: bales; the ratio has none.
 
 **F5. Wrapping sums and squares** (claims 8 and 14). The following are computed as signed 32-bit
-integers, with the true result *r* replaced by its residue modulo 2³² in the range −2³¹ to 2³¹ − 1 (that
-is, by *r* − 2³² when *r* ≥ 2³¹):
+integers, with the true result *r* replaced by its residue modulo 2³² in the range −2³¹ to 2³¹ − 1:
+*r* − 2³² × ⌊(*r* + 2³¹) / 2³²⌋. This is exact integer arithmetic; ⌊ ⌋ is floor division.
+The affected expressions are:
 - the kick tests *k* + *s* < *t* (claim 14), integers, ticks, and
 - the refinery distance *dx*² + *dy*² (claim 8), integers, leptons squared; it wraps when the true
   value is at least 2³¹, which needs a distance of at least about 46341 leptons (about 181 cells).
   Two such distances are compared as signed numbers.
-Each wrap has its own quirk switch, in claims 8 and 14.
+Each wrap has its own quirk switch, in claims 8 and 14. With
+`quirks.refinery_distance_wraps` off, compare exact non-negative integer squared distances
+instead of their signed residues; there is no rounding. This does not remove claim 8's
+primary-building overrides or change either tie rule.
 
 **F6. Step counter** (claims 5 and 11). A pacing period *p* started in tick *a* holds until the
 next period is started, in tick *a*′ (or for good). It makes the counter rise in the ticks *τ*
@@ -1274,8 +1334,11 @@ select which harvester takes the earlier turn.
   or more between the reference points, which a large map's diagonal can reach.
   `quirks.refinery_distance_wraps` (default: the original): the squared distance is a signed 32-bit
   integer that wraps, so a refinery that far away can look nearer than one close by. With the
-  switch off, the square is exact (64-bit) and the nearest
-  refinery wins as claim 8 reads without the wrap. No importer warning: the data is valid.
+  switch off, *dx*² + *dy*² is an exact non-negative integer, without wrapping or rounding,
+  at both levels of claim 8's choice. Eligibility, holding order, dock-list order,
+  primary-building overrides and ties are unchanged; a primary building can therefore still
+  defeat a nearer one. H4 part e includes an engine-only off-setting check.
+  No importer warning: the data is valid.
 - **The last bale** of a cell yields nothing (S-0401, `quirks.last_bale_lost`), so a harvester
   that empties cells one after another loses one bale per cell.
 - **A load period of 0** (claim 5). With *L* = 0 the pacing period after a load step is 0, and a
@@ -1312,7 +1375,8 @@ select which harvester takes the earlier turn.
 - `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8),
   `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
   together with `quirks.harvester_failed_step_off_origin` (claim 13) and
-  `quirks.slave_relocation_failed_search_origin` (claim 25), are this spec's own switches.
+  `quirks.slave_relocation_failed_search_origin` (claim 25) and
+  `quirks.slave_negative_capacity_stalls` (claim 26), are this spec's own switches.
 
 ## Import mapping
 
@@ -1330,6 +1394,8 @@ select which harvester takes the earlier turn.
 | Art, building type section, `Foundation` | site-search rectangle width and height (claim 24), from the deployed or deploys-into type | foundation form owned by S-0406 | S-0406 |
 | No data key | missing relocation comparison points, emergence and retry after failed improvement, immediate automatic-pack-up destination (claim 25); slave-place ordering, map-north emergence, two-clock work and busy-state gates (claims 21, 26, 27); directed harvest processing and manual packing gates (claims 22, 28) | engine behaviour, not imported settings | fixed, with claim 25's quirk alternative |
 | No data key | temporary pack-up slave creation and draw order (claim 19a), field-seeking and retrying building transitions (claim 27), shared automatic memory and guard spot (claim 28) | engine behaviour, not imported settings | fixed; failed-vehicle retention alternative is S-0415 claim 11's quirk |
+| Rules, building type section, `Factory`, `Cloning`, `UnitRepair`, `ConstructionYard` | site-offer guard-spot eligibility (claim 27a): infantry or vehicle factory category, or any of the three flags | factory-category form (S-0003 claim 21), then booleans | no factory, then no for each flag |
+| No data key | site-offer refusal during selling, absence of a separate building movement destination, independent move queueing and 450-tick no-op building move processing (claim 27a) | engine behaviour, not imported settings | fixed |
 | Rules, infantry type section, `HarvestRate` | loading-processing interval *h*, not the seeking or delivery group-update interval (claims 14, 26) | integer, ticks | 1 |
 | Rules, `[General]`, `HarvesterLoadRate` | load step period *L* (claim 5) | integer, ticks | 2 |
 | Rules, `[General]`, `HarvesterDumpRate` | dump rate *D* (claim 11) | decimal (S-0003), game minutes | the double nearest 0.016 |
@@ -1373,7 +1439,8 @@ and the scenario stream's draw count come from a recorder (a read-only memory re
 *recorder*), and orders are given by scripted input (glossary, *measurement setup*), as the project
 lead allowed. Unless a scenario says otherwise, the harvester is the human
 house's, the refinery has stock art, there is one harvester, and resource cells do not grow (growth
-and spread fractions 0).
+and spread fractions 0). Unless stated otherwise, use game-speed index 2 at 800 × 600,
+with director and mods off except for the scenario's named test data.
 
 **H1. One full cycle: load, travel, unload, credits (claims 1, 2, 3, 5, 6, 11, 12, 16; F1, F2).**
 - *Setup:* load period *L* = 3, dump rate 0.02 (900 × *D* is just below 18 in single precision, so
@@ -1422,7 +1489,19 @@ and spread fractions 0).
   relative to *f*; (iii) contact is broken in tick *f* + 1. Falsified if run (ii) differs from run (i), if
   in run (i) contact is broken before the unloading animation has ended or more than one tick after
   it, or if in (iii) it is broken later than *f* + 1.
-- *Runs:* 3 for the main run, 1 for each variant.
+  (f) Dump rate 0 and then −0.02, with a mixed load of two tiberiums: the first
+  payment occurs at the first processing after the unloading start row, then the
+  second payment and the change to *finishing* follow one tick apart. Any two
+  payments in one processing, or a longer gap with uninterrupted processing,
+  falsifies this boundary of F2.
+  For variant e, repeat with health above and at or below the yellow threshold,
+  supplying distinguishable damaged versions of all three animations. The damaged
+  version must be selected exactly in the at-or-below runs; a different selection
+  falsifies the damaged-form rule. Test a dock-unload building without the refinery
+  flag separately: its docking and payment animations still play, but it supplies
+  no unloading-animation wait. A missing docking animation solely because this
+  flag is absent falsifies that part of claim 11.
+- *Runs:* 3 for the main run, 1 for each variant and animation/health control.
 
 **H2. Field choice (claim 4).**
 - *Setup:* a clear cell *Q* with the harvester starting 4 cells away from it. The harvester is
@@ -1512,11 +1591,16 @@ and spread fractions 0).
   the power switch): the harvester docks at the other one; with the refinery switched on again, and separately
   with the house at low power, it docks at the nearer one. Falsified if the switched-off refinery
   is used or low power makes the harvester refuse the nearer one.
-- *Part e (distance wrap, original default).* A map large enough for two refineries, A about 150
-  cells and B about 190 cells from the harvester along one axis; too-far field 50. Expected: the
+- *Part e (distance wrap, original default).* A map large enough for two connected,
+  accepting refineries of one dock type, neither primary: A about 150 cells and B about
+  190 cells from the harvester along one axis; too-far field 50. Expected: the
   harvester drives to B's queueing cell (B's wrapped distance is negative). Falsified if it goes to A.
   If the original cannot load a map that large, this part is dropped and the wrap stays
-  `unmeasured` (reason: it needs a map beyond the original's size).
+  `unmeasured` (reason: it needs a map beyond the original's size). On our engine only,
+  repeat with `quirks.refinery_distance_wraps` off: it drives towards A, whose exact
+  squared distance is smaller. Choosing B falsifies the off-setting rule. Repeat part c
+  and its tie runs with the switch off as well: their primary and tie outcomes must not
+  change. These off-setting runs are conformance tests, not oracle measurements.
 - *Part f (the equality at both limits).* The refinery's foundation centre lies at a cell centre
   and the harvester stands at a cell centre, on level ground, so the 3-D distance is a whole number
   of cells times 256 leptons with no remainder. (i) Too-far field 5, harvester exactly 5 cells
@@ -2142,9 +2226,53 @@ is wrong). *Runs:* 3.
   packing gives the vehicle that destination. Immediate checking from seeking or
   retrying, emergence in those transitions, independent destination memories or
   automatic memory overriding a later accepted order falsifies the claims.
+- *Site-offer variants (Q-0500):* repeat the field-seeking success case three
+  times with a previously remembered, distinct cell and three times with no
+  guard spot. Record the offered shifted site, guard spot, current and queued
+  behaviours, processing ticks, group state and random-stream state through
+  the next group update, then sell and observe the returned vehicle's destination.
+  Use the same speed, houses, recorder and scripted input as above. Add named
+  test-map type overrides qualifying the master through exactly one of these
+  properties at a time: cloning, construction yard, repair depot, infantry factory
+  and vehicle factory. Use controls with none of those properties, including an
+  aircraft-factory-only control. Keep the building alive through the test.
+  The qualifying non-selling variant replaces the guard spot with the offered
+  site and later packs towards it. The control retains its earlier spot or
+  absence, yet requests *move*. Repeat during current *selling*, timing the
+  search before conversion: both the earlier guard spot and queued behaviour
+  remain unchanged, but the group still enters travelling. In a ready,
+  non-constructing case, *move* may become current before the next group
+  update, without movement or packing. Each processing while it is current
+  does nothing and has a 450-tick delay with no draw attributable to that
+  processing; separate group-update draws are recorded separately. Returning
+  to rest does not cancel *move*. Replacement for a nonqualifying or selling
+  building, any separate site memory inherited on packing, packing caused by
+  *move* alone, a processing interval other than 450 ticks, a processing draw, or
+  move cancellation by the group reset falsifies claim 27a.
+  Repeat the qualifying offer during construction, with low power and with the
+  power switch off, recording the offer separately from whether *move* can start.
+  Repeat the construction-yard variant with lobby redeploy off: destination
+  acceptance is unchanged, although conversion still has its separate legality
+  checks. A rejected offer solely due to any of these conditions falsifies the
+  corresponding no-exclusion statement. Record the bystander's own qualifying
+  master separately for an owner control; a refusal solely due to owner falsifies
+  that statement. Only named test objects are exempt from the bystander void rule.
+  Runs that never reach the required group-state/behaviour overlap do not test
+  that variant; its backing remains `unmeasured`, with the unreachable overlap
+  recorded as the reason.
 
 ## Open questions
 
+- Cross-spec changes to confirm: S-0215 claim 4 must explicitly cover the reachable
+  450-tick no-op building *move* of claim 27a, with H25 as its scenario, rather
+  than treating every no-rule building case as unreachable. S-0415 claim 9's
+  backing must no longer say that a move click is the only way a construction
+  yard can gain a guard spot: claim 27a's site offer can supply one with lobby
+  redeploy off. Its pack-up legality remains S-0213 claim 12's, unchanged here.
+- Q-0500 is answered by claim 27a. Claim 28 and S-0415 claims 9 and 10
+  already identify the shared guard spot and its packing consequences.
+  S-0215 claims 7 and 11 already fix queue refusal and building starts.
+  The site-offer gates and destination retention are now explicit here.
 - Q-0441's creation and draw ordering is claim 19a; S-0415 claim 11 owns
   refused-vehicle retention and its quirk. Q-0442's deployed state boundaries and
   shared remembered destination are claims 27 and 28. Q-0440 belongs to S-0408

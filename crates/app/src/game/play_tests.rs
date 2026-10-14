@@ -459,9 +459,9 @@ fn page_requests_and_wheel_on_an_overflowing_strip() {
     p.tab_click(0);
     // Five icons on the shown tab, one row visible: N = 5, R = 1, E = 2.
     let icons = &mut p.game.world.houses[usize::from(p.local.0)].econ.tech.icons[0];
-    let first = icons[0].clone();
+    let first = icons[0];
     while icons.len() < 5 {
-        icons.push(first.clone());
+        icons.push(first);
     }
     p.cues.clear();
     p.scroll_icons(-1, 1);

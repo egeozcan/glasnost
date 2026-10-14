@@ -1078,6 +1078,9 @@ pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
     nearby_filtered(w, centre, use_, None)
 }
 
+/// A cell test of a nearby-cell search's user.
+pub type CellTest<'a> = &'a dyn Fn(&World, CellXY) -> bool;
+
 /// The nearby-cell search (S-0212 claim 25) with a user's own extra test
 /// `extra` that a cell must pass to be collected, besides the search's
 /// own (S-0402 claim 24's footprint test of a slave-miner site).
@@ -1085,7 +1088,7 @@ pub fn nearby_filtered(
     w: &World,
     centre: CellXY,
     use_: NearbyUse,
-    extra: Option<&dyn Fn(&World, CellXY) -> bool>,
+    extra: Option<CellTest<'_>>,
 ) -> Option<CellXY> {
     let q = w.rules().quirks;
     let fp = *w.cells.footprint();
