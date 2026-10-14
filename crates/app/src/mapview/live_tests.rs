@@ -248,6 +248,22 @@ fn synthetic_live() -> (Live, Scene) {
     (live, built.scene)
 }
 
+/// spec: S-0214 claim 25 (mobile candidates take places in their current
+/// drawing order, not object order; static drawings between them consume
+/// no place and do not reverse their priority)
+#[test]
+fn mobile_candidates_follow_the_drawing_order() {
+    let mut g = GroundLayer::default();
+    g.enter(Entrant::Object(ObjectId(3)), 10);
+    g.enter(Entrant::Object(ObjectId(1)), 20);
+    g.enter(Entrant::Static(0), 15);
+    g.enter(Entrant::Object(ObjectId(2)), 5);
+    assert_eq!(
+        g.objects().collect::<Vec<_>>(),
+        [ObjectId(2), ObjectId(3), ObjectId(1)]
+    );
+}
+
 fn own_mobile(live: &Live, h: u8) -> ObjectId {
     testkit::house_objects(&live.world, h)
         .into_iter()

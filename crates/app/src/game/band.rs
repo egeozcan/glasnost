@@ -1,7 +1,8 @@
 //! The band box's input state and geometry (S-0214 claims 18 and 19, F6
-//! and State and ordering): a primary-button press arms a drag, a motion
+//! and State and ordering): a left-button press arms a drag, a motion
 //! farther than the threshold from the press pixel makes it a box anchored
-//! there, and the release selects. Input only, never game state.
+//! there, and the release selects. The frame's screen candidates follow
+//! claims 20, 24 and 25 and F7. Input only, never game state.
 
 use glasnost_num::Rounding;
 use glasnost_num::geom::root_floor;
@@ -29,7 +30,7 @@ pub struct Drag {
 }
 
 impl Drag {
-    /// A primary-button press in the battlefield arms a drag.
+    /// A left-button press in the battlefield arms a drag.
     pub fn armed(press: Point) -> Self {
         Self {
             press,
@@ -67,18 +68,39 @@ pub fn inside(press: Point, end: Point, q: Point) -> bool {
 // spec: S-0214 claim 20 and Constants (500 screen candidates per drawn frame; not a selection limit)
 pub const SCREEN_CANDIDATES: usize = 500;
 
-/// The screen candidates admitted for a frame (S-0214 claim 20): mobile
-/// candidates first, then buildings, cut at [`SCREEN_CANDIDATES`]. Every
-/// candidate consumes a place whether or not a box could take it; places
-/// are not replenished. The order inside each group is the callers'.
+/// How far outside the battlefield view a mobile candidate's point may lie,
+/// pixels on each axis.
+// spec: S-0214 F7 and Constants (mobile candidate margin 32 pixels on each axis, independent of image dimensions)
+pub const MOBILE_MARGIN: i32 = 32;
+
+/// Whether a mobile object's box point `p`, relative to the battlefield
+/// view's top-left corner, passes F7 for a view of `w` × `h` pixels.
+pub fn mobile_point_in(p: Point, w: i32, h: i32) -> bool {
+    // spec: S-0214 F7 (−32 ≤ x ≤ W + 32 and −32 ≤ y ≤ H + 32, inclusive integer comparisons; the upper bound is W + 32, not W − 1 + 32)
+    (-MOBILE_MARGIN..=w + MOBILE_MARGIN).contains(&p.x)
+        && (-MOBILE_MARGIN..=h + MOBILE_MARGIN).contains(&p.y)
+}
+
+/// Whether a building's box point `p`, relative to the battlefield view's
+/// top-left corner, passes F7 for a view of `w` × `h` pixels.
+pub fn building_point_in(p: Point, w: i32, h: i32) -> bool {
+    // spec: S-0214 F7 (0 ≤ x ≤ W and 0 ≤ y ≤ H, the unexpanded view including its right and bottom boundary coordinates)
+    (0..=w).contains(&p.x) && (0..=h).contains(&p.y)
+}
+
+/// The screen candidates admitted for a frame (S-0214 claims 20, 24 and
+/// 25): every qualifying building, then every qualifying mobile object,
+/// cut at [`SCREEN_CANDIDATES`]. Every candidate consumes a place whether
+/// or not a box could take it; places are not replenished. `buildings`
+/// come in creation order and `mobile` in drawing order (the callers').
 pub fn admit<T>(
-    mobile: impl IntoIterator<Item = T>,
     buildings: impl IntoIterator<Item = T>,
+    mobile: impl IntoIterator<Item = T>,
 ) -> Vec<T> {
-    // spec: S-0214 claim 20 (mobile drawing candidates consume places before the later building candidates; ineligible objects still consume places)
-    mobile
+    // spec: S-0214 claims 20 and 25 (qualifying buildings precede every qualifying mobile object; the first 500 in that order are admitted; ineligible objects still consume places)
+    buildings
         .into_iter()
-        .chain(buildings)
+        .chain(mobile)
         .take(SCREEN_CANDIDATES)
         .collect()
 }
@@ -134,20 +156,57 @@ mod tests {
         assert!(!inside(a, c, Point::new(7, 19)));
     }
 
-    // spec: S-0214 claim 20 (at most 500 screen candidates, mobile before buildings; ineligible candidates consume places without replenishment)
+    // spec: S-0214 claims 20 and 25 and Scenario T15 part B (20 qualifying buildings and 490 mobile objects: all 20 buildings and the first 480 mobile objects; 500 mobile objects and one vehicle-like building: the building and 499 mobile objects)
     #[test]
-    fn claim_20_candidate_capacity() {
-        let mobile: Vec<u32> = (0..490).collect();
+    fn claims_20_25_buildings_first() {
         let buildings: Vec<u32> = (1000..1020).collect();
-        let a = admit(mobile.clone(), buildings.clone());
+        let mobile: Vec<u32> = (0..490).collect();
+        let a = admit(buildings.clone(), mobile.clone());
         assert_eq!(a.len(), 500);
-        assert_eq!(&a[..490], &mobile[..]);
-        assert_eq!(&a[490..], &buildings[..10]);
-        let crowd: Vec<u32> = (0..510).collect();
-        let a = admit(crowd, buildings);
+        assert_eq!(&a[..20], &buildings[..]);
+        assert_eq!(&a[20..], &mobile[..480]);
+        let crowd: Vec<u32> = (0..500).collect();
+        let a = admit([2000], crowd.clone());
         assert_eq!(a.len(), 500);
-        assert!(a.iter().all(|&x| x < 1000), "no building gets a place");
-        // Few candidates: all admitted, buildings after mobiles.
-        assert_eq!(admit([1, 2], [9]), [1, 2, 9]);
+        assert_eq!(a[0], 2000);
+        assert_eq!(&a[1..], &crowd[..499]);
+        // Few candidates: all admitted, buildings first.
+        assert_eq!(admit([9], [1, 2]), [9, 1, 2]);
+    }
+
+    // spec: S-0214 F7 (mobile points pass from −32 through the view dimension + 32 inclusive on each axis; −33 and dimension + 33 fail)
+    #[test]
+    fn f7_mobile_bounds() {
+        let (w, h) = (800, 600);
+        for x in [-32, -1, 0, w, w + 32] {
+            assert!(mobile_point_in(Point::new(x, 300), w, h), "{x}");
+        }
+        for x in [-33, w + 33] {
+            assert!(!mobile_point_in(Point::new(x, 300), w, h), "{x}");
+        }
+        for y in [-32, h + 32] {
+            assert!(mobile_point_in(Point::new(400, y), w, h), "{y}");
+        }
+        for y in [-33, h + 33] {
+            assert!(!mobile_point_in(Point::new(400, y), w, h), "{y}");
+        }
+    }
+
+    // spec: S-0214 F7 (building points pass from 0 through the view dimension inclusive; −1 and dimension + 1 fail)
+    #[test]
+    fn f7_building_bounds() {
+        let (w, h) = (800, 600);
+        for x in [0, w] {
+            assert!(building_point_in(Point::new(x, 300), w, h), "{x}");
+        }
+        for x in [-1, w + 1] {
+            assert!(!building_point_in(Point::new(x, 300), w, h), "{x}");
+        }
+        for y in [0, h] {
+            assert!(building_point_in(Point::new(400, y), w, h), "{y}");
+        }
+        for y in [-1, h + 1] {
+            assert!(!building_point_in(Point::new(400, y), w, h), "{y}");
+        }
     }
 }

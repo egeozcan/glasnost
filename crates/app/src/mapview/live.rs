@@ -131,6 +131,15 @@ impl GroundLayer {
         self.list.iter().map(|(e, _)| *e)
     }
 
+    /// The simulation objects of the layer in drawing order; static
+    /// entries consume no place (S-0214 claim 25).
+    pub fn objects(&self) -> impl Iterator<Item = ObjectId> + '_ {
+        self.order().filter_map(|e| match e {
+            Entrant::Object(id) => Some(id),
+            Entrant::Static(_) => None,
+        })
+    }
+
     /// Whether `e` is in the layer.
     pub fn contains(&self, e: Entrant) -> bool {
         self.list.iter().any(|(x, _)| *x == e)
@@ -673,6 +682,18 @@ impl Live {
     /// (S-0201 claim 6).
     fn shown_tick(&self) -> i32 {
         (self.world.tick - 1).max(0)
+    }
+
+    /// The mobile objects that take part in the object pass's body drawing,
+    /// in their current drawing order (S-0102 claims 4 to 7, S-0214 claims
+    /// 24 and 25): the ground layer's simulation objects that are drawn.
+    /// Every mobile object is drawn in the ground layer here; the upper
+    /// layers are not modelled.
+    pub fn drawn_mobiles(&self, inputs: &Inputs) -> Vec<ObjectId> {
+        self.ground
+            .objects()
+            .filter(|&id| self.mobile(inputs, id).is_some())
+            .collect()
     }
 
     /// What one simulation object looks like now, if it is drawn.

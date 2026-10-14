@@ -409,7 +409,8 @@ impl Play {
             self.selection.clear();
         }
         let mut first = None;
-        // Candidates are added in object order (interim, Q-0278).
+        // Candidates are added in their admitted order: buildings, then
+        // mobile objects in drawing order (interim, Q-0452).
         for &id in candidates {
             if targeting::box_eligible(w, local, &self.selection, id) {
                 // spec: S-0214 claims 12 and 20 (additions use the selection order; no count limit on the selection)

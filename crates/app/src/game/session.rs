@@ -612,39 +612,55 @@ impl Session {
     }
 
     /// The live box candidates whose box point is inside the box from
-    /// `press` to `end` (S-0214 claim 19, Terms *box point*): objects of
-    /// any owner in play on the map, at their position projected with
-    /// height lift, aircraft at their lifted origin. Terrain objects are not
-    /// candidates. The frame's screen candidates are cut at 500, mobile
-    /// objects before buildings (claim 20); interim (Q-0392): a screen
-    /// candidate is one whose box point is in the battlefield view, and
-    /// each group is in object order.
-    fn box_candidates(&self, press: Point, end: Point) -> Vec<ObjectId> {
+    /// `press` to `end` (S-0214 claim 19, Terms *box point*), out of the
+    /// frame's admitted screen candidates (claims 20, 24 and 25, F7): the
+    /// in-play buildings on the map whose type is not invisible in the game
+    /// and whose point is in the view, in creation order, then the drawn
+    /// mobile objects whose point is within 32 pixels of it, in drawing
+    /// order, cut at 500. Owner and eligibility play no part here. Points
+    /// are the position projected with height lift, aircraft at their
+    /// lifted origin.
+    fn box_candidates(&mut self, press: Point, end: Point) -> Vec<ObjectId> {
+        let drawn = self
+            .with_live(|live, inputs, _| live.drawn_mobiles(inputs))
+            .unwrap_or_default();
         let w = &self.play.game.world;
         let v = self.view();
         let m = self.map_rect();
-        // spec: S-0214 Terms (box point: the drawing origin, the position projected with world-height lift; S-0101 F1)
+        // spec: S-0214 Terms (box point: the drawing origin, the position projected with world-height lift; S-0101 F1) and F7 (relative to the battlefield view's top-left corner)
         let point = |o: &glasnost_sim::world::Object| {
             let (qx, qy) = project_lifted(o.pos.x, o.pos.y, o.pos.z);
-            Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y)
+            Point::new(qx - v.origin.0, qy - v.origin.1)
         };
-        let corner = Point::new(m.right() - 1, m.bottom() - 1);
-        let screen: Vec<(ObjectId, Point, bool)> = w
+        let invisible = |o: &glasnost_sim::world::Object| {
+            w.rules()
+                .buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.raw.invisible_in_game.unwrap_or(false))
+        };
+        // spec: S-0214 claim 24 (an in-play building on the map whose type is not invisible in the game, its point in the unexpanded view; not filtered by owner, eligibility, shroud or health; terrain objects are no candidates) and claim 25 (earlier-created buildings first)
+        let buildings = w
             .objects
             .values()
-            .filter(|o| o.on_map && o.kind != SimKind::Terrain)
-            .map(|o| (o.id, point(o), o.kind == SimKind::Building))
-            .filter(|&(_, q, _)| band::inside(Point::new(m.x, m.y), corner, q))
-            .collect();
-        // spec: S-0214 claim 20 (500 screen candidates, mobile before buildings, places consumed whether eligible or not)
-        let admitted = band::admit(
-            screen.iter().filter(|c| !c.2).copied(),
-            screen.iter().filter(|c| c.2).copied(),
+            .filter(|o| o.kind == SimKind::Building && o.on_map && !invisible(o))
+            .map(|o| (o.id, point(o)))
+            .filter(|&(_, q)| band::building_point_in(q, m.w, m.h));
+        // spec: S-0214 claim 24 (a mobile object taking part in the frame's body drawing, its point within F7's expanded view) and claim 25 (in the current drawing order)
+        let mobile = drawn
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .map(|o| (o.id, point(o)))
+            .filter(|&(_, q)| band::mobile_point_in(q, m.w, m.h));
+        // spec: S-0214 claims 20 and 25 (500 screen candidates, buildings before mobile objects, places consumed whether eligible or not)
+        let admitted = band::admit(buildings, mobile);
+        let (press, end) = (
+            Point::new(press.x - m.x, press.y - m.y),
+            Point::new(end.x - m.x, end.y - m.y),
         );
         admitted
             .into_iter()
-            .filter(|&(_, q, _)| band::inside(press, end, q))
-            .map(|(id, _, _)| id)
+            .filter(|&(_, q)| band::inside(press, end, q))
+            .map(|(id, _)| id)
             .collect()
     }
 
