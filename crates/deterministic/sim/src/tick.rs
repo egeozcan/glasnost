@@ -110,7 +110,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
         return;
     }
     if kind == Kind::Vehicle {
-        // spec: S-0203 claim 12 (a vehicle master's group update sees its position and destination before its movement of the turn; a destination it assigns is available to that movement)
+        // spec: S-0203 claim 12 (a vehicle master's due group update comes after that turn's behaviour start and processing, whose destination and group-state changes it sees, and before its movement; a destination it assigns is available to that movement)
         crate::econ::slaves::group_turn(w, id);
         if w.obj(id).is_none() {
             return;
