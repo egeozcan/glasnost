@@ -2,11 +2,11 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-14
 measurements: []
 requests: [Q-0009, Q-0018, Q-0041, Q-0046, Q-0055]
 supersedes: []
@@ -2026,18 +2026,7 @@ inconclusive.
 
 ## Cross-spec changes to confirm
 
-- S-0211 claim 5 must name the unconditional game-start recalculation, not only further
-  whole-map terrain changes. Its vehicle-move backing and scenario L23 must use R1 part D2's
-  surviving cell, not part D's plus centre or an unset-transition patch; those are already
-  stable at the first tick. R1's named buildability override can be reused when needed.
-- S-0202's loading-draw table must include the tile-animation creation draws of the game-start
-  recalculation after starting units, before the first tick (claim 19; S-0011 already lists it).
-- S-0410 scenario R6 part D must select variants with claim 13's ordinary pattern, not assume a
-  known way to set the alternate-image state. Parts A and D back claim 20 here, not A and C.
-- S-0103's terrain-animation term should include animations started by recalculation in play,
-  as the glossary and claim 19 already do.
-- S-0009 claims 6 and 8 already defer the picture rule to claim 24; the scrub's requested
-  cross-reference settlement is present and needs no further edit.
+No cross-spec changes remain to confirm against the approved revisions reviewed for this scrub. S-0211 claim 5 includes the game-start recalculation and the relevant move trigger; S-0202 claim 14 states the game-start animation-draw ordering; S-0410 scenario R6 part D uses S-0010 claim 13's ordinary variant pattern; S-0103 defines terrain animations to include those started when terrain is set up or a cell is recalculated in play; and S-0009 claims 6 and 8 defer the picture rule to S-0010 claim 24.
 
 ## Questions for the project lead
 
