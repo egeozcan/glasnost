@@ -589,7 +589,7 @@ pub fn factory_could_make(w: &World, house: HouseId, t: u32) -> bool {
             && o.on_map
             && o.health > 0
             // spec: S-0404 Terms via S-0406 claim 1 (a building being sold cannot make)
-            && o.beh.current != Some(Behaviour::Selling)
+            && o.beh.seen() != Some(Behaviour::Selling)
             && r.buildings[o.type_index as usize].factory
                 == Some(crate::rules::FactoryKind::Building)
             // spec: S-0404 Terms (its type's owner countries share one with the item type's)
@@ -716,14 +716,11 @@ pub fn begin_construction(w: &mut World, id: ObjectId, deployed: bool) {
 }
 
 /// The behaviour a rule sees when it asks for a building's behaviour
-/// (S-0406 claim 17): the current one, or the queued *construction* while
-/// none is current.
+/// (S-0406 claim 17, S-0215 claim 1): the current one, or the queued one
+/// (such as *construction*) while none is current.
 pub fn seen_behaviour(o: &crate::world::Object) -> Option<Behaviour> {
-    match (o.beh.current, o.beh.queued) {
-        // spec: S-0406 claim 17 (a rule that asks for its behaviour while none is current sees the queued construction)
-        (None, Some(Behaviour::Construction)) => Some(Behaviour::Construction),
-        (cur, _) => cur,
-    }
+    // spec: S-0406 claim 17 and S-0215 claim 1 (a rule that asks for its behaviour while none is current sees the queued one)
+    o.beh.seen()
 }
 
 /// Whether the first per-tick start of a building's turn is withheld

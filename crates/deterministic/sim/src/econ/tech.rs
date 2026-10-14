@@ -456,7 +456,7 @@ pub fn type_of(o: &Object) -> TypeRef {
 /// A building whose current behaviour is *selling* (S-0407 Terms, *being
 /// sold*).
 pub fn being_sold(o: &Object) -> bool {
-    o.beh.current == Some(Behaviour::Selling)
+    o.beh.seen() == Some(Behaviour::Selling)
 }
 
 /// A building whose queued behaviour is *selling* (S-0407 Terms, *queued

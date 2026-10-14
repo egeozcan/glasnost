@@ -279,7 +279,7 @@ pub fn step(w: &mut World, id: ObjectId) {
         // spec: S-0215 claim 37 (d) (may approach: the can-approach property, and not draining, in a bunker or an open-topped passenger, all seams)
         let may = u.is_none_or(|u| u.raw.can_approach_target.unwrap_or(true));
         // spec: S-0215 claim 37 (d) (the keep-or-drop table by current behaviour, may approach and owner)
-        let keep = match o.beh.current {
+        let keep = match o.beh.seen() {
             Some(Behaviour::Sticky) => false,
             Some(Behaviour::Attack) => true,
             Some(Behaviour::AreaGuard) => may || human,

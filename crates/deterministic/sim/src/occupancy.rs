@@ -228,7 +228,7 @@ pub fn crushable_by(w: &World, crusher: ObjectId, obj: ObjectId) -> bool {
 pub fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
     let o = w.obj(mover)?;
     // spec: S-0209 Terms (mission target: the destination or target while in a behaviour with one)
-    match o.beh.current {
+    match o.beh.seen() {
         Some(Behaviour::Enter | Behaviour::Capture | Behaviour::Sabotage | Behaviour::Eaten) => {
             o.dest.or(o.target)
         }
@@ -340,7 +340,7 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         } else if allied {
             match o.kind {
                 Kind::Vehicle => {
-                    let guarding = m.beh.current == Some(Behaviour::AreaGuard)
+                    let guarding = m.beh.seen() == Some(Behaviour::AreaGuard)
                         && m.guard_spot == Some(Target::Object(oid));
                     if guarding {
                         // spec: S-0209 claim 4 (row WP5: a vehicle the walker guards)
@@ -521,7 +521,7 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
         let allied = w.allied(m.owner, o.owner);
         let v: Option<Outcome>;
         let mut over = false;
-        if m.beh.current == Some(Behaviour::Enter)
+        if m.beh.seen() == Some(Behaviour::Enter)
             && m.dest == Some(Target::Object(oid))
             && o.kind == Kind::Vehicle
         {
@@ -579,7 +579,7 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             } else {
                 Outcome::Blocked
             });
-        } else if m.beh.current == Some(Behaviour::AreaGuard)
+        } else if m.beh.seen() == Some(Behaviour::AreaGuard)
             && m.guard_spot == Some(Target::Object(oid))
         {
             // spec: S-0209 claim 5 (row VP18)

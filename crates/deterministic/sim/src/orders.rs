@@ -267,7 +267,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                     ob.path.steps.clear();
                 }
                 if harvester
-                    && matches!(ob.beh.current, Some(Behaviour::Harvest | Behaviour::Return))
+                    && matches!(ob.beh.seen(), Some(Behaviour::Harvest | Behaviour::Return))
                 {
                     // spec: S-0213 claim 8 (a harvester in harvest or return gets guard at once)
                     ob.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
@@ -470,7 +470,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     // spec: S-0213 table T3 (a) (enter while entering, towards a building it is in contact with: ignored)
     if b == Behaviour::Enter
         && mobile
-        && ob.beh.current == Some(Behaviour::Enter)
+        && ob.beh.seen() == Some(Behaviour::Enter)
         && let Some(Target::Object(d)) = dest
         && w.obj(d).is_some_and(|x| x.kind == Kind::Building)
         && ob.contact == Some(d)

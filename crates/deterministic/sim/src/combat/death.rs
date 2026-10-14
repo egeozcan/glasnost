@@ -544,7 +544,7 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // (f) destruction particle systems: which kinds are eligible belongs to the particle specs; none is created.
     survivors(w, id, hit);
     // spec: S-0312 claim 21 (only the type's explodes flag counts, or the sale's behaviour at the destruction: the building awaits removal with 0 health)
-    let selling = o.beh.current == Some(crate::rules::Behaviour::Selling);
+    let selling = o.beh.seen() == Some(crate::rules::Behaviour::Selling);
     if tc.explodes || selling {
         return;
     }

@@ -1440,7 +1440,7 @@ pub fn spy_satellite_check(w: &mut World, h: HouseId) {
                     && flags.get(o.type_index as usize).copied().unwrap_or(false)
                     && o.on_map
                     && o.health > 0
-                    && o.beh.current != Some(Selling)
+                    && o.beh.seen() != Some(Selling)
                     && o.beh.queued != Some(Selling)
             })
         })

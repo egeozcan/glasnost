@@ -96,7 +96,7 @@ fn qualifies(w: &World, id: ObjectId) -> bool {
             // spec: S-0410 claim 1 (switched on, on the map, neither current nor queued behaviour selling)
             && !o.econ.building.switched_off
             && o.on_map
-            && o.beh.current != Some(Behaviour::Selling)
+            && o.beh.seen() != Some(Behaviour::Selling)
             && o.beh.queued != Some(Behaviour::Selling)
     })
 }

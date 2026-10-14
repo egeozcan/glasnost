@@ -74,6 +74,15 @@ pub struct Gate {
 }
 
 impl Behaviours {
+    /// The behaviour a rule sees when it asks for the actor's behaviour
+    /// (S-0215 claim 1): the current one, or the queued one while none is
+    /// current. Seeing it neither starts the queued behaviour nor fills the
+    /// current slot; processing and the slot mechanics read the raw slots.
+    pub fn seen(&self) -> Option<Behaviour> {
+        // spec: S-0215 claim 1 (with no current behaviour, rules that ask for its behaviour see the queued one)
+        self.current.or(self.queued)
+    }
+
     /// The behaviour start of S-0215 claim 3: timer expired now, start tick
     /// now, progress count 0.
     fn start(&mut self, tick: i32) {
@@ -223,6 +232,22 @@ impl Behaviours {
 mod tests {
     use super::*;
     use crate::rules::Behaviour as B;
+
+    // spec: S-0215 claim 1 (with no current behaviour the queued one is seen; seeing it fills no slot)
+    #[test]
+    fn seen_is_current_else_queued() {
+        let mut s = Behaviours {
+            queued: Some(B::Guard),
+            ..Default::default()
+        };
+        assert_eq!(s.seen(), Some(B::Guard));
+        assert_eq!((s.current, s.queued), (None, Some(B::Guard)));
+        s.current = Some(B::Attack);
+        assert_eq!(s.seen(), Some(B::Attack));
+        s.current = None;
+        s.queued = None;
+        assert_eq!(s.seen(), None);
+    }
 
     // spec: S-0215 claim 7 (queue rows: ignored under selling or wait/guard; current again keeps; replace)
     #[test]

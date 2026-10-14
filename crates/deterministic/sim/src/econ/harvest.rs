@@ -1151,7 +1151,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     } else if !crate::occupancy::in_progress(w, id) {
         let sold = w
             .obj(r)
-            .is_some_and(|b| b.econ.sale.is_some() || b.beh.current == Some(Behaviour::Selling));
+            .is_some_and(|b| b.econ.sale.is_some() || b.beh.seen() == Some(Behaviour::Selling));
         // spec: S-0402 claim 10 row 4 (facing 16384 and not moving: the refinery queues unload on it, without an immediate start, unless it is being sold)
         if !sold && let Some(ob) = w.obj_mut(id) {
             ob.beh.queue(Some(Behaviour::Unload));
@@ -1366,7 +1366,7 @@ pub fn refinery_sold(w: &mut World, refinery: ObjectId) {
             }
         } else if w
             .obj(h)
-            .is_some_and(|o| o.beh.current == Some(Behaviour::Enter))
+            .is_some_and(|o| o.beh.seen() == Some(Behaviour::Enter))
         {
             // spec: S-0402 claim 11 (refinery sold: a harvester still in enter queues guard instead and scatters)
             if let Some(ob) = w.obj_mut(h) {

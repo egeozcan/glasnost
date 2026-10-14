@@ -280,7 +280,7 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
     };
     // spec: S-0208 claim 19 (occupants ignored in capture, sabotage, enter or eaten with a vehicle or aircraft in C, or the building occupying C, as destination)
     let ignore = matches!(
-        o.beh.current,
+        o.beh.seen(),
         Some(Behaviour::Capture | Behaviour::Sabotage | Behaviour::Enter | Behaviour::Eaten)
     ) && match dest {
         Target::Object(x) => w.obj(x).is_some_and(|m| match m.kind {

@@ -217,7 +217,7 @@ fn sell_building(w: &mut World, id: ObjectId) {
         // spec: S-0408 claim 4 (no build-up sprite otherwise: nothing happens)
         return;
     }
-    if o.beh.current == Some(Behaviour::Selling) {
+    if o.beh.seen() == Some(Behaviour::Selling) {
         // spec: S-0408 claim 4 (a second sell order changes nothing)
         return;
     }

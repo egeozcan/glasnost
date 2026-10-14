@@ -496,7 +496,7 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
     let Some(ob) = w.obj_mut(id) else { return };
     let Some(mem) = ob.attack_move else { return };
     // spec: S-0309 claim 23 (b) (resumed when engaged or in guard; otherwise the memory is removed, with its engaged mark)
-    if !(ob.combat.engaged || ob.beh.current == Some(Behaviour::Guard)) {
+    if !(ob.combat.engaged || ob.beh.seen() == Some(Behaviour::Guard)) {
         ob.attack_move = None;
         ob.combat.engaged = false; // spec: S-0309 claim 23 (c) (removing the memory ends the engaged mark)
         return;
