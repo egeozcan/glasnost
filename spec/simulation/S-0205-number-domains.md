@@ -22,7 +22,7 @@ program-wide round-toward-zero mode and its scope; how floating-point values bec
 the conventions the other specs use to write these rules. This spec owns the single quirk switch
 `quirks.chop_rounding` for the rounding mode, and lists the claims of other specs that depend on
 it. How data text becomes numbers is S-0003; which domain each game quantity uses belongs to the
-spec of that quantity.
+spec of that quantity. This contract covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -66,7 +66,10 @@ Shared terms used here are defined in the glossary: *round-toward-zero mode*, *d
    calculations of the original instead halve a signed integer rounding toward −∞ (−7 halved is
    −4); the specs that use such a step say so and write it ⌊*a* / 2⌋ (Formulas, Notation). The
    one quotient that does not fit the integer range, −2147483648 ÷ −1, is covered by claim 3.
-   - Backing: `measurable` (S-0101 scenario M1b)
+   - Backing: `measurable` for signed quotient truncation (scenario N3, using S-0101 M1b).
+     `unmeasured` for the general remainder rule, negative cell positions and signed floor-halving:
+     N3 observes a quotient, not a remainder, and provides neither off-map positions nor a
+     calculation isolating floor-halving. Topic specs retain their own measurements of those cases.
    - Confidence: high
 
 3. **Integer division by zero, and the one overflowing quotient.** An integer division whose
@@ -98,10 +101,9 @@ Shared terms used here are defined in the glossary: *round-toward-zero mode*, *d
    their exact real values, with no tolerance and no rounding.
    - Backing: `measurable` for the 53-bit significand (scenario N4: a 24-bit or 64-bit significand
      gives a different result there); the exact widening is a property of the two formats and needs
-     no measurement; exact comparison is `unmeasured` (a comparison with a tolerance, or after a
-     rounding, would differ only for two values closer than one unit in the last place of a double,
-     and no scenario is known that brings such a pair to a game-state comparison with controllable
-     data)
+     no measurement; exact comparison is `unmeasured` (no scenario here isolates a game-state comparison
+     between controllable unequal values close enough to distinguish exact comparison from a
+     tolerance-based or rounded comparison)
    - Confidence: high
 
 5. **The round-toward-zero mode, and its scope.** From before the first data file is read (S-0003,
@@ -120,14 +122,14 @@ Shared terms used here are defined in the glossary: *round-toward-zero mode*, *d
      toward zero as above. Its
      result is not formed by multiplication: it comes from the processor's logarithm and
      exponential instructions. One game-state calculation uses it, the launch angle of projectiles
-     that are affected by gravity (a future combat spec), which takes the tabulated square root
+     that are affected by gravity (S-0306 claim 6 a and F4), which takes the tabulated square root
      (claim 6) of
 
      > *s* = RZ₅₃(*P*(*d*<sub>x</sub>) + *P*(*d*<sub>y</sub>))
 
      where *d*<sub>x</sub> and *d*<sub>y</sub> are integers (Terms), in leptons: the two horizontal
      components of the distance from the firing point to the aimed point of the shot, each in
-     −2147483647 … 2147483647 (the combat spec of the launch angle names the exact points). They are
+     −2147483647 … 2147483647 (S-0306 names the fire point and impact point). They are
      whole numbers, converted to doubles exactly before the power function sees them, and
      *P*(*c*) is the power function's square of the integer *c*, a double. RZ₅₃ (Terms) is the rounding of the
      sum; with `quirks.chop_rounding` off it is RN₅₃ instead (Formulas, Floating-point result).
@@ -137,7 +139,7 @@ Shared terms used here are defined in the glossary: *round-toward-zero mode*, *d
        exactly. That bound is the processor's documented accuracy and has not been checked on
        hardware. A processor outside it could give a *P*(*c*) one unit in the last place below *c*², and
        the rounding of *s* toward zero would keep that error.
-     - For |*c*| ≥ 2²⁶, *c*² is in general not a double, so no processor gives *c*² and the original's
+     - For |*c*| ≥ 2²⁶, *c*² is in general not a double, so an exactly represented square is no longer guaranteed, and the original's
        *P*(*c*) is whatever its instructions return for that processor (not measured). No map known has a planar distance between two points near 2²⁶
        leptons (262144 cells), so this case is not expected in play.
      - **Departure** (host-dependent, no switch): our engine uses *P*(*c*) = RN₅₃(*c*²), the exact
@@ -175,11 +177,11 @@ Shared terms used here are defined in the glossary: *round-toward-zero mode*, *d
    Our engine must use those tables, not a mathematical library, wherever a spec gives one.
    The one use of a library function in game state is the power function of claim 5, used only
    for squares.
-   - Backing: `measurable` for the use of the tables named here (scenario N6: S-0204 scenario C3
-     and S-0009 scenario M10b show the tabulated square root, S-0204 scenario C1 the arctangent
-     table, and S-0105's rendering scenarios the table sines); the
-     absence of library functions from every other game-state calculation is `unmeasured` (it is a
-     statement about every calculation, which shows only through each quantity's own spec)
+   - Backing: `measurable` for the tabulated square root and arctangent (scenario N6).
+     `unmeasured` here for table sines and arcsines: N6 has no isolated test of those table values
+     against mathematical functions; their topic specs own any such tests. The absence of library
+     functions from every other game-state calculation is `unmeasured` (it is a statement about
+     every calculation, which shows only through each quantity's own spec)
    - Confidence: high
 
 7. **Conversions to integers.** A conversion truncates toward zero, in every rounding mode:
@@ -195,10 +197,11 @@ Shared terms used here are defined in the glossary: *round-toward-zero mode*, *d
    (trunc(*x*) below −2³¹ or at least 2³¹, infinite or not a number) they give −2147483648. The effect clamps those
    results to the picture's bounds at once, and the rendering spec that covers it will say so.
    Conversions are not affected by `quirks.chop_rounding`.
-   - Backing: `measurable` (truncation: scenario N3; the wrap from 2³¹ up: scenario N5; the zero
-     result at 2⁶³ and above: scenario N2); the 32-bit form is `unmeasured` (it is presentation
-     only, its inputs are picture coordinates that never come near 2³¹, and the effect clamps its
-     results at once)
+   - Backing: `measurable` for positive in-range truncation (scenario N7), a positive
+     out-of-range wrap (N5) and a positive huge value giving zero (N2). `unmeasured` here for
+     negative inputs, infinities, not-a-number and the exact 2⁶³ boundary: these scenarios do not
+     isolate those inputs. The 32-bit form is `unmeasured` (it is presentation only, its inputs
+     are picture coordinates that never come near 2³¹, and the effect clamps its results at once)
    - Confidence: high (truncation, wrap, the zero result, and that only that effect uses the
      32-bit form)
 
@@ -260,8 +263,8 @@ for example, writes ⌊ ⌋ for truncation toward zero.
 | trunc(*z*) | Truncation toward zero |
 | RZ₅₃, RZ₂₄, RN₅₃, RN₂₄ | Rounding of a real number to a double or single (Terms) |
 
-**Floating-point result** (claims 4, 5). For operands *p* and *q* (doubles) and an operation ∘ of
-+, −, ×, ÷:
+**Floating-point result** (claims 4, 5). Outside claim 5's power-function exception, for operands
+*p* and *q* (doubles) and an operation ∘ of +, −, ×, ÷:
 
 > result = RZ₅₃(*p* ∘ *q*) with `quirks.chop_rounding` on (the original), RN₅₃(*p* ∘ *q*) with it off.
 >
@@ -281,12 +284,15 @@ for example, writes ⌊ ⌋ for truncation toward zero.
 
 **Adding one half before converting.** Some calculations round a double *x* by adding one half and
 converting. With the conversion above, the result is trunc(RZ₅₃(*x* + 1/2)) (`quirks.chop_rounding`
-on, the original); with the switch off it is trunc(RN₅₃(*x* + 1/2)), the round-to-nearest
+on, the original), provided the rounded sum is finite and its truncation fits the integer
+range. Otherwise claim 7's common-form conversion applies to the rounded sum, including wrap
+and the zero result. With the switch off the in-range result is trunc(RN₅₃(*x* + 1/2)), the round-to-nearest
 arithmetic of the Floating-point result above. With the switch on, for *x* ≥ 0 this
 rounds halves up, except where adding one half rounds down below a whole number: *x* =
 0.49999999999999994 (the double just below 1/2) gives 0, while round-to-nearest arithmetic gives 1.
 For negative *x* it is not "round half away from zero": −1.2 gives 0 and −1.7 gives −1. A spec
-that uses this rounding cites this paragraph.
+that uses this rounding cites this paragraph. Backing: `unmeasured` here (N1–N7 isolate no
+calculation that adds one half); confidence: high. Each topic spec using it owns its measurement.
 
 **Integer division by zero and the overflowing quotient** (claim 3, departure): *a* ÷ 0 = 0 and
 *a* rem 0 = *a*; −2147483648 ÷ −1 = −2147483648 and −2147483648 rem −1 = 0. Where a topic spec
@@ -314,17 +320,20 @@ Observable ordering: none; the mode applies to every calculation alike.
 
 ## Edge cases and quirks
 
-- **`quirks.chop_rounding`** (default: on, the original). On: every arithmetic result is rounded
+- **`quirks.chop_rounding`** (default: on, the original). On: outside claim 5's power-function exception, every arithmetic result is rounded
   toward zero to 53 bits and every narrowing toward zero to 24 bits (claim 5). Off ("fixed"): every
-  arithmetic result is rounded to the nearest double (ties to even) and every narrowing to the
+  arithmetic result outside that exception is rounded to the nearest double (ties to even) and every narrowing to the
   nearest single, from that double. In both settings: arithmetic uses a 53-bit significand,
   conversions truncate toward zero (claim 7), decimal text is read as S-0003 says, and table
   values are used as stored. This is the only switch for the mode; the specs in the table below
-  define none of their own.
+  define none of their own. The original's power function retains claim 5's nearest rounding
+  in both settings; our engine uses the deterministic square departure stated there.
 
   **Effects of the switch.** The table lists the claims of the other specs written so far whose
   results depend on it, and what changes when `quirks.chop_rounding` is off. Claims that state they
-  do not depend on it, or depend on it only for some data, are listed too. "Percent sign" means a
+  do not depend on it, or depend on it only for some data, are listed too. This is a dependency
+  index: each row inherits the backing and confidence of the cited owning claim or formula,
+  not a claim that N1–N7 measure every listed effect. "Percent sign" means a
   decimal written with a percent sign (S-0003, claim 7); a decimal without one is a single (except for the items of fixed-count lists, S-0003 claim 13,
   which are doubles), and its product with 900 or 256 is exact (claim 9).
 
@@ -383,7 +392,12 @@ This spec reads no keys. How data text becomes integers, decimals and percentage
 
 ## Measurement scenarios
 
-All scenarios use the measurement setup.
+All scenarios use the glossary's measurement setup, with the director and unrelated mods off.
+Unless a referenced scenario fixes another value, use game-speed index 2 and 800 × 600 output.
+Each standalone test map includes one bystander computer player, farthest from the observed area,
+subject to the glossary's bystander void rule. The observed area is the test infantry patch for N2 and the human
+base/sidebar for N5 and N7. Record screenshots or tick-labelled video through a read-only recorder.
+Named test data below are the only data overrides.
 
 - **N1, rounding toward zero (claim 5).** Use S-0104 scenario L5 as S-0003 scenario V12 describes it:
   neutral test lighting, an infantry pixel on flat ground whose palette colour has a red channel that
@@ -394,7 +408,7 @@ All scenarios use the measurement setup.
 - **N2, conversion of a huge value gives 0 (claim 7).** Named test file: a copy of the rules
   file with the idle-action frequency of S-0107 (its Formulas, F4; Import mapping there) set to
   `1e18`. A test map with five infantry of the human house that have idle animations, standing on
-  open ground, no computer players and no other objects. Video-record 2 game minutes (1800 ticks)
+  open ground, no other objects in the observed infantry patch, and the bystander outside it. Video-record 2 game minutes (1800 ticks)
   at a fixed game speed, 1 run, and a control run with the stock value. By S-0107, F4, the timer
   length is then at least about 4.5 × 10²⁰ ticks before conversion (450 times the single-precision
   value of 10¹⁸), which is above 2⁶³, so it converts to 0 and the idle timer has run out at every
@@ -403,8 +417,12 @@ All scenarios use the measurement setup.
   ending, at least 20 per infantry in the 1800 ticks. *Falsified if* any infantry takes no idle
   action after its first one (which a conversion that saturates at 2147483647 would give) or idles
   only as often as in the control run.
-- **N3, truncation of negative values (claims 2, 7).** Use S-0101 scenario M1b (truncation toward
-  zero of negative positions and heights). *Expected and falsified as* stated there.
+- **N3, signed integer quotient truncation (claim 2).** Use S-0101 scenario M1b: a slowly
+  moving vehicle crosses the X = Y diagonal, so its projected screen column involves a signed
+  integer quotient. Record column hold times. *Expected:* the diagonal column lasts about twice
+  as long as each neighbour. *Falsified if:* its hold time is less than 1.5 times the neighbours'
+  average, or a neighbouring column has the doubled hold time instead. This does not test
+  floating-point conversion, negative world heights or off-map cell positions.
 - **N4, the 53-bit significand (claims 4, 5).** Use S-0104 scenario L19: three runs with grey map
   tints (1.01, 1.01, 1.01) and (1.03, 1.03, 1.03) and a white control, detail low, a plain ground
   tile as the subject, pixels compared across the runs. In S-0104's tint normalisation the divisor
@@ -444,9 +462,9 @@ All scenarios use the measurement setup.
   the wrap), or the order follows the display names (*Q*, *P*, *W*) or changes with the build
   order.
 - **N6, tables instead of library functions (claim 6).** Use S-0204 scenario C3 and S-0009
-  scenario M10b (the tabulated square root), S-0204 scenario C1 (the arctangent table: quantised
-  directions and the never-taken facings) and S-0105's rendering scenarios that show the table
-  sines. *Expected and falsified as* stated there.
+  scenario M10b (the tabulated square root) and S-0204 scenario C1 (the arctangent table:
+  quantised directions and the never-taken facings). *Expected and falsified as* stated there.
+  No sine or arcsine measurement is asserted by this scenario.
 - **N7, data fractions (claim 9).** The fraction 1.0 = 100 %: use S-0003 scenario V4, *expected and
   falsified as* stated there. The multiplication and conversion: a named test map built like N5,
   with four new superweapons *Y*, *Z*, *X* and *P*, each a copy of an existing one granted by its own
@@ -470,20 +488,20 @@ All scenarios use the measurement setup.
   during play, and whether such a change could reach game state before the next conversion renews
   the mode. No such change is known; claim 5's renewal makes any effect short-lived.
 - Whether the processor's logarithm and exponential instructions give exactly the squares of
-  claim 5 on every processor in use, for distance components below 2²⁶ leptons. The combat spec that covers the launch angle of
-  gravity-affected projectiles should propose a measurement if a difference could show.
+  claim 5 on every processor in use, for distance components below 2²⁶ leptons. S-0306 owns the launch angle of
+  gravity-affected projectiles; no practical discriminating measurement is currently known.
 
-**Questions for the project lead**
+**Cross-spec consistency checks**
 
 - **Other specs checked against this one.**
-  - Approved S-0004 revision 10 agrees: scenario F3 writes superweapon *A*'s recharge time as
+  - S-0004 agrees: scenario F3 writes superweapon *A*'s recharge time as
     `30%`, which gives 269 ticks (claim 9), and keeps `0.3` for *B* and for the control pair, which
     tie at 270 ticks.
-  - Approved S-0215 revision 16 agrees: it attributes the one-tick shortfall of a rate written as
+  - S-0215 agrees: it attributes the one-tick shortfall of a rate written as
     0.06 to the single-precision reading alone. The product of the single value with 900 is exact
     (claim 9), so the rate delay depends on `quirks.chop_rounding` only for a rate written with a
     percent sign.
-  - Approved S-0109 revision 9 uses the 53-bit significand for the floating-point products of F4,
+  - S-0109 uses the 53-bit significand for the floating-point products of F4,
     including for a negative end value (claim 4).
   - The approved S-0004, S-0101, S-0105 and S-0108 versions no longer call this spec planned. The
     approved glossary also no longer has the old planned-spec wording for S-0205 in its planned
