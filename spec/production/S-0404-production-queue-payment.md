@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,7 +25,7 @@ network games and campaigns are out of scope.
 **Paired revisions.** S-0407 revision 13 separates the issue of claim 9's cancellation orders
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test and keeps claim 10's application-time limit test on queued starts
-(S-0407, claims 13 and 16). S-0411 revision 14 specifies cancellation with refund at the
+(S-0407, claims 13 and 16). S-0411 revision 15 specifies cancellation with refund at the
 place-order application boundary for a busy or failed unit release, without retry; no eligible
 factory leaves the item done (claims 7 and 13 below). Its claim 14 states the continued steps
 and payments while a factory is being sold or queued to be sold. The relevant factory-eligibility
