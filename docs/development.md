@@ -211,7 +211,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | Where | Placeholder | Request |
 |---|---|---|
 | `ini::table::Table::lookup_mut` | a layered-load lookup that sorts an unordered table and finds nothing forgets the remembered occurrence (S-0002 State and ordering, row 5, read literally; row 3 keeps it for an ordered table) | Q-0183 |
-| `convert::sim` (`Form::Ints`: the economy lists `AIVirtualPurifiers`, `MultiplayerAICM`, `AIHateDelays`) | the items of a general integer list are read with S-0003 claim 3's integer form within 127 bytes; an empty item takes no place; an unreadable item gives 0 and keeps its place (Q-0171 is answered by S-0003 claim 22 for the auto-deploy list only, which now reads decimal-prefix items within 511 bytes; these lists keep its former workaround) | Q-0171 |
+| `convert::sim` (`Form::Ints`: the economy lists `AIVirtualPurifiers`, `MultiplayerAICM`, `AIHateDelays`) | the items of a general integer list are read with S-0003 claim 3's integer form within 127 bytes; an empty item takes no place; an unreadable item gives 0 and keeps its place (Q-0171's former workaround; S-0003 claim 22 answers it for the auto-deploy list only) | Q-0234 |
 | `render::voxel::section_order` | sections with equal nearest depth outside F8's two rows keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24) | Q-0210 |
 | `render::voxel::column_steps` | normal-mode-0 columns outside claim 35's three cases are read with the previous revision's grouping (S-0105 claim 35) | Q-0211 |
 | `sim::infantry` (idle action) | the hard-coded cow type is still picked out by the literal identifier the simulation compares; S-0107 no longer names it | Q-0212 |
