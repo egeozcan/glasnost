@@ -1,9 +1,9 @@
 ---
 id: Q-0570
 title: What does an oversized view show beyond the local area?
-status: open
+status: answered
 related: [S-0101, S-0110, S-0009, S-0409]
-answered-by: []
+answered-by: [S-0101]
 ---
 
 ## Need

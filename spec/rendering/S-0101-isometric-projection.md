@@ -2,13 +2,13 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0279, Q-0450, Q-0460]
+requests: [Q-0279, Q-0450, Q-0460, Q-0570]
 supersedes: []
 ---
 
@@ -173,7 +173,19 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    its ordinary limits if it is not oversized.
    This is a departure confirmed by the project lead: the original chooses contradictory minimum
    or maximum bounds according to the request, making an oversized view jump.
-   - Backing: `measurable` (M3a for normal limits; M3b is a departure test against this spec)
+   On each oversized axis, battlefield pixels beyond that axis's interval of F5's local-area
+   pixel rectangle are black in every drawn frame: no terrain, objects, shroud or light appears
+   there, regardless of whole-map reveal or the shared explored state of non-legal cells.
+   With both axes oversized, the black region is the union of those horizontal and vertical
+   bands. The vertical bands use the same rectangle, without shifting it to match the fixed
+   centre. Selection overlays, the cursor, messages and the sidebar are unaffected and may
+   appear over the black. Non-oversized axes gain no additional clipping rule.
+   This is presentation only and changes no simulation state. It takes precedence over
+   S-0110 claim 5's light-alpha drawing and claim 8's shroud point test for battlefield imagery
+   in those bands, without changing the point test for other uses.
+   - Backing: `measurable` (M3a for normal limits; M3b tests centring and black bands on our
+     engine). Original-side backing for the black-band rule: not applicable, our departure
+     accompanying the fixed oversized centre, not a claim about the original
    - Confidence: high for the formulas and the oversized-view result. Medium for the mapping of the
      map file's numbers onto the rectangle roles, which follows S-0009 and is not yet measured (M3a
      would confirm it).
@@ -430,6 +442,17 @@ columns further right (the local area's right edge). At y<sub>min</sub>, the vie
 world row 15·(*M<sub>w</sub>* + 2·*V<sub>y</sub>*) − 75. At y<sub>max</sub>, its bottom edge is
 30·*V<sub>h</sub>* + 135 rows below that.
 
+The local-area pixel rectangle used by claim 8 has integer world-pixel bounds:
+
+> left = 30·(2·*V<sub>x</sub>* − *M<sub>w</sub>*), right = left + 60·*V<sub>w</sub>*
+>
+> top = 15·(*M<sub>w</sub>* − 5 + 2·*V<sub>y</sub>*), bottom = top + 30·*V<sub>h</sub>* + 135
+
+Left and top are inclusive; right and bottom are exclusive. Arithmetic is exact integer
+arithmetic, with no rounding. Test a view pixel using its world pixel (F3).
+This rectangle includes the ordinary vertical scroll margins; it is not shifted by the
+oversized vertical centre, which lies 7.5 pixels above the rectangle's geometric midpoint.
+
 **F6. Screen to ground** (world pixel (*q<sub>x</sub>*, *q<sub>y</sub>*) = view pixel + *O*):
 
 > X = trunc₀( *a* · (*q<sub>x</sub>* + 2·*q<sub>y</sub>*) ),  Y = trunc₀( *a* · (2·*q<sub>y</sub>* − *q<sub>x</sub>*) ),  *z* = 0
@@ -632,6 +655,7 @@ part of the request that was cut off.
 | map file, `[Map]` | `Size` = left, top, width, height | map size. Only the width *M<sub>w</sub>* enters F5 | four integers | as in S-0009 |
 | map file, `[Map]` | `LocalSize` = left, top, width, height | local area *V<sub>x</sub>*, *V<sub>y</sub>*, *V<sub>w</sub>*, *V<sub>h</sub>* in F5 | four integers | as in S-0009 |
 | map file, cell data | cell height | height level of each cell (terrain lift, cursor probe) | integer per cell | 0 |
+| No user key | none | oversized-axis black bands (claim 8) use the local-area pixel rectangle derived from the map geometry above | presentation rule, not imported data | always applied on each oversized axis, independent of reveal and shared off-map state |
 | No user key | none | exact object drawing lift (claim 3, F2); simulation sight-centre lift is separately defined by S-0409 claim 5 and F2 | engine arithmetic, not imported data | drawing always uses F2 |
 | settings file, options section | scroll-speed control | scroll index *r* | integer, ordinary control range 0 … 6, fastest … slowest | 3 |
 | rules, `[AudioVisual]` | `ScrollMultiplier` | edge-scroll multiplier μ | floating-point number or percent, as S-0003 | 1.0; later layers retain the value in force |
@@ -764,6 +788,25 @@ A second run otherwise serves to rule out a reading mistake.
     oversized on both axes: every request leaves both origins fixed. One run per shape.
     Any axis coupling, jump or different fixed centre falsifies claim 8. Oversized outcomes
     test this spec, not the original.
+    For each shape, also capture the battlefield pixel colours on our engine at speed 2,
+    using stock terrain and object types with the director and mods off. Make the map size
+    larger than its local area, with terrain and visible objects whose images would extend
+    into the bands without clipping. Test unrevealed play and whole-map reveal (S-0409
+    claim 15), and both explored and unexplored shared off-map states using S-0110
+    claim 8's scenario SH8 part Q2 setup. Capture after scrolling and centring requests.
+    Record the world origin and compare every band pixel, excluding UI and selection
+    overlays, with F5's exact integer bounds: all must be black, including corners when
+    both axes are oversized. Probe the first pixel outside and the last pixel inside each
+    interval; choose visible terrain inside as a control that ordinary drawing continues.
+    The vertical boundary must use F5's rectangle rather than a rectangle shifted to
+    symmetrically surround the fixed centre. Move the cursor and a selection overlay over
+    a band and show a status message: these retain their ordinary presentation there.
+    Repeat with neither axis oversized as a control: no new black band is imposed.
+    One run per shape and reveal/shared-state condition. Any terrain, object, shroud or
+    light pixel in a band, a shifted vertical boundary, clipping on a non-oversized axis,
+    or suppression of the UI overlays by this rule falsifies claim 8. Tool: frame capture
+    and pixel comparison on our engine; original-side backing is not applicable because
+    this is our departure, not an original-game measurement.
   - (c) Centring with height. Setup: a large map. A unit standing on a 4-level plateau in the middle
     of the local area, far from every scroll limit, and a unit standing at level 0 likewise.
     Use the same unit type and facing in both places. Centre the view on each in turn. Observable:
