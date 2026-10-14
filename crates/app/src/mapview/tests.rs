@@ -419,7 +419,8 @@ fn deck_overlay_shadow_skips_the_deck_levels() {
 /// spec: S-0112 claim 1 (deck and marker cells come before the tiberium row: outside them ore and
 /// gems use the start-up resource table; a deck cell's overlay takes the tile table and the deck
 /// frame of claim 6; a marker cell draws no body), claim 8 (a marker cell's shadow is its own
-/// type's d + ⌊N/2⌋); S-0104 claims 3 and 13 (veinhole marker shadows are drawn)
+/// type's d + ⌊N/2⌋); S-0104 claims 3 and 13 (veinhole marker shadows are drawn); S-0103 claim 8
+/// (ore and gems take the start-up resource table, with S-0112 claim 1's deck exception)
 #[test]
 fn deck_and_marker_cells_come_before_the_ore_row() {
     // Overlay types 0 … 167 (in place of the base list): a bridge position (24), a marker
