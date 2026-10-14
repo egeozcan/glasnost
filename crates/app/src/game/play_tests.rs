@@ -57,7 +57,9 @@ fn step_until(p: &mut Play, limit: i32, done: impl Fn(&Play) -> bool) {
     }
 }
 
-/// spec: S-0214 claim 12 (a click selects), S-0213 claim 10 (deploy),
+/// spec: S-0214 claim 12 (a click selects), claim 26 (a left release
+/// selects or orders, a right release clears the selection), S-0213 claim
+/// 10 (deploy),
 /// S-0201 claim 14 (no orders before tick 4), S-0411 claims 4 and 10
 /// (build and place from the sidebar)
 #[test]
@@ -71,14 +73,15 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     assert!(p.game.replay().orders.is_empty());
     // spec: S-0701 claim 17 (the newly selected object gives the selection response)
     assert_eq!(std::mem::take(&mut p.selected), [mcv]);
-    // A left click on the ground clears it.
-    p.click_map(Button::Left, None, cell, Modifiers::default());
+    // A right click clears it, over the unit too.
+    p.click_map(Button::Right, Some(mcv), cell, Modifiers::default());
     assert!(p.selection.is_empty());
+    assert!(p.game.replay().orders.is_empty());
     p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
     step_until(&mut p, 10, |p| p.world().tick >= 4);
-    // A right click on a cell moves it.
+    // A left click on a cell moves it.
     let to = CellXY::new(cell.x, cell.y + 2);
-    p.click_map(Button::Right, None, to, Modifiers::default());
+    p.click_map(Button::Left, None, to, Modifiers::default());
     assert_eq!(p.game.replay().orders.len(), 1, "the move is in the replay");
     // spec: S-0701 claim 18 (the click's orders and selection go to the order response); the order selects nothing new
     assert_eq!(p.acks.len(), 1);
@@ -114,6 +117,17 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     step_until(&mut p, 4000, |p| icon_ready(p.world(), p.local, t));
     assert!(p.cues.contains(&UiCue::ConstructionComplete));
     // A left click on the ready icon enters placement mode.
+    p.cameo_click(0, Button::Left, false);
+    assert_eq!(p.tool, Tool::Place(t));
+    // spec: S-0214 claim 28 (a battlefield right click ends placement mode with no order and no deselection; the item stays ready and can be taken up again)
+    let orders = p.game.replay().orders.len();
+    let selection = p.selection.clone();
+    let yard_cell = p.world().obj(own(&p, Kind::Building)[0]).unwrap().pos.cell();
+    p.click_map(Button::Right, None, yard_cell, Modifiers::default());
+    assert_eq!(p.tool, Tool::Select);
+    assert_eq!(p.game.replay().orders.len(), orders);
+    assert_eq!(p.selection, selection);
+    assert!(icon_ready(p.world(), p.local, t));
     p.cameo_click(0, Button::Left, false);
     assert_eq!(p.tool, Tool::Place(t));
     // Find a cell the preview shows green, then place there.
@@ -234,6 +248,37 @@ fn key_commands_sound_once_per_press_for_a_nonempty_selection() {
     p.key(KeyCommand::Stop);
     p.key(KeyCommand::Guard);
     assert_eq!(p.keys, [KeyCommand::Stop, KeyCommand::Guard]);
+}
+
+/// spec: S-0214 claim 28 (a right click in sell or repair mode ends the
+/// mode instead of selling or repairing the building under the pointer, and
+/// does not also clear the selection); claim 26 (in ordinary mode the right
+/// click clears the selection and gives no order)
+#[test]
+fn right_click_cancels_a_mode_before_deselecting() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let cell = p.world().obj(mcv).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(mcv), cell, Modifiers::default());
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
+    let yard = own(&p, Kind::Building)[0];
+    let at = p.world().obj(yard).unwrap().pos.cell();
+    p.selection = vec![yard];
+    for m in [Mode::Sell, Mode::Repair] {
+        p.mode_click(m);
+        assert_eq!(p.tool, Tool::Mode(m));
+        let orders = p.game.replay().orders.len();
+        p.click_map(Button::Right, Some(yard), at, Modifiers::default());
+        assert_eq!(p.tool, Tool::Select, "the mode ends");
+        assert_eq!(p.game.replay().orders.len(), orders, "no sell or repair order");
+        assert_eq!(p.selection, [yard], "no ordinary deselection on mode exit");
+    }
+    let orders = p.game.replay().orders.len();
+    p.click_map(Button::Right, Some(yard), at, Modifiers::default());
+    assert!(p.selection.is_empty());
+    assert_eq!(p.game.replay().orders.len(), orders);
 }
 
 /// spec: S-0214 claim 19 (with force-select eligible objects are added, not toggled: a selected one inside stays selected, and ineligible candidates clear nothing)

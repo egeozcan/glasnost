@@ -49,6 +49,45 @@ impl Drag {
     }
 }
 
+/// The factor applied to each host drag metric for a right-button drag.
+// spec: S-0214 claim 27, F8 and Constants (right-drag metric factor 2, applied separately to each axis)
+pub const RIGHT_DRAG_FACTOR: i32 = 2;
+
+/// Our engine's drag metric on each axis, pixels, in place of the host's.
+// spec: S-0214 claim 27, F8 and Constants (our engine fixes both host drag metrics at 4 pixels, lead decision)
+pub const RIGHT_DRAG_METRIC: i32 = 4;
+
+/// A right-button press in the battlefield (S-0214 claims 26 to 28 and
+/// F8): it anchors a possible scroll drag at the press pixel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RightDrag {
+    /// The press pixel, the anchor.
+    pub press: Point,
+    /// A sampled motion has crossed F8: the gesture is a scroll drag until
+    /// release.
+    pub scrolling: bool,
+}
+
+impl RightDrag {
+    /// An accepted right-button press anchors a possible scroll drag.
+    pub fn armed(press: Point) -> Self {
+        Self {
+            press,
+            scrolling: false,
+        }
+    }
+
+    /// A sampled pointer motion while the button is held.
+    pub fn motion(&mut self, p: Point) {
+        let limit = RIGHT_DRAG_FACTOR * RIGHT_DRAG_METRIC;
+        // spec: S-0214 F8 (the scroll drag starts when |Δx| > 2hₓ or |Δy| > 2hᵧ, exact integers, no radial distance; equality on both axes stays a click)
+        // spec: S-0214 claim 27 (once started the classification stays until release, even back at the anchor)
+        if (p.x - self.press.x).abs() > limit || (p.y - self.press.y).abs() > limit {
+            self.scrolling = true;
+        }
+    }
+}
+
 /// The moving endpoint, limited to the battlefield view's last pixel on
 /// each axis.
 pub fn limit(p: Point, view: Rect) -> Point {
@@ -154,6 +193,34 @@ mod tests {
         assert!(inside(a, c, Point::new(10, 30)));
         assert!(!inside(a, c, Point::new(11, 25)));
         assert!(!inside(a, c, Point::new(7, 19)));
+    }
+
+    fn right_moved(dx: i32, dy: i32) -> bool {
+        let mut d = RightDrag::armed(Point::new(100, 100));
+        d.motion(Point::new(100 + dx, 100 + dy));
+        d.scrolling
+    }
+
+    // spec: S-0214 claim 27 and F8 (with metrics of 4: moves of (8, 0), (0, 8) and (8, 8) stay a click; (9, 0), (0, −9) and (9, 1) start the scroll drag; the test is per axis, not radial)
+    #[test]
+    fn claim_27_right_drag_threshold() {
+        assert!(!right_moved(8, 0));
+        assert!(!right_moved(0, 8));
+        assert!(!right_moved(8, 8));
+        assert!(!right_moved(-8, -8));
+        assert!(right_moved(9, 0));
+        assert!(right_moved(0, -9));
+        assert!(right_moved(9, 1));
+    }
+
+    // spec: S-0214 claim 27 (a started scroll drag stays one when the pointer returns to its anchor)
+    #[test]
+    fn claim_27_right_drag_latches() {
+        let mut d = RightDrag::armed(Point::new(10, 10));
+        d.motion(Point::new(30, 10));
+        d.motion(Point::new(10, 10));
+        assert!(d.scrolling);
+        assert_eq!(d.press, Point::new(10, 10));
     }
 
     // spec: S-0214 claims 20 and 25 and Scenario T15 part B (20 qualifying buildings and 490 mobile objects: all 20 buildings and the first 480 mobile objects; 500 mobile objects and one vehicle-like building: the building and 499 mobile objects)

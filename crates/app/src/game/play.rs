@@ -39,7 +39,8 @@ pub const CLOCK_MS: i64 = 16;
 /// What a left click on the battlefield does.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Tool {
-    /// Select, and order with the right button (S-0214).
+    /// Select and order with the left button; the right button deselects
+    /// (S-0214 claim 26).
     #[default]
     Select,
     /// Placement mode for a done building (S-0411 claim 10).
@@ -335,6 +336,7 @@ impl Play {
                     }
                 }
             }
+            // spec: S-0214 claim 28 (a right click cancels placement, repair, sell and power-switch mode with no order and no ordinary deselection; the placement item stays ready)
             (Tool::Place(_) | Tool::Mode(_), Button::Right) => self.tool = Tool::Select,
             (Tool::Mode(m), Button::Left) => {
                 match modes::order(&self.game.world, self.local, m, on) {
@@ -346,24 +348,13 @@ impl Play {
                     None => self.say("Nothing to do there."),
                 }
             }
-            (Tool::Select, Button::Left) => match on {
-                ClickOn::Object(_) => {
-                    // A left click selects: without force-select it acts as
-                    // if nothing were selected, so it never orders (S-0214
-                    // claim 12).
-                    let sel = if mods.force_select {
-                        std::mem::take(&mut self.selection)
-                    } else {
-                        Vec::new()
-                    };
-                    self.apply_click(sel, on, mods);
-                }
-                ClickOn::Cell(_) => self.selection.clear(),
-            },
-            (Tool::Select, Button::Right) => {
+            // spec: S-0214 claim 26 (a left-button release resolves the action at the release pixel: it selects or toggles selection, or gives the orders of claims 2 to 11 and table M)
+            (Tool::Select, Button::Left) => {
                 let sel = std::mem::take(&mut self.selection);
                 self.apply_click(sel, on, mods);
             }
+            // spec: S-0214 claim 26 (a right-button release without a scroll drag clears the selection in ordinary mode, over an object or the ground; it never gives an order)
+            (Tool::Select, Button::Right) => self.selection.clear(),
         }
     }
 

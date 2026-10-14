@@ -104,6 +104,9 @@ pub struct Session {
     press: Option<(Point, Button)>,
     /// The armed band-box drag (S-0214 claim 18).
     drag: Option<band::Drag>,
+    /// The right-button press in the battlefield and its scroll-drag
+    /// classification (S-0214 claims 26 to 28, F8).
+    right: Option<band::RightDrag>,
     /// The imported cursor image (S-0214 claim 22), when the install has it.
     cursor_art: Option<CursorArt>,
     /// The cursor palette's painter row, once registered.
@@ -245,6 +248,7 @@ impl Session {
             edge_live: true,
             press: None,
             drag: None,
+            right: None,
             cursor_art,
             cursor_row: None,
             animator: cursor::Animator::default(),
@@ -513,6 +517,9 @@ impl Session {
         if let Some(d) = self.drag.as_mut() {
             d.motion(p, mode);
         }
+        if let Some(r) = self.right.as_mut() {
+            r.motion(p);
+        }
     }
 
     /// The pointer left the window.
@@ -520,6 +527,7 @@ impl Session {
         self.pointer = None;
         self.press = None;
         self.drag = None;
+        self.right = None;
     }
 
     /// A mouse-wheel event, anywhere over the game (S-0411 claim 18).
@@ -535,18 +543,24 @@ impl Session {
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.pointer = Some(p);
         self.press = Some((p, b));
-        // spec: S-0214 claim 18 (a primary-button press in the battlefield can start a selection drag when sell, repair, power, building-placement and superweapon targeting modes are off)
+        // spec: S-0214 claim 18 (a left-button press in the battlefield can start a selection drag when sell, repair, power, building-placement and superweapon targeting modes are off)
         self.drag = (b == Button::Left
             && !self.paused
             && self.play.tool == Tool::Select
             && self.targets.hit(p) == Some(HudHit::Map))
         .then(|| band::Drag::armed(p));
+        // spec: S-0214 claim 27 (an accepted right-button press in the battlefield anchors a possible scroll drag at that pixel)
+        self.right = (b == Button::Right
+            && !self.paused
+            && self.targets.hit(p) == Some(HudHit::Map))
+        .then(|| band::RightDrag::armed(p));
     }
 
     /// A button went up: a click or the end of a drag.
     pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) -> SessionEvent {
         self.pointer = Some(p);
         let drag = self.drag.take();
+        let right = self.right.take();
         let Some((start, pb)) = self.press.take() else {
             return SessionEvent::None;
         };
@@ -574,7 +588,10 @@ impl Session {
             };
         }
         let dragged = drag.is_some_and(|d| d.active) && b == Button::Left;
+        let scrolled = right.is_some_and(|r| r.scrolling) && b == Button::Right;
         match self.targets.hit(start) {
+            // spec: S-0214 claim 27 (a scroll drag's release neither clears the selection, nor cancels a targeting mode, nor gives an order)
+            Some(HudHit::Map) if scrolled => {}
             Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
                 let end = band::limit(p, self.map_rect());
                 let inside = self.box_candidates(start, end);
