@@ -2,9 +2,9 @@
 //! landing point fixed when the destination is given, the jump on the next
 //! movement update, and phasing in.
 //!
-//! In our engine only vehicles move with it: an infantry unit's landing
-//! point is open (request Q-0181) and an aircraft holds no vehicle-present
-//! mark to move (request Q-0232).
+//! Vehicles and infantry move with it; an infantry unit's landing point is
+//! a standing position (S-0208 claims 19 and 20). An aircraft holds no
+//! vehicle-present mark to move (request Q-0232).
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
@@ -12,8 +12,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::occupancy;
 use crate::path::{self, NearbySettings, NearbyUse};
-use crate::rules::{Kind, Locomotor};
+use crate::rules::{Behaviour, Kind, Locomotor};
+use crate::walk;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
+
+/// Terrain level at or below which a teleporting infantry unit's landing
+/// entry check is clear without a test.
+// spec: S-0208 claim 19 (level −6 or lower: the check's initial reference level −1 is more than four levels above)
+const NEGATIVE_ENTRY_LEVEL: i32 = -6;
 
 /// Height above the surface at the destination from which the landing
 /// search is in deck mode, leptons.
@@ -44,6 +50,10 @@ pub struct TeleportState {
     pub mark: Option<CellXY>,
     /// Phasing in: the jump tick *t*₀ and the delay *D* (part f, F9).
     pub phasing: Option<(i32, i64)>,
+    /// The record layer of an infantry unit's reserved standing position
+    /// at `mark` (S-0208 claim 19).
+    #[serde(default)]
+    pub mark_layer: Layer,
 }
 
 /// Whether the object moves with the teleporting locomotor in our engine.
@@ -98,6 +108,10 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         st.for_dest = None;
         set_state(w, id, st);
         drop_destination(w, id);
+        return;
+    }
+    if o.kind == Kind::Infantry {
+        take_infantry_destination(w, id, dest, st);
         return;
     }
     let dc = match dest {
@@ -174,6 +188,189 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
     let p = Pos::centre(c, 0);
     // spec: S-0207 claim 20 (b) (L: the chosen cell's centre at the height H there)
     Some(Pos::centre(c, w.surface_at(p.x, p.y)))
+}
+
+/// An infantry unit takes destination `dest` (S-0208 claim 19): the
+/// landing point is a standing position, which the unit reserves in place
+/// of a vehicle-present mark.
+fn take_infantry_destination(w: &mut World, id: ObjectId, dest: Target, mut st: TeleportState) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let oq = crate::objects::occ_quirks(w);
+    let top = w.rules().quirks.top_position_counts_as_centre;
+    // The cell and record layer of the unit's present entry in the occupancy record.
+    let (old, old_layer) = match st.mark {
+        Some(c) => (c, st.mark_layer),
+        None => (o.pos.cell(), o.layer),
+    };
+    match infantry_landing(w, id, dest) {
+        Some((l, layer)) => {
+            // spec: S-0208 claim 19 (an infantry unit reserves its chosen standing position, not a vehicle-present mark) and S-0209 claim 1 (the old entry cleared, the new one marked at once)
+            w.cells.clear_infantry(old, old_layer, id, oq);
+            let mark = walk::position_class(within(l).0, within(l).1, top);
+            if let Some(h) = o.owner {
+                w.cells.mark_infantry(l.cell(), layer, mark, id, h);
+            }
+            st.mark = Some(l.cell());
+            st.mark_layer = layer;
+            st.landing = Some(l);
+            st.for_dest = Some(dest);
+            set_state(w, id, st);
+        }
+        None => {
+            // spec: S-0208 claim 19 (no landing point: the destination is removed and the unit does not jump)
+            if st.mark.is_some() {
+                // A landing reserved for an earlier destination is given up and the unit's
+                // entry goes back to where it stands (interim, request Q-0235).
+                w.cells.clear_infantry(old, old_layer, id, oq);
+                let mark = walk::position_class(within(o.pos).0, within(o.pos).1, top);
+                if let Some(h) = o.owner {
+                    w.cells.mark_infantry(o.pos.cell(), o.layer, mark, id, h);
+                }
+            }
+            set_state(w, id, TeleportState::default());
+            drop_destination(w, id);
+        }
+    }
+}
+
+/// A point's position within its cell.
+fn within(p: Pos) -> (i32, i32) {
+    (p.x.rem_euclid(256), p.y.rem_euclid(256)) // spec: S-0204 claim 2 (the position within the cell, 0 … 255 per axis)
+}
+
+/// The cell of an object's heading point for S-0208 claim 19's search: its
+/// next movement point, or its own position when it has none.
+fn heading_cell(w: &World, x: ObjectId) -> Option<CellXY> {
+    let o = w.obj(x)?;
+    // spec: S-0207 Terms (a drive vehicle's heading point: its track's target; a teleporting object has none, S-0208 claim 19 its own position)
+    let track = o
+        .drive
+        .as_ref()
+        .and_then(|d| d.track.as_ref())
+        .map(|t| t.target_cell);
+    // spec: S-0208 claim 19 (a walker's next movement point: its walking target)
+    let walking = o.walk.as_ref().and_then(|s| s.target).map(|p| p.cell());
+    Some(track.or(walking).unwrap_or(o.pos.cell()))
+}
+
+/// The landing point of an infantry unit for destination `dest` (S-0208
+/// claim 19) and the record layer of its standing position, or `None`
+/// when no landing point is found.
+fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, Layer)> {
+    let o = w.obj(id)?.clone();
+    let u = w.rules().unit(o.kind, o.type_index)?.clone();
+    // spec: S-0208 claim 19 (P: the destination point supplied to the locomotor, C its cell)
+    let p = match dest {
+        Target::Cell(_) => path::heading_point(w, id)?,
+        Target::Object(x) => w.obj(x)?.pos,
+    };
+    let c = p.cell();
+    let high = |w: &World, c: CellXY| w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    let h = w.surface_at(p.x, p.y);
+    // spec: S-0208 claim 19 (standing deck mode: C carries a high bridge and the present height exceeds H(P) by more than 312)
+    let deck = high(w, c) && o.pos.z > h.wrapping_add(DECK_MODE_ABOVE);
+    // The record a standing position is chosen in and reserved: the deck's on a high-bridge cell, as for the entry check (interim, request Q-0235).
+    let layer_of = |w: &World, c: CellXY| {
+        if high(w, c) {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        }
+    };
+    // spec: S-0208 claim 19 (occupants ignored in capture, sabotage, enter or eaten with a vehicle or aircraft in C, or the building occupying C, as destination)
+    let ignore = matches!(
+        o.beh.current,
+        Some(Behaviour::Capture | Behaviour::Sabotage | Behaviour::Enter | Behaviour::Eaten)
+    ) && match dest {
+        Target::Object(x) => w.obj(x).is_some_and(|m| match m.kind {
+            Kind::Vehicle | Kind::Aircraft => m.pos.cell() == c,
+            Kind::Building => w.cells.list(c, Layer::Ground).contains(&x),
+            _ => false,
+        }),
+        Target::Cell(_) => false,
+    };
+    let point = |w: &World, c: CellXY, pos: u8| {
+        let (su, sv) = walk::standing_point(pos);
+        let (x, y) = (256 * c.x + su, 256 * c.y + sv); // spec: S-0208 table P (a standing position within the cell)
+        // spec: S-0208 claims 1 and 19 (the surface height there, 416 above in standing deck mode)
+        let z = w.surface_at(x, y) + if deck { DECK_HEIGHT } else { 0 };
+        Pos::new(x, y, z)
+    };
+    // spec: S-0208 claim 19 (the desired class: the position class of P)
+    let class = walk::position_class(within(p).0, within(p).1, true);
+    let first = walk::choose_position(w, c, layer_of(w, c), class, ignore);
+    if let Some(pos) = first
+        && entry_clear(w, id, c, high(w, c))
+    {
+        return Some((point(w, c, pos), layer_of(w, c)));
+    }
+    // spec: S-0208 claim 19 (a refusal: only an object destination enables a nearby-cell search)
+    let Target::Object(x) = dest else {
+        return None;
+    };
+    let centre = heading_cell(w, x)?;
+    crate::regions::ensure(w);
+    // spec: S-0208 claim 19 (reach: the unit's own heading-point cell, its own position for the teleporting locomotor, with its present deck status)
+    let reach = crate::regions::reach_read(w, o.pos.cell(), u.zone, o.layer == Layer::Deck);
+    // spec: S-0208 claim 19 (the search: the heading-point cell, own class and unsimplified zone, deck mode on a high-bridge centre, height condition, no further test, no no-overlay, bridges allowed, no reference cell)
+    let f = path::nearby(
+        w,
+        centre,
+        NearbyUse::Settings(NearbySettings {
+            class: u.class,
+            zone: u.zone,
+            reach: Some(reach),
+            deck: high(w, centre),
+            height: true,
+            reference: None,
+            no_bridges: false,
+            no_overlay: false,
+        }),
+    )?;
+    // spec: S-0208 claim 19 (a second standing-position choice with the found cell's centre as desired point; no second entry test)
+    let pos = walk::choose_position(w, f, layer_of(w, f), crate::cells::position::CENTRE, ignore)?;
+    Some((point(w, f, pos), layer_of(w, f)))
+}
+
+/// S-0208 claim 19's entry check for an infantry landing on cell `c`.
+fn entry_clear(w: &World, id: ObjectId, c: CellXY, high: bool) -> bool {
+    let level = w.cells.cell(c).map_or(0, |cell| i32::from(cell.level));
+    // spec: S-0208 claim 19 and Edge cases (a cell at level −6 or lower is clear without a test; quirks.teleport_infantry_negative_level_entry)
+    if w.rules().quirks.teleport_infantry_negative_level_entry && level <= NEGATIVE_ENTRY_LEVEL {
+        return true;
+    }
+    // spec: S-0208 claim 19 (S-0209's infantry entry outcome on the deck's objects and record on a high-bridge cell, the ground's otherwise; no connecting-step height restriction)
+    let reference = level + if high { DECK_LEVELS } else { 0 };
+    occupancy::infantry_outcome(w, id, c, reference) == occupancy::Outcome::Clear
+}
+
+/// Placement-time clearing (S-0208 claim 20): when the placement fall-back
+/// supplies a destination to a teleporting infantry unit, the destination
+/// cell's ground occupants get a cell-wide scatter request before the
+/// landing point is chosen.
+pub fn placement_destination(w: &mut World, id: ObjectId) {
+    if !is_teleporter(w, id) {
+        return;
+    }
+    let Some(o) = w.obj(id).cloned() else { return };
+    let for_dest = o.teleport.as_ref().and_then(|t| t.for_dest);
+    if o.kind != Kind::Infantry || o.dest.is_none() || o.dest == for_dest {
+        return;
+    }
+    if let Some(c) = path::goal_cell(w, id) {
+        // spec: S-0208 claim 20 (a cell-wide request to the destination cell's ground occupants: no threat point, forced, move-anywhere; no owner test)
+        crate::scatter::cell_request(
+            w,
+            c,
+            Layer::Ground,
+            crate::scatter::ScatterRequest {
+                threat: None,
+                forced: true,
+                anywhere: true,
+            },
+        );
+    }
+    take_destination(w, id);
 }
 
 fn set_state(w: &mut World, id: ObjectId, st: TeleportState) {
@@ -269,16 +466,24 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     let new = l.cell();
     let high = w.cells.idx(new).is_some_and(|i| w.cells.deck[i]);
     // spec: S-0207 claim 20 (e) (on a high-bridge cell at H + 416, elsewhere at H; it stays in the ground layer and keeps its facing)
-    let z = l.z.wrapping_add(if high { DECK_HEIGHT } else { 0 });
+    let z = w
+        .surface_at(l.x, l.y)
+        .wrapping_add(if high { DECK_HEIGHT } else { 0 });
+    // An infantry unit is listed in the layer of the record its standing position was reserved in (interim, request Q-0235).
+    let layer = if o.kind == Kind::Infantry {
+        o.teleport.as_ref().map_or(Layer::Ground, |t| t.mark_layer)
+    } else {
+        Layer::Ground
+    };
     w.cells.leave(old, o.layer, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = Pos::new(l.x, l.y, z);
-        ob.layer = Layer::Ground;
+        ob.layer = layer;
         // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
         ob.dest = None;
         ob.path.steps.clear();
     }
-    w.cells.enter(new, Layer::Ground, id, false);
+    w.cells.enter(new, layer, id, false);
     // spec: S-0207 claim 20 (e) and S-0211 claim 5 (entering L's cell as a vehicle reaching a track target in a new cell: the cells are recomputed, crushing)
     crate::load::recalc_cells(w, &[old, new]);
     crate::crush::entered_cell(w, id, new);
@@ -345,7 +550,7 @@ fn end_phasing(w: &mut World, id: ObjectId) {
     // spec: S-0207 claim 20 (f) and S-0309 claim 1 (the teleport search, then the idle behaviour when it sets no target)
     crate::combat::acquire::teleport_search(w, id);
     if w.obj(id)
-        .is_some_and(|o| o.target.is_none() && o.kind == Kind::Vehicle)
+        .is_some_and(|o| o.target.is_none() && o.kind.is_mobile())
     {
         crate::process::fall_back(w, id, false);
     }

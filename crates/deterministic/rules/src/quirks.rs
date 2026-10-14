@@ -117,6 +117,10 @@ pub struct Quirks {
     // spec: S-0208 claim 18 and Edge cases
     #[serde(default = "on")]
     pub walker_bridge_destination_deck: bool,
+    /// A teleporting infantry unit's landing entry check takes a cell at terrain level −6 or lower as clear without testing terrain or occupants; off: the ordinary landing entry check applies.
+    // spec: S-0208 claim 19 and Edge cases
+    #[serde(default = "on")]
+    pub teleport_infantry_negative_level_entry: bool,
     /// The hard-coded cow type's idle action can scatter it.
     // spec: S-0107 claim 14; S-0208
     #[serde(default = "on")]
@@ -1045,6 +1049,7 @@ impl Default for Quirks {
             walker_overshoot: true,
             slow_walker_stall: true,
             walker_bridge_destination_deck: true,
+            teleport_infantry_negative_level_entry: true,
             cow_idle: true,
             infantry_facing_sector_skew: true,
             unchecked_substitute: true,
@@ -1319,6 +1324,10 @@ impl Quirks {
             (
                 "walker_bridge_destination_deck",
                 self.walker_bridge_destination_deck,
+            ),
+            (
+                "teleport_infantry_negative_level_entry",
+                self.teleport_infantry_negative_level_entry,
             ),
             ("cow_idle", self.cow_idle),
             (
