@@ -648,3 +648,248 @@ fn slave_state_round_trip() {
         glasnost_sim::save::state_hash(&w)
     );
 }
+
+/// A slave of `m` that stands delivery-ready: returning, on the map, in
+/// the unloading cell and not between steps.
+fn delivery_ready(w: &World, m: ObjectId) -> Option<ObjectId> {
+    let c = slaves::unloading_cell(w, m)?;
+    on_map(w, m).into_iter().find(|&s| {
+        let o = w.obj(s).unwrap();
+        let st = slaves::slave_of(w, s).unwrap();
+        (st.phase == SlavePhase::Returning || st.recalled)
+            && o.pos.cell() == c
+            && !glasnost_sim::occupancy::in_progress(w, s)
+    })
+}
+
+// spec: S-0203 claim 12 (a returning slave delivers in its master's group update, not in its own turn: income comes only in due update ticks, and the slave waits in the unloading cell until then)
+#[test]
+fn s0203_claim_12_delivery_in_group_update() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let mut deliveries = 0;
+    let mut waited = false;
+    for _ in 0..800 {
+        let due = group(&w, b).next_update;
+        let t = w.tick;
+        let credits = w.houses[0].credits;
+        if delivery_ready(&w, b).is_some() && t < due {
+            waited = true;
+        }
+        testkit::run(&mut w, 1);
+        if w.houses[0].credits > credits {
+            deliveries += 1;
+            assert!(t >= due, "a delivery in tick {t}, the update due in {due}");
+            assert_eq!(group(&w, b).next_update, t + slaves::PERIOD);
+        }
+    }
+    assert!(deliveries > 0);
+    assert!(waited, "a slave stood ready between updates");
+}
+
+// spec: S-0203 claim 12 (paid building repair comes after the group update in the master's turn: a delivery in that update pays for the same turn's repair step)
+// spec: S-0314 claim 8 (available credits below the step cost turn repair off)
+#[test]
+fn s0203_claim_12_delivery_before_repair() {
+    let mut r = rules();
+    // P_b = trunc(0.002 × 900) = 1: a repair step in every tick (S-0314 F1).
+    r.sim.general.repair_rate = Some(Decimal("0.002".into()));
+    r.sim.general.repair_step = Some(10);
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    assert_eq!(w.rules().combat.general.repair_period, 1);
+    until(&mut w, 800, |w| {
+        delivery_ready(w, b).is_some() && w.tick == group(w, b).next_update
+    })
+    .expect("a slave ready for the due update");
+    let s = delivery_ready(&w, b).unwrap();
+    w.houses[0].credits = 0;
+    w.obj_mut(b).unwrap().health = 100;
+    let mut twin = w.clone();
+    w.obj_mut(b).unwrap().econ.building.repairing = true;
+    testkit::run(&mut w, 1);
+    testkit::run(&mut twin, 1);
+    assert!(!w.obj(s).unwrap().on_map, "delivered");
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.health, 110, "the repair step was paid from the delivery");
+    assert!(o.econ.building.repairing);
+    let cost = glasnost_sim::combat::heal::step_cost(&w, b).unwrap();
+    assert!(cost > 0);
+    assert_eq!(twin.houses[0].credits - w.houses[0].credits, cost);
+}
+
+// spec: S-0203 claim 12 (a vehicle master's group update sees the destination before the vehicle's movement: arriving in the update's tick does not deploy it then; it deploys at the next due update with no destination)
+#[test]
+fn s0203_claim_12_vehicle_arrival_deploys_at_next_update() {
+    let r = rules();
+    let mut w = game_on(&r, &[], false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-2, 0), 0);
+    unblock(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(0, 0))),
+        }
+    ));
+    testkit::run(&mut w, 1);
+    // Travelling, with no group update before the arrival.
+    {
+        let t = w.tick;
+        let g = w.obj_mut(m).unwrap().econ.group.as_mut().unwrap();
+        g.state = GroupState::Travelling;
+        g.next_update = t + 1000;
+    }
+    // Find the arrival tick, then replay it with a due group update.
+    let mut prev = w.clone();
+    for _ in 0..300 {
+        prev = w.clone();
+        testkit::run(&mut w, 1);
+        if w.obj(m).unwrap().dest.is_none() {
+            break;
+        }
+    }
+    assert!(prev.obj(m).unwrap().dest.is_some());
+    let mut w = prev;
+    let t = w.tick;
+    w.obj_mut(m)
+        .unwrap()
+        .econ
+        .group
+        .as_mut()
+        .unwrap()
+        .next_update = t;
+    testkit::run(&mut w, 1);
+    let o = w.obj(m).expect("not deployed in the arrival tick");
+    assert_eq!(o.dest, None, "arrived");
+    assert_eq!(group(&w, m).state, GroupState::Travelling);
+    assert_eq!(group(&w, m).next_update, t + slaves::PERIOD);
+    let travelling = |w: &World| {
+        slaves::group_of(w, m).map(|g| g.state) == Some(GroupState::Travelling)
+    };
+    while w.tick < t + slaves::PERIOD {
+        testkit::run(&mut w, 1);
+        assert!(travelling(&w), "no attempt before the next due update");
+    }
+    // The deployment attempt at the next due update (deployed, or turning to deploy).
+    testkit::run(&mut w, 1);
+    assert!(!travelling(&w), "the attempt at the next due update");
+}
+
+// spec: S-0203 claim 12 (a destination the group assigns is available to the vehicle's movement in the same turn)
+#[test]
+fn s0203_claim_12_vehicle_moves_in_assignment_tick() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 0), 0);
+    testkit::run(&mut w, 1);
+    {
+        let t = w.tick;
+        let g = w.obj_mut(m).unwrap().econ.group.as_mut().unwrap();
+        g.state = GroupState::FieldSeeking;
+        g.next_update = t;
+    }
+    let before = w.obj(m).unwrap().clone();
+    testkit::run(&mut w, 1);
+    assert_eq!(group(&w, m).state, GroupState::Travelling);
+    let o = w.obj(m).unwrap();
+    assert!(o.dest.is_some());
+    assert!(
+        o.pos != before.pos || !o.path.steps.is_empty(),
+        "the movement of the assignment tick took up the new destination"
+    );
+}
+
+// spec: S-0203 claim 12 and S-0402 claim 21 (a slave received in an update completes reload only at a later update, even with reload delay 0)
+#[test]
+fn s0203_claim_12_received_slave_reloads_later() {
+    let mut r = rules();
+    r.sim
+        .buildings
+        .get_mut("SMB")
+        .unwrap()
+        .econ
+        .slave_reload_rate = Some(0);
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    until(&mut w, 800, |w| {
+        delivery_ready(w, b).is_some() && w.tick == group(w, b).next_update
+    })
+    .expect("a slave ready for the due update");
+    let s = delivery_ready(&w, b).unwrap();
+    let i = group(&w, b)
+        .members
+        .iter()
+        .position(|m| m.id == Some(s))
+        .unwrap();
+    testkit::run(&mut w, 1);
+    let m = group(&w, b).members[i].clone();
+    assert!(m.inside && !m.ready, "not reloaded in its delivery update");
+    until(&mut w, slaves::PERIOD, |w| {
+        let m = &group(w, b).members[i];
+        m.ready || !m.inside
+    })
+    .expect("reloaded at the next update");
+}
+
+// spec: S-0203 claims 10 and 12 (taking a slave inside is a removal during the master's turn: it costs the object directly after the master its turn only when the slave stood before the master in update order)
+#[test]
+fn s0203_claim_12_delivery_removal_counts_before_master() {
+    let r = rules();
+    let pos = |w: &World, x: ObjectId| w.update.order.iter().position(|&y| y == x);
+    // Slaves earlier than the master: a vehicle created after them takes the group.
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let v = place_vehicle(&mut w, "SMV", 0, at(-6, 6), 0);
+    let obs = place_vehicle(&mut w, "CART", 0, at(-6, 9), 0);
+    slaves::transfer(&mut w, b, v);
+    {
+        let g = w.obj_mut(v).unwrap().econ.group.as_mut().unwrap();
+        g.pending_seek = false;
+        g.state = GroupState::AtRest;
+    }
+    assert_eq!(pos(&w, obs), pos(&w, v).map(|p| p + 1));
+    slaves::recall(&mut w, v);
+    let mut skipped = 0;
+    for _ in 0..600 {
+        let t = w.tick;
+        let inside = group(&w, v).members.iter().filter(|m| m.inside).count();
+        let earlier = slaves::slaves_of(&w, v)
+            .iter()
+            .all(|&s| pos(&w, s).is_some_and(|p| Some(p) < pos(&w, v)));
+        testkit::run(&mut w, 1);
+        let now = group(&w, v).members.iter().filter(|m| m.inside).count();
+        if now > inside {
+            assert!(earlier);
+            assert_ne!(w.obj(obs).unwrap().last_turn, t, "the observer lost its turn");
+            skipped += 1;
+        }
+        if now == SLAVES as usize {
+            break;
+        }
+    }
+    assert!(skipped > 0);
+
+    // Control: slaves that emerged after their master cost nobody a turn.
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = place_building(&mut w, "SMB", 0, at(0, -1));
+    let obs = place_vehicle(&mut w, "CART", 0, at(-6, 9), 0);
+    assert_eq!(pos(&w, obs), pos(&w, b).map(|p| p + 1));
+    let mut delivered = 0;
+    for _ in 0..800 {
+        let t = w.tick;
+        let credits = w.houses[0].credits;
+        testkit::run(&mut w, 1);
+        if w.houses[0].credits > credits {
+            assert_eq!(w.obj(obs).unwrap().last_turn, t, "no turn lost");
+            delivered += 1;
+        }
+    }
+    assert!(delivered > 0);
+}
+

@@ -474,94 +474,105 @@ fn move_to(w: &mut World, id: ObjectId, c: CellXY) {
 }
 
 /// The group update of a master, called in its turn (S-0402 claims 21 and
-/// 22).
+/// 22; S-0203 claim 12 places it in that turn).
 pub fn group_turn(w: &mut World, id: ObjectId) {
     let Some(g) = group(w, id) else { return };
     let t = w.tick;
-    // spec: S-0402 claim 21 (a group update when due, in the master's turn)
+    // spec: S-0402 claim 21 and S-0203 claim 12 (a due group update happens in the master's turn)
     if t.wrapping_sub(g.next_update) < 0 {
         return;
     }
     // spec: S-0402 claim 21 (subsequent uninterrupted group updates 10 ticks apart)
     set_group(w, id, |g| g.next_update = t.wrapping_add(PERIOD));
-    regenerate(w, id);
-    reload(w, id);
-    recalled(w, id);
+    // spec: S-0203 claim 12 and S-0402 claim 26 (slave-state effects in increasing slave-place order, before the master's field, travelling, deployment and relocation decisions)
+    let places = g.members.len();
+    for i in 0..places {
+        regenerate(w, id, i);
+        reload(w, id, i);
+        returned(w, id, i);
+    }
     match w.obj(id).map(|o| o.kind) {
         Some(Kind::Vehicle) => vehicle_update(w, id),
         Some(Kind::Building) => building_update(w, id),
         _ => {}
     }
+    // spec: S-0203 claim 12 and S-0402 claim 21 (emergence offers after the decisions, in reverse slave-place order)
     emerge(w, id);
 }
 
-/// Replacements for lost slaves whose regeneration delay has elapsed
-/// (S-0402 claims 14, 19, 21 and 23).
-fn regenerate(w: &mut World, id: ObjectId) {
+/// The replacement of slave place `i` when it is empty and its
+/// regeneration delay has elapsed (S-0402 claims 14, 19, 21 and 23).
+fn regenerate(w: &mut World, id: ObjectId, i: usize) {
     let Some(g) = group(w, id) else { return };
+    let Some(m) = g.members.get(i) else { return };
     let t = w.tick;
+    // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
+    if m.id.is_some() || t.wrapping_sub(m.since) < g.regen {
+        return;
+    }
     // spec: S-0402 claim 23 (a replacement belongs to the master's current house)
     let owner = w.obj(id).and_then(|o| o.owner);
-    for (i, m) in g.members.iter().enumerate() {
-        // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
-        if m.id.is_some() || t.wrapping_sub(m.since) < g.regen {
-            continue;
+    let s = new_slave(w, id, g.slave_type, owner);
+    set_group(w, id, |g| {
+        if let Some(x) = g.members.get_mut(i) {
+            // spec: S-0402 claim 14 (a replacement is created inside the miner) and claim 19 (ready)
+            *x = Member {
+                id: Some(s),
+                inside: true,
+                ready: true,
+                since: t,
+            };
         }
-        let s = new_slave(w, id, g.slave_type, owner);
-        set_group(w, id, |g| {
-            if let Some(x) = g.members.get_mut(i) {
-                // spec: S-0402 claim 14 (a replacement is created inside the miner) and claim 19 (ready)
-                *x = Member {
-                    id: Some(s),
-                    inside: true,
-                    ready: true,
-                    since: t,
-                };
-            }
-        });
-    }
+    });
 }
 
-/// Slaves inside whose reload delay has elapsed (S-0402 claims 14 and 21).
-fn reload(w: &mut World, id: ObjectId) {
+/// The reload of slave place `i`: a slave inside whose reload delay has
+/// elapsed (S-0402 claims 14 and 21).
+fn reload(w: &mut World, id: ObjectId, i: usize) {
     let Some(g) = group(w, id) else { return };
+    let Some(m) = g.members.get(i) else { return };
     let t = w.tick;
-    for (i, m) in g.members.iter().enumerate() {
-        let Some(s) = m.id else { continue };
-        // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
-        if !m.inside || m.ready || t.wrapping_sub(m.since) < g.reload {
-            continue;
-        }
-        let strength = crate::combat::damage::strength(w, s);
-        if let Some(o) = w.obj_mut(s) {
-            // spec: S-0402 claim 14 (its health is restored to its strength)
-            o.health = strength;
-        }
-        set_group(w, id, |g| {
-            if let Some(x) = g.members.get_mut(i) {
-                // spec: S-0402 claim 14 (it is ready to leave again)
-                x.ready = true;
-            }
-        });
+    let Some(s) = m.id else { return };
+    // spec: S-0402 claim 21 (completion at the first update with t − a ≥ r)
+    if !m.inside || m.ready || t.wrapping_sub(m.since) < g.reload {
+        return;
     }
+    let strength = crate::combat::damage::strength(w, s);
+    if let Some(o) = w.obj_mut(s) {
+        // spec: S-0402 claim 14 (its health is restored to its strength)
+        o.health = strength;
+    }
+    set_group(w, id, |g| {
+        if let Some(x) = g.members.get_mut(i) {
+            // spec: S-0402 claim 14 (it is ready to leave again)
+            x.ready = true;
+        }
+    });
 }
 
-/// Recalled slaves walk back to the master and go inside.
-fn recalled(w: &mut World, id: ObjectId) {
+/// The returning slave of place `i`: delivery when it stands in the
+/// unloading cell, else a recalled slave is sent there. Delivery is a
+/// group-update effect in the master's turn (S-0203 claims 10 and 12): it
+/// runs after this place's reload check, so a slave received now finishes
+/// reload only at a later update (S-0402 claim 21).
+fn returned(w: &mut World, id: ObjectId, i: usize) {
+    let Some(s) = group(w, id).and_then(|g| g.members.get(i).and_then(|m| m.id)) else {
+        return;
+    };
     let Some(c) = unloading_cell(w, id) else {
         return;
     };
-    for s in slaves_of(w, id) {
-        let Some(o) = w.obj(s).cloned() else { continue };
-        if !o.on_map || !slave_state(w, s).is_some_and(|x| x.recalled) {
-            continue;
-        }
-        if o.pos.cell() == c && !crate::occupancy::in_progress(w, s) {
-            deliver(w, id, s);
-        } else if o.dest != Some(Target::Cell(c)) {
-            // spec: S-0209 Terms (returning slaves are sent to the unloading cell with a plain move)
-            move_to(w, s, c);
-        }
+    let Some(o) = w.obj(s).cloned() else { return };
+    let Some(st) = slave_state(w, s) else { return };
+    if !o.on_map || !(st.recalled || st.phase == SlavePhase::Returning) {
+        return;
+    }
+    if o.pos.cell() == c && !crate::occupancy::in_progress(w, s) {
+        // spec: S-0203 claim 12 and S-0402 claims 14 and 27 (a returning slave in the unloading cell delivers and goes inside in the master's turn)
+        deliver(w, id, s);
+    } else if st.recalled && o.dest != Some(Target::Cell(c)) {
+        // spec: S-0209 Terms (returning slaves are sent to the unloading cell with a plain move)
+        move_to(w, s, c);
     }
 }
 
@@ -1032,16 +1043,16 @@ pub fn process_slave(w: &mut World, id: ObjectId) -> i32 {
     h
 }
 
-/// A returning slave: delivery at the unloading cell, else it walks there
-/// (S-0402 claim 14).
+/// A returning slave walks to the unloading cell (S-0402 claim 14); once
+/// there it waits for its master's group update to deliver (S-0203 claim
+/// 12).
 fn return_step(w: &mut World, id: ObjectId, m: ObjectId) {
     let Some(c) = unloading_cell(w, m) else {
         return;
     };
     let Some(o) = w.obj(id).cloned() else { return };
     if o.pos.cell() == c && !crate::occupancy::in_progress(w, id) {
-        // spec: S-0402 claim 14 (a slave that reaches the miner delivers)
-        deliver(w, m, id);
+        // spec: S-0203 claim 12 (delivery is not the slave's own turn's: it waits for its master's group update, `returned`)
     } else if o.dest != Some(Target::Cell(c)) {
         // spec: S-0402 claim 14 (it walks back to the miner, to the unloading cell)
         walk_to(w, id, c);

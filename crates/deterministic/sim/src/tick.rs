@@ -109,6 +109,13 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::damage::delay_kill_expiry_turn(w, id);
         return;
     }
+    if kind == Kind::Vehicle {
+        // spec: S-0203 claim 12 (a vehicle master's group update sees its position and destination before its movement of the turn; a destination it assigns is available to that movement)
+        crate::econ::slaves::group_turn(w, id);
+        if w.obj(id).is_none() {
+            return;
+        }
+    }
     let loco = w
         .obj(id)
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
