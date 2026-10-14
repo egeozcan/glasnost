@@ -2,13 +2,13 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046]
+requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419]
 supersedes: []
 ---
 
@@ -24,7 +24,10 @@ pre-placed object starts, the cell tags and map trigger variables, what a cell o
 reads as, and the starting units each house receives. Byte-level stream encodings, lighting, tile categories, triggers and the
 map's rules overrides are outside this spec (Open questions).
 
-This revision specifies skirmish only. Network games and campaigns are out of scope. References
+Gameplay requirements specify skirmish only. Claims 47 and 48 additionally specify the house
+identity import needed for map inspection without skirmish reassignment, complementing
+S-0103 claim 14. This limited import probe does not establish campaign gameplay support.
+Network games and campaigns are out of scope. References
 below to their differing behaviour are retained as historical context, not requirements or
 measurement proposals for this revision.
 
@@ -1686,6 +1689,57 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       for the placement always succeeding while the map loads, and for the visceroid draw being
       the only draw of a vehicle's placement
 
+### House identity for map inspection
+
+47. **A listed house's country (Q-0419).** For map inspection without skirmish reassignment,
+    each entry of the map's house list names a house and its own map section, not its country.
+    Only the first 19 bytes of the list value are used, then leading and trailing whitespace
+    are trimmed. The section's country selector determines the house's country even when the
+    house name happens to equal a different country's name. An absent or empty selector uses
+    the country at registration index 0, not the country named like the house.
+    - A nonempty selector uses its first 127 bytes, trimmed after the cut. It matches a
+      country's type name or its imported name field without regard to ASCII letter case.
+      Countries are considered in registration order, so the earliest country matching either
+      name wins. Numbers are names, never registration indices.
+    - An ordinary nonempty name matching no country creates a new country at the end of the
+      country registry, with that name limited to 24 bytes as in S-0004 claim 5. It uses engine
+      defaults, not the properties of an unrelated country or a later read of its own section.
+      In particular its inherited colour is the initial colour choice described by
+      S-0103 claim 14. The house's own colour selector can still replace that inheritance under
+      the same claim. A missing selector and an unknown nonempty selector therefore differ.
+    - Reserved random-country and player-at-position selectors are not ordinary unknown names.
+      They do not select a valid country for this map-house import in the original, whose
+      result is unspecified. Our importer treats them as an absent selector and warns.
+      A country registry with no country at index 0 likewise cannot supply the absent-selector
+      fallback: our importer leaves that house unresolved and warns, rather than inventing
+      a country or colour.
+    - Backing: `measurable` (M27 A–C for names, defaults and creation). Reserved-selector and
+      empty-registry original results are `unmeasured`: they supply no defined original
+      country or colour to compare with.
+    - Confidence: high for the selector, matching and defaults; medium for unknown-country
+      inheritance and malformed-selector handling
+
+48. **Owner names are house names, not country fallback selectors (Q-0419).** In the same
+    map-inspection import, a nonempty house list creates only the listed houses. An object's
+    owner must match one of their imported house names exactly, including letter case, as in
+    claim 27. Matching a country but no house does not create an owner or select that country's
+    colour. An owner matching neither is also unresolved: the original drops its object, so
+    there is no original remap colour for it. A viewer that retains such an entry for inspection
+    must distinguish it as unresolved rather than claim its provisional colour is inherited
+    from the original.
+    - With no house-list entries, the original instead creates one house per registered
+      country, in country order. Such a house takes the first 20 bytes of its country's type
+      name as its house name and inherits that country's colour, subject to its own section's
+      colour override under S-0103 claim 14. Thus an exact country-name owner can resolve in
+      this empty-list case, but not merely because it is a country name. It must match an
+      actually created house. An empty-valued list line is no entry (S-0001 claim 11).
+    - These rules do not create additional skirmish houses. Claim 26 still excludes the map's
+      house definitions there; claim 27 determines owner retention, and S-0103 claim 10
+      supplies the retained skirmish houses' colours, including the neutral and special houses.
+    - Backing: `measurable` (M27 D–E, including listed, country-only and unknown owners)
+    - Confidence: high for house-only matching and empty-list fallback; medium for pixels
+      before measurement
+
 ## Formulas
 
 **Starting-unit budget** (claim 45). With *n* ≥ 1 the number of types in the budget pool (1 when
@@ -2286,7 +2340,11 @@ the original's absent-key behaviour.
 | [Terrain] n | terrain object at cell n (claim 42): key decoded 1000-based at format version 4 and above, 128-based below it, wrapped per coordinate; value = terrain object type name, without regard to letter case; <none>, none and an empty value place nothing; an unknown name creates the type (S-0004) | key: cell number (leading integer); value: string | no terrain objects |
 | [Smudge] (any key) | smudge: type name, cell x, cell y, piece number (claim 42); placed only when the piece number is absent or 0; covers the type's width × height cells from (x, y) | comma-separated list as [Units]; cell always two fields | no smudges |
 | [Tubes] | tube (tunnel) definitions; their format has no spec yet | lists | none |
-| [Houses] and per-house sections | not read in skirmish | — | — |
+| [Houses] (any key) | map-inspection house names and their own section names (claims 47–48); not read in skirmish | string value: first 19 bytes, then trim; entries in section order, with duplicate-key lookup as S-0002 claim 4 | no listed houses: map inspection creates one house per country, using the first 20 bytes of its type name |
+| map house's own section: Country | country of a listed house (claim 47); not read in skirmish | first 127 bytes, then trim; ASCII-case-insensitive whole-name match to country type name or Name field; earliest matching country wins; numeric text is a name | absent or empty: country index 0; unknown nonempty name creates a default country with a 24-byte type name |
+| rules country: Name | alternative country name accepted by the house's country selector (claim 47) | imported name string, as S-0004 claim 9 | initially its type name |
+| map house's own section: Country = <random> or <Player @ A> … <Player @ H> | reserved selectors invalid for this inspection import (claim 47) | random token ignores ASCII case; player-at-position tokens match exact case | our importer uses the absent-selector fallback and warns |
+| country and map house's own section: Color | inherited country colour and optional house replacement, respectively | S-0103 claim 14 and its Import mapping own the name lookup, 31-character limit and defaults | S-0103 claim 14; no colour fallback for an unresolved object owner (claim 48) |
 | [Basic] Player | not read in skirmish | — | — |
 
 Keys from other files that this spec relies on (theater file and rules file):
@@ -3469,7 +3527,54 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     budget unit stands anywhere but on the ground of base cell 0, or in K2 it stands on base
     cell 0.
 
+- **M27, map-house identity and unresolved owners (claims 47–48; Q-0419).**
+  - *Setup:* S-0103 scenario PM's isolated single-player map-entry probe, not a campaign-play
+    test or a skirmish. Tiny purpose-made map, separated visible stock infantry and ordinary
+    buildings, neutral test lighting, speed index 2, 800×600, director and unrelated mods off.
+    Named test data: PM's loose base-rules copy with three countries C0, C1 and C2 assigned
+    distinct existing colour definitions, C0 at registration index 0. Keep the colour registry
+    valid. Remove the test files afterwards. Each variant is one fresh program run.
+  - *Procedure A, identity:* list short house names different from every country name, give
+    their sections selectors for C1, mixed-case C1 and C2, and leave their house colour
+    selectors absent. Also list a house named exactly like C2 whose country selector is C1.
+    Give C1 a unique imported alternative name and test a house selecting that alternative.
+    *Expected:* both spellings, the alternative name and the C2-named house inherit C1's
+    ramp; only the C2-selected house inherits C2's. A house's own name does not choose its
+    country. With an alternative name shared by C1 and C2, C1 wins by country order.
+  - *Procedure B, defaults:* use absent, empty, unknown short nonempty and undefined numeric
+    country selectors. Make C0's imported colour distinct from the first definition.
+    *Expected:* absent and empty inherit C0, whereas unknown and numeric selectors create
+    default countries and inherit the initial definition of S-0103 claim 14. Repeat with
+    a rules country whose type name is that numeric text: it then resolves by name. Give a
+    house an explicit valid colour selector as PM's control: it replaces either inheritance.
+  - *Procedure C, length:* list a 19-byte house name followed by extra letters, supplying
+    different country selectors in the full-name section and the 19-byte section. Use a
+    short house with a country selector of more than 127 bytes whose first 127 bytes become
+    C1 after trailing spaces are trimmed; the omitted suffix must not affect lookup.
+    *Expected:* the long house uses its 19-byte section; the cut-and-trim selector selects C1.
+    These are named test map data, not stock-name-length assumptions.
+  - *Procedure D, nonempty list:* list one test house only. Place otherwise valid objects owned
+    by that house, by an unlisted country name, by a wholly unknown name and by a case-changed
+    spelling of the listed house. *Expected:* only the exact listed-house objects survive.
+    There is no automatic country fallback and no grey original object for the others.
+  - *Procedure E, empty list:* remove all house-list entries, also testing a list containing
+    only an empty-valued line. Place objects with exact short country type names, changed-case
+    names and unknown names. *Expected:* exact country-named objects now resolve to the
+    automatically created houses and inherit their countries' ramps, subject to a valid own
+    colour override; changed-case and unknown owners remain absent.
+  - *Observable:* record which objects remain and the identified remap pixels of each retained
+    infantry and building, compared with S-0103 claim 6's ramps under test lighting. Record
+    imported owner/country identities if a read-only recorder is available, especially for
+    the new-country controls. *Falsified if:* another country or ramp is selected, numeric
+    text is an index, the length cuts differ, or an unlisted owner survives in D. If PM's direct
+    map-entry harness is unavailable, propose it to the user; do not modify the executable or
+    substitute skirmish loading, which intentionally discards these definitions.
+
 ## Open questions
+
+Q-0419's house identity, country-only owners and unresolved-owner questions are answered by
+claims 47–48. S-0103 claim 14 already owns inherited and overridden colour selection. A viewer's
+optional diagnostic colour for unresolved entries is presentation policy, not an original colour.
 
 - Outside this spec, with pointers only: lighting (S-0104); tile categories and what tiles mean
   for play (S-0010); triggers and tags (S-0011); and the rules sections a map may override
