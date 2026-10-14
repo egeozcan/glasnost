@@ -2,7 +2,7 @@
 id: S-0413
 title: Country bonuses (what each country field does, which spec owns it, and the fields with no effect)
 topic: simulation
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-This spec lists every field of a country's rules section that the original reads, says what each does in play and which spec owns the rule. It owns the leftovers: the factors that are read but change nothing, the aircraft speed factor, the country's colour field, the wall-owner rewrite at game start, and the rule that every house of a country gets the same advantages whoever plays it. It names no stock country and says nothing about which country has which advantage: that is stock data.
+This spec catalogues the country fields read by the original and their rule owners for skirmish; network games and campaigns are out of scope. Map-owner colour inheritance is an import-only pointer, not gameplay in another mode. It owns the leftovers: the factors that are read but change nothing, the aircraft speed factor, the country's colour field, the wall-owner rewrite at game start, and the rule that every house of a country gets the same advantages whoever plays it. It names no stock country and says nothing about which country has which advantage: that is stock data.
 
 ## Terms
 
@@ -71,20 +71,23 @@ with the glossary's build *progress*). In addition:
    | armour, cost, build time, ground speed, air speed (general factors) | none | claim 2 |
    | parent country, name prefix, name suffix, smart-computer flag | none known | claim 4 |
 
-   - Backing: `measurable` for each field's effect, through the scenarios of the owning specs and
-     scenarios C1 to C3 here; `unmeasured` for the completeness of the list (a claim that no other
-     field of a country's section is read, which no scenario can show; a spec that finds another
-     field adds it here)
-   - Confidence: high for each effect as its owner gives it; medium that the list is complete
+   - Backing: each row inherits the backing of its owning claim, including the `unmeasured`
+     portions of claims 3, 4 and 6. Scenarios C1 to C3 cover only the portions they identify.
+     Completeness is `unmeasured`: no finite scenario can show that no other country field is
+     read; a spec that finds another field adds it here.
+   - Confidence: each effect inherits its owner's confidence; medium that the list is complete
 
 2. **General factors with no effect.** The general armour, cost, build-time, ground-speed and
    air-speed factors of a country change nothing in play: no damage, price, build time or speed
    depends on them. Only the general firepower and rate-of-fire factors act (claim 1). The house's
-   difficulty row has the same five factors and they change nothing either (S-0412 claim 5; S-0302
-   claim 3; S-0403 claim 9; S-0404 claim 2). The importer warns when a rules file gives one of the
+   difficulty row's armour, cost and build-time factors also change nothing (S-0412 claim 5,
+   S-0302 claim 3, S-0403 claim 9 and S-0404 claim 2). The importer warns when a rules file gives one of the
    five country factors a value other than 1.0, since a mod author may expect an effect.
    - Backing: `measurable` (scenario C1; S-0302 scenario D19 part b already covers the general
-     armour factor, S-0404 scenario P2 the cost factor, S-0403 scenario B8 the build-time factor)
+     armour factor, S-0404 scenario P2 the cost factor, S-0403 scenario B8 the build-time factor).
+     The importer warning is `unmeasured` in the original: it is our engine's design requirement,
+     not an original message. An engine import check must warn for each of the five factors set
+     to the invented value 2.0, and not warn for 1.0; either opposite result fails that check
    - Confidence: high for armour, cost and build time (their owners); medium for ground and air
      speed (every house gets its country's general speed factors however the game is set up, but
      no speed rule uses them: the original's speed rules, S-0207 and S-0208, use only the
@@ -102,8 +105,12 @@ with the glossary's build *progress*). In addition:
    S-0501).
    Each object uses the factor of its own kind only: an infantry unit the infantry factor, a
    vehicle the vehicle factor, an aircraft the aircraft factor. A building has no speed.
-   - Backing: `measurable` for the kind selection and the aircraft factor (scenario C2, which also
-     runs the vehicle and infantry factors); `unmeasured` for the order of the country factor and
+   - Backing: `measurable` for kind selection and a qualitative aircraft slowdown (scenario C2).
+     The exact aircraft formula, its speed-field conversion and its applicability to every
+     aircraft locomotion are `unmeasured`: no validated flight conversion and integration rule
+     yet connects the formula's speed to a tick-by-tick position prediction. C2 cannot establish
+     the truncations or an exact interval ratio; planned S-0501 must supply that test.
+     `unmeasured` for the order of the country factor and
      the object's speed multiplier, with this reason: the only known source of a speed multiplier
      other than 1.0 is the speed power-up, which does not reach aircraft (S-0207 claim 13), and so,
      as far as is known, an aircraft's multiplier stays 1.0, so with *b* = 1 the two orders give the same whole
@@ -119,7 +126,8 @@ with the glossary's build *progress*). In addition:
    shown in the in-game player lists and the score screen. It does not limit which countries the
    lobby's random choice can pick with the original fixed-range rule (S-0412 claim 6). The parent-country field, the
    name prefix, the name suffix and the smart-computer flag are read, but no rule of play is known
-   to use them. Our engine reads all five and gives them no effect on game state. The prefix is
+   to use them. Our engine reads these four fields without a game-state effect. The listing flag
+   retains its lobby and display effects, but does not change play after setup. The prefix is
    at most one character and the suffix at most three: from a longer value the field keeps its
    first one or three characters, with any whitespace at the ends of the kept characters removed,
    and the original gives no message. Our importer cuts the same way and gives an importer warning
@@ -132,19 +140,28 @@ with the glossary's build *progress*). In addition:
      for the other four (a claim about the absence of any effect; each topic that could use them
      would state it; a comparison of game state between two runs of the original needs the same
      seed, which the measurement setup cannot set), and for the cutting of the prefix, the suffix
-     and the parent-country field and the empty-prefix rule (a field with no observable effect
-     cannot show what was kept)
+     and the parent-country field, the empty-prefix and empty-suffix rules, and their defaults
+     (a field with no observable effect cannot show what was kept). Importer warnings are also
+     `unmeasured` in the original: they are design requirements of our engine, not original
+     messages. An engine import check must warn for an invented two-character prefix or
+     four-character suffix, retain only the stated characters, and not warn for a prefix or
+     suffix within its limit; a wrong retained value or warning outcome fails that check
    - Confidence: high for the listing flag's explicit-country filtering; medium for what it does
      to the displays; low that the listing flag
      and the other four have no effect on game state; medium for the cutting of the prefix and
      suffix, the 24-character cut and the empty-prefix rule
 
-5. **The country's colour field.** The field decides no game state: house colours come from the
-   lobby colour slots through S-0103's table (claim 10). In the original it colours only the text
-   of the alliance messages (S-0414 claims 12 and 13), which take the colour field of the issuing
-   house's country and read it as a colour definition position. Those messages are presentation.
-   From the moment the player houses are created to the end of the game, a country's colour field
-   holds:
+5. **The country's colour field.** In a skirmish the field decides no game state: player-house
+   colours come from the lobby colour slots through S-0103 claim 10. Alliance messages
+   (S-0414 claims 12 and 13) are drawn in the issuing house's own colour, position *P*(*s*)
+   of that table, with no quirk switch for a presentation-only defect. For map inspection without
+   skirmish reassignment, a house inherits its country's imported colour, subject to its own
+   map-section override (S-0103 claim 14); that colour-import rule does not add houses to a skirmish.
+   In the original skirmish, the country's field colours only alliance-message text: the original's
+   bug is to use position *s* from the last same-country player in house order, rather than the
+   issuing house's position *P*(*s*), so same-country players share the wrong message colour.
+   From the moment the player houses are created to the end of a skirmish, the original's
+   country colour field holds:
 
    | Country | Colour field |
    |---|---|
@@ -153,15 +170,12 @@ with the glossary's build *progress*). In addition:
 
    Before the player houses are created, every country's colour field holds its imported value.
    Countries are built afresh at every game start (S-0004 claim 1), so nothing carries over to a
-   later game. So an alliance message is drawn in the colour definition at position *s*, not at
-   position *P*(*s*), the colour definition position that S-0103's table gives slot *s*, and it
-   does not show the issuing player's colour; and every player house of one country issues its
-   alliance messages in the same colour, the one that the last of them in house order decides.
-   The colour is a defect of the original, so it is a quirk: `quirks.alliance_message_slot_colour`, default on (the original: the message
-   is drawn in the colour definition at position *s*). Off, an alliance message is drawn in the
-   issuing house's own colour (position *P*(*s*) of S-0103's table). Whether our engine keeps the
-   switch or fixes the colour with no switch is Questions for the project lead, 2.
-   - Backing: `measurable` (scenario C3, part b)
+   later game.
+   - Backing: `measurable` (scenario C3 part b for the original message colour; S-0103 scenario
+     PM for map-house inheritance and override). The corrected presentation is a design rule,
+     `unmeasured` in the original; C3 part b also gives an engine acceptance check. The values
+     held by an unplayed country's field and their lifetime are `unmeasured`: they supply no
+     message observable in a skirmish, and C3 tests only the played-country result.
    - Confidence: high for the slot number that the field holds and its use by the alliance messages,
      medium for the resulting colour on screen
 
@@ -189,11 +203,14 @@ with the glossary's build *progress*). In addition:
    type can carry a superweapon (planned S-0512) or give a free unit. The base unit a house receives
    is the first type of the base-unit list whose owner list includes its country (S-0009 claim 45).
    A unique unit's own abilities belong to the specs of those abilities.
-   - Backing: `measurable` through the owning specs
-   - Confidence: high
+   - Backing: `measurable` for build eligibility through S-0407's scenarios for claims 5 and 11,
+     and for the base-unit choice through S-0009's scenario for claim 45. The building-carried
+     superweapon and free-unit examples are `unmeasured` here: this catalogue gives no scenario
+     for their operation, which needs the owning ability or production spec.
+   - Confidence: high for build eligibility and base-unit choice; medium for the two examples
 
-8. **The same advantages for every player.** Every rule in this spec and in the specs it points
-   to applies to a house because of its country alone. In our engine every house, AI or human, uses
+8. **The same advantages for every player.** The country-derived factors and type lists in
+   this catalogue do not depend on whether a person or an AI plays the house. In our engine every house, AI or human, uses
    the normal difficulty row unless its player sets the handicap (S-0412 claim 5), so an AI house
    of a country gets exactly what a human house of that country gets, and two player houses of one
    country differ in their firepower and rate-of-fire factors only through a handicap. The neutral
@@ -214,9 +231,10 @@ The other five general factors act nowhere (claim 2):
 
 > *h* = RZ₅₃(*r* × *g*)
 
-with *r* the row's factor and *g* the country's general factor, both doubles and dimensionless
-(S-0205; for the rate of fire, S-0301 Formulas F2; for firepower, S-0302 claim 3), and *h* the
-double result, dimensionless. In our engine *r* is the normal row's factor, or the chosen row's
+with *r* the row's factor and *g* the country's general factor, both doubles and dimensionless.
+RZ₅₃ rounds the product toward zero to double precision, as in S-0205 claim 7.
+*h* is the dimensionless double result. S-0301 Formulas F2 owns its rate-of-fire use and
+S-0302 claim 3 its firepower use. In our engine *r* is the normal row's factor, or the chosen row's
 when the handicap is set. The per-kind factors are used directly by their owners, in single
 precision.
 
@@ -256,24 +274,20 @@ which is a vehicle rule).
 The country fields are read with the rules layers at every game start (S-0006). The house factors
 built from them are fixed when the houses are created (S-0412 table "Game start") and do not change
 during a game. The wall-owner rewrite of claim 6 leaves every wall that the map places with the
-owner S-0210 (claim 14 a) gives it. Of several player houses of one country, the last in house order decides the
-colour of the alliance messages of every house of that country (claim 5).
+owner S-0210 (claim 14 a) gives it. Alliance messages use the issuing house's own colour
+(claim 5), independently of other houses of the same country.
 
 ## Edge cases and quirks
 
-One quirk switch is proposed here (the alliance-message colour, below); the other decision that
-might add one is for the project lead (Questions for the project lead).
+No quirk switch is proposed here. The general-factor question remains for the project lead
+(Questions for the project lead).
 
 - **General factors with no effect** (claim 2). Our engine gives them no effect either, as the
   original does. This is a property of the rules' data, not a defect that a mod would turn off, so
   no switch is named. The importer warns when one of the five differs from 1.0. Whether a switch
   that gives them an effect is wanted is question 1.
-- **The colour field shared by every house of a country** (claim 5). The field holds a lobby
-  colour slot number, which the alliance messages read as a colour definition position, and the
-  last player house of the country in house order decides it.
-  Presentation only. Switch: `quirks.alliance_message_slot_colour`, default on (the original's
-  colour); off, the message uses the issuing house's own colour. Whether the switch is kept is
-  question 2.
+- **Alliance-message colour** (claim 5). Messages use the issuing house's own colour. This is
+  a presentation-only correction with no switch.
 - **Wall-owner rewrite** (claim 6). Ordinary behaviour, reproduced; not a quirk, because no later
   use of the flag is known.
 
@@ -284,7 +298,9 @@ S-0003. Keys of the per-kind cost and build-time factors and of the income facto
 mappings of S-0404, S-0403 and S-0402; the per-kind armour keys in S-0302; the veteran lists in
 S-0311; the passive flag in S-0009; the wall-owner flag in S-0210.
 
-Every key keeps the value in force when a layer omits it (S-0006), except `ParentCountry` (claim 1). `Prefix` differs in the other case: an empty value is not ignored (claim 1).
+Every country field keeps the value in force when a rules layer omits it (S-0006 claim 3), except
+the parent-country field, which resets as claim 1 describes. The name-prefix field differs for an
+empty value: an empty value is not ignored (claim 1).
 The last column is the absent-key default, the value when no layer gives the key.
 
 | Key | Concept | Parse form | Absent-key default |
@@ -306,44 +322,54 @@ The last column is the absent-key default, the value when no layer gives the key
 ## Measurement scenarios
 
 All scenarios run under the glossary's *measurement setup* in a skirmish on a purpose-made flat
-map of clear ground, at any game speed (glossary G3: game speed does not reach game state), with a
-test rules file whose values are invented test values; no stock value is needed. No expected
+map of clear ground, at game speed index 2 and 800 × 600 resolution, with the director and mods
+off apart from the named test rules file and map overrides. Their changed values are invented
+test values; no stock value is needed. No expected
 result depends on a random draw, so each variant runs once. Every variant is a separate run of the
 whole game. The *recorder* reads each tick the positions of the test objects. "Cell *k*" and
 "arrival" are as in S-0207 scenario D1 (the first tick at whose end the object is at or past the
 centre of the *k*-th cell of its route), and the *interval* is the arrival tick at cell 20 minus
 the arrival tick at cell 10.
 
-**Test objects (C1 and C2).** The human house owns one test vehicle (S-0207's D1 setup: speed field
-20, wheel class, clear ground at 100 %, a straight route of 30 cells), one test aircraft whose speed
-field converts to a speed *V* in progress units per tick (the conversion of an aircraft's speed
-field is the flight rules', planned S-0501; the test picks a field value that gives *V* of at
-least 4, and *V* is known from that conversion once S-0501 exists) flying a straight route of 30 cells, and one test infantry unit on a straight route of
-30 cells. Each object has its own route, starts at full health with no veterancy, and is ordered
-to move at the same tick. In every variant, every country factor not named is 1.0.
+**Test objects (C1 and C2).** A named test map places three objects for the human house: a
+vehicle using S-0207's D1 straight-route setup (invented speed field 20, wheel class, clear ground
+at 100 %), a stock fixed-wing aircraft with a named map override giving its speed field the
+invented value 20, and a stock walking infantry type with the same invented speed field.
+Each has a separate straight route of 30 cells towards map north, starts at full health without
+veterancy, and receives a move order at tick 100 through scripted input. Place the infantry at
+the right standing position so its empty-cell entries do not need a random position choice
+(S-0208 claim 3). Keep their routes free
+of obstructions and combat. The aircraft's starting facing points along its route; its route
+must allow takeoff before cell 10 and continued flight past cell 20 without a turn. No aircraft
+speed conversion is assumed or needed for these comparisons. Record the selected stock type
+names with the measurement. Every country factor not named is 1.0.
+Include one bystander computer player under the glossary's void rule. The observed area is the
+three routes. Void a run if an object turns, fights or is obstructed on its measured segment.
+Record until each reaches cell 20 or tick 3000, whichever comes first. Failure of a baseline
+object to reach cell 20 makes the fixture invalid, not evidence about its country factor.
 
 **C1: general factors with no effect.** Runs: 2. Run 1: all factors 1.0 (baseline). Run 2: the
 human's country general ground-speed and air-speed factors 2.0, with every per-kind factor 1.0.
 Observable: the interval of the test vehicle, of the test aircraft and of the test infantry unit.
 Expected: all three intervals equal their run-1 values. Falsified if any of the three intervals
-differs between the runs.
+differs between the runs, or a run-2 object fails to reach cell 20 by tick 3000.
 
 **C2: the aircraft speed factor and the kind selection.** Runs: 4. Run 1: baseline. Run 2: aircraft
 factor 0.5. Run 3: vehicle factor 0.5. Run 4: infantry factor 0.5. Observable: the interval of
 each of the three test objects (*T*ₐ for the aircraft, *T*ᵥ for the vehicle, *T*ᵢ for the infantry
 unit), per run.
-- *Expected:* in run 2 the aircraft's speed is trunc(*V* / 2) (claim 3 Formulas with *κ* = 0.5 and
-  *b* = 1), so its interval is *V* / trunc(*V* / 2) times its run-1 value, within 2 ticks (exactly
-  2 times for an even *V*, and at most 2.5 times for an odd *V*, which is at least 5; each interval
-  is read to the tick); the vehicle's and the
-  infantry unit's intervals equal their run-1 values. In run 3 the vehicle's interval is 66 ± 1
-  (S-0207 scenario D12 run 1); the aircraft's and the infantry unit's equal their run-1 values.
-  In run 4 the infantry unit's interval is longer than in run 1 (it walks at the factor times its
-  own speed, S-0208 claim 7), and the aircraft's and the vehicle's equal their run-1 values.
-- *Falsified if:* in run 2 the aircraft's interval differs from *V* / trunc(*V* / 2) times its
-  run-1 value by more than 2 ticks; or any object that is not of the halved kind has an interval that differs from
-  its run-1 value in any run; or the infantry unit's interval does not grow in run 4.
-- *Not covered:* the order of the factors for aircraft (claim 3: unmeasured, since *b* is 1).
+- *Expected:* run 2 has a longer aircraft interval than run 1, while the vehicle and infantry
+  intervals are unchanged. This tests only a qualitative slowdown, not an exact speed or interval
+  ratio. In run 3 the vehicle interval is 66 ± 1 ticks (S-0207 scenario D12 run 1), while the
+  aircraft and infantry intervals are unchanged. In run 4 the infantry interval grows
+  (S-0208 claim 7), while the aircraft and vehicle intervals are unchanged.
+- *Falsified if:* the aircraft interval does not grow in run 2, the vehicle interval is outside
+  65 to 67 ticks in run 3, the infantry interval does not grow in run 4, or any unaffected kind's
+  interval differs from its baseline. A changed object that has not reached cell 20 by tick
+  3000 is recorded as stalled and fails the predicted continued movement.
+- *Not covered:* the exact aircraft formula, truncation sites, grouping of factors or coverage
+  of every aircraft locomotion (claim 3's `unmeasured` portions). There is no justified exact
+  arrival-interval prediction until the flight rules supply conversion and integration.
 
 **C3: listing flag and colour field.**
 - *Part a.* Runs: 2, for one human and one computer player of different countries. Run 1
@@ -370,9 +396,17 @@ unit), per run.
   player's slot number (S-0103 claim 10), which is neither the colour at position 1 (the human's
   displayed colour) nor the colour at position 10 (the computer's). Falsified if the messages show
   any colour other than the colour at position 2 (in particular the colour at position 1 or at
-  position 10).
+  position 10). Replay the same setup in our engine: both messages must use position 1,
+  the issuing human house's displayed colour. A match to position 2 or 10 falsifies the fixed
+  presentation rule.
 
 ## Cross-spec hand-off
+
+**Presentation-policy replacement within S-0413.** Claim 5 and Edge cases apply the project
+lead's 2026-10-14 policy for obvious presentation-only defects, also stated in the template:
+use the fixed message colour without a switch. This explicitly replaces the previously approved
+requirement for `quirks.alliance_message_slot_colour` and resolves its pending lead question.
+The old original-default switch must not survive this hand-off. No gameplay rule changes.
 
 S-0412 claim 15 owns the standard lobby's explicit-country filtering; claim 4 here now includes
 that use of the listing flag. Joint sign-off must verify these claims against the exact versions
@@ -383,7 +417,8 @@ handed off together. The original random-country rule still ignores the flag (S-
 - Whether any rule of play uses the parent-country field, the name prefix or suffix, or the
   smart-computer flag, or uses the multiplayer listing flag beyond explicit-country filtering
   and the two displays (claim 4).
-- Whether every aircraft locomotion uses the speed rule of claim 3.
+- The aircraft speed-field conversion and flight integration needed for an exact tick-by-tick
+  test of claim 3's formula; whether every aircraft locomotion uses that formula.
 - Whether any source gives an aircraft a speed multiplier other than 1.0 (claim 3); if one exists,
   the order of the two factors becomes measurable.
 - Whether anything reads the wall-owner flag after game start in a skirmish (claim 6), and whether the rewrite includes the neutral and special houses.
@@ -396,10 +431,3 @@ handed off together. The original random-country rule still ignores the flag (S-
    switch whose alternative gives them effect? The alternative would be new behaviour that needs
    its own design: which rule each factor feeds, in which precision and in which order of
    rounding.
-2. **The alliance-message colour (claim 5).** The original draws the messages in the colour at the
-   position given by the last same-country player's slot number, which is not that player's
-   colour. This draft proposes `quirks.alliance_message_slot_colour` with the original's colour as
-   its default, and the issuing house's own colour when it is off. Does the lead accept
-   the quirk (a quirk's default is always the original behaviour), or should our engine fix the
-   colour as a departure with no quirk (presentation only), or reproduce the original with no
-   quirk?

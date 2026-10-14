@@ -16,7 +16,7 @@ use glasnost_ai::game::Game;
 use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
 use glasnost_map::CellXY;
-use glasnost_render::compose::{ComposeQuirks, Frame};
+use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
 use glasnost_render::projection::{
     ProjectionQuirks, TERRAIN_LIFT, cell_top, cursor_cell, limit_centre, project_lifted,
     view_origin,
@@ -89,7 +89,6 @@ pub struct Session {
     /// Whether the client has set the starting window size.
     sized: bool,
     centre: (i32, i32),
-    reference: i32,
     filter: Filter,
     /// Decoded icon frames by type (S-0007 claims 22 and 25).
     icons: BTreeMap<TypeRef, IndexedImage>,
@@ -238,7 +237,6 @@ impl Session {
             screen: (1024, 768),
             sized: false,
             centre: (0, 0),
-            reference: Frame::reference_at_reset(0, &ComposeQuirks::default()),
             filter: Filter {
                 groups: Group::ALL.to_vec(),
                 provisional: true,
@@ -264,7 +262,7 @@ impl Session {
         };
         problems.append(&mut s.loaded.problems);
         s.problems = problems;
-        s.set_centre(start.unwrap_or((0, 0)), true);
+        s.set_centre(start.unwrap_or((0, 0)));
         // spec: S-0213 claim 25 (the status width budget after game start)
         let view_w = s.map_rect().w;
         s.play.status_view(view_w, false);
@@ -320,7 +318,7 @@ impl Session {
         if size != self.screen {
             self.screen = size;
             let c = self.centre;
-            self.set_centre(c, false);
+            self.set_centre(c);
             let view_w = self.map_rect().w;
             // spec: S-0213 claim 25 (W − 22 after game start; after an in-game change of the view's dimensions W − 16 and the lines cleared)
             self.play.status_view(view_w, !first);
@@ -332,35 +330,20 @@ impl Session {
         (r.w.max(1), r.h.max(1))
     }
 
-    /// Sets the view centre, limited by S-0101 F5; a jump resets the depth
-    /// reference (S-0102 F1).
-    pub fn set_centre(&mut self, requested: (i32, i32), jump: bool) {
+    /// Sets the view centre, limited by S-0101 F5. The depth reference
+    /// does not change (S-0102 F1: one C for the whole game).
+    pub fn set_centre(&mut self, requested: (i32, i32)) {
         let f = self.loaded.map.footprint;
         let size = self.view_size();
         // spec: S-0101 claim 8 (every request is limited by F5; the stored centre is the limited one)
-        let c = limit_centre(
-            requested,
-            size,
-            f.width,
-            f.local,
-            &ProjectionQuirks::default(),
-        );
-        let (dx, dy) = (c.0 - self.centre.0, c.1 - self.centre.1);
-        // spec: S-0102 Terms (a view jump moves by more than the view's width across or its height up or down)
-        let big = dx.abs() > size.0 || dy.abs() > size.1;
-        self.centre = c;
-        if jump || big {
-            // spec: S-0102 F1 (at a reset, C = 32768 + the world row of the view's top; quirks.depth_reference_reset_on_jump)
-            self.reference =
-                Frame::reference_at_reset(view_origin(c, size).1, &ComposeQuirks::default());
-        }
+        self.centre = limit_centre(requested, size, f.width, f.local);
     }
 
     /// Scrolls the view by `d` pixels.
     pub fn scroll(&mut self, d: (i32, i32)) {
         if d != (0, 0) {
             let c = (self.centre.0 + d.0, self.centre.1 + d.1);
-            self.set_centre(c, false);
+            self.set_centre(c);
         }
     }
 
@@ -408,13 +391,7 @@ impl Session {
         // spec: S-0101 F9 (a one-pixel request in the direction blocked by F5)
         // spec: S-0213 claim 24 (blocked when a one-pixel trial cannot move the view under S-0101's limits)
         move |d: (i32, i32)| {
-            limit_centre(
-                (centre.0 + d.0, centre.1 + d.1),
-                size,
-                f.width,
-                f.local,
-                &ProjectionQuirks::default(),
-            ) == centre
+            limit_centre((centre.0 + d.0, centre.1 + d.1), size, f.width, f.local) == centre
         }
     }
 
@@ -424,7 +401,8 @@ impl Session {
         View {
             origin: view_origin(self.centre, size),
             size: (size.0 as u32, size.1 as u32),
-            reference: self.reference,
+            // spec: S-0102 F1 (C = 32768 throughout the game, whatever the view)
+            reference: DEPTH_REFERENCE,
         }
     }
 
@@ -624,7 +602,7 @@ impl Session {
                     r.cell_at(&self.play.game.world, p.x - l.radar.x, p.y - l.radar.y)
                 }) {
                     let (x, y) = glasnost_render::projection::cell_centre(cell.x, cell.y);
-                    self.set_centre(project_lifted(x, y, 0), true);
+                    self.set_centre(project_lifted(x, y, 0));
                 }
             }
             Some(HudHit::Tab(i)) => self.play.tab_click(i),

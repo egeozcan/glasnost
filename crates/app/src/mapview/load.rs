@@ -160,7 +160,7 @@ pub async fn load_with(
     let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
     let GameInputs {
         map,
-        map_warnings,
+        mut map_warnings,
         import,
         resolved,
         catalogue,
@@ -257,7 +257,10 @@ pub async fn load_with(
     }
     if make.is_none() && !options.skirmish && options.slots.is_empty() {
         // spec: S-0103 claim 14 (outside a skirmish the map's own owners show their imported colours)
-        options.map_colours = build::map_owner_colours(&map, &import, &map_ini);
+        let owners = build::map_owner_colours(&map, &import, &map_ini);
+        options.map_colours = owners.colours;
+        options.unresolved_owners = owners.unresolved;
+        map_warnings.extend(owners.warnings);
     }
     let inputs = Inputs {
         map: &map,

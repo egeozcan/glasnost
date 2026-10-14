@@ -1,9 +1,9 @@
 ---
 id: Q-0430
 title: Does a vehicle slave master's group update come before or after its behaviour processing in its turn?
-status: open
+status: answered
 related: [S-0203, S-0402, S-0215]
-answered-by: []
+answered-by: [S-0203]
 ---
 
 ## Need

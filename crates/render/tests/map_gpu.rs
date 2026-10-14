@@ -5,7 +5,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use glasnost_fmt::image::IndexedImage;
-use glasnost_render::compose::{ComposeQuirks, DepthTest, Frame, Paint, Profile};
+use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE, DepthTest, Paint, Profile};
 use glasnost_render::gpu::{self, BackendChoice};
 use glasnost_render::map_gpu::{MapRenderer, targets};
 use glasnost_render::offscreen::read_texture;
@@ -152,7 +152,7 @@ fn gpu_matches_cpu_reference() {
         let view = View {
             origin,
             size,
-            reference: Frame::reset_reference(origin.1),
+            reference: DEPTH_REFERENCE,
         };
         let filter = Filter::default();
         let cpu = s
@@ -263,7 +263,7 @@ fn sync_uploads_added_images_and_rows() {
     let view = View {
         origin: (0, 0),
         size,
-        reference: Frame::reset_reference(0),
+        reference: DEPTH_REFERENCE,
     };
     let filter = Filter::default();
     let cpu = full
@@ -334,12 +334,11 @@ fn overlapping_writer_shadows() {
     let view = View {
         origin: (0, 0),
         size,
-        reference: Frame::reset_reference(0),
+        reference: DEPTH_REFERENCE,
     };
     for on in [true, false] {
         let q = ComposeQuirks {
             cell_pass_shadows_write_depth: on,
-            ..ComposeQuirks::default()
         };
         let cpu = s.compose(&view, &Filter::default(), &q).to_rgba();
         let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
@@ -402,7 +401,7 @@ fn gpu_light_alpha_matches_cpu() {
         let view = View {
             origin,
             size,
-            reference: Frame::reset_reference(origin.1),
+            reference: DEPTH_REFERENCE,
         };
         let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
             .map(|i| ((i * step) % 256) as u8)

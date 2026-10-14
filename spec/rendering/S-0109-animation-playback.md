@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0046]
+requests: [Q-0046, Q-0418]
 supersedes: []
 ---
 
@@ -19,7 +19,7 @@ supersedes: []
 How an animation plays its sprite over time (stage delay, random rates, game-speed normalisation,
 passes, reversed and ping-pong play, loop delays, follow-up types, its end, and the start and middle
 events tied to its stages), which sprite its derived playback fields come from, and which image frame
-it draws and how (translucency, shadow, detail level, attachment to another object). Render layers
+it draws and how (draw point, stacked copies, translucency, shadow, detail level, attachment to another object). Render layers
 and depth are S-0102's, palettes and brightness S-0103's and S-0104's, building slot animations
 S-0108's, and sprite lookup and the theater refresh S-0007's. This revision covers skirmish.
 Network games and campaigns are out of scope. Claim 24 preserves a deferred fog rule only.
@@ -52,6 +52,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
 | Term | Meaning |
 |---|---|
+| stored rectangle | The image frame's stored pixel rectangle inside the sprite canvas, including transparent pixels within that rectangle. Its dimensions can differ between frames; centred placement still uses the full canvas (S-0102 claim 19). |
 | animation | An object whose type is of the animation type kind (glossary *type kind*). Its type's fields come from the art database (S-0006, claim 8). |
 | *N* | The number of image frames in a sprite. Claim 25 says which of the type's sprites each derived value uses. |
 | sprite end *E*<sub>s</sub> | *N*, or ⌊*N* / 2⌋ for a shadow type (claim 10): the value that an absent end field takes (claim 25). |
@@ -248,16 +249,22 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
 10. **Shadow types.** For a shadow type, the sprite end is ⌊*N* / 2⌋ instead of *N*
     (*E*<sub>s</sub>, claim 25). Wherever image frame *f* = *a* + *k* is drawn, image frame *f* +
-    ⌊*N* / 2⌋ is also drawn at the same place as its shadow (darkening the pixels below it), never
-    translucent, whatever claims 20 and 21 give for the image. Shadow depth testing, darkening, and
+    ⌊*N* / 2⌋ is also drawn as its shadow (darkening the pixels below it), never
+    translucent, whatever claims 20 and 21 give for the image. The image is drawn before
+    its shadow, with no other object's drawing between them. Both are centred by S-0102
+    claim 19, but their draw points differ when the type has a vertical draw shift:
+    the shadow stays at the unshifted screen projection of the animation's position,
+    including the height lift (claim 26). Consequently, wherever their non-transparent
+    pixels overlap and the shadow passes its depth test, it darkens the image already
+    painted, rather than the image covering the shadow. Shadow depth testing, darkening, and
     overlap behaviour are specified by S-0102 claims 10, 13 and 26 to 28. A type that is also drawn
     flat or tiled (S-0102) draws no shadow image at
     all. Its last pass also ends when *k* is at or above λ<sub>e</sub> − *a*, as the other passes
     do, unless it is reversed. The middle image frame (claim 14) is not
     halved.
     - Backing: `measurable` (AN1, AN8) for frame selection and pass end, flat/tiled
-      suppression. Non-translucent shadow drawing has S-0102's backing; AN8 supplies
-      no translucent image for an additional local test.
+      suppression; AN24 for placement, draw order and overlap, including a translucent
+      image. Shadow darkening and depth tests also have S-0102's backing.
     - Confidence: high for the shadow image frame, the flat and tiled exception and the end; medium
       for the darkening style, which belongs to the shadow drawing of S-0102
 
@@ -639,6 +646,53 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     - Confidence: medium (the order of the type reads and the refresh is S-0007's; the rule itself
       is clear)
 
+26. **Animation draw point and vertical draw shift.** An ordinary or flat animation's
+    image is centred on the screen pixel of its current world position, using S-0101
+    claim 1's projection with the height lift of its claim 3 and the view origin of its
+    claim 5, then moved down by the type's integer vertical draw shift *v* pixels.
+    A positive *v* moves the image down; a negative *v* moves it up. There is no further
+    horizontal displacement. This drawing displacement does not change the world
+    position, attachment displacement, damage position or middle-event height test.
+    The shadow image frame of a shadow type does not receive *v* (claim 10).
+    Building slot animations use their own current position, already displaced by
+    the slot under S-0108 claim 10: the type's shift is additional, not a replacement
+    for the slot displacement. Tiled images use claim 27 instead.
+    - Backing: `measurable` (AN24)
+    - Confidence: high
+
+27. **Tiled copies.** A tiled animation shows a vertical stack of copies of its current
+    image frame, not one copy per stage or a fixed imported copy count. Let *h* > 0 be
+    the height in pixels of image frame 0's stored rectangle (Terms), not the
+    canvas height and not the rectangle height of the current frame. Let (*pₓ*, *pᵧ*)
+    be the screen projection of the animation position, with *pᵧ* measured from the
+    battlefield view's top row. Copy *j*, counted from 0 upwards, is centred at
+
+    > (*pₓ*, *pᵧ* − ⌊*h*/2⌋ − *j h* + *v*).
+
+    Thus even the lowest copy is lifted by half the first rectangle's height before
+    the type's vertical draw shift is applied. The spacing is exactly *h* rows.
+    In a full-view drawing the number of copies is
+
+    > *C* = 1 when *pᵧ* − ⌊*h*/2⌋ < 0, otherwise
+    > *C* = ⌊(*pᵧ* − ⌊*h*/2⌋) / *h*⌋ + 2.
+
+    All arithmetic here is integer and exact; the divisions take the floor. The
+    highest copy therefore has its unshifted centre strictly above the view's top
+    row; clipping removes pixels outside the view. The shift *v* moves every copy
+    but does not change this count. Copies are drawn from lowest to highest, so a
+    translucent upper copy blends with already-painted lower copies wherever they
+    overlap and pass their depth tests. No shadow image frame is drawn, even when
+    the type is a shadow type or is also flat (claim 10). S-0102 claim 13 owns the
+    depth of the copies, not their number or spacing.
+    With a zero-height first rectangle and a projected centre at or below the view's
+    top row, the original's stacking fails to terminate. Our engine draws at most one copy centred at (*pₓ*, *pᵧ* + *v*) and warns about
+    the sprite; this is a safe bad-data departure, not a quirk switch.
+    - Backing: `measurable` (AN24) for positive-height placement, count and spacing.
+      The zero-height failure is `unmeasured`: the oracle cannot produce a completed
+      drawn frame in that case; the safe result is a design rule.
+    - Confidence: high for spacing and the first-rectangle source; medium for the
+      full-view count before measurement
+
 ## Formulas
 
 **F1. Stage delay** (integer arithmetic, ticks). ρ is the rate value as read (S-0003 integer form).
@@ -886,7 +940,10 @@ forms are those of S-0003.
 | `LoopCount` | integer | *L* (claim 7) | 0, which gives one pass |
 | `Reverse` | boolean | reversed (claim 8) | no |
 | `PingPong` | boolean | claim 9 | no |
-| `Shadow` | boolean | shadow type (claim 10) | no |
+| `Shadow` | boolean | shadow type, drawn after the image at the unshifted point (claim 10) | no |
+| `YDrawOffset` | integer, pixels | vertical image shift *v*, not a shadow shift (claims 26 and 27); depth effect in S-0102 claim 13 | 0 |
+| `Tiled` | boolean | stack of image copies (claim 27), suppressing the shadow (claim 10) | no |
+| `Flat` | boolean | flat drawing profile of S-0102 claim 13, with claim 26's image point and no shadow image frame | no |
 | `RandomLoopDelay` | two integers, updates | loop delay pair (claim 11) | 0,0 (none) |
 | `Next` | type name | follow-up type (claim 15) | none |
 | `Damage` | decimal | δ (claim 17) | 0 |
@@ -1320,8 +1377,50 @@ building that can cloak), it sets them in the test map's override section, which
     sprite rule. A fixture that does not produce the intended two successful sprite finds is
     inconclusive.
 
+- **AN24 (claims 10, 26 and 27; Q-0418 placement).** Common setup at speed 4,
+  800×600, maximum detail, director and mods off except named test art and sprites.
+  Use a long-lived test animation with labelled canvas points and a distinct shadow
+  rectangle overlapping part of the body. Play it by trigger at a recorded position
+  on flat ground and on raised ground; also use it as a building slot with a known
+  slot displacement. Record world position and view origin with the read-only
+  recorder and capture pixels in a full-view redraw. Use one valid run per case.
+  On raised ground, account for the original height-lift discrepancy documented
+  by S-0101 claim 3 and its Formulas F2 when interpreting oracle captures; engine
+  acceptance uses that spec's fixed lift. That known discrepancy is not a failure
+  of the additional image or shadow placement asserted here.
+  - Ordinary and flat variants: compare shifts 0, +7 and −7 pixels, with the same
+    playback frame and view. Expected: the image follows claim 26's projection and
+    moves by exactly the chosen shift, including the slot displacement where present.
+    A different image point or a changed world position falsifies claim 26.
+  - Shadow variant, neither flat nor tiled: repeat the shifts, first with an opaque
+    image, then with translucency code 2. Expected: the shadow stays on the unshifted
+    projected point in all three runs. At an overlap pixel where depth permits it,
+    each channel of the painted body or blended body pixel is halved and rounded
+    down by the shadow. A shadow moving with the image, or an undarkened overlapping
+    body pixel where the shadow passes depth, falsifies claim 10. Flat and tiled
+    shadow variants must draw no shadow image frame.
+  - Tiled variant: give frame 0 a stored rectangle height of 10 pixels in a canvas
+    of 32 rows, and the displayed frame a rectangle of 14 rows. Repeat with frame 0
+    height 11, keeping canvas and displayed frame unchanged. Record every visible
+    copy's labelled canvas point, then scroll so that the unshifted lowest centre
+    crosses row 0 and a multiple of *h*, forcing a full redraw after each scroll.
+    Repeat with shifts 0 and +7. Expected: claim 27's centres, spacing and count,
+    using heights 10 and 11, with shifts changing only centres. Any spacing based
+    on 32 or 14 rows, an omitted lowest half-height lift, or a count inconsistent
+    with the formula falsifies claim 27. Use translucent overlapping copies as a
+    separate order test: the upper copy blends over the lower, not the reverse.
+    Recover clipped copy positions from the sprite's known labelled rows; a copy
+    with no visible pixels cannot be counted from the capture alone.
+
 ## Open questions
 
+- Q-0418 questions 1 to 4 are answered by claims 10, 26 and 27. S-0108 claim 10
+  already supplies the building-slot world position, and S-0102 claim 19 already
+  supplies canvas centring. Question 5's exact packed-pixel blending remains for
+  S-0102's compositing rules; claims 20 and 21 here choose the code only, and
+  S-0103 claim 9 already supplies the pixel layouts, not the blending formula.
+  The tiled depth progression and tiled palette exception must be confirmed with
+  S-0102 claim 13 and S-0103 claim 8 at joint hand-off (companion changes recorded).
 - Q-0046 is answered across specs. Claim 25 answers Q2c, including animations created during
   map loading. Claim 14 answers Q2b's event gates, height condition and scorch-or-crater choice.
   S-0202 claim 15 and R14 complete the downstream particle creation draws, smudge candidate

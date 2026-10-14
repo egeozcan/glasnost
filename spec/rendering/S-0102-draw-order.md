@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418]
 supersedes: []
 ---
 
@@ -21,7 +21,8 @@ render layers and ordered inside each layer, and how a per-pixel depth buffer de
 terrain, overlays, buildings, units, projectiles and animations hide each other. It also says where
 a sprite's image frame lands on the screen relative to the object that draws it (infantry, vehicles
 drawn as sprites, terrain objects, overlays and smudges), which image frame a vehicle drawn as a
-sprite shows, and what a shadow does to the pixels under it. Positions, world pixels and the height
+sprite shows, what a shadow does to the pixels under it, and how translucent animation pixels
+blend. Positions, world pixels and the height
 lift *L(z)* are those of S-0101. This spec covers skirmish; network games and campaigns are out
 of scope. Fog of war is off in skirmish (S-0110 claim 4); conditional remembered-image rules
 are retained as rendering definitions, tested with engine scene fixtures rather than reachable
@@ -73,7 +74,7 @@ screen rows.
 | tile depth data | The per-pixel depth values, integers in 0…255, stored with each terrain tile image. |
 | world pixel row | The row coordinate of a world pixel (S-0101). Increasing downward on screen. |
 | ground reference row | For a point, the world pixel row it would have at world height 0 (S-0101 F1 without *L*). |
-| *L(z)* | Height lift of S-0101 F2, in pixels. S-0101 computes it in floating point and rounds it to an integer; this spec uses only that integer result, which is not the same as 15/104 × *z* rounded (for example *L*(400) = 57). |
+| *L(z)* | Height lift of S-0101 claim 3 and F2, in pixels: ⌊15·*z*/104 + ½⌋, exact rational arithmetic for signed integer *z* in leptons, with ties towards positive infinity. For example *L*(400) = 58, and *L*(104·ℓ) = 15·ℓ for every integer level ℓ. |
 | depth reference *C* | The view-independent integer 32768 depth units that ties depth values to world pixel rows throughout a game (F1). |
 | view jump | A change of the battlefield view's position between two drawn frames by more than the view's width across or more than its height up or down, for example after a click on a distant point of the radar map. Smaller changes are *scrolls*. Both sizes are in screen pixels. |
 | global cruise height | A game-wide height above the terrain, in leptons, that separates the air layer from the top layer for objects whose layer is not decided by their own movement type (Import mapping). |
@@ -272,7 +273,7 @@ screen rows.
     An object's body at any height is therefore depth-compared as if it stood at its
     ground reference row: a flying aircraft is hidden only by terrain, overlays or buildings that lie
     in front of the point below it, never by terrain behind that point even though it is drawn over
-    that terrain. Overlays and their shadows use the exact 15 pixels per level instead of *L(z)* (claim 13).
+    that terrain. Overlays and their shadows use exactly 15 pixels per level (claim 13), equal to *L*(104·ℓ) at every whole level. The bridge-deck body's elevation and its shadow's terrain-only level remain distinct.
     - Backing: `measurable` (D7 for aircraft bodies; the sprite, projectile, animation, overlay
       and ordinary-terrain shadow terms use the scenarios assigned in claim 13). The excluded
       above-deck shadow is `unmeasured` for the reason in claim 20.
@@ -335,7 +336,7 @@ screen rows.
     | projectile shadow (types with a shadow, while the projectile's height above the terrain is greater than 0) | −10 − *L*(world height of the terrain under it) | flat | no |
     | animation, ordinary (also slot animations, claim 17) | type vertical draw shift + animation depth adjustment − *L(z)* − 2 | upright | no |
     | animation, flat | type vertical draw shift + animation depth adjustment − *L(z)* − 3 | flat | no |
-    | animation, tiled (stacked) | as ordinary but −50 instead of −2, and each further copy stacked above has its bias reduced by the number of rows it is shifted up | upright | no |
+    | animation, tiled (stacked) | type vertical draw shift + animation depth adjustment − *L(z)* − 50 − *j h* for copy *j* starting at 0, with *h* the stored rectangle height of image frame 0 (S-0109 claim 27) | upright | no |
     | animation shadow (types with a shadow) | −2 − *L(z)* | flat | no |
     | animation drawn entirely as a shadow (a per-animation state) | type vertical draw shift − *L(z)* | flat | no |
     | overlay, flat type, ore and gems, wall, rock | −2 − 15 × *ℓ* | see claim 12 | yes |
@@ -367,6 +368,11 @@ screen rows.
 
     The animation's vertical draw shift appears in the bias because shifting an image down by *n*
     rows would otherwise make it *n* depth units nearer; the bias keeps its depth tied to its position.
+    S-0109 claims 10, 26 and 27 give its draw point, unshifted shadow drawn after the image,
+    and the placement, count and spacing of tiled copies. Each higher copy reduces the bias by
+    exactly *h* depth units relative to the preceding copy. The original instead reduces it by
+    *h* + ⌊*h*/2⌋ per copy, making upper copies excessively near; this drawing-only defect is
+    fixed without a quirk switch. The corrected reduction is tested by D40 against this spec.
     - Backing: `measurable`. Coverage by row: infantry body with *h* = 0 and the own shadow of
       infantry D8, D15, D31; generic shadow of infantry with *h* > 0 D25 (b) (placement only)
       and D31 (e), on ordinary terrain only; voxel units
@@ -375,7 +381,9 @@ screen rows.
       adjustment; gate body, building shadow, bib,
       under-door sprites, non-animated terrain object and its shadow D15; projectile sprite,
       projectile shadow,
-      ordinary, flat and tiled animations and animation shadow D15; overlays, wall, rock, ore and gems
+      ordinary, flat and tiled animations and animation shadow D15, with corrected tiled-copy
+      reduction tested on our engine by D40; normal and unloading building bodies, building
+      parts drawn as sprites and the door sprite D39; overlays, wall, rock, ore and gems
       D11, D15; overlay shadows D35; vehicle drawn as a sprite with *h* = 0 and its own shadow D33 (a), (b); shadow of a
       vehicle drawn as a sprite whose type has a turret D29 (c) (its place under the vehicle's
       image, and its bias through a bib); animated terrain object D33 (c) (that it is a reader, and
@@ -383,12 +391,6 @@ screen rows.
       - the generic infantry shadow above a high-bridge cell at or above the deck: S-0107 claim 19
         leaves the neighbouring-cell condition unresolved, so its point and depth cannot be
         predicted for a controlled setup here.
-      - normal and unloading building-body biases: D15 does not isolate their values from the
-        unresolved companion depth image and the different unloading sprite rectangles. Image
-        selection is covered by S-0108 B10, not an absolute depth-bias test here.
-      - building parts drawn as sprites and the door sprite: the only writer they overlap is their
-        own body, whose companion depth image has reference points that are not yet settled (F5,
-        Open questions).
       - animations drawn entirely as a shadow: the state cannot be set up on purpose.
       - the row of a vehicle drawn as a sprite whose type is too big to fit under a bridge: it
         applies only on cells that count as near a bridge, and which cells those are, in terms of
@@ -404,7 +406,7 @@ screen rows.
         to overlap a fogged building would normally bring it back in sight, so no probe can be
         compared with the remembered body; the remembered animation's absolute bias is not
         isolated by D17, which tests compositing against the finished depth buffer (claim 16),
-        not its bias independently of F5's unresolved body depth.
+        not its bias independently of the remembered body depth.
     - Confidence: high for projectile sprites, overlays, overlay shadows, animations, building bodies, infantry
       bodies, the own shadows of sprite units, the smudge row, non-animated terrain objects and their
       shadows, and the −*L(z)* term; medium for the rows with *h* not 0, the generic infantry shadow,
@@ -557,22 +559,23 @@ screen rows.
       fixed row.
 
     Where an aircraft's shadow and its own body overlap and both pass the depth test, the body is
-    shown undarkened: the shadow never paints over its own aircraft. For vehicles, a freshly made
-    shadow excludes non-transparent pixels of the completed body, turret and barrel image,
-    independently of their scene-depth acceptance (S-0105, claim 39). Thus qualifying own-image
-    overlaps are undarkened on flat ground, on slopes and for hovering vehicles. This is not an
-    unconditional shadow-before-body rule: a reused shadow retains its earlier own-image exclusions
-    and can darken current own-image pixels that filled an earlier hole, or leave a gap where an
-    earlier part pixel has disappeared. S-0105 claim 39 owns those exclusions and their reuse,
-    including `quirks.voxel_shadow_cached_cutouts` (default original; off: exclude the current
-    completed part image on every appearance).
+    shown undarkened: the shadow never paints over its own aircraft. For vehicles, every shadow
+    appearance, fresh or reused, excludes non-transparent pixels of the current completed body,
+    turret and barrel image, independently of their scene-depth acceptance (S-0105 claim 39).
+    Thus qualifying own-image overlaps are undarkened on flat ground, on slopes and for hovering
+    vehicles. This is not an unconditional shadow-before-body rule: the current image masks the
+    footprint before the shadow darkens qualifying scene pixels after the parts contribute.
+    No earlier pose's exclusions persist, even when another object supplies a reused footprint.
+    The original retained cached cutouts, causing stale gaps or darkening current part pixels.
+    S-0105 claim 39 fixes that drawing-only defect without a switch.
     - Backing: `measurable` (scenario D23, including D23 (d) for Q-0213). The bias value itself is tested only relative to the
       body's (both use *U*); whether an aircraft's body shows over its own shadow is `unmeasured`, because an
       aircraft's shadow and its own body overlap only when it is on or very near the ground, where
       the shadow point is not settled.
     - Confidence: high for the drawing inside the object's own drawing (and so its layer and list
-      place), the reader-only test, the bias *U*, the upright profile and the fresh vehicle
-      own-image exclusions and their retention; medium for visible vehicle overlap and for an
+      place), the reader-only test, the bias *U*, the upright profile and current vehicle
+      own-image exclusions; corrected reuse is a departure tested against this spec, not the
+      original. Medium for visible vehicle overlap and for an
       aircraft's body showing over its own shadow
 
 ### Placement of sprite images
@@ -870,9 +873,8 @@ screen rows.
     its depth test against the stored depth). A building's body is a writer painted before its
     shadow, so the building's shadow darkens the body only where the shadow's depth is strictly less
     than the body's stored depth.
-    - Backing: `measurable` (scenario D32) for sprite units; the building part is `unmeasured`,
-      because the body's depth comes with its companion depth image, whose placement is not settled
-      (F5).
+    - Backing: `measurable` (scenario D32) for sprite units; the building part is
+      `measurable` (D39, using F5's companion sampling to predict body/shadow acceptance).
     - Confidence: high for sprite units; medium for buildings
 
 29. **Sprite vehicle facings with the switch off.** With
@@ -900,6 +902,37 @@ screen rows.
     non-animated type use the object pass; it does not reverse or separate body and shadow.
     This claim fixes ordering, not the still-open destruction-frame timing.
     - Backing: `measurable` (D36, including the mine and destruction cases)
+    - Confidence: high
+
+31. **Shared building depth image (Q-0415).** Every body drawing with a companion
+    depth image uses image frame 0 of the shared game data file named in Import mapping.
+    Live and remembered bodies use the same image and the sampling in F5. Its values are
+    signed depth adjustments, not colours and not transparency. A zero value means no
+    per-pixel adjustment to the constant companion anchor, not the ordinary upright profile.
+    Where the companion's stored rectangle does not cover a body pixel, that body pixel is
+    not drawn and writes no depth: there is no upright-profile fallback. This is distinct
+    from a drawing with no companion at all, which uses the ordinary profile of F2.
+    Positive art displacement moves the companion coverage left and up relative to the
+    body draw point, so the body samples farther right and down in the companion.
+    Companion sampling applies regardless of the body's frame compression. The original
+    cropped an uncompressed body to companion coverage but ignored the companion values,
+    using plain upright depth instead; this drawing-only defect is fixed without a switch.
+    - Backing: `measurable` (D39 for live bodies and encoded values; remembered placement
+      is an engine scene-fixture test because fog is out of skirmish scope, claim 16)
+    - Confidence: high for selection, encoding, reference point, sign and coverage clipping
+
+32. **Translucent animation pixels (Q-0418 question 5).** A non-transparent image pixel
+    that passes its depth test blends its selected, lit hi-colour source pixel with the
+    already-painted destination pixel. S-0109 claims 20 and 21 choose the code, and
+    claims 10, 26 and 27 already answer Q-0418 questions 1 to 4. Code 0 replaces the
+    destination. Codes 1, 2 and 3 use F8, with separate truncation of each input channel
+    before the weighted sum. They are not a single rounded weighted average. Palette
+    index 0 leaves both colour and depth alone; the ordinary animation image is a reader
+    and translucency does not make it a writer. The shadow is never blended by this rule:
+    it uses claim 26's plain halving, even when the image is translucent.
+    - Backing: `measurable` (D41) for 5-6-5. The same formula in 5-5-5 is
+      `unmeasured`: no supported oracle path exposing that surface layout is established
+      (S-0103 claim 9); D41 checks its definition with an engine fixture.
     - Confidence: high
 
 ## Formulas
@@ -1000,26 +1033,48 @@ For a building whose top-left foundation cell is (*c<sub>x</sub>*, *c<sub>y</sub
 key = 256·*c<sub>x</sub>* + 256·*c<sub>y</sub>* + *t* − *g*, where *t* = 32 if its turret is a voxel
 model and 0 otherwise, and *g* = 16 if it is a gate and 0 otherwise.
 
-**F5. Building companion depth image** (integers, pixels). The building body uses one shared depth
-image (a game data file) as its companion depth image, the first image in that file, for every
-building whose foundation is less than 8 cells wide (wider buildings get none). It is positioned
-relative to the body sprite by a displacement of the form
+**F5. Building companion depth image** (exact integer arithmetic, pixels and depth units).
+For a foundation less than 8 cells wide, the body uses image frame 0 of the shared file
+in Import mapping; widths of 8 cells or more use no companion. Gate opening/closing
+uses no companion (claim 13). No building art chooses another depth image.
+Let *P* = (*pₓ*, *pᵧ*) be the body sprite's actual centred draw point, including the
+image anchor of S-0108 claim 8 and any image placement adjustments. Define
 
-> (*K<sub>x</sub>* + *m<sub>x</sub>* − 30·(*w* − *h*),  *K<sub>y</sub>* + *m<sub>y</sub>* − 15·(*w* + *h* − 2)) pixels
+> *Dₓ* = *Kₓ* + *mₓ* − 30·(*w* − *h*)
+>
+> *Dᵧ* = *Kᵧ* + *mᵧ* − 15·(*w* + *h* − 2).
 
-where *w*, *h* are the foundation width and height in cells, (*m<sub>x</sub>*, *m<sub>y</sub>*) is the
-building art's depth-image displacement (Import mapping; it is not applied while the building is
-being built up or sold), and 30·(*w* − *h*), 15·(*w* + *h* − 2) is the screen displacement of the
-foundation's last cell from its first. The engine constants (*K<sub>x</sub>*, *K<sub>y</sub>*) are
-(198, 446) for live buildings and (144, 172) for the remembered image of a fogged building; the two
-constants are measured from different reference points of the body sprite, and which reference point
-each uses (and so the sign convention of the displacement) is not yet confirmed. Low confidence.
-This spec owns the question (Open questions). No building's art supplies a depth image of its own:
-every building narrower than 8 cells uses the shared image, live and remembered alike (high
-confidence). Backing: `unmeasured` for this displacement, its constants, the width threshold and
-shared-image selection: the reference points are unresolved, so no scenario here predicts the
-per-pixel body depth needed to isolate those values.
+Here *w*, *h* are foundation width and height in cells. The imported art displacement
+(*mₓ*, *mᵧ*) defaults to (0, 0); live construction and selling omit it. The constants
+(*Kₓ*, *Kᵧ*) are (198, 446) for live bodies and (144, 172) for remembered bodies.
+Both pairs are measured from the actual body draw point, not the body canvas corner,
+rectangle corner or rectangle centre. They are sampling displacements: their positive
+sign moves companion coverage left/up, not right/down.
 
+Let the companion's stored rectangle start at canvas column *c_z*, row *r_z*, with
+width *W_z* and height *H_z*. A body pixel at screen column *x*, row *y* samples
+column *u_z*, row *v_z* counted from the companion's stored rectangle's top-left:
+
+> *u_z* = *x* − *pₓ* + *Dₓ* + *c_z*
+>
+> *v_z* = *y* − *pᵧ* + *Dᵧ* + *r_z*.
+
+Equivalently the companion's stored rectangle begins at screen pixel
+(*pₓ* − *Dₓ* − *c_z*, *pᵧ* − *Dᵧ* − *r_z*). Its own canvas is not centred.
+Only body pixels with 0 ≤ *u_z* < *W_z* and 0 ≤ *v_z* < *H_z* may draw.
+Others are clipped, not given a fallback depth (claim 31).
+
+For the file byte *b* in 0…255 at that sample, the signed adjustment is
+
+> *a* = 0 for *b* = 0, otherwise
+> *a* = ((*b* − 65 + 128) mod 256) − 128.
+
+The modulo has a non-negative remainder. Thus a zero byte and byte 65 both give
+adjustment 0; byte 64 gives −1 and byte 66 gives +1 depth unit. These samples use
+neither a palette nor colour lighting. Pixel depth is the unrounded constant upright
+anchor of F2 minus *a*, using the body's full drawing rectangle before view clipping.
+Backing: `measurable` (D39); confidence: high. Remembered placement is tested on our
+engine as a rendering definition, not through fog in an original skirmish.
 
 **F6. Centred placement** (integers, screen pixels). For a canvas *W* × *H*, an image frame whose
 rectangle starts at column *c* and row *r* of the canvas, and a draw point (*x*<sub>p</sub>,
@@ -1042,6 +1097,24 @@ An engine that keeps 8-bit channels and packs them to hi-colour by keeping each 
 (S-0103 claim 9) gets exactly the same packed result by halving the 8-bit channel (rounding down)
 before packing, also after several darkenings: ⌊⌊*C*/8⌋/2⌋ = ⌊*C*/16⌋ = ⌊⌊*C*/2⌋/8⌋ for an 8-bit
 red or blue *C*, and likewise with 4 for green.
+
+**F8. Translucent hi-colour blending** (integer channel values). Let *s* be a source
+channel after palette selection and lighting, packed as in S-0103 claim 9, and *d* the
+channel already at the destination. Compute each output channel independently:
+
+| Translucency code | Output channel |
+|---|---|
+| 0, opaque | *s* |
+| 1, 25 % translucent | 3·⌊*s*/4⌋ + ⌊*d*/4⌋ |
+| 2, 50 % translucent | ⌊*s*/2⌋ + ⌊*d*/2⌋ |
+| 3, 75 % translucent | ⌊*s*/4⌋ + 3·⌊*d*/4⌋ |
+
+All inputs are non-negative integers; each division rounds down separately before
+multiplication or addition. In 5-6-5, red/blue are 0…31 and green is 0…63; in 5-5-5
+all channels are 0…31. Repack the three results in the same layout. There is no
+floating-point calculation, cross-channel carry, or final rounding of a weighted sum.
+For *s* = 31, *d* = 15, codes 1, 2 and 3 give 24, 22 and 16, respectively, not 27,
+23 and 19. Pack first: blending 8-bit colours and packing only afterwards need not agree.
 
 ## Constants
 
@@ -1167,7 +1240,8 @@ building's key. Between two units, the one later in the list is drawn on top whe
 
 For every switch below, the stated default is the original YR behaviour; an alternative
 identified as our engine's alternative is not behaviour of the original. Claims 6 and 16 and
-formulas F1 and F2 instead define unconditional drawing-only departures, with no switches.
+formulas F1 and F2, claim 13's corrected tiled-copy reduction and claim 18's current-image
+masking instead define unconditional drawing-only departures, with no switches.
 
 - **`quirks.unsorted_upper_layers`** (default: on). Underground, surface, air and top layers keep
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
@@ -1183,9 +1257,6 @@ formulas F1 and F2 instead define unconditional drawing-only departures, with no
   and sort adjustment, an absent slot key counting as 0 (claim 17). Alternative: add the slot's
   values to the type's, so that an animation type's own adjustments also apply when a building
   plays it. D22 (b) tells the two apart.
-- **`quirks.overlay_lift_exact_levels`** (default: on). Overlay depth, and that of overlay shadows, uses 15 per level while object
-  depth uses −*L(z)*; at levels ≥ 20 the two disagree by a few units (see S-0101 quirk
-  `quirks.height_lift_float_scale`). Alternative: use the same lift for both.
 - **`quirks.sprite_vehicle_eight_facings_only`** (default: on). A vehicle drawn as a sprite turns its
   image only when its type's facing count is exactly 8; with any other count it always shows the
   facing part 0 (claim 22). With the absent-key defaults, a type with no firing frames and no turret
@@ -1232,7 +1303,9 @@ formulas F1 and F2 instead define unconditional drawing-only departures, with no
 | art, building image | the other slots' `…ZAdjust` and `…YSort` keys (the slot base keys are listed in S-0108), and `PowerUpNLocZZ`, `PowerUpNYSort` for the upgrade slots (digit N in place of the letter) | the slot's depth adjustment and y-sort, replacing the animation type's values (claim 17) | integer, depth units; integer, leptons | 0; 0 |
 | rules, building type | the key for the searchlight flag; no stock type sets it | the building has a building light effect, created when the building is placed (claim 3); used by D19 (e) | boolean | no |
 | art, building image | `NormalZAdjust` | building's normal depth adjustment (body in the cell pass) | integer, depth units | 0 |
-| art, building image | `ZShapePointMove` | depth-image displacement (*m<sub>x</sub>*, *m<sub>y</sub>*) in F5 | two integers, pixels | 0, 0 |
+| art, building image | `ZShapePointMove` | sampling displacement (*mₓ*, *mᵧ*) in F5; positive values move coverage left/up; omitted for live construction/selling | two integers, pixels | 0, 0 |
+| game data file | `BUILDNGZ.SHA`, image frame 0 | shared companion for eligible building bodies (claim 31, F5); neither a per-building image selector nor a palette | shape file; frame rectangle and byte samples, decoded by F5 | fixed file selection; missing-file recovery is not specified here |
+| art, building image | `Foundation` | width/height and last-cell displacement in F5 | foundation form of S-0108 claim 8 | S-0108 claim 8 |
 | art, building image | `SpecialZOverlay`, `SpecialZOverlayZAdjust` | an image and an adjustment that are read but have no known effect on drawing: no drawing of this image was found | image name; integer (no unit stated, since no effect is known) | none; 0 |
 | art, building image | `BibShape` | the building's bib | image name | none (no bib) |
 | art, building image | `DeployingAnim` | the deploying sprite | image name | none |
@@ -1246,9 +1319,11 @@ formulas F1 and F2 instead define unconditional drawing-only departures, with no
 | art, animation | `Layer` | layer of unattached animations | one of `underground`, `surface`, `ground`, `air`, `top` | air |
 | art, animation | `YSortAdjust` | animation sort adjustment (copied to each animation; a building's slot animation has its slot's y-sort instead, claim 17) | integer, leptons | 0 |
 | art, animation | `ZAdjust` | animation depth adjustment (copied to each animation; the creator may replace it, and a building's slot animation has its slot's depth adjustment instead, claim 17) | integer, depth units | 0 |
-| art, animation | `YDrawOffset` | vertical draw shift (also enters the depth bias) | integer, pixels | 0 |
+| art, animation | `YDrawOffset` | vertical draw shift (also enters image depth bias); shadow stays unshifted, S-0109 claims 10 and 26 | integer, pixels | 0 |
 | art, animation | `Flat` | flat profile and −3 bias | boolean | no |
-| art, animation | `Tiled` | stacked drawing with −50 bias | boolean | no |
+| art, animation | `Tiled` | stack placement/count in S-0109 claim 27; −50 bias and corrected −*j h* per-copy term in claim 13 | boolean | no |
+| art, animation | `Translucency`, `Translucent`, `TranslucencyDetailLevel`, `DoubleThick` | select code/hide state under S-0109 claims 20 and 21; pixel blend here is claim 32 and F8 | integer; boolean; integer; boolean | 0; no; 0; no |
+| none | none | building-provided translucency level and erasure state are runtime inputs to S-0109 claims 20 and 21, not new blend keys | not applicable | code selection as S-0109; no configurable blend rounding |
 | art, animation | `Shadow` | shadow drawn with −2 bias | boolean | no |
 | art, projectile image | `Flat` | projectile goes to the surface layer | boolean | no |
 | art, projectile image | `Shadow` | projectile shadow drawn while the projectile's height above the terrain is greater than 0 | boolean | yes |
@@ -1267,7 +1342,7 @@ formulas F1 and F2 instead define unconditional drawing-only departures, with no
 | rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
 | rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21), or the voxel shadow (claim 18; S-0105 claim 31) | boolean | no |
 | art, vehicle image | `DisableShadowCache`, `DisableVoxelCache` | reuse controls for D23 (d); full mapping and defaults owned by S-0105 | boolean | S-0105 Import mapping |
-| none | none | vehicle own-image exclusion has no ordering key (claim 18); S-0105 claim 39 owns the cached-cutout quirk and model inputs | not applicable | fresh own-image exclusions; retain exclusions on reuse |
+| none | none | vehicle own-image exclusion has no ordering key (claim 18); S-0105 claim 39 owns the current-image masking rule and model inputs | not applicable | exclude the current completed image on every appearance, including reuse |
 | rules, vehicle type | `SmallVisceroid`, `LargeVisceroid` | either one suppresses the own shadow of a vehicle drawn as a sprite (claim 21) | boolean | no |
 | rules, vehicle type | `TooBigToFitUnderBridge` | the *U* − 18 flat row near a bridge (claim 13) | boolean | no |
 | rules, vehicle type | `Turret` | the turret path of a vehicle drawn as a sprite (claim 22); also a default of `Facings` | boolean | no |
@@ -1515,7 +1590,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     (−17) 3 or 4 rows (D11). Normal and unloading building bodies are excluded from this numerical
     comparison: F2's comparison without a companion depth image cannot predict their cutoffs,
     and different body sprites can have different rectangle bottoms. Their biases remain
-    `unmeasured` here for those reasons (claim 13).
+    tested instead with companion sampling in D39 (claim 13).
   - Upright readers behind a wall overlay (−2), observable: the smallest distance
     *b*<sub>reader</sub> − *b*<sub>wall</sub> at which the reader shows over the wall. Expected: an
     ordinary animation (−2) shows from 1 to 3 rows; a tiled animation (−50) shows already from −35
@@ -1593,7 +1668,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   drawn frames. Expected (lifts from S-0101 F2): A hovers at 208 leptons, a lift of *L*(208) = 30
   rows; C at 300 leptons, 43 rows; B at 500 leptons, 72 rows; each within ±2 rows. Falsified if any run
   differs from its expected lift by more than 2 rows; in particular, if A's
-  lift is near *L*(100) = 14 rows (no minimum), or if B's lift is near *L*(400) = 57 rows (the
+  lift is near *L*(100) = 14 rows (no minimum), or if B's lift is near *L*(400) = 58 rows (the
   global cruise height used instead of the type's default), or more than 2 rows from 72. That the
   same value is also the air/top threshold is tested by D12.
 - **D19, remaining layer rows (claim 3).** Setup: a flat map with a ground vehicle standing still
@@ -1729,14 +1804,15 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   - (d) Own vehicle image (Q-0213). Use S-0105 MS-27's named test model, cache controls and
     no-shadow comparison at speed index 2, with one bystander computer player outside the observed
     area. Capture each matching pose twice on flat ground, on a ramp and for a hovering vehicle
-    resting and rocking. Expected: with fresh shadows, every qualifying own-body overlap pixel
-    equals the no-shadow control, and qualifying footprint pixels outside the own image darken.
-    With shadow reuse, a newly filled body pixel can darken and an earlier exclusion can persist
-    as a gap, including sharing between same-type objects. Repeat the two frame orders after
-    program restart as MS-27 specifies. Darkened own pixels in the fresh runs, a reversal on
-    slopes or hovering, or loss of retained exclusions with verified reuse falsifies the claim.
-    Changed keys or invalidated caches void the reuse comparison. The full frame and rocking
-    controls, turret/barrel inclusion and freshness rules are owned by S-0105 claim 39 and MS-27.
+    resting and rocking. Expected: on every appearance, fresh or reused, every qualifying own-body
+    overlap pixel equals the no-shadow control, and qualifying footprint pixels outside the
+    current own image darken. No stale exclusion survives a changed pose or sharing between
+    same-type objects. Repeat the two frame orders after program restart as MS-27 specifies.
+    Darkened current own pixels, a stale gap, or a reversal on slopes or hovering falsifies the
+    corrected rule. Reuse variants test this spec's departure on our engine, not the original's
+    cached-cutout defect; fresh variants remain oracle-testable. Changed keys or invalidated
+    caches void the reuse comparison. The full frame and rocking controls, turret/barrel
+    inclusion and freshness rules are owned by S-0105 claim 39 and MS-27.
 
 - **D24, centred placement (claim 19).** Setup: a flat map at level 0 with a stock building, a
   stock infantry unit standing alone in a cell (its position from the standing-position rules of
@@ -2056,7 +2132,87 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   Any clipping-dependent change at a surviving pixel falsifies the departure. These repeats
   check writers, companion images and reused images, not unresolved original-game bugs.
 
+- **D39, companion coverage and sampling (claims 13, 28 and 31; F5; Q-0415).**
+  Use the common skirmish setup with a tall narrow building in front of a low wide
+  building and a sprite infantry probe walking in front of and behind the tall body's
+  upper part. Keep all drawings fully inside the view. Read the shared image's frame-0
+  rectangle and bytes from the installed data. From F5 and F2, predict each overlapping
+  pixel's body depth, probe acceptance and building-shadow acceptance. Capture one
+  complete probe crossing; any accepted/rejected pixel differing from that prediction
+  falsifies the formula. Repeat with named art displacements (0, 0), (17, 0), (0, 23)
+  and (17, 23): the latter shift the sampled depth pattern and coverage 17 columns left
+  and/or 23 rows up, without moving the body image.
+  - To isolate encoding and absence of fallback, use a named loose replacement of the
+    shared image, frame 0, uncompressed with its stored rectangle filling its canvas.
+    Choose canvas dimensions large enough to cover the whole narrow building at the
+    predicted position; give its frame separate labelled patches of byte values 0, 64,
+    65 and 66. Give a second frame a different constant pattern to detect wrong-frame
+    selection. Use a named body sprite with labelled opaque pixels, an odd canvas and
+    a nonzero body rectangle origin. First record coverage without a foreground writer,
+    then overlap a probe and wall at depths that distinguish adjustments −1, 0 and +1.
+    Expected: frame 0 only, the F5 samples, and byte 0 behaving like byte 65, not as
+    transparent coverage. Change the companion to a smaller full-canvas rectangle
+    cutting through the body: body pixels outside coverage disappear even on bare ground,
+    with no depth write and no upright fallback. Any other result falsifies claim 31.
+  - Repeat with named foundations of widths 7 and 8 cells: only width 7 uses the
+    companion; width 8 uses plain F2. Use S-0108 B10's named unloading sprites to
+    compare normal, deploying and roof-deploying bodies, computing their different
+    rectangle bottoms and claim 13 biases separately. A named door sprite and own
+    shadow can then probe the predicted stored body depth. A mismatch falsifies the
+    corresponding bias, not just the companion's placement. Oracle body markers use
+    compressed frames; repeat with an equivalent uncompressed body on our engine and
+    expect identical coverage and depth. A compression-dependent result falsifies the
+    corrected rule; the original uncompressed variant records its drawing defect.
+  - On our engine only, use a remembered-building scene fixture with the same named
+    images, displacement and probe positions. Expect the remembered constants of F5,
+    not the live constants. Also give the companion a nonzero stored-rectangle origin
+    and check F5's source coordinates. These are rendering-definition tests, not
+    original skirmish fog measurements. Each variant needs one deterministic run.
+    Remove named files afterwards. Missing or malformed shared files are not tested.
+
+- **D40, corrected tiled-copy depth (claim 13; Q-0418).** Common setup and the named
+  marker animation of S-0109 AN24, with first rectangle height *h* = 12 pixels,
+  current rectangle tall enough that three copies overlap, vertical shift 0 and no
+  translucency. Put an upright wall writer over the upper-copy markers. Draw fully
+  inside the view, choosing position and animation depth adjustment so that F2 with
+  copy 2's corrected bias −50 − 24 rejects a marker but bias −50 − 36 accepts it.
+  Compute with the actual writer depth and current rectangle bottom, not a rounded
+  approximate switch distance. Capture the same pose on our engine: the marker must
+  be hidden. Appearance under the excessive reduction falsifies the correction.
+  An oracle capture of that pose is expected to show the marker and records the
+  original drawing-only defect, not backing for the fixed rule. Repeat for copy 1,
+  where the two bias reductions are 12 and 18 units. One run per variant; remove
+  named test files. S-0109 claim 27 owns the independent count and placement checks.
+
+- **D41, packed translucent pixels (claim 32; F8; Q-0418 question 5).** Common setup
+  with a named marker animation, a named palette, a uniform background and no
+  overlapping shadows or writers except those deliberately added. Named art selects
+  codes 0, 1, 2 and 3 through the translucency field, no fade flag, and a detail
+  threshold at or below the player's detail level. Record an opaque source control
+  and a background-only control, so source and destination channels after lighting
+  and packing are known without assuming palette bytes survive lighting unchanged.
+  Choose test colours so captured red/blue controls have *s* = 31 and *d* = 15.
+  For green add a pair *s* = 63, *d* = 31 in 5-6-5. At the same marker position,
+  expect outputs 31, 24, 22, 16 for the first pair, and 63, 52, 46, 36 for the
+  second, in code order 0 through 3. Transparent image pixels retain the background.
+  Repeat at another brightness using the new opaque control values in F8. Repeat
+  with two overlapping animations and with tiled copies: each blends with the colour
+  already present, not the original background. Add a writer rejecting one marker.
+  That marker must not blend. A different channel value, transparency effect or
+  rejected-pixel change falsifies claim 32. One run per variant; capture losslessly
+  and identify the surface's pixel layout, not the capture's expanded RGB layout.
+  On our engine also test 5-5-5 with F8 for all three channels; if the oracle can
+  select that surface layout, repeat the capture there, otherwise record it as an
+  engine fixture. Remove named files after testing. A shadow-type variant checks
+  unblended halving after the image at the unshifted point (S-0109 claim 10).
+
 ## Open questions
+
+Q-0415's three questions are answered by claim 31, F5 and the shared-file Import
+mapping. S-0108 claim 8 already supplies the body draw point, but did not resolve
+companion sampling. Q-0418 questions 1–4 are answered by S-0109 claims 10, 26 and
+27; question 5 is claim 32 and F8 here. Both requests require joint hand-off with
+the current owning specs; no requested part owned here remains open.
 
 - **Generic infantry shadow above a high bridge:** S-0107 claim 19 leaves unresolved the
   neighbouring-cell condition under which the deck counts as ground for a unit above a high-bridge
@@ -2107,15 +2263,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   drawing in the same group has not been identified.
 - **Tunnel digging term** of the unit depth adjustment and its interaction with the underground
   layer; to be settled with the tunnel movement spec.
-- **Companion depth images (owned here):** which reference points of the body sprite the constants
-  of F5 are measured from, and so the sign convention of the displacement, are not confirmed. That
-  no building's art supplies its own depth image is settled (F5). S-0108 leaves depth images to
-  this spec.
 - **Shadow point of voxel models:** where the shadow draw point of a vehicle or aircraft lies (claim 18), in
   particular how high an airborne unit's shadow is drawn, is given by its movement type and has not
   been determined. Vehicle own-image overlap is settled by S-0105 claim 39 and claim 18 here:
-  fresh exclusions leave own pixels undarkened, but retained cached exclusions can differ from
-  the current image. This spec owns the drawing order and scene depth of the shadow; the point itself depends on the
+  every appearance excludes the current completed image, including reuse. This spec owns the drawing order and scene depth of the shadow; the point itself depends on the
   movement types (S-0106 and the movement specs).
 
 - **Situational unit term *s*:** besides the ordinary −1, these cases are known but only partly

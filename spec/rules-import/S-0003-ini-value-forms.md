@@ -2,7 +2,7 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -34,7 +34,10 @@ an importer warning. Missing or empty pairs keep the whole value in force. Confi
 in the versions handed off together, including owner-country marker handling and
 exact event type-name matching. S-0011's reveal scope and S-0409 claim 17 already
 agree on every player house in our engine, including observers; that design rule
-is not an extension of this spec's type-reference rule.
+is not an extension of this spec's type-reference rule. Confirm claim 16's display-only
+pip-colour correction against S-0111 claim 12 and S-0006 claim 5 in the versions
+handed off together: absent reads keep the held pip value in our engine, with no
+quirk switch.
 
 ## Terms
 
@@ -437,15 +440,21 @@ our engine's result.
     movement zone, a terrain speed class, a building foundation size or a passenger pip colour) read
     the value as text (the limit is per field: 31 or 127 bytes in the cases checked) and compare it
     with the vocabulary ignoring ASCII case. The field's absent-key default is itself a vocabulary
-    word, and a missing key gives the value in force. A word that matches nothing does **not** give
+    word, and a missing key normally gives the value in force. The original has a display-only
+    bug: reading an infantry section without its passenger pip colour or occupant pip field can
+    change the held pip image frame on each read (S-0111 claim 12). Our engine keeps the held
+    value for both fields, with no quirk switch; this correction changes no passenger capacity,
+    loading legality or other gameplay rule. A word that matches nothing does **not** give
     the value in force. It gives a fallback that is fixed per
     field: for some fields a particular vocabulary entry, for others an invalid "no value" result.
     Each topic spec that defines such a field states its vocabulary and its fallback. One worked
     example, used by scenario V11: the passenger pip colour of a type falls back to green, the
     vocabulary's first entry, whatever its value in force. The importer warns for a word that
     matches nothing, naming the fallback it gives.
-    - Backing: `measurable` (scenario V11)
-    - Confidence: high (case-insensitive matching, the value in force when absent); medium (the
+    - Backing: `measurable` (scenario V11; S-0111 scenario OV7 for the original's absent-pip
+      bug); `unmeasured` for keeping the pip value in our engine (display-only correction by policy)
+    - Confidence: high (case-insensitive matching, the normal value-in-force rule and pip
+      correction); medium (the
       per-field fallback, checked for four fields only)
 
 ### Floating-point rounding

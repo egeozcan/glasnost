@@ -802,11 +802,6 @@ fn sprite_vehicle_frame_and_shadow() {
     assert_eq!(bias(&body), (Profile::Upright, -3));
 }
 
-/// Builds `text` with typed rules in which HUTX has strength 100.
-fn build_with_rules(text: &[u8]) -> Built {
-    build_with_rules_in(context(), text)
-}
-
 /// Builds `text` in the context `ctx` with typed rules in which HUTX has
 /// strength 100.
 fn build_with_rules_in(ctx: (glasnost_convert::Import, Catalogue, Assets), text: &[u8]) -> Built {
@@ -842,8 +837,12 @@ fn build_with_rules_in(ctx: (glasnost_convert::Import, Catalogue, Assets), text:
 /// spec: S-0009 claim 37 (starting health from the health value), S-0108 claim 2 (damaged: k + 1 in idle)
 #[test]
 fn claim_37_damaged_building_frame() {
+    // Idle from frame 0, so that the damaged frame 1 is still a body frame of
+    // the 4-frame sprite (S-0108 claim 3 clamps to ⌊4/2⌋ − 1 = 1).
+    let art = ART.replace("AnimIdle=1,1,0", "AnimIdle=0,1,0");
     let body = |health: i32| {
-        let b = build_with_rules(
+        let b = build_with_rules_in(
+            context_full(RULES, &art),
             format!(
                 "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
                  [Structures]\n0=Neutral,HUTX,{health},6,10,0\n"
@@ -853,12 +852,23 @@ fn claim_37_damaged_building_frame() {
         let items = items_of(&b, "building");
         b.scene.images[items[0].image as usize].pixels()[0]
     };
-    // Idle stage 1 (AnimIdle=1,1,0): frame 1 shows pixel 2. Damaged (h ≤ 0.5): frame 2, pixel 3.
-    assert_eq!(body(256), 2);
-    assert_eq!(body(128), 3);
+    // Idle stage 0: frame 0 shows pixel 1. Damaged (h ≤ 0.5): frame 1, pixel 2.
+    assert_eq!(body(256), 1);
+    assert_eq!(body(128), 2);
     // 130 of 256 gives 50 (truncated), still damaged; 131 gives 51.
-    assert_eq!(body(130), 3);
-    assert_eq!(body(131), 2);
+    assert_eq!(body(130), 2);
+    assert_eq!(body(131), 1);
+}
+
+/// spec: S-0108 claim 3 (a request past the body half shows the last body frame and its
+/// shadow, frame 2⌊N/2⌋ − 1)
+#[test]
+fn body_frame_past_the_body_half_shows_the_last() {
+    // The 4-frame sprite in idle from frame 1, damaged: f = 2, clamped to 1 (pixel 2), its
+    // shadow 1 + 2 = 3 (pixel 4).
+    let pixels = building_pixels(context(), 128);
+    assert_eq!(pixels[0].1, 2);
+    assert_eq!(pixels[1], (Paint::Shadow, 4));
 }
 
 /// The first pixel of each building item of a one-building map whose HUTX
@@ -910,11 +920,11 @@ fn damaged_gate_body_frame() {
     let damaged = body(&art, 128);
     assert_eq!(damaged[0].1, 2);
     assert_eq!(damaged[1], (Paint::Shadow, 4));
-    // Damaged with the absent-key G = 9: frame 10, clamped to ⌊4/2⌋ = 2 (pixel 3); its shadow
-    // index 4 is past the sprite, so no shadow.
+    // Damaged with the absent-key G = 9: frame 10, clamped to ⌊4/2⌋ − 1 = 1 (pixel 2); its
+    // shadow is 1 + 2 = 3 (pixel 4).
     let pixels = body(ART, 128);
-    assert_eq!(pixels[0].1, 3);
-    assert!(pixels.iter().all(|(p, _)| *p != Paint::Shadow));
+    assert_eq!(pixels[0].1, 2);
+    assert_eq!(pixels[1], (Paint::Shadow, 4));
     // An occupiable gate takes the occupiable rule first: hurt at tech level 255 when damaged: 1.
     let rules = format!("{RULES}[HUTX]\nGate=yes\nCanBeOccupied=yes\n");
     assert_eq!(building_pixels(context_full(&rules, ART), 128)[0].1, 2);
@@ -1139,7 +1149,8 @@ fn slot_animations_of_a_placed_building() {
     assert!(slots.iter().all(|i| i.provisional));
 }
 
-/// spec: S-0102 claims 5 and 17 (the sort key is X + Y of the position plus the slot's y-sort)
+/// spec: S-0102 claims 5 and 17 (the sort key is X + Y of the position plus the slot's y-sort;
+/// the slot's values count in the first drawn frame), claim 6
 #[test]
 fn slot_animation_sort_key() {
     let (import, catalogue, assets) = slot_context();
@@ -1173,6 +1184,30 @@ fn slot_animation_sort_key() {
     // SLOTA: 1792 + 2560 + its slot's y-sort 40; SLOTC: the anchor (1536, 2560) and no y-sort.
     let keys: Vec<i64> = built.ground.iter().map(|g| g.key).collect();
     assert_eq!(keys, [1792 + 2560 + 40, 1536 + 2560]);
+    // S-0102 claim 17 (the slot's values count in the first drawn frame, ordered under claim 6):
+    // an object whose key lies between SLOTA's X + Y and X + Y + 40 is drawn before SLOTA from
+    // the first frame on, whichever entered first.
+    use super::live::{Entrant, GroundLayer};
+    let mover = Entrant::Object(glasnost_sim::world::ObjectId(1));
+    for mover_first in [true, false] {
+        let mut g = GroundLayer::default();
+        let mut members = vec![(mover, 1792 + 2560 + 20)];
+        members.extend(
+            built
+                .ground
+                .iter()
+                .enumerate()
+                .map(|(i, e)| (Entrant::Static(i), e.key)),
+        );
+        if !mover_first {
+            members.rotate_left(1);
+        }
+        g.update(&members);
+        assert_eq!(
+            g.order().collect::<Vec<_>>(),
+            [Entrant::Static(1), mover, Entrant::Static(0)]
+        );
+    }
     // SLOTB (air) and SLOTD, SLOTE (top) are kept apart, in entering order.
     let layers: Vec<_> = built.layered.iter().map(|(l, _)| *l).collect();
     use super::slots::Layer;
@@ -1209,34 +1244,19 @@ fn slot_animation_detail_level() {
     assert_eq!((n(&high), n(&low)), (6, 5));
 }
 
-/// spec: S-0103 claim 14 (a map-defined owner's imported colour: the country's selector through
-/// the rules layers, a later valid name replacing an earlier one, an unknown or absent one keeping
-/// the choice in force, position 0 without any; a listed house's own valid selector replacing the
-/// inherited choice, compared without regard to case on its first 31 characters, a number being a
-/// name). Interim (Q-0419): an owner's country is the country of its own name.
-#[test]
-fn map_owner_colours_by_claim_14() {
-    const LONG: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ01234"; // 31 characters
+/// The map owners of `map_text` over the synthetic rules with `countries` added.
+fn map_owners(
+    countries: &str,
+    map_text: &str,
+) -> (super::build::MapOwners, glasnost_convert::Import) {
     let rules = RULES.replace(
         "LightGrey=0,0,150\n",
-        &format!(
-            "LightGrey=0,0,150\n{LONG}=7,7,7\n[Countries]\n1=Americans\n2=Soviets\n3=Yuri\n\
-             4=Neutral\n[Americans]\nColor=c3\n[Soviets]\nColor=Nope\n[Neutral]\nColor=LightGrey\n"
-        ),
-    );
-    let map_text = format!(
-        "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
-         [Houses]\n0=Yuri\n1=Rebels\n2=Guards\n3=Americans\n\
-         [Yuri]\nColor=c5\n[Rebels]\nColor={LONG}EXTRA\n[Guards]\nColor=12\n[Americans]\nColor=\n\
-         [Soviets]\nColor=C2\n\
-         [Units]\n0=Americans,CARX,256,6,9,64\n1=Soviets,CARX,256,6,8,64\n2=<human player>,CARX,256,6,7,64\n\
-         [Infantry]\n0=Yuri,MANX,256,9,11,0,Guard,64\n1=Rebels,MANX,256,9,13,0,Guard,0\n\
-         2=Guards,MANX,256,9,12,0,Guard,0\n3=Neutral,MANX,256,8,12,0,Guard,0\n"
+        &format!("LightGrey=0,0,150\n{countries}"),
     );
     let import = convert(
         &Inputs {
             base: input("rules.ini", &rules),
-            map: input("test.map", &map_text),
+            map: input("test.map", map_text),
             art: input("art.ini", ART),
             ..Default::default()
         },
@@ -1244,31 +1264,127 @@ fn map_owner_colours_by_claim_14() {
     );
     let doc = Document::parse(map_text.as_bytes(), Quirks::default(), &mut Vec::new());
     let map = decode(&doc, &DecodeContext::default()).map;
-    let got = super::build::map_owner_colours(&map, &import, &doc);
+    (super::build::map_owner_colours(&map, &import, &doc), import)
+}
+
+/// The map text of a 10 × 10 map with `sections` and one vehicle per owner.
+fn owners_map(sections: &str, owners: &[&str]) -> String {
+    let units: String = owners
+        .iter()
+        .enumerate()
+        .map(|(i, o)| format!("{i}={o},CARX,256,6,{},64\n", i + 1))
+        .collect();
+    format!(
+        "[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n{sections}[Units]\n{units}"
+    )
+}
+
+/// spec: S-0009 claim 47 (a listed house's country is its own section's selector, not its name:
+/// the first 19 bytes of the list value, trimmed; an absent or empty selector uses registration
+/// index 0; type name or name field, case ignored, earliest wins; an unknown name creates a
+/// default country; reserved selectors are treated as absent, with a warning). spec: S-0009
+/// claim 48 (an owner must equal a created house's name exactly; a country-only or unknown owner
+/// is unresolved). spec: S-0103 claim 14 (the country's selector through the rules layers, an
+/// unknown one keeping position 0; a created country's colour is position 0; a house's own valid
+/// selector, case ignored, cut to 31 characters, replaces the inherited colour).
+#[test]
+fn map_owner_colours_by_s0009_claims_47_48() {
+    const LONG: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ01234"; // 31 characters
+    let countries = format!(
+        "{LONG}=7,7,7\n[Countries]\n1=Americans\n2=Soviets\n3=Yuri\n\
+         [Americans]\nColor=c3\n[Soviets]\nName=Reds\nColor=C2\n[Yuri]\nColor=Nope\n"
+    );
+    let sections = format!(
+        "[Houses]\n0=Alpha\n1=Bravo\n2=Charlie\n3=Delta\n4=Americans\n5=Echo\n6=  Foxtrot\n\
+         7=ABCDEFGHIJKLMNOPQRSXYZ\n8=Golf\n9=Hotel\n\
+         [Alpha]\nCountry=reds\n[Charlie]\nCountry=\n[Delta]\nCountry=Atlantis\n\
+         [Americans]\nCountry=YURI\n[Echo]\nCountry=Atlantis\nColor={LONG}EXTRA\n\
+         [Foxtrot]\nCountry=<RANDOM>\n[ABCDEFGHIJKLMNOPQRS]\nCountry=Soviets\nColor=12\n\
+         [Golf]\nCountry=<Player @ B>\n[Hotel]\nCountry=Yuri\nColor=c6\n"
+    );
+    let owners = [
+        "Alpha",
+        "Bravo",
+        "Charlie",
+        "Delta",
+        "Americans",
+        "Echo",
+        "Foxtrot",
+        "ABCDEFGHIJKLMNOPQRS",
+        "Golf",
+        "Hotel",
+        "Soviets",
+        "alpha",
+        "Nobody",
+        "<human player>",
+    ];
+    let (got, import) = map_owners(&countries, &owners_map(&sections, &owners));
+    let c = |n: &str, hsv: [u8; 3]| (n.as_bytes().to_vec(), hsv);
     assert_eq!(
-        got,
+        got.colours,
         [
-            // Base layer's mixed-case selector; the house's empty selector keeps it.
-            (b"Americans".to_vec(), [30, 200, 200]),
-            // Base layer's unknown name keeps position 0; the map layer's valid name replaces it.
-            (b"Soviets".to_vec(), [20, 200, 200]),
-            // No country selector: position 0; the house's own selector replaces it.
-            (b"Yuri".to_vec(), [50, 200, 200]),
-            // Not a country: the house's own selector, cut to 31 characters.
-            (b"Rebels".to_vec(), [7, 7, 7]),
-            (b"Neutral".to_vec(), [0, 0, 150]),
+            // The name field, case ignored.
+            c("Alpha", [20, 200, 200]),
+            // Absent and empty selectors: country index 0, whose mixed-case selector names C3.
+            c("Bravo", [30, 200, 200]),
+            c("Charlie", [30, 200, 200]),
+            // An unknown name: a created default country, position 0.
+            c("Delta", [1, 2, 3]),
+            // Named like one country, selecting another, whose unknown selector keeps position 0.
+            c("Americans", [1, 2, 3]),
+            // The house's own selector, cut to 31 characters, replaces the inheritance.
+            c("Echo", [7, 7, 7]),
+            // Reserved selectors: as absent.
+            c("Foxtrot", [30, 200, 200]),
+            // The list value cut to 19 bytes; a numeric own selector names nothing and keeps it.
+            c("ABCDEFGHIJKLMNOPQRS", [20, 200, 200]),
+            c("Golf", [30, 200, 200]),
+            c("Hotel", [60, 200, 200]),
         ]
     );
-    // "Guards" is no country and its numeric selector names no definition: no entry, so the
-    // viewer's provisional colour applies; the placeholder owner has none either.
+    // A country-only owner, a case variant of a house and an unknown owner are unresolved; the
+    // placeholder is the viewer's.
+    let u: Vec<&[u8]> = got.unresolved.iter().map(Vec::as_slice).collect();
+    assert_eq!(u, [&b"Soviets"[..], b"alpha", b"Nobody"]);
+    assert_eq!(got.warnings.len(), 2);
     let options = Options {
         skirmish: false,
-        map_colours: got,
+        map_colours: got.colours,
+        unresolved_owners: got.unresolved,
         ..Options::default()
     };
     let def = |o: &[u8]| super::build::owner_definition(&import, &options, o);
-    assert_eq!(def(b"Yuri"), ([50, 200, 200], false));
-    assert!(def(b"Guards").1);
+    assert_eq!(def(b"Hotel"), ([60, 200, 200], false));
+    assert_eq!(def(b"Soviets"), ([0, 0, 150], true));
+}
+
+/// spec: S-0009 claim 48 (with no house-list entries, an empty-valued line being none, one house
+/// per country named by the first 20 bytes of its type name, inheriting its colour subject to its
+/// own section's override; owners match those houses exactly). spec: S-0103 claim 14.
+#[test]
+fn map_owner_colours_without_a_house_list() {
+    let countries = "[Countries]\n1=Americans\n2=Soviets\n3=LongCountryNameXYZ0123\n\
+                     [Americans]\nColor=C3\n[LongCountryNameXYZ0123]\nColor=C4\n";
+    let sections = "[Houses]\n0=\n[LongCountryNameXYZ01]\nColor=C9\n";
+    let owners = [
+        "Americans",
+        "Soviets",
+        "LongCountryNameXYZ01",
+        "LongCountryNameXYZ0123",
+        "americans",
+    ];
+    let (got, _) = map_owners(countries, &owners_map(sections, &owners));
+    let c = |n: &str, hsv: [u8; 3]| (n.as_bytes().to_vec(), hsv);
+    assert_eq!(
+        got.colours,
+        [
+            c("Americans", [30, 200, 200]),
+            c("Soviets", [1, 2, 3]),
+            c("LongCountryNameXYZ01", [90, 200, 200]),
+        ]
+    );
+    let u: Vec<&[u8]> = got.unresolved.iter().map(Vec::as_slice).collect();
+    assert_eq!(u, [&b"LongCountryNameXYZ0123"[..], b"americans"]);
 }
 
 /// spec: S-0103 claim 10 (a slot picks the definition at position P(s): slot 0 → position 1,

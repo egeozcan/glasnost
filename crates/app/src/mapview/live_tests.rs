@@ -16,7 +16,6 @@ use glasnost_sim::{save, testkit};
 
 use super::build::{InfantryFrame, Inputs, Mobile, Options, build_parts, infantry_frame};
 use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
-use super::quirks::ViewQuirks;
 use super::tests::{context, scene_map_text};
 
 /// spec: S-0201 claims 2, 4 and 5 (16 × s ms at s = 1 … 6, 8 ms at index 0)
@@ -53,8 +52,8 @@ fn pacing_has_no_catch_up() {
     assert_eq!(n, 10);
 }
 
-/// spec: S-0102 claim 6 (enter before the first strictly greater key; equal
-/// keys keep entry order; on an unsorted list a newcomer can land early)
+/// spec: S-0102 claim 6 (enter before the first strictly greater key, so a
+/// newcomer follows equal keys)
 #[test]
 fn ground_layer_entry() {
     let mut g = GroundLayer::default();
@@ -62,63 +61,66 @@ fn ground_layer_entry() {
     g.enter(o(1), 5);
     g.enter(o(2), 10);
     g.enter(o(3), 3);
-    // 5, 10 … 3 goes before 5.
     g.enter(o(4), 5);
     assert_eq!(g.order().collect::<Vec<_>>(), [o(3), o(1), o(4), o(2)]);
-    // The claim's example: keys 5, 10, 3 unsorted, a newcomer with key 4 goes first.
-    let mut h = GroundLayer::default();
-    h.enter(o(1), 5);
-    h.enter(o(2), 10);
-    h.list_for_test_push(o(3), 3);
-    h.enter(o(4), 4);
-    assert_eq!(h.order().next(), Some(o(4)));
 }
 
-/// spec: S-0102 claim 6 (one pass of adjacent swaps per tick: a grown key
-/// can travel far back, a shrunk key moves at most one place forward)
+/// spec: S-0102 claim 6 (fully ordered in the first frame showing the new
+/// keys: a mover crossing several keys at once lands on the right side of
+/// all of them, in either direction; a departure, D3)
 #[test]
-fn ground_layer_pass() {
+fn ground_layer_mover_crosses_several_keys_at_once() {
     let o = |n| Entrant::Object(ObjectId(n));
     let mut g = GroundLayer::default();
     for (n, k) in [(1, 10), (2, 20), (3, 30), (4, 40)] {
         g.enter(o(n), k);
     }
-    // Object 1 moves far back in one pass.
-    g.set_key(o(1), 45);
-    g.pass(&ViewQuirks::default());
+    // Object 1 moves past three keys in one tick.
+    g.update(&[(o(1), 45), (o(2), 20), (o(3), 30), (o(4), 40)]);
     assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(3), o(4), o(1)]);
-    // Object 1 drops to the front: one place per pass.
-    g.set_key(o(1), 0);
-    g.pass(&ViewQuirks::default());
-    assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(3), o(1), o(4)]);
-    g.pass(&ViewQuirks::default());
-    assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(1), o(3), o(4)]);
+    // And back to the front in one tick, not one place per tick.
+    g.update(&[(o(1), 0), (o(2), 20), (o(3), 30), (o(4), 40)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(1), o(2), o(3), o(4)]);
 }
 
-/// spec: S-0102 Edge cases (quirks.ground_layer_single_pass_sort off: the
-/// layer is fully sorted every tick, stable, by key)
+/// spec: S-0102 claim 6 (equal-key objects retain their previous relative
+/// order)
 #[test]
-fn ground_layer_full_sort_switch() {
+fn ground_layer_equal_keys_keep_their_order() {
     let o = |n| Entrant::Object(ObjectId(n));
-    let off = ViewQuirks {
-        ground_layer_single_pass_sort: false,
-        ..ViewQuirks::default()
-    };
     let mut g = GroundLayer::default();
-    for (n, k) in [(1, 10), (2, 20), (3, 30), (4, 40)] {
+    for (n, k) in [(1, 10), (2, 20), (3, 30)] {
         g.enter(o(n), k);
     }
-    // A shrunk key reaches its place in one tick, not one place per tick.
-    g.set_key(o(4), 0);
-    let mut on = g.clone();
-    on.pass(&ViewQuirks::default());
-    assert_eq!(on.order().collect::<Vec<_>>(), [o(1), o(2), o(4), o(3)]);
-    g.pass(&off);
-    assert_eq!(g.order().collect::<Vec<_>>(), [o(4), o(1), o(2), o(3)]);
-    // Equal keys keep their order (stable).
-    g.set_key(o(2), 10);
-    g.pass(&off);
-    assert_eq!(g.order().collect::<Vec<_>>(), [o(4), o(1), o(2), o(3)]);
+    // 3 moves to key 10: it was after 1, so it stays after 1.
+    g.update(&[(o(1), 10), (o(2), 20), (o(3), 10)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(1), o(3), o(2)]);
+    // 1 moves to key 20: the order 3, 1, 2 keeps 1 before 2 (1 was first).
+    g.update(&[(o(1), 20), (o(2), 20), (o(3), 10)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(3), o(1), o(2)]);
+    // Unchanged keys: unchanged order.
+    g.update(&[(o(1), 20), (o(2), 20), (o(3), 10)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [o(3), o(1), o(2)]);
+}
+
+/// spec: S-0102 claim 6 (a newcomer follows existing equal-key objects,
+/// including one that moved to that key in the same frame; leavers drop out)
+#[test]
+fn ground_layer_newcomer_follows_equal_keys() {
+    let o = |n| Entrant::Object(ObjectId(n));
+    let (a, b, c, n) = (o(1), o(2), o(3), o(4));
+    let mut g = GroundLayer::default();
+    g.enter(a, 5);
+    g.enter(b, 10);
+    g.enter(c, 20);
+    // C moves to key 5 and N enters with key 5 in the same frame. The
+    // newcomer is listed first in `members` but still follows A and C.
+    g.update(&[(n, 5), (a, 5), (b, 10), (c, 5)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [a, c, n, b]);
+    // B leaves.
+    g.update(&[(a, 5), (c, 5), (n, 5)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [a, c, n]);
+    assert!(!g.contains(b));
 }
 
 /// spec: S-0107 F1, F2 (frame from stage, count and facing group)
@@ -614,66 +616,4 @@ fn right_click_on_an_enemy_orders_an_attack() {
         live.world.obj(cart).unwrap().target,
         Some(Target::Object(walker))
     );
-}
-
-/// spec: S-0102 claim 6 (r11: the ordering transition's drawing-position
-/// table, every position and comparison on the pre-transition order;
-/// keys 10, 5, 3 become 5, 3, 10; equal keys keep their order; entry into
-/// 5, 10, 3 with key 4 gives 4, 5, 10, 3)
-#[test]
-fn ground_layer_transition_table() {
-    let o = |n| Entrant::Object(ObjectId(n));
-    // The table, 1-based positions, on the keys before the transition.
-    let table = |k: &[i64]| -> Vec<usize> {
-        let n = k.len();
-        let mut out = vec![0; n];
-        for i in 0..n {
-            let pos = if k[..i].iter().any(|&e| e > k[i]) {
-                i // (i + 1) − 1
-            } else if let Some(j) = (i + 1..n).find(|&j| k[j] >= k[i]) {
-                j // (j + 1) − 1
-            } else {
-                n
-            };
-            out[pos - 1] = i + 1;
-        }
-        out
-    };
-    let cases: [&[i64]; 6] = [
-        &[10, 5, 3],
-        &[5, 10, 3],
-        &[40, 10, 20, 30],
-        &[7, 7, 3, 7, 1],
-        &[3, 9, 2, 9, 4, 1, 8],
-        &[1, 2, 3],
-    ];
-    for keys in cases {
-        let mut g = GroundLayer::default();
-        for (n, &k) in keys.iter().enumerate() {
-            g.list_for_test_push(o(n as u32 + 1), k);
-        }
-        g.pass(&ViewQuirks::default());
-        let got: Vec<usize> = g
-            .order()
-            .map(|e| match e {
-                Entrant::Object(ObjectId(n)) => n as usize,
-                Entrant::Static(_) => unreachable!(),
-            })
-            .collect();
-        assert_eq!(got, table(keys), "keys {keys:?}");
-    }
-    // The claim's worked example.
-    let mut g = GroundLayer::default();
-    for (n, k) in [(1, 10), (2, 5), (3, 3)] {
-        g.list_for_test_push(o(n), k);
-    }
-    g.pass(&ViewQuirks::default());
-    assert_eq!(g.order().collect::<Vec<_>>(), [o(2), o(3), o(1)]);
-    // Entry: 5, 10, 3 and a newcomer with key 4 give 4, 5, 10, 3.
-    let mut h = GroundLayer::default();
-    for (n, k) in [(1, 5), (2, 10), (3, 3)] {
-        h.list_for_test_push(o(n), k);
-    }
-    h.enter(o(4), 4);
-    assert_eq!(h.order().collect::<Vec<_>>(), [o(4), o(1), o(2), o(3)]);
 }

@@ -36,8 +36,8 @@ use glasnost_render::overlay::{
 };
 use glasnost_render::palette::{PaletteState, TINT_EXEMPT, house_palette};
 use glasnost_render::projection::{
-    LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, cell_centre, cell_top, height_lift,
-    project_lifted, screen_to_ground,
+    LEVEL_LEPTONS, TERRAIN_LIFT, cell_centre, cell_top, height_lift, project_lifted,
+    screen_to_ground,
 };
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
 use glasnost_render::voxel::{self, VoxelQuirks};
@@ -97,6 +97,9 @@ pub struct Options {
     /// Colour definitions (H, S, V) of the map's own owners outside a
     /// skirmish, by house name ([`map_owner_colours`], S-0103 claim 14).
     pub map_colours: Vec<(Vec<u8>, [u8; 3])>,
+    /// The map's owners outside a skirmish that match no house the map
+    /// creates (S-0009 claim 48): drawn in our grey and noted.
+    pub unresolved_owners: Vec<Vec<u8>>,
     /// The game a loaded map starts.
     pub game: GameMode,
 }
@@ -123,6 +126,7 @@ impl Default for Options {
             computer_slot: 1,
             slots: Vec::new(),
             map_colours: Vec::new(),
+            unresolved_owners: Vec::new(),
             game: GameMode::Sandbox,
         }
     }
@@ -222,6 +226,7 @@ mod notes {
     pub const SHORT_VPL: &str = "the voxel lighting table ends before its last row, or has more than 128 rows: missing rows read as zero (S-0105 claim 38, S-0013 claims 4 and 6)";
     pub const FEW_VPL_ROWS: &str = "the voxel lighting table declares fewer than 32 rows: the undeclared rows read as zero (S-0013 Import mapping)";
     pub const TRAILING_VPL: &str = "the voxel lighting table has bytes after its declared rows: they are ignored (S-0013 claim 5)";
+    pub const OWNER_COLOUR_OURS: &str = "objects of an owner that matches no house the map creates are drawn in our grey: the original drops them, so they have no original colour (S-0009 claim 48, S-0103 claim 14)";
     pub const WATER_FILL: &str = "water-fill variants are drawn by the game load (S-0009 claim 6, S-0202): without a game the base water tile is drawn";
 }
 
@@ -302,7 +307,14 @@ pub fn owner_definition(import: &Import, options: &Options, owner: &[u8]) -> ([u
         .iter()
         .find(|(n, _)| n.as_slice() == owner)
         .map(|(_, hsv)| *hsv);
-    if let Some(s) = named {
+    if options
+        .unresolved_owners
+        .iter()
+        .any(|n| n.as_slice() == owner)
+    {
+        // spec: S-0009 claim 48, S-0103 claim 14 (an unresolved owner has no original colour: ours, marked)
+        (grey, true)
+    } else if let Some(s) = named {
         // spec: S-0103 claim 10 (a house's lobby colour slot picks its colour definition)
         (by_slot(s).unwrap_or(grey), false)
     } else if let Some(hsv) = imported {
@@ -389,20 +401,143 @@ fn country_colour(import: &Import, country: &[u8]) -> Option<[u8; 3]> {
 /// The colour key of a country's or a map house's section (S-0103 Import mapping).
 const COLOR_KEY: &[u8] = b"Color"; // spec: S-0103 Import mapping (rules country section and map house section: Color)
 /// The map's house list section.
-const HOUSES_SECTION: &[u8] = b"Houses"; // spec: S-0103 Import mapping (map, house's section named by [Houses])
+const HOUSES_SECTION: &[u8] = b"Houses"; // spec: S-0009 Import mapping ([Houses] (any key): map-inspection house names)
+/// The country key of a map house's own section.
+const COUNTRY_KEY: &[u8] = b"Country"; // spec: S-0009 Import mapping (map house's own section: Country)
+/// A country's name field.
+const NAME_KEY: &[u8] = b"Name"; // spec: S-0009 Import mapping (rules country: Name)
 
-/// The colour definitions of the owners of `map`'s objects outside a
-/// skirmish (S-0103 claim 14), from the map file read as `map_ini`: a
-/// house's inherited colour is that of the country of its name (S-0009
-/// Import mapping, as the sandbox game makes its houses; which country a
-/// house the map's house list names belongs to has no spec, Q-0419), and
-/// a house the list names can replace it by its own section's selector.
-/// The two player placeholders, and an owner with neither, get no entry.
-pub fn map_owner_colours(
-    map: &Map,
+/// The map's own owners outside a skirmish ([`map_owner_colours`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MapOwners {
+    /// Each resolved owner's colour definition (H, S, V), by owner name.
+    pub colours: Vec<(Vec<u8>, [u8; 3])>,
+    /// Owners matching no house the map creates (S-0009 claim 48).
+    pub unresolved: Vec<Vec<u8>>,
+    /// Importer warnings (S-0009 claim 47's departures).
+    pub warnings: Vec<String>,
+}
+
+/// The first `n` bytes of `v`, then trimmed of leading and trailing
+/// whitespace (S-0009 claim 47).
+fn cut_trim(v: &[u8], n: usize) -> &[u8] {
+    v[..v.len().min(n)].trim_ascii()
+}
+
+/// The colour definition the country selector `selector` of a map house
+/// gives it (S-0009 claim 47, S-0103 claim 14); `None` when it selects
+/// no country (an empty registry, with a warning).
+fn house_country_colour(
     import: &Import,
-    map_ini: &Document,
-) -> Vec<(Vec<u8>, [u8; 3])> {
+    house: &[u8],
+    selector: Option<&[u8]>,
+    warnings: &mut Vec<String>,
+) -> Option<[u8; 3]> {
+    const SELECTOR_LEN: usize = 127; // spec: S-0009 claim 47 (a nonempty selector uses its first 127 bytes, trimmed after the cut)
+    let countries = import
+        .outcome
+        .registries
+        .get(&Kind::Countries)
+        .map_or(&[][..], |r| r.as_slice());
+    let mut sel = selector.map_or(&[][..], |s| cut_trim(s, SELECTOR_LEN));
+    // spec: S-0009 Import mapping (Country = <random> ignores ASCII case; <Player @ A> … <Player @ H> match exact case)
+    let reserved = sel.eq_ignore_ascii_case(b"<random>")
+        || (b'A'..=b'H').any(|c| sel == [&b"<Player @ "[..], &[c], b">"].concat());
+    if reserved {
+        // spec: S-0009 claim 47 (our importer treats a reserved selector as an absent one and warns)
+        warnings.push(format!(
+            "map house {}: reserved country selector {} treated as absent (S-0009 claim 47)",
+            String::from_utf8_lossy(house),
+            String::from_utf8_lossy(sel)
+        ));
+        sel = &[];
+    }
+    let position_0 = import.outcome.colours.first().map(|c| c.hsv);
+    if sel.is_empty() {
+        // spec: S-0009 claim 47 (an absent or empty selector uses the country at registration index 0)
+        let Some(first) = countries.first() else {
+            // spec: S-0009 claim 47 (no country at index 0: the house is left unresolved, with a warning)
+            warnings.push(format!(
+                "map house {}: no country at registration index 0, house unresolved (S-0009 claim 47)",
+                String::from_utf8_lossy(house)
+            ));
+            return None;
+        };
+        return country_colour(import, &first.name);
+    }
+    // spec: S-0009 claim 47 (type name or name field, ASCII case ignored; the earliest country matching either wins)
+    let found = countries.iter().find(|c| {
+        let name = c
+            .keys
+            .get(NAME_KEY)
+            .and_then(|k| k.value.as_deref())
+            .unwrap_or(&c.name);
+        c.name.eq_ignore_ascii_case(sel) || name.eq_ignore_ascii_case(sel)
+    });
+    if let Some(c) = found {
+        return country_colour(import, &c.name);
+    }
+    // A later selector naming the created country matches it, with the same colour.
+    // spec: S-0009 claim 47, S-0103 claim 14 (an unknown name creates a default country, initially colour definition position 0)
+    position_0
+}
+
+/// The map's own owners outside a skirmish (S-0009 claims 47 and 48,
+/// S-0103 claim 14), from the map file read as `map_ini`. A nonempty
+/// house list creates only the listed houses, each inheriting its
+/// country selector's colour; an empty one creates a house per country,
+/// named by the first 20 bytes of its type name. A house's own section
+/// can replace the inherited colour by naming a definition. An object's
+/// owner must equal a created house's name exactly; any other is
+/// unresolved (the original drops its objects). The two player
+/// placeholders are the viewer's and get no entry.
+pub fn map_owner_colours(map: &Map, import: &Import, map_ini: &Document) -> MapOwners {
+    const LIST_NAME_LEN: usize = 19; // spec: S-0009 claim 47 (only the first 19 bytes of a list value are used, then trimmed)
+    const COUNTRY_HOUSE_LEN: usize = 20; // spec: S-0009 claim 48 (the first 20 bytes of the country's type name)
+    let mut out = MapOwners::default();
+    // spec: S-0009 claim 48 (an empty-valued list line is no entry)
+    let listed: Vec<&[u8]> = map_ini
+        .section(HOUSES_SECTION)
+        .map(|s| {
+            s.entries()
+                .iter()
+                .map(|e| cut_trim(&e.value, LIST_NAME_LEN))
+                .filter(|v| !v.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let own = |house: &[u8]| {
+        // spec: S-0103 claim 14 (a valid selector in the house's own section replaces the inherited colour)
+        map_ini
+            .value(house, COLOR_KEY)
+            .and_then(|v| colour_by_selector(import, v))
+    };
+    let mut houses: Vec<(Vec<u8>, Option<[u8; 3]>)> = Vec::new();
+    if listed.is_empty() {
+        // spec: S-0009 claim 48 (no list entries: one house per registered country, in country order)
+        for c in import
+            .outcome
+            .registries
+            .get(&Kind::Countries)
+            .map_or(&[][..], |r| r.as_slice())
+        {
+            let name = &c.name[..c.name.len().min(COUNTRY_HOUSE_LEN)];
+            let hsv = own(name).or(country_colour(import, &c.name));
+            houses.push((name.to_vec(), hsv));
+        }
+    } else {
+        for house in listed {
+            // spec: S-0009 claim 47 (the house's own section's country selector, not its name, picks the country)
+            let inherited = house_country_colour(
+                import,
+                house,
+                map_ini.value(house, COUNTRY_KEY),
+                &mut out.warnings,
+            );
+            let hsv = inherited.map(|i| own(house).unwrap_or(i));
+            houses.push((house.to_vec(), hsv));
+        }
+    }
     let o = &map.objects;
     let owners = o
         .units
@@ -412,26 +547,16 @@ pub fn map_owner_colours(
         .chain(o.aircraft.iter().map(|x| &x.placed))
         .chain(o.structures.iter().map(|x| &x.placed))
         .map(|p| p.owner.as_slice());
-    let listed = |owner: &[u8]| {
-        map_ini.section(HOUSES_SECTION).is_some_and(|s| {
-            s.entries()
-                .iter()
-                .any(|e| e.value.eq_ignore_ascii_case(owner))
-        })
-    };
-    let mut out: Vec<(Vec<u8>, [u8; 3])> = Vec::new();
     for owner in owners {
-        if [HUMAN, COMPUTER].contains(&owner) || out.iter().any(|(n, _)| n.as_slice() == owner) {
+        let seen = out.colours.iter().any(|(n, _)| n.as_slice() == owner)
+            || out.unresolved.iter().any(|n| n.as_slice() == owner);
+        if [HUMAN, COMPUTER].contains(&owner) || seen {
             continue;
         }
-        let inherited = country_colour(import, owner);
-        // spec: S-0103 claim 14 (a valid selector in the house's own section replaces the inherited colour)
-        let own = listed(owner)
-            .then(|| map_ini.value(owner, COLOR_KEY))
-            .flatten()
-            .and_then(|v| colour_by_selector(import, v));
-        if let Some(hsv) = own.or(inherited) {
-            out.push((owner.to_vec(), hsv));
+        // spec: S-0009 claim 48 (an owner must match a created house's name exactly, including letter case)
+        match houses.iter().find(|(n, _)| n.as_slice() == owner) {
+            Some((_, Some(hsv))) => out.colours.push((owner.to_vec(), *hsv)),
+            _ => out.unresolved.push(owner.to_vec()),
         }
     }
     out
@@ -931,8 +1056,12 @@ impl Builder<'_> {
 
     /// The colour definition an owner shows (S-0103 claim 10), and whether
     /// the choice is ours (an owner no skirmish house carries).
-    fn owner_colour(&self, owner: &[u8]) -> ([u8; 3], bool) {
-        owner_definition(self.import, self.options, owner)
+    fn owner_colour(&mut self, owner: &[u8]) -> ([u8; 3], bool) {
+        let (hsv, ours) = owner_definition(self.import, self.options, owner);
+        if ours {
+            self.note(notes::OWNER_COLOUR_OURS);
+        }
+        (hsv, ours)
     }
 
     /// Whether an owner's objects appear (S-0009 claim 27, in the skirmish
@@ -1366,11 +1495,7 @@ impl Builder<'_> {
             let depth_level = if deck { level + DECK_LEVELS } else { level };
             // spec: S-0102 claim 13 (overlay biases: −2 − 15ℓ, or −17 − 15ℓ for other upright types;
             // quirks.overlay_lift_exact_levels)
-            let lift = overlay_depth_lift(
-                depth_level,
-                &ViewQuirks::default(),
-                &ProjectionQuirks::default(),
-            );
+            let lift = overlay_depth_lift(depth_level, &ViewQuirks::default());
             let bias = if flat || flags.wall || rock || flags.tiberium {
                 -2 - lift
             } else {
@@ -1437,8 +1562,7 @@ impl Builder<'_> {
             // spec: S-0102 claim 13 (an overlay's shadow: −2 − 15 × ℓ_s with ℓ_s the cell's level alone,
             // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
             // (every overlay kind); S-0102 Edge cases (quirks.overlay_lift_exact_levels covers overlay shadows)
-            let shadow_bias = -2
-                - overlay_depth_lift(level, &ViewQuirks::default(), &ProjectionQuirks::default());
+            let shadow_bias = -2 - overlay_depth_lift(level, &ViewQuirks::default());
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -1931,8 +2055,8 @@ impl Builder<'_> {
             k.saturating_add(i32::from(damaged))
         };
         let n_i = i32::try_from(n).unwrap_or(i32::MAX);
-        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋), quirks.building_frame_clamp_to_shadow)
-        let body_frame = drawn_body_frame(f, n_i, &ViewQuirks::default());
+        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋ − 1); with no body frames nothing is drawn)
+        let body_frame = drawn_body_frame(f, n_i);
         // spec: S-0108 claim 3, F2 (an index below 0 or at or past N draws nothing)
         let frame_of = |x: i32| usize::try_from(x).ok().filter(|&x| x < n);
         let normal_z = self

@@ -2,13 +2,13 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-14
 measurements: []
-requests: [Q-0018, Q-0412]
+requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
 ---
 
@@ -581,14 +581,30 @@ skirmishes only; network games and campaigns are out of scope.
       - Backing: `measurable` (O14 parts A and C; S-0402 H22 for the construction-state gate)
       - Confidence: high for repair and the draw precedence; medium for the same-turn
         construction-state boundary
-    - **Vehicle masters.** The group sees the position and destination before the vehicle's
+    - **Vehicle masters (Q-0430).** A due group update sees the effects of that turn's
+      permitted per-tick behaviour start and due behaviour processing (S-0215 claims 2,
+      3 and 11). This includes any destination set, replaced or cleared by that work,
+      and any group-state change made by directed *harvest* processing (S-0402 claim 22).
+      Thus successful directed harvesting has already put the group into travelling
+      with its selected destination when the group makes its decisions; it is not still
+      field seeking merely because it began the turn in that state. The behaviour's
+      scenario draws precede the group's replacement and emergence draws.
+      Conversely, that turn's ordinary behaviour processing does not see changes made
+      by the later group update, such as its change to working after a deployment
+      attempt. The update causes no second ordinary behaviour processing in this turn.
+      An order applied at the preceding tick's end (claim 7) can start and process in
+      this turn before the group update, subject to S-0215's readiness and processing
+      gates; being applied does not guarantee a permitted start.
+
+      The group nevertheless sees the position and destination before the vehicle's
       movement in that turn. Reaching a destination later in the turn does not make it
       destination-free for a group update that already ran. In particular, automatic
       deployment requiring no destination waits for a later eligible group update
       (S-0402 claim 22), not the arrival tick's already-completed update. Conversely a
       destination assigned by the group is available to movement in this turn; ordinary
       movement gates still apply.
-      - Backing: `measurable` (O14 part B)
+      - Backing: `measurable` (O14 part B for movement; O15 for behaviour precedence
+        and its draw-order consequence)
       - Confidence: high
     - **Consequences within the group.** Slave-state effects use increasing slave-place
       order, not separate passes for all replacements, all reloads and all deliveries.
@@ -695,6 +711,7 @@ whose timing S-0402 owns; they do not change claim 12's precedence:
 | `Enslaves` | a vehicle or building type's section | infantry type name | none | the slave type for a master's group; S-0402 claim 19 owns creation, claim 12 here its turn placement |
 | `SlavesNumber` | the master's type section | signed integer | 0 | initial slave-place count; S-0402 claim 19 |
 | `SlaveRegenRate`, `SlaveReloadRate` | the master's type section | signed integers, ticks | 0 each | replacement and reload delays; S-0402 claim 21 owns due group updates and claim 12 here their precedence |
+| No data key | — | engine behaviour | fixed | claim 12's vehicle behaviour-start and processing precedence over a due group update; S-0402 claim 22 owns directed harvesting and its imported flags, and S-0215 claims 6 and 11 own processing delays and start gates |
 
 ## Measurement scenarios
 
@@ -1279,6 +1296,42 @@ scenarios' timing expectations use the stated index.
   loses a turn. The named observer's ordinary projectiles are exempt from the
   common unexpected-firing rule; reject ticks with any additional removal before
   the observer, so a different cause cannot explain its silence.
+
+**Scenario O15: vehicle behaviour before the slave group (claim 12; Q-0430).**
+- *Setup:* O14's quiet skirmish setup at game speed 6, with a human vehicle slave
+  master, a distant bystander computer player, director and mods off. Use stock data
+  except named map overrides for the slave replacement delay and the harvest behaviour
+  rate. Lose one emerged slave through ordinary combat, then remove the attacker from
+  the test area and wait for all combat and death effects to end. Keep the remaining
+  slaves inside by an ordinary recall order. Choose the replacement delay in pilot runs
+  so its first eligible replacement update is tick *n*. Prepare an unobstructed
+  resource destination for directed harvesting, away from the master's cell.
+- *Tool and observable:* extend O14's read-only recorder with the current and queued
+  behaviours, behaviour-start tick, selected processing delay, scenario random state
+  before and after each tick, and the replacement's creation sample. Record destinations
+  and group state too. Use ordinary scripted input, never set the seed or alter state.
+- *Controls:* exercise directed harvest processing alone and replacement alone, five
+  runs each. Account for all draws using S-0402 claim 22, S-0215 claim 6, S-0202
+  claim 10 and any infantry creation effects of S-0107. Keep replacement slaves inside
+  so there is no emergence draw. Unaccounted draws make the test inconclusive until
+  identified. Choose a harvest rate that leaves several possible recorded delays.
+- *Procedure:* queue directed *harvest* at the end of tick *n* − 1 through ordinary
+  input. Count only runs in which the vehicle is ready to change, the recorded start
+  tick is *n*, its harvest processing chooses a delay in *n*, and the replacement is
+  created in that same turn. From the stream state before *n*, predict the labelled
+  harvest delay and replacement sample for harvest-then-replacement, and for the
+  reverse order, including rejected ranged-draw values. Count only predictions that
+  differ. Obtain ten distinguishing runs within 100 attempts; fewer is inconclusive.
+- *Expected:* the harvest delay takes its draw before the replacement's creation
+  group, with exactly the accounted consumption. The new behaviour therefore starts
+  and processes before the due group update even though its order was applied at the
+  preceding tick's end. The later group's changed state cannot influence that already
+  completed processing. Destination and group-state records must also satisfy S-0402
+  claim 22; these records alone need not distinguish the two orders.
+- *Falsified if:* a distinguishing run matches the reverse draw assignment. Matching
+  neither prediction requires investigation of draw accounting, not an assumed order.
+  Void runs with unrelated creation, removal, combat or bystander activity in the test
+  area during the counted tick. This proposes a recorder extension, not a harness change.
 
 **Production-start assignment (claim 8).** S-0404 P11 B and C own the shared measurement
 scenarios: game speed 6, quiet test maps with named test data, scripted normal input and a

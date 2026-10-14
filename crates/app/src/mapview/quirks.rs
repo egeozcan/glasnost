@@ -13,17 +13,15 @@
 //! specs name is one or the other.
 
 use glasnost_num::geom::n_step;
-use glasnost_render::projection::{
-    LEVEL_LEPTONS, ProjectionQuirks, TERRAIN_LIFT, height_lift_with,
-};
+use glasnost_render::projection::{LEVEL_LEPTONS, TERRAIN_LIFT, height_lift};
 
 /// Switches of S-0102 and S-0108 implemented in `mapview`.
+///
+/// The ground layer's full sort in every drawn frame (S-0102 claim 6) and
+/// the building body clamp to the last body frame (S-0108 claim 3) are
+/// rules without switches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ViewQuirks {
-    /// `quirks.ground_layer_single_pass_sort` (S-0102 claim 6): the ground
-    /// layer gets one pass of adjacent swaps per tick. Off: it is fully
-    /// sorted by key every tick (stable).
-    pub ground_layer_single_pass_sort: bool,
     /// `quirks.cliff_fudge_far_cliff_weaker` (S-0102 claim 14): a high
     /// cell two steps in front gives cliff factor 1 and overrides a high
     /// cell one step in front, which alone gives 2. Off: factor 2 whenever
@@ -39,10 +37,6 @@ pub struct ViewQuirks {
     /// type, "hurt" is badly damaged at tech level 0 or below and damaged
     /// above. Off: always damaged.
     pub occupiable_hurt_rule: bool,
-    /// `quirks.building_frame_clamp_to_shadow` (S-0108 claim 3): the drawn
-    /// body frame is min(f, ⌊N/2⌋), the first shadow frame. Off:
-    /// min(f, ⌊N/2⌋ − 1), the last body frame.
-    pub building_frame_clamp_to_shadow: bool,
     /// `quirks.sprite_vehicle_eight_facings_only` (S-0102 claim 22): a
     /// vehicle drawn as a sprite turns its image only with a facing count
     /// of exactly 8. Off: with a count that is a power of two from 2 to 256,
@@ -55,11 +49,9 @@ impl Default for ViewQuirks {
     fn default() -> Self {
         // spec: S-0102 Edge cases and quirks, S-0108 Edge cases and quirks (every switch defaults on)
         Self {
-            ground_layer_single_pass_sort: true,
             cliff_fudge_far_cliff_weaker: true,
             overlay_lift_exact_levels: true,
             occupiable_hurt_rule: true,
-            building_frame_clamp_to_shadow: true,
             sprite_vehicle_eight_facings_only: true,
         }
     }
@@ -67,22 +59,14 @@ impl Default for ViewQuirks {
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 6] {
+    pub fn named(&self) -> [(&'static str, bool); 4] {
         [
-            (
-                "ground_layer_single_pass_sort",
-                self.ground_layer_single_pass_sort,
-            ),
             (
                 "cliff_fudge_far_cliff_weaker",
                 self.cliff_fudge_far_cliff_weaker,
             ),
             ("overlay_lift_exact_levels", self.overlay_lift_exact_levels),
             ("occupiable_hurt_rule", self.occupiable_hurt_rule),
-            (
-                "building_frame_clamp_to_shadow",
-                self.building_frame_clamp_to_shadow,
-            ),
             (
                 "sprite_vehicle_eight_facings_only",
                 self.sprite_vehicle_eight_facings_only,
@@ -109,15 +93,16 @@ pub fn cliff_factor(high_one: bool, high_two: bool, q: &ViewQuirks) -> i32 {
 }
 
 /// The lift an overlay's depth bias takes for `level` height levels
-/// (S-0102 claim 13: 15 per level). `p` gives the objects' lift L(z),
-/// which the overlay takes with the switch off.
-pub fn overlay_depth_lift(level: i32, q: &ViewQuirks, p: &ProjectionQuirks) -> i32 {
+/// (S-0102 claim 13: 15 per level). With the switch off the overlay takes
+/// the objects' lift L(z) of S-0101 F2, which since S-0101's exact lift
+/// gives the same value at every whole level.
+pub fn overlay_depth_lift(level: i32, q: &ViewQuirks) -> i32 {
     if q.overlay_lift_exact_levels {
         // spec: S-0102 claim 13 (overlay biases lift by 15 per level)
         TERRAIN_LIFT * level
     } else {
         // spec: S-0102 Edge cases (quirks.overlay_lift_exact_levels off: the objects' lift L(z), S-0101 F2)
-        height_lift_with(LEVEL_LEPTONS * level, p)
+        height_lift(LEVEL_LEPTONS * level)
     }
 }
 
@@ -155,16 +140,14 @@ pub fn occupiable_hurt(tech_level: i32, damaged: bool, badly: bool, q: &ViewQuir
 }
 
 /// The body frame drawn for body frame `f` of a sprite with `n` image
-/// frames (S-0108 claim 3). The result may be negative or past the sprite;
-/// such an index draws nothing (claim 3, F2).
-pub fn drawn_body_frame(f: i32, n: i32, q: &ViewQuirks) -> i32 {
-    if q.building_frame_clamp_to_shadow {
-        // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋); a negative index is not raised to 0)
-        f.min(n / 2)
-    } else {
-        // spec: S-0108 Edge cases (quirks.building_frame_clamp_to_shadow off: clamp to ⌊N/2⌋ − 1)
-        f.min(n / 2 - 1)
-    }
+/// frames (S-0108 claim 3). The result may be negative; such an index
+/// draws nothing (claim 3, F2). A sprite with no body frame (`n` < 2)
+/// always gives a negative index, so neither its body nor its shadow
+/// (the body frame plus ⌊N/2⌋) is drawn.
+pub fn drawn_body_frame(f: i32, n: i32) -> i32 {
+    // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋ − 1), the last body frame, a departure; with no
+    // body frames nothing is drawn; a negative index is not raised to 0)
+    f.min(n / 2 - 1)
 }
 
 /// Named switches of the rendering specs (`spec/rendering/S-01*.md`) that
@@ -174,8 +157,8 @@ pub fn drawn_body_frame(f: i32, n: i32, q: &ViewQuirks) -> i32 {
 pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     // S-0101
     (
-        "screen_band_tests_position_only",
-        "S-0101 claim 6: our renderer does no on-screen culling (no screen band or ground box)",
+        "height_lift_float_scale",
+        "S-0101 claim 3 retired this switch (the exact lift is a departure without a switch); S-0102's overlay_lift_exact_levels text still names it (Q-0460)",
     ),
     (
         "screen_to_ground_not_exact_inverse",
@@ -191,12 +174,8 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0102 claim 4: render layer membership is not modelled (the moments of claim 4 may be simulation state)",
     ),
     (
-        "remembered_animation_in_cell_pass",
-        "S-0102 claim 16: no fog, so no remembered animations",
-    ),
-    (
         "slot_values_replace_animation_adjustments",
-        "S-0102 claim 17: building slot animations are not drawn",
+        "S-0102 claim 17: the on state is drawn; the off state (the slot's values added to the type's) is not implemented, as the animation type's own depth and sort adjustments are not imported",
     ),
     // S-0103
     (
@@ -264,16 +243,8 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     // S-0108
     (
-        "unbuildable_occupied_damaged_frame",
-        "S-0108 claim 2: no building is occupied in our engine yet",
-    ),
-    (
         "full_state_unmaxed",
         "S-0108 claim 2: buildings are drawn in their idle state only",
-    ),
-    (
-        "gate_double_reverse",
-        "S-0108 claim 4: a sale's build-down is not drawn (a building being sold is drawn idle)",
     ),
     (
         "turret_building_no_body_wrap",
@@ -302,10 +273,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     // S-0109
     (
         "anim_damage_starts_at_one",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_erasure_late_slots_opaque",
         "S-0109: animation playback is not implemented",
     ),
     (
@@ -371,11 +338,9 @@ mod tests {
 
     fn off() -> ViewQuirks {
         ViewQuirks {
-            ground_layer_single_pass_sort: false,
             cliff_fudge_far_cliff_weaker: false,
             overlay_lift_exact_levels: false,
             occupiable_hurt_rule: false,
-            building_frame_clamp_to_shadow: false,
             sprite_vehicle_eight_facings_only: false,
         }
     }
@@ -442,27 +407,18 @@ mod tests {
         assert_eq!(cliff_factor(true, true, &off), 2);
     }
 
-    /// spec: S-0102 claim 13, Edge cases (quirks.overlay_lift_exact_levels), S-0101 F2
+    /// spec: S-0102 claim 13, Edge cases (quirks.overlay_lift_exact_levels), S-0101 claim 3, F2
     #[test]
     fn overlay_lift_switch() {
         let on = ViewQuirks::default();
         let off = off();
-        let p = ProjectionQuirks::default();
-        // Up to level 19 the two lifts agree; from level 20 they differ.
-        for level in 0..20 {
-            assert_eq!(
-                overlay_depth_lift(level, &on, &p),
-                overlay_depth_lift(level, &off, &p)
-            );
+        // S-0101's exact lift L(104 × level) is 15 × level at every whole
+        // level, so the two settings agree everywhere.
+        assert_eq!(overlay_depth_lift(20, &on), 300);
+        for level in -128..=127 {
+            assert_eq!(overlay_depth_lift(level, &on), 15 * level, "level {level}");
+            assert_eq!(overlay_depth_lift(level, &off), 15 * level, "level {level}");
         }
-        assert_eq!(overlay_depth_lift(20, &on, &p), 300);
-        assert_eq!(overlay_depth_lift(20, &off, &p), 299);
-        // Off, with the exact object lift (S-0101 quirks.height_lift_float_scale off).
-        let exact = ProjectionQuirks {
-            height_lift_float_scale: false,
-            ..p
-        };
-        assert_eq!(overlay_depth_lift(20, &off, &exact), 300);
     }
 
     /// spec: S-0108 claim 2, Edge cases (quirks.occupiable_hurt_rule)
@@ -477,24 +433,39 @@ mod tests {
         assert!(!occupiable_hurt(0, false, false, &off()));
     }
 
-    /// spec: S-0108 claim 3, Edge cases (quirks.building_frame_clamp_to_shadow)
+    /// spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋ − 1): the last body frame, with its shadow)
     #[test]
-    fn body_frame_clamp_switch() {
-        let on = ViewQuirks::default();
+    fn body_frame_clamp() {
         // A sprite of 4 frames: body frames 0 and 1, shadows 2 and 3.
-        assert_eq!(drawn_body_frame(1, 4, &on), 1);
-        assert_eq!(drawn_body_frame(3, 4, &on), 2);
-        assert_eq!(drawn_body_frame(3, 4, &off()), 1);
-        // Off, a sprite of one frame clamps to −1, which draws nothing.
-        assert_eq!(drawn_body_frame(0, 1, &off()), -1);
+        assert_eq!(drawn_body_frame(1, 4), 1);
+        assert_eq!(drawn_body_frame(2, 4), 1);
+        assert_eq!(drawn_body_frame(3, 4), 1);
+        // Its shadow is the clamped frame plus ⌊N/2⌋: 2⌊N/2⌋ − 1.
+        assert_eq!(drawn_body_frame(9, 4) + 4 / 2, 3);
+        // An odd count: 5 frames, ⌊5/2⌋ = 2 body frames; the shadow of the
+        // clamped frame is frame 3 = 2⌊N/2⌋ − 1.
+        assert_eq!(drawn_body_frame(4, 5), 1);
+        assert_eq!(drawn_body_frame(4, 5) + 5 / 2, 3);
+    }
+
+    /// spec: S-0108 claim 3 (with no body frames, no body or shadow is drawn)
+    #[test]
+    fn no_body_frames_draw_nothing() {
+        for n in [0, 1] {
+            for f in [0, 1, 5] {
+                let body = drawn_body_frame(f, n);
+                assert!(body < 0, "n {n}, f {f}");
+                // The shadow index (body + ⌊N/2⌋) is negative too.
+                assert!(body + n / 2 < 0, "n {n}, f {f}");
+            }
+        }
     }
 
     /// spec: S-0108 claim 3, F2 (a negative index is kept, not raised to image frame 0)
     #[test]
     fn negative_body_frame_is_kept() {
-        let on = ViewQuirks::default();
-        assert_eq!(drawn_body_frame(-1, 4, &on), -1);
-        assert_eq!(drawn_body_frame(-3, 4, &off()), -3);
+        assert_eq!(drawn_body_frame(-1, 4), -1);
+        assert_eq!(drawn_body_frame(-3, 4), -3);
     }
 
     /// Every `quirks.name` that a rendering spec names is a field of a quirk
@@ -508,6 +479,7 @@ mod tests {
         use glasnost_render::light::LightQuirks;
         use glasnost_render::overlay::OverlayQuirks;
         use glasnost_render::palette::PaletteQuirks;
+        use glasnost_render::projection::ProjectionQuirks;
         use glasnost_render::shroud::ShroudQuirks;
         use glasnost_render::voxel::VoxelQuirks;
 

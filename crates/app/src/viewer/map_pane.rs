@@ -18,7 +18,7 @@
 use std::rc::Rc;
 
 use egui::{Color32, RichText, TextureHandle, TextureOptions, Ui};
-use glasnost_render::compose::{ComposeQuirks, Frame};
+use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
 use glasnost_render::light::DetailLevel;
 use glasnost_render::projection::{
     ProjectionQuirks, cell_centre, cursor_cell, limit_centre, project_lifted, view_origin,
@@ -108,7 +108,6 @@ pub struct MapPane {
     shown: Option<Shown>,
     generation: u64,
     centre: (i32, i32),
-    reference: i32,
     view_size: (u32, u32),
     groups: Vec<Group>,
     provisional: bool,
@@ -136,7 +135,6 @@ impl Default for MapPane {
             shown: None,
             generation: 0,
             centre: (0, 0),
-            reference: Frame::reference_at_reset(0, &ComposeQuirks::default()),
             view_size: (960, 600),
             groups: Group::ALL.to_vec(),
             provisional: true,
@@ -260,7 +258,7 @@ impl MapPane {
             radar_tick: -1,
             shroud: true,
         });
-        self.set_centre(start, true);
+        self.set_centre(start);
         self.pinned = None;
     }
 
@@ -268,30 +266,15 @@ impl MapPane {
         self.shown.as_ref().map(|s| &s.loaded.map.footprint)
     }
 
-    /// Sets the view centre, limited by S-0101 F5. A jump resets the depth
-    /// reference (S-0102 F1).
-    fn set_centre(&mut self, requested: (i32, i32), jump: bool) {
+    /// Sets the view centre, limited by S-0101 F5. The depth reference
+    /// does not change (S-0102 F1: one C for the whole game).
+    fn set_centre(&mut self, requested: (i32, i32)) {
         let Some(f) = self.footprint().copied() else {
             return;
         };
         let size = (self.view_size.0 as i32, self.view_size.1 as i32);
         // spec: S-0101 claim 8 (every request is limited by F5; the stored centre is the limited one)
-        let c = limit_centre(
-            requested,
-            size,
-            f.width,
-            f.local,
-            &ProjectionQuirks::default(),
-        );
-        let (dx, dy) = (c.0 - self.centre.0, c.1 - self.centre.1);
-        // spec: S-0102 Terms (a view jump moves by more than the view's width across or its height up or down)
-        let big = dx.abs() > size.0 || dy.abs() > size.1;
-        self.centre = c;
-        if jump || big {
-            // spec: S-0102 F1 (at a reset, C = 32768 + the world row of the view's top; quirks.depth_reference_reset_on_jump)
-            self.reference =
-                Frame::reference_at_reset(view_origin(c, size).1, &ComposeQuirks::default());
-        }
+        self.centre = limit_centre(requested, size, f.width, f.local);
     }
 
     fn view(&self) -> View {
@@ -299,7 +282,8 @@ impl MapPane {
         View {
             origin: view_origin(self.centre, size),
             size: self.view_size,
-            reference: self.reference,
+            // spec: S-0102 F1 (C = 32768 throughout the game, whatever the view)
+            reference: DEPTH_REFERENCE,
         }
     }
 
@@ -793,7 +777,7 @@ impl MapPane {
 
     fn view_ui(&mut self, ui: &mut Ui) {
         if let Some(t) = self.pending_jump.take() {
-            self.set_centre(t, true);
+            self.set_centre(t);
         }
         let avail = ui.available_size();
         let ppp = ui.ctx().pixels_per_point();
@@ -804,7 +788,7 @@ impl MapPane {
         if size != self.view_size {
             self.view_size = size;
             let c = self.centre;
-            self.set_centre(c, false);
+            self.set_centre(c);
         }
         if self.shown.is_none() {
             ui.centered_and_justified(|ui| ui.label("No map loaded."));
@@ -870,7 +854,7 @@ impl MapPane {
             });
         }
         if c != self.centre {
-            self.set_centre(c, false);
+            self.set_centre(c);
             ui.ctx().request_repaint();
         }
         drop(scene);
