@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -426,8 +426,8 @@ skirmishes only; network games and campaigns are out of scope.
      also come before the orders of the tick (claim 7). So a hold order given in the cycle of tick
      *n* does not stop a progress step that falls in tick *n*: the line is on hold at the end of
      tick *n* and has still made that step. S-0404 claim 1 owns the creation-order payment
-     priority when a house's lines compete for credits; this is not by itself a rule for assigning
-     random values to simultaneous item starts (S-0404 claim 11).
+     priority when a house's lines compete for credits. Item-start creation draws instead follow
+     the causing-action precedence of S-0404 claim 11, not payment priority.
    - **Houses.** Each house's own update also comes after the turn pass of the same tick. A house
      matter decided in the house update therefore sees what the turn pass did. One example is the
      raise of a house's tags in every eighth tick (S-0011, claim 35): it sees a trigger variable that
@@ -457,9 +457,21 @@ skirmishes only; network games and campaigns are out of scope.
      one after another in house order (S-0009, claim 19), and before the orders (claim 7). No draw
      is known in a production line's own update, but the lines keep the original's place before the
      houses for the same reason (claim 1). S-0404 claim 11 distinguishes item-start creation
-     draws from a line's own update, which takes none under that claim. Its assignment of random
-     values to simultaneous starts remains open; payment priority does not settle it. The
-     production specs own that within-part draw order (Open questions).
+     draws from a line's own update, which takes none under that claim. Each start receives its
+     creation draw at the action that causes it, with no value reserved for a line in advance.
+     Starts caused during the turn pass inherit the causing objects' turn order and precede
+     starts caused by orders at that tick's end. At the order boundary, starts follow production
+     orders' application order (S-0213 claim 3), including S-0411 claim 13's tab/icon order for
+     automatic cancellations. Draws from intervening actions remain between the starts.
+     Across houses, turn-pass starts still follow turn order; order-boundary starts in our engine
+     follow house creation order and each house's production-order issue order. That between-house
+     order-boundary extension is a deterministic design rule, not an observed rule of the original's
+     computer production. Completion alone starts no replacement and creates no draw batch in
+     row 6; the later place order causes release and any queued replacement (S-0404 claim 11).
+     - Backing: `measurable` (S-0404 P11 B for same-boundary assignment and P11 C for a turn-pass
+       start before an order-boundary start). The between-house order-boundary extension is
+       `unmeasured`, because it is a design rule, not an oracle outcome.
+     - Confidence: medium for causing-action assignment, as in S-0404 claim 11.
    - Backing: `measurable` (scenario O7, part A for the lines after the turn pass, part C for the
      lines before the orders, and part B for the houses); for the draw order among them, claim 1's
      backing (`unmeasured`)
@@ -1116,6 +1128,16 @@ scenarios' timing expectations use the stated index.
   row. Part A tests row 1 before row 5, part B tests row 5 before row 8, and together they test
   row 1 before row 8. Neither part confirms the untested rows listed in claim 1's backing.
 
+**Production-start assignment (claim 8).** S-0404 P11 B and C own the shared measurement
+scenarios: game speed 6, quiet test maps with named test data, scripted normal input and a
+read-only random-state and item-creation recorder. P11 B reverses line creation order while
+keeping tab/icon cancellation order fixed; replacement samples must still follow cancellation
+application order. P11 C aligns a factory-removal start during the turn pass with a build-order
+start at that tick's end; the former sample must occupy the earlier stream position, allowing
+intervening draws. Each requires three distinguishing observations; reversed assignment falsifies
+the rule. These tests do not measure the between-house order-boundary design extension or the
+separate row-6 versus row-7 draw comparison.
+
 ## Open questions
 
 - Network games are out of scope here, as in S-0201 (claim 13) and S-0202 (claim 12). They run the
@@ -1130,11 +1152,12 @@ scenarios' timing expectations use the stated index.
   is whose turn performs going inside anything else. It decides which object loses its turn when a
   unit boards or goes inside (claim 10) and whether a boarding open-topped passenger's next turn is
   its second of the tick (claim 11).
-- S-0404 claim 1 settles payment priority among a house's lines, and claim 11 states that a
-  line's own update takes no scenario-stream draw. Claim 11 leaves the allocation of successive
-  random values to simultaneous item starts open. This spec fixes the parts' relative places
-  (claims 1 and 8), not that within-part allocation. Confirm the production spec's resolution
-  together with S-0202 claim 10 at hand-off; a payment-priority test alone cannot resolve it.
+- The earlier simultaneous-item-start allocation question is resolved by S-0404 claim 11's
+  causing-action precedence, cited in claim 8 here. P11 B and C propose assignment tests, not
+  completed measurements; the between-house order-boundary extension remains an unmeasured
+  design rule. Confirm this resolution together with S-0202 claim 10 at hand-off. It does not
+  resolve claim 1's separate row-6 versus row-7 draw comparison, for which no scenario here
+  aligns a queued creation with an identified house-update draw.
 - Rows 6, 10, 13 and 14 keep the original's places only because they might take draws (claim 1).
   If their owning specs show that they take none, their places can be released to the freedom of
   claim 1's last point. Likewise, if work listed there turns out to take draws, it needs a row.
@@ -1226,7 +1249,8 @@ scenarios' timing expectations use the stated index.
     with claims 3, 4 and 10 here on a deployed building's appended place and possible missed
     first turn. These are confirmations, not new behaviour. Recheck the versions handed off
     together at sign-off; this check does not replace S-0414's wider joint hand-off checks.
-  - S-0404 claims 1 and 11 separate payment priority from creation-draw allocation. The
-    simultaneous-start allocation is still explicitly open in its current text, not resolved
-    by a count-only random-stream test. Confirm any later resolution against claims 1 and 8
-    here and S-0202 claim 10 before handing the versions off together.
+  - S-0404 claims 1 and 11 separate payment priority from creation-draw allocation. Revision 15
+    adopts claim 11's causing-action precedence, with P11 B/C's proposed assignment tests,
+    including turn-pass starts before order-boundary starts and the unmeasured between-house
+    design extension. Confirm claims 1 and 8 here and S-0202 claim 10 against the versions
+    handed off together. The unrelated row-6 versus row-7 comparison remains unmeasured.
