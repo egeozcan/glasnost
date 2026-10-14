@@ -60,6 +60,10 @@ pub enum Offer {
     NoRepair,
     /// Power mode, whether or not it offers a switch.
     Power,
+    /// The ordinary arrow in place of the representative's action image:
+    /// a berserk infantry or vehicle representative with
+    /// `quirks.berserk_action_cursor` off (S-0214 Edge cases).
+    BerserkArrow,
 }
 
 /// The cursor choice for an offer: an image, or the previous image kept.
@@ -162,6 +166,8 @@ pub fn table_c(offer: Offer, shrouded: bool, retain_damaging_entry: bool) -> Cho
         Offer::NoRepair => Choice::Show(Frames::one(190)),
         // spec: S-0214 table C (power switch, no-power: 384 either way)
         Offer::Power => Choice::Show(Frames::one(384)),
+        // spec: S-0214 claim 21 and Edge cases (with quirks.berserk_action_cursor off the arrow replacement takes precedence over table C, revealed or shrouded)
+        Offer::BerserkArrow => Choice::Show(arrow),
     }
 }
 
@@ -271,6 +277,18 @@ mod tests {
             in_range: false,
             shroud_moves: false,
         }
+    }
+
+    // spec: S-0214 claim 21 and Edge cases (quirks.berserk_action_cursor off: the ordinary arrow, static frame 0 with hot spot (0, 0), whatever the target)
+    #[test]
+    fn berserk_arrow_replaces_table_c() {
+        for shrouded in [false, true] {
+            assert_eq!(
+                table_c(Offer::BerserkArrow, shrouded, true),
+                Choice::Show(Frames::ARROW)
+            );
+        }
+        assert_eq!(hot_spot(Frames::ARROW, 55, 43), (0, 0));
     }
 
     // spec: S-0214 claim 21 and table C (frame assignments, revealed and shrouded; nothing is the arrow, an illegal move its own refusal image)

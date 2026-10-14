@@ -611,6 +611,52 @@ mod r11 {
         assert!(held(true, false, false, Action::Tote, true));
     }
 
+    // spec: S-0214 claim 15, claim 21 and Edge cases (quirks.berserk_action_cursor: on, a berserk infantry or vehicle representative shows its action's cursor; off, the arrow; aircraft, buildings and non-berserk actors are unaffected)
+    #[test]
+    fn berserk_action_cursor_switch() {
+        use targeting::berserk_cursor_arrow as arrow;
+        for k in [Kind::Infantry, Kind::Vehicle] {
+            assert!(!arrow(Some(k), true, true), "default: the action's cursor");
+            assert!(arrow(Some(k), true, false), "off: the arrow");
+            assert!(!arrow(Some(k), false, false), "not berserk: unchanged");
+        }
+        for k in [Kind::Aircraft, Kind::Building] {
+            assert!(!arrow(Some(k), true, false));
+        }
+        assert!(!arrow(None, true, false));
+    }
+
+    // spec: S-0214 Edge cases (quirks.berserk_action_cursor is presentation only: with it off the cursor action and the click's selection and orders are those of the default)
+    #[test]
+    fn berserk_action_cursor_changes_no_action() {
+        let mut r = testkit::combat_ruleset();
+        r.globals.quirks.berserk_action_cursor = false;
+        let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "targeting"));
+        let off = glasnost_sim::load::new_game(
+            rules,
+            &testkit::map(),
+            testkit::catalogue(),
+            &testkit::setup(3),
+        )
+        .expect("the scenario loads");
+        let on = game(3);
+        let a = carts(&on, 0);
+        let enemy = carts(&on, 1);
+        for target in [ClickOn::Object(enemy[0]), ClickOn::Cell(cell(6, 6))] {
+            let m = Modifiers::default();
+            assert_eq!(
+                targeting::cursor(&on, ALPHA, &a, target, m),
+                targeting::cursor(&off, ALPHA, &a, target, m)
+            );
+            assert_eq!(
+                targeting::click(&on, ALPHA, &a, target, m),
+                targeting::click(&off, ALPHA, &a, target, m)
+            );
+            // No actor is berserk: the arrow replacement does not apply.
+            assert!(!targeting::cursor_shows_arrow(&off, &a, target));
+        }
+    }
+
     // spec: S-0214 table BC (rows BC1 and BC3 to BC7)
     // spec: S-0214 Edge cases (quirks.building_cell_attack_no_weapon: row BC3 gives attack with no weapon in the first slot; off: nothing)
     #[test]

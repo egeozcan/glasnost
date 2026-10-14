@@ -483,6 +483,10 @@ pub struct Quirks {
     // spec: S-0214 claim 15
     #[serde(default = "on")]
     pub berserk_carrier_tote: bool,
+    /// A berserk infantry or vehicle representative shows the cursor of its resolved action; off: the ordinary arrow (presentation only, the action and orders are unchanged).
+    // spec: S-0214 claim 15, claim 21 and Edge cases
+    #[serde(default = "on")]
+    pub berserk_action_cursor: bool,
     /// A building with no weapon in its first slot gets attack over a cell whose generic result is attack (row BC3); off: nothing.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -1285,6 +1289,7 @@ impl Default for Quirks {
             stale_suspended_revert: true,
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
+            berserk_action_cursor: true,
             building_cell_attack_no_weapon: true,
             near_full_health_rounds_up: true,
             upgrade_fields_carry_over: true,
@@ -1725,6 +1730,7 @@ impl Quirks {
             ("stale_suspended_revert", self.stale_suspended_revert),
             ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
             ("berserk_carrier_tote", self.berserk_carrier_tote),
+            ("berserk_action_cursor", self.berserk_action_cursor),
             (
                 "building_cell_attack_no_weapon",
                 self.building_cell_attack_no_weapon,

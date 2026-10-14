@@ -697,7 +697,10 @@ impl Session {
             Tool::Select => {
                 let sel = &self.play.selection;
                 let mods = self.mods;
-                if targeting::shows_attack_move(w, local, sel, on, mods) {
+                if targeting::cursor_shows_arrow(w, sel, on) {
+                    // spec: S-0214 claim 21 and Edge cases (quirks.berserk_action_cursor off: a berserk infantry or vehicle representative shows the arrow; the action and the click are unchanged)
+                    Offer::BerserkArrow
+                } else if targeting::shows_attack_move(w, local, sel, on, mods) {
                     Offer::AttackMove
                 } else {
                     Offer::Action {

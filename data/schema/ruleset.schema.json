@@ -5848,6 +5848,11 @@
           "type": "boolean",
           "default": true
         },
+        "berserk_action_cursor": {
+          "description": "A berserk infantry or vehicle representative shows the cursor of its resolved action; off: the ordinary arrow (presentation only, the action and orders are unchanged).",
+          "type": "boolean",
+          "default": true
+        },
         "berserk_carrier_tote": {
           "description": "A berserk carrier aircraft can still get tote and its move order; off: it gets no order, like every berserk object.",
           "type": "boolean",

@@ -1477,6 +1477,28 @@ pub fn cursor(
     }
 }
 
+/// Whether the battlefield cursor shows the ordinary arrow instead of
+/// table C's image for the representative's action (S-0214 claim 15,
+/// claim 21 and Edge cases): `quirks.berserk_action_cursor` is off and the
+/// representative is berserk infantry or a berserk vehicle. Presentation
+/// only: [`cursor`] and [`click`] are unchanged.
+pub fn cursor_shows_arrow(w: &World, selection: &[ObjectId], on: ClickOn) -> bool {
+    representative(w, selection, on).is_some_and(|id| {
+        berserk_cursor_arrow(
+            kind(w, id),
+            berserk(w, id),
+            w.rules().quirks.berserk_action_cursor,
+        )
+    })
+}
+
+/// The rule of [`cursor_shows_arrow`] for a representative of kind `kind`.
+/// `show_action` is `quirks.berserk_action_cursor`.
+pub fn berserk_cursor_arrow(kind: Option<Kind>, berserk: bool, show_action: bool) -> bool {
+    // spec: S-0214 Edge cases (quirks.berserk_action_cursor off: a berserk infantry or vehicle representative shows the ordinary arrow; aircraft and buildings are unaffected)
+    !show_action && berserk && matches!(kind, Some(Kind::Infantry | Kind::Vehicle))
+}
+
 /// Attack-move eligibility (S-0214 claim 5).
 fn eligible(w: &World, id: ObjectId) -> bool {
     matches!(kind(w, id), Some(Kind::Infantry | Kind::Vehicle))
