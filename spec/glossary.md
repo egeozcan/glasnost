@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -176,9 +176,7 @@ or the pixels it draws (see *measurement setup*).
 the number of leptons per cell, a table size, a hard-coded multiplier or an absent-key default. Specs
 may and should state engine constants, always with a unit.
 
-**entry, key, value.** An entry is one key/value pair inside a section of a data file, written as a
-line `key=value`. The key is the trimmed text before the first `=`, the value the trimmed text after
-it. See S-0001.
+**entry, key, value.** An entry is one key/value pair inside a section of a data file. Its key is the trimmed text before the first equals sign, and its value is the trimmed text after that sign. See S-0001.
 
 **field.** One setting of a type, or of a game-wide section, that the original reads from a value.
 Each field has a value form (integer, percent, boolean, list and so on, see S-0003) and an absent-key
@@ -227,7 +225,11 @@ engine looks for loose files in the game directory only. The original also looks
 places outside it; S-0005 claim 4 makes not doing so a *departure*, with no switch. See S-0005.
 
 **map layer.** The map file as a rules layer: the highest of the rules layers of a game (see *rules
-layer*), so any rules section it contains overrides the lower layers. What it sets in type sections lasts for that game only, except in
+layer*), so its rules sections normally override the lower layers, subject to S-0006's
+section-specific exceptions. In particular, a colour name already defined keeps its first
+definition, comparing names without regard to letter case (S-0103, claim 5; S-0006, claim 2).
+S-0103 owns `quirks.colour_redefinition_ignored` (default original); with it off, a later
+definition replaces the value while keeping its position. What it sets in type sections lasts for that game only, except in
 tiberiums' sections: what it sets there, and any tiberium it adds, lasts for the rest of the session
 (S-0006, claim 10). What it sets in game-wide sections can outlast the game too (see *rules
 database*). See S-0006.
@@ -346,8 +348,11 @@ exception: the reset cases that S-0006 (claim 5) and S-0105 (claim 27) list (see
 override*), and the light values that S-0104 (claim 12) truncates to whole units when a higher
 layer reads their section again without giving them. Specs write "higher" and "lower" for places in this list; "later" and "earlier"
 mean the same. The list decides four observable things:
-- *Overrides.* Where two layers give the same key, the value of the higher one is in force
-  (S-0006, claims 1 and 3 to 5).
+- *Overrides.* Where two layers give the same key, the value of the higher one is normally in
+  force, subject to the section-specific exceptions (S-0006, claims 1 to 5). Colour definitions
+  are one exception: the first definition of a name wins, comparing names without regard to
+  letter case (S-0103, claim 5; S-0006, claim 2). S-0103 owns the alternative under
+  `quirks.colour_redefinition_ignored`, as described under *map layer*.
 - *Registration order.* A type first named by a lower layer has a lower registration index than a
   type of the same kind first named by a higher one; a higher layer can only add types at the end
   of a registry (S-0004, claim 4; S-0006, claim 6).
@@ -1057,8 +1062,8 @@ unless its type must return to a dock; that type refuses the release tether. Bot
 contact (S-0417, claim 11). This release example is not provisional. Landing tethering and the
 ending of an aircraft tether when it leaves the ground remain provisional hypotheses, not
 established rules of this glossary (S-0213, Open questions; S-0417, claim 11 and Open questions).
-S-0417 must own any verified release-aircraft take-off rule; it cannot inherit that rule from
-this provisional pointer. Which other situations of play set the link
+S-0417 owns the release-aircraft take-off hypothesis and its test (claim 11, scenario U12),
+not a rule inherited from this glossary. Which other situations of play set the link
 is not fully known (S-0208 and S-0213, Open questions). What a tether changes is owned by the
 specs that use it, for example S-0213 (table T1) for orders.
 
@@ -1091,13 +1096,18 @@ decision of the project lead it also owns infantry scatter from damage: which sc
 hit sends (claim 15). S-0107 (claims 14 and 15) gives the idle and flee scatters, and for scatter from damage it points to
 S-0208 (claims 11 and 15). S-0209
 (claims 11 and 12) gives the cell-wide scatter requests that make room, and S-0215 (claim 19) the
-scatter property of behaviours. How vehicles and other kinds of unit scatter is left to later
-revisions of the movement specs.
+scatter property of behaviours. S-0207 (claim 16) owns acceptance and destinations for every
+vehicle, whatever its locomotor; S-0402 (claim 10) uses that rule for a refused refinery-arrival
+report. Scatter for other unit kinds remains with their movement specs.
 
 **scatter request.** A request to a unit to scatter, with an optional *threat point* (the point to
-move away from) and two yes/no options: *forced* (it ignores the unit's current behaviour) and *move
-anywhere* (it ignores the unit's own destination). See S-0208 (Terms), which lists the specs that
-send each kind of request.
+move away from) and two yes/no options: *forced* and *move anywhere*. Each option bypasses
+only the gates that the receiver's owning spec names, not every refusal. S-0208 (claim 11)
+owns infantry acceptance, including when movement makes a forced request count as not forced.
+For vehicles, forced bypasses the scatter-property gate, and move-anywhere bypasses the ordinary
+destination gate; the other refusals remain (S-0207, claim 16). In particular, forced alone does
+not bypass an existing destination, as S-0402 (claim 10) illustrates. S-0208 (Terms) lists the
+specs that send each kind of request.
 
 ### combat
 
@@ -1501,6 +1511,11 @@ alone does not remove an icon or give cancellation orders (S-0411, claim 2; S-04
 S-0411 uses the offer for order legality and icon membership, and current conditions for darkening
 (claims 2 to 4). Darkening is not a full buildability test: stale prerequisite refusal alone does
 not darken an icon (S-0411, claim 3). S-0415 also uses *offered*.
+Capacity-aware offers and delayed refill are owned by S-0411 (claim 15): a type suppressed by a
+full tab is not offered, and a vacancy left by removals at a recheck is not filled during that
+same recheck or an ordinary sidebar update. Still-eligible types compete for admission at the
+next recheck; a vacancy alone schedules none. In our engine this offer rule applies to every
+player house, not just the local sidebar.
 
 **place order, build order, hold order, cancel order, cancel-all order.** The production orders a
 house gives. Each names a type, and so a *production line*; a place order of a building also names
@@ -1586,7 +1601,8 @@ Specs write "trigger action", not "script action".
 
 **build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type *offered* to the local
 player, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
-S-0411 what an icon shows and which orders its clicks give (Terms, claims 1 to 12); S-0404 and
+S-0411 what an icon shows and which orders its clicks give (Terms, claims 1 to 12), and
+capacity-aware offers and delayed refill (claim 15); S-0404 and
 S-0407 use the term. Specs write "build icon"; "cameo" means the same.
 
 **free mover.** An actor that the click rules of S-0214 treat apart when it is sent to a cell or an
