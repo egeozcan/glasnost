@@ -648,6 +648,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     out.push(("art", "QueueingCell".to_owned(), "S-0402"));
     out.push(("art", "NumberOfDocks".to_owned(), "S-0402"));
     out.push(("art", "Buildup".to_owned(), "S-0108, S-0408"));
+    out.push(("art", "GateStages".to_owned(), "S-0108, S-0406"));
     out
 }
 
@@ -832,6 +833,10 @@ impl Builder<'_> {
                 });
         if buildup == Some(true) {
             econ.put("buildup", jsonc::boolean(true));
+        }
+        // spec: S-0108 Import mapping (GateStages: an integer, absent 9; S-0406 claim 15)
+        if let Some(v) = self.art_int(kind, index, t, "GateStages") {
+            econ.put("gate_stages", int_node(v));
         }
         // spec: S-0402 Import mapping (the docking, payment and unloading animations: animation type names)
         for &(field, k) in DOCK_ANIMS {

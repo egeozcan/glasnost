@@ -389,8 +389,13 @@ pub fn buildup_ticks(w: &World, t: u32) -> i32 {
         // spec: S-0108 claim 5 (no build-up sprite: range a = 0, c = 1, d = 0, finished at once)
         return 0;
     }
-    // spec: S-0108 claim 5 (n = ⌊N_b / 2⌋; unknown frame counts read as n = 0)
-    let n = b.raw.econ.buildup_frames.unwrap_or(0).div_euclid(2);
+    let n = if b.raw.gate.unwrap_or(false) {
+        // spec: S-0108 claim 5 and Import mapping (a gate: n = G + 1, GateStages absent 9; S-0406 claim 15)
+        b.raw.econ.gate_stages.unwrap_or(9).saturating_add(1)
+    } else {
+        // spec: S-0108 claim 5 (n = ⌊N_b / 2⌋; unknown frame counts read as n = 0)
+        b.raw.econ.buildup_frames.unwrap_or(0).div_euclid(2)
+    };
     let db = if n <= 0 {
         // spec: S-0108 claim 5 (n ≤ 0: d_b = 1)
         1

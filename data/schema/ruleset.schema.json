@@ -2355,6 +2355,15 @@
           "format": "int32",
           "default": null
         },
+        "gate_stages": {
+          "description": "Buildings: the art `GateStages`, the gate-stage count *G* (S-0108\nclaim 5 and Import mapping: a gate's build-up has *n* = *G* + 1\nframes; S-0406 claim 15); absent: 9.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "guard_range": {
           "description": "Buildings: `GuardRange`, the wall fill length *G* as the decimal text\nof cells (S-0406 claim 11; leptons as S-0215 Import mapping states);\nabsent: 0.",
           "anyOf": [
