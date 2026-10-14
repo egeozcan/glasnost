@@ -123,6 +123,21 @@ pub async fn load(
     play: bool,
     canvas: VoxelCanvas,
 ) -> Loaded {
+    load_with(vfs, bytes, origin, options, play, canvas, None).await
+}
+
+/// [`load`] with the game's setup made by `make` from the map's typed
+/// rules (the game client's skirmish); `options.game` should then be
+/// [`build::GameMode::Skirmish`] so the skirmish files are read.
+pub async fn load_with(
+    vfs: &mut Vfs,
+    bytes: Vec<u8>,
+    origin: String,
+    options: &Options,
+    play: bool,
+    canvas: VoxelCanvas,
+    make: Option<live::MakeSetup<'_>>,
+) -> Loaded {
     let GameInputs {
         map,
         map_warnings,
@@ -159,7 +174,7 @@ pub async fn load(
         match (&resolved, tiles) {
             (Err(e), _) => Err(format!("the rules did not resolve: {e}")),
             (Ok(_), None) => Err("no tile catalogue for the simulation".into()),
-            (Ok(r), Some(t)) => live::start(&map, r, t, options.game),
+            (Ok(r), Some(t)) => live::start_with(&map, r, t, options.game, make),
         }
     } else {
         Err("the game was not started".into())
