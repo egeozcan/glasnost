@@ -976,6 +976,59 @@ fn s0213_t3_h_move_recalls() {
     }
 }
 
+// spec: S-0213 claim 5 and table T3 (h) (generic slave recall excludes a resulting attack behaviour even for a mobile master)
+#[test]
+fn s0213_t3_h_attack_keeps_slaves_out() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let (v, out) = vehicle_with_slaves_out(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: v,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Cell(at(-6, 8))),
+            dest: None,
+        }
+    ));
+    testkit::run(&mut w, 1);
+    for s in out {
+        assert!(!slaves::slave_of(&w, s).unwrap().recalled);
+    }
+}
+
+// spec: S-0213 claim 8 (the slave-recall row applies only to vehicles: a stop order to a deployed slave-miner building does not itself recall its slaves) and claim 5 (generic recall excludes buildings)
+#[test]
+fn s0213_claims_5_8_building_master_keeps_slaves_out() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let out = on_map(&w, b);
+    assert!(!out.is_empty());
+    assert!(orders::issue(&mut w, HouseId(0), Order::Stop { actor: b }));
+    testkit::run(&mut w, 1);
+    for &s in &out {
+        assert!(!slaves::slave_of(&w, s).unwrap().recalled);
+    }
+    orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: b,
+            behaviour: Behaviour::Guard,
+            attack_move: false,
+            target: None,
+            dest: None,
+        },
+    );
+    testkit::run(&mut w, 1);
+    for &s in &out {
+        assert!(!slaves::slave_of(&w, s).unwrap().recalled);
+    }
+}
+
 // spec: S-0402 claims 14 and 22 (in guard, past the kick delay, at rest and on tiberium land, the slaves wake: the group starts field seeking and then travels to a site)
 #[test]
 fn claim_14_wake_starts_field_seeking() {

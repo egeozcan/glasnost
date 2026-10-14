@@ -262,7 +262,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                         )
                     })
                 {
-                    // spec: S-0213 claim 8 (a vehicle that controls slave units, whatever its behaviour: its slaves are sent back to guard it)
+                    // spec: S-0213 claim 8 (a vehicle that controls slave units, whatever its behaviour: its slaves are sent back to guard it; the slave-recall row applies only to vehicles, not to a deployed slave-miner building)
                     crate::econ::slaves::recall(w, actor);
                 }
             }
@@ -508,7 +508,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         && ob.kind == Kind::Vehicle
         && crate::econ::slaves::is_master(w, actor)
     {
-        // spec: S-0213 table T3 (h) (an actor that controls slave units, resulting behaviour not attack: its slaves are sent back to guard it)
+        // spec: S-0213 table T3 (h) and claim 5 (a mobile actor controlling slave units, resulting behaviour not attack: its slaves are sent back to guard it; buildings, a deployed slave miner included, are excluded; the mobile masters modelled are vehicles)
         crate::econ::slaves::recall(w, actor);
     }
     let Some(m) = w.obj_mut(actor) else { return };
