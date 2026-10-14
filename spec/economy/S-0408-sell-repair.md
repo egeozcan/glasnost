@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -34,7 +34,8 @@ warning*, *quirk switch*, *absent-key default*. S-0205's notation applies: trunc
 *switched on*, *in operation*, *being drained*, *absorbing building* and *upgrade* apply. From
 S-0214 (Terms): *vehicle-like building* (a building whose type undeploys into a vehicle and has a
 1 × 1 foundation). From S-0211 (Terms): the *firestorm-wall flag* and a house's *firestorm* (a
-house state, on or off). In addition:
+house state, on or off). S-0402 claims 19 to 21 define a miner's *slave group*,
+its *master*, and slaves *inside* rather than on the map. In addition:
 
 - **Sale.** The course of selling one building, from the first processing of its *selling*
   behaviour (S-0215) to its removal or its return to another behaviour (claims 4 to 10).
@@ -83,6 +84,9 @@ house state, on or off). In addition:
 - **Silent wall sale.** A wall sale (claim 12) that plays no sound whoever the house is. The only
   one is the removal of walls under a building being placed (S-0406, claim 9). A sale ordered by
   a sell-wall order is not silent.
+- **Civilian-side recipient.** The first existing house in house-creation order whose country's
+  side is the civilian side (Import mapping). In ordinary stock setup this is the neutral house.
+  This is a side test, not an unconditional choice of the house named neutral.
 - **Sellable.** The test of claim 3, which the sell mode of S-0214 (claim 13) calls "can be sold".
 - **Repairable.** The test of claim 14, which the repair mode of S-0214 (claim 13) calls "can be
   repaired".
@@ -306,6 +310,34 @@ house state, on or off). In addition:
       if one is found)
     - Confidence: medium (the formula, the truncation of the amount), low (whether any skirmish path
       reaches it)
+
+### Slaves after a true sale
+
+10a. **Removing a slave master by sale.** A true sale that removes a building master does not
+    transfer its working slave group to a new vehicle. When the removed master's slaves are
+    dealt with, every existing slave loses its master. Slaves still inside and off the map are
+    removed without being placed: they do not join the sale survivors or get a placement attempt.
+    Slaves already on the map remain there and change owner to the civilian-side recipient
+    (Terms), not to the seller or a nearby enemy. Their destination and target are cleared and
+    they are given *guard*, ending their harvesting for that master. The removed group makes
+    no further replacements. No additional sale refund is paid for either kind of slave.
+
+    If no civilian-side recipient exists, an on-map slave instead receives a hit whose integer
+    damage amount is its current health, using the demolition warhead, with no attacker and
+    without the ignore-defences marker. S-0302 claims 6 and 9 determine the resulting health.
+    This is not an unconditional deletion. Hidden slaves are still removed.
+
+    This happens as a consequence of removing the master, not at the earlier passenger,
+    garrison and survivor release of claim 6. Selling only an upgrade (claim 5) does not remove
+    the master and therefore does not free its slaves. Successful packing-up instead preserves
+    the working group and makes the resulting vehicle its master (S-0415 claim 10); the
+    vehicle and hidden-unit outcome of a failed conversion remains S-0415 claim 11's, not a
+    true sale of the master. Destruction during a sale remains a destruction case (S-0312),
+    not this attacker-less sale case. The exact tick of slave cleanup relative to refund and
+    foundation removal remains open.
+    - Backing: `measurable` (scenario S13)
+    - Confidence: high for hidden removal, recipient selection and no replacement,
+      medium for the sale integration, guard reset and no-recipient hit
 
 ### Selling other things
 
@@ -550,6 +582,7 @@ for such a range: completion is reported on its first wrap (Edge cases).
 | *selling* | sell order | nothing changes, except that the local player hears the order sound again for an own building (claim 4) |
 | vehicle or aircraft on a building | sell order (no input creates one) | refund; removed at once (claim 11) |
 | wall cell | sell-wall order, conditions of claim 12 | wall removed; no credits |
+| slave group | master removed by true sale | hidden slaves removed; on-map slaves freed to civilian-side recipient, or hit if none exists (claim 10a) |
 
 Observable ordering: the survivors stand on the map before the refund arrives, and the refund
 arrives in the same processing in which the building is removed, so a house's credits rise on the
@@ -618,6 +651,8 @@ tick the building disappears.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| Rules, side list `[Sides]`, side named `Civilian`; country section, `Side` | civilian-side recipient of claim 10a: first existing house whose country belongs to that named side; name lookup is case-insensitive | side registry and country-to-side mapping, S-0004 claim 9 | no matching recipient uses claim 10a's hit fallback |
+| Rules, type section, `Enslaves`; `[CombatDamage]`, `C4Warhead` | slave group and fallback demolition warhead of claim 10a | infantry type name (S-0402 claims 19 to 21); warhead type name (S-0303 Import mapping) | existing owning specs' defaults |
 | Rules, `[General]`, `RefundPercent` | refund percentage *r* (claim 1) | decimal, a percent sign allowed (S-0003, claims 6 and 7), held as a double, narrowed to single (RZ₂₄) when used | 0.5; a layer without the key keeps the value in force |
 | Rules, type section, `Soylent` | refund override *v* (claim 1) | integer, credits | 0 |
 | Rules, upgrade building section, `Turret` | resets upgrade count to 0 on sale when yes; otherwise lowers it by 1 (claim 5) | boolean | no |
@@ -964,8 +999,40 @@ tick number. Any game speed.
 - *Falsified if:* a listed click itself adds any battlefield text message. Record its event
   and duration rather than treating an independently generated message as a click notice.
 
+**S13: slave fate after true sale (claim 10a).**
+- *Setup:* flat purpose-made skirmish map, stock slave-miner types and a resource patch, one
+  distant bystander computer player kept outside the patch, speed index 2, 800 × 600,
+  director and mods off. Use named map overrides only for variants: a long slave reload delay
+  to keep some slaves inside, and a deployed master with its packing conversion absent so
+  sell mode gives a true sale. Keep other own buildings so the sale cannot defeat the player.
+  A second variant keeps the packing conversion and uses a move click for successful packing-up.
+- *Procedure:* let some slaves emerge and harvest while at least one is inside. Sell the
+  non-converting master with normal scripted input. Use a read-only recorder to identify each
+  existing slave, its position, owner, master, destination, target and behaviour, and the
+  master's refund and removal ticks. Observe through removal and for at least twice the
+  imported regeneration delay afterward. Repeat three times. Repeat with all slaves inside,
+  and with all on the map. Run the packing-up control with both hidden and emerged slaves.
+- *Expected:* true sale removes every hidden slave without emergence or placement. On-map
+  slaves keep their positions, lose their master and become the neutral house's in this stock
+  setup, with target and destination cleared and *guard* given. No replacements or slave
+  refunds occur. The control preserves the existing group under the resulting vehicle.
+  Record cleanup ticks rather than assuming they equal the foundation-removal tick.
+- *Recipient variants:* in named map data, give the human player's country the civilian side
+  while retaining the normal neutral house. The earlier-created player is then the recipient.
+  In a separate variant ensure no existing country's house belongs to that side; the on-map
+  slaves then receive health-sized demolition hits, with resolved damage following S-0302,
+  rather than an ownership transfer. Keep ordinary defence factors and record health changes.
+  Verify the house-side setup with the recorder before accepting either variant.
+- *Falsified if:* hidden slaves appear as survivors, the seller keeps on-map slaves in the stock
+  run, a slave continues harvesting for the removed master, a replacement appears, an extra
+  slave refund is paid, the recipient variants choose a later qualifying house or ignore the
+  no-recipient hit, or the successful conversion frees rather than transfers the group.
+  Void and repeat a run if the bystander affects the patch or is defeated.
+
 ## Open questions
 
+- The exact slave-cleanup tick relative to a true sale's refund and foundation removal
+  (claim 10a; S13 records it).
 - Whether the occupants of a garrison leave before the sale survivors (claim 9; S5 part a), which
   the structures specs' account of the occupants' leaving can settle.
 - Which links make a docked unit that keeps the sale waiting (claim 6).
