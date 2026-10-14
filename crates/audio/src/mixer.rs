@@ -1,25 +1,43 @@
-//! The software mixer: voices with gain, distance attenuation and stereo
-//! panning against the view, voice limits and priority stealing, and
-//! resampling to the output rate. Pure Rust and integer arithmetic, so it
-//! renders offline and every test checks exact samples.
+//! The software mixer of S-0701 claims 5 to 15: sound instances, their
+//! placement against the battlefield view (Formulas F2), the per-entry limit
+//! (claim 8), sixteen channels with priority (claim 9), the instance pool
+//! (claim 10), audio passes on the audio clock (claim 12), the per-instance
+//! draws and sample order (claims 13 and 14), and the level and pan law
+//! (Formulas F3 and F4). Announcements play on a voice of their own
+//! (claim 27).
 //!
-//! How loud a sound is at a distance, how it is panned, how many play at
-//! once and which one gives way are not specified (Q-0262). Every such
-//! parameter is in [`MixParams`], marked as our own interim design.
-//!
-//! Sound never feeds back into the simulation: the mixer only reads the
-//! [`Clip`]s and positions it is given.
+//! Pure Rust and integer arithmetic apart from F2's single-precision level,
+//! which is formed exactly, so it renders offline and the tests check exact
+//! samples. Sound never feeds back into the simulation (claim 29): the mixer
+//! only reads the clips and positions it is given, and its draws come from
+//! the stream it holds, which [`crate::Audio`] makes the client's
+//! unsynchronised stream (claim 30), never the scenario random stream.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use glasnost_fmt::pcm::Pcm;
+use glasnost_sim::rng::Rng;
+use glasnost_sim::world::Pos;
 
-/// Unity gain in the mixer's fixed point (16 fractional bits).
-pub const UNITY: u32 = 1 << 16;
+use crate::catalog::{EntryId, FULL, Priority, SoundEntry};
 
-/// Leptons per cell side, used only to state the interim distances in
-/// cells.
-const CELL: i32 = 256; // spec: S-0204 claim 2 (position to cell: 256 leptons to a cell side)
+/// Channels that sound instances play on (S-0701 Constants).
+pub const CHANNELS: usize = 16; // spec: S-0701 claim 9 and Constants (16 channels)
+/// Most sound instances at once (S-0701 Constants).
+pub const POOL: usize = 300; // spec: S-0701 claim 10 and Constants (300 instances)
+/// Most follow-placed positional instances at once (S-0701 Constants).
+pub const FOLLOW_POOL: usize = 200; // spec: S-0701 claim 10 and Constants (200 positional one-shots)
+/// Audio pass interval: a pass needs more than this many ms (S-0701
+/// Constants).
+pub const PASS_MS: i64 = 33; // spec: S-0701 claim 12 and Constants (more than 33 ms)
+/// Smallest effective delay, and the ambient pre-delay minimum (S-0701
+/// Constants).
+pub const MIN_DELAY_MS: i32 = 33; // spec: S-0701 claims 13 and 14, Constants (33 ms)
+/// Centre pan.
+pub const CENTRE: i32 = 8192; // spec: S-0701 Terms (pan 0 … 16384; 8192 is centre)
+/// Pixels per cell of range (S-0701 Constants).
+const PIXELS_PER_CELL: i64 = 60; // spec: S-0701 F2 and Constants (R = 60 × range)
 
 /// A decoded sound, ready to mix: interleaved signed 16-bit samples, one or
 /// two channels.
@@ -63,128 +81,352 @@ impl Clip {
     }
 }
 
-/// The mixer's tunable parameters. **Every default is our own interim
-/// design (Q-0262)**, not the game's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MixParams {
-    /// Voices that can play at once (interim: 16, Q-0262).
-    pub max_voices: usize,
-    /// Distance from the listener, in leptons, within which a positional
-    /// sound plays at full gain (interim: 10 cells, Q-0262).
-    pub full_radius: i32,
-    /// Distance in leptons at and beyond which a positional sound is
-    /// silent; a sound that starts there is not started (interim: 30
-    /// cells, Q-0262). Between the two radii the gain falls linearly.
-    pub silent_radius: i32,
-    /// Screen-x offset (x − y, leptons) at which a sound is panned fully to
-    /// one side (interim: 20 cells, Q-0262). Panning is a balance: the far
-    /// side's gain falls linearly, the near side stays at full gain.
-    pub pan_width: i32,
+/// The battlefield view a positional sound is placed against (F2).
+#[derive(Clone, Copy, Debug)]
+pub struct View {
+    /// World pixel at the view's top-left corner.
+    pub origin: (i32, i32),
+    /// Width *W* and height *H* in pixels.
+    pub size: (i32, i32),
+    /// World pixel of a map position (leptons, with its height).
+    pub project: fn(i32, i32, i32) -> (i32, i32),
 }
 
-impl Default for MixParams {
+fn flat(x: i32, y: i32, _z: i32) -> (i32, i32) {
+    (x, y)
+}
+
+impl Default for View {
+    /// No view yet: every positional sound is out of range.
     fn default() -> Self {
         Self {
-            max_voices: 16,           // interim, Q-0262
-            full_radius: 10 * CELL,   // interim, Q-0262
-            silent_radius: 30 * CELL, // interim, Q-0262
-            pan_width: 20 * CELL,     // interim, Q-0262
+            origin: (0, 0),
+            size: (0, 0),
+            project: flat,
         }
     }
 }
 
-/// The listener: the centre of the view, in map leptons (given by the
-/// caller every frame).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Listener {
-    /// Map x, leptons.
-    pub x: i32,
-    /// Map y, leptons.
-    pub y: i32,
-}
-
-/// Where a sound plays.
+/// Where an instance plays (S-0701 claims 5 and 7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Placement {
-    /// Everywhere: no attenuation, centred (interface sounds,
-    /// announcements, a sound the specs give no position).
-    Everywhere,
-    /// At a map position (leptons): attenuated by distance from the
-    /// listener and panned.
-    At {
-        /// Map x, leptons.
-        x: i32,
-        /// Map y, leptons.
-        y: i32,
+pub enum Where {
+    /// A screen sound (claim 5).
+    Screen,
+    /// A direct positional request: it keeps its start level and pan
+    /// (claim 7).
+    Fixed(Pos),
+    /// A positional request that keeps its map position and is placed again
+    /// at audio passes (claim 7).
+    Follow(Pos),
+    /// An attached sound, placed again when its anchor moves and at passes
+    /// (claim 7).
+    Attached {
+        /// The anchor (an object, by the caller's numbering).
+        anchor: u64,
+        /// Its last position.
+        pos: Pos,
     },
 }
 
-/// A request to start a voice.
-#[derive(Clone, Debug)]
-pub struct VoiceRequest {
-    /// The samples.
-    pub clip: Arc<Clip>,
-    /// The sound it belongs to (per-sound limits count voices by key).
-    pub key: String,
-    /// Gain, [`UNITY`] = full.
-    pub gain: u32,
-    /// Where it plays.
-    pub placement: Placement,
-    /// Priority for voice stealing: higher wins.
-    pub priority: i32,
-    /// At most this many voices of the same key at once; `None`: no limit.
-    pub limit: Option<u16>,
+impl Where {
+    fn pos(self) -> Option<Pos> {
+        match self {
+            Where::Screen => None,
+            Where::Fixed(p) | Where::Follow(p) | Where::Attached { pos: p, .. } => Some(p),
+        }
+    }
 }
 
-/// Why a voice was not started.
+/// F2: the request level ℓ and pan of a position, or `None` when its level
+/// fraction is below 0.05 (claim 6).
+pub fn place(e: &SoundEntry, view: &View, pos: Pos) -> Option<(i32, i32)> {
+    let (w, h) = (i64::from(view.size.0), i64::from(view.size.1));
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    let (wx, wy) = (view.project)(pos.x, pos.y, pos.z);
+    let px = i64::from(wx) - i64::from(view.origin.0);
+    let py = i64::from(wy) - i64::from(view.origin.1);
+    // Half pixels throughout, so W/2 and H/2 are exact.
+    // spec: S-0701 F2 (δ = pₓ − W/2; uₓ = |trunc(δ)|, uᵧ = |trunc(pᵧ − H/2)|)
+    let d2 = 2 * px - w;
+    let ux = (d2 / 2).abs();
+    let uy = ((2 * py - h) / 2).abs();
+    let (ax2, ay2) = if e.placement.local {
+        // spec: S-0701 F2 (with local: aₓ = uₓ, aᵧ = 2 × uᵧ)
+        (2 * ux, 4 * uy)
+    } else {
+        // spec: S-0701 F2 (otherwise aₓ = max(0, uₓ − W/2), aᵧ = 2 × max(0, uᵧ − H/2))
+        ((2 * ux - w).max(0), 2 * (2 * uy - h).max(0))
+    };
+    // spec: S-0701 F2 (R = 60 × range pixels)
+    let r2 = 2 * PIXELS_PER_CELL * i64::from(e.range);
+    // spec: S-0701 F2 (L₀ = (R − max(aₓ, aᵧ)) / R when aₓ < R, aᵧ < R and R > 0, else 0; stored in single precision toward zero)
+    let l0 = if ax2 < r2 && ay2 < r2 && r2 > 0 {
+        ratio_rz(r2 - ax2.max(ay2), r2)
+    } else {
+        0.0
+    };
+    // spec: S-0701 F2 (L = max(L₀, minimum level) with global)
+    let l = if e.placement.global {
+        l0.max(e.min_level)
+    } else {
+        l0
+    };
+    // spec: S-0701 F2 and claim 6 (not started when L < 0.05, compared in double precision)
+    if f64::from(l) < 0.05 {
+        return None;
+    }
+    // spec: S-0701 F2 (ℓ = min(trunc(L × 16384), 16384))
+    let level = ((f64::from(l) * f64::from(FULL)) as i32).min(FULL);
+    // spec: S-0701 F2 (pan = trunc(clamp(δ, −W, W) × 8192 / W + 8192))
+    let dc = d2.clamp(-2 * w, 2 * w);
+    let pan = (4096 * dc + 8192 * w).div_euclid(w);
+    Some((level, pan as i32))
+}
+
+/// n / d (0 ≤ n ≤ d, d > 0) rounded toward zero to single precision, exactly.
+fn ratio_rz(n: i64, d: i64) -> f32 {
+    if n <= 0 {
+        return 0.0;
+    }
+    if n >= d {
+        return 1.0;
+    }
+    let (n, d) = (i128::from(n), i128::from(d));
+    let mut k = 0u32;
+    while (n << k) < (d << 23) {
+        k += 1;
+    }
+    // 2²³ ≤ mantissa < 2²⁴: 24 significant bits, truncated.
+    let m = (n << k) / d;
+    (m as f64 / 2f64.powi(k as i32)) as f32
+}
+
+/// F4's attenuation T(k) in hundredths of a decibel, for k = 0 … 100.
+pub fn attenuation(k: i32) -> i32 {
+    // spec: S-0701 F4 (T(0) = −10000, silence)
+    if k <= 0 {
+        return -10000;
+    }
+    // spec: S-0701 F4 (T(k) = round-nearest(1000 × log₂(k / 100)); no argument is a tie)
+    (1000.0 * (f64::from(k.min(100)) / 100.0).log2()).round() as i32
+}
+
+/// The amplitude of an attenuation in hundredths of a decibel, 65536 =
+/// unity: 10^(A / 2000); silence at or below T(0).
+pub fn amplitude(a: i32) -> i64 {
+    if a <= -10000 {
+        return 0;
+    }
+    (65536.0 * 10f64.powf(f64::from(a) / 2000.0)).round() as i64
+}
+
+/// F3's heard level h.
+pub fn heard(e: i32, l: i32, s: i32, g: i32, o: i32) -> i32 {
+    let (e, l, s, g, o) = (
+        i64::from(e),
+        i64::from(l),
+        i64::from(s),
+        i64::from(g),
+        i64::from(o),
+    );
+    let full = i64::from(FULL);
+    // spec: S-0701 F3 (σ = 16384 − ⌊s × 16384 / 100⌋)
+    let sigma = full - s * full / 100;
+    // spec: S-0701 F3 (h = ⌊⌊⌊⌊e × ℓ / 16384⌋ × σ / 16384⌋ × g / 16384⌋ × o / 16384⌋)
+    (((e * l / full) * sigma / full) * g / full * o / full) as i32
+}
+
+/// F4: left and right amplitudes (65536 = unity) of a heard level and pan.
+pub fn gains(h: i32, pan: i32) -> (i64, i64) {
+    // spec: S-0701 F4 (k = ⌊h × 100 / 16384⌋)
+    let k = (i64::from(h) * 100 / i64::from(FULL)) as i32;
+    if k <= 0 {
+        return (0, 0);
+    }
+    let t = attenuation(k);
+    // spec: S-0701 F4 (q = ⌊pan × 200 / 16384⌋ − 100)
+    let q = (i64::from(pan.clamp(0, FULL)) * 200 / i64::from(FULL)) as i32 - 100;
+    // spec: S-0701 F4 (q < 0: the right side attenuated by −T(100 + q); q ≥ 0: the left side by −T(100 − q))
+    let (bl, br) = if q < 0 {
+        (0, attenuation(100 + q))
+    } else {
+        (attenuation(100 - q), 0)
+    };
+    (amplitude(t + bl), amplitude(t + br))
+}
+
+/// A sound entry ready to play: the entry and the clips of its samples, in
+/// order.
+#[derive(Clone, Debug)]
+pub struct Prepared {
+    /// The entry.
+    pub id: EntryId,
+    /// Its settings.
+    pub entry: Arc<SoundEntry>,
+    /// Its loaded samples.
+    pub clips: Vec<Arc<Clip>>,
+}
+
+/// An instance, by number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct InstanceId(pub u64);
+
+/// Why a request plays nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refused {
-    /// The clip has no frames.
-    Empty,
-    /// A positional sound at or beyond the silent radius.
+    /// Its placement is below 0.05 (claim 6).
     OutOfRange,
-    /// Its sound already plays as often as its limit allows.
-    Limit,
-    /// Every voice is taken by one of higher priority.
-    NoSlot,
+    /// The instance pool is full (claim 10).
+    PoolFull,
 }
 
-/// A started voice.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct VoiceId(pub u64);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Phase {
+    /// Waiting for a pass to get a channel.
+    Requested,
+    /// On a channel, waiting through its pre-delay until the audio clock
+    /// reaches this time.
+    Waiting(i64),
+    /// On a channel, playing.
+    Playing,
+    /// An indefinite loop out of range: no channel, placed again at passes
+    /// (claim 7).
+    Dormant,
+    /// Ended or cut.
+    Dead,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stage {
+    Attack,
+    Body,
+    Decay,
+    Done,
+}
+
+/// The sample order of one instance (claim 14).
+#[derive(Clone, Debug)]
+struct Sequence {
+    attack: Option<usize>,
+    body: Vec<usize>,
+    one: Option<usize>,
+    all: bool,
+    random: bool,
+    order: VecDeque<usize>,
+    passes_left: Option<i32>,
+    decay: Option<usize>,
+    stage: Stage,
+}
 
 #[derive(Clone, Debug)]
 struct Voice {
-    id: u64,
-    req: VoiceRequest,
+    clip: Arc<Clip>,
     /// Position in the clip, frames in 32.32 fixed point.
     pos: u64,
     /// Clip frames per output frame, 32.32.
     step: u64,
 }
 
+#[derive(Clone, Debug)]
+struct Instance {
+    id: u64,
+    prep: Prepared,
+    at: Where,
+    /// Request level ℓ.
+    level: i32,
+    pan: i32,
+    phase: Phase,
+    channel: Option<usize>,
+    pitch: i32,
+    shift: i32,
+    seq: Option<Sequence>,
+    voice: Option<Voice>,
+}
+
+impl Instance {
+    fn alive(&self) -> bool {
+        self.phase != Phase::Dead
+    }
+
+    /// The level used for ranking: ⌊e × ℓ / 16384⌋.
+    fn rank_level(&self) -> i32 {
+        (i64::from(self.prep.entry.level) * i64::from(self.level) / i64::from(FULL)) as i32
+    }
+
+    fn indefinite(&self) -> bool {
+        let e = &self.prep.entry;
+        e.control.looped && e.loop_count == 0
+    }
+}
+
+/// Settings of the mixer that come from the rules' quirk switches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MixQuirks {
+    /// `quirks.sound_order_startup_draw` (S-0701 claim 14).
+    pub sound_order_startup_draw: bool,
+    /// `quirks.ranged_draw_half_span` (S-0202 claim 5).
+    pub ranged_draw_half_span: bool,
+}
+
+impl Default for MixQuirks {
+    fn default() -> Self {
+        // spec: S-0701 Edge cases, S-0202 Edge cases (on by default)
+        Self {
+            sound_order_startup_draw: true,
+            ranged_draw_half_span: true,
+        }
+    }
+}
+
+/// The announcement voice (claim 27).
+#[derive(Clone, Debug)]
+struct Speech {
+    voice: Voice,
+}
+
 /// The mixer.
 #[derive(Clone, Debug)]
 pub struct Mixer {
     rate: u32,
-    params: MixParams,
-    listener: Listener,
-    master: u32,
-    voices: Vec<Voice>,
+    quirks: MixQuirks,
+    view: View,
+    instances: Vec<Instance>,
+    channels: [Option<u64>; CHANNELS],
     next: u64,
+    rng: Rng,
+    now: i64,
+    last_pass: Option<i64>,
+    /// The master level g of F3.
+    master: i32,
+    /// The player's sound volume option o of F3.
+    option: i32,
+    speech: Option<Speech>,
     acc: Vec<i64>,
 }
 
 impl Mixer {
-    /// A mixer rendering stereo at `output_rate` frames per second.
-    pub fn new(output_rate: u32, params: MixParams) -> Self {
+    /// A mixer rendering stereo at `output_rate` frames per second, drawing
+    /// its per-instance choices from an S-0202 stream seeded with `seed`.
+    /// [`crate::Audio`] lends it the client's unsynchronised stream instead
+    /// while it services (claim 30).
+    pub fn new(output_rate: u32, seed: u32, quirks: MixQuirks) -> Self {
         Self {
             rate: output_rate.max(1),
-            params,
-            listener: Listener::default(),
-            master: UNITY,
-            voices: Vec::new(),
+            quirks,
+            view: View::default(),
+            instances: Vec::new(),
+            channels: [None; CHANNELS],
             next: 0,
+            // spec: S-0701 claim 30 (per-instance draws on the unsynchronised stream, lent by the caller)
+            rng: Rng::new(seed),
+            now: 0,
+            last_pass: None,
+            master: FULL,
+            // spec: S-0701 F3 (o = trunc(option fraction × 16384); full volume)
+            option: FULL,
+            speech: None,
             acc: Vec::new(),
         }
     }
@@ -194,169 +436,659 @@ impl Mixer {
         self.rate
     }
 
-    /// The parameters.
-    pub fn params(&self) -> &MixParams {
-        &self.params
+    /// Restarts the presentation generator (a new game).
+    pub fn reseed(&mut self, seed: u32) {
+        self.rng = Rng::new(seed);
     }
 
-    /// Moves the listener (the view centre). Playing voices follow it.
-    pub fn set_listener(&mut self, l: Listener) {
-        self.listener = l;
+    /// The stream the per-instance draws take (tests).
+    pub fn rng(&self) -> &Rng {
+        &self.rng
     }
 
-    /// The listener.
-    pub fn listener(&self) -> Listener {
-        self.listener
+    /// The stream the per-instance draws take, to lend it the shared
+    /// unsynchronised stream (claim 30).
+    pub fn rng_mut(&mut self) -> &mut Rng {
+        &mut self.rng
     }
 
-    /// Sets the master gain ([`UNITY`] = full).
-    pub fn set_master(&mut self, gain: u32) {
-        self.master = gain;
+    /// Sets the battlefield view (call every frame).
+    pub fn set_view(&mut self, v: View) {
+        self.view = v;
     }
 
-    /// Voices playing.
-    pub fn playing(&self) -> usize {
-        self.voices.len()
+    /// The view.
+    pub fn view(&self) -> &View {
+        &self.view
     }
 
-    /// Whether a voice still plays.
-    pub fn is_playing(&self, id: VoiceId) -> bool {
-        self.voices.iter().any(|v| v.id == id.0)
+    /// Sets the player's sound volume option, 0 … 16384 (F3's o).
+    pub fn set_volume(&mut self, o: i32) {
+        self.option = o.clamp(0, FULL);
     }
 
-    /// Keys of the playing voices, oldest first.
-    pub fn playing_keys(&self) -> Vec<&str> {
-        self.voices.iter().map(|v| v.req.key.as_str()).collect()
+    /// The master level g of F3.
+    pub fn master(&self) -> i32 {
+        self.master
     }
 
-    /// Stops a voice.
-    pub fn stop(&mut self, id: VoiceId) {
-        self.voices.retain(|v| v.id != id.0);
+    /// Instances that exist (requested, waiting, playing or dormant).
+    pub fn alive(&self) -> usize {
+        self.instances.iter().filter(|i| i.alive()).count()
     }
 
-    /// Stops every voice.
-    pub fn clear(&mut self) {
-        self.voices.clear();
+    /// Whether an instance still exists.
+    pub fn is_alive(&self, id: InstanceId) -> bool {
+        self.instances.iter().any(|i| i.id == id.0 && i.alive())
     }
 
-    /// Starts a voice, applying the range test, the per-sound limit and the
-    /// voice limit, in that order. When every voice is taken, the new one
-    /// replaces the playing voice of lowest priority (the oldest of those)
-    /// if its own priority is at least as high, and is refused otherwise.
-    /// All of this is our interim design (Q-0262).
-    pub fn play(&mut self, req: VoiceRequest) -> Result<VoiceId, Refused> {
-        if req.clip.frames() == 0 {
-            return Err(Refused::Empty);
+    /// Whether an instance is on a channel and audible now.
+    pub fn is_playing(&self, id: InstanceId) -> bool {
+        self.instances
+            .iter()
+            .any(|i| i.id == id.0 && i.phase == Phase::Playing)
+    }
+
+    /// Channels in use.
+    pub fn busy_channels(&self) -> usize {
+        self.channels.iter().filter(|c| c.is_some()).count()
+    }
+
+    /// The entries of the instances on channels, in channel order.
+    pub fn channel_entries(&self) -> Vec<Option<EntryId>> {
+        self.channels
+            .iter()
+            .map(|c| c.and_then(|id| self.get(id).map(|i| i.prep.id)))
+            .collect()
+    }
+
+    /// The request level and pan of an instance.
+    pub fn placement(&self, id: InstanceId) -> Option<(i32, i32)> {
+        self.get(id.0).map(|i| (i.level, i.pan))
+    }
+
+    /// The pitch and volume shift an instance drew (claim 13).
+    pub fn draws(&self, id: InstanceId) -> Option<(i32, i32)> {
+        self.get(id.0).map(|i| (i.pitch, i.shift))
+    }
+
+    /// The sample order still to play of an instance, current body pass
+    /// only (tests).
+    pub fn sample_order(&self, id: InstanceId) -> Option<Vec<usize>> {
+        let i = self.get(id.0)?;
+        let s = i.seq.as_ref()?;
+        let mut v = Vec::new();
+        if s.stage == Stage::Attack {
+            v.extend(s.attack);
         }
-        if self.spatial(req.placement).is_none() {
-            return Err(Refused::OutOfRange);
+        if matches!(s.stage, Stage::Attack | Stage::Body) {
+            v.extend(s.order.iter().copied());
         }
-        if let Some(limit) = req.limit {
-            let same = self.voices.iter().filter(|v| v.req.key == req.key).count();
-            if same >= usize::from(limit) {
-                return Err(Refused::Limit);
-            }
+        if s.stage != Stage::Done {
+            v.extend(s.decay);
         }
-        if self.params.max_voices == 0 {
-            return Err(Refused::NoSlot);
+        Some(v)
+    }
+
+    fn get(&self, id: u64) -> Option<&Instance> {
+        self.instances.iter().find(|i| i.id == id && i.alive())
+    }
+
+    /// Requests an instance (S-0701 claims 5, 6 and 10). `scale` is the
+    /// request level of a screen sound (16384 = full); positional requests
+    /// take theirs from F2. The instance gets a channel at the next pass.
+    pub fn request(
+        &mut self,
+        prep: Prepared,
+        at: Where,
+        scale: i32,
+    ) -> Result<InstanceId, Refused> {
+        let (level, pan) = match at.pos() {
+            // spec: S-0701 claim 5 and F2 (a screen sound: ℓ = 16384, pan 8192)
+            None => (scale.clamp(0, FULL), CENTRE),
+            // spec: S-0701 claim 6 (below 0.05: not started, no draws)
+            Some(p) => place(&prep.entry, &self.view, p).ok_or(Refused::OutOfRange)?,
+        };
+        // spec: S-0701 claim 10 (a request when the pool is full, after dead instances are cleared, plays nothing)
+        self.instances.retain(Instance::alive);
+        if self.instances.len() >= POOL {
+            return Err(Refused::PoolFull);
         }
-        if self.voices.len() >= self.params.max_voices {
-            // Lowest priority, then oldest (voices are kept oldest first).
-            let victim = self
-                .voices
+        if matches!(at, Where::Follow(_))
+            && self
+                .instances
                 .iter()
-                .enumerate()
-                .min_by_key(|(_, v)| (v.req.priority, v.id))
-                .map(|(i, v)| (i, v.req.priority));
-            match victim {
-                Some((i, p)) if p <= req.priority => {
-                    self.voices.remove(i);
-                }
-                _ => return Err(Refused::NoSlot),
-            }
+                .filter(|i| matches!(i.at, Where::Follow(_)))
+                .count()
+                >= FOLLOW_POOL
+        {
+            return Err(Refused::PoolFull);
         }
-        let step = (u64::from(req.clip.sample_rate) << 32) / u64::from(self.rate);
         let id = self.next;
         self.next += 1;
-        self.voices.push(Voice {
+        self.instances.push(Instance {
             id,
-            req,
-            pos: 0,
-            step: step.max(1),
+            prep,
+            at,
+            level,
+            pan,
+            phase: Phase::Requested,
+            channel: None,
+            pitch: 100,
+            shift: 0,
+            seq: None,
+            voice: None,
         });
-        Ok(VoiceId(id))
+        Ok(InstanceId(id))
     }
 
-    /// Left and right gains for a placement, [`UNITY`] = full, or `None`
-    /// when it is out of range (interim curve, Q-0262).
-    fn spatial(&self, p: Placement) -> Option<(u32, u32)> {
-        let Placement::At { x, y } = p else {
-            return Some((UNITY, UNITY));
-        };
-        let dx = i64::from(x) - i64::from(self.listener.x);
-        let dy = i64::from(y) - i64::from(self.listener.y);
-        let d = (dx * dx + dy * dy).unsigned_abs().isqrt() as i64;
-        let full = i64::from(self.params.full_radius.max(0));
-        let silent = i64::from(self.params.silent_radius).max(full + 1);
-        if d >= silent {
-            return None;
+    /// Moves an anchor's attached sounds and places them again (claim 7).
+    pub fn move_anchor(&mut self, anchor: u64, pos: Pos) {
+        let view = self.view;
+        for i in 0..self.instances.len() {
+            if let Where::Attached { anchor: a, .. } = self.instances[i].at
+                && a == anchor
+                && self.instances[i].alive()
+            {
+                self.instances[i].at = Where::Attached { anchor, pos };
+                self.replace_one(i, &view);
+            }
         }
-        let g = if d <= full {
-            i64::from(UNITY)
-        } else {
-            i64::from(UNITY) * (silent - d) / (silent - full)
+    }
+
+    /// Asks an anchor's attached sounds to finish looping: the current body
+    /// pass ends, then the decay plays (claim 23).
+    pub fn finish_anchor(&mut self, anchor: u64) {
+        for i in &mut self.instances {
+            if let Where::Attached { anchor: a, .. } = i.at
+                && a == anchor
+                && i.alive()
+            {
+                match &mut i.seq {
+                    Some(s) => s.passes_left = Some(0),
+                    None => {
+                        i.phase = Phase::Dead;
+                        if let Some(c) = i.channel.take() {
+                            self.channels[c] = None;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Stops an instance at once.
+    pub fn stop(&mut self, id: InstanceId) {
+        if let Some(i) = self.instances.iter().position(|i| i.id == id.0) {
+            self.kill(i);
+        }
+    }
+
+    fn kill(&mut self, i: usize) {
+        let inst = &mut self.instances[i];
+        inst.phase = Phase::Dead;
+        inst.voice = None;
+        if let Some(c) = inst.channel.take() {
+            self.channels[c] = None;
+        }
+    }
+
+    /// Stops every instance and the announcement.
+    pub fn clear(&mut self) {
+        self.instances.clear();
+        self.channels = [None; CHANNELS];
+        self.speech = None;
+    }
+
+    /// Places a follow-placed or attached instance again (claim 7).
+    fn replace_one(&mut self, i: usize, view: &View) {
+        let Some(p) = self.instances[i].at.pos() else {
+            return;
         };
-        let w = i64::from(self.params.pan_width.max(1));
-        let s = (dx - dy).clamp(-w, w);
-        let near = i64::from(UNITY);
-        let far = i64::from(UNITY) * (w - s.abs()) / w;
-        let (l, r) = if s > 0 { (far, near) } else { (near, far) };
-        Some((((g * l) >> 16) as u32, ((g * r) >> 16) as u32))
+        if matches!(self.instances[i].at, Where::Fixed(_)) {
+            return;
+        }
+        match place(&self.instances[i].prep.entry, view, p) {
+            Some((level, pan)) => {
+                let inst = &mut self.instances[i];
+                inst.level = level;
+                inst.pan = pan;
+                if inst.phase == Phase::Dormant {
+                    // spec: S-0701 claim 7 (an indefinitely looping entry can restart when audible again)
+                    inst.phase = Phase::Requested;
+                }
+            }
+            None => {
+                // spec: S-0701 claim 7 (updated placement below 0.05 stops a playing instance; an indefinite loop can restart later)
+                if self.instances[i].indefinite() {
+                    let inst = &mut self.instances[i];
+                    inst.phase = Phase::Dormant;
+                    inst.voice = None;
+                    inst.seq = None;
+                    if let Some(c) = inst.channel.take() {
+                        self.channels[c] = None;
+                    }
+                } else {
+                    self.kill(i);
+                }
+            }
+        }
+    }
+
+    /// Advances the audio clock to `now_ms` and runs an audio pass when more
+    /// than 33 ms have passed since the last one (claim 12). Returns whether
+    /// a pass ran.
+    pub fn service(&mut self, now_ms: i64) -> bool {
+        self.now = now_ms;
+        self.start_waiting();
+        // spec: S-0701 claim 12 and 30 (a pass is eligible only when more than 33 ms of the audio clock have elapsed since the preceding one; the interval is a lower bound)
+        if self.last_pass.is_some_and(|t| now_ms - t <= PASS_MS) {
+            return false;
+        }
+        self.last_pass = Some(now_ms);
+        self.pass();
+        true
+    }
+
+    /// Instances whose pre-delay is over start their first sample.
+    fn start_waiting(&mut self) {
+        for i in 0..self.instances.len() {
+            if let Phase::Waiting(until) = self.instances[i].phase
+                && self.now >= until
+            {
+                self.instances[i].phase = Phase::Playing;
+                self.advance(i);
+            }
+        }
+    }
+
+    /// One audio pass (claims 7 to 13, F3).
+    fn pass(&mut self) {
+        self.instances.retain(Instance::alive);
+        let view = self.view;
+        // spec: S-0701 claim 7 (follow-placed and attached instances are placed again at passes)
+        for i in 0..self.instances.len() {
+            if matches!(
+                self.instances[i].at,
+                Where::Follow(_) | Where::Attached { .. }
+            ) {
+                self.replace_one(i, &view);
+            }
+        }
+        // spec: S-0701 Ordering (the per-entry limit is applied before channels are given out)
+        self.limit();
+        let pending: Vec<usize> = (0..self.instances.len())
+            .filter(|&i| self.instances[i].phase == Phase::Requested)
+            .collect();
+        for i in pending {
+            self.allocate(i);
+        }
+        self.instances.retain(Instance::alive);
+        // spec: S-0701 F3 (C = Σ ⌊20 × e / 16384⌋ over surviving instances; target 16384 when C ≤ 100, else ⌊1638400 / C⌋)
+        let c: i64 = self
+            .instances
+            .iter()
+            .filter(|i| matches!(i.phase, Phase::Playing | Phase::Waiting(_)))
+            .map(|i| 20 * i64::from(i.prep.entry.level) / i64::from(FULL))
+            .sum();
+        // interim: Q-0333 (the master level reaches its target at once)
+        self.master = if c <= 100 {
+            FULL
+        } else {
+            (1_638_400 / c) as i32
+        };
+    }
+
+    /// The per-entry limit (claim 8).
+    fn limit(&mut self) {
+        let mut entries: Vec<EntryId> = self
+            .instances
+            .iter()
+            .filter(|i| i.alive())
+            .map(|i| i.prep.id)
+            .collect();
+        entries.sort();
+        entries.dedup();
+        for e in entries {
+            loop {
+                let of: Vec<usize> = (0..self.instances.len())
+                    .filter(|&i| self.instances[i].alive() && self.instances[i].prep.id == e)
+                    .collect();
+                let Some(&first) = of.first() else { break };
+                let entry = self.instances[first].prep.entry.clone();
+                // spec: S-0701 claim 8 (limit 0: no limit); negative limits are not established (Open questions), and are treated as none
+                if entry.limit <= 0 || of.len() <= entry.limit as usize {
+                    break;
+                }
+                // spec: S-0701 claim 8 (levels within ⌊e / 10⌋ count as equally loud)
+                let band = entry.level / 10;
+                let interrupt = entry.control.interrupt;
+                let mut low = first;
+                for &c in &of[1..] {
+                    if self.ranks_below(c, low, band, interrupt) {
+                        low = c;
+                    }
+                }
+                // spec: S-0701 claim 8 (the lowest-ranked is cut, stopped at once if playing)
+                self.kill(low);
+            }
+        }
+    }
+
+    /// Whether instance `a` ranks below `b` (claim 8).
+    fn ranks_below(&self, a: usize, b: usize, band: i32, interrupt: bool) -> bool {
+        let (ia, ib) = (&self.instances[a], &self.instances[b]);
+        let (la, lb) = (ia.rank_level(), ib.rank_level());
+        if (la - lb).abs() >= band.max(1) {
+            // spec: S-0701 claim 8 (ranked loudest first by level)
+            return la < lb;
+        }
+        let (na, nb) = (ia.phase == Phase::Requested, ib.phase == Phase::Requested);
+        if na != nb {
+            // spec: S-0701 claim 8 (equally loud: a new request ranks above the playing ones with interrupt, below them otherwise)
+            return if interrupt { !na } else { na };
+        }
+        // Within one class: with interrupt the oldest is cut, otherwise the
+        // newest (claim 8's two outcomes).
+        if interrupt {
+            ia.id < ib.id
+        } else {
+            ia.id > ib.id
+        }
+    }
+
+    /// Gives a requested instance a channel, or discards it (claim 9).
+    fn allocate(&mut self, i: usize) {
+        let p = self.instances[i].prep.entry.priority;
+        let ch = match self.channels.iter().position(Option::is_none) {
+            // spec: S-0701 claim 9 (a free channel if there is one)
+            Some(c) => Some(c),
+            None => self.victim(p),
+        };
+        let Some(c) = ch else {
+            // spec: S-0701 claim 9 (discarded; not retried)
+            self.kill(i);
+            return;
+        };
+        if let Some(old) = self.channels[c]
+            && let Some(j) = self.instances.iter().position(|x| x.id == old)
+        {
+            // spec: S-0701 claim 9 (the chosen candidate is cut and replaced)
+            self.kill(j);
+        }
+        self.channels[c] = Some(self.instances[i].id);
+        self.instances[i].channel = Some(c);
+        self.acquire(i);
+    }
+
+    /// The channel a new instance of priority `p` takes when all are busy,
+    /// or `None` when it is discarded (claim 9).
+    fn victim(&self, p: Priority) -> Option<usize> {
+        let inst =
+            |c: usize| self.channels[c].and_then(|id| self.instances.iter().find(|i| i.id == id));
+        let mut playing: Option<(usize, Priority, i32)> = None;
+        let mut waiting: Option<(usize, Priority)> = None;
+        for c in 0..CHANNELS {
+            let Some(i) = inst(c) else { continue };
+            let pr = i.prep.entry.priority;
+            if i.phase == Phase::Playing {
+                let lv = heard(
+                    i.prep.entry.level,
+                    i.level,
+                    i.shift,
+                    self.master,
+                    self.option,
+                );
+                playing = match playing {
+                    None => Some((c, pr, lv)),
+                    Some((_, bp, _)) if pr < bp => Some((c, pr, lv)),
+                    // spec: S-0701 claim 9 (equal priority: a later channel replaces the candidate only if its level is lower by at least 1638/65536 of a unit; integer levels here, so strictly lower)
+                    Some((_, bp, bl)) if pr == bp && lv < bl => Some((c, pr, lv)),
+                    keep => keep,
+                };
+            } else {
+                // spec: S-0701 claim 9 (among non-playing channels, equal priority keeps the first in channel order)
+                waiting = match waiting {
+                    Some((_, bp)) if bp <= pr => waiting,
+                    _ => Some((c, pr)),
+                };
+            }
+        }
+        // spec: S-0701 claim 9 (the playing candidate only if its priority is strictly lower than the non-playing one's, or there is none)
+        let (c, cp) = match (playing, waiting) {
+            (Some((c, pp, _)), Some((_, wp))) if pp < wp => (c, pp),
+            (_, Some((c, wp))) => (c, wp),
+            (Some((c, pp, _)), None) => (c, pp),
+            (None, None) => return None,
+        };
+        // spec: S-0701 claim 9 (a candidate of higher priority than the new instance: the new one is discarded)
+        (cp <= p).then_some(c)
+    }
+
+    fn r(&mut self, a: i32, b: i32) -> i32 {
+        self.rng.ranged(a, b, self.quirks.ranged_draw_half_span)
+    }
+
+    /// The draws of an instance that got its channel (claims 13 and 14,
+    /// State and ordering), and its first sample or pre-delay.
+    fn acquire(&mut self, i: usize) {
+        let e = self.instances[i].prep.entry.clone();
+        let n = self.instances[i].prep.clips.len();
+        // spec: S-0701 claim 13 (pitch p = 100 + R(f₁, f₂))
+        let pitch = 100 + self.r(e.fshift.0, e.fshift.1);
+        // spec: S-0701 claim 13 (volume shift s = R(0, vs))
+        let shift = self.r(0, e.vshift);
+        // spec: S-0701 claim 13 (pre-delay R(a, d₂) only with pre-delay or ambient; a = 33 for ambient, else d₁)
+        let predelay = if e.control.predelay || e.control.ambient {
+            let a = if e.control.ambient {
+                MIN_DELAY_MS
+            } else {
+                e.delay.0
+            };
+            Some(self.r(a, e.delay.1))
+        } else {
+            None
+        };
+        // The partition; oversized counts are not established (Open
+        // questions) and are cut to the samples there are.
+        let a = (e.attack.max(0) as usize).min(n);
+        let d = (e.decay.max(0) as usize).min(n - a);
+        let body: Vec<usize> = (a..n - d).collect();
+        // spec: S-0701 claim 14 (one attack sample R(0, A − 1) if A > 0)
+        let attack = (a > 0).then(|| self.r(0, a as i32 - 1) as usize);
+        let random = e.control.random;
+        let all = e.control.all;
+        // spec: S-0701 claim 14 (random without all: one body sample R(A, n − D − 1); otherwise the first body sample)
+        let one = if body.is_empty() {
+            None
+        } else if random && !all {
+            Some(self.r(a as i32, (n - d) as i32 - 1) as usize)
+        } else {
+            Some(a)
+        };
+        // spec: S-0701 claim 14 (one decay sample R(n − D, n − 1) if D > 0)
+        let decay = (d > 0).then(|| self.r((n - d) as i32, n as i32 - 1) as usize);
+        // spec: S-0701 claim 14 (immediate mode: the delay's first number below 33)
+        let immediate = e.delay.0 < MIN_DELAY_MS;
+        // spec: S-0701 claim 14 and Edge cases (quirks.sound_order_startup_draw: random, immediate, no attack sample: one discarded R(0, m − 1))
+        // interim: Q-0329 (delayed mode takes no startup draw)
+        if random && immediate && a == 0 && self.quirks.sound_order_startup_draw && !body.is_empty()
+        {
+            let _ = self.r(0, body.len() as i32 - 1);
+        }
+        // spec: S-0701 claim 14 (with loop: forever when the loop count is 0, else that many passes in total)
+        let passes_left = if e.control.looped {
+            (e.loop_count > 0).then_some(e.loop_count - 1)
+        } else {
+            Some(0)
+        };
+        let mut seq = Sequence {
+            attack,
+            body,
+            one,
+            all,
+            random,
+            order: VecDeque::new(),
+            passes_left,
+            decay,
+            stage: Stage::Attack,
+        };
+        seq.order = self.body_pass(&seq);
+        let inst = &mut self.instances[i];
+        inst.pitch = pitch;
+        inst.shift = shift;
+        inst.seq = Some(seq);
+        // spec: S-0701 claim 13 (a pre-delay of 33 ms or more is waited; a shorter one is no wait)
+        match predelay {
+            Some(t) if t >= MIN_DELAY_MS => inst.phase = Phase::Waiting(self.now + i64::from(t)),
+            _ => {
+                inst.phase = Phase::Playing;
+                self.advance(i);
+            }
+        }
+    }
+
+    /// The samples of one body pass (claim 14).
+    fn body_pass(&mut self, s: &Sequence) -> VecDeque<usize> {
+        if !s.all {
+            // spec: S-0701 claim 14 (a body sample chosen once by random is the one repeated)
+            return s.one.into_iter().collect();
+        }
+        if !s.random {
+            // spec: S-0701 claim 14 (all: every body sample in list order)
+            return s.body.iter().copied().collect();
+        }
+        // spec: S-0701 claim 14 (all and random: each next one is R(0, m − 1) among the m not yet played)
+        let mut left = s.body.clone();
+        let mut out = VecDeque::new();
+        while !left.is_empty() {
+            let k = self.r(0, left.len() as i32 - 1) as usize;
+            out.push_back(left.remove(k));
+        }
+        out
+    }
+
+    /// Starts the instance's next sample, or ends it.
+    fn advance(&mut self, i: usize) {
+        let next = loop {
+            let Some(mut s) = self.instances[i].seq.take() else {
+                break None;
+            };
+            let got = match s.stage {
+                Stage::Attack => {
+                    s.stage = Stage::Body;
+                    s.attack
+                }
+                Stage::Body => match s.order.pop_front() {
+                    Some(x) => Some(x),
+                    None => {
+                        let more = s.passes_left.is_none_or(|p| p > 0) && !s.body.is_empty();
+                        if more {
+                            if let Some(p) = s.passes_left.as_mut() {
+                                *p -= 1;
+                            }
+                            s.order = self.body_pass(&s);
+                        } else {
+                            s.stage = Stage::Decay;
+                        }
+                        None
+                    }
+                },
+                Stage::Decay => {
+                    s.stage = Stage::Done;
+                    s.decay
+                }
+                Stage::Done => {
+                    self.instances[i].seq = Some(s);
+                    break None;
+                }
+            };
+            self.instances[i].seq = Some(s);
+            if let Some(x) = got {
+                break Some(x);
+            }
+        };
+        match next {
+            Some(x) => {
+                let inst = &mut self.instances[i];
+                let clip = inst.prep.clips[x].clone();
+                // spec: S-0701 F4 (playback rate = trunc(rate × pitch / 100)); F3 (pitches combine as trunc(p₁ × p₂ / 100))
+                let rate = (u64::from(clip.sample_rate) * inst.pitch.max(1) as u64) / 100;
+                let step = ((rate << 32) / u64::from(self.rate)).max(1);
+                inst.voice = Some(Voice { clip, pos: 0, step });
+            }
+            None => self.kill(i),
+        }
+    }
+
+    /// Starts an announcement's sample on the announcement voice, replacing
+    /// any (claim 27).
+    pub fn speak(&mut self, clip: Arc<Clip>) {
+        let step = ((u64::from(clip.sample_rate) << 32) / u64::from(self.rate)).max(1);
+        self.speech = Some(Speech {
+            voice: Voice { clip, pos: 0, step },
+        });
+    }
+
+    /// Whether an announcement is playing.
+    pub fn speaking(&self) -> bool {
+        self.speech.is_some()
+    }
+
+    /// Stops the announcement.
+    pub fn stop_speech(&mut self) {
+        self.speech = None;
     }
 
     /// Mixes the next `out.len() / 2` stereo frames (interleaved left,
-    /// right) into `out`, overwriting it, and advances every voice. Voices
-    /// that reach their end are removed. The sum is clipped to 16 bits.
+    /// right) into `out`, overwriting it, and advances every playing
+    /// instance and the announcement. The sum is clipped to 16 bits.
     pub fn render(&mut self, out: &mut [i16]) {
         let frames = out.len() / 2;
         self.acc.clear();
         self.acc.resize(frames * 2, 0);
-        let master = i64::from(self.master);
-        for vi in 0..self.voices.len() {
-            let (l, r) = self
-                .spatial(self.voices[vi].req.placement)
-                .unwrap_or((0, 0));
-            let v = &mut self.voices[vi];
-            let g = (i64::from(v.req.gain) * master) >> 16;
-            let gl = (g * i64::from(l)) >> 16;
-            let gr = (g * i64::from(r)) >> 16;
-            let clip = &v.req.clip;
-            let n = clip.frames();
-            for f in 0..frames {
-                let i = (v.pos >> 32) as usize;
-                if i >= n {
+        for c in 0..CHANNELS {
+            let Some(id) = self.channels[c] else { continue };
+            let Some(i) = self.instances.iter().position(|x| x.id == id) else {
+                self.channels[c] = None;
+                continue;
+            };
+            if self.instances[i].phase != Phase::Playing {
+                continue;
+            }
+            let inst = &self.instances[i];
+            let h = heard(
+                inst.prep.entry.level,
+                inst.level,
+                inst.shift,
+                self.master,
+                self.option,
+            );
+            let (gl, gr) = gains(h, inst.pan);
+            let mut f = 0;
+            while f < frames {
+                let Some(v) = self.instances[i].voice.as_mut() else {
                     break;
+                };
+                f = mix(v, &mut self.acc, f, frames, gl, gr);
+                if f < frames || (v.pos >> 32) as usize >= v.clip.frames() {
+                    // The sample ended: the next one (sample completion
+                    // is serviced here, claim 12).
+                    self.advance(i);
+                    if !self.instances[i].alive() {
+                        break;
+                    }
                 }
-                let frac = (v.pos & 0xFFFF_FFFF) as i64;
-                let j = (i + 1).min(n - 1);
-                let lerp = |c: usize| {
-                    let a = clip.at(i, c);
-                    let b = clip.at(j, c);
-                    a + (((b - a) * frac) >> 32)
-                };
-                let (sl, sr) = if clip.channels == 1 {
-                    let s = lerp(0);
-                    (s, s)
-                } else {
-                    (lerp(0), lerp(1))
-                };
-                self.acc[2 * f] += (sl * gl) >> 16;
-                self.acc[2 * f + 1] += (sr * gr) >> 16;
-                v.pos += v.step;
             }
         }
-        self.voices
-            .retain(|v| ((v.pos >> 32) as usize) < v.req.clip.frames());
+        if let Some(s) = self.speech.as_mut() {
+            // spec: S-0701 claim 35 (announcements skip the master level and the sound volume option; the voice option is at full, centred)
+            let unity = 1 << 16;
+            mix(&mut s.voice, &mut self.acc, 0, frames, unity, unity);
+            if (s.voice.pos >> 32) as usize >= s.voice.clip.frames() {
+                self.speech = None;
+            }
+        }
         for (o, a) in out.iter_mut().zip(&self.acc) {
             *o = (*a).clamp(i64::from(i16::MIN), i64::from(i16::MAX)) as i16;
         }
@@ -368,251 +1100,38 @@ impl Mixer {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn clip(rate: u32, channels: u16, samples: Vec<i16>) -> Arc<Clip> {
-        Arc::new(Clip {
-            sample_rate: rate,
-            channels,
-            samples,
-        })
-    }
-
-    fn req(c: &Arc<Clip>, key: &str) -> VoiceRequest {
-        VoiceRequest {
-            clip: c.clone(),
-            key: key.into(),
-            gain: UNITY,
-            placement: Placement::Everywhere,
-            priority: 0,
-            limit: None,
+/// Mixes a voice into `acc` from frame `from` until the buffer or the clip
+/// ends; returns the frame it stopped at.
+fn mix(v: &mut Voice, acc: &mut [i64], from: usize, frames: usize, gl: i64, gr: i64) -> usize {
+    let clip = &v.clip;
+    let n = clip.frames();
+    let mut f = from;
+    while f < frames {
+        let i = (v.pos >> 32) as usize;
+        if i >= n {
+            break;
         }
-    }
-
-    fn render(m: &mut Mixer, frames: usize) -> Vec<i16> {
-        let mut out = vec![0; frames * 2];
-        m.render(&mut out);
-        out
-    }
-
-    #[test]
-    fn one_mono_voice_plays_unchanged_on_both_sides_then_ends() {
-        let c = clip(100, 1, vec![1000, -2000, 3000]);
-        let mut m = Mixer::new(100, MixParams::default());
-        m.play(req(&c, "a")).unwrap();
-        assert_eq!(
-            render(&mut m, 4),
-            [1000, 1000, -2000, -2000, 3000, 3000, 0, 0]
-        );
-        assert_eq!(m.playing(), 0);
-    }
-
-    #[test]
-    fn stereo_clip_keeps_its_channels() {
-        let c = clip(100, 2, vec![10, 20, 30, 40]);
-        let mut m = Mixer::new(100, MixParams::default());
-        m.play(req(&c, "s")).unwrap();
-        assert_eq!(render(&mut m, 2), [10, 20, 30, 40]);
-    }
-
-    #[test]
-    fn voices_sum_and_the_sum_clips() {
-        let a = clip(100, 1, vec![1000, 30000, -30000]);
-        let b = clip(100, 1, vec![500, 10000, -10000]);
-        let mut m = Mixer::new(100, MixParams::default());
-        m.play(req(&a, "a")).unwrap();
-        m.play(req(&b, "b")).unwrap();
-        assert_eq!(
-            render(&mut m, 3),
-            [1500, 1500, i16::MAX, i16::MAX, i16::MIN, i16::MIN]
-        );
-    }
-
-    #[test]
-    fn gain_scales_linearly() {
-        // S-0416 claim 4's "half volume" is applied as gain UNITY / 2 by
-        // the event layer; here the mixer's linear gain.
-        let c = clip(100, 1, vec![8000, -8000]);
-        let mut m = Mixer::new(100, MixParams::default());
-        m.play(VoiceRequest {
-            gain: UNITY / 2,
-            ..req(&c, "h")
-        })
-        .unwrap();
-        assert_eq!(render(&mut m, 2), [4000, 4000, -4000, -4000]);
-    }
-
-    #[test]
-    fn distance_attenuates_and_out_of_range_is_refused() {
-        let p = MixParams {
-            full_radius: 1000,
-            silent_radius: 3000,
-            pan_width: 1_000_000,
-            ..MixParams::default()
+        let frac = (v.pos & 0xFFFF_FFFF) as i64;
+        let j = (i + 1).min(n - 1);
+        let lerp = |c: usize| {
+            let a = clip.at(i, c);
+            let b = clip.at(j, c);
+            a + (((b - a) * frac) >> 32)
         };
-        let c = clip(100, 1, vec![10000; 4]);
-        let at = |x, y| VoiceRequest {
-            placement: Placement::At { x, y },
-            ..req(&c, "p")
+        let (sl, sr) = if clip.channels == 1 {
+            let s = lerp(0);
+            (s, s)
+        } else {
+            (lerp(0), lerp(1))
         };
-        let mut m = Mixer::new(100, p);
-        m.set_listener(Listener { x: 5000, y: 5000 });
-        // Within the full radius: full gain (on the diagonal x = y the pan
-        // offset x − y is 0).
-        m.play(at(5500, 5500)).unwrap();
-        assert_eq!(render(&mut m, 1), [10000, 10000]);
-        m.clear();
-        // Halfway between the radii: half gain.
-        m.play(at(5000 + 1414, 5000 + 1414)).unwrap();
-        let out = render(&mut m, 1);
-        assert!((out[0] - 5000).abs() <= 10, "{out:?}");
-        m.clear();
-        // At the silent radius: not started.
-        assert_eq!(m.play(at(5000 + 3000, 5000)), Err(Refused::OutOfRange));
+        acc[2 * f] += (sl * gl) >> 16;
+        acc[2 * f + 1] += (sr * gr) >> 16;
+        v.pos += v.step;
+        f += 1;
     }
-
-    #[test]
-    fn playing_voices_follow_the_listener() {
-        let p = MixParams {
-            full_radius: 1000,
-            silent_radius: 3000,
-            pan_width: 1_000_000,
-            ..MixParams::default()
-        };
-        let c = clip(100, 1, vec![10000; 4]);
-        let mut m = Mixer::new(100, p);
-        m.play(VoiceRequest {
-            placement: Placement::At { x: 0, y: 0 },
-            ..req(&c, "p")
-        })
-        .unwrap();
-        assert_eq!(render(&mut m, 1), [10000, 10000]);
-        // The view moves away: the voice keeps playing, silent.
-        m.set_listener(Listener { x: 3000, y: 3000 });
-        assert_eq!(render(&mut m, 1), [0, 0]);
-        assert_eq!(m.playing(), 1);
-    }
-
-    #[test]
-    fn panning_follows_the_screen_x_offset() {
-        let p = MixParams {
-            full_radius: 100_000,
-            silent_radius: 200_000,
-            pan_width: 1000,
-            ..MixParams::default()
-        };
-        let c = clip(100, 1, vec![10000]);
-        let mut m = Mixer::new(100, p);
-        let mut at = |x: i32, y: i32| {
-            m.play(VoiceRequest {
-                placement: Placement::At { x, y },
-                ..req(&c, "p")
-            })
-            .unwrap();
-            render(&mut m, 1)
-        };
-        // Screen right (x − y > 0): left falls, right stays full.
-        assert_eq!(at(500, 0), [5000, 10000]);
-        assert_eq!(at(0, 2000), [10000, 0]);
-        // On the screen's vertical through the listener: centred.
-        assert_eq!(at(700, 700), [10000, 10000]);
-    }
-
-    #[test]
-    fn a_full_mixer_steals_the_lowest_priority_oldest_voice() {
-        let c = clip(100, 1, vec![1; 100]);
-        let p = MixParams {
-            max_voices: 2,
-            ..MixParams::default()
-        };
-        let mut m = Mixer::new(100, p);
-        let pri = |k: &str, priority| VoiceRequest {
-            priority,
-            ..req(&c, k)
-        };
-        m.play(pri("low1", 1)).unwrap();
-        m.play(pri("low2", 1)).unwrap();
-        // Higher priority replaces the oldest of the lowest.
-        m.play(pri("high", 5)).unwrap();
-        assert_eq!(m.playing_keys(), ["low2", "high"]);
-        // Equal priority to the lowest still replaces it.
-        m.play(pri("eq", 1)).unwrap();
-        assert_eq!(m.playing_keys(), ["high", "eq"]);
-        // Lower than every playing voice: refused.
-        assert_eq!(m.play(pri("lower", 0)), Err(Refused::NoSlot));
-        assert_eq!(m.playing_keys(), ["high", "eq"]);
-    }
-
-    #[test]
-    fn per_sound_limit_refuses_extra_copies() {
-        let c = clip(100, 1, vec![1; 100]);
-        let mut m = Mixer::new(100, MixParams::default());
-        let lim = VoiceRequest {
-            limit: Some(2),
-            ..req(&c, "tick")
-        };
-        m.play(lim.clone()).unwrap();
-        m.play(lim.clone()).unwrap();
-        assert_eq!(m.play(lim.clone()), Err(Refused::Limit));
-        m.play(req(&c, "other")).unwrap();
-        assert_eq!(m.playing(), 3);
-    }
-
-    #[test]
-    fn resampling_interpolates_linearly() {
-        // 50 Hz source into a 100 Hz output: every other output frame is a
-        // midpoint; 3 source frames last 6 output frames (the last one
-        // holds its value).
-        let c = clip(50, 1, vec![0, 1000, -1000]);
-        let mut m = Mixer::new(100, MixParams::default());
-        m.play(req(&c, "r")).unwrap();
-        let out = render(&mut m, 7);
-        let left: Vec<i16> = out.iter().step_by(2).copied().collect();
-        assert_eq!(left, [0, 500, 1000, 0, -1000, -1000, 0]);
-        assert_eq!(m.playing(), 0);
-        // Downsampling 200 Hz into 100 Hz takes every other frame.
-        let c = clip(200, 1, vec![1, 2, 3, 4, 5, 6]);
-        m.play(req(&c, "d")).unwrap();
-        let left: Vec<i16> = render(&mut m, 4).iter().step_by(2).copied().collect();
-        assert_eq!(left, [1, 3, 5, 0]);
-    }
-
-    #[test]
-    fn rendering_in_pieces_equals_rendering_at_once() {
-        let c = clip(
-            22050,
-            2,
-            (0..2000).map(|i| (i * 13 % 4000 - 2000) as i16).collect(),
-        );
-        let mut a = Mixer::new(44100, MixParams::default());
-        let mut b = a.clone();
-        a.play(req(&c, "x")).unwrap();
-        b.play(req(&c, "x")).unwrap();
-        let whole = render(&mut a, 3000);
-        let mut parts = Vec::new();
-        for n in [1, 999, 1000, 1000] {
-            parts.extend(render(&mut b, n));
-        }
-        assert_eq!(whole, parts);
-    }
-
-    #[test]
-    fn clip_from_pcm_rejects_unplayable_shapes() {
-        let ok = Pcm {
-            sample_rate: 8000,
-            channels: 2,
-            samples: vec![1, 2, 3],
-        };
-        assert_eq!(Clip::from_pcm(ok).unwrap().samples, [1, 2]);
-        for (rate, ch) in [(0, 1), (8000, 0), (8000, 3)] {
-            let p = Pcm {
-                sample_rate: rate,
-                channels: ch,
-                samples: vec![0; 12],
-            };
-            assert!(Clip::from_pcm(p).is_none());
-        }
-    }
+    f
 }
+
+#[cfg(test)]
+#[path = "mixer_tests.rs"]
+mod tests;

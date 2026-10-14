@@ -48,6 +48,8 @@ fn synthetic_install() -> Install {
             },
         )],
         names: Default::default(),
+        sounds: None,
+        speech: None,
         bank: Default::default(),
         summary: "synthetic".into(),
     }
@@ -95,7 +97,11 @@ fn menu_setup_and_start_hand_out_jobs() {
     let px = c.frame_rgba();
     assert_eq!(px.len(), (c.size.0 * c.size.1 * 4) as usize);
     // The map does not load: back to the setup, the file system kept.
-    c.done(Done::Started(Vfs::default(), Box::new(Err("no map".into()))));
+    c.done(Done::Started(
+        Vfs::default(),
+        Box::new(Err("no map".into())),
+        glasnost_audio::bank::SoundBank::new(),
+    ));
     assert_eq!(c.shell.screen, Screen::Setup);
     assert!(c.vfs.is_some());
     assert_eq!(c.status, "no map");

@@ -213,7 +213,7 @@ fn claim_1_a_shot_starts_at_the_fire_point() {
     let t = w.obj(a).unwrap().target.unwrap();
     assert!(fire::shot(&mut w, a, 0, t));
     let from = w.effects.iter().rev().find_map(|e| match e {
-        Effect::Shot { firer, from } if *firer == a => Some(*from),
+        Effect::Shot { firer, from, .. } if *firer == a => Some(*from),
         _ => None,
     });
     assert_eq!(from, Some(want));

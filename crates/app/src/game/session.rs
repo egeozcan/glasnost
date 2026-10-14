@@ -331,12 +331,6 @@ impl Session {
         &self.filter
     }
 
-    /// The view centre in leptons on the ground, for the sound listener.
-    pub fn listener(&self) -> (i32, i32) {
-        let (cx, cy) = glasnost_render::projection::flat_cell(self.centre.0, self.centre.1);
-        glasnost_render::projection::cell_centre(cx, cy)
-    }
-
     /// The light-alpha values of the view after the local player's shroud
     /// covers (S-0110).
     pub fn light_alpha(&self) -> Vec<u8> {

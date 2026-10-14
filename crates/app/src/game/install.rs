@@ -1,6 +1,7 @@
 //! What the client reads from a mounted install before the menus: the
 //! base rules (for the setup screen's values and the sound names), the
-//! multiplayer maps with their start positions, and the sound bank.
+//! multiplayer maps with their start positions, the sound and speech
+//! databases, and the sound bank.
 
 use std::sync::Arc;
 
@@ -22,6 +23,11 @@ pub struct Install {
     pub maps: Vec<(Listing, MapEntry)>,
     /// The sound names of the base rules.
     pub names: SoundNames,
+    /// The sound database (S-0005 Import mapping), read by S-0701 claims 1
+    /// to 3 when a game starts, under that game's quirk switches.
+    pub sounds: Option<Document>,
+    /// The speech database (S-0005 Import mapping, S-0701 claim 26).
+    pub speech: Option<Document>,
     /// The samples found.
     pub bank: SoundBank,
     /// What was found, for the menu's status line.
@@ -123,6 +129,12 @@ pub fn start_count(bytes: &[u8]) -> u32 {
         .count() as u32
 }
 
+/// A database file read through the game's search order and parsed.
+async fn database(vfs: &Vfs, name: &str) -> Option<Document> {
+    let f = glasnost_convert::inputs::read(vfs, name).await?;
+    Some(Document::parse(&f.bytes, Default::default(), &mut Vec::new()))
+}
+
 /// Reads the install's menus data: the base rules resolved, the
 /// multiplayer maps with at least two start positions, and the samples.
 pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
@@ -155,6 +167,9 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         return Err("no multiplayer map with two start positions was found".into());
     }
     let names = SoundNames::from_ruleset(&resolved.ruleset);
+    // spec: S-0005 Import mapping (`soundmd.ini`, the sound database; `evamd.ini`, the speech database)
+    let sounds = database(vfs, "soundmd.ini").await;
+    let speech = database(vfs, "evamd.ini").await;
     let (bank, report) = bank::discover(vfs).await;
     let summary = format!(
         "{} maps, {} countries, {} samples",
@@ -166,6 +181,8 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         setup,
         maps,
         names,
+        sounds,
+        speech,
         bank,
         summary,
     })

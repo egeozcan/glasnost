@@ -425,6 +425,18 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     if result != HitResult::NowDead && result != HitResult::PostMortem {
         damage_effect_reaction(w, target, result, hit.warhead);
     }
+    // A presentation event for the sound reactions (S-0701 claim 20); no state, no draw.
+    w.effects.push(crate::combat::effects::Effect::Hit {
+        id: target,
+        of: crate::econ::TypeRef {
+            kind: o.kind,
+            index: o.type_index,
+        },
+        owner: o.owner,
+        pos: o.pos,
+        result,
+        attacker: hit.attacker,
+    });
     reactions(w, target, &hit, h, result);
     result
 }

@@ -1070,6 +1070,42 @@ pub struct Quirks {
     // spec: S-0307 claim 21, Edge cases
     #[serde(default = "on")]
     pub approach_alternative_outside_area: bool,
+    /// The sound data's game-wide default priority is read and never applied: an entry without its own priority is normal; off: it is the default for entries without their own priority.
+    // spec: S-0701 claim 3, Edge cases
+    #[serde(default = "on")]
+    pub default_sound_priority_ignored: bool,
+    /// One sample missing from the audio archive silences the whole sound entry; off: the missing sample is left out of the list and the rest play.
+    // spec: S-0701 claim 4, Edge cases
+    #[serde(default = "on")]
+    pub missing_sample_silences_entry: bool,
+    /// Immediate-mode random ordering with no attack sample takes and discards one startup ordering draw; off: no discarded draw.
+    // spec: S-0701 claim 14, Edge cases
+    #[serde(default = "on")]
+    pub sound_order_startup_draw: bool,
+    /// A sound entry's volume of 100 % gives level 16383; off: 16384.
+    // spec: S-0701 F1, Edge cases
+    #[serde(default = "on")]
+    pub full_volume_16383: bool,
+    /// A sound entry with the attack or decay word whose samples leave no body sample makes no sound, then stays silent for the session; off: its attack and decay samples play.
+    // spec: S-0701 Edge cases
+    #[serde(default = "on")]
+    pub attack_decay_without_body: bool,
+    /// A sound with the shroud word at cell (0, 0) is never heard; off: that cell is judged like any other.
+    // spec: S-0701 claim 6, Edge cases
+    #[serde(default = "on")]
+    pub shroud_sound_corner_cell: bool,
+    /// An object's damage sound starts twice per unchanged hit; off: once.
+    // spec: S-0701 claim 20, Edge cases
+    #[serde(default = "on")]
+    pub damage_sound_doubled: bool,
+    /// The deploy command's game-wide sound is never read, so the command is silent; off: it is read and played.
+    // spec: S-0701 claim 19, Edge cases
+    #[serde(default = "on")]
+    pub deploy_command_silent: bool,
+    /// An announcement's volume key has no effect; off: the volume (a fraction, default 1) scales it.
+    // spec: S-0701 claim 26, Edge cases
+    #[serde(default = "on")]
+    pub announcement_volume_ignored: bool,
 }
 
 impl Default for Quirks {
@@ -1334,6 +1370,15 @@ impl Default for Quirks {
             approach_alternative_walk: true,
             approach_alternative_zero_height: true,
             approach_alternative_outside_area: true,
+            default_sound_priority_ignored: true,
+            missing_sample_silences_entry: true,
+            sound_order_startup_draw: true,
+            full_volume_16383: true,
+            attack_decay_without_body: true,
+            shroud_sound_corner_cell: true,
+            damage_sound_doubled: true,
+            deploy_command_silent: true,
+            announcement_volume_ignored: true,
         }
     }
 }
@@ -1954,6 +1999,24 @@ impl Quirks {
             (
                 "approach_alternative_outside_area",
                 self.approach_alternative_outside_area,
+            ),
+            (
+                "default_sound_priority_ignored",
+                self.default_sound_priority_ignored,
+            ),
+            (
+                "missing_sample_silences_entry",
+                self.missing_sample_silences_entry,
+            ),
+            ("sound_order_startup_draw", self.sound_order_startup_draw),
+            ("full_volume_16383", self.full_volume_16383),
+            ("attack_decay_without_body", self.attack_decay_without_body),
+            ("shroud_sound_corner_cell", self.shroud_sound_corner_cell),
+            ("damage_sound_doubled", self.damage_sound_doubled),
+            ("deploy_command_silent", self.deploy_command_silent),
+            (
+                "announcement_volume_ignored",
+                self.announcement_volume_ignored,
             ),
         ]
     }

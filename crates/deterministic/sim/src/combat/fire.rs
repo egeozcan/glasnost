@@ -233,7 +233,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         ob.combat.firing_frame = Some(2 * firing_frames - 1);
     }
     let _ = mode;
-    crate::combat::projectile::shot_effect(w, firer, fp);
+    crate::combat::projectile::shot_effect(w, firer, weapon, fp);
     // spec: S-0309 claim 15 and S-0302 claim 18 (a shot lowers the target's expected remaining health)
     if let Some((x, e)) = expected
         && let Some(tob) = w.obj_mut(x)

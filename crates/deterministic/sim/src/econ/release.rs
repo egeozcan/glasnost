@@ -21,6 +21,8 @@ use glasnost_num::geom::{Facing, direction, n_step};
 use serde::{Deserialize, Serialize};
 
 use crate::behaviour::Door;
+use crate::combat::effects::{Effect, Sound};
+use crate::econ::TypeRef;
 use crate::rules::{Behaviour, Kind};
 use crate::scatter::ScatterRequest;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
@@ -518,7 +520,7 @@ pub fn release(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         .obj(k)
         .and_then(|b| w.rules().buildings.get(b.type_index as usize))
         .is_some_and(|b| b.naval);
-    match kind {
+    let out = match kind {
         // spec: S-0404 claim 13 (infantry factory row; claim 14's copies)
         Kind::Infantry => infantry(w, k, unit, true),
         // spec: S-0404 claim 13 (naval vehicle factory row)
@@ -528,7 +530,23 @@ pub fn release(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
         // spec: S-0404 claim 13 (aircraft factory row)
         Kind::Aircraft => aircraft(w, k, unit, super::production::dock_free(w, k)),
         _ => Outcome::Failed,
+    };
+    if out == Outcome::Released
+        && let (Some(u), Some(f)) = (w.obj(unit), w.obj(k))
+    {
+        // A presentation event: the unit-ready sound and announcement (S-0701 claims 23 and 28); no state, no draw.
+        let e = Effect::Sound {
+            sound: Sound::UnitReady,
+            of: Some(TypeRef {
+                kind: u.kind,
+                index: u.type_index,
+            }),
+            house: u.owner,
+            pos: Some(f.pos),
+        };
+        w.effects.push(e);
     }
+    out
 }
 
 /// K's rally point (S-0213 claim 20).

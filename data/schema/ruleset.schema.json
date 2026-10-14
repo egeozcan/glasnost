@@ -5784,6 +5784,11 @@
           "type": "boolean",
           "default": true
         },
+        "announcement_volume_ignored": {
+          "description": "An announcement's volume key has no effect; off: the volume (a fraction, default 1) scales it.",
+          "type": "boolean",
+          "default": true
+        },
         "approach_alternative_outside_area": {
           "description": "A vehicle's approach alternatives skip the usable-area test; off:\nthey must pass it as primaries do.",
           "type": "boolean",
@@ -5801,6 +5806,11 @@
         },
         "area_damage_per_foundation_cell": {
           "description": "A building takes one hit for each scanned foundation cell within the spread radius.",
+          "type": "boolean",
+          "default": true
+        },
+        "attack_decay_without_body": {
+          "description": "A sound entry with the attack or decay word whose samples leave no body sample makes no sound, then stays silent for the session; off: its attack and decay samples play.",
           "type": "boolean",
           "default": true
         },
@@ -5969,6 +5979,11 @@
           "type": "boolean",
           "default": true
         },
+        "damage_sound_doubled": {
+          "description": "An object's damage sound starts twice per unchanged hit; off: once.",
+          "type": "boolean",
+          "default": true
+        },
         "death_weapon_unplaced_projectile": {
           "description": "The death weapon's projectile tests use its unplaced default position.",
           "type": "boolean",
@@ -5976,6 +5991,11 @@
         },
         "deck_side_step_ground_level": {
           "description": "A step from a bridge deck is judged by the ground level under the deck, so a side step of 1 level lands on ground 3 or 5 levels below; off: such a step onto a cell that is not a bridge cell is refused.",
+          "type": "boolean",
+          "default": true
+        },
+        "default_sound_priority_ignored": {
+          "description": "The sound data's game-wide default priority is read and never applied: an entry without its own priority is normal; off: it is the default for entries without their own priority.",
           "type": "boolean",
           "default": true
         },
@@ -6011,6 +6031,11 @@
         },
         "delay_kill_whole_cell_spread": {
           "description": "The delayed-kill countdown divides by the spread's whole cells, so a spread below one cell gives 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "deploy_command_silent": {
+          "description": "The deploy command's game-wide sound is never read, so the command is silent; off: it is read and played.",
           "type": "boolean",
           "default": true
         },
@@ -6214,6 +6239,11 @@
           "type": "boolean",
           "default": true
         },
+        "full_volume_16383": {
+          "description": "A sound entry's volume of 100 % gives level 16383; off: 16384.",
+          "type": "boolean",
+          "default": true
+        },
         "gap_end_keeps_cover": {
           "description": "When a hostile gap field stops, its cells stay unexplored until a sight reaches them.",
           "type": "boolean",
@@ -6316,6 +6346,11 @@
         },
         "missile_turn_wrap": {
           "description": "The steering turn step uses only the residue mod 256 and is a signed 16-bit value.",
+          "type": "boolean",
+          "default": true
+        },
+        "missing_sample_silences_entry": {
+          "description": "One sample missing from the audio archive silences the whole sound entry; off: the missing sample is left out of the list and the rest play.",
           "type": "boolean",
           "default": true
         },
@@ -6709,6 +6744,11 @@
           "type": "boolean",
           "default": true
         },
+        "shroud_sound_corner_cell": {
+          "description": "A sound with the shroud word at cell (0, 0) is never heard; off: that cell is judged like any other.",
+          "type": "boolean",
+          "default": true
+        },
         "sidebar_both_flags_rank": {
           "description": "An item with both the counts-as-aircraft and naval flags ranks 1 as\nthe new item and 2 as an item already in the tab; off: 1 in both.",
           "type": "boolean",
@@ -6751,6 +6791,11 @@
         },
         "slow_walker_stall": {
           "description": "A walker of speed 1 heading between east and south stalls.",
+          "type": "boolean",
+          "default": true
+        },
+        "sound_order_startup_draw": {
+          "description": "Immediate-mode random ordering with no attack sample takes and discards one startup ordering draw; off: no discarded draw.",
           "type": "boolean",
           "default": true
         },

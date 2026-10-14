@@ -5,9 +5,10 @@
 //! ([`glasnost_fmt::pcm::Pcm::from_wav`]). They are decoded when first
 //! played and then kept.
 //!
-//! Which files hold the samples, and which copy wins when a name is in
-//! several, is not specified (Q-0263). [`discover`] finds sample banks by
-//! content and the first bank to hold a name wins: our interim rule.
+//! The samples of sound entries come from one indexed bank, found by name
+//! through the game's file lookup (S-0701 claim 34, [`discover`]). Which copy
+//! wins when the index lists a name twice is not specified (Q-0263): the
+//! first copy wins, our interim rule.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -16,7 +17,7 @@ use std::sync::Arc;
 use glasnost_fmt::aud::Aud;
 use glasnost_fmt::idx::{Idx, IdxEntry};
 use glasnost_fmt::pcm::Pcm;
-use glasnost_vfs::{FileRef, Vfs};
+use glasnost_vfs::Vfs;
 
 use crate::mixer::Clip;
 
@@ -31,8 +32,8 @@ enum Source {
     Clip(Arc<Clip>),
 }
 
-/// Samples by name. Names compare with ASCII case folding (interim, as
-/// sample names of an index file are matched; Q-0260).
+/// Samples by name. Names compare with ASCII case folding (S-0701 claim 34:
+/// samples are looked up ignoring case).
 #[derive(Clone, Debug, Default)]
 pub struct SoundBank {
     sources: BTreeMap<String, Source>,
@@ -176,76 +177,42 @@ impl SoundBank {
 /// What [`discover`] found.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DiscoverReport {
-    /// Index files found by content.
+    /// Index files found (0 or 1).
     pub banks: usize,
-    /// Index files whose data file could not be identified or read.
+    /// Index files whose data file was missing or unreadable, or that did
+    /// not parse.
     pub unpaired: usize,
     /// Samples added.
     pub samples: usize,
 }
 
-/// Whether an entry's size fits an index file: a 12-byte header and whole
-/// 36-byte entries (the layout of [`glasnost_fmt::idx`]).
-fn idx_shaped(size: u32) -> bool {
-    let size = size as usize;
-    size >= glasnost_fmt::idx::HEADER_LEN
-        && (size - glasnost_fmt::idx::HEADER_LEN).is_multiple_of(glasnost_fmt::idx::ENTRY_LEN)
-}
+/// The sample bank's index file (S-0701 Import mapping, claim 34).
+pub const INDEX_FILE: &str = "audio.idx"; // spec: S-0701 Import mapping (`AUDIO.IDX`, matched ignoring case)
+/// The sample bank's data file (S-0701 Import mapping, claim 34).
+pub const DATA_FILE: &str = "audio.bag"; // spec: S-0701 Import mapping (`AUDIO.BAG`, matched ignoring case)
 
-/// Builds a bank from the mounted archives (interim rule, Q-0263): every
-/// archive entry that parses as an index file, in archive mount order, with
-/// the entry of the same archive whose size equals the end of its furthest
-/// sample as its data file (as the asset viewer pairs them). The first bank
-/// to hold a name wins. Loose files are not read.
+/// Builds the sample bank: the index file and the data file, each found
+/// through the game's file lookup (S-0005), so either may be a member of a
+/// mounted archive or a loose file (S-0701 claim 34).
 pub async fn discover(vfs: &Vfs) -> (SoundBank, DiscoverReport) {
     let mut bank = SoundBank::new();
     let mut report = DiscoverReport::default();
-    for (ai, archive) in vfs.archives().iter().enumerate() {
-        for entry in &archive.index.entries {
-            if !idx_shaped(entry.size) {
-                continue;
-            }
-            let file = FileRef {
-                archive: glasnost_vfs::ArchiveId(ai as u32),
-                entry: *entry,
-            };
-            let Ok(head) = vfs.read_prefix(&file, 4).await else {
-                continue;
-            };
-            if head.as_slice() != glasnost_fmt::idx::MAGIC {
-                continue;
-            }
-            let Ok(bytes) = vfs.read(&file).await else {
-                continue;
-            };
-            let Ok(idx) = Idx::parse(&bytes) else {
-                continue;
-            };
-            report.banks += 1;
-            let end = idx
-                .entries
-                .iter()
-                .map(|e| u64::from(e.offset) + u64::from(e.size))
-                .max()
-                .unwrap_or(0);
-            let mut matches = archive
-                .index
-                .entries
-                .iter()
-                .filter(|e| e.id != entry.id && u64::from(e.size) == end);
-            let (Some(bag_entry), None) = (matches.next(), matches.next()) else {
-                report.unpaired += 1;
-                continue;
-            };
-            let bag_file = FileRef {
-                archive: file.archive,
-                entry: *bag_entry,
-            };
-            match vfs.read(&bag_file).await {
-                Ok(bag) => report.samples += bank.add_idx(&idx, Rc::from(bag)),
-                Err(_) => report.unpaired += 1,
-            }
-        }
+    // spec: S-0701 claim 34 (one bank: its index file and data file through the ordinary file lookup of S-0005)
+    let Some(idx_ref) = vfs.resolve(INDEX_FILE) else {
+        return (bank, report);
+    };
+    report.banks = 1;
+    let idx = match vfs.read_resolved(&idx_ref).await {
+        Ok(bytes) => Idx::parse(&bytes).ok(),
+        Err(_) => None,
+    };
+    let bag = match vfs.resolve(DATA_FILE) {
+        Some(r) => vfs.read_resolved(&r).await.ok(),
+        None => None,
+    };
+    match (idx, bag) {
+        (Some(idx), Some(bag)) => report.samples = bank.add_idx(&idx, Rc::from(bag)),
+        _ => report.unpaired = 1,
     }
     (bank, report)
 }
@@ -324,39 +291,25 @@ mod tests {
         assert!(b.contains("MADE"));
     }
 
-    /// Q-0263 interim: banks found by content, paired by size, first
-    /// archive's copy of a name wins.
+    // spec: S-0701 claim 34 (the bank's two files by name through the file lookup, loose files included; other banks are not read)
     #[test]
-    fn discover_finds_banks_by_content_in_mount_order() {
-        use glasnost_fmt::mix::{HeaderCipher, MixKeys, MixWriter, WriteLayout, id_hash};
+    fn discover_reads_the_named_bank_files() {
+        use glasnost_fmt::mix::{HeaderCipher, MixKeys};
         use glasnost_fmt::mix_key::RsaKeyPair;
         use glasnost_vfs::source::MemSource;
-        use glasnost_vfs::{MountOptions, PickedFile};
+        use glasnost_vfs::{GameOptions, MountOptions, PickedFile};
 
-        let mix = |files: Vec<(&str, Vec<u8>)>| {
-            MixWriter {
-                layout: WriteLayout::Classic,
-                files: files.into_iter().map(|(n, d)| (id_hash(n), d)).collect(),
-            }
-            .write()
-        };
         let (i1, b1) = bank_bytes(&["alpha", "shared"], 1);
-        let first = Idx::parse(&i1).unwrap().entries[1].decode(&b1).unwrap();
-        let (i2, b2) = bank_bytes(&["shared", "beta"], 9);
+        let (i2, b2) = bank_bytes(&["beta"], 9);
         let picked = |path: &str, bytes: Vec<u8>| PickedFile {
             path: path.into(),
             source: Rc::new(MemSource(bytes)),
         };
         let files = vec![
-            picked(
-                "one.mix",
-                mix(vec![
-                    ("x1.idx", i1),
-                    ("x1.bag", b1),
-                    ("note.txt", b"hi".to_vec()),
-                ]),
-            ),
-            picked("two.mix", mix(vec![("x2.idx", i2), ("x2.bag", b2)])),
+            picked("AUDIO.IDX", i1),
+            picked("Audio.Bag", b1),
+            picked("other.idx", i2),
+            picked("other.bag", b2),
         ];
         let keys = MixKeys {
             rsa: RsaKeyPair::synthetic().public().clone(),
@@ -364,24 +317,37 @@ mod tests {
         };
         let mut vfs = Vfs::new(keys, MountOptions::default());
         pollster::block_on(vfs.mount_install(files));
+        let on = GameOptions {
+            mod_layer: true,
+            ..GameOptions::default()
+        };
+        pollster::block_on(vfs.mount_startup(on));
         let (mut bank, report) = pollster::block_on(discover(&vfs));
         assert_eq!(
             report,
             DiscoverReport {
-                banks: 2,
+                banks: 1,
                 unpaired: 0,
-                samples: 3
+                samples: 2
             }
         );
-        assert_eq!(bank.clip("shared").unwrap().samples, first.samples);
-        assert!(bank.clip("beta").is_some());
+        assert!(bank.clip("SHARED").is_some());
+        assert!(bank.clip("beta").is_none());
     }
 
     #[test]
-    fn index_shape_filter() {
-        assert!(idx_shaped(12));
-        assert!(idx_shaped(12 + 36 * 3));
-        assert!(!idx_shaped(11));
-        assert!(!idx_shaped(12 + 35));
+    fn no_index_file_gives_an_empty_bank() {
+        use glasnost_fmt::mix::{HeaderCipher, MixKeys};
+        use glasnost_fmt::mix_key::RsaKeyPair;
+        use glasnost_vfs::MountOptions;
+
+        let keys = MixKeys {
+            rsa: RsaKeyPair::synthetic().public().clone(),
+            cipher: HeaderCipher::BigEndianWords,
+        };
+        let vfs = Vfs::new(keys, MountOptions::default());
+        let (bank, report) = pollster::block_on(discover(&vfs));
+        assert_eq!(report, DiscoverReport::default());
+        assert!(bank.is_empty());
     }
 }

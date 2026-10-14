@@ -10,8 +10,11 @@
 
 use std::collections::BTreeMap;
 
-use glasnost_audio::events::Audio;
-use glasnost_audio::mixer::Listener;
+use glasnost_audio::catalog::SoundCatalog;
+use glasnost_audio::bank::SoundBank;
+use glasnost_audio::events::{Audio, local_voice_set};
+use glasnost_audio::mixer::View as SoundView;
+use glasnost_audio::speech::SpeechCatalog;
 use glasnost_render::batch2d::CpuImage;
 use glasnost_sim::rng::Rng;
 use glasnost_sim::targeting::{KeyCommand, Modifiers};
@@ -48,6 +51,9 @@ pub enum Job {
         offered: Vec<String>,
         /// The game's seed.
         seed: u32,
+        /// The announcement data, for loading the local voice set's files
+        /// (S-0701 claim 34).
+        speech: SpeechCatalog,
     },
 }
 
@@ -57,8 +63,9 @@ pub enum Done {
     Mounted(Result<Vfs, String>),
     /// The menus' data, with the file system back.
     Prepared(Vfs, Result<Box<Install>, String>),
-    /// The game started, or why not, with the file system back.
-    Started(Vfs, Box<Result<Session, String>>),
+    /// The game started, or why not, with the file system back and the
+    /// local voice set's announcement files (S-0701 claim 34).
+    Started(Vfs, Box<Result<Session, String>>, SoundBank),
 }
 
 /// Runs a job.
@@ -82,6 +89,7 @@ pub async fn run_job(job: Job) -> Done {
             lobby,
             offered,
             seed,
+            speech,
         } => {
             let make = |rules: &glasnost_sim::rules::SimRules| {
                 // spec: S-0202 claim 8 (both streams take the game's seed); the lobby's own stream
@@ -89,7 +97,17 @@ pub async fn run_job(job: Job) -> Done {
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
             let r = Session::start(&mut vfs, &file, &make).await;
-            Done::Started(vfs, Box::new(r))
+            let mut voices = SoundBank::new();
+            if let Ok(s) = &r {
+                let set = local_voice_set(&s.play.game.world, Some(s.play.local));
+                // spec: S-0701 claim 34 (each announcement a separate file, opened through the file lookup, never from the bank)
+                for name in speech.files(set) {
+                    if let Some(f) = glasnost_convert::inputs::read(&vfs, &name).await {
+                        voices.add_file(&name, std::rc::Rc::from(f.bytes));
+                    }
+                }
+            }
+            Done::Started(vfs, Box::new(r), voices)
         }
     }
 }
@@ -231,7 +249,7 @@ impl Client {
                     Err(e) => self.status = e,
                 }
             }
-            Done::Started(vfs, r) => {
+            Done::Started(vfs, r, voices) => {
                 self.vfs = Some(vfs);
                 match *r {
                     Ok(mut s) => {
@@ -244,11 +262,11 @@ impl Client {
                         s.register_art(&mut self.painter);
                         // spec: S-0202 claim 8 (the unsynchronised stream takes the game's seed)
                         self.unsync = Rng::new(s.play.game.replay().setup.seed);
-                        self.start_audio();
                         self.pacer.reset();
                         self.radar_tick = -1;
                         self.game_serial += 1;
                         self.session = Some(s);
+                        self.start_audio(voices);
                         self.shell.screen = Screen::Game;
                     }
                     Err(e) => {
@@ -261,17 +279,27 @@ impl Client {
         }
     }
 
-    fn start_audio(&mut self) {
+    fn start_audio(&mut self, voices: SoundBank) {
         let Some(install) = self.install.as_ref() else {
             return;
         };
-        let audio = self.audio.get_or_insert_with(|| {
-            let mut a = Audio::platform();
-            a.set_catalog(glasnost_audio::catalog::SoundCatalog::interim());
-            a
+        let Some(s) = self.session.as_ref() else {
+            return;
+        };
+        let w = &s.play.game.world;
+        let q = w.rules().quirks;
+        let audio = self.audio.get_or_insert_with(Audio::platform);
+        audio.set_quirks(q);
+        let sounds = install.sounds.as_ref().map(|d| {
+            SoundCatalog::from_ini(d, q.default_sound_priority_ignored, q.full_volume_16383)
         });
+        audio.set_catalog(sounds.unwrap_or_default());
+        let speech = install.speech.as_ref().map(SpeechCatalog::from_ini);
+        audio.set_speech(speech.unwrap_or_default());
         audio.set_bank(install.bank.clone());
+        audio.set_voices(voices);
         audio.set_names(install.names.clone());
+        audio.start(w, Some(s.play.local));
     }
 
     /// A user gesture happened: the browser lets sound start now.
@@ -309,6 +337,11 @@ impl Client {
             lobby,
             offered: install.setup.countries.clone(),
             seed: self.next_seed,
+            speech: install
+                .speech
+                .as_ref()
+                .map(SpeechCatalog::from_ini)
+                .unwrap_or_default(),
         });
     }
 
@@ -460,19 +493,27 @@ impl Client {
         } else if self.pacer.due(now_ms, s.speed) {
             s.step();
             if let Some(a) = self.audio.as_mut() {
-                a.play_effects(&s.play.effects, Some(s.play.local));
+                a.tick(&s.play.game.world, &s.play.effects, &mut self.unsync);
             }
         }
+        let cues = std::mem::take(&mut s.play.cues);
+        let acks = std::mem::take(&mut s.play.acks);
+        let selected = std::mem::take(&mut s.play.selected);
+        let keys = std::mem::take(&mut s.play.keys);
         if let Some(a) = self.audio.as_mut() {
-            for cue in std::mem::take(&mut s.play.cues) {
+            let w = &s.play.game.world;
+            for cue in cues {
                 a.cue(cue);
             }
-            for click in std::mem::take(&mut s.play.acks) {
-                a.acknowledge(&s.play.game.world, &click, true, &mut self.unsync);
+            for id in selected {
+                a.selected(w, id, &mut self.unsync);
             }
-        } else {
-            s.play.cues.clear();
-            s.play.acks.clear();
+            for (selection, click) in acks {
+                a.ordered(w, &selection, &click, &mut self.unsync);
+            }
+            for k in keys {
+                a.key(k);
+            }
         }
         let mut d = if self.focused { s.edge_scroll() } else { (0, 0) };
         let [l, r, u, dn] = self.held;
@@ -480,9 +521,14 @@ impl Client {
         d.1 += SCROLL_STEP * (i32::from(dn) - i32::from(u));
         s.scroll(d);
         if let Some(a) = self.audio.as_mut() {
-            let (x, y) = s.listener();
-            a.set_listener(Listener { x, y });
-            a.frame();
+            let v = s.view();
+            a.set_view(SoundView {
+                origin: v.origin,
+                size: (v.size.0 as i32, v.size.1 as i32),
+                // spec: S-0701 F2 (the position's place on screen: S-0101's projection with its height)
+                project: glasnost_render::projection::project_lifted,
+            });
+            a.frame(now_ms, &mut self.unsync);
         }
         if let Some(end) = s.play.end(period_ms(s.speed)) {
             self.shell.game_over(end);
