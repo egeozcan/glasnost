@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 29
+revision: 30
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1043,7 +1043,7 @@ used by this spec:
     - Confidence: high for walking-target arrival versus reservation or boundary
       crossing; medium for the combined observable ordering and same-cell case
 
-23. **Walking arrival and the clear report (Q-0295).** For ordinary walking infantry,
+23. **Infantry arrival and the clear report (Q-0295).** For ordinary walking infantry,
     a cell-arrival update is the arrival tick of claim 6 at each walking target: the
     tick the unit snaps to the cell's chosen standing position, not the tick it
     crosses a cell boundary. It is not limited to the end of the whole walk. The
@@ -1064,13 +1064,31 @@ used by this spec:
 
     S-0417 claim 10 owns the resulting end of factory contact and tether; the report
     does not by itself finish or redirect the infantry's walk to the exit. Claims 16
-    and 17 still own walking completion. This rule covers an ordinary release walk
-    without an entry interaction that removes the unit before it can report; it
-    does not prescribe jumpjet, teleporting or passenger-unloading behaviour.
-    - Backing: `measurable` (scenario W15; S-0417 scenario U10(a) supplies the release setup)
-    - Confidence: high for the walking arrival event, report on the first update,
-      and absence of a foundation/destination test; medium for the combined release
-      and continuing-walk consequence
+    and 17 still own walking completion.
+
+    A tethered infantry unit using its own teleporting locomotor instead reports
+    clear on its first jump's cell-arrival update after tether establishment
+    (S-0207 claim 22). Under S-0417 claim 10, factory contact and tether end in that
+    jump tick, after landing position, height and landing-layer listing change but
+    before the landing cell's entered-by tag is raised. Its tag actions therefore
+    observe the factory contact place already free. No foundation-exit or
+    different-destination test applies, and the vehicle building-cell suppression
+    does not apply. The ordinary infantry factory gives no run-away reply or extra
+    exit-cell leg. Landing reservation alone does not report clear; neither
+    phasing-in completion nor falling back to rest is required for release.
+    Without a jump, another cell-arrival update or an independent contact-breaking
+    event, contact and tether remain, with no factory-release contact timeout
+    (S-0417 claim 10).
+
+    These report rules cover ordinary factory release without an entry interaction
+    that removes the unit before it can report. They do not prescribe jumpjet or
+    passenger-unloading behaviour.
+    - Backing: `measurable` (scenario W15; S-0417 U10 a supplies the walking release
+      setup, U10 d/e cover teleporting release, entered-by ordering and no-jump retention)
+    - Confidence: high for the walking and jump arrival events, report on the first
+      update, contact/tether loss before the entered-by raise and absence of a
+      foundation/destination test; medium for the combined release, continuing-walk
+      and no-jump consequences
 
 ## Formulas
 
