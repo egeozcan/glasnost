@@ -2,7 +2,7 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 23
+revision: 24
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -217,15 +217,15 @@ Radiation-field light creation, fading, removal and snow-theater colour are owne
     - **Overlays:** the first applicable row of S-0112 claim 1 wins, including for types with several flags. The bodies of the veinhole markers of S-0112 are not drawn, but their shadows are drawn as S-0112 claim 8 specifies. Any other overlay in a deck cell uses the cell's **scaled raised** level, regardless of type. Outside deck cells, ore and gem overlays use 1000 regardless of cell light; wall overlays use the **unscaled** ground level *U*; and every other drawn overlay, the vein overlay included, uses the **scaled** ground level.
     - **Smudges:** each piece takes the scaled ground level and tile shade table of the cell being painted (S-0112 claim 3).
     - **Animations** (palette choice in the table of S-0103, claim 8): vein animations (row 1) and terrain animations, which are created as part of a cell's terrain (row 2), take the cell's **scaled** ground level. Anim-palette animations (row 5) take the **unscaled** ground level *U*. Alternative-palette animations (row 4) are drawn with a single-shade table, so brightness has no effect on them. An object's own animation that is drawn with its object (row 3) takes a brightness that is stored with the animation:
-      - A building's own animation: the building's brightness, *U* of the building's top-left foundation cell (as for an ordinary building, even when the building uses the terrain palette). It is set when the animation starts and set again on every tick, so it follows the building's light.
+      - A building's own animation: the building's brightness, *U* of the building's top-left foundation cell (as for an ordinary building, even when the building uses the terrain palette). It is set when the animation starts and refreshed on each building turn, so it follows the building's light. Under protection, this stored brightness includes the building's protection adjustment as specified by S-0102 claim 34; the normal-light override below still wins.
       - A parachute: *U* of the carried object's cell on the tick the parachute is created. It is not updated during the fall.
       - A unit's deploy or undeploy animation: 1000, whatever the cell's light (`quirks.deploy_animation_unlit`).
       - Any other animation of this row: not established (Open questions).
 
       An animation flagged to use normal light is drawn at 1000 in every case, row 3 included.
-    - **Protection brightness:** S-0513 claim 29 and F9 specify the brightness envelope for curtain and force-shield protection, applied to the ordinary non-negative brightness above before claim 15's shade-row mapping. That contract isolates protection without simultaneous damage flashes or air-strike marking; it does not settle those combinations or every attached animation's treatment.
-      - Backing: `measurable` (S-0513 scenario SW10 part g)
-      - Confidence: high
+    - **Protection brightness:** S-0513 claim 29 and F9 specify the brightness envelope for curtain and force-shield protection, applied to the ordinary non-negative brightness above before claim 15's shade-row mapping. S-0102 claim 34 owns which drawing variants receive that envelope, building-slot brightness inheritance, the normal-light override, and the separate pixel-colour adjustment after shading. Mere attachment does not convey the host's envelope. These contracts isolate protection without simultaneous damage flashes or air-strike marking; those combinations and special drawing variants outside S-0102 claim 34 remain unresolved.
+      - Backing: `measurable` (S-0513 scenario SW10 part g; S-0102 scenario D44 for drawing variants and slot inheritance)
+      - Confidence: high for the envelope; medium for drawing variants and slot-brightness refresh, as qualified by S-0102 claim 34
     - **Not covered here:** changes to an object's brightness while it flashes or, for a building, while it is marked by an air strike (S-0519 claims 17 and 19). These modify the values above (Open questions).
     - The extra-light values are stored as ⌊*v* × 1000⌋ ‰ with no rounding allowance, where *v* is the single-precision decimal of S-0003, so a value such as 0.57 becomes 569.
     - All additions are integer additions. *b* is not clamped here; the row mapping of claim 15 treats any *b* ≤ 0 as 0.
@@ -828,7 +828,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 - Which cells a shadow-casting terrain tile marks as shadowed (Terms, claim 13).
 - How light-glow images write light-alpha values on display paths other than battlefield rendering (Terms, claim 15); battlefield cover-piece and glow updates are specified in S-0110 claims 5 and 6.
 - The brightness of an object's own animation drawn with its object (S-0103, claim 8, row 3) other than a building's own animation, a parachute, and a deploy or undeploy animation (claim 13).
-- How an object's brightness changes while it flashes or, for a building, while it is marked by an air strike (claim 13; S-0519 claims 17 and 19), including combinations with protection. These questions include buildings and their own animations. Protection alone is specified by S-0513 claim 29 and F9; that claim leaves unlisted drawing variants and exact pixel-colour composition unresolved.
+- How an object's brightness changes while it flashes or, for a building, while it is marked by an air strike (claim 13; S-0519 claims 17 and 19), including combinations with protection. These questions include buildings and their own animations. Protection alone follows S-0513 claim 29 for the envelope and S-0102 claim 34 for variant-specific application, building-slot brightness inheritance and opaque pixel-colour composition. Translucent and special accessory drawings outside that claim remain unresolved.
 - The brightness of other drawn things that claim 13 does not list, such as animations drawn from voxel models. Smudges are covered by S-0112 claim 3.
 - What lighting the original gives a position outside the map's legal cells (S-0009, claim 1).
 - Light radii of about 32000 leptons (125 cells) or more. The squared distances then exceed the range of the original's integer arithmetic when it selects the cells a light change recomputes (claim 12), and from about 65500 leptons also in the reach test (claim 11). Which cells it then recomputes and reaches is not established; claims 11 and 12 hold for smaller radii.
