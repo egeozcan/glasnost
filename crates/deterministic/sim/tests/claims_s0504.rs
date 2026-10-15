@@ -961,3 +961,84 @@ fn carrier_like_ship_runs() {
     }
     assert!(w.obj(vessel).is_some());
 }
+
+/// Orders `actor` of `house` by a click on `target`.
+fn click_attack_as(w: &mut World, house: HouseId, actor: ObjectId, target: ObjectId) {
+    let r = targeting::click(
+        w,
+        house,
+        &[actor],
+        ClickOn::Object(target),
+        Modifiers::default(),
+    );
+    assert!(!r.orders.is_empty(), "the click gives an attack order");
+    for o in r.orders {
+        assert!(orders::issue(w, house, o));
+    }
+}
+
+// spec: S-0504 claims 1 and 3, S-0506 claims 1 to 9 and 15 to 19, S-0501 claims 35 and 36 (end to end: a missile ship and a carrier ship of two houses fight across the lake; the missiles damage the carrier, the carrier's aircraft fly out and damage the missile ship, and both ships stay on water)
+#[test]
+fn carrier_and_missile_ship_fight() {
+    let mut r = spawner_rules("RKB", 2, true);
+    r.sim.aircraft.insert(
+        "WASP".into(),
+        UnitType {
+            strength: Some(60),
+            speed: Some(12),
+            rot: Some(10),
+            spawned: Some(true),
+            locomotor: Some(Locomotor::Fly),
+            primary: Some("Gun".into()),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("WASP".into());
+    let mut carrier = r.sim.vehicles["VESSEL"].clone();
+    carrier.missile_spawn = Some(false);
+    carrier.combat.spawns = Some("WASP".into());
+    r.sim.vehicles.insert("CARRIER".into(), carrier);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("CARRIER".into());
+    let mut w = world(r);
+    let launcher = at(&mut w, "VESSEL", 0, -6, 4);
+    let carrier = at(&mut w, "CARRIER", 1, 8, 4);
+    open(&mut w);
+    let (l0, c0) = (
+        w.obj(launcher).unwrap().health,
+        w.obj(carrier).unwrap().health,
+    );
+    click_attack_as(&mut w, ALPHA, launcher, carrier);
+    click_attack_as(&mut w, HouseId(1), carrier, launcher);
+    let mut aircraft_seen = false;
+    for _ in 0..2000 {
+        tick::step(&mut w);
+        for s in [launcher, carrier] {
+            if w.obj(s).is_some_and(|o| o.health > 0) {
+                assert_eq!(land_of(&w, s), land::WATER);
+            }
+        }
+        aircraft_seen |= w
+            .objects
+            .values()
+            .any(|o| o.kind == Kind::Aircraft && o.owner == Some(HouseId(1)) && o.on_map);
+        let hurt = |id: ObjectId, h0: i32| w.obj(id).is_none_or(|o| o.health < h0);
+        if hurt(launcher, l0) && hurt(carrier, c0) {
+            break;
+        }
+    }
+    assert!(aircraft_seen, "the carrier launches its aircraft");
+    assert!(
+        w.obj(carrier).is_none_or(|o| o.health < c0),
+        "the missiles hit the carrier"
+    );
+    assert!(
+        w.obj(launcher).is_none_or(|o| o.health < l0),
+        "the carrier's aircraft hit the missile ship"
+    );
+}
