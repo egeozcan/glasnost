@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 30
+revision: 31
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -589,9 +589,14 @@ rank* and *elite weapon*), *n*
    escaping a destroyed vehicle. In those checks the dying vehicle itself contributes neither a
    listed blocker nor its vehicle-present flag. Other occupants still affect entry normally.
    This exclusion is specific to that vehicle's passenger escape: it does not exempt unrelated
-   dying objects or apply to ordinary unloading.
-   - Backing: `measurable` (S-0312 claim 12's passenger-escape measurement)
-   - Confidence: high for the scoped exclusion
+   dying objects or apply to ordinary unloading. For comparison, counting an allied vehicle
+   with no movement in progress, no destination and no entry override gives *stationary friendly*
+   (outcome 6, row WP16) in an otherwise clear cell. That outcome is rejected by S-0312 claim 12's
+   escape gate, which accepts only *clear* and *moving blocker*. This conditional comparison does
+   not change the dying-vehicle exclusion or prescribe one outcome for every vehicle state.
+   - Backing: `measurable` (S-0312 claim 12's scenario D9, variant g, for the scoped exclusion
+     and stationary-vehicle comparison)
+   - Confidence: high for the scoped exclusion and conditional comparison
 
    *4a. Terrain checks.* Terrain checks that give *blocked* belong to S-0211 and S-0212 and are not
    repeated here: height steps (S-0212 claim 10), impassable land, a land type whose walker speed
