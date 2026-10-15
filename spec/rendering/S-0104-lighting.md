@@ -2,7 +2,7 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 22
+revision: 23
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -223,7 +223,10 @@ Radiation-field light creation, fading, removal and snow-theater colour are owne
       - Any other animation of this row: not established (Open questions).
 
       An animation flagged to use normal light is drawn at 1000 in every case, row 3 included.
-    - **Not covered here:** changes to an object's brightness while it flashes, while it is protected by the invulnerability superweapon, or, for a building, while it is marked by an air strike (S-0519 claims 17 and 19). These apply on top of the values above (Open questions).
+    - **Protection brightness:** S-0513 claim 29 and F9 specify the brightness envelope for curtain and force-shield protection, applied to the ordinary non-negative brightness above before claim 15's shade-row mapping. That contract isolates protection without simultaneous damage flashes or air-strike marking; it does not settle those combinations or every attached animation's treatment.
+      - Backing: `measurable` (S-0513 scenario SW10 part g)
+      - Confidence: high
+    - **Not covered here:** changes to an object's brightness while it flashes or, for a building, while it is marked by an air strike (S-0519 claims 17 and 19). These modify the values above (Open questions).
     - The extra-light values are stored as ⌊*v* × 1000⌋ ‰ with no rounding allowance, where *v* is the single-precision decimal of S-0003, so a value such as 0.57 becomes 569.
     - All additions are integer additions. *b* is not clamped here; the row mapping of claim 15 treats any *b* ≤ 0 as 0.
     - Backing: `measurable` (Scenarios L9 for the animations and the terrain tile, L10, L14, L15 for vehicles and infantry in shadowed cells, L23 for buildings, terrain objects, wall and other overlays, deck overlays and the animations of row 3, L3 Setup A for the tint of plain terrain objects, and S-0112 OV1, OV2 and OV11 for untinted ore-spawning terrain objects and smudges; S-0103 PE for undeploy animations and its repeat of L23 Part B for a terrain-palette building's own animation). `unmeasured` for the infantry equality boundary at exactly 208 leptons and the vehicle boundary at that height: L10 and L15 observe stock flight or falls, but do not guarantee a sample exactly at that height. `unmeasured` for the exceptional second tile pass: its selecting condition is not established, so no scenario isolates it. The terrain-palette building's even-centre rule and own-animation source are `unmeasured` unless the corresponding L23 or S-0103 setup identifies a suitable stock subject. Its voxel-part source is `unmeasured`: L23 Part E tests voxel parts of ordinary buildings only. The parachute's exact creation-tick sampling is `unmeasured`: L23 Part D tests the retained brightness during the fall but does not distinguish creation from first visible opening. The normal-light override for row-3 animations is `unmeasured`: L9 supplies a row-5 subject, not a drawing-with-object subject with that flag. The timing of an object's added λ term after a dominator ends is `unmeasured`: L16 observes ground and ordinary infantry, not the deck or airborne subjects that would distinguish the alternatives.
@@ -825,7 +828,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 - Which cells a shadow-casting terrain tile marks as shadowed (Terms, claim 13).
 - How light-glow images write light-alpha values on display paths other than battlefield rendering (Terms, claim 15); battlefield cover-piece and glow updates are specified in S-0110 claims 5 and 6.
 - The brightness of an object's own animation drawn with its object (S-0103, claim 8, row 3) other than a building's own animation, a parachute, and a deploy or undeploy animation (claim 13).
-- How an object's brightness changes while it flashes, while it is protected by the invulnerability superweapon, or, for a building, while it is marked by an air strike (claim 13; S-0519 claims 17 and 19). These changes apply to buildings and to their own animations as well.
+- How an object's brightness changes while it flashes or, for a building, while it is marked by an air strike (claim 13; S-0519 claims 17 and 19), including combinations with protection. These questions include buildings and their own animations. Protection alone is specified by S-0513 claim 29 and F9; that claim leaves unlisted drawing variants and exact pixel-colour composition unresolved.
 - The brightness of other drawn things that claim 13 does not list, such as animations drawn from voxel models. Smudges are covered by S-0112 claim 3.
 - What lighting the original gives a position outside the map's legal cells (S-0009, claim 1).
 - Light radii of about 32000 leptons (125 cells) or more. The squared distances then exceed the range of the original's integer arithmetic when it selects the cells a light change recomputes (claim 12), and from about 65500 leptons also in the reach test (claim 11). Which cells it then recomputes and reaches is not established; claims 11 and 12 hold for smaller radii.
