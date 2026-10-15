@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -59,8 +59,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
 - **Blackout.** A house state in which its output counts as 0 (claim 5). A *timed blackout* is
   *running* from its start until the end given in claim 6; a *drain blackout* lasts while one of its
   counted buildings that has output is being drained.
-- **Being drained.** The state of a building to which an enemy unit with a draining weapon is
-  attached (special-abilities specs own the attaching and which building types can be drained).
+- **Being drained.** The state of a building attached to a drainer by a drain link.
+  S-0608 owns the attaching (claims 2, 5) and its ending (claims 11–14).
 - **Charger.** An infantry unit registered as a building's charger by a charge shot.
   S-0518 claims 11–12 own registration and removal, including registrations retained by
   non-overpowerable buildings under `quirks.stale_chargers_kept` (default original).
@@ -232,7 +232,7 @@ house's own update in a tick, which comes after the turn pass and before orders 
      turn, and the house works out its power in its update of the same tick,
    - a passenger enters or is voluntarily released from an absorbing building of the house
      whose type's extra output is above 0 (S-0605 claims 7 and 13),
-   - a draining unit attaches to or lets go of one of its buildings,
+   - a drain link forms on or ends for one of its buildings (S-0608 claims 5 and 14),
    - an erasing weapon successfully locks on to one of its buildings, or the last erasing
      attacker releases it before completion (S-0514 claims 4 and 10). Release restores the
      building's contributions according to its resulting switch state (claims 1, 2 and 8).
@@ -670,7 +670,7 @@ remain through tick *n*, and the re-evaluation is in tick *n* + 1 (claim 7, S-04
 | Rules, building section, `TogglePower` | whether input offers power mode on the building (S-0214, claim 13) | boolean | yes |
 | Rules, building section, `PowersUnit` | the control centre's powered unit (claim 13) | vehicle type name | none |
 | Rules, vehicle section, `PoweredUnit` | powered-unit flag (claim 13) | boolean | no |
-| Rules, building section, `Drainable` | whether a draining unit can attach (special-abilities specs) | boolean | no |
+| Rules, building section, `Drainable` | drainable type (S-0608 claims 1–3 own eligibility and attachment) | boolean | no |
 | Rules, building section, `SuperGapRadiusInCells` | super-gap radius (claim 16; this spec owns the key) | integer, cells | 0 |
 | Rules, `[General]`, `SpyPowerBlackout` | spy blackout length *d* (claim 6) | integer, ticks | 0; keeps |
 | Rules, `[General]`, `LowPowerPenaltyModifier`, `MinLowPowerProductionSpeed`, `MaxLowPowerProductionSpeed` | production slowdown (claim 11) | owned by S-0403 | S-0403 |
