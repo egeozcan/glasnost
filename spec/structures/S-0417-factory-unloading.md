@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -168,6 +168,12 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    Any other locomotor instead gets destination (*x*₀ + 4, *y*₀ + 1), independent of the
    foundation and its exit list. It moves by its own locomotor's rules. K sets u's speed fraction
    to 0.5 after this exit instruction in all these cases.
+   A resting, powered, non-paralysed hovering vehicle attempts its first path search and
+   heading-point choice during the exit instruction itself (S-0503 claim 5), before K sets
+   ρ = ½. A successful clear choice already supplies a heading point and produces claim 7's
+   cell-arrival update at u's pre-travel position (S-0503 claim 15). A refused choice or
+   unsuccessful search need not supply a point; there is no mandatory next-tick delay
+   before the first choice.
    For a hovering vehicle, ρ = ½ can persist during the exit move, but is not guaranteed
    for the whole leg. S-0503 claim 4 owns its subsequent fraction changes: in particular,
    a stalled start with provisional step length 0 leptons and movement heading exactly
@@ -178,7 +184,11 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
      specified here. Failed temporary replacement is `unmeasured`: no stock setup is
      established that makes it fail. Hover fraction persistence and the stalled-start
      reset are `measurable` (U6 and S-0503 H8), with backing inherited from S-0503 claim 4.
+     Immediate heading-point choice and its arrival update inherit the `measurable`
+     backing of S-0503 claims 5 and 15 (H8).
    - Confidence: high (driving and fixed destination), medium (temporary replacement),
+     medium (immediate hover choice, inherited from S-0503 claim 5),
+     high (clear-choice arrival update, inherited from S-0503 claim 15),
      low (duration of the hovering exit fraction, inherited from S-0503 claim 4)
 
 6. **Exit track and speed.** T1 gives every point and facing. Passing its first point places u
@@ -216,13 +226,26 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    Crossing a cell boundary in the middle of a track is not a cell-arrival update, and neither is
    turning in place. The exit track of T1 has no chain point, and only its last point is its
    target, so on it the report can happen only at E's centre, never in an earlier cell.
+
+   **Cell-arrival updates of a hovering vehicle.** S-0503 claim 15 owns these events:
+   a clear heading-point choice produces an update at u's actual, pre-travel position,
+   including the immediate first choice of S-0503 claim 5. An arrival-time choice that
+   succeeds without supplying a heading point also produces an update, with the actual-cell
+   occupancy mark restored. This includes normal completion in the contacted factory's
+   cell. Arrival alone, destination clearing alone and cell-edge crossings do not guarantee
+   an update: S-0503 claim 15 gives the precise choice/contact conditions and exclusions.
+   The report tests above apply at those actual positions, not at the chosen heading point.
+   Thus an immediate clear choice on a building cell with a different destination still
+   suppresses the report; choosing a point does not itself end the tether.
    - Backing: `measurable` (U2, U8 for normal exits and the report at E). The *enter* and
      *unload* exceptions and the different-destination building-cell suppression are
      `unmeasured` here: no release setup retaining those conditions on an arrival
      update is established. The chain-point update is `unmeasured` here: no scenario part in
      this spec produces a chained curve while tethered, and a factory exit has no chain point.
+     Hover update events inherit S-0503 claim 15's `measurable` backing (H8).
    - Confidence: high (tests, the two update events, the report only at E on the exit track),
-     medium (normal arrival consequence)
+     medium (normal arrival consequence). Hover update confidence is inherited from
+     S-0503 claim 15: high for clear choices, medium for exceptional completion cases.
 
 8. **Run-away destination.** A vehicle factory gives the run-away reply to the clear report.
    These are precedence rules, not a required internal implementation sequence:
@@ -673,7 +696,15 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   a hovering vehicle following T1, a destination other than F4 for that hovering vehicle,
   or a speed fraction other than 0.5 immediately after the exit instruction.
   For the hovering exit, also record ρ, hover speed, provisional step length, movement
-  heading and heading point each tick. Expect ρ = ½ to persist only until a reset listed
+  heading and heading point each tick. Also apply S-0503 H8: record the first point choice
+  and cell-arrival update during the exit instruction. On a successful clear choice for a
+  resting powered hover, expect a heading point before K sets ρ = ½ and an update at the
+  pre-travel position, with report suppression if it is a building cell with a different
+  destination. A compulsory next-tick first choice, an update at the chosen point rather
+  than the actual position, or a report despite that suppression falsifies the rule.
+  Compare later update events, contact and tether against S-0503 claim 15 and H8, not
+  cell-edge crossings or destination clearing alone.
+  Expect ρ = ½ to persist only until a reset listed
   in S-0503 claim 4. In particular, a 0-lepton provisional step with heading exactly
   towards the heading point resets ρ to 1, without itself setting hover speed to 1.
   A fraction change without a listed reset, or no reset in that stalled-start state,
