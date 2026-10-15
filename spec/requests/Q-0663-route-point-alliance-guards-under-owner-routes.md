@@ -1,9 +1,9 @@
 ---
 id: Q-0663
 title: Whose alliance the repair and reload route-point guards test, given our owner-routes departure (S-0215 claim 13)
-status: open
+status: answered
 related: [S-0215, S-0214]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

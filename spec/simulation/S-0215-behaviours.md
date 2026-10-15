@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371, Q-0663]
 supersedes: []
 ---
 
@@ -83,7 +83,11 @@ search; claim 38 supplies its centre. Keep Q-0238 open until the complementary r
 are approved together. Q-0241 remains open for its bootstrap and upgrade comparison.
 Q-0371 question 3's behaviour consequence and subsequent processing are clarified by
 claim 11a; S-0212 claim 23 owns the failure categories and route retry delay, and
-S-0402 claims 3 and 13 own seeking and resumption.
+S-0402 claims 3 and 13 own seeking and resumption. Q-0663 is answered by
+claim 13: the owner-routes departure also uses the actor owner's house for both alliance
+guards and the non-allied fallback, without a machine-local house. The same claim distinguishes
+ordinary original skirmishes from our engine's AI-house route cases. S-0214's acting-house
+and allied definitions already supply ordinary classification, not these extra route guards.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -983,25 +987,29 @@ Terms used by this spec:
     the earlier claim that the next route point immediately supplied a destination.
 
     **Repair/reload route points.** For a route point resolving to an object, the action is
-    classified as an ordinary object click (S-0214 claims 4, 7 and 8). When the house played on the
-    machine counts the object's owner as allied, an object-directed action is used only for a
+    classified as an ordinary object click (S-0214 claims 4, 7 and 8), with the actor owner's
+    house as the acting house. Under the owner-routes departure, all alliance tests in this
+    paragraph use that same owner, not a house played on the machine. When the actor owner's
+    house counts the object's owner as allied, an object-directed action is used only for a
     building that meets at least one of these service conditions:
     - it is a unit repair building, the actor's integer health is below its type's maximum health,
       and the actor is not infantry,
     - it is a unit reload building, the actor's integer ammunition count is below its type's
       maximum ammunition and that count is not −1 (unlimited ammunition).
 
-    In addition, the building's owner must count the house played on the machine as allied,
+    In addition, the building's owner must count the actor owner's house as allied,
     and the classified action must be neither *select* nor *toggle select*. Thus this service
-    branch requires mutual alliance with the local player's house, not merely a one-way alliance
-    or alliance with an owner-changed actor's house. When these guards hold, the point issues
+    branch requires mutual alliance with the actor owner's house, not merely a one-way alliance. When these guards hold, the point issues
     the classified object action as an order, rather than replacing it with a nearby-cell move.
-    Failure of any guard uses the cell-action fallback instead. For an object that the local
-    player's house does not count as allied, *select*, *toggle select*, *move* and *no-move*
+    Failure of any guard uses the cell-action fallback instead. For an object that the actor
+    owner's house does not count as allied, *select*, *toggle select*, *move* and *no-move*
     actions likewise use the cell fallback; other classified actions remain object-directed.
     A point with no object also uses the cell action. These are route-order selection rules,
     not permission to pass through an occupied repair building or a guarantee of docking or
     paid service (claim 29). The issued order still takes effect at the ordinary order boundary.
+    The original instead uses the house played on the machine for both alliance guards and
+    the non-allied fallback test. Our engine has no machine-local simulation house, including
+    in a replay or a skirmish without a person playing: no substitute local house is needed.
 
     The common effects never send a
     scatter request. The scatter that can follow a fall-back to rest in *capture*, *sabotage* and
@@ -1048,6 +1056,19 @@ Terms used by this spec:
     lays any out; an actor of another house could follow one only after an owner change in the
     middle of a route (for example a mind-controlled vehicle), and whether an owner change keeps
     the route is not established (Open questions).
+
+    **Skirmish distinction (Q-0663 question 3).** For an actor owned by the house played on the
+    machine, the two alliance readings are identical, even if the point object's owner changes
+    or alliances are asymmetric. They can differ only when actor owner and that house differ,
+    and then only when the relevant directed alliance tests differ and affect the chosen action.
+    No additional reachable case is established for the original's ordinary single-person
+    skirmish beyond the conditional owner-change case above. In our engine an AI house can
+    issue the same legal route orders as a person (S-0213 claim 16; S-0214's acting-house rule),
+    so an AI-owned route needs no ownership change to distinguish the readings. For example,
+    a damaged AI-owned vehicle routing to its own repair building, with a non-allied person
+    playing another house, qualifies for the owner-based service branch; using that person's
+    house instead fails the reverse-alliance guard even if the ordinary classification is
+    *enter*. This is a design consequence, not an additional observed route case in the original.
     - Backing: `measurable` (scenario B15: cases a and d for the guard-spot row, case b for the
       route row's eventual movement; B15 e and S-0417 U6 for temporary driving restoration,
       B33 for route-order timing; B40 for repair/reload route-point selection; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
@@ -2988,7 +3009,9 @@ orders).
   route falls back to rest, the original finds the route's next point in the route list of the
   house played on the machine running the game, not in that of the actor's owner, so the result
   depends on which machine computes it and is unspecified on the others. Our engine uses the
-  owner's routes on every machine (departure, no switch).
+  owner's routes on every machine and judges repair/reload route-point alliance guards and
+  the non-allied fallback from the actor owner's house (departure, no switch). There is no
+  machine-local house in the simulation.
 - **Auto-deploy delay list too short** (claim 31). If the game-wide auto-deploy delay list has no
   entry for an owner's difficulty index, the original's value for that index is unspecified
   (claim 31; Terms). In our engine only the units of the neutral and special houses reach the
@@ -3055,6 +3078,7 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 
 | Data input | Concept | Parse form and absent-key result |
 |---|---|---|
+| none | route ownership and alliance perspective (claim 13, Q-0663) | fixed owner-routes departure, including both service alliance guards and non-allied fallback; no imported local-house setting or absent-key choice |
 | none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 | none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
 | none | initial ready mark and queued/current distinction for set-up buildings (claim 1, Q-0241) | fixed behaviour, not a new data flag; building map entry, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
@@ -4529,6 +4553,13 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   assignment inside the fall-back instead of later order application. Three runs per case.
   The original's local-player alliance dependence and asymmetric-alliance guards remain
   unmeasured under claim 13's qualifications; these mutually allied fixtures do not test them.
+  For our engine's design departure, additionally check a skirmish with a person and a
+  non-allied AI house, and an otherwise legal route issued by that AI to its own repair
+  building for a damaged vehicle. Record the classified action and issued order, holding
+  the fixture free of unrelated orders. With *enter* classification, expect the object order,
+  regardless of which house is being viewed; a cell fallback caused solely by the viewed
+  house's alliance falsifies the departure. Repeat with below-capacity reload and with no
+  person playing. These are engine acceptance cases, not proposed original-game measurements.
 
 - **B41 (claim 33a, conditional allied-target investigation).** Use the common tiny-map
   skirmish setup at game speed 2, stock data, director and mods off, and a read-only recorder
