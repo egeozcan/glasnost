@@ -232,3 +232,12 @@ Quirk switches named in changed lines: `quirks.parasite_host_loss_suppresses_nav
 new to these specs (S-0614 claim 15, already declared). Existing ones re-cited:
 `quirks.crash_death_weapon_twice` (now non-rocket) and `quirks.random_magnitude_overflow` (new F6
 off-branch meaning). Pointer only: `quirks.destroyed_rocket_still_detonates` (S-0506 claim 20).
+
+## Addendum: revisions after d158117
+
+- **S-0301 r7** (a19e764): table R rank 4 gains the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold, ahead of rank 9's organic-only test. (b): pointers into S-0506 claim 10 and S-0614 claim 8, which lanes A1 and B1 implement in `combat::check`.
+- **S-0306 r9** (69cf98a):
+  - Claim 20: inaccurate and airburst projectiles skip only (b) and (c), and (a)'s raise still applies. (c): `projectile::detonation_point` already raises first and then returns.
+  - The parasite-warhead exception moves from latching weapons to any projectile with a parasite-flag warhead (S-0303 claim 2). (b): this is lane B1's.
+  - Attribution is lost when the firer is removed by any means (believed: when it starts to cloak). (c): `projectile.rs` already drops a firer removed by any means, and cloaking is not modelled.
+  - The first-turn exception for an earlier removal is S-0203's turn pass, already modelled. (c).
