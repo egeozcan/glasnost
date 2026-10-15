@@ -1,9 +1,9 @@
 ---
 id: Q-0691
 title: When a hovering vehicle sets and clears vehicle-present flags, and when it is between steps
-status: open
+status: answered
 related: [S-0503, S-0209, S-0212]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

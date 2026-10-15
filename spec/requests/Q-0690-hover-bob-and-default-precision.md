@@ -1,9 +1,9 @@
 ---
 id: Q-0690
 title: Precision of the hover bob constants and of the hover keys' engine defaults
-status: open
+status: answered
 related: [S-0503, S-0003]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

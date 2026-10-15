@@ -1,9 +1,9 @@
 ---
 id: Q-0692
 title: Whether a hover's immediate step-check searches start the retry delay, and its step after a failed search
-status: open
+status: answered
 related: [S-0503, S-0212, S-0207]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

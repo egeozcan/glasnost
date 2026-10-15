@@ -1,9 +1,9 @@
 ---
 id: Q-0693
 title: Which events are cell-arrival updates of a hovering vehicle leaving a factory
-status: open
+status: answered
 related: [S-0417, S-0503]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

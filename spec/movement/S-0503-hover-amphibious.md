@@ -2,13 +2,13 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
 supersedes: []
 ---
 
@@ -50,7 +50,12 @@ below, not necessarily the travel direction. S-0207 claim 19 d's stop permits cl
 already-computed step. S-0405 claim 13's description of inactivity must allow the settling, spin,
 residual travel and fall of claims 8 and 10–11. S-0312 claim 11's assertion that stock play has no
 source of the bomb mark must be removed: claim 11 below supplies one. These corrections must be
-checked together at sign-off.
+checked together at sign-off. Further coordinated additions: S-0209 claim 1 and its
+between-steps definition must use claim 13 below for hovering; S-0212 claims 8, 21 and 23
+must distinguish claim 14's ρ test, claim 12's immediate-search timer restart and claim 7's
+cached final step. S-0417 claims 5 and 7 must cite claims 5 and 15 for immediate first-point
+choice and hover cell-arrival updates. S-0206 claim 13 must cite claim 15 for initial north
+and retained placement heading. S-0213 claim 8 must cite claim 16 for the hover stop outcome.
 
 ## Terms
 
@@ -146,8 +151,8 @@ New terms:
    outcomes of claim 7, where *s* is S-0207 claim 2's per-tick speed, read here in
    leptons per tick. *s* contains the speed fraction ρ. A hovering vehicle sets ρ only to 1 or 0:
    to 1 when it is given a move while powered and not moving now, and on a tick on which it is
-   moving with no heading point; to 0 for a refused step or an explicit immediate stop
-   (claims 7 and 12). The switch-off stop request of claim 10 does not itself zero ρ. It also sets ρ to
+   moving with no heading point; to 0 for a refused step or a forced immediate halt
+   (claims 7 and 12). A person's stop order is not that forced halt (claim 16). The switch-off stop request of claim 10 does not itself zero ρ. It also sets ρ to
    1 on a tick on which *d* = 0 while its movement heading points exactly at its heading point (a
    stalled start, Edge cases). Any other value set by another rule stays until one of those events.
    So the ρ = ½ that S-0417 claim 5 sets after a factory exit can persist during the exit move unless
@@ -158,12 +163,25 @@ New terms:
    may enter, water, beach and land alike. The land multipliers of its class (S-0211 claim 2)
    matter to it only through which cells it may enter (a multiplier of 0 forbids entry).
    - Backing: `measurable` (H1 for land independence, H3 and H7 for ordinary endings,
-     H8 for the factory exit and stalled-start reset)
+     H8 for the factory exit and stalled-start reset, H12 for stop orders)
    - Confidence: high for the land independence; low for how long the factory-exit half speed
      lasts
 
-5. **Choosing the next heading point.** A hovering vehicle chooses a new heading point when it
-   starts a move and each time it arrives at its heading point (claim 7):
+5. **Choosing the next heading point.** A powered hovering vehicle that is not moving now
+   attempts its first path search and heading-point choice immediately when given a nonempty
+   destination, not on its next movement tick. This includes a resting factory-produced hover:
+   on a successful clear choice it already has its heading point before the factory sets
+   ρ = ½ (S-0417 claim 5). A refused choice or unsuccessful search need not supply a point.
+   A paralysed vehicle merely remembers the destination without this immediate choice.
+   A powered vehicle already moving now keeps an existing heading point when given a new
+   destination. If moving now but without a heading point, it sets throttle and ρ to 1 and
+   attempts the path update immediately, but chooses a heading point there only if its
+   destination has disappeared or is in its present cell. Otherwise the no-heading-point
+   tick rule supplies the later choice. Giving a destination while unpowered does not itself
+   start the choice.
+
+   A vehicle also attempts a new heading-point choice on moving ticks without a heading
+   point and on arrivals at its heading point (claim 7):
    - with no stored step left, it has no heading point, and the path-search rules of S-0212
      (claims 20 to 23, with the hover's in-range rules of S-0207 claim 19 c and d) apply.
    - otherwise the heading point is the centre of the cell its first stored step enters (Terms),
@@ -175,7 +193,9 @@ New terms:
    towards the point one neighbour step (256 leptons on each affected map axis) beyond the heading point in the direction of its
    next stored step, or towards the heading point when there is no further step. So the body looks
    one cell ahead along the path; the body facing does not steer the vehicle.
-   - Backing: `measurable` (H2 for body aim, H3 for heading-point selection, H10 for crates).
+   - Backing: `measurable` (H2 for body aim, H3 for heading-point selection, H10 for crates,
+     H8 for the immediate move-start choice). The paralysed, unpowered and already-moving-now
+     exceptional assignments are `unmeasured`: H8 does not isolate those states.
      The elevated heading point on a non-bridge cell is `unmeasured`: no stock route isolating
      that height condition is established
    - Confidence: medium
@@ -183,8 +203,8 @@ New terms:
 6. **Straight-line travel.** A hovering vehicle travels in a straight line along its movement
    heading, not along tracks: in each tick in which *d* > 0 its ground position moves by *d* in the
    direction of η's current value, by the same planar step formula as S-0208 claim 6 (F4). Its world height is not changed
-   by this step (claim 8 sets it). Its occupancy (S-0209) is moved from cell to cell as its position
-   crosses a cell edge. When it enters a high-bridge cell with a hover height of 416 or more above
+   by this step (claim 8 sets it). Its listing in cell contents moves as its position crosses
+   a cell edge; this is not the timing of its vehicle-present flags (claim 13). When it enters a high-bridge cell with a hover height of 416 or more above
    the cell's surface it is on the deck, and when it enters a cell that is not a bridge cell it is
    off any deck (S-0511 owns bridge surfaces).
    - Backing: `measurable` (scenario H3)
@@ -209,7 +229,15 @@ New terms:
      travel on that tick, except that a give-up can still take the already computed positive *d*
      as a final step. After the destination is cleared there are no later travel ticks until
      another move starts.
-   - Backing: `measurable` (scenario H3)
+
+   A failed fresh search on an arrival tick, including either failed-search distance case of
+   S-0212 claim 23, does not cancel the already computed positive *d*: the surviving on-map
+   vehicle can take that final step along its old movement heading even though the search
+   cleared its destination and heading point. This also applies when the first refusal caused
+   an immediate search and that search failed: zeroing φ and ρ during the refusal does not
+   change the already computed *d*. It is the resulting nonzero entry outcome that can
+   suppress travel, not search failure alone.
+   - Backing: `measurable` (scenarios H3 and H9)
    - Confidence: medium (the stop position and the same-tick continuation are read, not observed)
 
 ### Hover height
@@ -323,12 +351,97 @@ tick while switched off has no further spin rotation on that tick. The spin ends
     no gate row and no train exception, and the nearest object is looked for in the cell's deck layer
     when the vehicle's world height is more than 312 leptons (three height levels) above the
     surface at that cell's centre, not 208.
+    Every actual fresh search in T1's immediate-search rows starts the full retry delay
+    *R* = trunc(*p* × 900) ticks from that search's tick, whether it finds a path, fails in
+    the search, or fails at its reachability gate. Here *p* is the imported path-retry delay
+    in game minutes (S-0212 claim 21). These rows bypass a running timer to make this search.
+    They do not remove the new timer on success. The ordinary no-heading-point retry waits
+    for that timer. A first-check refusal later can again bypass it.
     - Backing: `measurable` (H9 for clear, cloaked blocker, blocked, moving blocker, closed
       friendly gate, stationary friendly and enemy obstacle). A repeated friendly-obstacle
       outcome, the missing gate response at the new-path inspection, and the exact deck-layer
       and nearest-object distinctions after a fresh search are `unmeasured`: H9 does not establish
       stock placements isolating these from passability or the ordinary step check. These are not confirmed by an ordinary unobstructed crossing
     - Confidence: medium for the table; low for the first cell of a new path
+
+### Reservations, placement and orders
+
+13. **Vehicle-present flags and between steps (Q-0691).** A newly created hover starts
+    between steps. Each F5 arrival puts it between steps again. Choosing a heading point does not
+    itself end that state: it ends on the next positive-distance travel with a heading point,
+    including travel later on that same arrival tick. Thus a hover with a heading point can
+    still be between steps while waiting to make its first positive advance. A heading point
+    absent after a refusal does not by itself set the state either.
+
+    A clear heading-point choice reserves that point's cell at once by setting its
+    vehicle-present flag, before physical entry. Replacing or abandoning a heading point
+    clears its old reservation. On the positive advance that ends the between-steps state,
+    the flag at the vehicle's actual position is cleared before its position moves, even if
+    it remains in that cell. While not between steps, cell-edge crossings move the listing
+    but neither set nor clear these flags: cells merely swung through at a turn are not
+    reserved. If a crossing occurs while still between steps, removal clears the flag at
+    the old actual position and insertion sets it at the new one. A successful arrival-time
+    choice that leaves no heading point restores a mark at the actual position.
+    A marked point uses deck occupancy only when its cell has a high bridge and that point
+    is at least 416 leptons above terrain surface there, otherwise ground occupancy.
+    This is not automatically the vehicle's present listing layer. These are flags, not counts
+    attributed to individual vehicles (S-0209 claim 1).
+    - Backing: `measurable` (H11)
+    - Confidence: high for reservation and first-advance release; medium for exceptional
+      between-steps crossings and no-heading-point restoration
+
+14. **Speed used by the blocker chain (Q-0691).** For S-0212 claim 8's choice of the cell a
+    hover is heading into, nonzero current speed means ρ ≠ 0, tested as a double-precision
+    fraction. It does not mean φ > 0, *d* > 0, or *s* × φ > 0. Thus even a hover still turning
+    with φ = 0 can send the chain along its body facing when ρ is nonzero. When ρ = 0 the
+    first remaining stored path direction supplies the heading cell instead, or none if
+    there is no stored step. The movement heading is not the body facing used by that test.
+    - Backing: `measurable` (H11)
+    - Confidence: high
+
+15. **Cell-arrival updates and initial movement heading (Q-0693, Q-0694).** A clear choice
+    of a heading point produces a cell-arrival update for S-0417 claims 7–8 at the vehicle's
+    actual position, not the chosen point. This includes the first choice when a move is
+    given and a further clear choice on an F5 arrival tick. The point is chosen but its
+    reservation and consumption of the stored step have not yet taken effect at that update.
+    Consequently factory reporting observes the pre-travel position. At an F5 arrival where
+    a choice is attempted and succeeds without supplying a heading point, there is also a
+    cell-arrival update at the actual position, after its flag is restored there. This includes
+    normal completion while still in the contacted factory's cell. Arrival alone does not
+    promise an update if no choice is attempted or its entry check refuses. A cleared
+    destination does not independently generate an update. In particular, when completion
+    clears the destination, no path remains and the contacted object is not in the present
+    cell, that completion alone gives no update. Cell-edge crossing between heading points
+    is not a cell-arrival update.
+
+    A newly attached hovering locomotor starts with movement heading north, 0 facing units,
+    independently of the body facing used to place the vehicle. Ordinary placement on the
+    map, factory release, and removal and replacement for teleportation do not reset an
+    existing hover movement heading. A newly produced hover therefore starts north, whereas
+    a teleported hover retaining its locomotor retains its previous heading and any turn
+    already in progress. A replacement with a newly attached hovering locomotor starts north
+    again. Body-facing placement does not copy into this heading.
+    - Backing: `measurable` (H8 for factory updates; H13 for initial and retained headings)
+    - Confidence: high for clear-choice updates and initial north; medium for exceptional
+      completion and retained-heading placement cases
+
+16. **A person's stop order (Q-0696).** When the stop order is accepted under S-0213 claim 8,
+    its order-level destination is cleared, but the locomotor's destination *D* and stored
+    path obey the same point-equality rule as claim 10's stop request: when *D* and *P*
+    differ as full three-dimensional points, *D* and the stored path are cleared. When
+    equal, that request leaves them. In either case it keeps its heading point, throttle,
+    hover speed and ρ at that instant. It is not a forced immediate halt and does not set
+    ρ to 0. A hover with a heading point remains moving, updates throttle and hover speed
+    by claims 2–3 using distance to that point (also the retained destination when equal),
+    and travels towards it. On an ordinary F5 arrival with no remaining path, the
+    heading point is cleared and any equal retained destination finishes by claim 7. The
+    already computed step may still be taken (claim 7): neither a snap to the centre nor
+    an exact-centre stop is promised. Once both points are absent, no subsequent travel
+    or passive speed ramp occurs. A hover already without a heading point ceases moving
+    when the destination is removed. Target, order queues, behaviour and stop-order
+    refusal conditions remain S-0213 claim 8's, not new locomotor exceptions.
+    - Backing: `measurable` (H12)
+    - Confidence: high for the retained movement quantities; medium for the final position
 
 ## Formulas
 
@@ -379,9 +492,17 @@ are double precision. Heights *A*, *h*ₜ and the resulting height are integer l
 Define the effective height *h*ₜ to be *h* − *H*ₕ when the vehicle has a stored step and the
 surface height one neighbour step ahead in that step's direction exceeds the surface height at
 its position; otherwise *h*ₜ = *h*. Let *A* = trunc(*h* + *v*), *m* = 1 for odd *N* and 1.1
-for even *N*, *P*ᵈ = *m* × *q* × 900 ticks, and *P*ᵢ = trunc(*P*ᵈ). Let
-ϱ = (*t* + 2*N*) mod *P*ᵢ, using integer remainder with the sign of the dividend.
-The unclamped height is *u* = trunc(2 × sin(ϱ × 2π / *P*ᵈ) + *A*).
+for even *N*. The constants 1.1 and 2π mean, respectively, the binary64 numbers nearest
+exact decimal 1.1 and exact mathematical 2π, chosen by round-to-nearest, ties-to-even,
+not single-precision values widened to double and not constants rounded towards zero.
+Their decimal round-trip representations are 1.1000000000000001 and 6.283185307179586.
+The period is *P*ᵈ = (*m* × *q*) × 900 ticks, rounding each product as specified above,
+and *P*ᵢ = trunc(*P*ᵈ), a signed 32-bit integer.
+Let ϱ = wrap₃₂(*t* + 2*N*) mod *P*ᵢ, using signed 32-bit integer arithmetic with
+wraparound and remainder with the sign of the dividend. Here wrap₃₂ reduces modulo 2³²
+and interprets the result in −2³¹ … 2³¹ − 1.
+The sine argument is α = (ϱ × 2π) / *P*ᵈ: multiply before dividing, rounding after each
+operation, not ϱ × (2π / *P*ᵈ). The unclamped height is *u* = trunc(2 × sin(α) + *A*).
 The resulting hover height is max(0, *u*). When *u* < 0, the velocity used for the following
 adjustments is 0; otherwise it is the old *v*.
 
@@ -425,7 +546,7 @@ The spin ends when the count reaches 0 or the vehicle is no longer powered.
 |---|---|---|
 | not moving | tick | no travel; height (claim 8) and spin (claim 10) still update |
 | moving, has heading point | tick | arrival uses the distance from this tick's updated throttle and hover speed; no snap is implied (claims 2–3, 6–7) |
-| moving, no heading point | tick | ρ = 1; search may give a heading point; any travel uses the retained hover speed, without that tick's ramp (claims 3–5) |
+| moving, no heading point after assignment or a previous arrival/refusal | tick | ρ = 1; search may give a heading point; any travel uses the retained hover speed, without that tick's ramp (claims 3–5). This is not a mandatory delay before the immediate first choice of claim 5 |
 | moving now, over water, tick divisible by 10 | after travel | one wake (claim 9) |
 | switched off, spinning | settles to hover height 0 on this tick | spin ends without another rotation; claim 11 decides the water fall |
 | powered, not *sleep* or *enter* | switched off | two draws and a new spin; stop request and loss of lift occur regardless of these spin conditions (claim 10) |
@@ -475,15 +596,22 @@ These consequences inherit the backing and confidence of claims 8–10 (H6 and H
 | Key | Feeds | Parse form | Absent-key default |
 |---|---|---|---|
 | `[General]` `HoverHeight` | *H*ₕ (claim 8, F6) | integer, leptons | engine default 120 |
-| `[General]` `HoverBob` | *q* (F6) | decimal (S-0003 claim 6), single precision widened to double; a `%` sign scales by 0.01 | engine default 30.0 |
-| `[General]` `HoverBoost` | boost factor (claim 3) | decimal, as above | engine default 1.3 |
-| `[General]` `HoverAcceleration` | *a* (F2) | decimal, as above | engine default 0.03 |
-| `[General]` `HoverBrake` | *b* (F2) | decimal, as above | engine default 0.03 |
-| `[General]` `HoverDampen` | *k* (F6) | decimal, as above | engine default 0.8 |
+| `[General]` `HoverBob` | *q* (F6) | decimal (S-0003 claim 6), single precision widened to double; a `%` sign scales by 0.01 | engine default 30.0, exact binary64 |
+| `[General]` `HoverBoost` | boost factor (claim 3) | decimal, as above | binary64 nearest exact decimal 1.3 |
+| `[General]` `HoverAcceleration` | *a* (F2) | decimal, as above | binary64 nearest exact decimal 0.03 |
+| `[General]` `HoverBrake` | *b* (F2) | decimal, as above | binary64 nearest exact decimal 0.03 |
+| `[General]` `HoverDampen` | *k* (F6) | decimal, as above | binary64 nearest exact decimal 0.8 |
 | `[AudioVisual]` `Gravity` | *g* (F6) | integer, leptons per tick per tick | engine default 3 |
 | `[General]` `Wake` | the wake animation (claim 9) | animation name | none: no wake |
 | type key `Locomotor` | hovering locomotor (S-0207 claim 14) | identifier | S-0207 |
 | type key `SpeedType` | locomotion class, for example amphibious (S-0211 claim 3) | name | S-0211 |
+
+The floating absent-key defaults above are chosen by round-to-nearest, ties-to-even to
+binary64, independently of the program's arithmetic rounding mode. They do not pass through
+the single-precision text conversion. Giving a key the displayed default decimal text can
+therefore differ from omitting it. This precision is specific to these defaults, not a new
+parsing rule for S-0003 claim 6. The path-retry field used by claim 12 is imported by
+S-0212 claim 21 and its Import mapping; it introduces no additional hover key.
 
 Each key keeps its value when a later layer omits it (S-0006). The engine defaults are those of the
 program when no layer gives the key. The absent-key defaults and numeric import precision are
@@ -513,7 +641,9 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   on both sides (cell-by-cell track pattern of S-0207), with its speed changing by its class's land
   multipliers (S-0207 claim 9). Falsified by straight-line hovering or a change of model.
 - **H2 Ramp, heading tolerance and body aim.** Order a resting hover whose movement heading is
-  south to move north 8 cells, then run a 90° turn and an approach from full speed. Expected:
+  south after a previous southward move to move north 8 cells, then run a 90° turn and
+  an approach from full speed. Map placement with a southward body facing alone does not
+  establish this starting movement heading (claim 15). Expected:
   F1–F4 each tick, with ordinary throttle 0 beyond 45°, half throttle strictly below the 3-D
   distance threshold, ramp and braking undershoot as F2, and body aim along the next stored
   direction rather than necessarily along movement heading. A differing throttle, increment,
@@ -556,7 +686,14 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   controls before the spin ends, where those controls permit it. Lift should resume without
   cancelling spin; premature cancellation falsifies that exception. No qualifying sequence is
   inconclusive, not confirmation. This setup tests no passengers.
-- **H8 Factory exit.** Record a produced hover's exit, then an ordinary move. Predict F3 from
+- **H8 Factory exit.** Record a produced hover's exit, then an ordinary move. Record the
+  first heading-point choice in the same tick as the exit instruction, before the factory's
+  half-fraction setting, and record cell-arrival updates, contact, the clear report and door
+  closing. Repeat a fresh ordinary move from rest. Expected: search and clear-point choice
+  at assignment, not deferred to the next tick; each clear choice produces claim 15's update
+  at the pre-travel position, including continued arrivals, with S-0417 claim 7 deciding whether
+  it reports clear. Crossing a cell edge alone gives no update. A delayed first choice,
+  absent qualifying update or boundary-only update falsifies the corresponding claim. Predict F3 from
   the actual recorded fraction rather than an approximate ratio of travel times. Expected:
   ρ = ½ persists only until a listed reset, including a stalled-start reset when step length is 0
   and movement heading exactly matches the heading-point direction. A fraction change without
@@ -577,11 +714,51 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   Compare against T1, including zero throttle, hover speed and fraction on refusal. A differing
   search tick, destination retention, scatter, attack, gate response or refusal state falsifies
   the corresponding row. A different recorded outcome makes the intended subtest inconclusive.
+  Also record the retry timer immediately after each immediate search, with success, failed
+  search and failed reachability gate distinguished. Expected: *R* from the current tick
+  in all three cases; zero delay after success falsifies claim 12. For failed searches on
+  an arrival tick, include both within-one-cell and farther-destination cases (S-0212
+  claim 23). Record positive *d* before arrival and the resulting position: expect F4's
+  final cached step despite lost destination and heading point, unless a later refusing
+  entry outcome or death/removal prevents it. No final step in an otherwise qualifying
+  run falsifies claim 7. A failed search is not evidence of a repeated refusing check.
 - **H10 Crate.** Put a stock crate in a traversable corridor and order a hover towards it. Record
   heading-point selection, crate disappearance/effect and physical arrival. Expected: collection
   on selection of that cell before physical arrival and its ordinary step check. Collection only
   at arrival, or no collection in a qualifying clear-entry run, falsifies claim 5. The crate's
   particular effect is outside this spec.
+
+- **H11 Reservations and blocker chain.** Extend H3's straight and 90°-turn runs with
+  a second stock walker and a vehicle ordered towards the hover's old cell, chosen cell
+  and cells merely swung through on selected ticks. Record vehicle-present flags, listing,
+  between-steps state and entry outcomes each tick, including heading-point selection,
+  the first positive advance and each arrival. Expected: claim 13's reservation at choice,
+  release before first positive travel rather than at boundary crossing, no reservation
+  of swing-only cells, and between-steps state until positive advance with a point. A
+  contrary flag/state trace falsifies that part. For the chain, use a narrow lane feeding
+  a mode-0 path search into the hover while it is turning from rest, with ρ nonzero and
+  φ and *d* zero. Separate its body-facing neighbour from its first remaining stored
+  step's cell, leaving one empty and the other blocked. Expected: the chain chooses the
+  body-facing cell despite zero hover speed; choosing by φ or last displacement falsifies
+  claim 14. Reverse which cell is blocked for a second run. Propose search-cost and
+  flag recording to the user if the existing recorder cannot expose them.
+- **H12 Stop order.** Send a stock hover at full speed over flat land, then flat water,
+  give an accepted stop order midway between points and repeat near a heading point.
+  Record assignment-time and per-tick destination, path, heading point, throttle, φ, ρ,
+  positions and arrival events. Expected: the order-level destination is cleared, and
+  *D* and the stored path obey claim 16's equality rule, with the other movement quantities
+  retained at assignment, followed by F1–F5 towards the retained point and
+  the final cached step. No travel or ramp after both points disappear. Immediate
+  heading-point removal, zeroed φ/ρ or exact-centre snapping falsifies claim 16.
+- **H13 Placement heading.** Put two stock hovers on the map facing north and south,
+  order both east eight cells on the same tick, and record η independently of body facing.
+  Expected: initial η = 0 for both and matching heading/throttle histories for equal
+  movement state. Repeat a factory-produced hover (H8): initial η remains north, not the
+  factory's body-facing placement. Turn a hover away from north, stop it, teleport it
+  through ordinary stock superweapon input, then order a new move. Expected: retained
+  η and turn state across replacement with the same locomotor. A reset to body facing
+  or north in this last case falsifies claim 15's retention. Record placement and motion
+  separately so movement on the placement tick is not mistaken for an initial setting.
 
 ## Open questions
 

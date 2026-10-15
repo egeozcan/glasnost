@@ -1,9 +1,9 @@
 ---
 id: Q-0694
 title: The movement heading of a hovering vehicle when it is put on the map
-status: open
+status: answered
 related: [S-0503, S-0206]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

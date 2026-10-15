@@ -1,9 +1,9 @@
 ---
 id: Q-0695
 title: When a hovering vehicle chooses the first heading point of a new move
-status: open
+status: answered
 related: [S-0503, S-0417, S-0212]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need
