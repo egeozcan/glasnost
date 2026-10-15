@@ -676,6 +676,9 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
         // spec: S-0312 claim 26 (the smudge choice, large form: with n fitting candidates one draw R(0, n − 1); n = 0 takes no draw and places nothing)
         w.note("S-0312 claim 26: smudge types, the smudges of cells and the morphable flag of tilesets are not modelled, so no smudge type fits: n = 0, no draw and no smudge");
         // spec: S-0312 Edge cases (quirks.smudge_footprints_beyond_map_edge is not consulted while no smudge type fits; it decides only footprint cells beyond the map edge)
+        // spec: S-0312 claim 26 (zero-coordinate exception: with quirks.destruction_smudge_zero_anchor on, an anchor at cell (0, 0) receives no smudge and takes no choice draw; off, it takes the ordinary rules, which here also find n = 0 and take no draw)
+        // Either setting therefore takes no smudge-choice draw while no smudge type is modelled.
+        let _ = rules.quirks.destruction_smudge_zero_anchor;
     }
     // spec: S-0312 claim 19 (b) (each foundation cell: nearby point raw value, delay R(0, 3), list pick)
     if !tc.explosion.is_empty() {

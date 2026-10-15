@@ -753,6 +753,12 @@ pub struct Quirks {
     // spec: S-0312 claim 26, Edge cases
     #[serde(default = "on")]
     pub smudge_footprints_beyond_map_edge: bool,
+    /// A destruction smudge's anchor cell with both coordinates 0 receives
+    /// no smudge and the smudge choice takes no draw; off: that anchor takes
+    /// the ordinary fit, candidate and choice rules, map legality included.
+    // spec: S-0312 claim 26, Edge cases
+    #[serde(default = "on")]
+    pub destruction_smudge_zero_anchor: bool,
     /// A building's turret displacement does not turn with its aim.
     // spec: S-0313 claim 4
     #[serde(default = "on")]
@@ -1293,6 +1299,10 @@ pub struct Quirks {
     // spec: S-0507 Edge cases
     #[serde(default = "on")]
     pub unload_failed_exit_gunner_handover: bool,
+    /// An air transport's unload replaces a destination that passes the landing test (S-0501 claim 40's F7) by the replacement search around map waypoint 700, and takes the height-based approach or reselect transition for one that fails it; off: only a failing destination is replaced, and a passing one takes the approach or reselect transition.
+    // spec: S-0507 claim 13, Edge cases
+    #[serde(default = "on")]
+    pub air_unload_reselects_clear_destination: bool,
     /// A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal.
     // spec: S-0503 F2, Edge cases
     #[serde(default = "on")]
@@ -1869,6 +1879,7 @@ impl Default for Quirks {
             rubble_overlay_by_index: true,
             barrel_probe_top_left_only: true,
             smudge_footprints_beyond_map_edge: true,
+            destruction_smudge_zero_anchor: true,
             building_fire_point_shift_fixed: true,
             negative_self_heal_counts: true,
             fraidycat_ammo_panic_ignores_fearless: true,
@@ -1999,6 +2010,7 @@ impl Default for Quirks {
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
             unload_failed_exit_gunner_handover: true,
+            air_unload_reselects_clear_destination: true,
             hover_brake_undershoot: true,
             hover_elevated_heading_point: true,
             hover_stalled_start_reset: true,
@@ -2537,6 +2549,10 @@ impl Quirks {
                 self.smudge_footprints_beyond_map_edge,
             ),
             (
+                "destruction_smudge_zero_anchor",
+                self.destruction_smudge_zero_anchor,
+            ),
+            (
                 "building_fire_point_shift_fixed",
                 self.building_fire_point_shift_fixed,
             ),
@@ -2875,6 +2891,10 @@ impl Quirks {
             (
                 "unload_failed_exit_gunner_handover",
                 self.unload_failed_exit_gunner_handover,
+            ),
+            (
+                "air_unload_reselects_clear_destination",
+                self.air_unload_reselects_clear_destination,
             ),
             ("hover_brake_undershoot", self.hover_brake_undershoot),
             (
