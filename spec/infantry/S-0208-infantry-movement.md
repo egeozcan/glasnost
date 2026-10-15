@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 26
+revision: 27
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -130,7 +130,7 @@ used by this spec:
   axis that the direction uses, for example (+256, −256) for direction 1.
 - **Speed field.** The type's imported speed value (Import mapping), an integer.
 - **Speed multiplier.** A per-unit real number, 1.0 when the unit is created. A speed crate
-  multiplies it (the crate rules belong to the crate specs).
+  changes it under S-0520 claim 20, which owns eligibility and the bonus value.
 - **Country speed factor for infantry.** A real number per country, imported (Import mapping), that
   scales the walking speed of every infantry unit of a house of that country.
 - **Faster veterancy ability.** The veterancy ability *faster* of S-0311 (Terms, claims 3 and 4),
@@ -1218,6 +1218,12 @@ standing position stops on that same tick and does not ask for a next walking ta
 W10).
 
 ## Edge cases and quirks
+
+- **Crate pickup timing.** S-0520 claim 6 owns pickup: a walker attempts it when it commits
+  to the step into the crate's cell, before arrival, not on the arrival tick. Its pickup gates
+  can prevent that step. S-0520 claim 20 owns speed bonuses; claim 7 here applies a changed
+  speed multiplier from the next walking step. These pickup and bonus rules carry S-0520
+  claims 6 and 20's backing and confidence. W4(c) needs only that pickup happens during the walk.
 
 - **Negative-level teleport entry** (`quirks.teleport_infantry_negative_level_entry`, default:
   original). Claim 19's entry check accepts a cell at terrain level −6 or lower without testing
@@ -2379,7 +2385,3 @@ cases).**
   keep the height of the position it left until it arrives, which is what our engine does (claim 6).
   Scenario W2(e) records the height on every tick of its walks, without an expected value; a
   measured value replaces our engine's choice.
-- The moment at which a walker takes a crate lying in the cell it walks into belongs to the crate
-  specs (a pointer only). It appears to happen on the tick on which the walker chooses its walking target
-  there, before it arrives, but this spec makes no claim about it and it was not confirmed. W4(c)
-  needs only that the crate is taken during the walk.
