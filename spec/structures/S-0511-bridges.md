@@ -2,7 +2,7 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -29,13 +29,13 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
 ## Terms
 
 - **Bridge family.** Each bridge piece belongs to one of two families.
-  - The *bridge-role family*: tiles of the theater's bridge role (S-0010), the high-bridge overlays
-    at positions 24 and 25 of the overlay type list, and the low pieces at positions 205 to 232.
-  - The *wooden-bridge-role family*: tiles of the wooden-bridge role, the high-bridge overlays at
-    positions 237 and 238, and the low pieces at positions 74 to 101.
+  - The *bridge-role family*: tiles of the theater's bridge role (S-0010 claim 25), its
+    high-bridge overlay pair and its low-piece palette.
+  - The *wooden-bridge-role family*: tiles of the wooden-bridge role, its high-bridge overlay
+    pair and its low-piece palette.
 
-  The two families behave identically. Every low position of the bridge-role family is the matching
-  wooden one plus 131.
+  The two families behave identically. Import mapping binds the symbolic piece identities below
+  to the imported overlays; no transition depends on our engine's registration order.
 - **Tile position *q*.** For a cell whose tile lies in a family's role, *q* = tile number − the
   role's start + 1 (so 1 to 16). The theater names ten positions (Import mapping), which this spec
   uses as follows. A position the theater leaves unset matches no tile.
@@ -44,8 +44,8 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
   - *piers:* middle 1 (*m*₁) along x, middle 2 (*m*₂) along y.
 
   Sub-tiles are numbered as in S-0010.
-- **Axis, start side, far side.** A high bridge runs along cell x when its overlays are at positions
-  24 or 237, and along cell y when they are at 25 or 238. Its spans run from a start piece toward
+- **Axis, start side, far side.** Each family's high overlays are called *Hₓ* and *Hᵧ*, for
+  bridges running along cell x and cell y respectively. Its spans run from a start piece toward
   increasing x (east) or increasing y (south), as in S-0010 claim 25. The *start side* of a piece is
   the side toward decreasing x (or y), and the *far side* the side toward increasing x (or y).
 - **Section.** One high-bridge overlay together with the four cells it marks (S-0211 claim 15). The
@@ -82,19 +82,19 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
 - **Low strip, strip class.** A low bridge is three cells wide. One step along its line, the three
   cells across it form a *strip*, all holding pieces of the same class. Along x the strip is the
   three cells (x, y − 1), (x, y) and (x, y + 1); along y it is the three cells (x − 1, y), (x, y) and
-  (x + 1, y). The low piece positions of the wooden-bridge-role family fall into these classes
-  (add 131 for the bridge-role family):
+  (x + 1, y). Each family and axis has these symbolic piece identities:
 
-  | Class | Along x | Along y |
-  |---|---|---|
-  | intact | 74 to 79 | 83 to 88 |
-  | damaged | 80 to 82 | 89 to 91 |
-  | start-side end piece, whole or damaged | 94, 95 | 98, 99 |
-  | far-side end piece, whole or damaged | 92, 93 | 96, 97 |
-  | destroyed | 100 | 101 |
+  | Class | Piece identities (ours) |
+  |---|---|
+  | intact | I₀, I₁, I₂, I₃ (ordinary looks), I₄, I₅ (edge looks) |
+  | damaged | D₀, D₁, D₂ |
+  | start-side end piece | S (whole), S′ (damaged) |
+  | far-side end piece | E (whole), E′ (damaged) |
+  | destroyed | X |
 
-  Within the intact and damaged classes the position is a look of the strip's edges (claim 14).
-  Pieces are placed at map load by S-0202 claim 10.
+  These are roles, not type names or absolute registration positions. Subscripts distinguish
+  looks that also affect neighbour re-evaluation (claim 14). The same labels apply independently
+  to both axes and families. Pieces are placed at map load by S-0202 claim 10.
 - **Falling, fall rate.** A falling object moves down by its *fall rate* (leptons per update)
   until it reaches the surface. The *bomb mark* is S-0312's term.
 - **Hut demolition, repair.** The destruction of a whole bridge from its bridge repair hut (claim
@@ -125,11 +125,16 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
    - *The trigger action that destroys attached objects* (S-0011 claim 27). After its hits, when
      the raise that fired the trigger carries a cell, the action makes up to 4 attempts at that cell
      and stops at the first that succeeds. The raise of claim 8 carries no cell.
+   - *The demolition-blast trigger action, code 63* (S-0524 claim 5). After its five area
+     damages, a defined waypoint receives up to 4 direct attempts at its cell, stopping at the
+     first success. Bridge effects within those area damages remain subject to the area-damage
+     gate.
    - *Hut demolition* (claim 16).
-   - *The gate.* Only area damage is gated by the game's bridge-destruction setting. The trigger
-     action and hut demolition make their attempts whatever the setting. In a skirmish the setting
+   - *The gate.* Only area damage is gated by the game's bridge-destruction setting. Both trigger
+     actions' direct attempts and hut demolition make their attempts whatever the setting. In a skirmish the setting
      is the game option of the setup screens; the map's own setting has no effect (Import mapping).
-   - Backing: `measurable` (B1, B9, B11 mixed-test variant, and B10 for gate/trigger/target effects)
+   - Backing: `measurable` (B1, B9, B11 mixed-test variant, and B10 for gate/trigger/target effects,
+     S-0524 scenario C5 for code 63)
    - Confidence: medium (test order and acceptance, the low single attempt, the gate); low (target
      dropping, the trigger cell)
 
@@ -287,7 +292,9 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
    - Confidence: medium (the kills, the drop, the draw sequence); low (empty-list behaviour)
 
 10. **Falling and landing.** A dropped object falls on each of its own updates (S-0203).
-    - Its height changes by its fall rate *v* before *v* is updated (Formulas F3).
+    - Its height changes by its fall rate *v* before *v* is updated (Formulas F3). Any attached
+      animation enables the parachute rate recurrence, not only a parachute (S-0522 claim 12).
+      The alternative is owned by `quirks.paratrooper_any_animation_slow_fall` in S-0522.
     - Its fall rate starts from the value it already holds. That is 0 for an object that has never
       fallen. An object that has fallen before (by parachute, for example) starts from the rate it
       ended its last fall with (low).
@@ -298,9 +305,13 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       no-escape marker, with no attacker and no attacking house. So every object on a lost deck
       dies on landing unless S-0302 stops that hit. A vehicle landing in water dies under S-0312
       claim 11.
-    - Over a whole drop from a deck (416 leptons above the terrain under it), with *v* starting
-      at 0 and the floor of F3 not reached, the object lands on its 30th update (Formulas F3).
-    - Backing: `measurable` (B3, including its prior-fall variant)
+    - Over a whole drop from a deck (416 leptons above the terrain under it), with no attached
+      animation, *v* starting at 0 and the floor of F3 not reached, the object lands on its 30th
+      update (Formulas F3).
+    - Backing: `measurable` (B3, including its prior-fall variant) for ordinary and prior
+      parachute drops; `unmeasured` here for a non-parachute attachment selecting the slow
+      recurrence, because B3 establishes no fixture that keeps such an attachment during a
+      deck drop (S-0522 claim 12 owns that shared condition)
     - Confidence: high (fall arithmetic, landing kill); medium (start from a stored rate)
 
 11. **Units heading onto a lost deck.** After an attempt has made its blow-ups, each blown-up cell
@@ -345,7 +356,7 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
 
     | Centre class | All three cells of the strip become | Re-evaluated neighbours (claim 14) | Outcome |
     |---|---|---|---|
-    | intact | the first damaged position (80, or 89 along y) | both | fails |
+    | intact | D₀ | both | fails |
     | damaged | destroyed | both, then claim 15 | succeeds |
     | far-side end piece, whole | its damaged position | decreasing x along x; increasing y along y | fails |
     | start-side end piece, whole | its damaged position | increasing x along x; decreasing y along y | fails |
@@ -365,24 +376,23 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     the line on that side. It is re-evaluated only when its centre cell holds a low piece.
     - *Neighbour pattern.* Its two neighbours contribute the integer *s* = *a* + *b* (exact
       integer addition). Along x, *a* comes from increasing x and *b* from decreasing x.
-      Along y, *a* instead comes from decreasing y and *b* from increasing y:
+      Along y, *a* instead comes from decreasing y and *b* from increasing y. Contribution
+      matches use the re-evaluation axis's bound identities, not an other-axis piece merely
+      bearing the same symbolic label:
 
-      | Contribution | Positions along x | Positions along y |
-      |---|---|---|
-      | *a* = 1 | 78, 80, 82, 93 | 87, 89, 91, 97 |
-      | *a* = 2 | 81, 100 | 90, 101 |
-      | *b* = 4 | 79, 80, 81, 95 | 88, 89, 90, 99 |
-      | *b* = 8 | 82, 100 | 91, 101 |
-      | otherwise 0 | any other | any other |
+      | Contribution | Neighbour piece, either axis and family |
+      |---|---|
+      | *a* = 1 | I₄, D₀, D₂, E′ |
+      | *a* = 2 | D₁, X |
+      | *b* = 4 | I₅, D₀, D₁, S′ |
+      | *b* = 8 | D₂, X |
+      | otherwise 0 | any other |
 
-      Add 131 to every position for the other family.
-
-    - *New position* (add 131 for the other family):
+    - *New piece*, for the re-evaluated strip's family and the re-evaluation axis:
 
       | *s* | 1 | 2 | 4 | 5 | 6 | 8 | 9 | 10 |
       |---|---|---|---|---|---|---|---|---|
-      | along x | 79 | 82 | 78 | 80 | 82 | 81 | 81 | 100 |
-      | along y | 88 | 91 | 87 | 89 | 91 | 90 | 90 | 101 |
+      | piece | I₅ | D₂ | I₄ | D₀ | D₂ | D₁ | D₁ | X |
 
     - *Applying it.* When *s* = 0, nothing changes.
       - For an intact or damaged strip, the new position replaces the strip's position on all
@@ -395,8 +405,8 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       it raises no event and starts no connectivity update of its own.
     - Re-evaluation does not spread further.
     - Backing: `measurable` (scenario B7)
-    - Confidence: medium (low for the exact look positions 78 to 82, which only change drawing,
-      except where they decide *s*)
+    - Confidence: medium (low for the exact edge and damaged looks I₄, I₅ and D₀ to D₂,
+      which change drawing and also decide *s*)
 
 15. **A destroyed low strip.** When an attempt destroys a strip (claim 13, damaged row), its
     three cells show the destroyed position. Deaths caused by neighbouring strips' re-evaluation
@@ -523,7 +533,7 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - With an endpoint, every eligible cell from the start cell through the cell before the
       endpoint receives an intact section of the selected family. The ineligible pier cells are
       even sub-tiles along x, or sub-tiles at most 4 along y.
-    - Its overlay position is 24 or 237 along x, and 25 or 238 along y; its data value is 0 along
+    - Its overlay is the selected family's Hₓ along x or Hᵧ along y; its data value is 0 along
       x and 9 along y. Each placement marks its four cells (S-0211 claim 15) and clears their
       bridge-body mark (S-0010 claim 25).
     - A cell whose slope shape (S-0010 claim 6) is greater than 4 receives no replacement overlay.
@@ -542,16 +552,18 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - The repair affects the whole contiguous centre-row low-piece run containing that piece,
       with no length cap. Piece choices and occupant deaths occur in increasing axis-coordinate
       order, so each repaired strip's random values precede the next one's.
-    - Each centre cell whose piece is damaged, destroyed, or one of the looks 78 and 79 (along x,
-      87 and 88 along y) becomes the intact position 74 + *r* (along y 83 + *r*). The value
-      *r* = 0 to 3 is drawn from the **map-generator stream** (S-0202 claim 13; Formulas F4).
+    - Each centre cell whose piece is damaged, destroyed, I₄ or I₅ becomes Iᵣ of its own
+      family and axis. The value *r* = 0 to 3 is drawn from the **map-generator stream**
+      (S-0202 claim 13; Formulas F4).
     - A damaged end piece becomes its whole position, and any other piece stays.
     - When the centre cell changes, all three cells of its strip get the new position. They are
       recalculated and kill-checked as in claims 13 and 15.
     - A unit standing where a repaired strip now forbids it dies. An example is a ship under the
       bridge.
     - Afterwards connectivity is updated.
-    - Backing: `measurable` (B12, including the low variant)
+    - Backing: `measurable` (B12, including the low variant) for ordinary choices and order,
+      `unmeasured` for F4's rejection endpoint, because it needs one particular raw value among
+      2³² values and the recorder cannot force that value
     - Confidence: medium (low for the stream)
 
 21. **The repair cursor uses its own test.** Whether the engineer's cursor offers a repair over a hut
@@ -589,11 +601,11 @@ zero after addition. The point therefore lies within 25 leptons of the cell cent
 
 The animation's own creation draws follow. This form has no 0.95 or 0.5 tests and no debris.
 
-**F3. Fall rate.** Let *hₙ* be the integer height above terrain in leptons and *vₙ* the integer fall rate in leptons per update, immediately before update *n*. For a falling object without a parachute:
+**F3. Fall rate.** Let *hₙ* be the integer height above terrain in leptons and *vₙ* the integer fall rate in leptons per update, immediately before update *n*. For a falling object with no attached animation:
 
 > *hₙ₊₁* = *hₙ* + *vₙ*; *vₙ₊₁* = max(trunc(*vₙ* − 1.4), *v*_min).
 
-Here trunc is truncation toward zero of a double-precision value, and *v*_min is the imported no-parachute maximum fall rate, a negative number. For *vₙ* ≤ 0 the rate update is *vₙ₊₁* = *vₙ* − 1, so from *v₀* = 0 the drop after *n* updates is 0 + 1 + … + (*n* − 1) = *n*(*n* − 1)/2 leptons, until *v*_min is reached. The landing test (*hₙ₊₁* ≤ 0) follows the move. For an object under a parachute, the rate recurrence is *vₙ₊₁* = max(*vₙ* − 1, the imported parachute maximum fall rate); this applies to paradropped objects.
+Here trunc is truncation toward zero of a double-precision value, and *v*_min is the imported no-parachute maximum fall rate, a negative number. For *vₙ* ≤ 0 the rate update is *vₙ₊₁* = *vₙ* − 1, so from *v₀* = 0 the drop after *n* updates is 0 + 1 + … + (*n* − 1) = *n*(*n* − 1)/2 leptons, until *v*_min is reached. The landing test (*hₙ₊₁* ≤ 0) follows the move. While any animation is attached to the falling object, the rate recurrence instead is *vₙ₊₁* = max(*vₙ* − 1, the imported parachute maximum fall rate), using exact integer subtraction and comparison. A parachute is one such animation, not a type restriction. S-0522 claim 12 and `quirks.paratrooper_any_animation_slow_fall` own this attachment condition and its alternative.
 
 **F4. Low repair piece.** One raw value *g* of the map-generator stream, read as an unsigned 32-bit
 integer:
@@ -609,7 +621,6 @@ centre cell uses one accepted value, with any rejected values before it, in walk
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
-| Bridge-role family shift | 131 | overlay positions | low piece of the bridge-role family = wooden one + 131 |
 | Deck height | 416 | leptons | 4 height levels; F2, claim 11 |
 | Heading tolerance | 104 | leptons | claim 11 |
 | Heading search block | 5 × 5 | cells | claims 11 and 15, the centre cell excluded |
@@ -699,8 +710,8 @@ passenger placement or exceptional cursor selection has been resolved.
 - `quirks.pier_repair_partial_height` (default on): a collapse lowers every cell of the pier's tile
   to the reference cell's level − 4, but repair raises only the pier column. Off: repair restores
   every cell of the pier's tile to the level it had before the collapse.
-- `quirks.low_strip_regress` (default on): re-evaluation can turn a damaged strip (80) back into an
-  intact look (78 or 79) when *s* is 1 or 4 (claim 14). This is not known to be reachable from
+- `quirks.low_strip_regress` (default on): re-evaluation can turn a D₀ strip back into an
+  intact edge look I₅ or I₄ when *s* is 1 or 4 respectively (claim 14). This is not known to be reachable from
   stock play, only from pieces placed damaged by a map. Off: re-evaluation never moves a strip from
   the damaged class to the intact class.
 - `quirks.low_bridge_wrong_axis_recheck` (proposed, default on, the original): a low piece of the
@@ -731,9 +742,31 @@ passenger placement or exceptional cursor selection has been resolved.
 | Theater `[General]` | `BridgeMiddle1`, `BridgeMiddle2` | *m*₁, *m*₂ (piers along x, along y) | as above | as above |
 | Announcements | `EVA_BridgeRepaired` | bridge-repaired announcement (claim 17) | announcement name | none |
 
-Overlay positions 24, 25, 74 to 101, 205 to 232, 237 and 238 are positions in the overlay type list
-(S-0004), not keys. The importer warns when the types registered at those positions are not bridge
-pieces.
+**Piece-role binding.** Hₓ and Hᵧ are the high-overlay identities whose marking directions
+are map north and map west respectively (S-0211 claim 15). The pair identified by the original
+restricted-deck exception of S-0211 claim 14 belongs to the wooden-bridge-role family, regardless
+of that quirk's current setting; the other pair belongs
+to the bridge-role family. These bindings identify imported types, not newly configurable keys.
+
+For each low-bridge family and axis, let *t*₀ be its bridge-piece base type in S-0202 claim 10.
+Of the two base types for a given axis, the lower input registration index identifies the
+wooden-bridge-role palette and the higher identifies the bridge-role palette. The following exact integer displacements from *t*₀ bind the symbolic
+roles. They describe the fixed bridge palette's transition relationships, not stock rule values.
+A displacement counts overlay registry positions in the input (S-0004 claim 4); our engine may
+store the resolved identities in any order.
+
+| Role | Displacement along x | Displacement along y |
+|---|---|---|
+| I₀ to I₅ | 0 to 5 respectively | 0 to 5 respectively |
+| D₀ to D₂ | 6 to 8 respectively | 6 to 8 respectively |
+| E, E′ | 18, 19 | 13, 14 |
+| S, S′ | 20, 21 | 15, 16 |
+| X | 26 | 18 |
+
+This is the same base-type and end-row binding as S-0202 claim 10, extended to the damage
+and destroyed roles. It does not infer bridge identity from art or type spelling. The importer
+warns when a required bound type is missing or is not a bridge piece. Backing: `measurable`
+(B7's palette variants); confidence: medium.
 
 ## Measurement scenarios
 
@@ -784,7 +817,7 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   - *Observable:* tick of loss, tick of each death, the height of the deck units on each tick.
   - *Expected:* the ground-layer and ship units die in the tick of loss. The deck units fall,
     the drop from 0 growing by 1 lepton more on each update (F3), and die when they land: the
-    30th update for a full 416-lepton drop. A deck vehicle over water shows the wake and splash
+    30th update for a full 416-lepton drop without an attached animation. A deck vehicle over water shows the wake and splash
     of S-0312 claim 11.
   - *Falsified by:* a ground-layer unit surviving the loss, a deck unit dying before a landing
     update, a deck unit surviving its landing, or a drop profile other than *n*(*n* − 1)/2.
@@ -856,7 +889,17 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     claim 13. Named malformed-width maps separately realise each centre-selection table row,
     with distinct classes on candidate centres. Expected changes are exactly the three cells
     around the table's selected centre, even if those cells previously held different overlays.
-    A different centre or preserved cross-cell overlay falsifies claim 13. Place an other-axis
+    A different centre or preserved cross-cell overlay falsifies claim 13.
+    *Palette-binding variants:* watch each symbolic role separately for both families and axes,
+    recording its resolved input type rather than assuming our engine uses the same index.
+    Compare the resolved type with the base-relative binding in Import mapping, then apply the
+    direct-attempt and neighbour-pattern tests above. A role bound to a different displacement,
+    or a transition inconsistent with its symbolic row, falsifies the binding. A named test
+    rules file renames the bridge types consistently without moving their input registry
+    positions: the same roles and transitions must remain, or the spelling-independent binding
+    is falsified. This test does not claim that moving types to arbitrary input positions
+    preserves the original's bridge behaviour.
+    Place an other-axis
     neighbour to check the original wrong-axis re-evaluation and a damaged strip with *s* = 1
     and 4 to check regression to an intact class. A skipped other-axis neighbour or retained
     damaged class falsifies the corresponding default quirk.
@@ -900,6 +943,12 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     start another cell attempt. A completed raise's centre-cell target must be dropped after a
     successful area-damage attempt in a separate run; a retained attack target falsifies that
     subclaim.
+  - *Demolition-action variant:* fire code 63 at a defined waypoint on an intact high section
+    and then on an intact low strip, with bridge destruction off. Record the five damage events
+    and subsequent bridge states. Expected: direct attempts still remove the section or destroy
+    the strip after the damage events, as S-0524 claim 5 and scenario C5 specify. A bridge left
+    intact solely because the option is off, or a direct loss before those damages, falsifies
+    this part of claim 1.
 - **B11 (claim 9, draws).** With the harness counting scenario-stream draws, lose one section in an
   otherwise quiet game.
   - *Expected:* 4 blow-ups. Each takes one unit-interval value and, when it is below 0.95, three
@@ -956,7 +1005,10 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   - *Side effects:* compare friendly, neutral-owned and enemy-owned huts at the same geometry.
     Completed entry must repair equally. Watch other infantry targeting the hut and infantry in
     its footprint: targets are forgotten and eligible stationary infantry scatter. Different
-    ownership results, retained hut targets, or missing tag raises falsify claim 17.
+    ownership results, retained hut targets, or missing tag raises falsify claim 17. Record
+    the local engineer's announcement and positional repair sound on completed broken-bridge
+    entry. A named loose test rules file omits the repair-sound setting at a fresh program
+    start: no positional repair sound is expected, and a sound falsifies that absent-key rule.
 - **B13 (claim 21).** *Setup:* a three-cell-wide low bridge, its hut and an engineer, owned by
   the human player, with one bystander computer player kept away. *Procedure:* record the cursor
   over the hut when the bridge is intact, after a middle strip becomes damaged, and after it
