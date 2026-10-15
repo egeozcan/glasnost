@@ -2,7 +2,7 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -75,9 +75,10 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 - **Credited object.** The object to which a destruction is credited: for a destruction by a hit,
   the attacker of S-0302 claim 14 when that claim credits the attacker; for the other
   destructions, the object named in claim 9.
-- **Infiltrated infantry factory, infiltrated vehicle factory.** Two yes/no states of a house that
-  an enemy infiltrator sets by entering one of the house's factories of infantry or of vehicles
-  (the special-abilities specs, not yet written, own infiltration and anything shown about it).
+- **Infiltrated infantry factory, infiltrated vehicle factory.** Two yes/no states belonging to
+  the infiltrating house, not the victim house. A house's spy can set the corresponding state
+  by entering another house's infantry or vehicle factory (S-0510 claim 5). Claim 11 reads
+  these states from the new object's own house.
 - **Country veteran lists.** Three lists of type names per country, one each for infantry,
   vehicles and aircraft (Import mapping).
 - **Armory.** A building type flag (Import mapping). S-0214 (table I, rows e1 to e3) gives which
@@ -287,15 +288,15 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 
 11. **Experience at creation.**
     - An infantry unit is created as a veteran (experience 1) when its type is in its house's
-      country veteran list for infantry, or when its house's infantry factory has been
-      infiltrated and its type is trainable.
+      country veteran list for infantry, or when its own house has the infiltrated-infantry-factory
+      flag and its type is trainable.
     - A vehicle is created as a veteran when its type is in the country list for vehicles, or when
-      its house's vehicle factory has been infiltrated and its type is trainable and not naval.
+      its own house has the infiltrated-vehicle-factory flag and its type is trainable and not naval.
     - An aircraft is created as a veteran when its type is in the country list for aircraft. An
       infiltrated factory never promotes aircraft.
-    - A building is created as a veteran when its house's vehicle factory has been infiltrated and
-      its type is trainable, not naval, and undeploys into a vehicle (a construction yard, for
-      example).
+    - A building is created as a veteran when its own house has the infiltrated-vehicle-factory
+      flag and its type is trainable, not naval, and undeploys into a vehicle (a construction yard,
+      for example).
     - An object placed by the map takes its experience from the map's veterancy value *n* (Import
       mapping): *e* = *n* × 0.01 (Formulas F5). This replaces whatever the rules above gave, so a
       map value of 0 makes even a type of the country list a rookie, and it is not limited by the
@@ -303,9 +304,9 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
     - Starting units of a skirmish are created as elites when a game-mode setting of the original
       is on (low: which setting this is was not identified; it is believed not to be reachable from
       the stock lobby).
-    - Backing: `measurable` (X7) for country lists and map values. Infiltrated-factory branches
-      are `unmeasured`: no skirmish-only part here gives the observer ordinary build control
-      over the enemy house whose factories they infiltrate. Starting-unit elites are
+    - Backing: `measurable` (X7) for country lists, map values and infiltrated-factory branches
+      (also S-0510 scenario I4). The observer builds for the infiltrating house, whose flags
+      supply the starting experience, not for the enemy victim house. Starting-unit elites are
       `unmeasured`: their enabling setting is unidentified, so no setup can be given
       (Open questions)
     - Confidence: high (country lists, the factory flags and the map value); medium (that the map
@@ -657,8 +658,21 @@ are explicitly 1 unless a part names another value.
 - *Part b (country lists without trainability):* repeat the three factory-built country-list
   types of part a with their trainable flags off. Expected: all still start at experience 1.
   Any rookie result falsifies the country-list rule's lack of a trainability test.
-- No infiltrated-factory part is proposed: the former two-human setup required a network game,
-  outside this spec's scope.
+- *Part c (infiltrating-house flags):* use S-0510 scenario I4's skirmish setup and procedure,
+  including empty country veteran lists. Record experience and rank of our newly built infantry,
+  ground vehicles and aircraft before and after each spy entry. Expected: experience 0 before
+  infiltration; after the barracks entry, infantry experience 1 and vehicles 0; after the naval-yard
+  entry, ground vehicles 1 and aircraft 0. These are our units, not the enemy victim's.
+  In separate fresh runs of that setup, named test-map overrides add untrainable infantry,
+  untrainable ground vehicles, trainable naval vehicles and two trainable non-naval building
+  types, one that undeploys into a vehicle and one that does not. Build and place the buildings
+  normally, not as map-placed objects; keep all objects out of combat. After both entries,
+  expected experience: 0 for the untrainable infantry, untrainable ground vehicles and naval
+  vehicles; 1 for the building that undeploys and 0 for the other. Repeat the undeployable
+  building variant with its trainable flag off, then with its naval flag on: both start at 0.
+  Perform one valid fresh-game run per variant at game speed 2 with director and mods off,
+  using the read-only recorder for experience where insignia is insufficient.
+  *Falsified if:* any experience or rank differs from these predictions.
 
 **X8: armory (claim 12, F6).**
 - *Setup:* a building type made an armory in the test map, owned by the human house; a rookie and
