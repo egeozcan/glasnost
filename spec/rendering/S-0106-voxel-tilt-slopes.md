@@ -2,11 +2,11 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: []
 supersedes: []
@@ -977,8 +977,9 @@ rule already specified in T11; no oracle run is expected to reproduce either cor
   carry them. The original's surface height and tilt treat all four alike (claim 2), so only their
   images show the pattern. Until the patterns are known this spec proposes no switch for the flat
   saddle surface: an alternative that follows the corners cannot be defined without them.
-- Where an airborne unit's shadow lands vertically (also open in S-0105), and which of an
-  aircraft's facings turns its shadow (claim 11).
+- Where an airborne vehicle's shadow lands vertically remains open. Aircraft shadow placement,
+  including high-bridge neighbour qualification, is specified by S-0105 claim 40.
+  Which of an aircraft's facings turns its shadow remains open (claim 11).
 - Which states of the tunnelling locomotor count as its surface state (claim 5). This belongs
   to the vehicle specs. Hovering power and the height used by its test are resolved by
   S-0503 claims 8 and 10.
