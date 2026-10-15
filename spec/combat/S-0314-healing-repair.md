@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -229,20 +229,21 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    *The repair-complete announcement.* It belongs to the depot's owner: it is heard only when that
    house is the local player. It tries to create the *unit repaired* radar event, the kind that
    depots and hospitals share (claim 7). If a nearby event of that kind suppresses creation,
-   neither a new event nor the announcement is raised. S-0701 F7 owns the distance test and
+   neither a new event nor the announcement is raised. S-0701 claim 28 owns the distance test and
    post-zoom lifetime. S-0410 claims 14–15 own the zoom progression and cadence: the radius
    contracts and rotation slows until its completion condition holds, advancing once per drawn
    frame even without radar or while the panel opens or closes. Completion starts the post-zoom
    tail at that frame's tick number, not at repair completion. A timed freeze advances zoom but
    not the tick-based tail; a stand-still with no drawn frames advances neither. Restoring radar
    does not restart the event. The total lifetime is therefore the position- and
-   imported-setting-dependent zoom phase followed by F7's tail, not a fixed tick count from
+   imported-setting-dependent zoom phase followed by S-0701 claim 28's tail, not a fixed tick count from
    repair completion. S-0011 claim 32 owns triggered events.
    Zoom timing inherits S-0410 claims 14–15's backing and confidence, including their unmeasured
-   exact floating-point equality boundaries. The *unit repaired* row and cross-creator suppression
-   retain F7's `unmeasured` backing: its scenarios do not isolate that kind or the full set of
-   creators. H4 part f tests only the depot-completion cases stated there; resolved zoom timing
-   does not establish those suppression details.
+   exact floating-point equality boundaries. The *unit repaired* suppression row and the
+   trigger/depot creator pair are `measurable`, with high confidence, through S-0701 claim 28,
+   scenario G7: it tests the row through trigger requests and the trigger/depot pair in both
+   directions. These are proposed observations, not completed measurements, and do not cover
+   every event creator. H4 part f tests only its stated depot-completion cases.
    The low-funds announcement belongs to the depot's owner
    too: it is heard only when that house is the local player, and it is that house's available
    credits that must be exactly 0. It has no such suppression. The paying house of a step is
@@ -261,7 +262,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    destination rule above, and our AI sends them on by ordinary orders.
    - Backing: `measurable` (scenario H4, parts a to f, H16 b for an allied depot's owner and
      announcement distinction, and S-0504 N8 for the waiting gate, spatial distance and 3-tick
-     delay), except the following cases and F7's stated unmeasured suppression details.
+     delay; S-0701 claim 28, G7 for the suppression row and trigger/depot pair), except the
+     following cases.
      `unmeasured` for the return to the guard spot of a non-player house: no input of
      the measurement setup makes a vehicle of the original's neutral or special house, or of its
      computer player, dock at a depot in a way that can be timed and recorded, and a player house
@@ -271,12 +273,12 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      that one): no input of the setup is known that moves a docked vehicle without ending the
      docking. If H4 part g finds one, this statement becomes `measurable`.
    - Confidence: high (one step per count of *K*<sub>u</sub>, the cost, the end on *done*,
-     the waiting thresholds, spatial distance and 3-tick delay); medium
+     the waiting thresholds, spatial distance, 3-tick delay, suppression row and trigger/depot
+     pair); medium
      (the settling step, the phase *D* + *K*<sub>u</sub> − 1, the return to settling after *cannot
      pay*, the owner conditions of the two announcements, that the settling *not needed* makes no
      announcement, and that *not needed* is tested before *cannot pay*), and low (the destination without a rally
-     point; the suppression of the repair-complete
-     announcement; the return to the guard spot; the moving step)
+     point; the return to the guard spot; the moving step)
 
 7. **Hospital.** An infantry unit inside a hospital gets repair steps at a cost of 0, on the
    timing of the depot's working phase with the infantry repair count *K*<sub>i</sub> (Formulas
@@ -286,7 +288,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    inside; on *done* it is put out, and the local player, when the hospital is theirs, hears the
    repair-complete sound and, unless it is suppressed, the repair-complete announcement (claim 6:
    the *unit repaired* radar-event kind shared with the depot, with suppression owned by
-   S-0701 F7 and the unmeasured details retained as claim 6 explains); on *not needed* it is put out
+   S-0701 claim 28, with G7 covering the row and trigger/depot pair, not the hospital creator).
+   On *not needed* it is put out
    without them. *Not needed* is rare here: S-0214 (table I, row e4) refuses the order that sends a
    full-health infantry unit into a hospital, so it arises only when a unit reaches full health
    while inside, which is not known to happen (Open questions). *Cannot pay* cannot happen here at non-negative available credits: the infantry step cost
@@ -294,8 +297,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    no scenario here can arrange hospital entry for an infantry unit at such a balance. The armory of S-0311 (claim 12) uses
    the same infantry repair count, but counts it in processings instead of ticks (S-0311, Formulas
    F6).
-   - Backing: `measurable` (H6 parts a to c for own hospitals), apart from F7's unmeasured
-     suppression details retained in claim 6. Absence of feedback for another
+   - Backing: `measurable` (H6 parts a to c for own hospitals; S-0701 claim 28, G7 for the
+     shared suppression row). Hospital-specific cross-creator suppression is `unmeasured`:
+     neither H6 nor G7 isolates a hospital/trigger pair. Absence of feedback for another
      owner's hospital is `unmeasured`: this scenario cannot order that owner's infantry to enter,
      and spontaneous entry is not a reproducible setup. `unmeasured` for *not needed* in a hospital
      (put out without the sound and announcement): no input of the measurement setup is known that
@@ -1078,14 +1082,15 @@ too.
   or sounds for the second, run 3 is silent for either, or, if completion is actually observed,
   run 4 is heard (the depot's owner is not the local player). Record the
   largest distance and the longest gap at which run 2's second announcement stays silent,
-  as observations toward S-0701 F7. Use S-0410 claims 14–15's zoom progression and cadence
+  as observations toward S-0701 claim 28. Use S-0410 claims 14–15's zoom progression and cadence
   and its R13 recording setup to identify the zoom-completion frame and its tick number.
-  Expect expiry after F7's post-zoom tail counted from that tick, not from repair completion.
+  Expect expiry after S-0701 claim 28's post-zoom tail counted from that tick, not from repair completion.
   A fixed total tick duration or a zoom restart on restoring radar would falsify the timing rule.
   R13's freeze and stand-still controls distinguish drawn-frame zoom from the tick-based tail.
   If zoom completion cannot be identified, the gap is inconclusive for the exact tail.
-  These runs do not establish the full *unit repaired* suppression row, all event creators or
-  cross-creator suppression; those retain F7's `unmeasured` backing.
+  These runs do not isolate the full *unit repaired* suppression row or cross-creator
+  suppression. S-0701 claim 28, G7 proposes tests for the row and trigger/depot pair in both
+  directions; neither scenario asserts exhaustive event-creator coverage.
 - *Part g (the moving step; the return to the guard spot):* both are `unmeasured` (claim 6). The
   attempt: after the settling step, order the docked vehicle to move on the tick a step falls due,
   and read the tick of its next health rise. *Expected:* a health rise on the first tick it stands
@@ -1545,8 +1550,9 @@ damaged to half strength unless a part says otherwise.
 - Whether passengers inside a transport (not a hospital) self-heal: the original is believed not to
   heal them while they are inside. This question covers open-topped transports too, whose
   passengers are in play and take turns (glossary, *in play*); no measurement has settled it for them.
-- The *unit repaired* suppression row and cross-creator suppression retain S-0701 F7's
-  unmeasured limitations (claim 6, H4 part f). Zoom progression and cadence are specified by
+- Hospital-specific cross-creator suppression remains unmeasured (claim 7); S-0701 claim 28,
+  G7 proposes tests for the *unit repaired* row and trigger/depot pair, not every creator.
+  No completed measurement is claimed. Zoom progression and cadence are specified by
   S-0410 claims 14–15, with their exact floating-point equality boundaries still unmeasured.
   The post-zoom tail begins at the completion frame's tick number. There is no separate
   unresolved zoom-duration rule here.
