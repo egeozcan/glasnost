@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 37
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1483,9 +1483,11 @@ of elite rank uses instead; the slot that holds it is that slot's *elite slot*. 
 owns when it is used and S-0308 (Terms, claims 1 and 2) the slots; S-0313 gives its firing positions.
 
 **erasure amount.** The integer remaining amount for a target with temporal beams attached.
-It starts at 10 times the target type's strength and falls each tick by the sum of the attackers'
-raw weapon damage, counting at most the leading attacker and the 51 most recent joiners.
-Erasure completes at 0 or less (S-0514 claims 6 and 7).
+It starts at 10 times the target type's strength and falls at each eligible target erasure update
+by the sum of the attackers' raw weapon damage, counting at most the leading attacker and the
+51 most recent joiners. A skipped target turn gives no update, and a range release gives no
+reduction (S-0514 claims 7 and 8). Erasure completes when the resulting amount is 0 or less
+(S-0514 claim 7).
 
 **expected damage.** The damage that the original estimates, when an object fires at another, for
 target choice. S-0302 owns how it is computed (claim 18); S-0309 uses it for its *expected
@@ -2161,8 +2163,10 @@ S-0410 use it.
 
 ### superweapons
 
-**arrival hold.** The period after a warp arrival during which the object is still phasing in,
-lasting its held delay in ticks (S-0513 claim 40).
+**arrival hold.** The period after arrival effects during which a warped object is still
+phasing in. For held delay *H* and arrival-effects tick *t*ₐ, phasing in ends in tick
+*t*ₐ + max(1, *H*); thus a zero held delay ends on the update after arrival effects
+(S-0513 claim 40).
 
 **camera sight.** The spy plane's own sight with its radius replaced by its primary weapon's
 damage, subject to the radius cap and zero-damage fallback of S-0513 claim 44.
@@ -2206,8 +2210,11 @@ granting and its giving-building definition includes the auxiliary-building cond
 **launching house.** The house that owns the superweapon record being launched
 (S-0513 claim 5).
 
-**leaving stage.** The fixed 60-tick period before a warped object leaves its old position,
-during which it counts as being erased (S-0513 claim 39).
+**leaving stage.** The period from a warp member's first update after launch until departure,
+including the update at which its fixed 60-tick wait expires. The 60 ticks are the leaving wait,
+not the full leaving stage; the member remains at its old position in the expiry update and
+departs on the following update. It counts as being erased throughout the leaving stage
+(S-0513 claim 39).
 
 **manual-charge superweapon.** A type whose record is granted with its clock stopped at the
 full charge time and charges only when a trigger sets its charge (S-0512 claim 20).
@@ -2294,8 +2301,11 @@ demolition blasts, unlike the cell-only actions of S-0524 claims 1, 2 and 4.
 Announcements play one at a time separately from sound channels. See S-0701 (Terms, claims 26
 to 28).
 
-**audio clock.** Real time in milliseconds, distinct from ticks. S-0701 owns which sound timings
-use it rather than game time (Terms, claims 9 to 14, 27 and 29).
+**audio clock.** The original's real time in milliseconds, distinct from ticks. S-0701 claims
+9 to 14 and 27 describe which original sound timings use it rather than game time. It is not an
+engine scheduling contract: S-0701 claim 30 requires deterministic presentation scheduling in
+our engine and defers the exact replacement schedule. The glossary's *departure* rule remains
+in force.
 
 **build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type *offered* to the local
 player, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
