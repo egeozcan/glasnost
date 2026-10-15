@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 31
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634]
 supersedes: []
 ---
 
@@ -44,6 +44,10 @@ reservation, remembered-point clearing, bridge placement marks and shared
 and S-0215 claim 10's jump-time target-loss and reversion contract with those companions.
 Retain S-0207 claim 20 e and S-0209 claim 1's aircraft reservation lifecycle and shared
 `quirks.teleport_aircraft_ground_reservation` alongside the vehicle contract above.
+Claim 25a completes the aircraft landing footprint search used by S-0501 claim 41.
+S-0501 owns building and fallback-object selection and map-edge destinations; its former
+footprint uncertainty must be removed at the coordinated hand-off. Equal-distance fallback
+objects are a separate S-0501 question, not the nearby search's candidate tie rule.
 At hand-off update the approved index to match this draft.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
 and absence of additional search draws. S-0215 claim 38 and F11–F12 supply the upstream
@@ -1484,7 +1488,8 @@ Terms specific to this spec:
     in the scan order (`quirks.nearby_centre_twice`): if it qualifies, it is collected twice and
     counts twice towards the limit of 24 collected cells.
 
-    The uses in table T5 examine single cells. S-0402 claim 24 owns the additional
+    The uses in table T5 examine single cells. Claim 25a adds the aircraft landing
+    footprint search. S-0402 claim 24 owns the additional
     slave-miner deployment-site use: candidates are rectangular footprints, not single
     cells. It supplies the footprint qualification, caller settings and destination shift
     after selection; the ring order, visibility preference, collection limit and
@@ -1519,6 +1524,8 @@ Terms specific to this spec:
     | Failed ordinary approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
     | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4); none when that read gives no reach region | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
+    | Trigger crate placement (S-0524 claim 4) | the waypoint-slot cell | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
+    | Paradrop target adjustment (S-0522 claim 1) | the target cell | *foot* | *normal* | none | never | no | no | none |
     | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
@@ -1533,6 +1540,15 @@ Terms specific to this spec:
     | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
+
+    The trigger-crate and paradrop rows allow bridge cells and ask for no no-overlay
+    condition. For a trigger crate, selection is not placement: a selected cell outside
+    the height-aware usable area or holding any overlay is refused without searching for
+    another candidate. S-0524 claim 4 owns placement capacity and the other crate rules.
+    The paradrop row is used only when the target is a water-role tile (S-0522 claim 1).
+    Its result replaces the target only when there is a result and it is not itself a
+    water-role tile; otherwise the original target remains. This post-selection refusal
+    does not cause another search.
 
     The parasite-exit row gives the original host-mobility search. S-0614 claim 13 owns
     when that search is needed and its `quirks.parasite_exit_search_host_mobility`
@@ -1618,7 +1634,8 @@ Terms specific to this spec:
     scatter, click-handling tick for move orders and rally points (S-0213 claim 20 and S-0214
     claim 11), failure tick for ordinary approach failure, landing-point fixation tick for
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
-    exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
+    action tick for trigger crate placement (S-0524 claim 4), launch tick for paradrop
+    target adjustment (S-0522 claim 1), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
     harvester step-off (S-0402 claim 13), release tick for
     aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
     tick for the house-selected destination after give-up (claim 23a). The base-record
@@ -1634,7 +1651,10 @@ Terms specific to this spec:
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
       parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
-      parasite-exit host-mobility parameters (S-0614 scenario P4), for the
+      parasite-exit host-mobility parameters (S-0614 scenario P4), for trigger-crate
+      search settings and post-selection refusal (S-0524 scenario C4), for paradrop
+      target-adjustment settings and retention of the original target after refusal
+      (S-0522 scenario P1), for the
       final nearby search after give-up (P26), for base-record-refresh parameters
       (S-0215 B37, with P26's refresh comparison), and for both free-unit searches and the no-overlay
       condition (S-0402 scenario H13 parts b and c), for the rectangular deployment-site
@@ -1679,6 +1699,51 @@ Terms specific to this spec:
       and that the further test is S-0010's burrowing test, each applied as stated; their content
       carries the confidence of those specs. High for the condition under which the no-move rows of
       T5 ask for the further test, and that they test no destination first
+
+25a. **Aircraft landing footprints and candidate ties (Q-0634).** The building-centred
+    landing search of S-0501 claim 41 uses claim 25's rings, scan order, collection limit
+    and visibility preference. A candidate (*x*, *y*) is the top-left cell of the nine-cell
+    rectangle (*x* + *i*, *y* + *j*), for integer *i* and *j* from 0 through 2, inclusive.
+    These are exact integer additions in cells, not a square centred on the candidate.
+
+    The top-left candidate must pass the height-aware usable-area test. Each of the nine
+    cells must pass all of these tests:
+    - its ground reach region for movement zone *normal* must match the building cell's
+      ground reach region, unless that reference has no reach region, which removes this
+      restriction rather than requiring cells of no reach region,
+    - its occupancy record must be empty as a whole, with no ignored infantry or vehicle
+      positions; read the deck record on a bridge cell and the ground record otherwise,
+    - it must be enterable by locomotion class *foot* and movement zone *normal* under
+      S-0211 claim 10, treating a bridge cell as entered on its deck. A wall overlay
+      refuses the cell, and a non-bridge cell needs a nonzero foot land multiplier.
+
+    There is no additional usable-area test on the other eight cells, no common-height or
+    slope requirement, no burrowing test, no blanket overlay exclusion and no extra
+    building-placement or terrain-object test beyond those class, region and occupancy
+    tests. Bridges are allowed; no deck mode means reach-region comparisons use ground
+    even though bridge occupancy and class checks use the deck. Non-wall overlays do not
+    independently refuse a cell. Visibility is tested at the top-left candidate's ground
+    level as in claim 25, not at the middle or at every cell of the rectangle.
+
+    The result is the selected top-left cell (*x*, *y*) itself: displacement is (0, 0)
+    cells. It is not shifted to (*x* + 1, *y* + 1), unlike S-0402 claim 24's deployment
+    site. The 3 × 3 search has no reference cell and does not rank candidates by distance
+    to the aircraft or building. With *n* preferred cells, its result is position *N* mod
+    *n* in claim 25's preferred sequence, where *N* is the landing-search tick number and
+    the remainder is exact integer arithmetic. Equal geometric distances introduce no
+    separate tie test. For the aircraft's 1 × 1 own-cell replacement search, S-0501 claim
+    41 supplies a reference cell: claim 25's minimum table-root distance applies, with
+    equal distances resolved by the earliest collected position, not tick modulo. The
+    1 × 1 other-object fallback search has no reference and uses tick modulo instead.
+    These 1 × 1 searches also return the selected cell unchanged. None of these searches
+    draws from a random stream.
+
+    S-0501 claims 34, 37 and 41 already answer the caller settings, no-building fallback
+    and edge-selection parts of Q-0634. Comparing buildings or equally distant fallback
+    objects belongs to S-0501 claim 41, not this footprint-selection rule.
+    - Backing: `measurable` (P28)
+    - Confidence: high for the nine-cell tests, unchanged result and absence of draws.
+      Medium for the shared collection, visibility and tie rules, as in claim 25
 
 ### Linked vehicles
 
@@ -2214,6 +2279,13 @@ firestorm walls and laser fences) and the locomotion class are S-0211's.
 | `IsTrain` (vehicle types) | boolean | false | marks the type as a train: train rules (claims 7, 8, 14, 16, 20, 24). Stock data is not known to set it |
 | `JumpJet` | boolean | false | an infantry type with this flag uses movement zone *infantry* for the coarse search of a path computation (claim 13), whatever its own movement zone. The estimate of claim 24 uses its own movement zone (Open questions) |
 | `Passive` (vehicle types only) | boolean | false | exception of claim 15 |
+
+**Aircraft landing search inputs** (claim 25a; caller selection belongs to S-0501 claim 41)
+
+| Input | Form and absent-key rule | Use here |
+|---|---|---|
+| Search dimensions, locomotion class and movement zone | executable constants, no INI key or absent-key case | building search is 3 × 3 cells, *foot* and *normal*, regardless of the aircraft type's `SpeedType` or `MovementZone`; its replacement/fallback searches are 1 × 1 |
+| Land multipliers, wall-overlay flags and map cells | imported forms and absent-key defaults belong to S-0211 Import mapping and S-0009 claims 4 and 5 | nine-cell class checks, reach regions and top-left height-aware usable-area test; no building foundation or placement flags are imported for this search |
 
 **Team type key**
 
@@ -3303,6 +3375,49 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   Record three qualifying runs; inability to obtain the failed-search fixture
   leaves this part inconclusive. Gate failure and failures within 1 cell retain
   the discriminating tests of P4 and P19, not this distant-search expectation.
+
+### P28: Aircraft landing footprints and ties (claim 25a)
+
+- **Setup:** purpose-made skirmish maps with stock rules and art, director and mods off,
+  speed index 2, short game off. Use an ordinary aircraft and a full own-house pad whose
+  building behaviour requests landing nearby when it cannot accept another aircraft.
+  Confirm that S-0501 claim 41's building search is used, that the winning building's
+  weighted distance is at least 256 leptons (avoiding the own-cell replacement), and no
+  successful pad choice supersedes it. Use the read-only bench recorder at 800 × 600,
+  one slot, fixed seeds 1 through 8, and scripted input. Record the search tick, chosen
+  destination cell, terrain, bridge state, reach-region membership derived from the map,
+  occupancy and random-stream state. A run not invoking that request is inconclusive.
+- **Footprint and displacement:** surround the building with obstacles so only one
+  qualifying top-left cell exists in its first qualifying ring. Leave its positive-x,
+  positive-y 3 × 3 rectangle clear. Expect that top-left cell, not its middle. In paired
+  maps place one stock infantry unit, parked vehicle or building in each of the other
+  eight rectangle cells in turn, keeping the top-left clear. Expect refusal and a separate
+  known clear rectangle selected. Repeat with a wall and with water outside the building's
+  normal ground reach region in one rectangle cell. Retaining that candidate falsifies
+  the nine-cell requirement.
+- **Which tests apply:** compare empty rectangles containing a stock resource overlay,
+  a passable slope and different reachable ground levels against a clear control. Qualify
+  each run by checking the nine class, region and occupancy conditions. Expect no independent
+  refusal for overlay, slope or height difference. On a bridge fixture keep the nine ground
+  cells in the building's normal reach region. Compare ground occupancy under a free deck
+  with deck occupancy: only deck occupancy refuses a bridge cell. A ground-region mismatch
+  still refuses it despite a connected deck. Contrary selection with all other conditions
+  controlled falsifies the corresponding test; failed fixture qualification is inconclusive.
+- **Usable-area extent:** provide a rectangle whose top-left is height-aware usable but
+  another cell is not, only where all nine still pass region, class and occupancy conditions.
+  Expect acceptance without a separate rectangle-boundary refusal. If no such stock fixture
+  can be established, rejection is inconclusive, not evidence for a further usable-area test.
+- **No-reference selection:** create several visible qualifying top-left candidates in one
+  stopping ring, with unequal distances to the aircraft and a pair equally distant from the
+  building. Keep occupancy stable and induce requests on enough tick residues to cover the
+  preferred-sequence length. Expect position *N* mod *n* in the scan order, unchanged by
+  aircraft distance and with no random-state advance attributable to the search. A nearest-only
+  result or selection draw falsifies this rule.
+- **Reference ties:** separately trigger S-0501 claim 41's own-cell 1 × 1 replacement with
+  its centre occupied and two equally near, visible, qualifying cells in the first ring.
+  Expect the earlier scan-order cell on every tick residue, with zero displacement and no
+  search draw. Reverse the geometry and repeat. Tick-modulo alternation here, or a shift by
+  one cell on either axis with either footprint size, falsifies the claim.
 
 ## Open questions
 
