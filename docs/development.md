@@ -447,15 +447,11 @@ Provisional rules of M6b walls and gates: none at present. S-0210 revision 20 an
 The teleporting locomotor's own move (S-0207 claims 20 to 22, F9; S-0208 claims 19 and 20) is in `glasnost_sim::teleport`, built before M6b. M6b makes it whole in play. The ledger is [docs/m6-claims/teleport.md](m6-claims/teleport.md).
 
 - **Presentation events.** The two warp animations (`WarpOut`) go through `combat::effects::anim`, so the view draws them; they keep their creation draws (claim 20 i). The departure and arrival sounds are `Sound::ChronoOut` at the old point and `Sound::ChronoIn` at *L*; audio plays the type's `ChronoOutSound` or `ChronoInSound`, else the game-wide one.
-- **Arrival effects.** A vehicle's landing has the effects of reaching a track target: the arrival report to a contacted building (S-0402 claim 10, and a tethered vehicle's clear report to its factory, S-0417 claims 7 and 8) and cell-centre crushing (S-0210 claims 3 and 8), then the entered-by raise (claim 22). A teleporting crusher crushes what it lands on. A tethered infantry unit's landing gives its clear report to its infantry factory (Q-0697, interim row below), so a teleporting unit that jumps away no longer holds the factory's contact place.
+- **Arrival effects.** A vehicle's landing has the effects of reaching a track target: the arrival report to a contacted building (S-0402 claim 10, and a tethered vehicle's clear report to its factory, S-0417 claims 7 and 8) and cell-centre crushing (S-0210 claims 3 and 8), then the entered-by raise (claim 22). A teleporting crusher crushes what it lands on. A tethered infantry unit's landing gives its clear report to its infantry factory (S-0417 claim 10), so a teleporting unit that jumps away no longer holds the factory's contact place.
 - **Seams.** Crate collection at *L* (S-0520), the airstrike target-retention exception (S-0519), the electromagnetic pulse (S-0511), *being erased* (S-0514) and a superweapon's hold (S-06xx) have no state in our engine; `teleport::take_destination` and `teleport::jump` mark where they go.
 - **What play needs.** A vehicle, infantry or aircraft type with `Locomotor=` the teleporting locomotor (the importer maps it). A person selects it and clicks a cell: `targeting::click` gives *move* to the clicked cell itself (S-0214 claim 11), `orders::issue` applies it, the landing point is fixed and marked at once, and the unit jumps on its next movement update, then phases in for F9's delay. `[General] WarpOut`, the `[General]` keys of F9 (`ChronoTrigger`, `ChronoDistanceFactor`, `ChronoMinimumDelay`, `ChronoRangeMinimum`) and `[AudioVisual] ChronoOutSound` and `ChronoInSound` give the animation, timing and sounds.
 
-Provisional rules of M6b teleport movement, each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `teleport::jump` (with `econ::release::arrival`) | the jump tick's arrival update (S-0207 claim 22) is a tethered teleporting infantry unit's clear report, given before the entered-by raise, with no run-away reply (as S-0208 claim 23's walker on its arrival) | Q-0697 |
+Provisional rules of M6b teleport movement: none at present. S-0417 revision 15 answers Q-0697 (claim 10: a tethered teleporting infantry unit reports clear in its jump's arrival update, before the entered-by raise; the code already did this).
 
 ## Simulation (M6a: aircraft)
 
