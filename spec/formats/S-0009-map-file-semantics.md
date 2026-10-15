@@ -2,11 +2,11 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419]
 supersedes: []
@@ -313,27 +313,37 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    height level. A raised cell near the top edge is drawn higher on screen, so it drops out of the
    area. A raised cell just below the bottom edge is drawn higher, so it comes into the area.
    Unlike the map size, the local area's origin numbers (Lx, Ly) are used.
-   - Backing: `measurable` (scenario M3) for the flat and plateau inequalities.
+   These are the local area's current values, not permanently its imported values: a trigger
+   action can replace all four during play (S-0524 claim 8).
+   - Backing: `measurable` (scenario M3) for the flat and plateau inequalities,
+     S-0524 claim 8 and its scenario C7 for runtime replacement.
      The extra half-row for a slope is `unmeasured` here: M3 uses flat plateau cells and
      supplies no slope-edge probe that distinguishes that adjustment.
    - Confidence: high for the inequalities. Which features use which variant is claim 5.
 
 5. **What the local area limits.** Nearly every gameplay use of the local area applies the
    height-aware test. Cells outside the local area still exist and are drawn (terrain outside it
-   is visible beyond the playable border), but play does not extend into them. The claim has two
-   parts with different backing:
+   is visible beyond the playable border), but play does not extend into them. Subsequent
+   usable-area tests use a replacement local area when a trigger changes it (S-0524 claim 8).
+   Effects on buildings excluded by a shrink remain open there. The claim has two parts
+   with different backing:
    - **5a.** The height-aware test limits the extent of the minimap, whether the mouse cursor
      offers an order on a cell, object placement checks, the "find a free nearby cell" search and
      ore growth.
      - Backing: `measurable` (scenarios M3 and M3b)
      - Confidence: medium
-   - **5b.** The height-aware test also limits the choice of a map-edge cell for arrivals from
-     off-map, the choice of the cells that two superweapons affect when fired (the superweapon
+   - **5b.** The height-aware test also governs the choice of a map-edge cell for arrivals from
+     off-map. For paradrop planes and aircraft retreat, S-0522 claims 4 and 5 own the cell
+     selection and house-edge choice: the selected edge cell is outside the height-aware usable
+     area, not inside it. Retreat behaviour is S-0501 claim 34.
+     The height-aware test also limits the choice of the cells that two superweapons affect when fired (the superweapon
      that turns infantry into mutants and the one that takes control of units), aircraft firing
      positions, cliff destruction and the pathfinding zones. The preview image generated for a map
      uses the plain test. A few features use the plain test in some situations and the
      height-aware test in others; they are listed as an open question.
-     - Backing: `unmeasured` here. A scenario for any of these features needs an expected result
+     - Backing: `measurable` for paradrop edge selection through S-0522 claims 4 and 5,
+       scenario P3; retreat behaviour inherits S-0501 claim 34's backing.
+       The remaining features are `unmeasured` here. A scenario for any of them needs an expected result
        for the feature itself (where an arrival appears, which cells a superweapon affects, which
        route a unit takes, what the generated preview shows), and those results are defined only by
        the topic specs that own the features. Most of them are not written yet, and the one that is
@@ -1650,7 +1660,7 @@ read, in the placement order of claim 43, while the game's set-up at game start 
 
       **Placement candidates and observable draws.** Let the first radius be 1 for a base unit whose direct placement has failed, and 4 for every other starting unit. At each radius through 31, the search has a first set of eight candidates and a second set of eight candidates. The first set lies one candidate in each of the eight step directions, at that radius from the base cell; the direction sequence begins at one ranged draw from 0 to 7 for that radius. The second set uses the same directions and radius, with each candidate independently displaced by either zero or one cell along each axis. For each such candidate, the x displacement is drawn first and its direction is chosen by a percent draw; the y displacement and its direction follow. A percent result below 50 moves toward higher coordinates, and every coordinate is clamped to 1 through W + H − 1.
 
-      The base cell is considered before these candidates. It can accept a unit only in that initial consideration; later occurrences of the base cell cannot accept it. Among all accepting candidates, the search chooses the first in this order: base cell, then the eight first-set candidates in direction order, then the eight second-set candidates in direction order, followed by the same two sets at each succeeding radius. Thus the chosen cell and the random-stream position are unchanged by the search's internal representation or by whether candidates are tested before being stored. The search consumes exactly the draws associated with candidates through and including the chosen candidate, including draws for any ineligible repeated occurrence of the base cell; it consumes no later candidate draws. If no candidate accepts the unit, all candidates through radius 31 are considered, all their associated draws are consumed, and placement fails.
+      Candidate precedence is the order of the base cell, followed at each radius from the first radius through 31 by the eight first-set candidates in direction order and then the eight second-set candidates in direction order. The base cell can accept the unit only at its initial position in this order; a later candidate that repeats the base cell cannot accept it. Placement uses the earliest candidate in this precedence order that passes the acceptance test. The observable draw trace ends with the draws associated with that candidate, including draws for any ineligible repeated occurrence of the base cell; no draws for later candidates are taken. If no candidate through radius 31 passes, the full candidate sequence's associated draws are taken and placement fails. Implementations may test candidates as they are generated or store them first, provided the chosen cell and random-stream position are identical.
 
       The two candidate sets and the coordinate clamping are given by the formulas under **Placement search candidate**. The acceptance test above applies to both sets. The chosen unit stands at the candidate cell's centre at its terrain surface height, on the ground below any bridge deck, facing 0.
 
