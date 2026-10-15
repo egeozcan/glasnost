@@ -2,7 +2,7 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -116,7 +116,7 @@ The crusher flag's effect in play is S-0210's (crushing).
    and the eight locomotion classes of Terms, fixed in the program. Data adds or removes none. The
    rules data gives one section per land type. A section's absence never removes a land type.
    - Backing: `unmeasured` (that the set is closed has no observable of its own; the effects of each
-     land type and class are covered by the claims below, each of which is measurable)
+     land type and class have the part-specific backings given below)
    - Confidence: high
 
 2. **Land multipliers and the buildable flag.** At every game start, each rules layer that
@@ -248,6 +248,8 @@ The crusher flag's effect in play is S-0210's (crushing).
      from one cell to the next, so every cell a unit enters or leaves is recomputed, and for a
      building or terrain object it covers every cell of its footprint.
 
+   Resizing the local area in play also recomputes every legal cell, not only cells gained or
+   lost by the resize (S-0524 claim 8; S-0010 claim 8). The recompute uses the new local area.
    Nothing else triggers it: in particular a change of a laser-fence section's state (Terms), of a
    house's firestorm or of the owner of a building does not. The specs that own the events above
    (bridges, walls, cliffs, ore, animations and the structures specs) say when each happens in play,
@@ -270,6 +272,7 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Post-detonation recompute of the animation start-event resource chain reaction | `measurable` (S-0401 scenario E17, post-detonation terrain variant and its controls) |
      | Recompute when an animation replaces the overlay | `unmeasured`: which animations put which overlay types in place belongs to the animation specs, and no scenario of this spec sets one up |
      | Recompute when the cell's tile, sub-tile or ground level is changed in play | `measurable` (S-0212 scenario P15 case (k): a collapsed destroyable cliff leaves a passable cell, whose category follows only at a recompute) |
+     | Recompute when the local area is resized in play, including cells retained inside it | `measurable` (scenario L24); the exact extent over every legal cell is `unmeasured`, because L24 samples a retained cell and neither it nor S-0524 scenario C7 isolates a recompute on every legal cell, especially outside both local areas |
      | Recompute in the game-start pass after starting units are placed | `measurable` (S-0010 claim 12, scenario R1 part D2 for the surviving cell's land-type outcome and scenario G4 part C for animation outcomes); the exact count of whole-map recalculations is `unmeasured`, because the outcomes do not distinguish extra recalculations once terrain is stable |
      | Recompute on any other whole-map change of the terrain at game start | `unmeasured`: which such changes happen belongs to S-0009 and S-0010, and no scenario of this spec separates such a pass from the stated passes |
      | Recompute when a terrain object is removed | `measurable` (scenario L14) |
@@ -281,7 +284,8 @@ The crusher flag's effect in play is S-0210's (crushing).
    - Confidence: high for rows 1, 4 and 5; medium for rows 2 and 3 (the map's tile numbers and
      sub-tiles must reach the recompute unchanged); high for the recompute at map load, on overlay
      changes, on terrain-object removal, on the moves of vehicles and infantry and for the
-     resource chain reaction's post-detonation recompute; medium for the composed chain-reaction
+     resource chain reaction's post-detonation recompute and the local-area-resize trigger
+     (S-0524 claim 8); medium for the composed chain-reaction
      sequence during map loading (S-0401 claim 20), and for a
      terrain object put into a cell and for a building placed or removed (both `unmeasured`), for tile
      and level changes in play, for aircraft on the ground and for whether the list is complete
@@ -448,8 +452,10 @@ The crusher flag's effect in play is S-0210's (crushing).
 
 11. **The passability category of a cell.** Each cell's passability category is recomputed at every
     land recompute (claim 5), from the cell as it is after the triggering change. It does not
-    depend on the infantry or vehicles in the cell, so their moves, although they trigger a land
-    recompute, never change a category. It is given by the first row of this table whose condition
+    depend directly on the infantry or vehicles in the cell. Their moves trigger a land
+    recompute, but leave the category unchanged when its other inputs are unchanged. A move can
+    still update a stale land type and hence the category, for example after a neighbour's level
+    changed (claim 8). It is given by the first row of this table whose condition
     holds (*ℓ* is the cell's land type, *ℓ*ₒ the land type of the cell's overlay type):
 
     | Rule | Condition | Category |
@@ -634,7 +640,13 @@ The crusher flag's effect in play is S-0210's (crushing).
     (*x* + 1, *y*), (*x*, *y*), (*x* − 1, *y*) and (*x* − 2, *y*).
     - (a) A cell marked by several overlays is simply a high-bridge cell. Marking does not look at
       the marked cell's height, slope, land type, overlay or contents, so a marked neighbour need
-      not hold a bridge overlay itself.
+      not hold a bridge overlay itself. Marking also preserves historical responsibility for
+      destruction: a cell marked as a section's own cell selects itself, even after another
+      section covers it. Otherwise it selects the last section that marked it as a covered cell.
+      A later covering mark replaces that remembered responsibility but does not remove an
+      existing section-cell marking. Replacing or removing the responsible overlay does not
+      select another nearby section. S-0511 claim 2 owns how destruction uses this responsibility,
+      including a missing or replaced responsible overlay.
     - (b) Only an overlay that is placed marks cells, and whether a map's overlay is placed at all
       is S-0009's (claim 12). On a cell whose slope shape index (S-0106), as it stands at that
       moment, is above 4, its slope condition refuses every overlay type except the one at
@@ -653,8 +665,9 @@ The crusher flag's effect in play is S-0210's (crushing).
       marked cells.
     - Backing: `measurable` (scenario L21: runs 1 and 2 for the marked cells and part c, run 3 for
       part b on a steep cell; S-0009 scenario M6d part B for the refusal on an already recomputed
-      cell); part d carries the `measurable` backing of S-0511 claims 5 and 19
-    - Confidence: high for the four marked cells and the two directions (read; the numbering of
+      cell); part a's historical responsibility carries the `measurable` backing of S-0511
+      claim 2 (scenario B15); part d carries the `measurable` backing of S-0511 claims 5 and 19
+    - Confidence: high for part a's historical responsibility, the four marked cells and the two directions (read; the numbering of
       the step directions is the one S-0208 and S-0212 use); medium for parts b and d
 
 ## Formulas
@@ -715,10 +728,10 @@ The crusher flag's effect in play is S-0210's (crushing).
 
 | State | Event | Result |
 |---|---|---|
-| any cell | map load; game-start pass after starting-unit placement and before the first tick; overlay placed, changed or removed; terrain changed | land recompute: land type (claims 5 to 8) and passability category from the new land type and contents (claim 11) |
+| any cell | map load; game-start pass after starting-unit placement and before the first tick; overlay placed, changed or removed; terrain changed; local area resized in play (every legal cell) | land recompute: land type (claims 5 to 8) and passability category from the new land type and contents (claim 11) |
 | any cell | an infantry unit, vehicle, aircraft, building or terrain object put into or taken out of the cell while on the ground | land recompute, seeing the contents after the change (claim 5) |
 | cell holding a terrain object | the terrain object is removed or destroyed | land recompute: rule 4 no longer sees it, so the category is decided without it (claim 11) |
-| cell | infantry or vehicle enters or leaves | land recompute, but the category is unchanged: it does not depend on them (claim 11) |
+| cell | infantry or vehicle enters or leaves | land recompute; the category is unchanged when its other inputs are unchanged, since it does not depend directly on these units (claim 11) |
 | cell with ore or gems, slope shape ≥ 5 | land recompute | overlay removed, tile land type used (claim 7) |
 | cell whose tile was dropped under row 3 | next land recompute | row 2 applies: the overlay's land type if it has an overlay (claim 5) |
 | cell with a bridge | bridge destroyed | bridge overlays removed, land recompute (claim 9) |
@@ -1431,6 +1444,11 @@ tile, or recomputation in either control falsifies this trigger rule.
 - *Falsified if:* any other pattern of refused cells, a difference between runs 1 and 2, or in run
   3 no overlay on *A* or another pattern of refused cells around it.
 - *Runs:* one each.
+- *Historical responsibility (claim 15 a).* Use the overlapping-mark and replaced-overlay
+  fixtures of S-0511 scenario B15, whose setup, recorder, expected destruction selection and
+  falsifiers also test this claim. A section-marked cell selects itself regardless of later
+  covering marks; another covered cell selects its last marking section, not a nearby substitute
+  when that overlay is replaced. Run both placement orders for each bridge family and axis.
 - *Part d, the bridge-body band (S-0406 claim 3 d; S-0010 claim 25).* Use the low-span map of
   S-0010 scenario G3 part E, including its no-span control, with no overlays and every tested
   cell flat. Instead of the tunnelling unit, use the placement indicator of an ordinary one-cell
@@ -1501,6 +1519,29 @@ test files).**
 - *Falsified if:* the cell still judges as rough land after part A, or after part B when the
   aircraft did stand in the cell. If the aircraft landed elsewhere, part B is inconclusive and
   is repeated.
+
+**L24: local-area resize recomputes retained cells (claim 5; named test files).**
+- *Setup:* use S-0010 scenario R1 part D2's named theater data and 4 × 4 rough block,
+  buildability controls and surviving cell at (*x*₀ + 2, *y*₀ + 2), as in L23. Use a tiny
+  skirmish map, one human and one bystander computer player kept away under the glossary's
+  void rule, game-speed index 2 and 800 × 600. No engine add-ons or unrelated mods are active.
+  A one-time elapsed trigger after tick 30 resizes the local area through S-0524 claim 8's
+  action. It enlarges a distant edge, leaving the block well inside both rectangles. No
+  object enters or leaves the block, and no overlay or terrain-changing event touches it.
+  Control: the same map with the resize action omitted. Start each run in a fresh program.
+- *Procedure:* before the action, use R1 part D2's placement preview to read the survivor's land
+  type without placing a building. Repeat after the action, without moving a unit onto it.
+  Repeat at the corresponding ticks in the control. Run each map twice.
+- *Observable:* the actual action tick, the new scrolling bounds, and whether the placement
+  preview judges the survivor as rough or clear under R1 part D2's buildability controls.
+- *Expected:* rough before the action and clear after it: resize recomputes this retained cell,
+  dropping its stray tile number. The no-action control stays rough at both checks. Thus a rule
+  that recomputes only newly gained or lost cells gives a different result.
+- *Falsified if:* the survivor remains rough after a confirmed resize while the control remains
+  rough. If it is already clear before resize, or becomes clear in the control, another recompute
+  has invalidated the fixture and the run is inconclusive. This tests the trigger and its reach
+  into the unchanged area, not the exact extent over all legal cells. S-0524 scenario C7 tests
+  rectangle assignment, scrolling and orders, but those alone do not prove a land recompute.
 
 ## Open questions
 
