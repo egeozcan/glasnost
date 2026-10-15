@@ -133,7 +133,9 @@ fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
     let o = w.obj(id)?;
     let here = o.pos.cell();
     let speed = o.drive.as_ref().is_some_and(|d| d.track.is_some())
-        || o.walk.as_ref().is_some_and(|s| s.target.is_some());
+        || o.walk.as_ref().is_some_and(|s| s.target.is_some())
+        // Q-0691 (interim: a hovering vehicle's current speed is not zero while φ > 0)
+        || crate::hover::has_speed(w, id);
     if speed {
         // spec: S-0212 claim 8 (speed not zero: one step in the 8-direction of its body facing)
         let d = glasnost_num::geom::eight_direction(o.body.value(w.tick));
@@ -1544,7 +1546,8 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
         // A unit at rest moves into the cell of its first stored step, so its
         // remaining steps are the ones after that step (claim 8's heading cell).
         let at_rest = !(u.drive.as_ref().is_some_and(|d| d.track.is_some())
-            || u.walk.as_ref().is_some_and(|s| s.target.is_some()));
+            || u.walk.as_ref().is_some_and(|s| s.target.is_some())
+            || crate::hover::has_speed(w, oid));
         let skip = usize::from(at_rest);
         for &s in u.path.steps.iter().skip(skip).take(STORED) {
             let (sx, sy) = STEPS[usize::from(s % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
@@ -2085,7 +2088,8 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
     let Some(o) = w.obj(id).cloned() else { return };
     let r = w.rules_arc();
     let walker = o.walk.is_some();
-    let drive = o.drive.is_some();
+    // spec: S-0212 claim 23 (the same clearing ends every failed search of a unit with the driving, ship or hovering locomotor)
+    let drive = o.drive.is_some() || o.hover.is_some();
     match res {
         Search::Found => {}
         Search::GateFailed => {

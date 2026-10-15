@@ -84,6 +84,8 @@ pub fn in_progress(w: &World, id: ObjectId) -> bool {
             || o.drive
                 .as_ref()
                 .is_some_and(|d| d.track.is_some() || d.turning_in_place)
+            // spec: S-0503 Terms (a hovering vehicle with a heading point is moving)
+            || o.hover.as_ref().is_some_and(|h| h.point.is_some())
             || !o.path.steps.is_empty()
     })
 }

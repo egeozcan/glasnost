@@ -866,9 +866,21 @@ fn set_disabled(w: &mut World, h: HouseId, unit: u32, disabled: bool) {
         .map(|o| o.id)
         .collect();
     for id in ids {
-        if let Some(o) = w.obj_mut(id) {
-            o.econ.building.unit_disabled = disabled;
-        }
+        apply_disabled(w, id, disabled);
+    }
+}
+
+/// Sets a vehicle's disabled flag. A hovering vehicle is switched off when
+/// the flag becomes set (S-0503 claim 10).
+pub fn apply_disabled(w: &mut World, id: ObjectId, disabled: bool) {
+    let was = unit_disabled(w, id);
+    let was_powered = crate::hover::powered(w, id);
+    if let Some(o) = w.obj_mut(id) {
+        o.econ.building.unit_disabled = disabled;
+    }
+    if disabled && !was {
+        // spec: S-0503 claim 10 (a hovering vehicle is switched off by the disabling of S-0405 claim 13)
+        crate::hover::switched(w, id, true, was_powered);
     }
 }
 
@@ -929,7 +941,7 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         .occ(cell, Layer::Ground)
         .is_some_and(|r| r.buildings > 0);
     let _ = layer;
-    if !building && let Some(ob) = w.obj_mut(id) {
-        ob.econ.building.unit_disabled = true;
+    if !building {
+        apply_disabled(w, id, true);
     }
 }

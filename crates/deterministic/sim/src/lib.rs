@@ -25,6 +25,7 @@ pub mod corridor;
 pub mod crush;
 pub mod drive;
 pub mod econ;
+pub mod hover;
 pub mod infantry;
 pub mod load;
 pub mod naval;

@@ -130,6 +130,8 @@ pub fn create_converted(
         parasite: None,
         air: None,
         naval: None,
+        // spec: S-0503 Terms (a hovering vehicle keeps its hover state)
+        hover: (loco == Locomotor::Hover).then(|| crate::hover::HoverState::new(w.rules().mode)),
         crush_slowdown: false,
         targeting_timer: 0,
         last_turn: -1,
@@ -242,6 +244,10 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
                 if let Some(d) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
                     d.claims = vec![cell];
                 }
+                // spec: S-0503 claim 6 and S-0209 claim 1 (a hovering vehicle's flag of its cell, its own until it leaves the cell; Q-0691 interim)
+                if let Some(h) = w.obj_mut(id).and_then(|ob| ob.hover.as_mut()) {
+                    h.claims = vec![(cell, o.layer)];
+                }
             } else {
                 // spec: S-0209 claim 1 (an aircraft on the ground sets the object-present flag)
                 if let Some(rec) = w.cells.occ_mut(cell, o.layer) {
@@ -256,6 +262,10 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         // spec: S-0206 claim 5 (placing sets body and turret facings at once to the placement facing)
         obj.body.set(facing, tick, keeps);
         obj.turret.set(facing, tick, keeps);
+        if let Some(h) = obj.hover.as_mut() {
+            // spec: S-0503 Terms (the movement heading η); Q-0694 (interim: set to the placement facing)
+            h.heading = Turning::at(facing);
+        }
     }
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
     crate::air::placed(w, id);

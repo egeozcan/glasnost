@@ -170,6 +170,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
             moved
         }
         Some(Locomotor::Walk) => walk::tick(w, id),
+        // spec: S-0503 claims 2 to 11 (the hovering locomotor; S-0614 claim 8 lists no hold for it)
+        Some(Locomotor::Hover) => crate::hover::tick(w, id),
         // spec: S-0417 claim 5 (a tunnelling or teleporting vehicle drives temporarily for its factory exit)
         _ if crate::econ::release::temporary_drive(w, id) => !held && drive::tick(w, id),
         // spec: S-0207 claim 20 (d) (the jump on the first movement update after L is fixed; the behaviour is processed before it)
