@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -186,6 +186,11 @@ Terms).
    of preceding orders under that precedence. The whole non-behaviour group has precedence
    before the behaviour group. Thus when successful orders in the two groups change the
    same actor state, the behaviour order determines that state, regardless of issue order.
+   Enter orders follow this same precedence: a later order sees any contact taken by an
+   earlier order, even when both came from one selection click. Thus two vehicles sent
+   together to a free repair depot do not both see it as free: the first takes contact,
+   and the later order has S-0314 claim 23's occupied-depot outcome. Their order is issue
+   order, hence selection order for that click (claim 1).
    This specifies outcomes and checks, not an internal work schedule. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
 
    In our engine, house creation order (S-0009 claim 19) supplies between-house
@@ -227,6 +232,7 @@ Terms).
    - Backing: the grouping is `unmeasured`: no input of the original issues a behaviour order and
      a later order of another kind for the same actor in one tick (claim 1), so no scenario can
      observe it. The drop of a computer house's orders is `measurable` (Scenario O11).
+     Enter-order contact precedence is `measurable` (S-0314 H18 f).
      Production-start assignment is `measurable` (S-0404 P11 B/C and S-0411 S9, referenced
      in Measurement scenarios). Between-house order-boundary assignment is `unmeasured`:
      it is a design extension, not an oracle outcome. The other rules for AI houses are also
@@ -480,7 +486,9 @@ Terms).
     factory ignores the order. Otherwise the actor breaks off any contact, its target and
     destination become nothing and the behaviour *unload* becomes its queued behaviour. What
     *unload* does depends on the type: deploying into a building, deploying in place, letting
-    passengers or garrison occupants out. It belongs to S-0215 and the special-abilities specs.
+    passengers or garrison occupants out. These consequences belong to S-0215,
+    S-0517 claims 1 to 8 (in-place vehicle deploying and deploy-fire vehicles), and the
+    special-abilities specs.
     - Backing: `measurable` (Scenario O6) for the vehicle-factory cell and for the unit that
       deploys in the way its type says (which shows that *unload* was queued and took effect). That
       the actor also breaks off contact and loses its target and destination is `unmeasured`: the
@@ -1261,6 +1269,12 @@ where a scenario says so or exact timing helps. Scripted input is one of the all
 measurement setup in the batch's glossary (*measurement setup*), added by the
 project lead's decision of 2026-10-09: a script produces mouse and keyboard input through the
 game's normal input only, as a player would, and never writes into the game.
+
+Enter-order contact precedence (claim 3) is tested by S-0314 Scenario H18 f:
+two vehicles ordered by one selection click give the first in selection order the free
+depot contact, and the later vehicle the occupied-depot outcome of S-0314 claim 23.
+Both taking the initially free contact, or the later vehicle taking it instead of the
+first without an intervening release or refusal, falsifies this precedence.
 
 Keyboard-command feedback (claim 18) is tested by S-0701 Scenario D4, including empty
 and nonempty-but-ineligible selections, one cue for several ordered objects, failed issuance
