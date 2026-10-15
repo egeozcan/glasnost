@@ -1113,8 +1113,8 @@ struct Approach {
     /// whose F3 step length is 0 leptons, while at least 16 leptons from
     /// the flight point.
     zero_steps: i32,
-    /// The last tick counted in `zero_steps`, and the first tick in *firing*.
-    last_zero_step: Option<i32>,
+    /// The first tick counted in `zero_steps`, and the first tick in *firing*.
+    first_zero_step: Option<i32>,
     firing_tick: Option<i32>,
     /// The flight point at the end.
     point: Option<Pos>,
@@ -1261,7 +1261,7 @@ fn close_approach_with(
                 && d >= 16
             {
                 out.zero_steps += 1;
-                out.last_zero_step = Some(w.tick);
+                out.first_zero_step.get_or_insert(w.tick);
             }
             if s.stage == air::Stage::Approaching
                 && air::step_length(v_conv, s.cur, mode) == 1
@@ -1562,9 +1562,10 @@ fn claim_42_zero_step_stall_off_fires() {
     assert!(x.zero.is_none(), "{x:?}");
     assert!(x.shot.is_some(), "fires: {x:?}");
     let first = x
-        .last_zero_step
+        .first_zero_step
         .unwrap_or_else(|| panic!("a zero step: {x:?}"));
     assert_eq!(x.firing_tick, Some(first + 1), "the next processing: {x:?}");
+    assert_eq!(x.zero_steps, 1, "{x:?}");
 }
 
 // spec: S-0501 claim 42 and Edge cases (quirks.aircraft_zero_step_attack_stall off alone: a 1-lepton step that changes neither coordinate is not a length-0 step, so AC24 b1 remains approaching and fires no shot)
