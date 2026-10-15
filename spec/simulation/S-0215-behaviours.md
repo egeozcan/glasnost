@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 37
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1823,15 +1823,18 @@ apply in our engine to the actors of every player house.
     timing are S-0507 claims 4–6; aircraft entry is S-0501 claim 24.
 
     **Repair buildings, land and naval.** Permission is S-0314 claim 16, with S-0504 claim 7's
-    naval-match test. Contact, arrival and servicing are distinct:
+    naval-match test. The repeated request above is not a repeat of that initial permission
+    query: merely standing on the depot does not make it fail. S-0314 claim 17 owns
+    repair-specific tether establishment; contact alone does not establish a tether, and
+    tethering need not wait for stopping or settling. Contact, arrival and servicing are distinct:
 
     | State | Event | Result |
     |---|---|---|
     | permission given, not yet in contact | successful entry request | contact takes the first free place before physical arrival; the depot has max(d, 1) places for imported docking-place count d (S-0314 claim 17) |
     | a one-place depot already holds another vehicle's contact | second vehicle makes an ordinary click | permission fails; no second enter order, waiting queue or displacement of the first contact (S-0314 claims 16–17) |
-    | approaching with contact | destination guidance | the ordinary land depot supplies the building destination and docking point of S-0314 claim 18; a vehicle-factory building uses S-0504 claim 12's point |
-    | completing entry | docking exchange | the vehicle turns toward 16384 facing units (map east); once no longer moving, tethered to the contacted building and still in enter, it reports arrival |
-    | arrival reported | repair building accepts completion | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start |
+    | approaching with contact | destination guidance | S-0314 claim 18 supplies the building destination and per-vehicle docking point for ordinary land depots and naval yards, and the separate obsolete-unloading exception |
+    | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
+    | completing entry | separate completed-entry confirmation | the vehicle can turn toward 16384 facing units (map east); once no longer moving, tethered to the contacted building and still in enter, it reports arrival; confirmation also establishes tether if absent (S-0314 claim 17) |
 
     Behaviour starts still obey claims 3, 7 and 11: the completion is not a forced start of
     either queued behaviour. Neither the click nor the contact reservation is a paid repair.
@@ -1857,9 +1860,14 @@ apply in our engine to the actors of every player house.
       while the vehicle is already in *enter*, not while docked in *sleep*,
     - a docked vehicle normally retains contact and tether under new orders, with the
       replacement-entry and same-depot-entry exceptions of S-0314 claim 20,
-    - a vehicle with a queued depot entry asks again every tick, not only at behaviour
-      processings (S-0314 claim 23). This is separate from the current *enter* processing's
-      repeated request above,
+    - a vehicle with a queued depot entry retries once per eligible vehicle turn, after
+      that turn's movement, self-healing, due behaviour processing and completed locomotor
+      restoration (S-0314 claim 23). This is separate from the current *enter* processing's
+      repeated request above, not an orders-phase batch or another movement pass. Acceptance
+      queues *enter* with a readiness-dependent immediate start and assigns the destination
+      that turn, but does not process the new behaviour synchronously. A place freed before
+      the retry is available in that tick; competing retries follow object-turn order, not
+      order-arrival time. Claim 23 owns skipped retries and inactive-depot clearing,
     - S-0314 claim 22 owns the run-away notice on sale: clearing a depot destination,
       changing *sleep* or *enter* to *guard*, and the possible scatter request. It also owns
       release on destruction and existing-contact power consequences. S-0314 claim 21 owns
@@ -1874,11 +1882,15 @@ apply in our engine to the actors of every player house.
     Every outcome of this enter processing chooses the standard delay, using the behaviour
     current when the delay is chosen (claim 6).
     - Backing: `measurable` (scenario B12; S-0507 T5 and T6 for loading replies,
-      S-0314 H16 for reservation and arrival, H18 for orders, queued entry, run-away notices
-      and other interruption consequences; scenario B39 for depot processing and orders).
-      The existing-tether exception inherits S-0507 claim 5's `unmeasured` backing.
-      The interruption details inherit S-0314 claims 20 to 23's confidence and limitations,
-      including the unresolved condition for sending the run-away scatter request.
+      S-0314 H16 and H19 for reservation, tether and movement arrival, H18 for orders,
+      queued entry, run-away notices and other interruption consequences, H22 for late
+      queued retries and next-turn processing; scenario B39 for depot processing and orders).
+      For transport loading, the existing-tether exception inherits S-0507 claim 5's
+      `unmeasured` backing; repair-specific tether observations are the H19 cases above.
+      Repair-specific tether, movement arrival and docking-point selection inherit
+      S-0314 claims 17–18's confidence and measurement limitations. The interruption
+      details inherit S-0314 claims 20 to 23's confidence and limitations, including
+      the unresolved condition for sending the run-away scatter request.
       Multiple-place servicing retains S-0314 claim 17's qualifications, not an extrapolation
       from the sequential one-place case.
     - Confidence: high (reply rule, completed arrival and queue/start distinction),
@@ -3709,9 +3721,14 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   and void rules. Stock data only, no mods or external automated player. In three runs per
   setup record processing ticks, reply categories, current/queued behaviours, contact,
   tether, destination, body facing, motion, health and credits with a read-only recorder.
-  First let an entry complete without further input. Expected: contact precedes arrival,
-  the completed exchange requests map-east facing and queues repair/sleep without bypassing
-  readiness; no reservation-only paid step. An early unarmed guard transition must meet
+  First let an entry complete without further input. Expected: contact precedes arrival.
+  movement arrival in the supplied docking-point cell queues repair/sleep without requiring
+  exact horizontal alignment or a pre-existing tether, and without bypassing readiness.
+  Record map-east facing and the separate tethered, stationary completed-entry confirmation
+  independently; no reservation-only paid step. Reuse S-0314 H19's tether and off-centre
+  controls and H22's late-retry controls, with their expected results and falsifiers:
+  same-turn destination assignment does not repeat movement or due behaviour processing,
+  and competing retries use object-turn order. An early unarmed guard transition must meet
   the truncated centre-distance and stillness tests and choose a 1-tick processing delay.
   A paid step at reservation, a forced queue start, or that guard result at 64 leptons or
   farther falsifies the respective claim. At each repeatable pre-tether and post-tether
@@ -4715,8 +4732,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   power consequences and the absence of automatic player-house repair return. Claim 17 there
   owns the separate multi-place servicing qualifications. Retain those contracts with claim 29
   at sign-off, rather than treating them as unresolved here. The further vehicle-state condition
-  for sending a run-away scatter request remains open in S-0314 claim 22. Exact remaining
-  locomotor approach geometry is not supplied by the behaviour processing alone.
+  for sending a run-away scatter request remains open in S-0314 claim 22. Claim 18 there
+  owns the docking-point selection and cell-based stopping, including its stated vertical
+  boundary and measurement limitations; behaviour processing alone supplies no further
+  approach geometry.
 - The refused deploy of claim 27 (vehicles): which situations let a deploying vehicle in *hunt*
   reach a spot where its building may not then be placed, so that the refusal and its queued
   *guard* can be observed. The deploy specs own the placement test.
