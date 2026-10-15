@@ -6426,6 +6426,16 @@
           "type": "boolean",
           "default": true
         },
+        "airstrike_empty_strike_stuck": {
+          "description": "A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "airstrike_recharge_same_target_only": {
+          "description": "The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "all_carriers_without_carrier": {
           "description": "An all-carriers tag with no carrier never fires; off: a carrier count of 0 counts like 1, so the tag fires once and is deleted.",
           "type": "boolean",
@@ -6488,6 +6498,11 @@
         },
         "berserk_carrier_tote": {
           "description": "A berserk carrier aircraft can still get tote and its move order; off: it gets no order, like every berserk object.",
+          "type": "boolean",
+          "default": true
+        },
+        "berserk_zero_duration": {
+          "description": "A berserk hit whose duration T is 0 or less still makes the target drop its target and queue *hunt*, berserk until its next update; off: such a hit has no effect on the target. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -6786,6 +6801,11 @@
           "type": "boolean",
           "default": true
         },
+        "deploy_makes_control_permanent": {
+          "description": "A controlled vehicle that deploys into a building leaves its controller's list silently and the owner change becomes permanent; off: the new object inherits the control link, the original owner and the list place, and is released as the old object would have been. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "deploy_refuses_own_walls": {
           "description": "A deploying vehicle cannot deploy onto its own house's wall.",
           "type": "boolean",
@@ -6903,6 +6923,11 @@
         },
         "drive_track_end_cap": {
           "description": "A tick finishes at most one track if it began without one, two if it began on one.",
+          "type": "boolean",
+          "default": true
+        },
+        "dying_victim_holds_slot": {
+          "description": "A dying victim holds its controller slot for as long as it still exists as the same object (a sinking ship, a building awaiting delayed destruction); off: a victim leaves its controller's list at its killing hit. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -7116,6 +7141,11 @@
           "type": "boolean",
           "default": true
         },
+        "gattling_zero_spin_down_empties": {
+          "description": "A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "ground_detonation_misses_aircraft": {
           "description": "Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.",
           "type": "boolean",
@@ -7243,6 +7273,11 @@
         },
         "low_strip_regress": {
           "description": "Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "mind_control_owner_change_keeps_victims": {
+          "description": "A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -7573,6 +7608,11 @@
         },
         "prone_noncrawler_speedup": {
           "description": "A prone unit whose type cannot crawl walks half as fast again.",
+          "type": "boolean",
+          "default": true
+        },
+        "psychic_intent_ignores_visibility": {
+          "description": "Hostile-intent lines are shown for units the viewer cannot see, including cloaked, disguised and shrouded units; off: a line is shown only for a unit visible to the viewer's house. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -8253,6 +8293,11 @@
         },
         "warp_hold_persists": {
           "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "wind_southeast_short": {
+          "description": "Wind direction 3 pushes a gas particle 1 lepton in x instead of 2, unlike its mirror direction 5; off: Δx = 2 for direction 3. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },

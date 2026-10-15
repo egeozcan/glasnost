@@ -1557,6 +1557,42 @@ pub struct Quirks {
     // spec: S-0525 claim 6 and Edge cases
     #[serde(default = "on")]
     pub radiation_residue: bool,
+    /// A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged. Not implemented yet (wave 2).
+    // spec: S-0519 claim 17 and Edge cases
+    #[serde(default = "on")]
+    pub airstrike_empty_strike_stuck: bool,
+    /// The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target. Not implemented yet (wave 2).
+    // spec: S-0519 claim 18
+    #[serde(default = "on")]
+    pub airstrike_recharge_same_target_only: bool,
+    /// A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does. Not implemented yet (wave 2).
+    // spec: S-0601 claim 11 and Edge cases
+    #[serde(default = "on")]
+    pub mind_control_owner_change_keeps_victims: bool,
+    /// A dying victim holds its controller slot for as long as it still exists as the same object (a sinking ship, a building awaiting delayed destruction); off: a victim leaves its controller's list at its killing hit. Not implemented yet (wave 2).
+    // spec: S-0601 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub dying_victim_holds_slot: bool,
+    /// A controlled vehicle that deploys into a building leaves its controller's list silently and the owner change becomes permanent; off: the new object inherits the control link, the original owner and the list place, and is released as the old object would have been. Not implemented yet (wave 2).
+    // spec: S-0601 claim 15 and Edge cases
+    #[serde(default = "on")]
+    pub deploy_makes_control_permanent: bool,
+    /// A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged. Not implemented yet (wave 2).
+    // spec: S-0609 claims 3 and 9, F2 and Edge cases
+    #[serde(default = "on")]
+    pub gattling_zero_spin_down_empties: bool,
+    /// A berserk hit whose duration T is 0 or less still makes the target drop its target and queue *hunt*, berserk until its next update; off: such a hit has no effect on the target. Not implemented yet (wave 2).
+    // spec: S-0610 claim 5 and Edge cases
+    #[serde(default = "on")]
+    pub berserk_zero_duration: bool,
+    /// Hostile-intent lines are shown for units the viewer cannot see, including cloaked, disguised and shrouded units; off: a line is shown only for a unit visible to the viewer's house. Not implemented yet (wave 2).
+    // spec: S-0610 claim 10 and Edge cases
+    #[serde(default = "on")]
+    pub psychic_intent_ignores_visibility: bool,
+    /// Wind direction 3 pushes a gas particle 1 lepton in x instead of 2, unlike its mirror direction 5; off: Δx = 2 for direction 3. Not implemented yet (wave 2).
+    // spec: S-0613 claim 12, Constants and Edge cases
+    #[serde(default = "on")]
+    pub wind_southeast_short: bool,
 }
 
 impl Default for Quirks {
@@ -1941,6 +1977,15 @@ impl Default for Quirks {
             crate_unit_fallback_unit_argument: true,
             radiation_add_overdraw: true,
             radiation_residue: true,
+            airstrike_empty_strike_stuck: true,
+            airstrike_recharge_same_target_only: true,
+            mind_control_owner_change_keeps_victims: true,
+            dying_victim_holds_slot: true,
+            deploy_makes_control_permanent: true,
+            gattling_zero_spin_down_empties: true,
+            berserk_zero_duration: true,
+            psychic_intent_ignores_visibility: true,
+            wind_southeast_short: true,
         }
     }
 }
@@ -2886,6 +2931,33 @@ impl Quirks {
             ),
             ("radiation_add_overdraw", self.radiation_add_overdraw),
             ("radiation_residue", self.radiation_residue),
+            (
+                "airstrike_empty_strike_stuck",
+                self.airstrike_empty_strike_stuck,
+            ),
+            (
+                "airstrike_recharge_same_target_only",
+                self.airstrike_recharge_same_target_only,
+            ),
+            (
+                "mind_control_owner_change_keeps_victims",
+                self.mind_control_owner_change_keeps_victims,
+            ),
+            ("dying_victim_holds_slot", self.dying_victim_holds_slot),
+            (
+                "deploy_makes_control_permanent",
+                self.deploy_makes_control_permanent,
+            ),
+            (
+                "gattling_zero_spin_down_empties",
+                self.gattling_zero_spin_down_empties,
+            ),
+            ("berserk_zero_duration", self.berserk_zero_duration),
+            (
+                "psychic_intent_ignores_visibility",
+                self.psychic_intent_ignores_visibility,
+            ),
+            ("wind_southeast_short", self.wind_southeast_short),
         ]
     }
 
