@@ -2,11 +2,11 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0132, Q-0220]
 supersedes: []
@@ -629,8 +629,9 @@ are repetitions that guard against void runs.
 - Part f (the turn under disturbance): the vehicle faces away from *D* and begins its turn; the
   recorder logs its cell and behaviour per tick. (1) A named parasite of the bystander attaches to it
   during the turn and holds it for a known number of ticks, which is 8 processings or more (it loses
-  deploy readiness, S-0214, Terms, *disabled*); if no hold that ends can be set up, the hold
-  lasts to the end of the run and only the first half of the expectation is recorded. (2) A
+  deploy readiness, S-0214, Terms, *disabled*). A release under S-0614 claim 12 may end
+  the attachment; record the actual release and end of the hold. If no hold that ends can be
+  set up, the hold lasts to the end of the run and only the first half of the expectation is recorded. (2) A
   scatter request is made during the turn (it gains a destination and moves to another cell); this
   is run with no queued behaviour, with 5 processings of the vehicle's behaviour recorded after
   it has stopped. Log the queued behaviour to confirm that it remains empty; the queued-behaviour
@@ -650,8 +651,10 @@ are repetitions that guard against void runs.
 - Part k (no deploy readiness at the first attempt): a named parasite is already attached to a
   vehicle facing *D* on a valid anchor. A named map script gives it *unload*, rather than relying
   on a deploy input that might refuse it for lost readiness: (1) a vehicle of the human house,
-  (2) the bystander's named vehicle of part j. Record that the parasite remains attached, there
-  is no destination and *unload* is processed; otherwise the run is not applicable.
+  (2) the bystander's named vehicle of part j. Attachment alone prevents this vehicle's deploy
+  readiness (S-0214, Terms); S-0614 claim 12 owns release from a living host, not a release
+  caused by an attempted building deployment or pack-up. Record that the parasite remains
+  attached, there is no destination and *unload* is processed; otherwise the run is not applicable.
 - Part m (a moving vehicle at the first attempt): the part a setup (3 × 3 building, no tree, facing
   equal to *D*), but a move order to a cell 8 cells away is given one tick before the deploy order.
   The deploy order clears its destination (S-0213 claim 10). If the vehicle is no longer moving
