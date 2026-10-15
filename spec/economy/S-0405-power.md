@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -105,9 +105,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
   normal gap and the gap field are S-0409's (claim 11); the power consequence of the super-gap is
   this spec's.
 - **Controlled unit, held unit.** A unit that a building has taken over with a mind-control weapon
-  is one of the building's *controlled units*; a vehicle that a building holds with a lifting
-  (magnetic) weapon is its *held unit*. The special-abilities specs own how they are taken and
-  what releasing them does.
+  is one of the building's *controlled units*. Its *held unit* is its *gripped unit* under
+  S-0607 (Terms), not every unit that remains seized after release. S-0607 claims 12–13 own
+  the end of the grip and the resulting drop or set-down.
 - **Control-centre type, powered-unit type.** A building type can name one vehicle type whose units
   depend on it (its *powered unit*); a vehicle type can carry the powered-unit flag (Import
   mapping). A building of a control-centre type is an *active control centre* from the first
@@ -230,7 +230,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
      gains or loses an upgrade, or is switched on or off,
    - the health of one of the house's buildings changes: the building notices the change in its own
      turn, and the house works out its power in its update of the same tick,
-   - a passenger enters or leaves an absorbing building of the house,
+   - a passenger enters or is voluntarily released from an absorbing building of the house
+     whose type's extra output is above 0 (S-0605 claims 7 and 13),
    - a draining unit attaches to or lets go of one of its buildings,
    - an erasing weapon successfully locks on to one of its buildings, or the last erasing
      attacker releases it before completion (S-0514 claims 4 and 10). Release restores the
@@ -252,6 +253,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
    happens after that update's power evaluation: it makes power due for the next house update,
    without changing the totals already published in the current one (S-0414 claim 16).
    A later evaluation still counts buildings by claim 3, including those awaiting removal.
+   Whether removal of a passenger while it remains inside a surviving absorbing building
+   makes power due is unresolved (S-0605 claim 15); it is not an established event of this list.
    - Backing: `measurable` (S-0414 scenario V12 for house-update destruction,
      scenario W5, parts a to c for health and switch timing; W1, W2, W4
      and W12 for the resulting totals after erasure, passengers, placement, removal, blackout,
@@ -311,8 +314,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
    - stops being an active control centre (claim 13), stops its gap (claim 16), and produces no
      credits from a cash-producing type (S-0515 claims 5 to 7),
    - releases every controlled unit it holds (S-0601 claims 9–10 own the release effects and
-     release order) and lets go of its held unit (Terms; the special-abilities specs own
-     what letting go does),
+     release order) and lets go of its held unit (S-0607 claims 12–13): at 1 lepton or more
+     above the surface the unit is dropped; at height 0 or less it is set down,
    - stops the effects of sensor types (visibility specs), and its lights and working animations
      (rendering specs).
 
@@ -352,7 +355,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
      sets of conditions hold (W6 observes firing refusal, not an answer label; no differing
      building response to these labels is known, and S-0301 claim 9 makes the same argument).
      `measurable` for cash production (S-0515 scenario TB3, including switched-off and unmanned
-     cases). `unmeasured` for the held unit, the lights and the sensor types (each needs the
+     cases). Held-unit release inherits S-0607 claims 12–13's backing (scenario L8 for a
+     building losing operation). `unmeasured` for the lights and the sensor types (each needs the
      observable of the spec that owns the effect, and those specs' scenarios should add a variant
      in which the building is switched off)
    - Confidence: high (firing under low power, the one-off effects' timing for the animation and the
@@ -594,7 +598,7 @@ is implementer design, not a further game-state rule. No formula here prescribes
 
 | State | Event | Result |
 |---|---|---|
-| house power not due | building placed, created on the map, removed, destroyed or changes owner; a building's health changes (damage or repair, noticed in its own turn); building switched on or off; upgrade gained or lost; passenger enters or leaves an absorbing building; draining unit attaches or lets go; erasing weapon successfully locks on or its last attacker releases before completion; timed blackout starts or ends; super-gap switched on or off (claim 7) | power due |
+| house power not due | building placed, created on the map, removed, destroyed or changes owner; a building's health changes (damage or repair, noticed in its own turn); building switched on or off; upgrade gained or lost; passenger enters or is voluntarily released from an absorbing building whose type's extra output is above 0; draining unit attaches or lets go; erasing weapon successfully locks on or its last attacker releases before completion; timed blackout starts or ends; super-gap switched on or off (claim 7) | power due |
 | power due | the house's update | *O*, *D* worked out (claims 4, 5); production periods worked out again (claim 11); a change of low-power state checks superweapon suspension and resumption under S-0512 claim 6, with claim 15's exceptions |
 | full power | worked out with *D* > 0 and *O* < *D* | low power: needs-power buildings with a base drain above 0 and fewer than 2 chargers stop being in operation (claim 8) |
 | low power | worked out with *O* ≥ *D* or *D* = 0 | full power: the power condition no longer prevents operation; claim 8's other conditions still apply |
@@ -1070,6 +1074,8 @@ switched off the house has full power (W3's second pair).
   entry falls (W4 parts a and c vary it).
 - Whether a blackout started with a length of 0 or less during a running one occurs in any
   skirmish (claim 6); it needs a superweapon effect with its own length.
+- Whether removal of a passenger inside a surviving absorbing building makes the house's
+  power due (S-0605 claim 15).
 - The full list of building functions that the in-operation test gates beyond those of claim 9.
 - What else a fourth or later upgrade of a wall tower changes in the original (S-0406 claim 12).
   This spec does not depend on it: power reads only the three positions (W12 confirms that a fourth
