@@ -2,11 +2,11 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644, Q-0646]
 supersedes: []
@@ -106,21 +106,48 @@ a carrier's controller is launching ordinary aircraft.
    without a point clears it. At track completion with an order destination still present,
    being in that destination's supplied movement-point cell with an absolute difference
    between ship world height and locomotor destination height strictly below 208 leptons
-   clears the point before the cell-arrival report. Merely standing in that cell does not.
-   Copies and comparisons use integer leptons without rounding. Give-up and fallback use
-   S-0207 claim 25's normal stop/replacement rules, not an inferred successful arrival.
-   S-0212 claims 20 to 22 still own search timing and give-up conditions.
+   clears the point before the cell-arrival report. This completion alone does not remove
+   the order-level destination. Copies and comparisons use integer leptons without rounding.
+
+   Order-level goal cleanup follows S-0207 claim 26. At a locomotion update without an
+   active track, occupying the cell named by a cell destination removes that destination
+   and stops locomotion, clearing the locomotor point immediately when there are no
+   approach destinations. With approach destinations, the old goal is abandoned and
+   S-0215 claim 13's fallback decides any replacement. This cell test needs no exact
+   position, height tolerance, successful search or due behaviour processing, and does
+   not require the locomotor point to be present or the current behaviour to be *move*.
+   After qualifying final completion in tick *t*, an unchanged ordinary cell goal therefore
+   remains through that locomotion update and is removed at the next tick's no-track
+   update, unless an intervening effect changes it. Arrival-report effects may separately
+   change the goal in tick *t*. An accepted same-cell move from rest is cleaned up at its
+   first subsequent no-track locomotion update, possibly in the assignment tick itself,
+   not after an extra one-tick delay.
+
+   A building destination is not a cell destination merely because its supplied point
+   lies in that cell. Mere cell equality without a track removes neither destination
+   for a building goal; same-cell entry can retain both until a stop, replacement or
+   applicable behaviour effect. There is a separate exception at rest in *guard*: with
+   a locomotor destination point present, exact equality of the ship's world point and
+   that point in all three integer-lepton coordinates triggers the same removal or
+   approach-destination fallback, even for a building goal. Same-cell equality alone
+   does not satisfy that exception. Entry and servicing effects remain S-0215 claim 29's
+   and S-0314 claims 17 and 18's, not a guaranteed persistence through those effects.
+   Give-up and fallback otherwise use S-0207 claim 25's normal stop/replacement rules,
+   not an inferred successful arrival. S-0212 claims 20 to 22 still own search timing
+   and give-up conditions.
    A ship stays in the ground layer, or the bridge-deck layer on a deck, by S-0207's rules; an
    underwater type is in the same layer as a surface ship (claim 6). Its body tilts on slopes as
    S-0106 claim 5 says for naval locomotion.
    - Backing: `measurable` (N1 and N2) for ordinary progress, turning, stopping, heading-point
      scatter and approach; S-0207 D27 for heading-height assignment and retention through
      chaining; S-0207 D29's water controls for the separate locomotor destination's
-     assignment and lifetime. The remaining shared-rule assertions are `unmeasured` here: those
+     assignment and lifetime; S-0207 D30's ship controls for cell-goal cleanup, next-update
+     timing, retained building goals and the exact-point guard exception. The remaining
+     shared-rule assertions are `unmeasured` here: those
      scenarios do not isolate power-ups, lead speed, cell-tag timing, slope tilt or every entry
      outcome; the cited specs' scenarios need ship-specific counterparts.
    - Confidence: high for shared ordinary rules and tables; medium for lead speed, approach
-     and cell-tag timing, and for approach-destination fallback lifetime
+     and cell-tag timing, composed cleanup timing and approach-destination fallback lifetime
 
 2. **Wakes behind a moving ship.** In each tick in which a ship is *moving now*, and the tick number
    (glossary) is divisible by 8, the ship creates one wake at its own position, provided all of these
@@ -603,6 +630,23 @@ Any contrary point lifetime falsifies the corresponding rule. Use D29's give-up 
 and its named docking-displacement controls for the strict 207/208-lepton boundary.
 if legal ship approaches cannot be established, that boundary control is inconclusive.
 N1 and N2 alone do not isolate destination-point presence.
+
+**Order-level cleanup (claim 1).** Use S-0207 D30's water-lane ship controls at
+speed index 2, director and mods off, three repetitions per case and an isolated
+bystander computer player. Record destination kind and presence, locomotor point,
+world point, active track, approach destinations, behaviour processing, searches and
+arrival reports immediately before and after locomotion. Test an accepted same-cell
+move, final arrival from several cells away, accepted same-cell building entry, and
+verified resting *guard* states with a building goal at exact equality, a horizontal
+displacement within the cell, and a height displacement. Include D30's verified
+approach-destination fallback control. Expected: first no-track update removes a
+cell goal without requiring search or due behaviour processing; final completion in
+tick *t* clears only the locomotor point and the unchanged cell goal clears in tick
+*t* + 1. Building cell equality alone clears neither, but exact three-coordinate
+equality in resting guard triggers cleanup or fallback. A different removal phase,
+cell-only building cleanup, or guard cleanup despite a displaced point falsifies
+the corresponding rule. Record intervening entry/arrival effects separately; runs
+without verified guard or fallback preconditions are inconclusive for those controls.
 
 **N3. Wake cadence (claims 2, 6).** *Setup:* one surface ship and one underwater ship moving on
 open water; a bridge over part of the path. *Procedure:* run 200 ticks of straight movement and a
