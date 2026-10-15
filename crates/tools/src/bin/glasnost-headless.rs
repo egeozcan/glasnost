@@ -19,7 +19,8 @@
 //!   `glasnost_ai::game::Game`); writes `local-lane/ai-duel.txt`.
 //!   `ai-sides [ticks] [seed] [index …]` plays one such game per pair of
 //!   sides (each player the first open country of its side) and writes
-//!   `local-lane/ai-sides.txt`.
+//!   `local-lane/ai-sides.txt`; `GLASNOST_AI_SIDES=a,b` plays only that
+//!   pair of sides.
 //! - `GLASNOST_GAME_DIR=<install> glasnost-headless triggers [index …]`: the
 //!   map trigger event and action codes every map of the install uses
 //!   (S-0011), with the listed map indices' own counts; codes and counts

@@ -26,7 +26,7 @@ use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::econ::tech;
 use glasnost_sim::load::new_game;
-use glasnost_sim::rules::{Kind, SimRules};
+use glasnost_sim::rules::{Kind, Locomotor, SimRules};
 use glasnost_sim::save;
 use glasnost_sim::world::{HouseId, World};
 
@@ -105,6 +105,8 @@ struct Game {
     replay_ms: u128,
     replay_matches: bool,
     save_matches: bool,
+    /// `GLASNOST_AI_QUICK` skipped the replay and save checks.
+    checks_skipped: bool,
     failure: Option<String>,
 }
 
@@ -160,7 +162,16 @@ async fn run_async(
         let rules = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
         let tiles = Arc::new(tiles);
         let pairs: Vec<Option<(i32, i32)>> = if players == Players::AiSides {
-            side_pairs(&rules).into_iter().map(Some).collect()
+            // `GLASNOST_AI_SIDES=a,b` plays only that pair of sides.
+            let want: Option<(i32, i32)> = std::env::var("GLASNOST_AI_SIDES").ok().and_then(|v| {
+                let (a, b) = v.split_once(',')?;
+                Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+            });
+            side_pairs(&rules)
+                .into_iter()
+                .filter(|p| want.is_none_or(|w| w == *p))
+                .map(Some)
+                .collect()
         } else {
             vec![None]
         };
@@ -437,6 +448,11 @@ fn play_ai(
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let mut drained = 0usize;
+    // `GLASNOST_AI_TRACE=n`: a timeline line per house every n ticks.
+    let trace: i32 = std::env::var("GLASNOST_AI_TRACE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -453,6 +469,9 @@ fn play_ai(
         }
         drained = w.effects.len();
         features(w, &mut g.features);
+        if trace > 0 && w.tick % trace == 0 {
+            print!("{}", timeline(w));
+        }
         if w.tick == EARLY {
             for h in 0..PLAYERS {
                 g.early[h] = offer(w, h);
@@ -531,6 +550,11 @@ fn play_ai(
         }
     }
     let end = game.state_hash();
+    if std::env::var_os("GLASNOST_AI_QUICK").is_some() {
+        // A diagnostic run: no replay, no save check.
+        g.checks_skipped = true;
+        return Ok(());
+    }
 
     // The replay runs the AI again.
     let t = Instant::now();
@@ -556,11 +580,123 @@ fn play_ai(
     Ok(())
 }
 
+/// A diagnostic timeline of the player houses at this tick: credits, army
+/// units on the map by kind and current behaviour, and each production
+/// line's item (kind, progress, done, hold, waiting for money) and queue
+/// length. Counts and states only.
+fn timeline(w: &World) -> String {
+    let mut s = String::new();
+    for h in 0..PLAYERS {
+        let house = HouseId(h as u8);
+        let mut army: BTreeMap<String, usize> = BTreeMap::new();
+        for o in w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner == Some(house))
+        {
+            if role_of(w, tech::type_of(o)) == Some(Role::Army) {
+                let loco = w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor);
+                *army
+                    .entry(format!(
+                        "{:?}/{:?} {:?}{}",
+                        o.kind,
+                        loco,
+                        o.beh.current,
+                        if o.contact.is_some() {
+                            " in contact"
+                        } else {
+                            ""
+                        }
+                    ))
+                    .or_default() += 1;
+            }
+            if o.kind == Kind::Building
+                && let Some(f) = w
+                    .rules()
+                    .buildings
+                    .get(o.type_index as usize)
+                    .and_then(|b| b.factory)
+            {
+                let contacts: Vec<String> = w
+                    .objects
+                    .values()
+                    .filter(|x| x.contact == Some(o.id))
+                    .map(|x| {
+                        let loco = w.rules().unit(x.kind, x.type_index).map(|u| u.locomotor);
+                        format!(
+                            "{:?}/{:?} {:?} on map {}",
+                            x.kind, loco, x.beh.current, x.on_map
+                        )
+                    })
+                    .collect();
+                *army
+                    .entry(format!(
+                        "factory {f:?} {:?} contacts [{}]",
+                        o.beh.current,
+                        contacts.join(", ")
+                    ))
+                    .or_default() += 1;
+            }
+        }
+        let lines: Vec<String> = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == house)
+            .map(|l| match &l.item {
+                Some(i) => format!(
+                    "{:?}: {:?} progress {} done {} hold {:?} waiting {} queue {}",
+                    l.kind,
+                    i.t.kind,
+                    i.progress,
+                    i.done_tick.is_some(),
+                    i.hold,
+                    i.waiting,
+                    l.queue.len()
+                ),
+                None => format!("{:?}: empty, queue {}", l.kind, l.queue.len()),
+            })
+            .collect();
+        let army: Vec<String> = army.iter().map(|(k, n)| format!("{k} ×{n}")).collect();
+        let _ = writeln!(
+            s,
+            "trace tick {} house {h}: credits {}; army {}; lines [{}]",
+            w.tick,
+            w.houses[h].credits,
+            army.join(", "),
+            lines.join("; ")
+        );
+    }
+    s
+}
+
+/// The report keys of the player houses' units by kind: infantry,
+/// vehicles (not ships or hovers), ships, hovers, aircraft.
+const UNIT_KEYS: [[&str; 5]; PLAYERS] = [
+    [
+        "house 0 infantry",
+        "house 0 vehicles",
+        "house 0 ships",
+        "house 0 hovers",
+        "house 0 aircraft",
+    ],
+    [
+        "house 1 infantry",
+        "house 1 vehicles",
+        "house 1 ships",
+        "house 1 hovers",
+        "house 1 aircraft",
+    ],
+];
+
 /// Notes the objects that show an M6 feature now: a spawner, a rocket in
 /// flight (S-0506), a parasite inside its host (S-0614), an aircraft on the
 /// map that is not a rocket (S-0501), a naval yard, a ship, a sinking ship
-/// (S-0504), and a building the script builds for no role (the tech climb);
-/// the owned ones count for the player houses only.
+/// (S-0504), a hover (S-0503), a teleporting unit (S-0207), a repair depot,
+/// a gate, a vehicle docked for repair at a depot or yard (S-0314, S-0504),
+/// each house's units by kind, and a building the script builds for no role
+/// (the tech climb); the owned ones count for the player houses only.
 fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
     let r = w.rules();
     for (id, o) in &w.objects {
@@ -580,6 +716,28 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
         if !o.on_map || o.owner.is_none_or(|h| usize::from(h.0) >= PLAYERS) {
             continue;
         }
+        let house = o.owner.map_or(0, |h| usize::from(h.0));
+        let loco = r.unit(o.kind, o.type_index).map(|u| u.locomotor);
+        // Units by kind and house; ships and hovers apart from the other vehicles.
+        let unit_kind = match (o.kind, loco) {
+            (Kind::Infantry, _) => Some(0),
+            (Kind::Vehicle, Some(Locomotor::Ship)) => Some(2),
+            (Kind::Vehicle, Some(Locomotor::Hover)) => Some(3),
+            (Kind::Vehicle, _) => Some(1),
+            (Kind::Aircraft, _) if o.rocket.is_none() => Some(4),
+            _ => None,
+        };
+        if let Some(k) = unit_kind {
+            note(UNIT_KEYS[house][k]);
+        }
+        // A type with no locomotor resolves to the teleporting one (S-0207
+        // claim 14): count only the types that name it.
+        let names_teleport = r
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.locomotor.is_some() && u.locomotor == Locomotor::Teleport);
+        if names_teleport {
+            note("teleporters");
+        }
         match o.kind {
             Kind::Aircraft if o.rocket.is_none() => note("aircraft"),
             Kind::Building => {
@@ -587,18 +745,36 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
                 if b.is_some_and(|b| b.naval && b.factory.is_some()) {
                     note("naval yards");
                 }
+                if b.is_some_and(|b| b.building.unit_repair && !b.naval) {
+                    note("repair depots");
+                }
+                if b.is_some_and(|b| b.gate) {
+                    note("gates");
+                }
                 if role_of(w, tech::type_of(o)).is_none() {
                     note("climb buildings");
                 }
             }
             Kind::Vehicle => {
-                if r.unit(o.kind, o.type_index)
-                    .is_some_and(|u| u.locomotor == glasnost_sim::rules::Locomotor::Ship)
-                {
+                if loco == Some(Locomotor::Ship) {
                     note("ships");
+                }
+                if loco == Some(Locomotor::Hover) {
+                    note("hovers");
                 }
                 if glasnost_sim::naval::sinking(w, *id) {
                     note("ships sinking");
+                }
+                if let Some(l) = glasnost_sim::depot::link(w, *id).filter(|l| l.tethered) {
+                    let at_yard = w
+                        .obj(l.depot)
+                        .and_then(|d| r.buildings.get(d.type_index as usize))
+                        .is_some_and(|b| b.naval);
+                    note(if at_yard {
+                        "docked for repair at a yard"
+                    } else {
+                        "docked for repair at a depot"
+                    });
                 }
             }
             _ => {}
@@ -772,11 +948,15 @@ fn report(
                 let _ = writeln!(s, "  house {h} army at the end: {}", v.join(", "));
             }
         }
-        let _ = writeln!(
-            s,
-            "  replay reproduces the final state: {}; save in mid-game, loaded and continued, matches: {}",
-            g.replay_matches, g.save_matches
-        );
+        if g.checks_skipped {
+            let _ = writeln!(s, "  replay and save checks skipped (GLASNOST_AI_QUICK)");
+        } else {
+            let _ = writeln!(
+                s,
+                "  replay reproduces the final state: {}; save in mid-game, loaded and continued, matches: {}",
+                g.replay_matches, g.save_matches
+            );
+        }
     }
     s
 }
