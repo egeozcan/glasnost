@@ -9,7 +9,9 @@
 //! gave. Playback here never feeds the simulation. The draws the
 //! simulation does not take (a follow-up type's random delay, the random
 //! loop delays between passes) come from a cosmetic stream of the
-//! drawing's own: an interim rule (docs/development.md, request Q-0770).
+//! drawing's own. S-0109 claim 28 makes them scenario-stream simulation
+//! effects; that needs playback in the simulation, which is not built
+//! (a seam, docs/development.md).
 //!
 //! Damage, start and middle events (claims 13, 14 and 17) are the
 //! simulation's and are not played here; held animations (claim 23) and

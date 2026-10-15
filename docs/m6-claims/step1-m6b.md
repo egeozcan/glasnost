@@ -107,7 +107,7 @@ open request.
 
 | Claim | Bucket | Change | Code location / evidence |
 |---|---|---|---|
-| 30 | (a), not done: blocked on Q-0671 | Presentation scheduling must be deterministic; the exact replacement schedule is deferred. Our passes run on host time. | `crates/audio` `Audio::frame`, `Mixer::service`. Filed **Q-0671**; interim row in docs/development.md (Audio). |
+| 30 | (a), not done | Presentation scheduling must be deterministic. Revision 14 answers Q-0671 with the logical cycle-end clock, sample durations, waits and draw assignment; not built yet, our passes run on host time. | `crates/audio` `Audio::frame`, `Mixer::service`. Row in docs/development.md (Audio). |
 | consumption death sounds | (e) S-0603 | none | none |
 
 ## New or unbuilt specs: S-0502 (rev 2 to 3), S-0514 (rev 3 to 4), S-0517 (rev 2 to 3), S-0601 (rev 1 to 2), S-0609 (rev 2 to 3), S-0608, S-0611, S-0612, S-0615 (rev 1)
