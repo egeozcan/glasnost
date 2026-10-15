@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711]
 supersedes: []
 ---
 
@@ -736,10 +736,29 @@ original's recording modes are retained as deferred context, not implementation 
       and playback modes are development features outside the measurement setup)
     - Confidence: medium (two per tick, network games only); low (the condition of the extra draw)
 
-13. **Map-generator stream.** The random-map generator has a stream of its own with the same
-    algorithm (claims 1 to 3). In a skirmish the generator can be reached from the map selection
-    of the setup screens, through a random-map setup screen, in a game mode that offers it. When
-    the game starts, the stream is seeded from the random map's 16-bit seed setting,
+13. **Map-generator stream (Q-0711).** The random-map generator has a stream of its own with the same
+    algorithm (claims 1 to 3). An **ordinary map** here is a map loaded from already-defined map
+    data, not generated from random-map settings. The stream is initially seeded with the unsigned
+    integer 0 at session start, independently of the game seed. Starting a skirmish on an ordinary
+    map neither selects a map-generator seed nor reseeds this stream. In particular there is no
+    unsynchronised R(0, 65535) for it, before or after map-load presentation draws. A fresh
+    session that has not generated a random map or otherwise used this stream therefore begins
+    ordinary-map play with the untouched seed-0 state: its next raw value is x₀ of claim 3's
+    seed-0 sequence. The game's seed cannot change that state.
+
+    Ordinary-map games in the same session retain the state left by earlier uses, including
+    earlier games' low-bridge repairs and random-map generation on the setup screens. Returning
+    to the menus and starting another ordinary-map game does not restore seed 0. During play,
+    low-bridge repairs advance the existing stream, including rejected values, without reseeding.
+    Thus this is not a once-per-game seeding rule. To reproduce a continuing session our engine
+    retains this stream's state across its games; the game seed alone does not identify that
+    continuing state. A new session begins at seed 0, not at a value derived from a fresh copy
+    of the unsynchronised stream.
+
+    In a skirmish the random-map generator can be reached from the map selection
+    of the setup screens, through a random-map setup screen, in a game mode that offers it.
+    Only when generating a random map, including its generation at game start, is the stream
+    reseeded from the random map's 16-bit seed setting,
     from 0 to 65535, or, when that setting is 0, from a ranged draw R(0, 65535) of the
     unsynchronised random stream, taken after that stream has been seeded for the game (claim 8).
     The random-map setup screen shows no seed and offers no way to type one. It chooses a new
@@ -768,7 +787,9 @@ original's recording modes are retained as deferred context, not implementation 
     | The skirmish setup screens can reach the generator, in a game mode that offers it | `measurable` (R9) | medium |
     | Same algorithm; seeded from the seed setting, which lies in 0 … 65535 | `measurable` (R9 a) | medium |
     | The random-map setup screen chooses the setting with a ranged draw R(0, 65535) of the unsynchronised stream | `measurable` (R9 b) | medium |
-    | Without a random-settings choice in a fresh session, the game-start map-generator seed comes from R(0, 65535) of the newly seeded unsynchronised stream | `measurable` (R9 e) | low |
+    | Session initialization uses seed 0; an ordinary-map start has no fallback draw or reseeding, irrespective of the game seed or map-load presentation draws | `measurable` (R9 g) | high |
+    | Ordinary-map games retain prior stream state across the menu boundary; repairs advance it without reseeding | `measurable` (R9 g/h) | high |
+    | Without a random-settings choice in a fresh session, a generated map's game-start seed comes from R(0, 65535) of the newly seeded unsynchronised stream, not necessarily its first value | `measurable` (R9 e) | low |
     | The hidden setting is initially 0 and 0 selects the fallback | `unmeasured` (R9 e reads the resulting seed, not the hidden setting; no scenario part distinguishes the sentinel itself) | low |
     | No map-generator-stream draw during R9's sampled play without low-bridge repair | `measurable` (R9 c) | medium |
     | Low-bridge repair piece choices: stream, formula, consumption including rejection retries, and strip order | `measurable` (R9 f; S-0511 claim 20) for ordinary choices and order; `unmeasured` for the rejection endpoint, which needs a particular raw value in 2³² that the recorder cannot force | medium |
@@ -1142,7 +1163,8 @@ Thus the visible variants of later neighbours depend on which earlier neighbours
 | Unit-interval factor *c* | (2³⁰ + 1) / 2⁶¹ | dimensionless (double) | Double precision |
 | Percent draw range | 0 … 99 | percent | Inclusive |
 | Network checksum draws | 2 | raw values per tick | The original's network games only; none in a skirmish (claim 12); the multiplayer spec decides |
-| Map-generator seed range | 0 … 65535 | seed value | Claim 13 |
+| Map-generator seed range | 0 … 65535 | seed value | Random-map generation, claim 13 |
+| Initial map-generator seed | 0 | unsigned seed value | Once per session, not once per ordinary-map game (claim 13) |
 | Network setup seed range | 0 … 32767 | seed value | The original's own setup screen (claim 8) |
 | Mixing constants *P*₀ … *P*₃, *Q*₀ … *Q*₃ | Formulas table | unsigned 32-bit values | Claim 3 |
 | Bridge end-marker positions | 122 … 125 and 233 … 236 | positions in the overlay type list | Claim 10; pairs 122–123, 124–125, 233–234, 235–236 |
@@ -1163,7 +1185,11 @@ Thus the visible variants of later neighbours depend on which earlier neighbours
 
 | Stream state | Event | Result |
 |---|---|---|
-| Any | Game start from the setup or menu screens | Both streams seeded with the game's seed; next raw value is x₀ (claim 8) |
+| Any scenario or unsynchronised stream state | Game start from the setup or menu screens | These two streams seeded with the game's seed; next raw value is x₀ (claim 8) |
+| Map-generator stream not yet initialized | Session starts | Seed 0; next raw value is x₀ of the seed-0 sequence (claim 13) |
+| Any map-generator state | Ordinary-map skirmish starts, including after returning to the menus | State unchanged; no seed selection or fallback draw (claim 13) |
+| Any map-generator state | Random-map generation begins | Replaced by the state seeded from the selected random-map seed (claim 13) |
+| Running map-generator stream | Low-bridge repair needs a random piece | Claim 13's accepted and rejected values advance the existing state; no reseeding |
 | Any | Campaign continuation (next mission or restart) | No seeding; both streams continue (claim 8) |
 | Running | A raw value is requested | Returns x<sub>n</sub>, advances to x<sub>n+1</sub> |
 | Running | Clearing of the previous game begins (at a game start, before the map is read) | No draws until the clearing ends, and the same state then as now (claim 7). In the original the scenario random stream is suspended for that time; our engine need not have this state |
@@ -1294,8 +1320,12 @@ The contained resource value used for glint eligibility comes from the resource 
 resource value field imported by S-0401, not from the glint frequency.
 
 The land types and slope shapes that the vein placement test reads come from S-0211 and S-0106. The
-map-generator seed (claim 13) is chosen by the random-map setup screen, not read from a rules key. The
-game seed is a game-setup value (claim 8).
+game seed is a game-setup value (claim 8). Map-generator seeding has no rules or art key:
+
+| Input | Form | Absent or ordinary-map case | Feeds |
+|---|---|---|---|
+| Random-map setup seed setting | unsigned 16-bit setup value, 0 … 65535; not an ordinary-map INI key | During random-map generation only, 0 selects the unsynchronised R(0, 65535) fallback | Replacement map-generator state, claim 13 |
+| Ordinary-map selection | already-defined map data, not random-map settings | No seed is imported or selected; retain the session's map-generator state, initially seeded with 0 | Low-bridge repair choices, claim 13; the game seed is not a substitute |
 
 ## Measurement scenarios
 
@@ -1640,6 +1670,26 @@ The recorder is part of the measurement setup (the project lead has approved it)
   order, with no value for the intact end piece. *Falsified by:* a mismatching position,
   strip order or stream advancement. Void a run if unrelated actors affect the bridge.
   This does not promise to encounter the rare rejection endpoint.
+  (g) *Ordinary-map initialization (Q-0711).* Use the same low-bridge stock-data
+  fixture, speed 4, director and mods off, with the human engineer and distant computer
+  player. Make three fresh launches, never opening random-map generation. Record each
+  game's naturally selected game seed and the map-generator state at the first tick,
+  before repair, and after repair. Also record repaired piece positions. Expected:
+  every first-tick and pre-repair map-generator state is exactly claim 3's seed-0 state,
+  regardless of game seed. The repairs fit claim 13's formula beginning at seed-0 x₀,
+  not at a stream seeded with the first unsynchronised ranged result. Falsified by any
+  different initial state or unexplained advancement. After repair, return to the menus
+  and start the same ordinary map again without exiting. Expected: its first-tick state
+  equals the preceding game's post-repair state, with no reset and no fallback draw.
+  A changed state falsifies persistence. Void a run with an intervening use of this stream.
+  (h) *No in-play reseeding (Q-0711).* In one ordinary-map game, perform two successive
+  low-bridge repairs, using two separate damaged bridges if needed. Record the state
+  before and after each repair and the piece positions, including all accepted and
+  rejected values. Expected: the second repair continues from the first repair's outgoing
+  state, not a fresh seed-0 or game-seeded state. Repeat three fresh-launch runs; a reset,
+  extra advancement between repairs or choice inconsistent with continuation falsifies it.
+  The read-only random-state recorder and scripted input are proposed tools for g/h,
+  not completed measurements.
 
 - **R10, game-start animation draws (claim 10, loading-draw table).** Reuse S-0010 G4 part C's
   named theater fixtures: run 1 starts an animation only in the game-start pass, and run 2 starts

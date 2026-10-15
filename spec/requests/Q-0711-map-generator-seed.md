@@ -1,9 +1,9 @@
 ---
 id: Q-0711
 title: The map-generator stream's seed in a skirmish on an ordinary map
-status: open
+status: answered
 related: [S-0202, S-0511]
-answered-by: []
+answered-by: [S-0202]
 ---
 
 ## Need
