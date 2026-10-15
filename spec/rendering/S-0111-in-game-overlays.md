@@ -2,7 +2,7 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -291,14 +291,15 @@ S-0108 (Formulas F3).
       confidence high for the lead-decided rule
 
 13. **Mind-control pips.** The row has *M* pips, *M* being the damage of the type's primary weapon
-    (the number of units it can control, the special-abilities specs). Counting from pip 0, as many
+    (its control capacity, S-0601 claim 1). Counting from pip 0, as many
     pips as the unit currently controls show image frame 1, and the rest of the row image frame 0.
     A unit whose type may control
-    without limit and that currently controls more than *M* (overloading, the special-abilities specs)
+    without limit and that currently controls more than *M* (S-0601 claims 1 and 16)
     shows one more pip at index *M*, just after the row. That pip shows image frame 3 for 10 ticks
-    from each overload damage pulse: in the drawn frames that follow the tick of the pulse and each of
+    from each damaging overload pulse (S-0601 claim 16): in the drawn frames that follow the tick of the pulse and each of
     the next 9 ticks. From the 10th tick after the pulse it shows image frame 4, until the next pulse.
-    The 10 ticks are not normalised for game speed.
+    The 10 ticks are not normalised for game speed. Link lines and control rings are separate
+    presentation effects owned by S-0601 claims 17 and 18, respectively.
     - A type with the mind-control kind and no primary weapon is bad data: the original fails as soon
       as such an object's pip scale is to be drawn, since the row length *M* it needs does not exist.
       Our engine takes *M* = 0 for it, so the row has no pips and an overload pip, if any, stands at
