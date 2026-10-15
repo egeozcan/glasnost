@@ -13,7 +13,7 @@ Each overlay marks four cells (S-0211 claim 15), so a cell can be marked by its 
 overlays one or two steps away in the marking direction, or one step against it. On an ordinary
 bridge the sections lie across that direction and no cell is marked twice, but on map data with
 neighbouring parallel bridges, or with an overlay that marks cells already marked by another, the
-choice matters. The code in `crates/deterministic/sim/src/bridges/high.rs` (`section_of`) needs
+choice matters. The code in `crates/deterministic/sim/src/bridges/pieces.rs` (`section_marking`) needs
 the order.
 
 ## Questions

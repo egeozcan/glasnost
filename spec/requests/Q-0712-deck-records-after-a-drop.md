@@ -16,7 +16,7 @@ seem to stay in the deck record at least until claim 11's check. The spec does n
 becomes of them afterwards. If they stayed for ever, a later repair (claim 19) would put the deck
 back with stale marks that no unit owns.
 
-The code in `crates/deterministic/sim/src/bridges/` (`drop_deck`) and `fall.rs` needs the rule.
+The code in `crates/deterministic/sim/src/bridges/blow.rs` (`drop_from_deck`, `transfer_marks`) and `fall.rs` needs the rule.
 
 ## Questions
 

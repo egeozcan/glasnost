@@ -13,7 +13,7 @@ in *c* within 104 leptons of *P*'s height" (*P* at the cell's floor + 416), and 
 same test at floor height. For drive and ship locomotion the destination is "the end of the track
 it is following, if any, else its destination". Our movement code keeps destinations as cells or
 objects, and our drive steps are cell to cell, not tracks with heights. The code in
-`crates/deterministic/sim/src/bridges/` (`heading_to`) needs to know which height a destination
+`crates/deterministic/sim/src/bridges/blow.rs` (`heading_cell`) needs to know which height a destination
 has.
 
 ## Questions
@@ -33,8 +33,8 @@ deck (ground level) instead of onto it.
 
 ## Current workaround
 
-A unit counts as heading to *c* when its next path step (drive, ship, hover) or walk target
-(walk) is in *c*, or else when its destination is the cell *c* itself; the height condition is
-taken as met for claim 11 when *c* had a deck at the start of the attempt, and for claim 15
-always. Object destinations do not count. The choices are marked in the code with this request's
+For drive and ship locomotion the cell is the target cell of the track step in progress, if any,
+else the destination cell; for walk and hover locomotion it is the destination cell. A unit counts
+as heading to *c* when that cell is *c*. The height condition is taken as met, for claim 11 and
+claim 15 alike. Object destinations do not count. The choices are marked in the code with this request's
 ID.

@@ -12,7 +12,8 @@ S-0511 claim 9 says a dropped object's "locomotion stops" and it starts falling;
 fall "on each of its own updates (S-0203)". The spec does not say whether the object's behaviour is
 still processed while it falls, whether its ordinary locomotor also runs, whether it keeps its
 destination, target and path, nor whether it can fire. The code in
-`crates/deterministic/sim/src/tick.rs` (`object_turn`) and `fall.rs` needs the rule.
+`crates/deterministic/sim/src/tick.rs` (`object_turn`), `fall.rs` and `bridges/blow.rs`
+(`drop_from_deck`) need the rule.
 
 ## Questions
 
@@ -32,5 +33,5 @@ protection lets it survive).
 
 At the drop the destination, any queued destinations and the path are cleared and the movement
 in progress is reset; the target is kept. While falling, the object's turn processes its
-behaviour as usual, but the fall step replaces its locomotor step, and a vehicle takes no firing
-step. The choices are marked in the code with this request's ID.
+behaviour as usual, but the fall step replaces its locomotor step, and neither a vehicle nor an
+infantry unit takes a firing step. The choices are marked in the code with this request's ID.

@@ -13,7 +13,7 @@ claim 13). On a map that is not a random map the seed setting is 0, so the strea
 a ranged draw R(0, 65535) of the unsynchronised random stream "taken after that stream has been
 seeded for the game". Our simulation does not run the unsynchronised stream (it serves
 presentation and setup only, S-0202 claim 11), so it cannot know how many values that stream has
-taken before the draw. The code in `crates/deterministic/sim/src/world.rs` (the map-generator
+taken before the draw. The code in `crates/deterministic/sim/src/world.rs` and `load.rs` (the map-generator
 stream) needs a seed that every machine agrees on.
 
 ## Questions
