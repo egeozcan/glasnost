@@ -1173,7 +1173,7 @@
           "default": null
         },
         "cloakable": {
-          "description": "`Cloakable`: whether an underwater type can be submerged (S-0504 Terms; planned S-0516).",
+          "description": "`Cloakable`: whether an underwater type can be submerged (S-0504 Terms; S-0516, wave 2).",
           "type": [
             "boolean",
             "null"

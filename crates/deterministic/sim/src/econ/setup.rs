@@ -632,7 +632,7 @@ fn live(w: &World) -> Vec<HouseId> {
 }
 
 /// S-0412 claim 10: the number of crates game start places. The placing,
-/// with its draws, is the crate rules' seam (no spec yet).
+/// with its draws (S-0520 claims 2 and 3, wave 2), is not built: a seam.
 fn place_crates(w: &mut World) {
     if !crates(w) {
         // spec: S-0412 claim 10 (crate setting off: no crate at game start)

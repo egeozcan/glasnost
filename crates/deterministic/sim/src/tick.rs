@@ -1,6 +1,6 @@
 //! The tick pipeline (S-0203): the parts of a tick in their fixed places.
 //!
-//! The parts that have no topic yet (planted bombs, the
+//! The parts that are not built yet (planted-bomb maintenance, S-0519, the
 //! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
 //! pulses, blast rings and crates) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
@@ -27,8 +27,9 @@ pub fn step(w: &mut World) {
     crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
     crate::econ::resource::part(w);
-    // Row 2 (planted bombs) has no topic yet: an empty seam.
-    // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted bombs (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
+    // Row 2 (planted-bomb maintenance, S-0519 claim 10; no draws) is not built: an empty seam. Timed
+    // bombs detonate in their carrier's turn in row 5 (S-0203 claim 1, S-0519 claim 4), not here.
+    // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted-bomb maintenance (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
     // Rows 10, 11, 12, 3 and 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
     // maintenance) takes no draws (S-0203 row 13) and is not built yet.

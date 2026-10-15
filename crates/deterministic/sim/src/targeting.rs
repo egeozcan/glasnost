@@ -553,7 +553,8 @@ fn phasing_in(w: &World, id: ObjectId) -> bool {
     crate::teleport::phasing_in(w, id)
 }
 
-/// Carries an active planted bomb (S-0213 Terms): no bombs before M4.
+/// Carries an active planted bomb (S-0213 Terms). Seam: planted bombs
+/// (S-0519, wave 2) are not built.
 fn planted_bomb(_w: &World, _id: ObjectId) -> bool {
     false
 }

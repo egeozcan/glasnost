@@ -190,7 +190,7 @@ pub fn submerged(w: &World, id: ObjectId) -> bool {
     let underwater = tc.is_some_and(|tc| tc.underwater);
     // spec: S-0504 claim 6 (without the cloak ability an underwater type stays surfaced)
     let cloakable = tc.is_some_and(|tc| tc.cloakable);
-    // spec: S-0504 Terms and claim 6 (submerged: underwater type and a cloak state of cloaking, cloaked or uncloaking; planned S-0516 owns the states, none is set yet)
+    // spec: S-0504 Terms and claim 6 (submerged: underwater type and a cloak state of cloaking, cloaked or uncloaking; S-0516 (wave 2) owns the states, none is set yet)
     underwater && cloakable && cloak_state_hidden(w, id)
 }
 

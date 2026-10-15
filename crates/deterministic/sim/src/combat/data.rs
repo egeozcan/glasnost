@@ -455,7 +455,7 @@ pub struct TypeCombat {
     pub naval_targeting: i32,
     /// Underwater.
     pub underwater: bool,
-    /// Can cloak (S-0504 Terms, planned S-0516).
+    /// Can cloak (S-0504 Terms; S-0516, wave 2).
     pub cloakable: bool,
     /// Organic.
     pub organic: bool,

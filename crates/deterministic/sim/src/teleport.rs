@@ -586,7 +586,8 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     // spec: S-0207 claim 20 (e) (every object that has it as its target drops it)
     // spec: S-0215 claim 10 (the target's own jump: an overridden attacker reverts first, then drops the jumper if it is still its target; a restored other target is kept)
     // The one exception, an attacker whose airstrike is aimed at the living target (S-0207 claim 20 (e),
-    // S-0215 claim 10; not an erasing-weapon exception), is a seam: no airstrike
+    // S-0215 claim 10; not an erasing-weapon exception), is a seam: air strikes and their
+    // designators (S-0519 claims 16 to 20, wave 2) are not built, so no airstrike
     // aiming exists in our engine.
     let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
     for x in ids {
