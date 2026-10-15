@@ -114,7 +114,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 1 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 21 | approved | — |
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 36 | approved | — |
-| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 33 | approved | — |
 | [S-0303](combat/S-0303-area-damage.md) | Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects) | combat | 15 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 23 | approved | — |
 | [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 17 | approved | — |
@@ -126,3 +125,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 15 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 13 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 33 | approved | — |
+| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 34 | approved | — |

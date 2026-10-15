@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -365,9 +365,13 @@ Terms used by this spec:
   computer player's rules own it, including when it is switched on (in a skirmish that can be
   from the start of the game, depending on the house's skill level), so this spec makes no claim
   about it; scenario B11, case f, reads it with the recorder.
-- **Mind control:** an actor's capture of an enemy actor, which then changes owner to the
-  capturer's house. The combat topic owns it; this spec uses only that a takeover gives the
-  captured actor a guard reset (claim 9).
+- **Mind control:** an actor's capture of another actor, which then changes owner to the
+  capturer's house. S-0601 claims 6 and 9 own takeover and release. Takeover normally gives
+  the captured actor a guard reset (claim 9); a vehicle that deploys in place and is currently
+  in *unload* is excepted as S-0601 claim 6 states. Release is not an explicit guard reset,
+  but its ownership change clears target and destination and normally requests *guard* with
+  a readiness-dependent immediate start (claim 7), rather than preserving the last order
+  (S-0601 claim 9).
 - **Being erased:** as the glossary defines it. The combat topic owns erasing weapons.
 - **Cloak, sensor:** an object that *starts to cloak* begins to turn invisible to other houses,
   and a *sensor* of a house detects cloaked objects in the cells it covers. S-0516 claims 1–9
@@ -648,7 +652,7 @@ Terms used by this spec:
    behaviour is not touched (`quirks.stale_suspended_revert`).
 
    Rules that force a behaviour include the guard reset (Terms), which the original applies to an
-   actor taken over by mind control, to an actor that is deactivated or reactivated, to an actor
+   actor taken over by mind control (with S-0601 claim 6's in-place-deployer exception), to an actor that is deactivated or reactivated, to an actor
    that enters an open-topped transport, to an actor whose locomotor is replaced by another,
    and to harvesting slaves through the slave rules (economy topic); and the processings of claims 23 and 27 (their original-only rules), which force *capture*, and of claim 30, which forces *guard*. No
    player's order is known to force a behaviour on the actor it is given to (claim 12); the stop
@@ -2117,6 +2121,39 @@ apply in our engine to the actors of every player house.
       to d); medium (the passive-search conditions, owned elsewhere, and the paragraph on actors
       with an attack-move memory)
 
+33a. **Dropping allied targets for nonhuman owners.** **Original only (note for AI designers):**
+    on each update that reaches ordinary target maintenance, an actor of a computer-controlled
+    owner drops its current target when that owner counts the target as allied, including
+    its own-house actors. This does not wait for the behaviour-processing or targeting timer.
+    A target removed here cannot be used by that update's subsequent behaviour processing.
+    A later search may still choose a new target on the same update.
+
+    The following are exceptions: this rule does not clear the target when
+    - the actor is berserk (S-0610 claim 6),
+    - the actor is an engineer infantry unit,
+    - the actor is infantry and the target is a building that currently permits that infantry
+      unit to occupy it (S-0508 claim 1), or
+    - the actor has a secondary weapon with an electric-charge warhead and the target is an
+      overpowerable building (S-0518 claims 11 and 12).
+
+    For a passenger in an open-topped transport that is itself mind-controlled, the controlling
+    actor's house replaces the passenger's own house for both the human-control gate and the
+    alliance test. Otherwise the passenger's own house is used. Alliance is tested from the
+    house just selected toward the target's owner, not the reverse. A cell target has no
+    allied owner and is not removed by this rule.
+
+    In our engine this nonhuman-owner gate holds only for the neutral and special houses.
+    AI player houses follow the human-controlled rule and do not clear targets on this ground
+    (Terms, houses in our engine). The exceptions do not promise that another target-loss rule
+    cannot remove the same target.
+    - Backing: `measurable` for the berserk exception (S-0610 scenario P4).
+      The ordinary clearing rule, the other exceptions and the passenger-house substitution
+      are `unmeasured`: no validated stock skirmish fixture here isolates an already-held
+      allied target at this maintenance point without another target-loss rule intervening.
+      Scenario B41 gives a conditional investigation, not a claim of a completed fixture.
+    - Confidence: high (clearing, exception conditions and house selection); medium (observable
+      timing relative to behaviour processing)
+
 ### Behaviours owned by other topics
 
 34. **Pointers.** The processing of these behaviours is part of other topics and is not specified
@@ -2870,8 +2907,9 @@ human-controlled owner):
 | *move* | stop order | no slot change; destination cleared; falls back to rest at a processing after it has stopped (claims 12, 22) |
 | *attack* | target gone | falls back to rest (claim 23) |
 | *guard* | attacked, retaliation allowed | override to *attack*; revert to *guard* at the killing hit on the attacker, or when the attacker goes off the map or changes owner (claims 10, 18) |
-| any but *wait* | taken over by mind control | *guard* current at once; target, destination and guard spot cleared (claim 9) |
+| any but *wait* | taken over by mind control, with the guard reset applicable under S-0601 claim 6 | *guard* current at once; target, destination and guard spot cleared (claim 9) |
 | *wait* | taken over by mind control | *wait* stays current (the forced *guard* is refused); target, destination and guard spot cleared (claim 9; scenario B3, case i) |
+| *unload*, vehicle that deploys in place | taken over by mind control | no takeover guard reset; S-0601 claim 6 owns the exception and claim 9 owns release |
 | *area guard* | target leads it beyond the leash | target dropped, returns to the guard spot (claim 26) |
 | *hunt* (skirmish) | no target found | stays in *hunt*, idles, searches again next processing (claim 27) |
 | a behaviour with the no-threat property | damaged by a known attacker | falls back to rest (claim 16) |
@@ -4491,6 +4529,22 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   assignment inside the fall-back instead of later order application. Three runs per case.
   The original's local-player alliance dependence and asymmetric-alliance guards remain
   unmeasured under claim 13's qualifications; these mutually allied fixtures do not test them.
+
+- **B41 (claim 33a, conditional allied-target investigation).** Use the common tiny-map
+  skirmish setup at game speed 2, stock data, director and mods off, and a read-only recorder
+  of target, owner, behaviour, processing timer and berserk state. First establish that a
+  computer-owned repair vehicle carrying an engineer can acquire a damaged own-house vehicle
+  as a healing target. Record acquisition and every subsequent own update, including ticks
+  when behaviour processing is not due. Compare a human-owned equivalent. Expected, if the
+  nonhuman vehicle reaches target maintenance holding that target: the target is cleared
+  before subsequent behaviour processing, regardless of either timer, while the human-owner
+  rule alone does not clear it. A nonhuman target retained through that point with none of
+  claim 33a's exceptions would falsify the rule. Failure to establish the held target does
+  not test it. Run three repeats after validating the fixture. For the berserk exception use
+  S-0610 P4's neutral-house pair: while berserk it can retain its allied target; expiry's
+  separate target clearing is not evidence of this rule. The engineer, occupation, charging
+  and controlled-transport comparisons remain unmeasured until fixtures isolate their
+  targets at the same maintenance point; no state injection is proposed.
 
 ## Open questions
 
