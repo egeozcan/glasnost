@@ -330,6 +330,9 @@ struct LiveAnim {
     layer: super::slots::Layer,
     /// Tick of its first update (S-0109 claim 5).
     first_update: i32,
+    /// The object it is attached to (S-0109 claim 22), if any: a
+    /// paratrooper's parachute (S-0522 claim 13).
+    owner: Option<ObjectId>,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -781,6 +784,15 @@ impl Live {
         self.sync_ground();
     }
 
+    /// The attached animations' owners and positions (tests).
+    #[cfg(test)]
+    pub(super) fn attached(&self) -> Vec<(ObjectId, glasnost_sim::world::Pos)> {
+        self.anims
+            .iter()
+            .filter_map(|a| a.owner.map(|o| (o, a.pos)))
+            .collect()
+    }
+
     /// Drops the computer houses' scripts: their houses are played
     /// elsewhere (the game client's `Game`).
     pub fn clear_scripts(&mut self) {
@@ -900,9 +912,57 @@ impl Live {
             pos,
             layer,
             first_update,
+            owner: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
+    }
+
+    /// A paratrooper's parachute (S-0522 claim 13): the parachute type
+    /// created at the paratrooper's position and attached to it (S-0109
+    /// claim 22), so it follows the unit down in the ground layer.
+    fn attach_parachute(
+        &mut self,
+        trooper: ObjectId,
+        pos: glasnost_sim::world::Pos,
+        now: i32,
+        drawn: Option<i32>,
+    ) {
+        let Some(name) = self.rules.superweapons.parachute.clone() else {
+            return;
+        };
+        self.counts.anims += 1;
+        let serial = self.anim_serial;
+        self.create_anim(&name_bytes(&name), pos, now, drawn);
+        if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            a.owner = Some(trooper);
+            // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
+            a.layer = super::slots::Layer::Ground;
+            // Q-0754 interim: the ordinary ground-layer animation order
+            // against the paratrooper and the animation palette.
+        }
+    }
+
+    /// The attached animations follow their owners (S-0109 claim 22, at
+    /// the displacement 0 they were attached with); an owner that left the
+    /// game takes its animation with it. A parachute whose paratrooper has
+    /// landed plays its current pass as its last (S-0522 claim 13).
+    fn follow_owners(&mut self) {
+        let world = &self.world;
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.owner else { return true };
+            // spec: S-0109 claim 22 (an owner removed from the game: the animation disappears at once)
+            let Some(o) = world.obj(id).filter(|o| o.on_map) else {
+                return false;
+            };
+            // spec: S-0109 claim 22 (its position is the owner's plus its displacement at attachment, here 0)
+            a.pos = o.pos;
+            if !o.fall.chute {
+                // spec: S-0522 claim 13 (still present on landing: the remaining passes become 0); the parachute stays attached
+                a.player.last_pass();
+            }
+            true
+        });
     }
 
     /// The viewer's teleport source marker (S-0513 claims 33 and 34): a
@@ -983,6 +1043,14 @@ impl Live {
             {
                 self.source_marker_event(*event, *pos, now);
             }
+            if let Effect::Superweapon {
+                event: glasnost_sim::superweapons::SwEvent::Parachute { trooper, delay },
+                pos: Some(pos),
+                ..
+            } = e
+            {
+                self.attach_parachute(*trooper, *pos, now, *delay);
+            }
             if let Effect::Anim { name, pos, delay } = e {
                 self.counts.anims += 1;
                 // spec: S-0109 claims 5 and 29 (created before or during the turn pass: first update
@@ -998,6 +1066,7 @@ impl Live {
                 }
             }
         }
+        self.follow_owners();
         self.update_anims(now);
         for e in effects {
             let (kind, pos) = match e {

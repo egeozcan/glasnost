@@ -245,6 +245,19 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
     }
 }
 
+/// Whether type `t` is listed in a paradrop payload (S-0522 claim 2): the
+/// paratroopers a paradrop lands join the army whatever the plan's names.
+fn paratrooper(w: &World, t: TypeRef) -> bool {
+    t.kind == Kind::Infantry
+        && w.rules()
+            .superweapons
+            .payloads
+            .iter()
+            .flatten()
+            .flatten()
+            .any(|&(i, _)| i == t.index)
+}
+
 /// Whether type `t` is a slave miner: a vehicle that gathers with slaves and
 /// takes their loads itself (S-0402 claim 14 and Terms).
 pub(crate) fn is_slave_miner(w: &World, t: TypeRef) -> bool {
@@ -461,8 +474,11 @@ impl Script {
         self.own(w)
             .into_iter()
             .filter(|&id| {
-                w.obj(id)
-                    .is_some_and(|o| self.allowed(w, tech::type_of(o), role))
+                w.obj(id).is_some_and(|o| {
+                    let t = tech::type_of(o);
+                    self.allowed(w, t, role)
+                        || (role == Role::Army && plays(w, t, role) && paratrooper(w, t))
+                })
                     && !(role == Role::Army && slaves::is_slave(w, id))
                     // A person orders only what they can select.
                     && (matches!(role, Role::Yard | Role::Power | Role::Refinery | Role::Factory(_))

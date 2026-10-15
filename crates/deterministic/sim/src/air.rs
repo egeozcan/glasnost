@@ -225,6 +225,13 @@ pub struct AirState {
     pub enter_docking: bool,
     /// The tick of the facing requests remembered below (claim 42).
     pub request_tick: i32,
+    /// The pass counter (S-0522 Terms): passes it may still start without
+    /// a successful drop. A paradrop plane starts with 5 (S-0522 claims 6
+    /// to 8); a successful drop sets it to 5 (claims 8 and 11).
+    pub passes: i32,
+    /// A paradrop plane sent by a launch (S-0522 Terms): its passengers
+    /// leave play silently with it when it leaves the map (claim 8).
+    pub paradrop: bool,
     /// The body facing before its first request in `request_tick`, so that
     /// a later request in the same tick replaces it without a trace
     /// (claim 42, S-0206 claim 1).
@@ -373,7 +380,7 @@ fn start_if_ready(w: &mut World, id: ObjectId) {
     }
 }
 
-fn queue(w: &mut World, id: ObjectId, b: Behaviour) {
+pub(crate) fn queue(w: &mut World, id: ObjectId, b: Behaviour) {
     if let Some(o) = w.obj_mut(id) {
         o.beh.queue(Some(b));
     }
@@ -387,7 +394,7 @@ fn forget(w: &mut World, id: ObjectId) {
     }
 }
 
-fn set_dest(w: &mut World, id: ObjectId, d: Option<Target>) {
+pub(crate) fn set_dest(w: &mut World, id: ObjectId, d: Option<Target>) {
     crate::econ::assign_destination(w, id, d);
 }
 
@@ -661,7 +668,7 @@ fn heading_point(w: &World, d: Target) -> Pos {
 
 /// The truncated table root of the planar squared difference (S-0204
 /// claim 5).
-fn planar(w: &World, a: Pos, b: Pos) -> i32 {
+pub(crate) fn planar(w: &World, a: Pos, b: Pos) -> i32 {
     let dx = i64::from(a.x - b.x);
     let dy = i64::from(a.y - b.y);
     let q = w.rules().quirks;
@@ -1617,6 +1624,12 @@ fn leave_map_test(w: &mut World, id: ObjectId, t: &Ty) -> bool {
     let gone = (may_leave_now(w, id, &a) && ((!usable && !t.fly_by && !t.fly_back) || !legal))
         || (retreat && !usable);
     if gone {
+        if a.paradrop {
+            // spec: S-0522 claim 8 (paratrooper still on board leave play with the plane without a death, loss count, kill credit or experience award; this overrides S-0507 claim 16's killing at removal)
+            for p in crate::transport::passengers(w, id) {
+                crate::objects::remove(w, p);
+            }
+        }
         crate::objects::remove(w, id);
     }
     gone
@@ -2515,10 +2528,10 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         Some(Behaviour::Retreat) => retreat(w, id),
         Some(Behaviour::SpyPlaneApproach) => spy_approach(w, id),
         Some(Behaviour::SpyPlaneOverfly) => spy_overfly(w, id),
-        // Seam: the paradrop plane's approach, passes and drops (S-0522 claims 6 to 15).
-        Some(Behaviour::ParadropApproach | Behaviour::ParadropOverfly) => {
-            crate::paradrop::drop_passengers(w, id).unwrap_or(NO_RULE_DELAY)
-        }
+        // spec: S-0522 claim 6 (paradrop approach)
+        Some(Behaviour::ParadropApproach) => crate::paradrop::approach(w, id),
+        // spec: S-0522 claim 7 (paradrop overfly)
+        Some(Behaviour::ParadropOverfly) => crate::paradrop::overfly(w, id),
         // spec: S-0507 claim 13 (an air transport in unload)
         Some(Behaviour::Unload) => crate::transport::process_air_unload(w, id),
         _ => NO_RULE_DELAY,
@@ -2763,7 +2776,7 @@ fn set_stage(w: &mut World, id: ObjectId, s: Stage) {
     }
 }
 
-fn set_lock(w: &mut World, id: ObjectId, on: bool) {
+pub(crate) fn set_lock(w: &mut World, id: ObjectId, on: bool) {
     if let Some(a) = st_mut(w, id) {
         a.run_lock = on;
     }

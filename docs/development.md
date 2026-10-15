@@ -593,7 +593,7 @@ S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Pas
   - tank bunkers (`tank_bunker`, S-0508);
   - the bomb mark (`bomb_marked`, the special-abilities specs);
   - temporal beams (`temporal_hand_back`, S-0514).
-  - The paradrop of S-0522 is not built.
+  - A paratrooper leaves its plane through `transport::drop_out` (S-0522, in its own section below).
 - **Quirks.** `quirks.air_unload_reselects_clear_destination`, `quirks.unload_facing_gap_no_wrap`, `quirks.unload_second_round_skips_rear`, `quirks.unload_failed_exit_gunner_handover` and `quirks.transport_load_truncated` are implemented, each on by default.
 - **Own AI.**
   - The brain ferries idle army infantry in its own transports (`Brain::ferry`). It builds the cheapest suitable type if it has none, and needs an amphibious hover when the goal lies across water.
@@ -658,7 +658,7 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
 - **Save format 21.** `Object::fall`, `Cells::alternate`, `Cells::pier_levels` and `World::map_rng` are new state, and they are hashed.
 - **Save format 24.** `Cells::section_self` and `Cells::covered_by` (claim 2's responsible section) are new state, and they are hashed.
 - **Save format 25.** `Track::height` (S-0207 claim 24, the heading point's stored height) is new state, and it is hashed. A landing keeps the bomb mark (claim 10).
-- **Save format 27.** `DriveState::goal` and `DriveState::for_dest` (S-0207 claim 25, the locomotor destination point) are new state, and they are hashed. `superweapons::Protection::tint` (S-0513 claim 29, the envelope phase up to its draw) replaces `tint_due`.
+- **Save format 28.** `DriveState::goal` and `DriveState::for_dest` (S-0207 claim 25, the locomotor destination point) are new state, and they are hashed. `superweapons::Protection::tint` (S-0513 claim 29, the envelope phase up to its draw) replaces `tint_due`.
 - **Not built.**
   - The own AI does not repair bridges, because it needs S-0509's entry.
   - The bridge-repaired and repair sounds are effects, but audio does not play them.
@@ -729,7 +729,7 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - `quirks.sensor_building_activation_once`;
   - `quirks.sensor_count_negative`;
   - `quirks.uncloak_from_cloaking_full_duration`.
-- **Save format 22.** `Object::cloak`, `Object::disguise` and `World::cloak` are new state, and they are hashed. Format 27 adds `cloak::Generator::phase` (S-0516 claim 20: growth or shrinking pending).
+- **Save format 22.** `Object::cloak`, `Object::disguise` and `World::cloak` are new state, and they are hashed. Format 28 adds `cloak::Generator::phase` (S-0516 claim 20: growth or shrinking pending).
 - **Not built.**
   - The app does not draw the disguise image (claim 37), and the cursor, insignia and hover name of claim 36 are not wired into the status drawing.
   - Buildings drawn as static map scenery get no translucency.
@@ -759,7 +759,7 @@ S-0512 (charge and readiness) and the S-0513 effects of the Allied and Soviet ki
 - **Weather storm (claims 14 to 21).** `superweapons::storm`. The storm states of T1 run in the weather update at row 3 of the tick pipeline, before the turn pass. It covers the countdown and warnings, the radar outage of the other houses, the centre and scatter clouds (F5, F6), strikes with the bolt, area damage and debris, and clearing. Trigger actions 44 and 45 start and stop a storm.
 - **Invulnerability and the force shield (claims 22 to 32).** `superweapons::protect`. The protection timer is `Object::sw.protection` (F7). Its consumers are the hit table, the small-detonation nullification, the firing answers, crushing and the occupancy row. The curtain releases a parasite through `parasite::host_curtain_started`. The force shield blacks out the launching house and shields allied buildings within F3's radius. PLAN.md lists the force shield under M7; it is built here because S-0513 specifies it with the others.
 - **Teleport (claims 33 to 41).** `superweapons::warp`. A source pick emits the player-local marker event. The warp walks the source block (F1, claim 4). For each examined object it first releases a naval parasite with 500 ticks of suppression (`parasite::superweapon_teleport`). It then kills organic objects (claim 35), leaves the excluded ones in place, and makes the rest members (`Object::sw.warp`). Each member's stages (T2) run at the start of its own living turn (`warp::turn`, from `tick::object_turn`): leaving, the 60-tick wait, departure, the landing check and redirect, placement, arrival fate, and the arrival hold. `teleport::phasing_in` and `being_erased` read the member's stage. The departure does not release a drone parasite (S-0614 claim 12, P7), so it does not use `objects::take_inside`. The chrono weapons of S-0514 are the seam `warp::chrono_seam`.
-- **Paradrop and spy plane (claims 42 to 45; S-0522 claims 1 to 3).** `superweapons::planes`. Planes are sent from the house's edge cell. Paratroopers board the plane. The drop itself is the seam `paradrop::drop_passengers` (S-0522), so a plane holds its paratroopers. The spy plane's camera reveals through `econ::shroud::camera` in its approach and overfly.
+- **Paradrop and spy plane (claims 42 to 45; S-0522 claims 1 to 3).** `superweapons::planes`. Planes are sent from the house's edge cell. Paratroopers board the plane. The passes and the drop are S-0522, in the section below. The spy plane's camera reveals through `econ::shroud::camera` in its approach and overfly.
 - **Quirks.** Every switch of S-0512 and S-0513 is implemented and on by default.
 - **Save format 26.** The records, the storm, the protection timers, the warp members and the held delay are new state, and they are hashed. `warp_state_survives_save_and_load` saves mid-warp and checks the hash.
 - **Own AI.** The brain (`glasnost_ai::brain`) builds the cheapest building that gives a missile or storm superweapon. It does so once its harvesters are kept, while it has none and is not selling out. This build comes before the tech climb but after a building the plan wants for power, a refinery or a factory. Each tick, it fires every granted, ready and not suspended missile or storm record. It fires through `Order::FireSuperweapon`, at the seen enemy cell with the most seen enemies within 3 cells and none of its own objects (`Brain::strike_cell`). A storm is fired only while none is under way. The other kinds are not used. Tests: `fires_a_ready_superweapon_at_seen_enemies` (debug) and `builds_and_fires_a_superweapon` (release) in `crates/deterministic/ai/tests/ai.rs`.
@@ -770,7 +770,7 @@ S-0512 (charge and readiness) and the S-0513 effects of the Allied and Soviet ki
   - iron curtain: 3 of 3 vehicles were protected 1 tick after the order;
   - teleport: the source pick armed list position 4 (S-0513 claim 33), and the destination click warped 3 of 3 vehicles, which stood at the destination 66 ticks later;
   - force shield: the shield started 1 tick after the order, aimed at an own building;
-  - paradrop and spy plane: no type found. The types at list positions 4, 5, 6, 8 and 9 (5 of 12) have a kind word that our interim words do not recognise (Q-0730), so these two scenes, and the first warp-kind type, find nothing. With `quirks.superweapon_kind_as_list_position` off, a source pick would therefore arm nothing, and the radar offers of those types would be lost.
+  - paradrop and spy plane: no type found (the `paratroopers-dropping` scene of S-0522 sends the plane without a type). The types at list positions 4, 5, 6, 8 and 9 (5 of 12) have a kind word that our interim words do not recognise (Q-0730), so these two scenes, and the first warp-kind type, find nothing. With `quirks.superweapon_kind_as_list_position` off, a source pick would therefore arm nothing, and the radar offers of those types would be lost.
 
   The screenshots show the explosion, a bolt under the clouds, the curtain's invoke animation, the group landed with the source markers fading, and the shielded building. The iron-curtain and force-shield shots have no tint (not built: S-0513 claim 29's brightness phases and F9, S-0102 claim 34).
 - **Not built.**
@@ -795,6 +795,43 @@ Provisional rules of M6b superweapons, each tied to a request:
 | `warp::pick_source`, `warp::examine`, `warp::redirect` | the source marker is a player-local event with no draw; an object whose destination cell is off the map is examined and then left in place; a blocked member with no nearby cell keeps its landing point and checks again next update | Q-0741 |
 
 S-0513 revision 9 answers Q-0733 (claim 29): the draw R(−5, 5) is taken on entering Initial dimming, in the turn *q* + 10 for an object with uninterrupted turns, *q* being its first turn while this application protects it. A launch applied after the turn pass in tick *t*₀ therefore draws in tick *t*₀ + 11. `protect::tint_turn` advances `Protection::tint` (before the first turn, Initial rise of 6 ticks, Bright hold of 4 ticks) by at most one phase per turn and takes the draw on entering Initial dimming. The later phases, their brightness factors and F9 are presentation and not built. The request file still reads open; the lead closes it. Tests: `claim29_tint_draw_in_turn_q_plus_ten`, `claim29_launch_after_the_turn_pass_draws_at_t0_plus_eleven`, `claim29_reapplication_restarts_the_envelope`.
+
+## Simulation (M6b: parachutes and drops)
+
+S-0522 is built in `glasnost_sim::paradrop`, on the plane sending of S-0513 (`superweapons::planes`). The ledger is [docs/m6-claims/S-0522.md](m6-claims/S-0522.md). The tests are `crates/deterministic/sim/tests/claims_s0522.rs`, with the launch side in `claims_s0513_planes.rs` and the arrival edge in `claims_s0501.rs`.
+
+- **Passes (claims 6 to 8).** `AirState` holds the pass counter (`passes`, 5 at sending and after each successful drop) and the paradrop flag. `air::process` dispatches *paradrop approach* to `paradrop::approach` (every 3 ticks) and *paradrop overfly* to `paradrop::overfly` (every 5 ticks). A plane that gives up retreats to its edge; there its paratroopers are removed silently before the plane (claim 8).
+- **Drop attempt (claims 9 and 10).** `paradrop::attempt` takes one round, picks the side by the ammunition's parity, and steps 128 leptons sideways to the drop point. The drop-point tests follow Q-0750. On success, `transport::drop_out` places the paratrooper at the plane's height, facing 32768, on the deck layer over a bridge. The fall starts, the parachute sequence is requested, and the parachute animation's draws are taken. The `SwEvent::Parachute` and `SwEvent::Chute` events are emitted. On failure, the round is given back.
+- **Shot drop (claim 11).** In `combat::fire::shot`, an aircraft carrying passengers makes a drop attempt in place of the projectile (Q-0751).
+- **Fall and parachute (claims 12 and 13).** `FallState::chute` marks an attached parachute. While it is set, `fall` uses the parachute recurrence, and the landing surface is the deck's for deck-layer objects. The chute is cleared on landing. `infantry` refuses other sequences while a paratrooper falls with its parachute sequence, and requests stand once it has landed (S-0107 claim 6). Both settings of `quirks.paratrooper_any_animation_slow_fall` give the same result, because the parachute is the only animation the simulation attaches.
+- **Losses (claims 14 and 15).** A paratrooper killed in descent is removed like any infantry. A shot-down plane kills only the passengers still aboard.
+- **Drawing.** The app attaches the parachute animation to its paratrooper on the `SwEvent::Parachute` event (`Live::attach_parachute`, S-0109 claim 22). The animation follows the unit in the ground layer and disappears with it. When the unit lands, its current pass becomes its last (`Live::follow_owners`). The chute sound event is not played, because the app plays no superweapon sounds yet.
+- **Quirks.** `quirks.paradrop_fallback_point`, `quirks.paradrop_west_edge_start_row` and `quirks.paratrooper_any_animation_slow_fall` are implemented, each on by default. No switch is new.
+- **Save format 27.** The pass counter, the paradrop flag and the chute mark are new state, and they are hashed. `save_load_mid_descent_round_trips` saves mid-descent and checks the hash.
+- **Own AI.** The brain fires every ready paradrop or American paradrop record at a cell 3 to 8 cells around its home: the first usable cell with no object on it (`Brain::drop_cell`). Infantry types listed in a paradrop payload count as army when they are armed (`scripted::of_role`), so landed paratroopers join the army. Test: `fires_a_paradrop_whose_troops_join_the_army` in `crates/deterministic/ai/tests/ai.rs`. The brain does not build a building for a paradrop.
+- **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=paratroopers-dropping cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` sends a plane to a cell near home. No type had a paradrop kind on the user's install (Q-0730), so the scene sent it straight through `planes::paradrop`. It writes `local-lane/m6b/paratroopers-dropping.png` and, 60 ticks later, `paratroopers-descending.png`. On the user's install (map 0):
+  - one plane was sent, and the first drop came 398 ticks after the order;
+  - 3 paratroopers were descending at 433 ticks, and 4 at 493;
+  - 6 were dropped, and all 6 stood on the ground 1055 ticks after the order;
+  - at both shots, every parachute animation had art and was drawn.
+
+  The second screenshot shows four paratroopers under their parachutes and the plane leaving.
+- **Seams.**
+  - Parachute reinforcements from triggers (S-0011 claim 30) are not built.
+  - The not-human-type exception of claim 14 keeps S-0107 claim 17's open outcome.
+  - The simulation has no animation clock (S-0109 claim 28), so the chute mark lasts until landing.
+  - The falling-damage multiplier is not applied by `fall`; magnetic-lift impact (S-0607, M7) adds it there for lifted objects only.
+  - Once landed, a paratrooper is ordinary infantry, so the M6c infantry features (garrisons S-0508, capture S-0509, infiltration S-0510, deployers S-0517) need nothing from `paradrop`. A falling paratrooper is on the map in the ground or deck layer, so M6c area effects (chrono weapons S-0514, radiation S-0525) and M7 effects reach it through the ordinary object lists.
+
+Provisional rules of M6b parachutes and drops, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `paradrop::attempt` | the standing-position choice comes first, so every refusal takes its draw; then entry outcome, usable area, deck-entry mark, qualification; on a bridge cell the paratrooper goes on the deck layer, and its mark goes in the deck record | Q-0750 |
+| `combat::fire::shot`, `paradrop::shot_drops` | a drop shot replaces only the projectile launch; the spray draw, the delay and its draws, the burst counter and the report effect run as usual; a drop shot is never void; a successful drop then sets the rearm countdown to the current tick | Q-0751 |
+| `paradrop::release` | with no parachute type, or one that is not listed, the drop succeeds, no animation is attached and no draws are taken, and the paratrooper falls with the no-parachute recurrence | Q-0752 |
+| `paradrop::release` (through `transport::drop_out`) | the paratrooper takes the ordinary placement fall-back to rest at the drop; after that, its behaviour follows the ordinary rules | Q-0753 |
+| `mapview::live` (`attach_parachute`) | the parachute uses the ordinary ground-layer animation order against its paratrooper and the animation palette | Q-0754 |
 
 ## Own AI (M5b)
 

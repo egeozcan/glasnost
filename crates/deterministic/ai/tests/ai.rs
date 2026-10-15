@@ -828,3 +828,140 @@ fn ferries_infantry_across_a_strait() {
         "on land"
     );
 }
+
+/// The skirmish rules with a paradrop (test data of our own): the
+/// superweapon DROP (paradrop kind, not power-dependent) given by the
+/// building AIRB, which no house can build, the plane PDPLANE and the
+/// paratrooper PARA (an armed rifleman no house can build), two per plane
+/// for every side group.
+fn paradrop_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
+    use glasnost_rules::sim::{BuildingType, Decimal, Locomotor, UnitType};
+    use glasnost_rules::sim_econ::SuperweaponType;
+    let mut r = fixture::ruleset();
+    let reg = |r: &mut glasnost_rules::schema::Ruleset, k: &str, n: &str| {
+        r.registries.entry(k.into()).or_default().push(n.into());
+    };
+    r.sim.superweapons.insert(
+        "DROP".into(),
+        SuperweaponType {
+            kind: Some("ParachuteDrop".into()),
+            action: Some("ParaDrop".into()),
+            recharge_time: Some(Decimal("0.1".into())),
+            is_powered: Some(false),
+            ..Default::default()
+        },
+    );
+    reg(&mut r, "superweapons", "DROP");
+    let mut airb = BuildingType {
+        strength: Some(500),
+        foundation: Some([1, 1]),
+        ..Default::default()
+    };
+    airb.econ.super_weapon = Some("DROP".into());
+    r.sim.buildings.insert("AIRB".into(), airb);
+    reg(&mut r, "buildings", "AIRB");
+    r.sim.aircraft.insert(
+        "PDPLANE".into(),
+        UnitType {
+            strength: Some(100),
+            speed: Some(30),
+            rot: Some(12),
+            locomotor: Some(Locomotor::Fly),
+            ..Default::default()
+        },
+    );
+    reg(&mut r, "aircraft", "PDPLANE");
+    let mut para = r.sim.infantry["WALKER"].clone();
+    para.owner = None;
+    para.tech_level = None;
+    r.sim.infantry.insert("PARA".into(), para);
+    reg(&mut r, "infantry", "PARA");
+    let g = &mut r.sim.general.superweapons;
+    for (inf, num) in [
+        (&mut g.ally_para_drop_inf, &mut g.ally_para_drop_num),
+        (&mut g.sov_para_drop_inf, &mut g.sov_para_drop_num),
+        (&mut g.yuri_para_drop_inf, &mut g.yuri_para_drop_num),
+        (&mut g.amer_para_drop_inf, &mut g.amer_para_drop_num),
+    ] {
+        *inf = Some(vec!["PARA".into()]);
+        *num = Some(vec![2]);
+    }
+    std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-paradrop"))
+}
+
+// A ready paradrop is fired near home (S-0512 claim 8, S-0513 claim 42);
+// the paratroopers land (S-0522) and join the army: a brain whose plan
+// names another type as its army still sends them at a nearby enemy.
+#[test]
+fn fires_a_paradrop_whose_troops_join_the_army() {
+    let mut g = Game::new(
+        paradrop_rules(),
+        &fixture::map(),
+        "synthetic-paradrop",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let free = |w: &World, c: glasnost_map::CellXY| {
+        w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c)
+    };
+    let airb_at = (2..12)
+        .map(|d| glasnost_map::CellXY::new(yard.x - d, yard.y))
+        .find(|&c| free(&g.world, c))
+        .expect("a free cell for the paradrop building");
+    testkit::spawn(&mut g.world, Kind::Building, "AIRB", 0, airb_at, 0);
+    let plane = |w: &World| {
+        w.objects
+            .values()
+            .find(|o| {
+                o.kind == Kind::Aircraft
+                    && o.owner == Some(HouseId(0))
+                    && w.rules().aircraft[o.type_index as usize].name == "PDPLANE"
+            })
+            .map(|o| o.id)
+    };
+    let limit = g.world.tick + 1000;
+    assert!(
+        step_until(&mut g, limit, |w| plane(w).is_some()),
+        "the brain fired its paradrop"
+    );
+    let landed = |w: &World| {
+        of(w, 0, "PARA")
+            .into_iter()
+            .filter(|&id| !w.obj(id).unwrap().fall.falling)
+            .collect::<Vec<_>>()
+    };
+    let limit = g.world.tick + 3000;
+    assert!(
+        step_until(&mut g, limit, |w| landed(w).len() == 2),
+        "both paratroopers landed"
+    );
+    let para = landed(&g.world)[0];
+    let at = g.world.obj(para).unwrap().pos.cell();
+    assert!(
+        (at.x - yard.x).abs() <= 12 && (at.y - yard.y).abs() <= 12,
+        "near home: {at:?}, yard {yard:?}"
+    );
+    // An enemy within reach, then a brain whose plan's army names only GUNR.
+    let mut w = g.world.clone();
+    let near = (2..6)
+        .map(|d| glasnost_map::CellXY::new(at.x + d, at.y))
+        .find(|&c| free(&w, c))
+        .expect("a free cell for the enemy");
+    let enemy = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, near, 0);
+    glasnost_sim::tick::step(&mut w);
+    let mut plan = glasnost_ai::brain::default_plan();
+    plan.names.army = vec!["GUNR".into()];
+    let mut brain = Brain::with_plan(&w, &fixture::map(), HouseId(0), plan);
+    let orders = brain.think(&w);
+    assert!(
+        orders.iter().any(|o| matches!(
+            o,
+            Order::Behaviour { actor, target: Some(Target::Object(e)), .. }
+                if landed(&w).contains(actor) && *e == enemy
+        )),
+        "a paratrooper is sent at the enemy: {orders:?}"
+    );
+}

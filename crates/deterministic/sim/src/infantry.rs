@@ -302,6 +302,12 @@ pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
     if count(w, id, q) == 0 {
         return false;
     }
+    // spec: S-0107 claim 6 (row 2: the current sequence is parachute and the unit is still falling; S-0522 claim 12)
+    if w.obj(id).is_some_and(|o| {
+        o.fall.falling && o.infantry.as_ref().and_then(|s| s.seq) == Some(Seq::Parachute)
+    }) {
+        return false;
+    }
     let crawls = w
         .obj(id)
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
@@ -376,6 +382,12 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
         } else if s.prone && !deploying && f2 < 50 {
             request(w, id, Seq::GetUp, false);
         }
+    }
+    // spec: S-0107 State and ordering (on every tick a unit whose current sequence is parachute and that is no longer falling asks for stand, forced); S-0522 claim 12
+    if w.obj(id).is_some_and(|o| {
+        !o.fall.falling && o.infantry.as_ref().and_then(|s| s.seq) == Some(Seq::Parachute)
+    }) {
+        request(w, id, Seq::Stand, true);
     }
     // Completion follow-up (S-0107 claim 8 and State and ordering).
     let s = w

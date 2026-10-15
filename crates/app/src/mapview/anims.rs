@@ -293,6 +293,14 @@ impl Player {
         self.ended
     }
 
+    /// Makes the current pass the last: the remaining passes become 0
+    /// (S-0522 claim 13, a parachute still present when its paratrooper
+    /// lands; S-0109 claim 7).
+    pub fn last_pass(&mut self) {
+        // spec: S-0522 claim 13 (its remaining passes become 0, making the current pass its last)
+        self.r = Remaining::Count(0);
+    }
+
     /// The animation's update in tick `tick` (S-0109 claims 5, 6, 9, 11, 15
     /// and 16). Returns whether it is still playing.
     pub fn update(&mut self, tick: i32, env: &mut dyn Env, q: &AnimQuirks) -> bool {

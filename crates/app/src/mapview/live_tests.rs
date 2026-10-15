@@ -1281,3 +1281,87 @@ fn source_marker_shows_for_the_launching_player_until_the_launch() {
     live.redraw(&inputs, &mut scene);
     assert_eq!(live.counts.anims_drawn, 0, "the launch ends it");
 }
+
+/// spec: S-0522 claim 13 and S-0109 claim 22 (a paratrooper's parachute is
+/// attached to it, follows it in the ground layer, and disappears with it)
+#[test]
+fn parachute_follows_its_paratrooper() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::superweapons::SwEvent;
+    use glasnost_sim::world::{HouseId, Pos};
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut rules = (*testkit::rules()).clone();
+    rules.superweapons.parachute = Some("boomx".into());
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (
+            testkit::new_game(5),
+            std::sync::Arc::new(rules),
+            testkit::setup(5),
+            Vec::new(),
+        ),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    let cell = glasnost_map::CellXY::new(5, 5);
+    let trooper = glasnost_sim::testkit::spawn(
+        &mut live.world,
+        glasnost_sim::rules::Kind::Infantry,
+        "WALKER",
+        0,
+        cell,
+        0,
+    );
+    let start = Pos {
+        x: 5 * 256 + 128,
+        y: 5 * 256 + 128,
+        z: 600,
+    };
+    {
+        let o = live.world.obj_mut(trooper).unwrap();
+        o.pos = start;
+        o.fall.falling = true;
+        o.fall.chute = true;
+    }
+    live.world.effects.push(Effect::Superweapon {
+        event: SwEvent::Parachute {
+            trooper,
+            delay: None,
+        },
+        house: Some(HouseId(0)),
+        sw: None,
+        pos: Some(start),
+    });
+    live.after_tick();
+    assert_eq!(live.attached(), vec![(trooper, start)]);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 1, "the parachute is drawn");
+    let lower = Pos { z: 590, ..start };
+    live.world.obj_mut(trooper).unwrap().pos = lower;
+    live.after_tick();
+    assert_eq!(
+        live.attached(),
+        vec![(trooper, lower)],
+        "it follows the unit"
+    );
+    glasnost_sim::objects::remove(&mut live.world, trooper);
+    live.after_tick();
+    assert!(live.attached().is_empty(), "it disappears with its owner");
+}

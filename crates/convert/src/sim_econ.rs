@@ -958,6 +958,15 @@ const GENERAL_SW: &[(&str, &[u8], &str, Form, &str)] = &[
         Text,
         "S-0513",
     ),
+    ("paradrop_radius", GENERAL, "ParadropRadius", Int, "S-0522"),
+    (
+        "parachute",
+        GENERAL,
+        "Parachute",
+        Ref(Kind::Animations),
+        "S-0522",
+    ),
+    ("chute_sound", AUDIO_VISUAL, "ChuteSound", Text, "S-0522"),
 ];
 
 /// The coverage rows of the keys this module converts: (category, key,
