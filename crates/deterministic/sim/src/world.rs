@@ -246,6 +246,10 @@ pub struct Object {
     /// (S-0507).
     #[serde(default)]
     pub transport: crate::transport::TransportState,
+    /// Falling: the fall rate, whether the object is falling and the bomb
+    /// mark (S-0511 claim 10, S-0312 Terms).
+    #[serde(default)]
+    pub fall: crate::fall::FallState,
     /// The crush-slowdown state (S-0210 claim 9).
     pub crush_slowdown: bool,
     /// Tick at which the targeting timer has run out (S-0215 claim 33).

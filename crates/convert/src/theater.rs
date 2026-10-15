@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::terrain::{
-    Roles, TileAnim, TileCatalogue, TileCell, TileInfo, UNSET, UNSET_DESTROYABLE_CLIFF,
+    BridgePositions, Roles, TileAnim, TileCatalogue, TileCell, TileInfo, UNSET, UNSET_DESTROYABLE_CLIFF, UNSET_POSITION,
 };
 use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
@@ -215,6 +215,8 @@ pub struct Catalogue {
     pub fallback: Vec<String>,
     /// Role starts (S-0010 claim 4, table R).
     pub roles: Roles,
+    /// The bridge tile positions (S-0511 Import mapping).
+    pub bridge_positions: BridgePositions,
     /// Importer warnings about the theater data file.
     pub warnings: Vec<String>,
 }
@@ -383,6 +385,15 @@ impl Catalogue {
                 *r = UNSET;
             }
         }
+        // spec: S-0511 Import mapping (the ten bridge positions: 1-based positions q, absent −1)
+        let position = |key: &str| general(key).unwrap_or(UNSET_POSITION);
+        let bridge_positions = BridgePositions {
+            top_left: [position("BridgeTopLeft1"), position("BridgeTopLeft2")],
+            top_right: [position("BridgeTopRight1"), position("BridgeTopRight2")],
+            bottom_right: [position("BridgeBottomRight1"), position("BridgeBottomRight2")],
+            bottom_left: [position("BridgeBottomLeft1"), position("BridgeBottomLeft2")],
+            middle: [position("BridgeMiddle1"), position("BridgeMiddle2")],
+        };
         let (_, suffix, fallback) = table_t(theater);
         Self {
             tile_count,
@@ -398,6 +409,7 @@ impl Catalogue {
                 .map(str::to_owned)
                 .collect(),
             roles,
+            bridge_positions,
             warnings,
             tilesets,
         }
@@ -571,6 +583,7 @@ impl Catalogue {
                 tiles,
                 roles: self.roles,
                 allow_tiberium,
+                bridge_positions: self.bridge_positions,
             },
             warnings,
         )
@@ -896,6 +909,24 @@ mod tests {
         // An explicit −1 ends the list too; a higher section has no effect.
         let d = doc("[TileSet0000]\nTilesInSet=-1\n[TileSet0001]\nTilesInSet=5\n");
         assert_eq!(Catalogue::read(&d, Theater::Temperate).tile_count, 0);
+    }
+
+    /// spec: S-0511 Import mapping (the ten bridge positions; absent: −1)
+    #[test]
+    fn bridge_positions() {
+        let d = doc(
+            "[General]\nBridgeTopLeft1=3\nBridgeTopLeft2=4\nBridgeTopRight1=5\n\
+             BridgeBottomRight1=7\nBridgeBottomLeft2=10\nBridgeMiddle1=11\nBridgeMiddle2=12\n",
+        );
+        let p = Catalogue::read(&d, Theater::Temperate).bridge_positions;
+        assert_eq!(p.top_left, [3, 4]);
+        assert_eq!(p.top_right, [5, -1]);
+        assert_eq!(p.bottom_right, [7, -1]);
+        assert_eq!(p.bottom_left, [-1, 10]);
+        assert_eq!(p.middle, [11, 12]);
+        let none = Catalogue::read(&doc("[General]\n"), Theater::Temperate).bridge_positions;
+        assert_eq!(none, BridgePositions::default());
+        assert_eq!(none.middle, [-1, -1]);
     }
 
     /// spec: S-0010 claim 4 (role starts, unset values, one past the end, theater 5)

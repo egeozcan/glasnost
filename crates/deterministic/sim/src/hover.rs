@@ -1030,16 +1030,15 @@ fn sink_test(w: &mut World, id: ObjectId) {
 
 /// Whether the vehicle carries the bomb mark (S-0312 Terms and claim 11).
 pub fn bomb_mark(w: &World, id: ObjectId) -> bool {
-    state(w, id).is_some_and(|h| h.bomb_mark)
+    state(w, id).is_some_and(|h| h.bomb_mark) || crate::fall::bomb_mark(w, id)
 }
 
-/// Seam: the fall of a vehicle given the bomb mark (S-0503 claim 11, S-0511
-/// claim 10). Falling objects are not built yet, so the vehicle stays where
-/// it settled, with the mark; S-0312 claim 11's low-water death effects
-/// for a marked vehicle are not built either.
+/// The fall of a vehicle given the bomb mark (S-0503 claim 11): it falls by
+/// S-0511 claim 10 ([`crate::fall`]) and is killed when it lands. S-0312
+/// claim 11's low-water death effects for a marked vehicle are not built.
 pub fn start_fall(w: &mut World, id: ObjectId) {
-    // spec: S-0511 claim 10 (the fall), not built: a seam
-    let _ = (w, id);
+    // spec: S-0503 claim 11 and S-0511 claim 10 (it starts to fall, with the bomb mark)
+    crate::fall::start(w, id, true);
 }
 
 /// Seam: the cloaked objects in `c` become visible to the vehicle's house

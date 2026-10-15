@@ -362,6 +362,10 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     if crate::spawn::partly_launched(w, id) {
         return false;
     }
+    // spec: S-0214 Terms (a movable mobile object is not falling)
+    if crate::fall::falling(w, id) {
+        return false;
+    }
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
@@ -436,9 +440,10 @@ pub fn first_may_move_into_shroud(w: &World, selection: &[ObjectId]) -> bool {
 }
 
 /// Able to fire (S-0214 Terms): own, armed, not disabled, not falling
-/// (nothing falls before the aircraft topic).
+/// (S-0511 claim 10).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
-    own(w, house, id) && armed(w, id) && !disabled(w, id)
+    // spec: S-0214 Terms (able to fire: armed, not disabled, not falling)
+    own(w, house, id) && armed(w, id) && !disabled(w, id) && !crate::fall::falling(w, id)
 }
 
 /// A healing actor (S-0214 Terms): an armed object whose default weapon

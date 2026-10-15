@@ -98,6 +98,9 @@ pub struct Settings {
     /// The build-off-ally setting (S-0406 claim 4).
     #[serde(default)]
     pub build_off_ally: Option<bool>,
+    /// The bridge-destruction game option (S-0511 claim 1).
+    #[serde(default)]
+    pub bridge_destruction: Option<bool>,
     /// The redeploy setting (S-0415).
     #[serde(default)]
     pub redeploy: Option<bool>,
@@ -158,6 +161,9 @@ pub struct Rules {
     pub crates: bool,
     /// See `short_game`.
     pub superweapons: bool,
+    /// The default of the bridge-destruction game option (S-0511 Import
+    /// mapping).
+    pub bridge_destruction: bool,
     /// *C*<sub>min</sub>, *C*<sub>max</sub> (claim 10).
     pub crate_min: i32,
     /// See `crate_min`.
@@ -194,6 +200,8 @@ impl Rules {
             crates: g.crates.unwrap_or(true),
             // spec: S-0412 Import mapping (SuperWeaponsAllowed absent: yes)
             superweapons: g.super_weapons_allowed.unwrap_or(true),
+            // spec: S-0511 Import mapping (BridgeDestruction absent: yes)
+            bridge_destruction: g.bridge_destruction.unwrap_or(true),
             // spec: S-0412 claim 10 (crate minimum absent: 1)
             crate_min: g.crate_minimum.unwrap_or(1),
             // spec: S-0412 claim 10 (crate maximum absent: 255)
@@ -249,6 +257,17 @@ pub fn credits_setting(w: &World) -> i32 {
 /// The short-game setting (S-0414 claim 2).
 pub fn short_game(w: &World) -> bool {
     w.econ.settings.short_game.unwrap_or(rules(w).short_game)
+}
+
+/// The bridge-destruction game option (S-0511 claim 1): in a skirmish the
+/// setup screens' option, whose default the rules offer; the map's own
+/// setting has no effect.
+pub fn bridge_destruction(w: &World) -> bool {
+    // spec: S-0511 claim 1 and Import mapping (the game option; the map's DestroyableBridges is not used in a skirmish)
+    w.econ
+        .settings
+        .bridge_destruction
+        .unwrap_or(rules(w).bridge_destruction)
 }
 
 /// The game's superweapon setting (S-0412 claim 9; S-0407 claim 7 reads

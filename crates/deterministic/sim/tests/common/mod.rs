@@ -147,6 +147,7 @@ impl Scene {
             tiles,
             roles: Roles::default(),
             allow_tiberium: Vec::new(),
+            bridge_positions: Default::default(),
         };
 
         let setup = GameSetup {

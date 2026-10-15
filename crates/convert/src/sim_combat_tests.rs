@@ -123,6 +123,29 @@ fn warned(w: &[Warning], text: &str) -> bool {
     w.iter().any(|w| w.message.contains(text))
 }
 
+/// spec: S-0511 Import mapping (BridgeExplosions, the fall rates and RepairBridgeSound) and Edge cases (an empty bridge-explosion list: the importer warns)
+#[test]
+fn bridge_values() {
+    let base = "[Animations]\n1=Boom1\n2=Boom2\n\
+                [General]\nBridgeExplosions=Boom1,Boom2\nNoParachuteMaxFallRate=-50\nParachuteMaxFallRate=-2\n\
+                [AudioVisual]\nRepairBridgeSound=Fixed\n";
+    let (s, w) = sim(base, "", "");
+    let g = &s.general;
+    assert_eq!(texts(&g.bridge_explosions), ["Boom1", "Boom2"]);
+    assert_eq!(
+        (g.no_parachute_max_fall_rate, g.parachute_max_fall_rate),
+        (Some(-50), Some(-2))
+    );
+    assert_eq!(g.repair_bridge_sound.as_deref(), Some("Fixed"));
+    assert!(!warned(&w, "BridgeExplosions"));
+    let (s, w) = sim("[General]\nBridgeExplosions=\n", "", "");
+    assert!(texts(&s.general.bridge_explosions).is_empty());
+    assert!(warned(&w, "BridgeExplosions"));
+    let (s, w) = sim("[General]\n", "", "");
+    assert_eq!(s.general.no_parachute_max_fall_rate, None);
+    assert!(warned(&w, "BridgeExplosions"));
+}
+
 /// spec: S-0301 Import mapping, S-0306 Import mapping, S-0307 claim 1 and Import mapping (weapon fields; Speed and the lepton ranges: −1 keeps the held value)
 #[test]
 fn weapon_fields_and_not_given_values() {

@@ -169,6 +169,41 @@ impl Default for Roles {
     }
 }
 
+/// The ten bridge tile positions of a theater's general section (S-0511
+/// Terms and Import mapping): 1-based positions *q* within a bridge role,
+/// −1 when unset (matching no tile). Index 0 holds the key ending in 1,
+/// index 1 the key ending in 2.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BridgePositions {
+    /// Start ramps along x (`BridgeTopLeft1`, `BridgeTopLeft2`).
+    pub top_left: [i32; 2],
+    /// Start ramps along y (`BridgeTopRight1`, `BridgeTopRight2`).
+    pub top_right: [i32; 2],
+    /// Far ramps along x (`BridgeBottomRight1`, `BridgeBottomRight2`).
+    pub bottom_right: [i32; 2],
+    /// Far ramps along y (`BridgeBottomLeft1`, `BridgeBottomLeft2`).
+    pub bottom_left: [i32; 2],
+    /// The pier bases *m*₁ (along x, `BridgeMiddle1`) and *m*₂ (along y,
+    /// `BridgeMiddle2`).
+    pub middle: [i32; 2],
+}
+
+/// An unset bridge position (S-0511 Import mapping).
+pub const UNSET_POSITION: i32 = -1; // spec: S-0511 Import mapping (absent: −1, matching no tile)
+
+impl Default for BridgePositions {
+    fn default() -> Self {
+        let u = [UNSET_POSITION; 2];
+        Self {
+            top_left: u,
+            top_right: u,
+            bottom_right: u,
+            bottom_left: u,
+            middle: u,
+        }
+    }
+}
+
 /// A theater's tile catalogue.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TileCatalogue {
@@ -180,6 +215,9 @@ pub struct TileCatalogue {
     /// claim 16); a tile without an entry has the flag off.
     #[serde(default)]
     pub allow_tiberium: Vec<bool>,
+    /// The theater's bridge tile positions (S-0511 Terms).
+    #[serde(default)]
+    pub bridge_positions: BridgePositions,
 }
 
 impl TileCatalogue {
@@ -571,6 +609,7 @@ mod tests {
             tiles,
             roles: Roles::default(),
             allow_tiberium: Vec::new(),
+            bridge_positions: Default::default(),
         }
     }
 

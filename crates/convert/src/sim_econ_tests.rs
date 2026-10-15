@@ -48,7 +48,7 @@ const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nI
 [AI]\nBuildTech=MILL\n\
 [AudioVisual]\nSavourDelay=0.5\n\
 [CrateRules]\nCrateMaximum=4\n\
-[MultiplayerDialogSettings]\nBases=no\nShortGame=yes\nMoney=777\n";
+[MultiplayerDialogSettings]\nBases=no\nShortGame=yes\nBridgeDestruction=no\nMoney=777\n";
 
 const ART: &str = "[MILLART]\nQueueingCell=2,3\nNumberOfDocks=2\nSpecialAnim=SPIN\nGateStages=4\nAnimIdle=5\nNormalized=yes\n";
 
@@ -291,6 +291,8 @@ fn tiberiums_superweapons_and_general_econ() {
     assert_eq!(g.crate_maximum, Some(4));
     assert_eq!(g.bases, Some(false));
     assert_eq!(g.short_game, Some(true));
+    // spec: S-0511 Import mapping (BridgeDestruction, the default of the game option)
+    assert_eq!(g.bridge_destruction, Some(false));
     assert_eq!(g.money, Some(777));
     assert_eq!(g.ai_hate_delays.as_deref(), Some(&[4, 5, 6][..]));
     assert!(g.savour_delay.is_some());

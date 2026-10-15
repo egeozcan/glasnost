@@ -148,6 +148,9 @@ pub struct UnitRules {
     pub threat_avoidance: F64,
     /// Jumpjet flag.
     pub jumpjet: bool,
+    /// Whether the type's imported locomotor is the jumpjet locomotor
+    /// (S-0511 claim 15), which our movement does not model.
+    pub jumpjet_locomotor: bool,
     /// Veteran and elite ability names.
     pub abilities: (Vec<String>, Vec<String>),
     /// Passengers: the capacity of a transport (S-0507 Terms).
@@ -1443,6 +1446,8 @@ fn unit_rules(
             .as_ref()
             .map_or(F64::ZERO, |d| d.single_value(mode)),
         jumpjet: b(u.jumpjet),
+        // spec: S-0511 claim 15 (a type with jumpjet locomotion)
+        jumpjet_locomotor: loco == rs::Locomotor::Jumpjet,
         abilities: (u.veteran_abilities.clone(), u.elite_abilities.clone()),
         // spec: S-0507 Import mapping (Passengers absent: 0, not a transport)
         passengers: u.passengers.unwrap_or(0),

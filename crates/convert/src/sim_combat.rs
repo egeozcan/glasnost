@@ -804,6 +804,34 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0303, S-0312",
     ),
     (
+        "bridge_explosions",
+        GENERAL,
+        "BridgeExplosions",
+        Refs(Kind::Animations),
+        "S-0511",
+    ),
+    (
+        "no_parachute_max_fall_rate",
+        GENERAL,
+        "NoParachuteMaxFallRate",
+        Int,
+        "S-0511",
+    ),
+    (
+        "parachute_max_fall_rate",
+        GENERAL,
+        "ParachuteMaxFallRate",
+        Int,
+        "S-0511",
+    ),
+    (
+        "repair_bridge_sound",
+        AUDIO_VISUAL,
+        "RepairBridgeSound",
+        Text,
+        "S-0511",
+    ),
+    (
         "weapon_nullify_anim",
         GENERAL,
         "WeaponNullifyAnim",
@@ -2429,7 +2457,18 @@ impl Builder<'_> {
         for &(field, section, k, form, _) in GENERAL_COMBAT {
             let state = self.global(section, k);
             let what = format!("[{}] {k}", show(section));
-            if let Some(n) = self.field(state.as_ref(), form, &what) {
+            let got = self.field(state.as_ref(), form, &what);
+            if field == "bridge_explosions"
+                && got.as_ref().is_none_or(|n| {
+                    matches!(&n.value, glasnost_rules::jsonc::Value::Array(v) if v.is_empty())
+                })
+            {
+                // spec: S-0511 Edge cases (an empty bridge-explosion list: the importer warns)
+                self.warn(0, 0, format!(
+                    "{what} is empty or given by no rules layer: a lost bridge section makes no explosion draws, and hut demolition takes its draws and creates no explosion (S-0511 claim 9, F2)"
+                ));
+            }
+            if let Some(n) = got {
                 rec.put(field, n);
             } else if field == "wake" {
                 // spec: S-0504 claim 4 and Import mapping (no wake animation: ships make no wakes and a sinking vessel takes its draws and makes none; the importer warns)
@@ -2741,5 +2780,27 @@ impl Builder<'_> {
                 show(&o.name)
             ));
         }
+        // spec: S-0511 Import mapping (the importer warns when a required bound low-bridge piece type is missing)
+        let lowest = LOW_BRIDGE_BASES.iter().min().copied().unwrap_or(0);
+        let highest = LOW_BRIDGE_BASES
+            .iter()
+            .map(|&b| b + LOW_BRIDGE_LAST)
+            .max()
+            .unwrap_or(0);
+        if overlays.len() > lowest && overlays.len() <= highest {
+            self.warn(0, 0, format!(
+                "[OverlayTypes] has {} types: the low-bridge pieces bound from types {lowest} to {highest} are not all present, so low bridges past the list cannot change (S-0511 Import mapping)",
+                overlays.len()
+            ));
+        }
     }
 }
+
+/// The base piece types t₀ of the four low-bridge palettes (S-0202
+/// Formulas, table *Bridge piece type*).
+// spec: S-0202 Formulas (bridge piece base types 74, 83, 205, 214)
+const LOW_BRIDGE_BASES: [usize; 4] = [74, 83, 205, 214];
+
+/// The largest displacement from t₀ that S-0511 binds (the destroyed piece
+/// along x).
+const LOW_BRIDGE_LAST: usize = 26; // spec: S-0511 Import mapping (X along x: displacement 26)

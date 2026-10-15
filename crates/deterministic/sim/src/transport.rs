@@ -259,11 +259,13 @@ pub fn tank_bunker(w: &World, building: ObjectId) -> bool {
     false
 }
 
-/// Whether a vehicle carries a bomb mark (S-0312 claims 11 and 12). Seam:
-/// planted bombs belong to the special-abilities specs, not built.
+/// Whether a vehicle carries a bomb mark (S-0312 claims 11 and 12): the mark
+/// of a fall from a lost deck (S-0511 claim 9) or of a sinking hover
+/// vehicle (S-0503 claim 11). Planted bombs belong to the
+/// special-abilities specs and are not built: a seam.
 pub fn bomb_marked(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    // spec: S-0312 Terms (the bomb mark), S-0511 claims 9 and 10, S-0503 claim 11
+    crate::hover::bomb_mark(w, id)
 }
 
 /// Disabled (S-0214 Terms): paralysed, or a vehicle playing its death

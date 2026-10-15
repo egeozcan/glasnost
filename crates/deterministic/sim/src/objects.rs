@@ -134,6 +134,7 @@ pub fn create_converted(
         // spec: S-0503 Terms (a hovering vehicle keeps its hover state)
         hover: (loco == Locomotor::Hover).then(|| crate::hover::HoverState::new(w.rules().mode)),
         transport: crate::transport::TransportState::default(),
+        fall: crate::fall::FallState::default(),
         crush_slowdown: false,
         targeting_timer: 0,
         last_turn: -1,

@@ -59,6 +59,19 @@ pub const WALK_C2: F64 = F64(0xbf19_222d_989f_5e57);
 // spec: S-0208 F3 (`quirks.table_direction` off: −2π / 65536)
 pub const WALK_C: F64 = F64(0xbf19_21fb_5444_2d18);
 
+/// The fall-rate step of S-0511 F3: 1.4 in double precision.
+// spec: S-0511 F3 and Constants (fall-rate step 1.4 leptons per update, double precision)
+pub const FALL_STEP: F64 = F64(0x3ff6_6666_6666_6666);
+
+/// The explosion chance threshold of S-0511 claim 9: 0.95 in double
+/// precision.
+// spec: S-0511 claim 9 and Constants (explosion chance threshold 0.95)
+pub const BRIDGE_EXPLOSION_CHANCE: F64 = F64(0x3fee_6666_6666_6666);
+
+/// *c* of S-0511 F4 (S-0202 claim 13): the double nearest 1 / (2³² − 1).
+// spec: S-0511 F4 (c, the double-precision constant nearest 1 / (2³² − 1))
+pub const MAP_GENERATOR_C: F64 = F64(0x3df0_0000_0010_0000);
+
 /// 2π of S-0503 F6's bob term: the double nearest 2π (Q-0690 interim, as
 /// S-0306 F7 forms it).
 // spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ)); Q-0690 (interim: the double nearest 2π)
@@ -133,5 +146,15 @@ mod tests {
             TWO_PI,
             c1.mul(F64::from_i64(4, Rounding::TowardZero), Rounding::TowardZero)
         );
+    }
+
+    // spec: S-0511 F3, claim 9 and F4 (1.4, 0.95 and the double nearest 1 / (2³² − 1))
+    #[test]
+    fn bridge_constants() {
+        assert_eq!(FALL_STEP, nearest_double("1.4"));
+        assert_eq!(BRIDGE_EXPLOSION_CHANCE, nearest_double("0.95"));
+        let one = F64::from_i64(1, Rounding::Nearest);
+        let d = F64::from_i64(4_294_967_295, Rounding::Nearest);
+        assert_eq!(MAP_GENERATOR_C, one.div(d, Rounding::Nearest));
     }
 }
