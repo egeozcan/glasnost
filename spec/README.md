@@ -117,7 +117,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0009](formats/S-0009-map-file-semantics.md) | Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview) | formats | 26 | approved | — |
 | [S-0402](economy/S-0402-harvest-cycle.md) | Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners) | economy | 23 | approved | — |
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 14 | approved | — |
-| [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 27 | approved | — |
 | [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 7 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 20 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 17 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 24 | approved | — |
 | [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 9 | approved | — |
 | [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 7 | approved | — |
+| [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 28 | approved | — |

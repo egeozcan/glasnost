@@ -1,7 +1,7 @@
 ---
 id: Q-0797
 title: What removes a driving vehicle's order-level destination when it stands in its goal cell
-status: open
+status: answered
 related: [S-0207, S-0314, S-0215, S-0212]
 ---
 

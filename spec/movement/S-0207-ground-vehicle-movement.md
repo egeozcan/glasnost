@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797]
 supersedes: []
 ---
 
@@ -28,6 +28,8 @@ its retained state after temporary driving. Claim 22 fixes cell-tag arrival timi
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
 that approaches a target stops once the target is in range, and what happens to its destination. Claims 24 and 25 distinguish
 stored heading height and the separate locomotor destination point, including factory exits.
+Claim 26 distinguishes cell-goal removal at rest from retained building entry goals and fixes
+its tick relative to final track completion.
 This spec covers skirmish. Network games and campaigns are out of scope.
 
 ## Terms
@@ -78,7 +80,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     replaced by driving,
   - claim 22 and D24 cover driving vehicles and own-locomotor teleports of any kind,
   - claim 24 and D27 cover heading-point heights for driving and ship vehicles,
-  - claim 25 and D29 cover the separate locomotor destination point for driving and ship vehicles.
+  - claims 25 and 26, with D29 and D30, cover the separate locomotor destination point
+    and order-level goal removal for driving and ship vehicles.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -124,6 +127,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   track's heading point. It can be present without a path or track, including while
   standing in its own cell. Claim 25 defines its lifetime for driving and ship vehicles.
   S-0314 claim 17 uses its presence in the depot movement report.
+- **Moving destination.** In claim 26, S-0314 claim 17's combined condition: an
+  order-level destination exists and the locomotor reports movement. For driving and
+  ship locomotion a present locomotor destination point is sufficient for that report,
+  even while the vehicle stands still.
 - **Heading point.** The point a vehicle's locomotor is moving the vehicle towards at this moment,
   if any. For the driving locomotor it is the track target of the track the vehicle is on, from
   the tick its track begins until the tick that track ends; it moves one cell on with the track
@@ -429,7 +436,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       *n* = Δ*x*² + Δ*y*² + Δ*z*², the distance in leptons from the vehicle to its move destination
       taken with S-0204's table square root (F5), not the exact root. From *n* = 16641 (129 leptons)
       on, *d*ₘ can be one lepton less than ⌊√*n*⌋ (S-0204 claim 5), so near the threshold the
-      braking test *d*ₘ < *D*ₛ can hold one lepton earlier than with the exact root. When more than one condition below holds, the earlier condition in the table determines the update. Apply that condition's stated result, then clamp the resulting fraction to the interval [0, 1]. If no condition before “Steady” holds, the fraction is unchanged.
+      braking test *d*ₘ < *D*ₛ can hold one lepton earlier than with the exact root. When more than one condition in the table holds, the resulting fraction is the result in the earliest matching row, clamped to [0, 1]. When none of the conditions before “Steady” holds, the fraction remains unchanged.
 
       | Case | Condition | New fraction *ρ*′ |
       |---|---|---|
@@ -1469,7 +1476,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     | Accepted instruction with no point | absent |
     | Stop or cancellation that stops locomotion, including removal of the order destination through the normal destination-setting rule | absent immediately, even while an already begun track finishes under claim 11 |
     | Completion of a track with an order destination still present, vehicle in that destination's supplied movement-point cell, and absolute difference between vehicle world height and locomotor destination height strictly below 208 leptons | absent before the cell-arrival report of claim 12 |
-    | Other track completion, or merely standing in the goal cell without completing a track | unchanged by arrival alone |
+    | Other track completion, or standing in the goal cell without completing a track | unchanged by arrival alone; claim 26's separate order-removal rules can still apply |
     | Give-up with no approach destinations (claim 15) | absent through the normal removal of the order destination |
     | Give-up with approach destinations | fall back to rest under S-0215 claim 13; any resulting stop clears the point and any newly supplied movement goal replaces it, rather than treating give-up as successful track arrival |
     | Successful driving factory exit-track instruction of S-0417 claim 5 | exit apron centre with height 0 leptons, as for that track's heading point; ships retaining ship locomotion instead use that claim's ordinary destination instruction |
@@ -1477,14 +1484,59 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     Point coordinates and the height comparisons are integer leptons, with no rounding.
     The high-bridge lift is applied when the point is accepted, not added again each tick.
     A point in the vehicle's own cell therefore remains present unless an actual stop,
-    replacement or qualifying track completion removes it. Cell equality must not be
-    used as a substitute for this presence test. An order-level destination can remain
-    present after the track-completion row has cleared the locomotor destination, or can
-    be removed by a later behaviour effect. S-0212 claims 20 to 22 own whether a search
-    failure waits, retries or gives up; this claim adds no new give-up condition.
+    replacement or qualifying track completion removes it. Claim 26 defines when standing
+    there removes the order-level destination and thereby stops locomotion; it distinguishes
+    a cell destination from a building destination. Cell equality must not be used as a
+    substitute for the point-presence test. An order-level destination can remain present
+    after the track-completion row has cleared the locomotor destination, or can be removed
+    by a later behaviour effect. S-0212 claims 20 to 22 own whether a search failure waits,
+    retries or gives up; this claim adds no new give-up condition.
     - Backing: `measurable` (D29; D28 for the factory instruction)
     - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
       medium for the resulting lifetime across approach-destination fallback
+
+26. **Removing the order-level goal at rest (Q-0797).** For driving and ship vehicles,
+    a destination that names a cell and a destination that names a building are different
+    kinds of order-level goal. The cell containing a building's supplied movement point
+    does not turn that building destination into a cell destination.
+
+    | State at a locomotion update | Event | Result |
+    |---|---|---|
+    | No active track; order-level destination is a cell | Vehicle occupies that cell | With no approach destinations, the order-level destination is removed and locomotion is stopped, clearing its destination point immediately (claim 25). With approach destinations, the current order-level goal is abandoned and the vehicle falls back to rest under S-0215 claim 13, including any replacement goal that rule supplies |
+    | No active track; order-level destination is a building | Vehicle occupies the cell of its supplied movement point | Cell equality alone removes neither destination. Entry exchanges and other behaviour effects remain S-0215 claim 29's and S-0314 claims 17 and 18's |
+    | At rest in guard; locomotor destination point present | Vehicle's world point equals that destination point in all three coordinates | The same removal or approach-destination fallback as in the first row applies, including for a building destination |
+
+    The first row is a locomotion rule, not a path-search result or a due *move* or *enter*
+    processing. It requires neither exact horizontal alignment, a height tolerance, a
+    successful search, nor an absent locomotor destination point. It does not depend on
+    the current behaviour being *move*. The guard row instead requires exact equality of
+    integer-lepton coordinates, including height, without rounding; being in the same
+    cell is insufficient for that row.
+
+    **Final track.** The qualifying completion of claim 25 clears the locomotor destination
+    in the completion tick, not the order-level destination. Completion alone therefore
+    leaves an ordinary cell destination present for the rest of that locomotion update.
+    With the goal unchanged and no intervening effect, the first row removes it at the
+    next tick's locomotion update, which begins without an active track. Arrival-report
+    effects can separately change the goal in the completion tick (claim 12). For an
+    *enter* goal naming a depot, neither completion nor the next update's mere cell
+    equality removes the building destination. Its entry and servicing effects own any
+    subsequent removal; it is not forcibly discarded at the end of the last track.
+
+    **Same-cell order from rest.** An accepted ordinary move that assigns the vehicle's
+    own cell does not leave a moving destination indefinitely. Assignment supplies the
+    locomotor point (claim 25); the first subsequent locomotion update without an active
+    track removes the cell destination, in that update's tick. This can be the assignment
+    tick itself when assignment precedes the vehicle's update. There is no extra one-tick
+    timer and no wait for due behaviour processing. Conversely, an accepted same-cell
+    *enter* instruction naming a depot can retain both destinations after successive
+    locomotion updates: the building row applies, not the cell row. This is persistence
+    absent another stop, replacement or applicable behaviour effect, not a guarantee that
+    the depot's entry exchange will never change state. The *move* behaviour's subsequent
+    fallback when it has no destination is S-0215 claim 22's separate event.
+    - Backing: `measurable` (D30; S-0314 claim 17's H19 f for accepted same-cell entry)
+    - Confidence: high for the cell/building distinction and cleanup conditions; medium for
+      the composed tick timing and approach-destination fallback
 
 ## Formulas
 
@@ -2125,6 +2177,7 @@ its new destination from that tick.
 | No additional key | Factory exit heading height, claim 24 | Engine constant 0 leptons; not imported from terrain or rules |
 | No additional key | Driving/ship locomotor destination lifetime, claim 25 | Runtime movement state, initially absent; assignment and clearing are not imported settings |
 | No additional key | Destination acceptance lift and arrival height tolerance, claim 25 | Engine constants: 416-lepton high-bridge lift and strict 208-lepton arrival tolerance |
+| No additional key | Order-level goal removal at rest, claim 26 | Runtime cell or building destination and behaviour state; no imported delay, alignment threshold or absent-key default |
 
 **T3 Locomotor input-value mapping** (claim 14). Each row maps a value of `Locomotor` in the
 user's rules file to a movement method. The five numbers are dimensionless nonnegative integers,
@@ -3335,8 +3388,56 @@ and 208 leptons at completion, provided both legal approaches can be established
 expected clearing only below 208. If those routes cannot be made, the numerical
 boundary remains unmeasured in practice; no oracle run or boundary observation is claimed.
 
+**D30. Cell goal versus building goal at rest (claim 26; Q-0797).** Use D29's tiny
+land and water lanes, stock driving vehicle and ship, speed index 2, one distant
+bystander computer player, director and mods off. Use scripted orders and a read-only
+recorder at 800 × 600. Record each vehicle's order-level destination kind and presence,
+locomotor destination point, heading, world point, active track, current and queued
+behaviour, behaviour-processing ticks, path-search events and cell-arrival reports.
+Record immediately before and after locomotion, not only at end of tick. Repeat each
+case three times for each locomotor, excluding unrelated orders, enemies and scatter.
+
+- From rest without approach destinations, issue an accepted ordinary move into the
+  vehicle's own cell. Expected: assignment supplies both destinations, then the first
+  no-track locomotion update removes the cell destination and clears the point, without
+  a path search or due behaviour processing being necessary. Record whether this update
+  is in the assignment tick. Persistence through that update falsifies the cell rule.
+- Issue an ordinary move from several cells away and record its final track. Expected:
+  qualifying completion clears only the locomotor destination before arrival reporting
+  in tick *t*. The cell destination remains after that update and disappears during
+  locomotion in tick *t* + 1, unless a separately recorded intervening effect changes it.
+  No due *move* processing is required for removal. Clearing both as the final track
+  ends, or retaining the cell goal after the next no-track update, falsifies this timing.
+- Repeat S-0314 claim 17's H19 f accepted same-cell entry, with a displaced docking point,
+  and record several updates before any stop, replacement or service-state change.
+  Expected: the destination names the depot, not a cell; both destinations can survive
+  no-track updates despite cell equality. Repeat an ordinary track approach to that depot:
+  qualifying completion clears the locomotor point, not the building destination.
+  An unconditional locomotion clear of the building destination on cell equality falsifies
+  the distinction. Record entry processing and arrival effects separately, so their
+  changes are not misclassified as locomotion cleanup.
+- Use a named test-map initial *guard* vehicle with a building destination and no active
+  track, first with its supplied point exactly equal to the vehicle's world point, then
+  with a nonzero horizontal displacement inside the same cell, then a height displacement.
+  Arrange and verify the accepted destination before the observed locomotion update,
+  and void a run whose guard processing changes it first. Expected: the guard row removes
+  the goal only on exact three-coordinate equality. Cell-only clearing falsifies it.
+- Repeat the cell-goal case with a verified nonempty approach-destination list, using
+  S-0417 claim 5's factory-exit setup to supply one. Record current-goal abandonment,
+  any fallback, and any replacement point separately. Expected: the old goal is abandoned
+  and S-0215 claim 13 decides the replacement; treating the old goal as permanently
+  retained, or clearing the fallback's new goal solely because the old one was reached,
+  falsifies this composition. The recorder must establish the no-track equal-cell
+  precondition; a run without it tests neither row.
+
 ## Cross-spec changes to confirm
 
+- Q-0797: S-0215 claims 22 and 29 should cite claim 26 for locomotion's cell-goal
+  cleanup and distinguish it from due behaviour processing. S-0314 claim 17 and H19 f
+  should make the retained same-cell entry case explicitly a building destination, not
+  an ordinary cell move. S-0504 claim 1 should include claim 26's cell-goal cleanup,
+  and its blanket statement about standing in the goal cell needs that qualification.
+  S-0212 claim 20 should distinguish this no-track cleanup from search failure or give-up.
 - Q-0793: S-0417 claim 5 and S-0511 claims 9 and 11 must distinguish claim 24's
   factory exit heading height of 0 leptons from ordinary tracks' copied starting height.
 - Q-0794: S-0314 claim 17 must use claim 25's independent point lifetime, not cell
