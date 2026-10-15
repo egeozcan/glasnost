@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,7 +45,7 @@ addition:
   while the timer runs. A parasite starts its host's hold timer (claims 7 and 10), and a parasite
   that comes out of a living host is itself held for some ticks (claim 13). This is not the electromagnetic-pulse
   disable that S-0214 calls *paralysed*. S-0214 (Terms, *Movable* and *Parasite*) and S-0207
-  (claim 20a, "under a paralysing effect") already refer to the hold. What being held changes is
+  (claim 20a) already refer to the hold. What being held changes is
   claim 8.
 - **Paralysis length *P*.** An integer field of a warhead, in ticks (Import mapping): how long each
   renewal of the hold lasts.
@@ -53,7 +53,7 @@ addition:
   fired at the unit (claim 5).
 - **Latching onto, failing to latch.** What a parasite does when its projectile detonates: it
   either becomes attached to the projectile's target (claim 3) or fails to latch (claim 4).
-- **Leaving a living host.** As S-0315 (Terms, *Leaving the host*): any way a parasite stops being
+- **Leaving a living host.** As S-0315 (Terms, *Leaving a living host*): any way a parasite stops being
   attached while the host still exists. Claim 12 lists the ways; claim 13 gives where it comes out.
 - **Losing the host.** The host leaves the map or is removed while a parasite is attached (claim 15).
   This is distinct from leaving a living host.
@@ -100,7 +100,8 @@ addition:
    For mobile targets the same test decides the firing legality of claim 5 and the outcome of claim 3. Nothing else
    about the target matters here: in particular its owner, its armour and the parasite's own weapon
    range are tested only by the general firing rules (S-0301).
-   - Backing: `measurable` (scenario P2 and P3)
+   - Backing: `measurable` (scenario P2 and P3); `unmeasured` (the no-cell exception:
+     no practical setup is known for an on-map mobile target without a cell)
    - Confidence: high
 
 3. **Latching onto a target.** When the projectile detonates and its target is latchable, the
@@ -158,7 +159,9 @@ addition:
      The delivered amount is imported weapon damage, not a shot scaled by firing bonuses.
 
    Hits on a host by its own parasite never suppress the parasite (S-0315, claim 6).
-   - Backing: `measurable` (scenario P1)
+   - Backing: `measurable` (P1 for deliveries and the no-escape outcome; P5 for attacker credit),
+     `unmeasured` (the absence of a separate attacking house: ordinary credit derives the same
+     house from the known parasite attacker, so these setups cannot distinguish that input)
    - Confidence: high (the cadence, the hit's amount and warhead, the instant kill of infantry),
      medium (the hit's markers and attacking house, which show only in rare cases)
 
@@ -177,12 +180,14 @@ addition:
      the hold,
    - is not *Movable* for orders (S-0214, Terms),
    - cannot stay cloaked: a held unit is uncloaked,
-   - cannot fire, when its type is organic: its shots are *illegal* (S-0301, claim 9).
+   - cannot fire a spawner weapon, regardless of whether its type is organic: the firing check
+     answers *impossible* (S-0506 claim 10), subject to earlier refusals in S-0301 claim 9,
+   - cannot fire other weapons when its type is organic: its shots are *illegal* (S-0301 claim 9).
 
    The drop-pod locomotor has not been checked.
-   - Backing: `measurable` (scenarios P1 and P9)
-   - Confidence: high (the locomotor list, the order refusal); medium (the cloak rule, the organic
-     firing rule)
+   - Backing: `measurable` (scenarios P1 and P9; S-0506 scenario R6 for spawner firing)
+   - Confidence: high (the locomotor list, the order refusal, the spawner firing rule); medium
+     (the cloak rule, the organic firing rule)
 
 9. **Rocking and effects of a drone parasite.** Each delivery to a host that is not infantry rocks
    the host's body with a strength of 1.5. F2 gives intended sideways presentation, not an
@@ -231,7 +236,8 @@ addition:
     The rocking of the host during the push phases is presentation: its tilt angle is
     sin(*k* × (±π/10)) × π/4 at frame *k* of the push, in floating point, and 0 during the grab and
     at the strike. Wake animations are created at the start of each push.
-    - Backing: `measurable` (P6 for timing and hits; P8 for ranged choices)
+    - Backing: `measurable` (P6 for timing, hits and the no-escape outcome; P8 for ranged choices),
+      `unmeasured` (the absence of a separate attacking house, for the same reason as claim 6)
     - Confidence: high (no use of the rate of fire, the draw count per strike); medium (the exact
       tick counts 30, 69 and 40, which depend on how the phase counters are stepped, and additional effect-creation choices)
 
@@ -267,8 +273,9 @@ addition:
     | A grappling parasite's host stands on a cell that is not a water tile (claim 10) | not applicable | exits, not held afterwards |
     | A grappling parasite culls its host (claim 11) | not applicable | exits, not held afterwards |
 
-    When the parasite leaves through a hit (the first two rows), it leaves before that hit changes
-    the host's health (claim 12's ordering, which supplements S-0315 claim 7).
+    Hit-triggered release excludes S-0315 claim 6's vehicle-factory exception: such a hit does
+    not release the parasite. Otherwise, when the parasite leaves through a hit (the first two
+    rows), it leaves before that hit changes the host's health (S-0315 claim 7).
     - Backing: `measurable` (P4 for hit and repair rows, P5 for unloading and consumption, P7 for
       superweapon, teleport and replacement rows, P6 for cull and off-water rows)
     - Confidence: high (sonic, healing, repair, unloading, the teleport jump, the locomotor
@@ -284,7 +291,7 @@ addition:
       class (S-0211, claim 10) for the parasite's own locomotion class and movement zone, a bridge
       cell judged on its deck, and holding no infantry and no vehicle at all, of any house. The
       host itself occupies its own cell, so for a parasite that is not naval the candidate is never
-      clear. The override of S-0209 (claim 5, rows VP2 and WP1), under which objects in the
+      clear. The override of S-0209 (claim 4 row WP1 and claim 5 row VP2), under which objects in the
       victim's cell do not block a parasite attached to that victim, belongs to entering a cell
       while moving. It does not apply to this test.
     - **The search.** Otherwise the nearby-cell search of S-0212 (claim 25) chooses the cell, as
@@ -353,7 +360,7 @@ addition:
     (`quirks.cull_experience_path`). The gain is given even when the host's type is unscored or the host is
     allied with the parasite. This answers the open question of S-0311 on the grappling parasite's
     own experience path.
-    - Backing: `measurable` (scenario P6)
+    - Backing: `measurable` (P5 for ordinary kill experience; P6 for cull experience)
     - Confidence: high (the formula's parts); medium (that the unscored test is skipped)
 
 17. **Retaliation and targeting.** A host never retaliates against its own parasite (S-0309,
@@ -560,13 +567,14 @@ A bench or arena adaptation should record ticks, health, positions, targets, exp
 state; these are requested observables, not a claim that the existing harness records them already.
 For every part, a result different from its stated expectation falsifies that part.
 
-- **P1, latch, deliveries and targeting (claims 1, 3, 6, 7, 9, 17).** Place a terror drone of A,
-  a moving tank of enemy B, and a second B tank within weapon reach. Order the drone to attack,
-  then the second tank to attack its host. Record launch, attachment and health-change ticks,
+- **P1, latch, deliveries and targeting (claims 1, 3, 6, 7, 9, 17).** Place a drone-parasite
+  test unit owned by A, a moving vehicle of enemy B, and a second A vehicle within weapon reach.
+  Order the parasite to attack B's vehicle, then the second A vehicle to attack its host.
+  Record launch, attachment and health-change ticks,
   effects, movement and attack targets. Expected: disappearance at launch, attachment to the
   original target even when it has moved away from the detonation, first delivery on the next
   host turn, then F1; no detonation area hit on a nearby bystander. The host can attack the
-  second tank but never its own parasite, and the second tank still targets the host.
+  second A vehicle but never its own parasite, and the second A vehicle still targets the host.
   Named map variants: make the host infantry and latchable with a nonzero versus value,
   or make the host temporarily invulnerable. Expected: the infantry delivery ignores defences
   and kills at first delivery, whereas ordinary non-infantry damage follows S-0302. Give the
@@ -575,6 +583,13 @@ For every part, a result different from its stated expectation falsifies that pa
   equal to and longer than rate of fire, plus zero rate of fire. Record hold state and move
   attempts between deliveries: expected F1 and cessation of hold on release. Do not infer the
   hold's starting tick from movement that occurred earlier in that same tick.
+  For the no-escape marker, use a named transport-host variant carrying passengers whose
+  ordinary lethal-hit control permits escape under S-0312. Kill it by a parasite delivery:
+  expected no escaping passengers. Repeat the lethal-delivery comparison in P6 with culling
+  disabled. An escaping passenger falsifies the marker claim.
+  For facing effects, give the delivery animation list eight visually distinct test entries,
+  then an empty list. Repeat for all eight host directions: expected the corresponding entry,
+  or no delivery animation for the empty list, with the spark effect unchanged.
 - **P2, legality (claims 2, 5).** Order two A drones at one B tank in one tick. Record every shot.
   Expected: once the first fires, the second check refuses for 20 ticks, and refuses while an
   attachment exists. Named map variant: slow the latching projectile enough that it remains in
@@ -595,8 +610,10 @@ For every part, a result different from its stated expectation falsifies that pa
   Expected: sonic release per claim 13 and F4; healing and repair silently remove a non-naval
   parasite; the host's hold and rocking end. Repeat sonic release for all eight host directions,
   with blocked candidate cells and with no qualifying nearby cell: expected host-mobility
-  search, or silent removal on failure. Named map variants: a latchable amphibious host on a
-  beach or water, a host on a bridge over water, and a host with a terrain object or building
+  search, or silent removal on failure. Repeat with a naval parasite for the side candidate
+  and its living-host suppression exemption. Named map variants: a latchable airborne host
+  (expected silent removal at release), a latchable amphibious host on a beach or water,
+  a host on a bridge over water, and a host with a terrain object or building
   in its cell. Expected: exactly the host-cell test of claim 13, including the bridge exception
   only to land type. Compare a host and parasite with different movement zones to discriminate
   host-based search from parasite-based search. Make the sonic hit lethal: expected release
@@ -614,22 +631,26 @@ For every part, a result different from its stated expectation falsifies that pa
   exit, hence non-naval removal. Enter an ordinary transport with an infected unit: expected
   host-loss release, not the passenger-unloading path. Test a ship killed by damage separately
   and record whether release waits until removal; this tests the sinking open question.
-- **P6, grapple and cull (claims 7, 10, 11, 16).** Order a squid to attack an enemy destroyer
-  on open water. Record health, phase changes, rocking, wake and splash counts and experience.
+- **P6, grapple and cull (claims 7, 10, 11, 16).** Order a grappling-parasite test unit to
+  attack an enemy naval host on open water. Record health, phase changes, rocking, wake and splash counts and experience.
   Expected: first strike at F3's exact tick, later strikes 40 ticks apart, uninterrupted hold,
-  three wakes at each push start, three splashes at each strike. A one-tick discrepancy
+  three wakes at each push start, three splashes at each strike, and push tilt following
+  claim 10's phase-frame formula with zero tilt during grab and strike. Record local loss
+  announcements too: expected the ordinary local unit-lost gating, not an unconditional sound. A one-tick discrepancy
   falsifies the proposed timing, rather than being accepted as tolerance. At red health the
   next eligible strike culls, releases without a hold and starts sinking without health loss.
   Named variants: different weapon rate of fire (no cadence change), cull flag off (ordinary
   hit), elite parasite with yellow host (cull), untrainable parasite (no cull experience),
   differing house-cost factors, allied and unscored hosts. Expected: F5 without victim-rank,
   alliance or unscored filtering, and no ordinary kill credit or score from culling.
-  Give an amphibious grappling host a route onto dry terrain: expected immediate release,
-  without a post-exit hold. Named long-lived hosts allow the phase test to finish before culling.
-- **P7, teleport and replacement (claim 12).** Infect a chrono-moving unit with a drone, then
-  order a jump; record the old and new positions and release tick. Expected: exit at the old
-  position before departure. Repeat a chronosphere relocation of an infected tank: hypothesis
-  is release at the warp jump, not launch. Repeat with a squid-carrying ship: expected release
+  In a named map variant, set paralysis length to zero so an amphibious host can follow a
+  route onto dry terrain while carrying a grappling parasite. Expected: release at the first
+  host turn that finds a non-water cell, without a post-exit hold. Named long-lived hosts allow the phase test to finish before culling.
+- **P7, teleport and replacement (claim 12).** Infect a unit using the teleporting locomotor
+  with a drone parasite, then order a jump; record the old and new positions and release tick.
+  Expected: exit at the old position before departure. Repeat a teleporting superweapon's
+  relocation of an infected vehicle: hypothesis is release at the warp jump, not launch.
+  Repeat with a ship carrying a grappling parasite: expected release
   at launch at its old position. Apply a locomotor-replacing weapon to a latchable host carrying
   a naval parasite and then a non-naval one (named map variants if needed); expected release
   only for the naval parasite.
@@ -642,10 +663,13 @@ For every part, a result different from its stated expectation falsifies that pa
   choices before each cull test, and a new direction plus wake choices only after a surviving
   hit. Account separately for raw-value rejection and effect-owned randomness; an extra
   unaccounted ranged choice, a different range or a changed order falsifies the explicit list.
-- **P9, hold, reuse and selection (claims 8, 14, 19).** Give an infected vehicle a sonic release,
-  then immediately issue move and attack orders. Record hold, movement, shots, experience and
+- **P9, hold, reuse and selection (claims 8, 14, 19).** Release a parasite from a vehicle by
+  a sonic hit, then immediately issue move and attack orders to the released parasite.
+  Record its hold, movement, shots, experience and
   selection. Expected: hold for 3 × primary rate of fire; non-organic firing is not blocked by
-  hold alone, organic firing is blocked; retained experience after release. Named map variants
+  hold alone for non-spawner weapons, organic firing is blocked; retained experience after release.
+  Spawner weapons are refused regardless of organic type, as S-0506 claim 10 and its scenario R6
+  specify. Named map variants
   give latchable hosts each locomotor listed in claim 8, organic and cloak flags as appropriate,
   and a harmless delivery weapon so hosts survive. Compare autonomous movement already ordered
   before attachment, fresh movement orders, organic firing, and cloak state while held:
