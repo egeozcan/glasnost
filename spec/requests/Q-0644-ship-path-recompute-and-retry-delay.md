@@ -1,9 +1,9 @@
 ---
 id: Q-0644
 title: Does a ship recompute its path and wait out the retry delay like a driving vehicle
-status: open
+status: answered
 related: [S-0504, S-0212, S-0207]
-answered-by: []
+answered-by: [S-0504]
 ---
 
 ## Need

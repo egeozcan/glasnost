@@ -1,9 +1,9 @@
 ---
 id: Q-0643
 title: Which amphibious movement zones are the exception of the naval match
-status: open
+status: answered
 related: [S-0504, S-0211]
-answered-by: []
+answered-by: [S-0504]
 ---
 
 ## Need

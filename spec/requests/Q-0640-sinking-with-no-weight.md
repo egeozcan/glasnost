@@ -1,9 +1,9 @@
 ---
 id: Q-0640
 title: Does a naval type with no weight setting sink when killed on water
-status: open
+status: answered
 related: [S-0312, S-0504]
-answered-by: []
+answered-by: [S-0504]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0600]
+requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644]
 supersedes: []
 ---
 
@@ -17,7 +17,7 @@ supersedes: []
 ## Summary
 
 How vessels move and what is particular to them once they are on the water: the ship locomotor
-(which reuses the driving rules of S-0207 with three differences), the wakes a moving vessel
+(which reuses the driving rules of S-0207 with the differences specified below), the wakes a moving vessel
 leaves, what a sinking vessel does between its killing hit and leaving play, what the underwater
 flag does and does not change, and the naval rules of docking at a building, including the
 distance at which a repair yard starts on a vessel.
@@ -25,7 +25,8 @@ distance at which a repair yard starts on a vessel.
 This spec does not repeat what other specs own. Entering water, the land-type and zone rules and
 ship substitutions are S-0211 (claims 10 to 12) and S-0209 (claim 5f). The naval weapon choice is
 S-0308 (claim 11 and table N). Release of a new vessel from a yard is S-0404 (claim 13) and S-0417
-(claim 9). The sinking condition at a killing hit is S-0312 (claim 10). A vessel's crush handling
+(claim 9). The sinking condition at a killing hit is S-0312 (claim 10); claim 11 here supplies
+its absent vehicle-weight default. A vessel's crush handling
 is S-0210 (claim 9). Cloaking, cloak timing and detection are planned S-0516; this spec only says which
 naval states those rules produce (Terms, *submerged*). The squid's grappling is S-0614.
 
@@ -59,6 +60,10 @@ a carrier's controller is launching ordinary aircraft.
   play (claim 4).
 - **Docking answer.** As S-0214 (Terms): the answer a building gives a unit that asks whether it
   may enter or dock.
+- **Docking point.** The world position a building supplies for a contacted unit's docking distance
+  test. It need not lie in an external neighbouring cell. Claim 12 fixes the naval vehicle-factory
+  case.
+- **Stored path, path retry timer.** As S-0212. Claim 9 specifies their ship-locomotor application.
 
 ## Behaviour
 
@@ -199,16 +204,34 @@ a carrier's controller is launching ordinary aircraft.
 
 ### Docking at buildings
 
-7. **Naval match.** A building refuses a unit that asks to enter or dock (its docking answer is
-   *refuses*) when exactly one of the two, the building and the unit, has the naval flag, unless the
-   unit's movement zone is *amphibious*. So a vessel cannot dock at a land repair depot, a land vehicle
-   cannot dock at a naval yard, and an amphibious craft can dock at either. The building's other
-   reasons to refuse (alliance, construction, power and the like) are unchanged.
-   - Backing: `measurable` (scenario N7)
+7. **Naval match (Q-0643).** A building refuses a unit that asks to enter or dock (its docking
+   answer is *refuses*) when exactly one of the building and the unit has the naval flag,
+   **unless the unit's movement zone is plain amphibious**. Only that one zone bypasses the
+   naval-flag comparison. Amphibious-crusher and amphibious-destroyer do not. Neither a ship zone,
+   the ability to cross water, a terrain-speed class nor locomotor kind supplies another exception.
+
+   | Unit's movement zone | Equal building/unit naval flags | Unequal naval flags |
+   |---|---|---|
+   | amphibious | passes this test | passes this test |
+   | amphibious-crusher | passes this test | refuses |
+   | amphibious-destroyer | passes this test | refuses |
+   | every other zone, including ship | passes this test | refuses |
+
+   Thus a plain-amphibious hovering craft passes this test at both a depot and a naval yard.
+   Its naval flag remains unchanged. A craft with either other amphibious zone must match the
+   building's naval flag. A ship-zone vehicle whose naval flag is off does not match a naval
+   building merely because of its zone. Passing this test is not acceptance: other refusal
+   conditions (alliance, construction, power and the like) are unchanged.
+   - Backing: `measurable` (scenario N7 for stock pairings and the plain-amphibious exception).
+     The other two amphibious zones and zone/flag mismatches absent from stock types are
+     `unmeasured`: N7 does not change imported type data to isolate them.
    - Confidence: high
 
 8. **Repair at a yard, and the starting distance.** A naval yard whose type has the repair flag
-   repairs vessels by the depot rules of S-0314 (claim 6). Before its settling phase a depot (land
+   repairs vessels by the depot rules of S-0314 (claim 6). Claim 12 fixes the naval
+   vehicle-factory docking point; click legality remains S-0214's building-entry rule, and
+   ordinary enter behaviour is S-0215 claim 29. An enter order or initial contact is not itself
+   a paid repair. Before its settling phase a depot (land
    or naval) with a docked vehicle *waits for it*: at each of its processings (S-0215 claim 2) it
    asks whether the vehicle stands still and measures its spatial distance to the vehicle's
    docking point at the building, not necessarily the building centre (F3). When the vehicle stands still
@@ -227,6 +250,92 @@ a carrier's controller is launching ordinary aircraft.
      selection is `unmeasured` here: no scenario covers every building and dock-place combination.
    - Confidence: high for thresholds, locomotor test, spatial distance and 3-tick delay,
      medium for *D* while waiting and the exact docking point at each yard
+
+9. **Ship path refresh and retry timing (Q-0644).** The ship locomotor shares S-0212 claim 20's
+   last-stored-step refresh with the driving locomotor. As the last stored step begins, a distance
+   strictly greater than 512 leptons to its movement destination triggers a search in mode 0,
+   immediately, without waiting for the path retry timer. Distance is the three-dimensional
+   floating-point Euclidean distance, truncated toward zero to integer leptons, as S-0212 F6c.
+   At 512 leptons there is no such refresh. The refresh does not itself start a new retry delay.
+   With `quirks.path_refresh_keeps_old_step` on (the original behaviour), the ship keeps the old
+   step already chosen and drops the first step of the replacement path, just as a driver does.
+   With it off, the replacement's first step is used. S-0212 claim 20's train exception is unchanged.
+
+   The ship also shares that claim's chase-path shortening with driving and hovering vehicles:
+   for a vehicle or infantry destination it cuts the stored path at ⌊*D* / 256⌋ steps when that
+   count is below 24, with *D* the distance just defined. These are extensions of S-0212's
+   currently drive-only last-step wording and drive/hover chase wording; there is no new search
+   algorithm or ship-specific path buffer. Hovering vehicles do not make the last-step refresh
+   (S-0503); driving vehicles do (S-0207 and S-0212).
+
+   The ordinary no-path search waits for expiry of the same retry timer. Its delay is S-0212
+   F3's *R* = trunc(*P* × 900) ticks, with *P* the imported path delay in game minutes:
+   floating-point multiplication, truncated toward zero to signed 32-bit ticks under S-0205.
+   The drive rules of S-0212 claims 21 and 22 also apply to ships: a successful ordinary fresh
+   search clears the delay, unlike a hovering vehicle's successful fresh search (S-0503 and
+   S-0212 claim 21); a failed one leaves it running from that search tick. The moving-blocker
+   re-path waits for this timer, chooses its search mode using the separate blockage countdown,
+   and restarts *R* after a search, whether successful or failed; a failed search gate clears it.
+   Neither ship speed nor the water terrain coefficient changes *R*, and it takes no jitter draw.
+
+   At a first step check, a cloaked blocker discards the path and reveals the cloaked objects
+   as S-0207 claim 15 specifies; a new search waits for timer expiry. A blocked cell, stationary
+   friendly occupant, friendly obstacle or enemy obstacle instead discards the path and searches
+   immediately, regardless of that timer; a found path is checked again on the same tick.
+   This agrees with S-0207 claim 15 and differs from S-0503 claim 12, where the hovering
+   locomotor also searches immediately after a first cloaked-blocker check. Other step-check
+   effects remain claim 1's driving equivalence, including the ship-specific crush exception.
+   - Backing: `measurable` (N11 for search timing and blockers); `unmeasured` for isolating the
+     retained-step refresh and chase cut with stock data: no setup here separates these from
+     unchanged routes or the chased unit's own cell-entry effects.
+   - Confidence: high (timer, triggers and shared branches); medium (retained-step route effect)
+
+10. **Effects that continue while sinking (Q-0642).** Beginning the killing-hit sinking state
+    cancels the vessel's destination and its own target and asks its locomotor to stop. This
+    does not clear every other object's already-held target. Body-facing updates are separate
+    from locomotor processing: a turn already in progress can continue towards the saved desired
+    facing while the vessel descends. Sinking does not itself assign a new desired body facing.
+    This is distinct from the visual list during descent (S-0106).
+
+    Sinking is not immunity to damage delivered to the object. An already-fired shot can still
+    damage it when the ordinary impact rules deliver damage to that object; applicable area
+    damage and radiation can also do so. Sinking does not disable ordinary self-healing or
+    the owner's periodic unit healing (S-0314). Their normal eligibility, cadence and caps
+    still apply. Healing does not clear sinking or cancel descent/removal. These rules grant
+    neither a new target nor a guaranteed impact to a projectile whose ordinary impact test
+    misses. Claim 5's targeting and firing refusals therefore do not cancel airborne projectiles.
+    Health-changing effects use the ordinary integer-health arithmetic of their owning specs.
+    sinking adds no health multiplier or rounding. Later killing-hit effects remain S-0312's
+    ownership, rather than a new naval death rule here.
+    - Backing: `measurable` (N10).
+    - Confidence: high (continuing updates and no damage/healing exemption); medium (isolating
+      each stock effect within the short descent interval)
+
+11. **Absent vehicle weight (Q-0640).** A newly imported vehicle type without a weight entry
+    starts with exactly 1.0, a dimensionless floating-point double. A later import without
+    that entry preserves its existing weight (S-0006), not necessarily 1.0. This default enters
+    S-0312 claim 10's inclusive comparison with the imported sinking threshold unchanged.
+    With its other killing-hit conditions satisfied, absent weight permits sinking exactly
+    when that threshold is at most 1.0; a threshold greater than 1.0 prevents it. Locomotor
+    kind does not select another default or bypass the weight test. A parasite's cull bypasses
+    this comparison (S-0614 claim 11).
+    - Backing: `measurable` (N12 for stock death outcomes); `unmeasured` for the isolated absent
+      value and threshold boundary: a stock-only setup cannot independently vary the threshold
+      or the presence of a weight entry.
+    - Confidence: high
+
+12. **Naval vehicle-factory docking point (Q-0641, partial).** A naval yard marked as a vehicle
+    factory supplies the centre of the cell displaced by (2, 1) cells along the map x and y axes
+    from its top-left foundation cell, at the yard's own world height. This is not a nearest-water
+    cell search, a rally point or the production release position of S-0404 claim 13. This
+    point takes precedence over imported pad docking displacements. Coordinates are signed
+    32-bit integers in leptons, with the wrapping arithmetic of S-0205 claim 1; selection takes
+    no floating-point calculation, rotation or random draw. Its cell may belong to the foundation:
+    there is no rule that repair must occur in an external neighbouring water cell. S-0209
+    claim 5 retains ownership of entry legality and blocking versus non-blocking foundation cells.
+    Claim 8 uses this point for the waiting distance, not an assumed foundation centre.
+    - Backing: `measurable` (N13).
+    - Confidence: high (point selection and precedence); medium (stock approach observations)
 
 ## Formulas
 
@@ -253,8 +362,8 @@ their sum and the square root in floating point, then truncates toward zero to i
 
 > *d* = trunc(√((*x* − *a*)² + (*y* − *b*)² + (*z* − *c*)²)).
 
-Height counts. This is not the table square root of S-0204. The building may supply different
-docking points for different dock places or approach sides; complete point selection is open.
+Height counts. This is not the table square root of S-0204. Claim 12 fixes the naval
+vehicle-factory point; other building kinds can supply other points.
 
 ## Constants
 
@@ -278,14 +387,17 @@ docking points for different dock places or approach sides; complete point selec
 | alive vessel | killing hit, S-0312 claim 10 holds | sinking at 1 health point, in play |
 | sinking | own update | descends 5 leptons; then leaves play if below −400 leptons, else on a tick number divisible by 4 two draws and one wake |
 | sinking | firing check reaches its sinking test | *illegal*, subject to claim 5's earlier answers |
+| sinking | ordinary damage or healing reaches it | ordinary health rules apply, with no sinking exemption (claim 10) |
+| sinking with a body turn in progress | own facing update | saved body-facing turn continues independently of locomotor suppression (claim 10) |
 | docked vehicle at a depot | stands still and is closer than the starting distance | settling scheduled 3 ticks later (claim 8) |
 
 The observable consequences within a sinking vessel's update are that its height is 5 leptons lower, and, if it leaves play on that update, it takes no wake-displacement draws on that tick. If it remains in play on a tick divisible by 4, it takes the two wake-displacement draws during its own update. Relative to other objects' draws, these draws follow the update order of S-0203.
 
 ## Edge cases and quirks
 
-No established gameplay defect is specified here. The following distinctions are not optional
-original-versus-fixed behaviours:
+Claim 9 extends the existing `quirks.path_refresh_keeps_old_step` switch of S-0212 to ships,
+with the same original default and corrected replacement-step choice. It introduces no new switch.
+The following distinctions are not optional original-versus-fixed behaviours:
 
 - **Independent type settings.** Claim 6's no-cloak combination follows the glossary's
   *submerged* definition. It is normal configuration behaviour, not a quirk that enables
@@ -309,12 +421,16 @@ original-versus-fixed behaviours:
 | Rules, type section, `Naval` | naval flag (claim 7; S-0303 and S-0312 also use it) | boolean | no |
 | Rules, type section, `Underwater` | underwater type (claims 2, 6) | boolean | no |
 | Rules, type section, `Cloakable` | whether an underwater type can be submerged (Terms; planned S-0516 owns it) | boolean | no |
-| Rules, type section, `MovementZone` | the *amphibious* exception of the naval match (claim 7; S-0211 owns the field) | movement zone name | S-0211 |
+| Rules, type section, `MovementZone` | the plain *amphibious* exception only (claim 7; S-0211 owns the field) | movement zone name; the other two amphibious names do not bypass naval matching | S-0211 |
 | Rules, `[General]`, `Wake` | the game-wide wake animation (claims 2, 4); claim 2's speed test and within-turn timing are engine rules, not additional imported settings | animation type name | none (engine default): a ship makes no wakes (claim 2); a sinking vessel takes its draws and makes no wake, with an importer warning (claim 4) |
 | Rules, building section, `UnitRepair` | repair flag of a depot or yard (claim 8; S-0314 owns it) | boolean | no |
 | Rules, building section, `Naval` | a naval building, for the naval match (claim 7) | boolean | no |
 | Rules, type section, `Spawns` | spawned type in the shared controller (S-0506 claim 1); claim 3 uses its launching count, not ordinary aircraft preparation | type name | none |
-| Rules, `[General]`, `ShipSinkingWeight` | sinking condition (S-0312 claim 10 owns it) | decimal | S-0312 |
+| Rules, `[General]`, `ShipSinkingWeight` | sinking condition (S-0312 claim 10 owns it) | decimal, double precision | S-0312 |
+| Rules, vehicle-type section, `Weight` | claim 11's vehicle weight | decimal, double precision | 1.0 at type creation; preserve current value on later import |
+| Rules, building section, `WeaponsFactory` | claim 12's vehicle-factory flag | boolean | no |
+| Rules, building section, `DockingOffset0` and subsequent numbered entries | pad docking displacements, S-0404 claim 15; do not override claim 12 | integer lepton triples; S-0404 | S-0404 |
+| Rules, `[AI]`, `PathDelay` | claim 9's shared retry-delay field | decimal game minutes, single precision held as a double | S-0212 |
 
 ## Measurement scenarios
 
@@ -471,10 +587,84 @@ that killing hit. If the weapons do not distinguish the two states, weapon selec
 inconclusive; choose a named weapon-selection test override from S-0308 claim 11's scenario.
 Remove the named override after this sub-test. This does not test forced cloak effects or culls.
 
+**N10. Effects during descent (claims 5 and 10).** *Setup:* separate runs on the same small
+water map, with a stock surface vessel eligible for killing-hit sinking. For (a), put a second
+stock firer on a sufficiently long flight-time shot, and kill the vessel with the first firer
+before that shot arrives. For (b), use a second explosion with area covering the vessel after
+sinking begins. For (c), use an elite stock vessel with a self-healing ability, and separately
+an owner benefiting from a captured stock vehicle-healing source. Confirm each healing eligibility
+and next due tick before sinking. For (d), order a turn and kill the vessel part-way through it.
+*Procedure:* run each through removal with tick-labelled recording. Time a due healing tick to
+fall before the 81st descent. A squid-cull variant can begin descent above 1 health to expose
+nonlethal damage independently of later killing-hit effects. *Observable:* delivered impact,
+health before/after every damage or healing event, world position/height, current and desired body
+facing, and removal tick. Also record repeated death effects for S-0312 rather than presuming
+immunity. *Expected:* (a,b) ordinary damage eligibility/arithmetic, not automatic unaffected due
+to sinking, (c) ordinary healing up to its ordinary cap, with sinking/descent continuing, (d)
+body facing progresses towards its saved desired facing under S-0206's schedule. *Falsified if:*
+an otherwise eligible delivered damage or due heal is suppressed solely by sinking, healing
+stops descent, or sinking freezes an already progressing body-facing update. An impact that
+misses, ineligible healing, no due healing tick before removal or a turn already complete is
+inconclusive. Radiation can be probed on stock water beside an irradiated shore only if the
+recorder confirms an applicable radiation exposure before removal; absence of such exposure does
+not test that claim. This requires read-only health/facing/event recording in the arena or bench,
+not modification of the oracle. No effect is claimed measured yet.
+
+**N11. Ship search cadence (claim 9).** *Setup:* a winding open-water route exceeding 24 steps,
+a stock ship, and separate runs with an allied moving ship temporarily blocking its next step.
+Use the same stock path-delay field for a driving vehicle on a land control route and a hovering
+craft on a water control route. *Procedure:* issue a move, let the blocker cross and then clear
+the route. Record search ticks, stored steps, destination, retry-timer expiry and blockage
+countdown through several searches. *Observable:* delay after a successful ordinary fresh search,
+last-stored-step refresh with destination over 512 leptons away, moving-blocker search mode and
+timer restart. *Expected:* ship/drive successful ordinary searches clear retry delay, hover fresh
+searches restart it. Ship/drive last-step refresh does not wait for expiry. Moving-blocker re-path
+waits for the retry timer and restarts the same *R*, independent of success; search mode follows
+S-0212 claim 22's blockage countdown. *Falsified if:* the ship defers the last-step refresh until
+its stored steps are exhausted, retains a fresh-search delay on success like hover, uses a
+ship-specific *R*, or omits the moving-blocker restart. Add a cloaked stock underwater blocker
+only when the recorder confirms the cloaked-blocker entry outcome, and a stationary friendly
+blocker as a control: with a nonzero retry timer the former waits to search and the latter
+searches immediately. Opposite timing falsifies those branches. Failure to establish that
+outcome or a nonzero timer is inconclusive. A stored-path change alone is insufficient to prove
+the retained-old-step quirk when old and new first steps agree; that subclaim remains unmeasured.
+Read-only search/timer recording is a proposed harness capability, not assumed present.
+
+**N12. Absent weight and stock death (claim 11).** *Setup:* a stock naval surface vehicle whose
+type omits its weight, on water, with a stock enemy able to kill it. Inspect its imported weight
+and the imported sinking threshold in a read-only recorder; do not alter either. *Procedure:*
+kill it and record health, sinking and removal. *Expected:* weight is 1.0, and sinking occurs
+only if the imported threshold is at most 1.0 and S-0312 claim 10's other conditions hold.
+*Falsified if:* a newly imported absent-weight type has another weight, or its otherwise eligible
+killing hit contradicts that comparison. A recorder that exposes only death, not imported weight,
+checks the stock outcome but cannot distinguish candidate absent defaults that fall on the same
+side of the threshold. Stock-only observations do not isolate the exact threshold boundary.
+
+**N13. Naval-yard point and repair start (claims 8 and 12).** *Setup:* each faction's stock naval
+yard in separate water areas, ample power/credits, one damaged stock compatible ship each.
+*Procedure:* click the yard with the ship selected and record its approach, contact, position,
+building processing phase, docking point, health and credits per tick. Repeat from each accessible
+side, then with a second damaged ship sent while the first is docked, and at full health.
+*Observable:* supplied docking point relative to the top-left foundation cell and yard height,
+foundation cells traversed, the successful waiting processing, settling and first paid repair.
+*Expected:* the point is always cell displacement (2, 1), at yard height, independent of approach
+side, release/rally location and pad displacements. Waiting/settling/repair timings follow claim 8,
+not immediate payment on contact or click. *Falsified if:* a compatible naval vehicle factory
+supplies another point, the point varies by approach, or payment precedes the stated gates.
+Only use ordinary playable placements; an unenterable approach is not a distance-test failure.
+Record the second-ship, full-health and cancellation outcomes without assigning an untraced
+expected handshake: they are proposals to finish Q-0641, not completed claims. The missing
+contact/event recorder capability should be proposed to the user, not installed or patched here.
+
 ## Open questions
 
-- Complete docking-point selection at each naval yard. Claim 8 uses spatial distance to that
-  point, not to an assumed building centre.
+- Q-0641 is partly answered: claims 8 and 12 fix the naval factory's waiting gate and docking
+  point. Full approach handshake, contact reservation timing and failure/retry routing are not
+  established here. Do not infer them from aircraft pads, land depots or production release.
+  Q-0641 is therefore not included in the answered-request list.
+- Later killing hits on an already-sinking vessel can enter ordinary damage handling (claim 10).
+  Their repeated destruction credit, passenger and death-effect consequences need S-0312's
+  audit; no sinking immunity is supplied as a substitute.
 - Whether concurrent launch and other movement waits produce an observable difference between
   ship and driving locomotors. This interaction is `unmeasured`: no setup or expected observable
   has been established. Claim 3 fixes only the ordinary launching-count hold, not precedence

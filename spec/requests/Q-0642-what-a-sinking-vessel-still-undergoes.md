@@ -1,9 +1,9 @@
 ---
 id: Q-0642
 title: What a sinking vessel still undergoes (further hits, healing, a turn under way)
-status: open
+status: answered
 related: [S-0504, S-0312, S-0302, S-0303, S-0314]
-answered-by: []
+answered-by: [S-0504]
 ---
 
 ## Need
