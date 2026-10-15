@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -299,16 +299,20 @@ Terms specific to this spec:
    one link per span, created in the visiting order of their start cells (S-0009 claim 3). A link
    is enabled at game start when its span is high and not enabled when it is low. So the two end cells
    of an intact high bridge's link lie in one reach region of every movement zone that can use
-   both of their regions, whatever lies under the bridge. In play, the bridge specs name a cell for
-   each section of a high bridge that is lost or repaired, and the bridge links change as follows:
+   both of their regions, whatever lies under the bridge. In play, a successful direct attempt
+   on a high bridge names one cell: the lost section's section cell or a collapsed pier's
+   reference cell, regardless of any additional losses caused by that attempt (S-0511 claim 12).
+   High-bridge repair names each restored pier's reference cell, the far ramp and the cell one
+   step before that ramp (S-0511 claim 19). Low-bridge destruction and repair name no cell
+   (S-0511 claims 12, 15 and 20). For each named cell, the bridge links change as follows:
 
    | Bridge links within 3 cells (Terms) of the named cell | Result |
    |---|---|
-   | at least one | each of them stops being enabled when the section is lost, and becomes enabled when it is repaired |
+   | at least one | each of them stops being enabled for a destruction attempt, and becomes enabled for a repair |
    | none | every bridge link is replaced by the links of the spans that S-0010 claim 25's rules for the spans and for high and low find on the map as it stands at that moment. Each new link within 3 cells of the named cell stops being enabled or becomes enabled as in the row above. When no new link lies within 3 cells, no link changes |
 
-   Which cell each destruction or repair names belongs to the bridge specs. Claim 5 brings
-   connectivity up to date after each of these changes.
+   S-0511 claims 12 and 19 own these named-cell rules. Claim 5 brings connectivity up to
+   date after bridge changes, including low-bridge changes that name no cell.
 
    The relation is symmetric: a step of 2 or 3 levels along cell x joins the two cells whichever of
    them is higher. The original builds regions by labelling the map in a fixed order, and in rare
@@ -322,9 +326,9 @@ Terms specific to this spec:
    in others. Departure D4 (accepted by the project lead, 2026-10-10) makes our engine follow the
    rule.
    - Backing: `measurable` (scenario P4, maps F, F3, F5, I and H; map K for a high bridge's link,
-     and P8 for a link that stops being enabled). `unmeasured` for the new search of spans in play
-     and for a link enabled by a repair: which cell a destruction or repair names belongs to the
-     bridge specs, and stock play gives no way to make that lookup find no link
+     and P8 for a link that stops being enabled; S-0511 scenarios B8 and B12 for the destruction
+     and repair named-cell rules). `unmeasured` for the new search of spans in play:
+     stock play gives no way to make that lookup find no link
    - Confidence: high for the height limits 1 and 3. Medium that the rule matches the original's
      reach regions on stock maps for movement zones that do not allow the category *blocked*. Low
      for the zones that allow it (subterranean and fly), where the original's labelling departs from
@@ -1329,7 +1333,8 @@ Terms specific to this spec:
     - Confidence: medium (for the walk and hovering locomotors: medium for the delays as stated,
       low for the exact tick of the hovering search after a wait, tested by S-0207 D21 run 4)
 
-22. **Blocked next step (drive locomotor).** For a unit with the drive locomotor, when the entry
+22. **Blocked next step (driving and hovering locomotors).** For a unit with the driving or
+    hovering locomotor, when the entry
     outcome for the next stored step is *moving blocker*, the unit starts a blockage timer of *B*
     ticks (the blockage delay) the first time this happens for the current blockage. A blockage ends,
     and the timer starts afresh the next time, once the unit has taken a step again or its
@@ -1338,7 +1343,7 @@ Terms specific to this spec:
     retry delay of claim 21 has passed, it computes a new path in search mode 1 while the blockage
     timer runs, and in search mode 2 once it has run out. A unit with a stored path but a next step
     of another outcome, other than *blocked*, reacts as S-0209 and the movement specs say (opening a
-    gate, attacking an obstacle, waiting). At the first check of a track's first cell,
+    gate, attacking an obstacle, waiting). For a driving unit, at the first check of a track's first cell,
     an outcome *blocked* clears the stored path and makes a fresh search in mode 0 on the
     same tick, regardless of the path retry timer. A found path gets the repeated check
     of S-0207 claim 15 on that tick. This is the same immediate-search timing as that claim's
@@ -1346,13 +1351,23 @@ Terms specific to this spec:
     a cloaked blocker. A repeated check with outcome *blocked* gives up the move. Checks
     of a curve's second cell follow S-0207 claim 15's separate table, not this first-cell rule.
 
+    A hovering unit follows the same moving-blocker timer and search-mode rule above
+    (S-0503 claim 12). Its first check with outcome *blocked* or *cloaked blocker* discards the
+    stored path and makes a fresh mode-0 search immediately, regardless of the path retry
+    timer; a found path receives a repeated check on that tick. Unlike driving, the hover's
+    cloaked-blocker search does not wait for the timer, and a repeated *cloaked blocker* keeps
+    the destination and waits rather than giving up the move. A repeated *blocked* gives up
+    the move. S-0503 claim 12 owns the full hovering entry-outcome table.
+
     The walk locomotor's reactions to every outcome of its next step are S-0209's (claims 7 to 10).
     Its re-paths for a moving blocker (S-0209 claim 10) use search modes 1 and 2 as above, and the
     immediate new path it makes after an obstacle (S-0209 claim 7) is a search in mode 0.
     - Backing: `measurable` (scenarios P6, P14; S-0207 scenario D17 part d3 for the immediate
-      fresh search on outcome *blocked*, also specified here as P18; P25(d) for separate
-      step-taken and destination-replaced endings of a blockage)
-    - Confidence: medium (the other locomotors are not established). Low for what ends a blockage,
+      fresh search on outcome *blocked*, also specified here as P18; S-0503 scenario H9 and
+      P18's hover variant for hovering reactions; P25(d) for separate step-taken and
+      destination-replaced endings of a blockage)
+    - Confidence: medium (locomotors other than driving, hovering and walking are not established).
+      Low for what ends a blockage,
       pending the discriminating timer observations of P25(d)
 
 23. **When no path is found.** What happens depends on why no path was found:
@@ -2991,6 +3006,21 @@ A failed search follows claim 23. Falsifier: no search on the refusal tick and a
 only after the timer expires, or a found path receives no repeated check on that tick although
 the mover faces its new first step. Use the stated setup and record the stated observables. Void the run if the bystander enters the corridor or acts on either test unit.
 
+**Hover variant (claim 22).** Repeat with a human-owned stock hovering type and record
+its heading point instead of track state. Obtain one qualifying first-check *blocked* run
+and one first-check *cloaked blocker* run while the retry timer is running. For the latter,
+place a stock cloak-capable enemy blocker after the path is chosen, as in S-0503 H9(c).
+Expected in both: an immediate mode-0 search and, when a path is found, a repeated check
+that tick. Only a trace with a successful search followed by the intended repeated outcome
+qualifies to test destination retention: repeated *cloaked blocker* retains the destination
+and waits; repeated *blocked* clears it. Failed searches instead follow claim 23.
+A delayed first search, or the opposite destination result in a qualifying repeated check,
+falsifies the corresponding hover rule. Repeat S-0503 H9(e)'s moving-allied-blocker test
+with the same recorder: expect mode 1 while the blockage timer runs and mode 2 once it
+expires, each held by the retry delay. A different mode or timer boundary falsifies the
+moving-blocker extension. Report inconclusive for each subtest without a qualifying trace.
+Retain the same game speed, settings and bystander void rule.
+
 **P19. Failed search beside the destination: ship and hovering (claims 21 and 23).**
 Use a tiny level map with an isolated bystander computer player, game speed 2, director and
 mods off except this test map and named overrides. Use a human-owned stock hovering type
@@ -3285,8 +3315,6 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 - For the corridor exemption (claim 13): exactly when a moving unit's recorded cell changes (on
   entering a new cell or at some other moment of its move), and whether an aircraft in flight keeps
   counting and from which cell, are only partly established.
-- Bridge links in play (claim 3): which cell each destruction or repair of a high bridge names, and
-  so which links change, belongs to the bridge specs.
 - When exactly a drive-locomotor follower car's destination is cleared after its computation of
   claim 26 fails (at once, or only at the car's next path computation) is not established.
 - The coarse threat at levels 1 and 2 (F5): which value the house's records hold for a level-1
