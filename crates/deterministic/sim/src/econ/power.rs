@@ -212,6 +212,10 @@ pub struct BuildingSwitches {
     pub super_gap: bool,
     /// Its sale was seen starting (S-0410 claim 2).
     pub selling_seen: bool,
+    /// Manned (glossary; S-0515 claim 2, S-0405 Terms): set at the
+    /// building's first ownership change of any cause and never cleared.
+    /// A building put on the map, by any means, is not manned.
+    pub manned: bool,
     /// A vehicle disabled by the loss of its control centre (claim 13).
     pub unit_disabled: bool,
     /// A vehicle's cell at its previous turn (claim 13, the cell-entry rule).
@@ -253,10 +257,11 @@ pub fn absorbed(w: &World, id: ObjectId) -> i32 {
     0
 }
 
-/// An engineer is inside the building (special-abilities specs). Seam.
-pub fn engineer_inside(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+/// Whether a building is manned (glossary; S-0515 claim 2): it has had
+/// at least one ownership change, whatever its cause. Not physical
+/// engineer presence (S-0405 Terms).
+pub fn manned(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.econ.building.manned)
 }
 
 /// Occupants who are inside an occupiable building (S-0215). Seam.
@@ -567,8 +572,8 @@ pub fn in_operation(w: &World, id: ObjectId) -> bool {
     {
         return false;
     }
-    // spec: S-0405 claim 8 (engineer present)
-    if t.needs_engineer && !engineer_inside(w, id) {
+    // spec: S-0405 claim 8 (manned when required: the needs-engineer flag and not manned, S-0515 claim 2)
+    if t.needs_engineer && !manned(w, id) {
         return false;
     }
     // spec: S-0405 claim 8 (not building or selling: the current behaviour only) and S-0406 claim 17 (the queued construction is seen while none is current)
@@ -689,7 +694,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The power topic's reaction to a change of owner (claims 7 and 13).
+/// The power topic's reaction to a change of owner (claims 7 and 13, and
+/// the manned state of S-0515 claim 2).
 pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Building {
@@ -700,6 +706,10 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     if let Some(ob) = w.obj_mut(id) {
         // Under its new owner the building comes into operation afresh in its next turn (Terms, *active control centre*).
         ob.econ.building.operating = None;
+        // spec: S-0515 claim 2 and S-0405 Terms (manned from the first ownership change of any cause, whatever the old and new owners; never cleared; glossary, *building ownership change*: a change of the owning house)
+        if old != new {
+            ob.econ.building.manned = true;
+        }
     }
     // spec: S-0405 claim 7 (a building that changes owner makes the house due)
     for h in [old, new].into_iter().flatten() {

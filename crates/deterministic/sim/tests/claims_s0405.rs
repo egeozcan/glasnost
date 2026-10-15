@@ -26,7 +26,7 @@ fn building(strength: i32, power: i32) -> BuildingType {
 
 /// PLANT (output 120, strength 500), CONS (drain 40), DEF (needs power,
 /// drain 10), NODRAIN (needs power, no drain), SPECIAL (special-power flag),
-/// ENG (needs an engineer), ABS (absorbing, extra output 30), XTRA (output
+/// ENG (needs-engineer flag: works only when manned), ABS (absorbing, extra output 30), XTRA (output
 /// 100, extra output 30), UPx upgrades, CENTRE (control centre for DRONE),
 /// GAPPER (super-gap radius, extra drain 20), GAPGEN (gap generator, radius 3,
 /// drain 10); vehicle DRONE (powered unit).
@@ -364,7 +364,7 @@ fn claim_7_health_change_noticed() {
     assert!(!w.houses[0].econ.power.due);
 }
 
-// spec: S-0405 claim 8 (the in-operation test: switch, low power with drain, no drain, special power and blackout, engineer, construction and selling)
+// spec: S-0405 claim 8 (the in-operation test: switch, low power with drain, no drain, special power and blackout, manned when required, construction and selling)
 #[test]
 fn claim_8_in_operation_rows() {
     let mut w = game(&rules());
@@ -377,7 +377,7 @@ fn claim_8_in_operation_rows() {
     assert!(power::low_power(&w, A));
     assert!(!power::in_operation(&w, def));
     assert!(power::in_operation(&w, nd));
-    // The needs-engineer type works only with an engineer inside (none: a seam).
+    // The needs-engineer type works only when manned; placement does not man it (S-0515 claim 2).
     assert!(!power::in_operation(&w, eng));
     // Special power: stops during a running timed blackout.
     assert!(power::in_operation(&w, sp));
@@ -851,4 +851,82 @@ fn claim_19_meter_parts() {
     assert_eq!(e.map(i), [10, 0, 0]);
     let (_, e) = power::meter(400, 0, 200, 20, rz);
     assert_eq!(e.map(i), [0, 5, 5]);
+}
+
+fn change_owner(w: &mut World, id: ObjectId, to: HouseId) {
+    let old = w.obj(id).unwrap().owner;
+    w.obj_mut(id).unwrap().owner = Some(to);
+    glasnost_sim::econ::events::owner_changed(w, id, old);
+}
+
+// spec: S-0405 claim 8 (manned when required) and S-0515 claim 2 (a building put on the map is not manned)
+#[test]
+fn claim_8_placed_building_not_manned() {
+    let mut w = game(&rules());
+    let eng = put(&mut w, "ENG", 0, 0, 0);
+    let plain = put(&mut w, "NODRAIN", 0, 2, 0);
+    step(&mut w);
+    assert!(!power::manned(&w, eng));
+    assert!(!power::manned(&w, plain));
+    assert!(
+        !power::in_operation(&w, eng),
+        "never in operation before its first ownership change"
+    );
+    // Only the needs-engineer flag makes the row read the state.
+    assert!(power::in_operation(&w, plain));
+    for _ in 0..5 {
+        step(&mut w);
+    }
+    assert!(!power::in_operation(&w, eng));
+}
+
+// spec: S-0405 claim 8 (manned when required) and S-0515 claim 2 (manned from the first ownership change of any cause, for good)
+#[test]
+fn claim_8_manned_by_ownership_change_for_good() {
+    let mut w = game(&rules());
+    let eng = put(&mut w, "ENG", 0, 0, 0);
+    step(&mut w);
+    assert!(!power::in_operation(&w, eng));
+    // A call that leaves the owner unchanged is no ownership change (glossary).
+    change_owner(&mut w, eng, A);
+    assert!(!power::manned(&w, eng));
+    change_owner(&mut w, eng, HouseId(1));
+    assert!(power::manned(&w, eng));
+    assert!(power::in_operation(&w, eng));
+    step(&mut w);
+    assert!(power::in_operation(&w, eng));
+    // A second change does not end it, whatever the houses.
+    change_owner(&mut w, eng, A);
+    assert!(power::manned(&w, eng));
+    assert!(power::in_operation(&w, eng));
+    // Nor does damage.
+    w.obj_mut(eng).unwrap().health = 100;
+    step(&mut w);
+    assert!(power::manned(&w, eng));
+    assert!(power::in_operation(&w, eng));
+}
+
+// spec: S-0405 claim 8 and S-0515 claim 2 (the manned state is saved game state: it survives a save/load round trip and enters the state hash)
+#[test]
+fn claim_8_manned_state_saved_and_hashed() {
+    let mut w = game(&rules());
+    let eng = put(&mut w, "ENG", 0, 0, 0);
+    step(&mut w);
+    let unmanned_hash = glasnost_sim::save::state_hash(&w);
+    let mut m = w.clone();
+    m.obj_mut(eng).unwrap().econ.building.manned = true;
+    assert_ne!(
+        unmanned_hash,
+        glasnost_sim::save::state_hash(&m),
+        "the flag is hashed"
+    );
+    change_owner(&mut w, eng, HouseId(1));
+    let bytes = glasnost_sim::save::save(&w);
+    let l = glasnost_sim::save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+    assert!(power::manned(&l, eng));
+    assert!(power::in_operation(&l, eng));
+    assert_eq!(
+        glasnost_sim::save::state_hash(&w),
+        glasnost_sim::save::state_hash(&l)
+    );
 }
