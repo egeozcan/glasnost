@@ -2,7 +2,7 @@
 id: S-0515
 title: Tech buildings (manned state, acquisition bonus, periodic income, ownership changes)
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -38,7 +38,7 @@ skirmish only; campaigns and network games are out of scope.
   the scenario start, has no ownership change. An event that would give the building to the house that
   already owns it is not an ownership change and has none of the effects below.
 - **Manned.** A state of a building: it is *manned* from its first ownership change on, for good
-  (claim 2). This is the meaning of "an engineer is inside" in the engineer row of S-0405 claim 8.
+  (claim 2). S-0405 claim 8 tests this state, not physical engineer presence.
 - **Cash-producing type.** A building type with a nonzero acquisition bonus or a positive income
   delay (Import mapping). The *acquisition bonus* *B*, the *income amount*
   *a* and the *income delay* *D* are whole numbers; *B* and *a* are in credits, *D* in ticks.
@@ -79,7 +79,7 @@ skirmish only; campaigns and network games are out of scope.
 2. **The manned state.** A building becomes manned at its first ownership change, whatever the cause
    and whatever the old and new owners, and stays manned for the rest of its life: later
    ownership changes, damage, power, a pulse and being erased do not end it. A building is not manned when it
-   is put on the map, by any means. Through the engineer row of S-0405 claim 8, a tech building that
+   is put on the map, by any means. Through the manned-when-required row of S-0405 claim 8, a tech building that
    has never changed owner is never in operation. In particular:
    - a tech building that a map gives to a player house from the start, or that a trigger action
      creates for one, produces no income (claim 5) and cannot fire (S-0405 claim 9) until its first
@@ -88,8 +88,8 @@ skirmish only; campaigns and network games are out of scope.
      (S-0512) and its secret type (S-0407 claim 4) do not depend on being in operation, so these
      work for an unmanned tech building as for any other.
 
-   The state is the same for every building; only the needs-engineer flag makes S-0405's engineer
-   row read it.
+   The state is the same for every building; only the needs-engineer flag makes the
+   manned-when-required row of S-0405 claim 8 read it.
    - Backing: `measurable` (scenario TB3 parts c to f; TB8). The services delegated to other
      specs retain those claims' backings rather than independent confirmation here.
      A first change between two passive houses is `unmeasured`: no scenario here exposes its
@@ -122,10 +122,7 @@ skirmish only; campaigns and network games are out of scope.
      before an income payment could expose the initial value.
    - Confidence: high
 
-5. **Income cycles and payments.** In a building's own turn, when the remaining time of its income
-   countdown is exactly 1 tick, the building has an income cycle: the countdown is restarted with
-   *D* (claim 4 c) and then, if the building's **current** owner is not a passive house and the
-   building is in operation (S-0405 claim 8), the owner is paid the income amount *a* (Formulas F2).
+5. **Income cycles and payments.** In a building's own turn, when the remaining time of its income countdown is exactly 1 tick, the building has an income cycle. An income cycle restarts the countdown with *D* (claim 4 c). A payment of the income amount *a* (Formulas F2) is made to the building's **current** owner only if that owner is not a passive house and the building is in operation (S-0405 claim 8).
    A cycle without payment still restarts the countdown, so a payment missed for want of
    operation (switched off, under a pulse, unmanned) is not made up and does not shift later
    cycles. A countdown that has run out has no cycle. So, for *D* ≥ 2 and a building whose turns
