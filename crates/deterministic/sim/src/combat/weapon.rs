@@ -69,13 +69,15 @@ pub fn is_target_object(w: &World, t: Target) -> bool {
 
 /// The weapon in slot `i` of an object (S-0308 Terms, claim 2): the elite
 /// slot's weapon for an elite object when that slot holds one, else the
-/// ordinary slot's. Buildings: installed upgrades (claim 12) and occupants
-/// (claim 13) would come first; neither exists in our engine yet (the
-/// structures specs own them), so a building uses its own slots.
+/// ordinary slot's. A building takes it first from its installed upgrades
+/// (claim 12); occupants (claim 13) are not modelled (garrisons are a seam).
 pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
     let tc = veterancy::type_combat(w, id)?;
     if i >= SLOTS {
         return None;
+    }
+    if let Some(u) = upgrade_slot_weapon(w, id, i) {
+        return Some(u);
     }
     // spec: S-0308 claim 2 (elite: the elite slot when it holds a weapon, else the slot; per slot)
     if veterancy::rank(w, id) == Rank::Elite
@@ -84,6 +86,33 @@ pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
         return Some(e);
     }
     tc.slots[i]
+}
+
+/// A building's installed upgrade types, first installed first (S-0308
+/// claim 12): its upgrade positions 1 to 3 in order (Q-0798 interim).
+pub fn installed_upgrades(w: &World, id: ObjectId) -> impl Iterator<Item = u32> + '_ {
+    let ups = w
+        .obj(id)
+        .filter(|o| o.kind == Kind::Building)
+        .map(|o| o.econ.building.upgrades)
+        .unwrap_or_default();
+    // Q-0798 interim: position order is installation order, also after a sale or a level skip.
+    ups.into_iter().flatten()
+}
+
+/// The ordinary slot-`i` weapon of a building type, if any.
+pub fn building_type_slot(w: &World, ty: u32, i: usize) -> Option<WeaponId> {
+    w.rules()
+        .buildings
+        .get(ty as usize)
+        .and_then(|b| b.combat.slots.get(i).copied().flatten())
+}
+
+/// The slot-`i` weapon a building's installed upgrades supply (S-0308
+/// claim 12), if any.
+fn upgrade_slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
+    // spec: S-0308 claim 12 (the first installed upgrade whose type has a weapon in slot i; always its ordinary slot, never its elite slot)
+    installed_upgrades(w, id).find_map(|u| building_type_slot(w, u, i))
 }
 
 /// Whether an object's type is a switching type (S-0308 Terms): a

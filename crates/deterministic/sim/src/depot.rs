@@ -205,6 +205,8 @@ pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
 /// one contact, so any other is released.
 fn take(w: &mut World, id: ObjectId, k: ObjectId, place: u32) {
     let keep = link(w, id).is_some_and(|l| l.depot == k && l.tethered);
+    let fresh = link(w, id).is_none_or(|l| l.depot != k);
+    let mut to_depot = false;
     if let Some(o) = w.obj_mut(id) {
         o.contact = Some(k);
         o.depot.link = Some(Link {
@@ -212,6 +214,11 @@ fn take(w: &mut World, id: ObjectId, k: ObjectId, place: u32) {
             place,
             tethered: keep,
         });
+        to_depot = o.dest == Some(Target::Object(k));
+    }
+    if fresh && to_depot {
+        // spec: S-0314 claim 18 and S-0207 claim 25 (the depot assigned as destination supplies its docking point, not its position, to driving or ship locomotion; our contact follows the destination's assignment within the same order)
+        crate::drive::take_destination(w, id);
     }
 }
 
@@ -374,10 +381,10 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
 
 /// Whether the vehicle has a moving destination (S-0314 Terms): an
 /// order-level destination while its locomotor gives claim 17's movement
-/// report. Driving and ship: its locomotor destination point is present, or
-/// its heading point, the track target, is
-/// present and differs horizontally from its position (Q-0794 interim for
-/// the destination point). Hovering: S-0503 claim 5's *is moving*.
+/// report. Driving and ship: its locomotor destination point is present
+/// (S-0207 claim 25), or its heading point, the track target, is present
+/// and differs horizontally from its position. Hovering: S-0503 claim 5's
+/// *is moving*.
 fn moving_destination(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0314 Terms (an order-level movement destination is needed in every row)
@@ -390,8 +397,8 @@ fn moving_destination(w: &World, id: ObjectId) -> bool {
     }
     if let Some(d) = o.drive.as_ref() {
         // spec: S-0314 claim 17 (driving or ship: the locomotor destination point present, or the heading point present and differing from the current horizontal position, x and y only; a turn in place, a track or stored steps are not sufficient by themselves)
-        // Q-0794 (interim: our driving locomotor keeps no destination point apart from the order-level destination, which it clears on reaching its goal cell; the point counts as present while that destination's goal cell exists and differs from the vehicle's cell)
-        let dest_point = crate::path::goal_cell(w, id).is_some_and(|g| g != o.pos.cell());
+        // spec: S-0314 claim 17 and S-0207 claim 25 (the separate point's presence, not goal-cell inequality or search success)
+        let dest_point = crate::drive::goal_present(w, id);
         let heading = d
             .track
             .as_ref()

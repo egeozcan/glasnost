@@ -211,3 +211,36 @@ Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q
 - **S-0701 (rev 14 to 15), S-0109 (rev 24 to 25), (a) and not built.** Claim 40 indexes
   Q-0260, Q-0264 and Q-0265 (already listed as answered). The per-layer sound-reference
   import rules are not built (`docs/development.md`, audio).
+
+## Spec revisions after dbdb150
+
+- **S-0516 (rev 6 to 7), (a).** Q-0791 and Q-0792 answered: cell-arrival updates by locomotor
+  (`quirks.flying_sensor_disc_stationary`), the generator's field phases and own-centre
+  interruption. See `S-0516.md`; gaps Q-0795 and Q-0796.
+- **S-0207 (rev 26 to 27), S-0314 (rev 19 to 20), S-0417 (rev 15 to 16), S-0504 (rev 15 to 16),
+  S-0511 (rev 5 to 6), (a).** Q-0793 and Q-0794 answered: the driving locomotor destination
+  point (`DriveState::goal`), its depot docking supply, and exit tracks at height 0. See
+  `depot-cycle.md`, `S-0511.md`, `docs/m5-claims/S-0417.md` and `S-0504.md`; gap Q-0797.
+- **S-0212 (rev 40 to 41), (a, already done).** Destination presence is S-0207 claim 25's, not the
+  search's: `DriveState::goal` is set at acceptance, before any search (`claim_25_*`).
+- **S-0105 (rev 16 to 17), (a, already done).** Q-0215 question 7 is answered: F8 gives every
+  sequence its overlap priority by record lows (MS-25 pairs, MS-28 larger ties). The existing
+  `section_order` loop is that relation; the new tests check it against F8 written out from its
+  words for every pattern of up to six sections, plus the MS-25 and MS-28 tables. The interim row
+  is retired.
+- **S-0215 (rev 42 to 43), S-0308 (rev 10 to 11), S-0301 (rev 14 to 15), (a).** S-0215 claim 32's
+  upgrade weapon gate, with `quirks.upgrade_attack_weapon_gate` (on), and S-0308 claim 12's
+  upgrade weapons, which were a seam, are built (`combat::behave::upgrade_gate`,
+  `combat::weapon::slot_weapon`). Gaps: Q-0798. Map-placed upgrades are still separate objects,
+  so neither rule applies to them. S-0308 claim 16's registration order was already so.
+  S-0301 claim 3's easy-bonus wording changes nothing (the flag is never read). S-0215's B36
+  and backing edits, its cloak and beam wording, and its claim 16 summary row need no code (the
+  claim 16 fall-back is not built).
+- **S-0513 (rev 6 to 9), (a).** Q-0733 answered: claim 29's draw comes on entering Initial
+  dimming, in turn *q* + 10 (`Protection::tint`; *t*₀ + 11 after a launch). The brightness
+  envelope's later phases, F9 and the colour selection are presentation and not built.
+- **S-0512 (rev 5 to 6), S-0214 (rev 36 to 37), S-0102 (rev 16 to 17), S-0104 (rev 22 to 24), (b).**
+  Q-0742 answered. The sidebar's clock and labels stay our design (S-0512 claim 16). Table CS's
+  aim cursors wait for Q-0731's action words. S-0102 claim 34's protection masks and S-0104's
+  protection brightness are not built. S-0104's building-animation brightness, now refreshed on
+  building turns, is not modelled (slot animations do not play).

@@ -270,6 +270,8 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     crate::depot::destination_given(w, id);
     // spec: S-0503 claim 4 (the hovering locomotor takes a move: ρ = 1 when powered and not moving now)
     crate::hover::take_destination(w, id);
+    // spec: S-0207 claim 25 (a driving or ship locomotor installs the supplied point at the assignment, before any path search)
+    crate::drive::take_destination(w, id);
     let Some(o) = w.obj(id) else { return };
     // spec: S-0107 claim 15 (clearing a destination makes no request)
     let Some(new) = o.dest else { return };
