@@ -536,6 +536,72 @@ Provisional rules of M6b hover and amphibious movement, each tied to a request:
 | `hover::take` | a hover without a heading point chooses its first one at once when it is given a move (path search and step check), so the ρ = ½ of a factory exit reaches the exit move (claim 4); the "moving, no heading point" row applies only when that choice gave none | Q-0695 |
 | `hover::stop_order` (from `orders`, the stop order) | a person's stop order only clears what S-0213 claim 8 clears; the hover keeps its heading point, throttle, hover speed and ρ, and stops at the heading point | Q-0696 |
 
+## Simulation (M6b: transports)
+
+S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Passengers`, `Size`, `SizeLimit`, `OpenTopped`, `Gunner`, `TurretCount`, `IsTrain`, `IsDropship`, `Carryall`, and the two transport sounds) are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0507.md](m6-claims/S-0507.md); the tests are in `crates/deterministic/sim/tests/claims_s0507.rs`, `claims_s0507_water.rs` and `crates/convert/src/sim_transport_tests.rs`.
+
+- **State.** Each object has a `TransportState` (`Object::transport`). On a transport it holds the passengers, position 1 first, and the kept count. On a passenger it holds the transport it rides. A vehicle transport's unload phase (table U) is the progress count of its *unload* behaviour.
+- **Who may board (claims 1, 2 and 4, F1).**
+  - `transport::answer` gives Accepts, Refuses or Neither.
+  - A vehicle transport counts sizes, with the load truncated after each addition (`quirks.transport_load_truncated`); an air transport counts heads.
+  - Neither is given to a candidate that is not allied, and to one at a building cell.
+- **Boarding (claims 3, 5 and 6).**
+  - `process_enter` runs the loading exchange each time *enter* is processed.
+  - Arrival (`walk`, `drive` and `hover` call `transport::arrival`) boards the unit at position 1 and takes it off the map.
+  - A closed transport's passengers leave the update order. An open-topped transport's passengers stay in it, follow its position (`transport::sync`) and take its target.
+- **Unloading a vehicle transport (claims 7 to 12, F2, F3).** `process_unload` runs the phases of table U:
+  1. settling, with a shore search on water;
+  2. the unloading-cell score, then the turn;
+  3. letting out from position 1, with a two-round exit search;
+  4. the kept passenger of a turret count, then *guard*.
+  
+  `may_unload` refuses water, bridges, decks, building cells and tunnel cells.
+- **Air transports (claim 13).** `process_air_unload` releases position 1 at its own cell once landed.
+- **Deaths and removal.** `combat::death` and `air` apply S-0312 claims 5, 12 and 16: the passengers die with an exploding or crashing carrier, or get out of a destroyed vehicle. `objects::remove` removes a removed transport's passengers with it.
+- **Hooks.**
+  - `combat::weapon` gives passengers their weapons (S-0308).
+  - `air::passengers` is `transport::count` (S-0501, and the S-0301 empty-carrier answer).
+  - `parasite::host_unloading` runs as a passenger is let out (S-0614 claim 12).
+  - Hover transports (S-0503) and ship transports (S-0504) use the same code.
+- **Seams.** These are named functions with doc comments:
+  - mind control (`mind_controlled`, `controls_objects`, `release_mind_control`; S-0601);
+  - the gattling spin (`reset_gattling_spin`, S-0609);
+  - tubes (`in_tube`);
+  - tank bunkers (`tank_bunker`, S-0508);
+  - the bomb mark (`bomb_marked`, the special-abilities specs);
+  - temporal beams (`temporal_hand_back`, S-0514).
+  - The paradrop of S-0522 is not built.
+- **Quirks.** `quirks.unload_facing_gap_no_wrap`, `quirks.unload_second_round_skips_rear`, `quirks.unload_failed_exit_gunner_handover` and `quirks.transport_load_truncated` are implemented, each on by default.
+- **Own AI.**
+  - The brain ferries idle army infantry in its own transports (`Brain::ferry`). It builds the cheapest suitable type if it has none, and needs an amphibious hover when the goal lies across water.
+  - It loads infantry by clicking the transport, drives to land near the goal, and unloads with the deploy click. It uses only orders, through `targeting::click` and `orders::issue`.
+  - The fixture adds TRUK (wheeled) and LIFT (amphibious hover), both for four with size limit 2, and `fixture::map_strait`. The test `ferries_infantry_across_a_strait` checks that infantry is let out on the far shore.
+- **Gate.** Each sim-gate duel asserts at least one load and one unload. It saves and loads at the first tick with a passenger aboard.
+- **Save format 20.** `Object::transport` is new state, and it is hashed.
+- **Not built.** Transport pips (S-0111 claims 9 to 12) need the pip-scale import and per-infantry pip colours. The boarding and leaving sounds are imported but not played.
+- **What play needs.** Data: a vehicle or aircraft type with `Passengers` above 0 and a `SizeLimit` at least the passengers' `Size`.
+
+  To load, a person selects infantry (or a vehicle) and clicks a friendly transport that shows the enter cursor (`targeting::click`, then `orders::issue`). The unit walks to the transport and boards it.
+
+  To unload, they select the transport and click it with the deploy cursor. A vehicle transport stops, turns its rear to the chosen cell and lets the passengers out one by one, last in first out.
+
+  There is no deploy cursor with no passengers. A vehicle transport also has none on water, or on a bridge, a deck or a tunnel cell.
+
+  An air transport lets its passengers out once it has landed.
+
+Provisional rules of M6b transports, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `transport::put_out` | an infantry unit takes the first free of the five positions, centre first; a vehicle goes to the centre of the serving cell; an air release keeps the transport's facing | Q-0700 |
+| `transport::shore` | the shore search is S-0212 claim 25's nearby-cell search from the transport's cell, for the wheel class in the normal zone, with no reach region | Q-0701 |
+| `transport::removing` | a transport removed without a death rule removes its passengers with it, nested passengers first | Q-0702 |
+| `transport::open_cell` | the occupant of claim 9's alliance test is the cell's infantry house | Q-0703 |
+| `transport::may_unload` | only cells of the tunnel land type refuse; there is no tunnel edge | Q-0704 |
+| `transport::process_air_unload` | an airborne dropship with no destination looks for the landing spot of S-0501 claim 41; otherwise an airborne air transport waits a standard delay while its flight approaches | Q-0705 |
+| `transport::process_unload` | the finished phase ends with the standard delay | Q-0706 |
+| `transport::escape` | the destroyed vehicle is not counted in its passengers' entry test; it is out of its cell's list while they get out | Q-0707 |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
