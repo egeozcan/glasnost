@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -122,20 +122,20 @@ confidence and proposed measurements remain those of the owning claims.
      outcomes, later outcomes too. It need not change the final stream state of the tick: swapping
      two fixed-length groups consumes the same total number of raw values. The consequence to
      test is the assignment of values to outcomes, not merely the tick's total draw count. The parts
-     that draw or can draw are rows 1 to 3 and 5 to 16. Each of them holds its place in the
+     that draw or can draw are rows 1 to 3, 5 to 12 and 14 to 16. Each of them holds its place in the
      original's sequence, so that whatever draws they take come in this order: the polling of map
      triggers (row 1), resource growth and spread (row 9), planted bombs (row 2),
      diving aircraft (row 10), teams (row 11), disc lasers (row 12), the weather storm (row 3),
-     radiation fields (row 13), the end of electromagnetic pulses (row 14), the turn pass (row 5),
+     the end of electromagnetic pulses (row 14), the turn pass (row 5),
      blast rings (row 15), crate respawns (row 16), the production lines (row 6), the houses (row 7)
      and the orders (row 8). Inside a part that holds several members (several teams, disc lasers,
-     radiation fields, houses), the members take their draws in the order the row states. Within a
+     houses), the members take their draws in the order the row states. Within a
      part, the spec of the topic owns which draws are taken; this spec owns only where the part
      stands. The teams and computer-player decisions describe the original only. Our AI uses
      normal orders under S-0213 and the glossary's *AI house* rule; this table does not require a
      replacement team system or require AI decisions to draw during row 11 or row 7.
      - Backing: `measurable` for the relative draw order of rows 1, 5 and 8 (scenario O13).
-       The remaining relative draw places, and the member orders within rows 9 to 16 and 7,
+       The remaining relative draw places, and the member orders within rows 9 to 12, 14 to 16 and 7,
        are `unmeasured` here, with the following specific limits. This does not mean that the
        permitted random-state recorder cannot check draw order. It supplies the raw values.
        Identifying which effect used them requires a phase-specific outcome and a complete draw
@@ -146,7 +146,7 @@ confidence and proposed measurements remain those of the owning claims.
        - Row 9: no scenario here aligns a resource growth or spread update with a second drawing
          part and predicts both complete draw groups. Resource timing and draws remain owned by
          S-0401; its isolated tests do not establish this cross-part order.
-       - Rows 10, 13 and 14: no drawing case is established here. Their places are precautionary
+       - Rows 10 and 14: no drawing case is established here. Their places are precautionary
          fidelity constraints, not claims that a draw occurs every tick or even occurs at all.
          A stream record with no draw cannot distinguish their positions.
        - Row 11 and the computer-decision draws in row 7: the original's team and strategy
@@ -163,7 +163,7 @@ confidence and proposed measurements remain those of the owning claims.
        rule pending a discriminating scenario; it is not reported as confirmed by O13.
      - Confidence: high for the sequence itself; medium that rows 12 and 15 take their draws only
        through the damage, animations and objects they create (not every path was traced); low
-       that rows 6, 10, 13 and 14 take draws in their own updates at all. None was found in their
+       that rows 6, 10 and 14 take draws in their own updates at all. None was found in their
        own update, but their work runs through paths that were not traced in full, so they keep
        the original's place.
    - **Row 1, the polling of map triggers, comes before the turn pass.** Row 1 is the per-tick raise
@@ -207,8 +207,19 @@ confidence and proposed measurements remain those of the owning claims.
    - **Rows 5 to 8.** The turn pass is row 5 (claims 2 to 6, 10 and 11). Claims 7 and 8 own the
      places of the production lines, the houses and the orders. After the last part of a tick the
      tick number grows by 1, unless the tick ends the game (S-0201, claim 1).
-   - **Rows 9 to 16.** These parts are placed only by the draw order above; apart from the disc
-     laser's, below, no other consequence of their places is stated here. The specs of their topics
+   - **Row 13, radiation maintenance.** Field updates take no scenario random draws
+     (S-0525 claim 12). Their place after the storm and before the turn pass matters instead
+     because a field made by a storm-killed object's death weapon updates in its creation tick,
+     and a decay step is already reflected in that tick's radiation hits. Hits happen in each
+     affected object's own turn in row 5, not in row 13; any damage-effect or death draws happen
+     there too (S-0525 claims 9, 11 and 12). A field made during the turn pass first updates
+     in the next tick (S-0525 claim 6). The member order remains most recently created first
+     for the cell-radiation sums of S-0525 claims 3 and 5.
+     - Backing: `measurable` (S-0525 scenarios RF3, RF5 part b, RF8 and RF10)
+     - Confidence: high for maintenance before hits and absence of draws; medium for the
+       same-tick-creation residue and within-turn hit consequences, as in S-0525
+   - **Rows 9 to 12 and 14 to 16.** These parts are placed only by the draw order above; apart
+     from the disc laser's, below, no other consequence of their places is stated here. The specs of their topics
      own what each one does. A disc laser
      (row 12) applies its damage in its own update, outside any object's turn. So, as in rows 2
      and 3, an object it destroys takes no turn in that tick, with the same exceptions, and its
@@ -661,7 +672,9 @@ Two parts with no such link may run in either order. Row numbers are labels. Row
 labels of revision 2, and rows 1 to 8 those of revision 5, so that other specs can keep citing them.
 Every two parts that take draws from the scenario random stream are linked, so their order is
 total (claim 1, draw order). Following the "Comes after" links, the drawing parts stand in the
-order 1, 9, 2, 10, 11, 12, 3, 13, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
+order 1, 9, 2, 10, 11, 12, 3, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
+Row 13 takes no draws; its links preserve radiation maintenance before the turn pass's hits
+and same-tick maintenance of fields made by storm deaths (S-0525 claims 6, 11 and 12).
 Claim 1 explicitly separates the measurable links from the unmeasured fidelity constraints.
 The table does not imply that all draw places have measurement scenarios. Row 11 and the
 computer-strategy work within row 7 describe the original only, not our AI's order interface.
@@ -676,10 +689,10 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 | 11 | Teams, one after another in the order of the list of teams (the specs of teams own both) | 10 | Draw order | Claim 1 |
 | 12 | Disc lasers, the most recently fired first; each applies its damage in its own update | 11 | An object a disc laser destroys takes no turn in this tick unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1 |
 | 3 | The weather storm's update, with the strikes of its storm bolts | 12 | An object a bolt destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part B |
-| 13 | Radiation fields, the most recently created first (the combat specs own them) | 3 | Draw order | Claim 1 |
-| 14 | The end of electromagnetic pulses whose time is up (the combat and superweapon specs own them) | 13 | Draw order | Claim 1 |
+| 13 | Radiation maintenance, the most recently created field first (S-0525 claims 5 and 6) | 3 | A storm-death field updates in its creation tick; decay is visible to this tick's hits. Maintenance takes no scenario draws | Claim 1; S-0525 scenarios RF3, RF5 part b and RF10 |
+| 14 | The end of electromagnetic pulses whose time is up (the combat and superweapon specs own them) | 3 | Draw order | Claim 1 |
 | 4 | The step of a chrono flash in force (S-0201, claim 11) | 1 | A chrono flash started in row 1 steps in the tick of its action; one started in the turn pass first steps in the next tick | Claim 1, scenario O6 part B |
-| 5 | Turn pass | 4, 14 | Objects act one after another in update order; their effects are immediate; draw order | Claims 2 to 6, 10, 11 |
+| 5 | Turn pass | 4, 13, 14 | Objects act one after another in update order; their effects are immediate; radiation hits and their effect draws occur in affected objects' own turns (S-0525 claims 9, 11 and 12); draw order | Claims 2 to 6, 10, 11; S-0525 scenario RF8 |
 | 15 | Blast rings (the superweapon specs own them) | 5 | Draw order | Claim 1 |
 | 16 | Crate respawns, in skirmish games with crates on (the crate rules own them) | 15 | Draw order | Claim 1 |
 | 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
@@ -1409,7 +1422,7 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   design rule. Confirm this resolution together with S-0202 claim 10 at hand-off. It does not
   resolve claim 1's separate row-6 versus row-7 draw comparison, for which no scenario here
   aligns a queued creation with an identified house-update draw.
-- Rows 6, 10, 13 and 14 keep the original's places only because they might take draws (claim 1).
+- Rows 6, 10 and 14 keep the original's places only because they might take draws (claim 1).
   If their owning specs show that they take none, their places can be released to the freedom of
   claim 1's last point. Likewise, if work listed there turns out to take draws, it needs a row.
 - The open-topped rule of claim 3 is traced for boarding and getting out. That nothing else takes
@@ -1438,7 +1451,7 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   freedom to place other once-per-tick work to work that takes no draws. Rows 9 to 16 are new. Some
   of them (teams, the decisions of computer houses inside row 7) belong to the original's computer
   player, which our engine replaces; those portions describe original scheduling only. Our AI
-  still acts through normal orders, not through those rows. Four rows (6, 10, 13 and 14) are
+  still acts through normal orders, not through those rows. Three rows (6, 10 and 14) are
   placed although no draw was found in their own updates, because their work was not traced
   through every path. The alternative is to release them until a draw is shown. Please confirm
   retaining the unmeasured fidelity constraints; O13 tests only rows 1, 5 and 8.
