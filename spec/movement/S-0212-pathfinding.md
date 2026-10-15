@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 37
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -528,7 +528,12 @@ Terms specific to this spec:
 
    A unit is heading into the cell one step from its own cell in the 8-direction of its current body
    facing if its current speed is not zero, and otherwise into the cell of the first step of its
-   stored path. A unit with zero speed and an empty stored path is heading nowhere. So a parked
+   stored path. For a hovering unit, this current-speed test means its double-precision
+   speed fraction ρ is nonzero, not that its hover speed or displacement is positive
+   (S-0503 claim 14). Even while turning with zero hover speed, nonzero ρ sends the
+   chain along the body facing, not the movement heading. With ρ = 0, the first stored
+   step supplies the direction, or none when the path is empty.
+   A unit with zero speed and an empty stored path is heading nowhere. So a parked
    unit, standing still with no stored path, ends the chain as an empty cell would (*b* = 1), while a
    unit that stands still but keeps a stored path passes the chain on to its next cell. For a
    further cell of the chain, the object is taken from the cell's deck when it is a bridge cell and
@@ -541,7 +546,9 @@ Terms specific to this spec:
    - Backing: `measurable` (scenario P13 for the values of T2, for the chain ending on an empty cell
      and for the chain ending on a parked unit, P2 for the absence of terrain costs, P1 for the
      whole). P23 tests the ten-cell cap, non-unit chain termination and bridge-layer
-     selection using scripted input and qualifying snapshots. P24 tests the closed-friendly-gate
+     selection using scripted input and qualifying snapshots. S-0503 scenario H11 tests
+     the hover's ρ-based heading choice separately from actual displacement.
+     P24 tests the closed-friendly-gate
      low base cost and trains' uniform treatment of stationary-friendly and enemy-obstacle
      outcomes. Exact gate cost and the other train outcome costs remain `unmeasured` individually:
      P24 separates the stated low-cost choices from the ordinary larger penalties but does not
@@ -1321,7 +1328,8 @@ Terms specific to this spec:
     path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
     computes no new path while its retry delay runs, with these exceptions: the immediate
     recomputation of claim 20 and immediate fresh searches of S-0207 claim 15
-    (driving locomotor) and S-0504 claim 9 (ship locomotor), the computation a follower car makes when its
+    (driving locomotor), S-0504 claim 9 (ship locomotor) and S-0503 claim 12
+    (hovering locomotor), the computation a follower car makes when its
     leader sends it after itself (claim 26), and the immediate new path of a walker that meets an
     obstacle (S-0209 claim 7, walk locomotor). The delay after a follower car's computation is
     claim 26's, not the fresh-search rule below: in particular a failed gate leaves the car's delay
@@ -1341,10 +1349,18 @@ Terms specific to this spec:
     For the hovering locomotor, a fresh search with no stored steps left waits for *R* to
     expire. Every such fresh search starts *R* again from its tick, whether it finds a path,
     fails in the search or fails at the gate. In particular, a successful fresh search does not
-    remove the delay as it does for the driving and ship locomotors. S-0207 claim 19 gives the waits
+    remove the delay as it does for the driving and ship locomotors. The immediate
+    first-check fresh searches of S-0503 claim 12 bypass a running timer but likewise
+    start the full *R* from the actual search tick on success, search failure or gate
+    failure. This covers first-check *cloaked blocker*, *blocked*, *friendly obstacle*,
+    *enemy obstacle* and *stationary friendly*. Later ordinary retries without a heading
+    point wait for that new timer, while another first-check refusal can bypass it again.
+    S-0207 claim 19 gives the waits
     this produces when a hovering unit discards its path while its target is in range.
     - Backing: `measurable` (S-0207 scenario D21 run 4 for the retained-destination hovering
-      retry wait after success; scenario P19 for its failed-search and failed-gate cases; scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
+      retry wait after success, scenario P19 for its failed-search and failed-gate cases,
+      P18's hover variant and S-0503 H9 for immediate-search timer restarts,
+      scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
       exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
       re-paths and C19 for the immediate new path). P25(a, b) additionally reads the retry
       timer immediately after a walker's failed search/gate and a follower car's computation.
@@ -1409,8 +1425,18 @@ Terms specific to this spec:
     locomotor, so in rows 2 and 3 such a unit is left without a destination, unless its house has
     just given it a new one (row 2, in the original only). Being within the close-enough distance
     of the destination makes no difference to any row.
+
+    For a hovering unit, stopping and clearing these points do not cancel a positive
+    travel distance already computed on an arrival tick. In either failed-search
+    distance case above, a surviving on-map hover can still take that cached final
+    step along its old movement heading (S-0503 claim 7), including after a first-check
+    refusal caused an immediate search that failed. Zeroing its hover speed and ρ
+    during that refusal does not recompute the cached distance. A resulting refusal
+    can suppress travel under S-0503 claims 7 and 12; search failure alone cannot.
+    This permits no later travel ticks once the move has ended.
     - Backing: `measurable` (P3, P4, P7 runs 5, 5b and 6, P8, P11; P19 for ship and hovering
-      units in row 3). `unmeasured` for destination retention and restart with locomotors other
+      units in row 3; S-0503 H3 and H9 for cached arrival-tick travel).
+      `unmeasured` for destination retention and restart with locomotors other
       than driving, ship and hovering: no scenario tests those locomotors after this failure,
       and the rule remains a low-confidence assumption (Open questions). The neutral/special
       distinction is our engine's scope rule from the glossary, not an additional oracle claim
@@ -3141,8 +3167,13 @@ Expected in both: an immediate mode-0 search and, when a path is found, a repeat
 that tick. Only a trace with a successful search followed by the intended repeated outcome
 qualifies to test destination retention: repeated *cloaked blocker* retains the destination
 and waits; repeated *blocked* clears it. Failed searches instead follow claim 23.
-A delayed first search, or the opposite destination result in a qualifying repeated check,
-falsifies the corresponding hover rule. Repeat S-0503 H9(e)'s moving-allied-blocker test
+Record the retry timer immediately after each actual immediate search: expect the full
+*R* from this tick on success, search failure and gate failure, even when an older timer
+was running. Include the obstacle and stationary-friendly first-check cases of S-0503
+claim 12. Later ordinary no-heading-point retries must wait for the new timer, unless
+another first-check refusal bypasses it. A delayed first search, a different timer value,
+or the opposite destination result in a qualifying repeated check falsifies the
+corresponding hover rule. Repeat S-0503 H9(e)'s moving-allied-blocker test
 with the same recorder: expect mode 1 while the blockage timer runs and mode 2 once it
 expires, each held by the retry delay. A different mode or timer boundary falsifies the
 moving-blocker extension. Report inconclusive for each subtest without a qualifying trace.
@@ -3170,6 +3201,14 @@ orders the mover to a cell on an isolated island in another reach region while i
 expired. Expected: no step, a gate failure, destination cleared, and *R* starting on that tick.
 Any step towards the island, a retained destination, or a different timer value falsifies
 this expected gate-failure result. The failed-gate timer specifically tests claim 21.
+For cached travel, add S-0503 H9's arrival-time failed-search runs in both distance
+cases of claim 23, including an immediate search after first-check refusal. Retain
+only traces with a positive distance computed before arrival and no subsequent refusal
+suppressing travel. Expected: clearing destination and heading point does not cancel
+that tick's F3–F4 travel of S-0503, despite speed fields being zeroed during refusal.
+No later travel occurs after the move ends. Suppression solely because the search
+failed, or later travel without a new move, falsifies this rule; no qualifying arrival
+is inconclusive.
 
 **P20. Deck steps over sloping ground (claim 10).** Use P4 K2's high bridge over dry
 clear ground, with the same unit and recorder. Named test maps change only the height and tile
