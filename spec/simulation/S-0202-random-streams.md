@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -652,8 +652,16 @@ original's recording modes are retained as deferred context, not implementation 
       choice of claim 10. Sound instances
       also use this stream for pitch, volume shift, conditional pre-delay, sample choices
       and play-order choices (S-0701 claims 13 and 14). Equal-ended ranged draws take
-      no raw value under claim 4; these are not a fixed raw count per sound. The complete
-      delayed-mode sound sequence remains unestablished in S-0701 claim 14.
+      no raw value under claim 4; these are not a fixed raw count per sound.
+      S-0701 claim 14 also owns the established partial delayed-mode choices:
+      fresh completion-delay requests and decay-candidate choices before attack/body
+      selection. Its complete audible sequence, preparation count, terminal wait
+      duration and full draw ordering remain explicitly deferred; the partial rules
+      imply neither a complete draw total nor a draw-free replacement.
+      Normal weapon reports instead reuse the creation-derived value without another
+      draw; spin sounds and occupant fire retain S-0701 claim 21's unsynchronised
+      choices. Claim 10 here and S-0701 claim 32 retain the report value's
+      persistence, save/restore and hash contract.
       The damage-feedback chance is R(0, 99) from this stream when a hit turns an object
       yellow and its type has a feedback list, even when its owner is not the local
       player (S-0701 claim 20). This chance is distinct from any subsequent response
@@ -680,13 +688,19 @@ original's recording modes are retained as deferred context, not implementation 
       departure).
 
     Our engine runs this stream from the game's seed (claim 8) with the same algorithm and lets
-    none of its draws reach game state. How it runs on the machines of a network game is for the
+    none of its draws reach game state. Game-side sound choices and per-instance playback
+    choices share this one unsynchronised stream, not separate generators (S-0701 claim 30).
+    Playback service times can change presentation choices without changing scenario-stream
+    state or game rules. How it runs on the machines of a network game is for the
     future multiplayer spec (network games are out of scope for now).
     - Backing: `measurable` (scenario R6 a) that no draw of this stream reaches the scenario random
       stream; `measurable` (R6 b) for voice responses and the choice of music track.
       Sound-instance pitch, volume shift, pre-delay, sample and play-order draws inherit
-      S-0701 claims 13/14's backing (E1) and confidence, including their unmeasured
-      complete delayed-mode sequence; the damage-feedback chance inherits claim 20's
+      S-0701 claims 13 and 14's backing (E1 and E3) and confidence for the explicitly
+      established choices only; the complete delayed-mode sequence remains outside
+      coverage, not an additional claim with backing here. The shared-stream engine
+      contract is S-0701 claim 30's. Report choices and the creation-derived value retain
+      S-0701 claims 21 and 32's backing and confidence; the damage-feedback chance inherits claim 20's
       high confidence and `measurable` backing (F1). The map-load use through S-0010's scenario V2: part A for the
       pattern's properties, part B for the draws themselves, with the random-state recorder's
       reading of the unsynchronised stream (Measurement scenarios); the random map seed through
