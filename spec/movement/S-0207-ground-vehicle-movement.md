@@ -2,11 +2,11 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356]
 supersedes: []
@@ -119,7 +119,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   the tick its track begins until the tick that track ends; it moves one cell on with the track
   target when a curve is chained (claim 8). A drive vehicle that stands still, turns in place
   before a step, waits (claim 15) or is between two tracks has no heading point. A vehicle with the
-  teleporting locomotor has none either (claim 20). The heading point of the ship, hovering and
+  teleporting locomotor has none either (claim 20). The ship locomotor has the same heading
+  point as the driving locomotor (S-0504 claim 1). The heading point of the hovering and
   other locomotors belongs to their specs (Open questions).
 - **Vehicle scatter centre cell.** The cell around which a vehicle that accepts a scatter request
   looks for its new destination (claim 16): the cell of its heading point when it has one, and
@@ -133,9 +134,11 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 - **Passive flag.** A vehicle-type field. It changes two rules (claims 8 and 10).
 - **Moving tick.** A tick in which the vehicle is on a track, or begins one, and is not prevented
   from moving (claims 6 and 12).
-- **Sinking.** A state of a killed vehicle: it is going down in water and stays in play (S-0312,
-  Terms). S-0312 (claim 10) gives the event that sets it at a killing hit; other events that set it
-  are in the Open questions. This spec only uses the state (claim 10, case 3).
+- **Sinking.** A vehicle is going down in water and stays in play (S-0312 Terms).
+  S-0312 claim 10 gives the condition at a killing hit; S-0614 claim 11 gives culling,
+  which starts sinking without a hit or health loss. Other possible sources remain in Open
+  questions. S-0504 claims 4 and 5 own descent and behaviour while sinking: the locomotor
+  is not processed, so claim 10's sinking case is never reached.
 - **Locomotor field, class identifier.** The type field that names a type's locomotor (Import
   mapping). Its value is a *class identifier*: 32 hexadecimal digits in five groups of 8, 4, 4, 4
   and 12 digits, joined by hyphens and enclosed in braces, with no spaces. Table T3 lists the eleven
@@ -295,9 +298,15 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
    in which the track begins are S-0206's (claim 12). Its budget
    is held at 0 while it turns (claim 3). Its speed fraction is kept, so a vehicle that stops to
    turn resumes at the fraction it had.
+
+   **Launching hold.** A driving vehicle that is launching (S-0301 Terms) does not begin
+   its next track. It waits between tracks with its destination kept until launching ends,
+   then resumes the ordinary step rules. A track already begun finishes before this hold
+   applies, as for a ship (S-0504 claim 3). Precedence against concurrent waits is not
+   established here.
    - Backing: `measurable` (scenarios D7 and D9; D7 run 3 for the speed fraction kept through the
-     turn)
-   - Confidence: high
+     turn; D26 for the launching hold)
+   - Confidence: high for turning and the ordinary launching hold
 
 7. **Choice of track.** At the start of a step, the current step *d* and the next step *e* choose the
    track (table T2):
@@ -395,7 +404,11 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 
 10. **Updating the speed fraction.** The speed fraction is updated once in each moving tick, and
     that tick's progress *s* (claim 2) is earned at the updated fraction. At some track boundaries
-    it is updated a second time (claim 12). Each update follows these rules:
+    it is updated a second time (claim 12). Sinking vehicles receive no locomotor processing
+    (S-0504 claim 5), so they neither progress nor update their speed fraction: case 3 below
+    is unreachable, not a rule for continued travel while sinking. The ship locomotor uses
+    the same speed-fraction rules (S-0504 claim 1), subject to its crush handling (S-0210 claim 9).
+    Each update follows these rules:
     - **Acceleration flag off:** *ρ* = clamp(*ρ*ₜ, 0, 1).
     - **Acceleration flag on, vehicle not passive.** Let *d*ₘ = ⌊*r*(*n*)⌋ with
       *n* = Δ*x*² + Δ*y*² + Δ*z*², the distance in leptons from the vehicle to its move destination
@@ -407,7 +420,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       |---|---|---|
       | 1. Crush slowdown | the vehicle is in the crush-slowdown state (S-0210 claim 9) | min(*ρ*ₜ, 0.2); the target fraction also takes this value |
       | 2. Braking | *d*ₘ < *D*ₛ | max(*ρ* − *V* × *η*, *F*₀.₃) |
-      | 3. Sinking | the vehicle is sinking | max(*ρ* − *V* × 0.0015ₛ, *F*₀.₁) |
+      | 3. Sinking (unreachable) | the vehicle is sinking | max(*ρ* − *V* × 0.0015ₛ, *F*₀.₁) |
       | 4. Accelerating | *ρ* < *ρ*ₜ | min(*ρ* + *a*, *ρ*ₜ) |
       | 5. Decelerating | *ρ* > *ρ*ₜ | max(*ρ* − *V* × *η*, *ρ*ₜ) |
       | 6. Steady | none of the above | *ρ* |
@@ -445,13 +458,13 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       makes the links (S-0009 claim 41), and S-0212 (claim 26) sends the cars after their leader.
     - Backing: `measurable` (scenarios D3, D4, D10, D13 and D14; D5 run 5 for case 5; D9 control 2
       for the passive rule; D14 control for a leader whose acceleration flag is off), except case
-      3, which is `unmeasured`: a sinking vehicle has been killed (S-0312 claim 10), and no setup is
-      known that keeps one driving a track while it sinks, so its fraction never reaches a
-      vehicle's progress in a run
+      3, which is `unmeasured`: locomotor suppression makes it unreachable. S-0504 N6
+      tests the absence of horizontal travel while sinking
     - Confidence: high for the acceleration-off rule, for cases 2, 4 and 5, including the raise
       by the braking floor, for the table square root in *d*ₘ and for the passive rule (no case
       applies, and a passive vehicle does not copy); medium for case 1 (the speed rule; when the
-      state begins and ends is S-0210's confidence), for case 3 and for car chains
+      state begins and ends is S-0210's confidence) and for car chains; high that case 3
+      is unreachable
 
     These rules hold on the tracks of this spec (T1 and T2). The factory exit track is
     S-0417 table T1; its speed-fraction rules are S-0417 claims 5 and 6. Other separate tracks
@@ -493,8 +506,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     A vehicle at rest has *ρ* = 0, so with the acceleration flag on its first tick from rest gives it
     *ρ* = clamp(min(*a*, *ρ*ₜ), 0, 1) and it earns trunc(*s*₂ × *ρ*), unless an earlier row of claim
     10's table applies. For example, within *D*ₛ of its destination the braking floor gives
-    *ρ* = *F*₀.₃ and trunc(*s*₂ × *F*₀.₃) (scenario D13), and a sinking vehicle farther away than
-    *D*ₛ gets *F*₀.₁.
+    *ρ* = *F*₀.₃ and trunc(*s*₂ × *F*₀.₃) (scenario D13). This does not apply while
+    sinking, when no movement update occurs (S-0504 claim 5).
 
     Consequences: a vehicle that is accelerating (row 4 of claim 10's table in both updates) gains
     2*a* in a tick in which it reaches a track target and begins its next track. A vehicle whose *s* is at or above
@@ -866,8 +879,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       behaviours left unchanged, and for the threat-point case and its draws (read; known senders
       are S-0215 claim 17 and S-0417 claims 4 and 13). Low for cases g and j. High for the vehicle
       scatter centre cell of a drive vehicle (the heading point was read wherever it is set and
-      cleared); medium for the tunnel exit; the heading point of the ship and hovering locomotors is
-      their specs'
+      cleared), including the ship equivalence of S-0504 claim 1. Medium for the tunnel exit.
+      The heading point of the hovering locomotor belongs to its spec
 
 ### Engine defaults of the speed-fraction fields
 
@@ -1015,8 +1028,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 
     - (a) **Taking a destination.** When the object is given a destination (its behaviour or an
       order sets one, S-0215), the locomotor takes it at once. It drops the destination and does
-      nothing, when the object is disabled by an electromagnetic pulse, is under a paralysing
-      effect, is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
+      nothing, when the object is disabled by an electromagnetic pulse, is *held*
+      (S-0614 Terms), is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
       **landing point** *L* at once (parts b and c). For a vehicle, the vehicle-present
       mark of the occupancy record (S-0209) moves at once from the cell of the object's old point
       to the cell of *L*. For a vehicle this reservation is in the **ground record**, even
@@ -1094,7 +1107,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       remains its target, but keeps a different target restored by the revert (S-0215 claim 10).
       Every projectile aimed at the jumping object loses its target, so a shot already in flight
       towards it misses (the same effect as becoming untargetable). A warp animation plays at the
-      old point, then the departure sound at the old point. The object is removed from its old
+      old point, then the departure sound at the old point. A parasite inside it exits before
+      the host leaves its old position, by S-0614 claims 12 and 13. The object is removed from its old
       cell's listing, takes position *L*, and is listed in *L*'s cell. On a high-bridge cell its
       cell layer is the bridge deck and its height is *H* + 416 leptons; elsewhere its cell layer
       is ground and its height is *H*. This includes an aircraft: it lands at terrain height,
@@ -1131,7 +1145,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       on infantry or aircraft. The respective movement and combat specs own those effects.
       Crate collection is governed by claim 13 and the crate specs. It stops moving and its
       destination is removed, so its behaviour falls back to rest (S-0215 claim 13). A second
-      warp animation plays at *L*. A parasite inside it is thrown out (the combat specs own how).
+      warp animation plays at *L*.
       Its type's departure and arrival sounds override the game-wide ones.
     - (f) **Phasing in.** At the jump the object starts *phasing in* (S-0214 Terms; *materialising*
       in S-0301) for *D* ticks, *D* from F9. An object whose type has the harvester flag of a
@@ -1303,6 +1317,18 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       collection, destination removal and the landing animation is `unmeasured`: D24
       establishes the arrival tick but isolates none of those comparisons
     - Confidence: medium
+
+### Wakes while driving
+
+23. **Driving wakes.** In each tick in which a drive vehicle is moving now and the tick number
+    is divisible by 10, it creates one instance of the game-wide wake animation at its own
+    position, provided it is off a bridge deck, its cell's land type is water, and that animation
+    is defined. Moving now means its body is turning, or it has a heading point and its current
+    speed is above zero. There is no underwater-type exclusion for driving wakes, unlike the
+    ship rule of S-0504 claim 2. Wake creation takes no random draw beyond the animation's
+    ordinary creation draws (S-0109 claim 3).
+    - Backing: `measurable` (D25)
+    - Confidence: high
 
 ## Formulas
 
@@ -1956,6 +1982,8 @@ its new destination from that tick.
 | `[AudioVisual]`, key `ConditionYellow` | yellow ratio (claim 9 e) | as in S-0108 | as in S-0108 |
 | country section, key `SpeedUnitsMult`; the country's matching keys for infantry and aircraft do not feed this spec | *κ*, for progress and the lead estimate (claims 2 and 18) | decimal (S-0003, claim 6), stored in single precision | keeps value; engine default 1.0 |
 | land-type sections | *M* | S-0211 | S-0211 |
+| `[General]`, key `Wake` | game-wide wake animation (claim 23) | animation type name | keeps value; engine default none |
+| vehicle section, key `Underwater` | underwater-type flag; does not suppress driving wakes (claim 23) | boolean | keeps value; engine default no |
 | infantry, vehicle and aircraft type sections, key `Locomotor` (building type sections read it too, without effect) | locomotor (claim 14, table T3) | class identifier: hexadecimal digits in groups of 8, 4, 4, 4 and 12, joined by hyphens, in braces, letters in either case; the value is read whole after trimming. A value of another form is ignored; an identifier not in T3 is treated as not given (departure, claim 14); both warn | keeps value in force; engine default the teleporting locomotor |
 
 The rows for the type speed, country factor and faster ability also feed the lead estimate
@@ -2956,6 +2984,28 @@ cell before *X*.
   removal and landing animation is `unmeasured`: this scenario does not supply a
   discriminating fixture or sufficiently resolved recording for those three comparisons.
 
+**D25. Driving wakes (claim 23).** Use a tiny flat map with water, a bank and a high bridge,
+stock data, director and mods off, at game speed index 2. Record tick numbers, positions,
+heading points, body turning and wake creation during three water crossings, turning at rest,
+and travel below the bridge. Repeat on land and, where accessible, on the deck. A named test
+map gives the same water-capable vehicle the driving locomotor, then repeats with only the
+underwater-type flag changed; a further named variant removes the game-wide wake animation.
+These variants are diagnostic map overrides, not stock measurements. Use the read-only recorder
+and frame capture; compare scenario-stream state with the animation draws of S-0109 claim 3.
+Expected: one wake on eligible tick numbers divisible by 10, including turning in place on water,
+none on land, on the deck or without an animation; changing the underwater flag alone does not
+suppress it. Any other cadence, exclusion or extra wake-specific draw falsifies claim 23.
+
+**D26. Driving launch hold (claim 6).** Repeat S-0504 N4 at game speed index 2, director and
+mods off, using its stock carrier and missile-vessel controls. In named diagnostic map variants,
+change only each vessel's locomotor to driving. Give a move order during launching, and separately
+initiate launching during travel. Record launching state, position, track endpoints and destination
+per tick for three launches of each kind. Expected: an existing track finishes, no new track begins
+while launching, the destination remains, and travel resumes when launching ends and the step
+is otherwise legal. Mid-track arrest, starting a track during launch, lost destination or failure to
+resume falsifies the hold. Use the read-only recorder and scripted orders; concurrent special waits
+are not covered by this scenario.
+
 ## Cross-spec changes to confirm
 
 - Q-0356: S-0209 claim 1 must extend its vehicle and aircraft lifecycle pointers to
@@ -3005,18 +3055,18 @@ cell before *X*.
   speed factor reaches a vehicle's speed. None does in the formula of claim 2. It is believed that no
   other rule of the original uses them, but this has not been searched exhaustively. This also bears
   on S-0006 open question 7.
-- Which events other than the killing hit of S-0312 (claim 10) set a vehicle sinking (Terms). A
-  reading (low confidence) points to three more: a vehicle of a type that is not naval arriving by
-  teleporting on a water cell that is neither a high-bridge cell nor a road; a unit landing on a
-  cell where it cannot exist; and a parasite releasing a ship it has killed. Each starts the
-  vehicle's destruction. S-0312 owns sinking as a state of destruction, so its next revision, or
-  the specs of those effects, should settle them; what a sinking vehicle does until it leaves play
-  is already an open question of S-0312.
+- Which further events set a vehicle sinking beyond the killing-hit condition of S-0312
+  claim 10 and the cull of S-0614 claim 11 (which delivers no hit and does not change health).
+  A reading (low confidence) points to a non-naval vehicle arriving by teleport on a water cell
+  that is neither a high-bridge cell nor a road, and a unit landing on a cell where it cannot
+  exist. Their exact conditions remain for the relevant movement specs to settle. Behaviour
+  once sinking is no longer open: S-0504 claims 4 and 5 own it.
 - Whether a game started with the capture-the-flag option on places flags that a vehicle can carry
   (scenario D15 checks this as its precondition).
 - The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
-- The heading point (Terms) of the ship, hovering and other locomotors, which decides a vehicle
-  scatter centre cell for such vehicles (claim 16), was not read; their specs should give it.
+- The heading point (Terms) of the hovering and other locomotors, which decides a vehicle
+  scatter centre cell for such vehicles (claim 16), remains for their specs. The ship case is
+  settled by S-0504 claim 1: it is the driving heading point.
 - Whether a live erasing-weapon lock can coexist with a teleporting locomotor jump (claim 20 e)
   is not established by a stock setup. The conditional exception follows S-0215 claim 10.
   reachability belongs to the erasing-weapon rules.
@@ -3043,10 +3093,6 @@ cell before *X*.
   facing's step direction. That case was not traced far enough to state it, and this spec does
   not describe it; the rule of F8 (top corner, not centre) is the one to reuse if a later
   revision does.
-- The ship locomotor's speed fraction is outside this spec, which covers only the driving
-  locomotor. S-0210 claim 9 assumes that the ship locomotor updates its speed fraction like
-  claim 10 here, as far as the crush slowdown is concerned; a spec of the ship locomotor should
-  state its own rule.
 - How an infantry or aircraft object whose type names the driving locomotor (claim 14) moves. No
   stock infantry or aircraft type names it, and this spec covers drive vehicles only (Terms). A
   reading (low confidence, not exercised) points to these differences from claims 2 to 13 and 15:
