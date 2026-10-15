@@ -213,7 +213,11 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     match scenario {
         Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, true),
         // The diagonal game ends before a launcher is sent; the straight
-        // and the naval duels fly both a rocket and an aircraft.
+        // duel flies both a rocket and an aircraft. Since S-0507 revision 4
+        // (eb0224c: the ferried infantry's course differs from about tick
+        // 10000) the naval game no longer reaches a launcher shot within the
+        // full run, and no fixture change kept both it and the naval
+        // skirmish tests, so the naval duel is not required to fly.
         Scenario::DuelDiagonal => {
             return duel(
                 &fixture::map_diagonal(),
@@ -223,7 +227,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
             );
         }
         Scenario::DuelNaval => {
-            return duel(&fixture::map_naval(), "synthetic-duel-naval", ticks, true);
+            return duel(&fixture::map_naval(), "synthetic-duel-naval", ticks, false);
         }
         _ => {}
     }
