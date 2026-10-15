@@ -2,11 +2,11 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0471]
 supersedes: []
@@ -68,12 +68,13 @@ S-0108 (Formulas F3).
    - Confidence: medium
 
 3. **When the health bar shows.** The health bar of an object, of any owner, is drawn while it is
-   selected, and while it is hovered. A hovered unit that is disguised to the local player shows a
-   health bar only as the disguise rules allow (the special-abilities specs). The health bar is drawn
-   at every health from full down to the last point.
-   - Backing: `measurable` (scenario OV3) for selection and hovering; the disguise case is a pointer
-     to the special-abilities specs, which will carry its backing
-   - Confidence: high for selection and hovering; low for the disguise case
+   selected, and while it is hovered. A hovered unit that *appears disguised* to the local player's
+   house (S-0516 claim 35) shows a health bar only when its disguise has a house, rather than none
+   (S-0516 claim 36). This restriction does not apply to a selected unit, or to a hovered unit that
+   does not appear disguised. It uses *appears disguised*, not whether the unit is drawn as its
+   disguise (S-0516 claim 37). The health bar is drawn at every health from full down to the last point.
+   - Backing: `measurable` (scenario OV3)
+   - Confidence: high
 
 4. **Filled segments.** A health bar has *n* segments (claims 6 and 7). For a full strength above 0,
    the number of filled segments is *f* = min(*n*, max(1, trunc(*h* × *n*))), with the product
@@ -368,16 +369,17 @@ S-0108 (Formulas F3).
     shows an insignia, whether or not it is selected and whoever owns it: veteran image frame 14, elite
     image frame 15, below 0 image frame 19, all from the pip sprite, as a centred image at (5, 2) from
     the anchor for infantry and (10, 6) for everything else. The insignia is not drawn while the unit
-    is disguised to the local player, and not while it is cloaked and hidden from the local player.
-    For vehicles, infantry and aircraft, a cloaked unit stays visible to the local player, insignia included, when:
-    - the local player owns it, or
-    - its cell is revealed by the local player's sensors (the special-abilities specs own cloaking
-      and sensors), or
-    - in a skirmish or multiplayer game, its owner and the local player's house are allied with each
-      other.
+    *appears disguised* to the local player's house (S-0516 claims 35–36), even if it is currently
+    drawn as its real type. Nor is it drawn when cloak presentation hides the object from that viewer
+    (S-0516 claim 28). A fully cloaked object remains visible, insignia included unless the disguise
+    restriction applies, when the local player owns it, senses its cell or is mutually allied with
+    its owner. Sensor coverage is S-0516 claims 21–23's, not shroud sight.
 
-    While such a unit is cloaking or uncloaking (between visible and cloaked), the insignia is drawn.
-    When a cloaked building hides its insignia is not established (Open questions).
+    A building at fade levels 11 to 15 uses that same fully cloaked presentation rule for its insignia,
+    even before its cloak state becomes fully cloaked. At fade levels 0 to 10 its insignia is not
+    suppressed by cloak. A fading vehicle, infantry unit or aircraft retains its insignia except in
+    the non-owner hidden band of S-0516 claim 28; disguise suppression still applies. These claims
+    cover skirmish only; campaigns and network games are out of scope.
     - Backing: `measurable` (scenario OV13)
     - Confidence: high for the image frames, bands and position; medium for the disguise and cloak cases
 
@@ -525,7 +527,7 @@ The same number can mean different pictures in the two.
 | Object state | Health bar | Pip scale | Insignia |
 |---|---|---|---|
 | selected | yes, with bracket (units) or corner brackets (buildings) | if claim 9 allows | if claim 18 allows |
-| hovered | yes, no bracket | if claim 9 allows | if claim 18 allows |
+| hovered | if claim 3 allows, no bracket | if claims 3 and 9 allow | if claim 18 allows |
 | neither | no | no | if claim 18 allows |
 
 Within one object, where they overlap, the selection marks and the health bar cover the insignia,
@@ -640,7 +642,13 @@ involved.
 - **OV3 (claims 3, 6).** A stock vehicle, infantry unit and aircraft of the player and of the computer
   player, each at several healths. Select and hover each. Expected: the segment rows of claim 6 at the
   displacements given (δ read from the type's field), the bracket only when selected, enemy bars on
-  hover. Falsified if any displacement or image frame differs.
+  hover. Falsified if any displacement or image frame differs. Also hover an enemy spy disguised
+  as infantry of the player's house and an enemy disguise-when-still vehicle disguised as terrain,
+  with neither inside the player's disguise-detector coverage. Expected: a bar on the spy, whose
+  disguise has a house, and none on the vehicle, whose disguise has none. Repeat after detector
+  coverage reaches the vehicle: expected its hover bar. Falsified by the opposite visibility.
+  Use game-speed index 2, director and mods off, screen capture and a read-only recorder of disguise
+  state and house; repeat each case three times.
 - **OV4 (claims 4, 5).** A test map gives one stock vehicle type a strength of 160 and sets the
   yellow and red ratios to 0.5 and 0.25 (exact in binary64), and gives a second stock vehicle type a
   strength of 170. The first vehicle is taken through healths 81, 80, 41 and 40. Expected: green,
@@ -773,12 +781,20 @@ involved.
   shown within sensor range. Then, in a skirmish with the computer player allied to the player, a
   cloaked allied naval unit away from the player's sensors: expected its insignia shown. And the own
   naval unit recorded every drawn frame while it cloaks and uncloaks: expected the insignia drawn
-  throughout. Last, a single-player test mission (not skirmish or multiplayer) in which a computer
-  house allied to the player owns a cloaked naval unit away from the player's sensors: expected its
-  insignia hidden. Falsified if any image frame or band differs, the own cloaked unit hides its insignia,
-  the cloaked enemy away from sensors shows it, the allied cloaked unit hides it in skirmish or
-  shows it in the single-player mission, or the insignia
-  vanishes during cloaking or uncloaking.
+  throughout for the imported stage count's non-hidden bands (S-0516 claim 28).
+  Add veteran buildings inside a test-map cloak field, owned by the player, a mutually allied house
+  and an enemy. Record fade level and insignia every tick, with and without player sensor coverage.
+  Expected: the enemy building without coverage loses its insignia at level 11 and regains it at
+  level 10 on uncloaking; the owned, mutually allied and sensed buildings retain it at all levels.
+  Also record a veteran disguised enemy vehicle during a fake blink that shows its real image
+  (S-0516 claim 39): while it still appears disguised, its insignia remains hidden. Once detector
+  coverage prevents it appearing disguised, the insignia shows. Use game-speed index 2, 800 × 600
+  pixels, director and mods off apart from the named test-map cloak-field and veterancy fixture,
+  tick-stamped screen capture and a read-only recorder; repeat these added sub-tests three times.
+  Falsified if any image frame or band differs, the own cloaked unit hides its insignia,
+  the cloaked enemy away from sensors shows it, the allied cloaked unit hides it in skirmish,
+  a building's threshold differs, or the insignia follows the disguise image rather than the
+  appears-disguised test.
 - **OV14 (claim 19).** A damaged own building being repaired, recorded per tick at game speeds 0, 3 and
   6. Expected: periods of 28, 7 and 4 ticks, image frames ⌊6 (*t* mod *p*)/(*p* − 1)⌋. Then the
   cell tested. The wrench is shaded (claim 2), so under a shroud piece it is black whatever the
@@ -814,9 +830,6 @@ involved.
 - Which corners of a building's box get selection brackets (claim 8) is not established.
 - Which picture each image-frame number holds in each pip sprite should be read from the stock sprites at
   measurement time; this spec fixes only the numbers.
-- How a disguised unit's health bar behaves on hover (claim 3) belongs to the special-abilities specs.
-- When a cloaked building's insignia is hidden from the local player (claim 18) is not established.
-  The rule given there is for vehicles, infantry and aircraft.
 - How the group number's text is aligned to its placement point, its font and the exact size of its
   border (claim 17) are not established; the colour is medium confidence.
 - The extra-information overlay that some units draw beside the pip scale is not covered, nor is the
