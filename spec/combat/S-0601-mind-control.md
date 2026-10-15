@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -39,7 +39,7 @@ specs consume. These claims cover skirmish only.
 - **What protection refuses:** S-0513 claim 27.
 - **The psionics immunity**, its defaults and its other consumers: S-0610 claim 1.
 - **Psychic domination itself** (the superweapon's area, its damage and which objects it reaches):
-  planned S-0612. This spec gives only the permanently controlled state it sets (claim 13).
+  S-0612 claims 13 and 14. This spec gives only the permanently controlled state it sets (claim 13).
 - **Boarding a transport:** S-0507 claims 4 and 6. **Garrisoning:** S-0508 claim 1.
 - **Erasing hits and the release of an attached attacker:** S-0514 claims 2 and 14.
 - **When a building is not in operation:** S-0405 claim 9.
@@ -268,7 +268,7 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
       building's own turn, as that claim says,
     - an erasing hit is delivered on the controller, even one refused by protection (S-0514
       claim 2),
-    - a drain begins on a controlling building (planned S-0608 owns draining),
+    - a drain link forms on a controlling building (S-0608 claim 5); a failed attempt releases nothing,
     - a trigger action changes the controller's house (campaign maps; out of scope for skirmish
       but stated for completeness).
 
@@ -315,7 +315,7 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
 
 ### Permanent control and the original owner
 
-13. **Permanently controlled.** Psychic domination (planned S-0612) can make an object
+13. **Permanently controlled.** Psychic domination (S-0612 claims 13 and 14) can make an object
     permanently controlled when all of these hold:
     - it is not a building,
     - its type does not have psionics immunity (S-0610 claim 1),
@@ -324,15 +324,18 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     - it is not in the air.
 
     When it does: a controlled object is first released by its controller (claim 9, with all its
-    effects), then it changes owner to the dominating house, becomes permanently controlled, and
-    gets the permanent control ring (claim 18). No original owner is recorded. The state is never
-    cleared for the object's lifetime.
+    effects), then it belongs to the dominating house, becomes permanently controlled, and
+    gets the permanent control ring (claim 18). If it already belongs to the dominating house,
+    there is no owner change and no change-of-owner consumer runs, but permanent control and the
+    ring still apply. S-0612 claim 14 owns `quirks.dominator_marks_own_objects` (default on, the
+    original). Off: an object already belonging to the dominating house is left unchanged.
+    No original owner is recorded. The state is never cleared for the object's lifetime.
     - A permanently controlled object is mind-controlled for every consumer: it fails the takeover
       test (claim 3) and is refused where S-0214 and S-0507 claim 4 refuse a mind-controlled
       object.
     - Being permanently controlled is not among the conditions above, so a later psychic
       domination by another house takes the object again and changes its owner to that house.
-    - Backing: `measurable` (MC10, including exclusion and repeat-domination variants)
+    - Backing: `measurable` (MC10, including exclusion, own-house and repeat-domination variants)
     - Confidence: high
 
 14. **The original-owner query.** For any object:
@@ -478,7 +481,7 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | free | takeover lands, test holds | controlled by *C*; owner = *C*'s house; original owner recorded (claim 6) |
 | free | takeover lands, test fails | free; tag events still raised (claim 5) |
 | controlled by *C* | *C* (capacity 1) takes another object | free, back to original owner (claim 7) |
-| controlled by *C* | *C* killed, destroyed, removed, not in operation, erasing hit, drain start | free, back to original owner (claims 9, 10) |
+| controlled by *C* | *C* killed, destroyed, removed, not in operation, erasing hit, drain link forms | free, back to original owner (claims 9, 10) |
 | controlled by *C* | *C* changes owner (not by trigger) | still controlled by *C*, owner unchanged (claim 11) |
 | controlled by *C* | victim boards a transport | free, back to original owner (S-0507 claim 6) |
 | controlled by *C* | accepted absorption | released by claim 9, then inside as its original owner's object (S-0605 claims 7 and 8) |
@@ -507,6 +510,9 @@ F3 uses exact integer additions and integer draws, with no rounding.
   its controller's list at its killing hit.
 - **`quirks.deploy_makes_control_permanent`** (claim 15; default on, the original). Off: the
   converted object keeps the control link.
+- **`quirks.dominator_marks_own_objects`** (S-0612 claim 14; claim 13 here). Default on:
+  eligible objects already belonging to the dominating house become permanently controlled with
+  a ring without an owner change. Off: those objects are left unchanged.
 - **Takeover weapon without a control record** (claim 4). The original fails when such a weapon
   of an object without a record is checked. Departure: the weapon is never legal, and the importer
   warns. A secondary takeover weapon is not malformed when the rookie primary already creates
@@ -662,8 +668,11 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   dominator reaches the permanently controlled tanks: they become C's and remain permanently
   controlled. Include a protected unit, a psionics-immune unit, a balloon-hovering unit, an
   airborne unit and a building beside an eligible ground tank. Expected: only the eligible
-  ground targets are transferred. A transfer of an excluded target, successful ordinary takeover
-  of a permanent victim, later return to B or refusal of the second domination falsifies claim 13.
+  ground targets are transferred. Also include an eligible ground tank already belonging to A
+  at A's sweep: its owner stays A, but it gains permanent control and a ring, with no owner-change
+  effects (S-0612 claim 14; scenario PD7 part b). A transfer of an excluded target, successful
+  ordinary takeover of a permanent victim, later return to B, refusal of the second domination,
+  or failure to mark the own-house tank falsifies claim 13 under the default quirk setting.
 - **MC11. Named test-map variants** (claims 1, 3, 5 to 7, 9 to 11, 17 and 18). Each variant changes
   only the properties named below on a copy of a stock type, and is removed after its run.
   These are data-only overrides, never executable changes. Record per-tick ownership, orders,
@@ -696,7 +705,9 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   - Make a Psychic Tower engineer-capturable. While it holds A's victims, have A's engineer
     capture it. Expected: victims retain the old controller house as current owner and keep
     their slots and original owner; destroying the tower afterwards returns them to A. On a
-    fresh tower with victims, begin a flying-disc drain: all victims return immediately.
+    fresh tower with victims, form a flying-disc drain link: all victims return immediately,
+    most recently taken first. Repeat with a failed drain attempt from beside the tower, using
+    S-0608 scenario D4 part b: no victim is released.
   - Give a freshly created unlimited controller a nonempty overload table whose first level has
     positive damage and a short invented positive frames value. Keep victim count in that level.
     Expected: first health loss at overload update 31, subsequent losses frames + 1 updates apart.
