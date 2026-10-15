@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -179,7 +179,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
 6. **Timed blackout length.** A timed blackout is started for a house with a length of *d* ticks:
    - when an enemy spy enters one of its buildings whose type's base output is above 0, *d* is the
      game-wide spy blackout length (Import mapping; the special-abilities specs own the entering),
-   - by a superweapon effect that the superweapon specs own.
+   - when the house launches a force shield, *d* is the force-shield blackout length
+     (S-0513 claim 30; that spec owns its import).
 
    Starting a blackout, whatever its length, makes the house due (claim 7). Let *t*₀ be the tick of
    the start.
@@ -205,7 +206,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
      negative value), for a start after the house update (no spy-entry input path is established
      at that point of a tick), and for replacement by a length of 0 or less (no skirmish setup
      with two different blackout lengths is established here; the spy length is game-wide and
-     superweapon lengths belong to future superweapon specs).
+     S-0513 scenario SW11 part c tests a single force-shield launch, not a zero-length
+     replacement). S-0513 scenario SW11 part c also makes the force-shield start and its
+     blackout length `measurable`.
    - Confidence: medium (the end at *t*₀ + *d* − 1, the restart, the length of 1), low (the exact
      tick of the first house update in which the output counts as 0, the live reading for *d* = 1,
      the replacement by a length of 0 or less)
@@ -405,13 +408,26 @@ house's own update in a tick, which comes after the turn pass and before orders 
     - Backing: `measurable` (scenario W9, parts a to d)
     - Confidence: medium
 
-15. **Superweapon charge.** A superweapon whose rules make it depend on power holds its charge
-    while its house has low power, as the house last worked out its power (claim 7), and resumes when
-    full power returns. The superweapon specs own the rule.
-    - Backing: `unmeasured` (the power-dependence import and applicable superweapon types are
-      not specified here or by an approved superweapon spec; W10 is a conditional proposal until
-      that setup exists).
-    - Confidence: low (which superweapons hold and how the remaining time is kept)
+15. **Superweapon charge.** S-0512 claims 4 and 6 own suspension and resumption. At its
+    availability checks, an ordinary building-granted, power-dependent superweapon that still
+    has a giving building is suspended when the house has low power (using claim 7's last totals)
+    or none of its giving buildings
+    is switched on. Normally its charge clock stops, keeping the remaining time, and resumes
+    from that time when the house has full power and at least one giving building is switched on.
+    Giving buildings are those of S-0512 claim 6; their being in operation (claim 8) is not the test.
+
+    Initial grants differ: under low power a building-granted record starts suspended even when
+    its type is not power-dependent. At full power a power-dependent record granted with all
+    giving buildings switched off starts charging until the next availability check. S-0512
+    claim 4 owns these exceptions and their quirk switch. S-0512 claims 10 and 14 own the
+    second-stage firing and charge-setting exceptions that can restart a clock while suspension
+    remains: time then runs through suspension, but clock completion cannot make the record
+    ready until suspension ends. Their quirk switch and the one-time and permanent-trigger grant
+    exceptions are owned by S-0512 claims 10, 12–14.
+    - Backing: `measurable` (W10; S-0512 scenarios X2 and X3 for suspension, remaining time
+      and initial grants; running-clock exceptions inherit S-0512 claims 10 and 14's backing)
+    - Confidence: high (ordinary suspension and initial grants); the running-clock exceptions
+      inherit S-0512 claims 10 and 14's confidence
 
 16. **The super-gap and its extra drain.** A building whose type's super-gap radius is not 0 (Import
     mapping) can be switched between its normal gap and its super-gap by its deploy behaviour. It
@@ -555,7 +571,7 @@ is implementer design, not a further game-state rule. No formula here prescribes
 | State | Event | Result |
 |---|---|---|
 | house power not due | building placed, created on the map, removed, destroyed or changes owner; a building's health changes (damage or repair, noticed in its own turn); building switched on or off; upgrade gained or lost; passenger enters or leaves an absorbing building; draining unit or erasing weapon attaches or lets go; timed blackout starts or ends; super-gap switched on or off (claim 7) | power due |
-| power due | the house's update | *O*, *D* worked out (claims 4, 5); production periods worked out again (claim 11); a change of low-power state starts or ends the charge hold of superweapons that depend on power (claim 15) |
+| power due | the house's update | *O*, *D* worked out (claims 4, 5); production periods worked out again (claim 11); a change of low-power state checks superweapon suspension and resumption under S-0512 claim 6, with claim 15's exceptions |
 | full power | worked out with *D* > 0 and *O* < *D* | low power: needs-power buildings with a base drain above 0 and fewer than 2 chargers stop being in operation (claim 8) |
 | low power | worked out with *O* ≥ *D* or *D* = 0 | full power: the power condition no longer prevents operation; claim 8's other conditions still apply |
 | in operation | the building's current behaviour becomes *selling* (sale's first processing) | not in operation at once (claim 8); output and drain unchanged (claim 3) |
@@ -893,19 +909,25 @@ switched off the house has full power (W3's second pair).
 - *Expected:* the map stays revealed in every part.
 - *Falsified if:* the shroud returns in any part.
 
-**W10: superweapon charge (claim 15; conditional proposal).**
-- *Setup:* once a superweapon spec supplies the power-dependence import: a named test file
-  defines a superweapon test type that it names as power-dependent, own and
-  charging, and in a second variant a test type with that dependence off; plants and a spare
-  consumer.
-- *Procedure:* (a) bring the house to low power for 600 ticks, then back to full power. (b) The same
-  with the second variant. Each is compared with a control run with no low-power period.
-- *Runs:* five per variant and per control.
-- *Observable:* the tick at which the superweapon becomes ready.
-- *Expected:* (a) it becomes ready 600 ticks (±2) later than in the control run; (b) it becomes
-  ready on the control run's tick.
-- *Falsified if:* (a) its delay relative to the control is outside 598 to 602 ticks; (b) its
-  readiness tick differs from the control.
+**W10: superweapon charge (claim 15; S-0512 claims 4 and 6).**
+- *Setup:* a named test file defines a power-dependent superweapon test type, own and charging,
+  and a second variant with that dependence off, using S-0512's import mapping. Both use an
+  ordinary running charge clock and have a giving building switched on, plants and a spare
+  consumer. Charge time is long enough that neither becomes ready during the test interval.
+  No trigger sets charge and no second-stage order restarts it.
+- *Procedure:* (a) after the grant under full power, bring the house to low power for 600 ticks,
+  then back to full power. (b) The same with the second variant; low power must start after the
+  grant, not at it. (c) Grant the second variant under low power, restoring full power 600 ticks
+  later. (d) With full house power throughout, switch off every giving building of the
+  power-dependent type for 600 ticks, then switch one on. Each is compared with a control
+  granted at the same tick with full power and its giving building on throughout.
+- *Runs:* five per part and per control.
+- *Observable:* remaining charge time during the interval and the tick of readiness.
+- *Expected:* (a), (c) and (d) keep their remaining time during suspension and become ready
+  600 ticks (±2) later than their controls; (b) keeps charging and becomes ready on its
+  control's tick. S-0512 X2 and X3 supply additional switch and initial-grant variants.
+- *Falsified if:* a suspended clock counts down, any delay in (a), (c) or (d) is outside
+  598 to 602 ticks, or (b)'s readiness tick differs from its control.
 
 **W11: super-gap (claim 16).**
 - *Setup:* only if input or a test map can give the deploy behaviour to a building: a gap test type
@@ -1020,8 +1042,6 @@ switched off the house has full power (W3's second pair).
   entry falls (W4 parts a and c vary it).
 - Whether a blackout started with a length of 0 or less during a running one occurs in any
   skirmish (claim 6); it needs a superweapon effect with its own length.
-- Which superweapons hold their charge under low power, and how the remaining time is kept
-  (claim 15; superweapon specs).
 - The full list of building functions that the in-operation test gates beyond those of claim 9.
 - What else a fourth or later upgrade of a wall tower changes in the original (S-0406 claim 12).
   This spec does not depend on it: power reads only the three positions (W12 confirms that a fourth
