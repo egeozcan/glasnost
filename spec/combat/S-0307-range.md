@@ -2,11 +2,11 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0172, Q-0230, Q-0237]
 supersedes: []
@@ -52,9 +52,10 @@ and *subject to walls*. In addition:
 - **Weapon range** *R*₀. The weapon's range field converted to leptons (claim 1).
 - **Effective range** *R*. *R*₀ after the bonuses and the replacement of claims 3 to 5 (F1). The
   elevation bonus of claim 6 is not part of *R*: it is added to the comparison limits of claim 9.
-- **Airborne, floor-bound.** An object on the map is *airborne* when its height above the
-  surface is at least 208 leptons (two height levels), and *floor-bound* otherwise. These are
-  the original's two tests used below; an object not on the map is neither.
+- **Airborne, floor-bound.** An ordinary object on the map is *airborne* when its height above
+  the surface is at least 208 leptons (two height levels), and *floor-bound* otherwise.
+  Aircraft use the in-the-air answer of S-0501 claim 18, including its two rocket-type
+  exceptions, as qualified in claim 26 below. An ordinary object not on the map is neither.
 - **Measured point** *M*_T. The point of the target that the range test measures to (claim 7). It
   is not S-0306's target point: it has no aim shift, and its height may be replaced.
 - **Source point** *S*. The point of the firer that the range test measures from (claim 8).
@@ -616,6 +617,20 @@ and *subject to walls*. In addition:
       `unmeasured` for exercising the shortcut under every other listed locomotor, since
       no normal-action fixture for each is established
     - Confidence: high for the common non-walking response; medium for reachable fixtures
+
+26. **Aircraft classification exceptions.** For an aircraft, *airborne* in this spec means
+    the in-the-air answer of S-0501 claim 18. Ordinary aircraft use the 208-lepton height
+    threshold in Terms. The two exceptions are the game-wide V3-rocket and dreadnought-missile
+    types: their locomotor's own in-the-air answer replaces that height test. For those two
+    types, *floor-bound* is the opposite of that answer, not a separate height comparison.
+    This qualification applies to the air bonus (claim 3), elevation eligibility (claim 6),
+    target-height replacement (claim 7) and source-height replacement (claim 8 b). It is not
+    S-0501's on-the-ground or in-flight test.
+    - Backing: `unmeasured` for the two exceptional types' range-test consequences: no
+      normal-action fixture is established here that isolates their range answers across
+      locomotor states from the other targeting and firing refusals. Ordinary height-test
+      backing remains RG2 and RG3 as cited by claims 3, 6 and 8
+    - Confidence: high
 
 ## Formulas
 
