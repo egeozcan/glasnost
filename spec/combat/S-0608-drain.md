@@ -2,7 +2,7 @@
 id: S-0608
 title: Drain (attaching to a building, draining its power and credits, and letting go)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -222,7 +222,7 @@ New terms:
     - the building is captured by the drainer's house, or by any other house that allies the
       drainer's house (S-0509),
     - the drainer is taken over by the building's house or by a house the building's house allies
-      (S-0601), or dominated likewise (S-0612).
+      (S-0601), or dominated likewise (S-0612 claim 14).
 
     An ownership change of either party to a house that does not ally the other party leaves the
     link in place: the building's new house then pays (claim 7), the drainer's new house receives,
