@@ -1171,6 +1171,29 @@ fn put_out(w: &mut World, t: ObjectId, p: ObjectId, at: Pos, facing: Facing, des
     passenger_left(w, t, p);
 }
 
+/// Passenger `p` of aircraft `t` is dropped (S-0522 claim 9): it is no
+/// longer a passenger and is put on the map at `at`, facing `facing`, in
+/// cell layer `layer`.
+pub(crate) fn drop_out(
+    w: &mut World,
+    t: ObjectId,
+    p: ObjectId,
+    at: Pos,
+    facing: Facing,
+    layer: Layer,
+) {
+    // spec: S-0507 claim 3 and S-0522 claim 9 (the first passenger leaves the passenger order)
+    if let Some(tb) = w.obj_mut(t) {
+        tb.transport.passengers.retain(|&x| x != p);
+    }
+    if let Some(ob) = w.obj_mut(p) {
+        ob.transport.riding = None;
+        ob.layer = layer;
+    }
+    crate::objects::place(w, p, at, facing);
+    passenger_left(w, t, p);
+}
+
 /// What follows a passenger leaving transport `t` (claims 10 and 13).
 fn passenger_left(w: &mut World, t: ObjectId, p: ObjectId) {
     // spec: S-0614 claim 12 (the host, a transport, lets a passenger out)

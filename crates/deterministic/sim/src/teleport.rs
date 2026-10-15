@@ -482,7 +482,7 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
 }
 
 /// S-0208 claim 19's entry check for an infantry landing on cell `c`.
-fn entry_clear(w: &World, id: ObjectId, c: CellXY, high: bool) -> bool {
+pub(crate) fn entry_clear(w: &World, id: ObjectId, c: CellXY, high: bool) -> bool {
     let level = w.cells.cell(c).map_or(0, |cell| i32::from(cell.level));
     // spec: S-0208 claim 19 and Edge cases (a cell at level −6 or lower is clear without a test; quirks.teleport_infantry_negative_level_entry)
     if w.rules().quirks.teleport_infantry_negative_level_entry && level <= NEGATIVE_ENTRY_LEVEL {

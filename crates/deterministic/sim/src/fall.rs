@@ -4,14 +4,17 @@
 //! An object dropped from a lost bridge deck (S-0511 claim 9), or a hovering
 //! vehicle that sinks (S-0503 claim 11), falls on each of its own updates:
 //! its height changes by its fall rate, the rate then follows F3's
-//! recurrence, and when it reaches the terrain the fall ends. One that lands
+//! recurrence, and when it reaches the terrain the fall ends. A dropped
+//! paratrooper (S-0522 claim 12) falls the same way, under the parachute
+//! recurrence while its parachute is attached, and lands on the bridge deck
+//! when it is on the deck layer. One that lands
 //! with the bomb mark and positive health takes the demolition hit.
 
 use glasnost_num::F64;
 use serde::{Deserialize, Serialize};
 
 use crate::combat::damage::{self, Hit};
-use crate::world::{ObjectId, World};
+use crate::world::{Layer, ObjectId, World};
 
 /// An object's falling state.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,6 +27,12 @@ pub struct FallState {
     /// The bomb mark (S-0312 Terms): a marked object is killed when it lands
     /// (S-0511 claim 10).
     pub bomb_mark: bool,
+    /// A parachute animation is attached (S-0522 claims 12 and 13): the
+    /// parachute recurrence of S-0511 F3 applies. The simulation keeps no
+    /// playback clock (S-0109 claim 28 seam), so the parachute stays
+    /// attached until the landing.
+    #[serde(default)]
+    pub chute: bool,
 }
 
 /// Whether `id` is falling.
@@ -61,22 +70,57 @@ pub fn next_rate(w: &World, v: i32) -> i32 {
     t.max(v_min)
 }
 
+/// The rate recurrence of S-0511 F3 while an animation is attached:
+/// *v*ₙ₊₁ = max(*v*ₙ − 1, the imported parachute maximum fall rate), in
+/// exact integers.
+pub fn next_chute_rate(w: &World, v: i32) -> i32 {
+    // spec: S-0511 F3 (the attached-animation recurrence: exact integer subtraction of 1 and the parachute floor)
+    v.saturating_sub(1)
+        .max(w.rules().combat.general.parachute_max_fall_rate)
+}
+
+/// Whether the parachute recurrence applies to `o` (S-0522 claim 12). The
+/// only animation our simulation attaches to an object is a paratrooper's
+/// parachute (claim 13), so both settings of
+/// `quirks.paratrooper_any_animation_slow_fall` (any attached animation, or
+/// the parachute only) select the same objects.
+fn slow(w: &World, o: &crate::world::Object) -> bool {
+    // spec: S-0522 Edge cases (quirks.paratrooper_any_animation_slow_fall: any attached animation, or only the parachute; the parachute is the only attachment, so both coincide)
+    let _ = w.rules().quirks.paratrooper_any_animation_slow_fall;
+    o.fall.chute
+}
+
+/// The surface a falling object lands on at its position (S-0522 claim 12):
+/// the bridge deck, 416 leptons above the terrain surface, for an object on
+/// the deck layer; the terrain surface otherwise.
+fn landing_surface(w: &World, o: &crate::world::Object) -> i32 {
+    let ground = w.surface_at(o.pos.x, o.pos.y);
+    if o.layer == Layer::Deck {
+        // spec: S-0522 claim 12 (the deck on a bridge cell); S-0207 Constants (416 leptons)
+        ground + crate::teleport::DECK_HEIGHT
+    } else {
+        ground
+    }
+}
+
 /// One falling update of `id` (S-0511 claim 10, F3), before its behaviour
 /// processing; while it still falls its locomotor does not advance.
 /// Returns whether it moved.
-///
-/// No animation is ever attached to an object in our simulation, so the
-/// parachute recurrence of F3 (S-0522 claim 12,
-/// `quirks.paratrooper_any_animation_slow_fall`) never applies here.
 pub fn turn(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let v = o.fall.rate;
     let pos = o.pos;
-    let next = next_rate(w, v);
+    // spec: S-0522 claim 12 (the parachute recurrence while an animation is attached, the no-parachute one otherwise)
+    let next = if slow(w, o) {
+        next_chute_rate(w, v)
+    } else {
+        next_rate(w, v)
+    };
     // spec: S-0511 F3 (h_{n+1} = h_n + v_n: the height changes by v before v is updated)
     let z = pos.z + v;
-    let ground = w.surface_at(pos.x, pos.y);
-    let landed = z - ground <= 0;
+    let ground = landing_surface(w, o);
+    // spec: S-0522 claim 12 and Constants (a height above the surface below 1 lepton after a fall step lands); S-0511 claim 10
+    let landed = z - ground < 1;
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.z = z;
         // spec: S-0511 F3 (v_{n+1} follows every update, the landing update included; the landing test follows the move)
@@ -85,6 +129,8 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0511 claim 10 (height above the terrain 0 or less after the move: height 0, the fall ends)
             ob.pos.z = ground;
             ob.fall.falling = false;
+            // spec: S-0522 claim 13 and State and ordering (a parachute still present on landing makes its current pass the last; the simulation keeps no playback clock, S-0109 claim 28, so it is detached here)
+            ob.fall.chute = false;
         }
     }
     if landed {

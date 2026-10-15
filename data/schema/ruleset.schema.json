@@ -7906,12 +7906,12 @@
           "default": true
         },
         "paradrop_fallback_point": {
-          "description": "An edge-cell selection without an acceptable candidate (a paradrop's arrival cell, an aircraft's retreat or spy-plane exit destination) uses the local point (1, ⌊width / 2⌋), with coordinates reversed from the north midpoint; off: (⌊width / 2⌋, 1). Implemented for the aircraft edge cells of S-0501 claim 34; paradrops are wave 2.",
+          "description": "An edge-cell selection without an acceptable candidate (a paradrop's arrival cell, an aircraft's retreat or spy-plane exit destination) uses the local point (1, ⌊width / 2⌋), with coordinates reversed from the north midpoint; off: (⌊width / 2⌋, 1). Implemented for the paradrop arrival cells and the aircraft edge cells of S-0501 claim 34.",
           "type": "boolean",
           "default": true
         },
         "paradrop_west_edge_start_row": {
-          "description": "A paradrop's west scan starts at local row r − 1, which is row −1 when r = 0; off: it starts at row r modulo 2·height and continues cyclically. The draw is unchanged. Implemented for the aircraft edge cells of S-0501 claim 34; paradrops are wave 2.",
+          "description": "A paradrop's west scan starts at local row r − 1, which is row −1 when r = 0; off: it starts at row r modulo 2·height and continues cyclically. The draw is unchanged. Implemented for the paradrop arrival cells and the aircraft edge cells of S-0501 claim 34.",
           "type": "boolean",
           "default": true
         },
@@ -7946,7 +7946,7 @@
           "default": true
         },
         "paratrooper_any_animation_slow_fall": {
-          "description": "A falling object uses the parachute fall recurrence while any animation is attached to it; off: only while the parachute animation is attached. Not implemented yet (wave 2).",
+          "description": "A falling object uses the parachute fall recurrence while any animation is attached to it; off: only while the parachute animation is attached. The parachute is the only animation our simulation attaches, so both settings behave alike.",
           "type": "boolean",
           "default": true
         },
@@ -9324,6 +9324,14 @@
           "format": "int32",
           "default": null
         },
+        "chute_sound": {
+          "description": "`[AudioVisual] ChuteSound`, the parachute sound (S-0522 claim 9);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "dig_sound": {
           "description": "`[AudioVisual] DigSound`, the nuclear siren (S-0513 claim 5); absent:\nnone.",
           "type": [
@@ -9507,6 +9515,23 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "parachute": {
+          "description": "`[General] Parachute`, the parachute animation type (S-0522 claim\n13); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "paradrop_radius": {
+          "description": "`[General] ParadropRadius`, leptons (S-0522 claims 6 and 7); absent:\n1024.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "sov_para_drop_inf": {
