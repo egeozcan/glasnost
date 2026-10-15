@@ -1,9 +1,9 @@
 ---
 id: Q-0620
 title: What are the ordinary placement rules when a parasite comes back on the map?
-status: open
+status: answered
 related: [S-0614, S-0209, S-0208]
-answered-by: []
+answered-by: [S-0614]
 ---
 
 ## Need

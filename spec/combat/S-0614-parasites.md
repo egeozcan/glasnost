@@ -2,13 +2,13 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0621, Q-0622, Q-0623]
+requests: [Q-0620, Q-0621, Q-0622, Q-0623]
 supersedes: []
 ---
 
@@ -18,8 +18,9 @@ supersedes: []
 
 Skirmish parasite attachment, drone and grappling deliveries, hold effects, release and experience.
 S-0315 claims 6 and 7 own suppression by damage and healing; network games and campaigns are
-out of scope. Claims 20 to 22 answer Q-0621 and Q-0623 and most of Q-0620; claim 18 answers
-Q-0622. The vehicle fallback after a failed position choice remains open.
+out of scope. Claims 15, 20 and 23 answer Q-0620. Claims 21 and 22 answer Q-0621 and Q-0623,
+and claim 18 answers Q-0622. S-0209 claims 4 and 5 already supply entry outcomes, and S-0208
+claim 3 already supplies standing-position choice; this spec establishes their placement uses.
 
 ## Terms
 
@@ -342,8 +343,8 @@ addition:
       ground record, even for a vehicle parasite. It consumes one ranged scenario choice over
       0 … 3 unless the vehicle-present or object-present refusal prevents it. An infantry
       parasite takes the resulting side position; no position means silent removal. A vehicle
-      uses the resulting point's cell centre when the choice succeeds. Its result when that
-      choice fails is not established (Open questions).
+      uses the resulting point's cell centre when the choice succeeds. Claim 23 specifies failed
+      choice, including a vehicle's erroneous placement far from the host, and bridge height.
     - Final placement skips claim 20's entry-legality check, so the parasite may share a cell
       with another unit. This does not bypass the fallback's earlier position choice. When the
       host-cell test passes, an infantry parasite instead uses the host's position class
@@ -351,7 +352,9 @@ addition:
       makes no second occupant-aware choice after a successful fallback choice.
     - It faces the host's facing. Its target and destination are cleared unless it has attack-move
       memory, and it falls back to rest. Unlike claim 13, it is **not** held afterwards.
-    - When no position is found, it is removed silently.
+    - Rejection by the fallback's land test, or failure of final forced placement, removes it
+      silently. Failed standing-position choice instead follows claim 23; it is not invariably
+      removal for a vehicle.
 
     This answers S-0315's open question on a host destroyed while it carries a parasite.
     - Backing: `measurable` (P5; P10 for fallback position choice and draws)
@@ -471,6 +474,44 @@ addition:
     - Backing: `measurable` (P13); `unmeasured` for an attached exceptional missile host:
       no normal-action fixture that latches onto one and releases it is established
     - Confidence: high
+
+23. **Host-loss fallback failure and surface.** This supplements claim 15, not the ordinary
+    return of claims 4 and 13. There is only one front-neighbour candidate; a refusal never
+    searches farther or retries with another standing position outside S-0208 claim 3's table.
+    Its outcomes are:
+
+    | Front-neighbour outcome | Infantry parasite | Vehicle parasite | Explicit ranged choices for placement |
+    |---|---|---|---|
+    | Restricted land rejected by claim 15 | removed silently | removed silently | none |
+    | Vehicle-present or object-present refusal under S-0208 claim 3 | removed silently | placed at world position (128, 128, 0) leptons | none |
+    | No free side position, with neither earlier refusal | removed silently | placed at world position (128, 128, 0) leptons | one over 0 … 3, even though no position was accepted |
+    | Side position accepted | that side position | centre of that position's cell | one over 0 … 3 |
+
+    The erroneous vehicle position is the centre of world cell (0, 0), outside the playable
+    map, not the centre of the map's local area or the front neighbour. The vehicle survives
+    release there, unattached, with no new hold and with claim 15's facing and order clearing.
+    It is not silently removed just because the standing-position choice failed. This is
+    `quirks.parasite_host_loss_failed_choice_origin` (default original); off, failed choice
+    removes a vehicle silently just as it does infantry. The choice and its draw are unchanged.
+
+    For an accepted point, let *z* be its terrain surface height, *h* the host cell's centre
+    terrain height, and *B* whether the chosen cell carries a high bridge. A released parasite
+    stands on the deck exactly when *B* and either the host stood on a high bridge or *z* < *h*.
+    In that case its world height is *z* + 416 leptons and it is marked on the bridge.
+    Otherwise it keeps *z* and is not marked on the bridge. The height comparison is exact
+    integer arithmetic without fractional rounding. This applies after vehicle centring and
+    before forced placement; it does not change the ground-record choice to a deck-record
+    choice. An empty choice supplies no bridge to rescue an infantry parasite from removal.
+    The failed-choice vehicle at world cell (0, 0) is not marked on a bridge.
+
+    Neither centring, surface selection nor final forced placement makes another placement
+    draw. S-0202 claim 4 owns raw draws for the one ranged choice, including rejection.
+    These are placement choices only, not any choices independently caused by the host's death
+    or later unit behaviour. S-0209 claims 1, 4 and 5 own occupancy and entry outcomes.
+    S-0208 claim 3 owns the shared position-choice refusal and side-preference rules.
+    - Backing: `measurable` (P10)
+    - Confidence: high (failed-choice position, survival versus removal, placement choices),
+      medium (accepted-point bridge-height consequences)
 
 ## Formulas
 
@@ -610,6 +651,10 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 - **`quirks.parasite_host_loss_bridge_test`** (default on): the fallback neighbour's restricted
   land passes when the host's cell has a bridge, even if that neighbour has none. *Fixed:* test
   the neighbour's bridge instead.
+- **`quirks.parasite_host_loss_failed_choice_origin`** (default original): claim 23's failed
+  standing-position choice sends a vehicle parasite to world position (128, 128, 0) leptons
+  outside the playable map instead of removing it. Off: remove silently, keeping the same
+  position-choice draw count. This is a gameplay bug, not merely a misplaced drawing.
 - **Re-selection on exit** is presentation; claim 19 fixes the original's display-only glitch
   without a quirk switch.
 - **A drone parasite on an infantry host** kills it at the first delivery whatever its health,
@@ -634,7 +679,7 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 | rules, any mobile section | `SuppressionThreshold` | integer | S-0315 | 0 |
 | rules, any mobile section | `ReselectIfLimboed` | boolean | the re-select flag: re-selection on exit (presentation) | no |
 | rules, mobile type section | `SpeedType`, `MovementZone`, `Locomotor` | class name, zone name, locomotor identifier | placement mobility (claim 20); interpretation owned by S-0211 claim 10 and S-0207 claim 14 | as S-0211 and S-0207 |
-| none | none | not imported | within-host-turn order (claim 18), carrier loss (claim 21), air threshold (claim 22), placement options (claims 15 and 20) | fixed engine behaviour; no separate INI setting |
+| none | none | not imported | within-host-turn order (claim 18), carrier loss (claim 21), air threshold (claim 22), placement options, failed-choice outcome and fallback surface (claims 15, 20 and 23) | fixed engine behaviour; no separate INI setting |
 | rules `[AudioVisual]` | `ConditionRed`, `ConditionYellow` | ratio (S-0003) | red and yellow ratios (F6) | as S-0111 |
 | rules `[General]` | `VeteranRatio`, `VeteranCap` | as S-0311 | F5 | as S-0311 |
 | rules `[CombatDamage]` | `SplashList` | list of animation names | the splash effects and the size *n* of claim 10 | as S-0303 |
@@ -772,7 +817,7 @@ For every part, a result different from its stated expectation falsifies that pa
   selection remembered only for infantry targets; our corrected presentation remembers every
   target. The correction itself is a design rule, not an oracle expectation.
 
-- **P10, returning placement (claims 4, 13, 15 and 20; Q-0620).** Use P3's failed latch,
+- **P10, returning placement (claims 4, 13, 15, 20 and 23; Q-0620).** Use P3's failed latch,
   first with a vehicle parasite and then a named infantry-parasite map variant. During flight
   occupy the original cell with an allied vehicle, enemy vehicle, allied infantry, enemy
   infantry, tree, wall and ordinary building, separately. Keep an adjacent cell clear. Record
@@ -786,10 +831,26 @@ For every part, a result different from its stated expectation falsifies that pa
   blockers separately: expected the ground-record entry test. Repeat sonic release to exercise
   claim 13's final placement separately from its earlier search. For host loss arrange a rejected
   host cell and a valid front neighbour, with zero, one and two occupied side positions, then
-  all three for infantry. Expected: ground-record centre-class choice before forced placement,
-  one draw when not flag-refused, vehicle centre after a successful choice, infantry side
-  position or removal when no position is available. The all-three-taken vehicle case is
-  exploratory, not an established expectation; record it to resolve the remaining question.
+  all three for both kinds. Also repeat with a vehicle-present refusal and an object-present
+  refusal, using a non-traversable object, and with restricted land rejected before choice.
+  Expected: ground-record centre-class choice before forced placement and claim 23's table.
+  All three side positions taken consumes one ranged choice; the two flag refusals consume
+  none. Infantry is removed in all three failed-choice cases, but the vehicle survives at
+  world position (128, 128, 0) leptons, unmarked on a bridge, not at the front neighbour or
+  another nearby cell. Record the parasite's actual position and existence immediately during
+  release, before its next behaviour turn; lack of a visible unit in the local area alone
+  cannot distinguish this outcome from removal. Restricted-land rejection instead removes
+  either kind without a placement choice. Any differing fate, point or placement-choice
+  count falsifies the corresponding claim. No extra placement draw follows a successful choice.
+  For accepted fallback points compare a host on and off a high bridge, a chosen cell with
+  and without a high bridge, and chosen terrain heights below, equal to and above the host
+  cell's centre terrain height where a map permits each case. Record world height and bridge
+  mark as well as ground/deck standing-position marks. Expected: claim 23's surface rule,
+  independent of the ground-record choice. Use named map variants where needed to make
+  infantry parasites or hosts latchable, but do not alter placement or random behaviour.
+  Run each arrangement three times with exact recorded seeds and both kinds of parasite.
+  The common recorder and director-off settings apply. The recorder must include positions
+  outside the playable map and stream state around release, not only visible units.
 - **P11, loss of the carrier (claim 21; Q-0621).** A named map variant gives a drone parasite
   an inaccurate non-steering projectile and a distant moving enemy at a legal map border.
   Keep its firing cell and neighbours clear. Record projectile position, detonation, parasite
@@ -826,10 +887,6 @@ For every part, a result different from its stated expectation falsifies that pa
   rejection. Any different classification falsifies claim 22.
 
 ## Open questions
-
-- Q-0620: a vehicle parasite's host-loss fallback when occupant-aware position choice supplies
-  no point. Successful choice gives the cell centre, but the failed-choice conversion is not
-  safely specified. P10 includes an exploratory run.
 
 - Whether creating the spark effect, the delivery animation, the wakes or the splash animations draws
   from the scenario random stream besides the draws listed in claims 9 and 10.
