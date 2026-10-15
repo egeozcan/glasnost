@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -277,10 +277,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   explosive-charges ability (row I16) and the crusher ability (value *k* of table V); what each
   ability does beyond those tests is S-0311's claim 4 (explosive charges: row I16 here, and
   crusher: S-0210 and table V here).
-- **Mind-controlled.** An object that is currently under the *mind control* of S-0215: held by a
-  controlling object, which took it over and keeps it while the control lasts. The combat topic
-  owns mind control. Whether a permanent takeover that leaves no controlling object counts is not
-  settled (low; Open questions).
+- **Mind-controlled.** As defined in S-0601 Terms: either *controlled* by a controlling object
+  or *permanently controlled* without one. Permanent control counts for these input rules
+  (S-0601 claim 13).
 
 ## Behaviour
 
@@ -2730,9 +2729,6 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   (medium).
 - Whether a skirmish can turn fog of war on, which rows IC2, IC3 and the fog parts of rows GC9, VC2
   and BC2 depend on.
-- Whether a permanent takeover that leaves no controlling object makes an object
-  *mind-controlled* in the sense of Terms (it matters for packing up a construction yard and for
-  deploying into one).
 - Whether a skirmish with stock data can produce an active ion storm, which the zone rule of
   claim 11 depends on.
 - The step of an underground unit's height from tick to tick, which decides how closely
