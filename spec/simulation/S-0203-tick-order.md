@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -122,9 +122,9 @@ confidence and proposed measurements remain those of the owning claims.
      outcomes, later outcomes too. It need not change the final stream state of the tick: swapping
      two fixed-length groups consumes the same total number of raw values. The consequence to
      test is the assignment of values to outcomes, not merely the tick's total draw count. The parts
-     that draw or can draw are rows 1 to 3, 5 to 12 and 14 to 16. Each of them holds its place in the
+     that draw or can draw are rows 1, 3, 5 to 12 and 14 to 16. Each of them holds its place in the
      original's sequence, so that whatever draws they take come in this order: the polling of map
-     triggers (row 1), resource growth and spread (row 9), planted bombs (row 2),
+     triggers (row 1), resource growth and spread (row 9),
      diving aircraft (row 10), teams (row 11), disc lasers (row 12), the weather storm (row 3),
      the end of electromagnetic pulses (row 14), the turn pass (row 5),
      blast rings (row 15), crate respawns (row 16), the production lines (row 6), the houses (row 7)
@@ -140,9 +140,10 @@ confidence and proposed measurements remain those of the owning claims.
        permitted random-state recorder cannot check draw order. It supplies the raw values.
        Identifying which effect used them requires a phase-specific outcome and a complete draw
        description, as O13 demonstrates.
-       - Rows 2 and 3: O10 times the deaths but does not identify the bomb's or storm's complete
-         animation and damage draw groups. It therefore tests neither their draw order relative
-         to each other nor their places relative to resource work and disc lasers.
+       - Row 3: O10 times the storm deaths but does not identify the storm's complete
+         animation and damage draw groups. It therefore does not test its draw place relative
+         to resource work and disc lasers. Timed planted-bomb detonations instead belong to
+         their carriers' turns in row 5, not row 2.
        - Row 9: no scenario here aligns a resource growth or spread update with a second drawing
          part and predicts both complete draw groups. Resource timing and draws remain owned by
          S-0401; its isolated tests do not establish this cross-part order.
@@ -172,16 +173,20 @@ confidence and proposed measurements remain those of the owning claims.
      object takes its turn in that tick.
      - Backing: `measurable` (scenario O6, part A)
      - Confidence: high
-   - **Row 2, the detonation of planted bombs whose countdown ends, comes before the turn pass.**
-     An object that a planted bomb destroys in tick *n* takes no turn in tick *n*, unless S-0312
-     keeps it in play after its death (claim 6: a sinking or crashing vehicle, an exploding or sold
-     building). In particular it does not fire in tick *n*, even if its weapon is ready then.
-     Because it leaves play while the
-     turn pass is not running, its removal costs no other object a turn (claim 10): the object
-     directly after it in the update order takes its turn in tick *n* as usual.
-     - Backing: `measurable` (scenario O10, part A: the carrier's silence rules out a detonation in
-       a later object's turn, such as the planter's; the observer's turn rules out a detonation in
-       the carrier's own turn)
+   - **Row 2 is planted-bomb maintenance, not detonation.** It drops bombs without a carrier,
+     maintains their ticking sounds and refreshes visibility every 46 ticks, with the
+     planting qualification of S-0519 claim 10. It takes no scenario random draws.
+     A timed bomb instead detonates during its on-map carrier's own turn in row 5
+     (S-0519 claim 4). Earlier objects have already acted, and an opportunity shot by the
+     carrier can precede detonation. A later object killed and removed by the explosion
+     takes no turn that tick. Removal of the carrier or an earlier object is a counting
+     removal and costs a later object its turn under claim 10; removing only an object
+     after the carrier does not. Claim 6's retained-death exceptions still apply.
+     Detonations caused by death or an explicit order retain the timing of their cause
+     (S-0312 claim 7; S-0519 claim 9), not a shared bomb-detonation pass.
+     - Backing: `measurable` (scenario O10 part A; S-0519 scenarios T4, T5 and T11).
+       The absence of maintenance draws is `unmeasured` here: these scenarios do not
+       isolate complete sound and visibility maintenance paths against a draw probe.
      - Confidence: high
    - **Row 17, shared kamikaze re-orders, comes after row 2 and before row 10.**
      S-0506 claim 26 owns the shared cycle and its deadlines. Its due ammunition, target
@@ -190,13 +195,15 @@ confidence and proposed measurements remain those of the owning claims.
      The assignment itself takes no scenario random draws; later aircraft behaviour processing
      and firing keep their ordinary draws and gates. This is not the carrier-slot ordering
      of S-0501 claim 35.
-     - Backing: `measurable` (S-0506 scenario R21 for the pre-turn boundary, a planted-bomb
-       release before the cycle where reachable, and absence of immediate assignment draws)
+     - Backing: `measurable` (S-0506 scenario R21 for the pre-turn boundary and absence
+       of immediate assignment draws). A timer-driven planted-bomb release is during
+       the turn pass, too late for this tick's shared cycle.
      - Confidence: high
    - **Row 3, the weather storm's update, with the strikes of its storm bolts, comes before the turn
-     pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*, with the
-     same exceptions as in row 2, and, as in row 2, its removal costs no other object a turn.
-     - Backing: `measurable` (scenario O10, part B, in the same two ways as part A)
+     pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*,
+     unless claim 6 keeps it in play after its death. Its removal is outside the turn pass
+     and costs no other object a turn (claim 10).
+     - Backing: `measurable` (scenario O10, part B)
      - Confidence: high
    - **Row 4, the step of a chrono flash in force, comes after row 1 and before the turn pass.** The
      step that a chrono flash takes in a tick (S-0201, claim 11) is part of row 4. So a chrono flash
@@ -221,8 +228,8 @@ confidence and proposed measurements remain those of the owning claims.
    - **Rows 9 to 12 and 14 to 16.** These parts are placed only by the draw order above; apart
      from the disc laser's, below, no other consequence of their places is stated here. The specs of their topics
      own what each one does. A disc laser
-     (row 12) applies its damage in its own update, outside any object's turn. So, as in rows 2
-     and 3, an object it destroys takes no turn in that tick, with the same exceptions, and its
+     (row 12) applies its damage in its own update, outside any object's turn. So, as in row 3,
+     an object it destroys takes no turn in that tick, with claim 6's exceptions, and its
      removal costs no object a turn (claim 10).
      - Backing: `unmeasured` for the disc laser. Which weapons fire one, and in which tick its
        damage falls after firing, is the combat specs' to establish, so no setup can yet time it.
@@ -375,14 +382,19 @@ confidence and proposed measurements remain those of the owning claims.
      removal for claim 10, and it costs a turn only under claim 10's condition: during the turn
      pass, when the vehicle is the current object or stands before it. The exceptions, owned by
      S-0312:
-     - a vehicle that sinks keeps 1 health point and stays in play (S-0312 claim 10), and the
-       naval specs own when it leaves,
+     - ordinary killing-hit sinking can retain 1 health point (S-0312 claim 10), but
+       sinking does not always mean 1 health point: a non-crashable vehicle already
+       sinking can remain in play at 0 health after another killing hit when the ordinary
+       sinking conditions fail (S-0312 claims 15 and 32). The naval specs own descent
+       and completion. Death-image-frame types retain S-0312's unresolved separate path,
      - a vehicle whose type can crash and which is above the terrain when it is destroyed starts
        to crash and stays in play until it hits the ground (S-0312 claims 15 and 16).
+       If it cannot start a crash, it leaves play immediately even when already sinking
+       (S-0312 claims 15 and 32).
 
      When such a vehicle does leave play, that is a removal for claim 10 like any other.
      - Backing: `measurable` (scenario O1; scenario O8, variant a, lethal against non-lethal) for
-       the rule; for the exceptions, S-0312's backing (its scenarios D8 and D11)
+       the rule; for the exceptions, S-0312's backing (its scenarios D8, D11 and D23)
      - Confidence: high for the rule; for the exceptions, S-0312's confidence
    - **(b) Buildings.** As a rule, a building whose damage destroys it leaves play like a vehicle,
      at the moment that damage is applied, at the end of its death effects, and that removal is a
@@ -672,8 +684,9 @@ Two parts with no such link may run in either order. Row numbers are labels. Row
 labels of revision 2, and rows 1 to 8 those of revision 5, so that other specs can keep citing them.
 Every two parts that take draws from the scenario random stream are linked, so their order is
 total (claim 1, draw order). Following the "Comes after" links, the drawing parts stand in the
-order 1, 9, 2, 10, 11, 12, 3, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
-Row 13 takes no draws; its links preserve radiation maintenance before the turn pass's hits
+order 1, 9, 10, 11, 12, 3, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
+Row 2 takes no scenario draws; timed bomb damage and its effects belong to the carrier's
+turn in row 5 (S-0519 claim 4). Row 13 takes no draws; its links preserve radiation maintenance before the turn pass's hits
 and same-tick maintenance of fields made by storm deaths (S-0525 claims 6, 11 and 12).
 Claim 1 explicitly separates the measurable links from the unmeasured fidelity constraints.
 The table does not imply that all draw places have measurement scenarios. Row 11 and the
@@ -683,7 +696,7 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 |---|---|---|---|---|
 | 1 | Polling of map triggers: the per-tick raise of every polled tag (S-0011, claim 6) | (start of the tick) | A trigger action set off here takes effect before any object takes its turn in this tick; draw order | Claim 1, scenario O6 part A |
 | 9 | Growth and spread of resources, growth first (the resource specs own both) | 1 | Draw order | Claim 1 |
-| 2 | Detonation of planted bombs whose countdown ends | 9 | An object a bomb destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part A |
+| 2 | Planted-bomb maintenance: remove carrierless bombs, maintain ticking sounds and refresh visibility (S-0519 claim 10) | 9 | Sound and due visibility updates precede the turn pass and orders. No timed detonations or scenario draws occur here; carrier-turn detonations and counting removals belong to row 5 | Claim 1; S-0519 scenario T11 |
 | 17 | Shared kamikaze re-orders, in enrollment order (S-0506 claim 26) | 2 | Due ammunition, target and queued attack changes are available to same-tick aircraft turns; releases during spawner turns miss this tick's cycle. Assignment takes no scenario draws | Claim 1; S-0506 scenario R21 |
 | 10 | Steering of aircraft that dive into their target (the aircraft specs own it) | 17 | Draw order | Claim 1 |
 | 11 | Teams, one after another in the order of the list of teams (the specs of teams own both) | 10 | Draw order | Claim 1 |
@@ -692,9 +705,9 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 | 13 | Radiation maintenance, the most recently created field first (S-0525 claims 5 and 6) | 3 | A storm-death field updates in its creation tick; decay is visible to this tick's hits. Maintenance takes no scenario draws | Claim 1; S-0525 scenarios RF3, RF5 part b and RF10 |
 | 14 | The end of electromagnetic pulses whose time is up (the combat and superweapon specs own them) | 3 | Draw order | Claim 1 |
 | 4 | The step of a chrono flash in force (S-0201, claim 11) | 1 | A chrono flash started in row 1 steps in the tick of its action; one started in the turn pass first steps in the next tick | Claim 1, scenario O6 part B |
-| 5 | Turn pass | 4, 13, 14 | Objects act one after another in update order; their effects are immediate; radiation hits and their effect draws occur in affected objects' own turns (S-0525 claims 9, 11 and 12); draw order | Claims 2 to 6, 10, 11; S-0525 scenario RF8 |
+| 5 | Turn pass | 4, 13, 14 | Objects act one after another in update order; their effects are immediate. Timed bombs detonate in carriers' turns, with counting-removal skips under claim 10 (S-0519 claim 4). Radiation hits and their effect draws occur in affected objects' own turns (S-0525 claims 9, 11 and 12); draw order | Claims 1 to 6, 10, 11; O10 part A; S-0525 scenario RF8 |
 | 15 | Blast rings (the superweapon specs own them) | 5 | Draw order | Claim 1 |
-| 16 | Crate respawns, in skirmish games with crates on (the crate rules own them) | 15 | Draw order | Claim 1 |
+| 16 | Crate respawns, in skirmish games with crates on (S-0520 claim 4) | 15 | Draw order | Claim 1 |
 | 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
 | 7 | Houses, one after another in house order; final-tick results committed at this part's start (S-0414 claim 16) | 6 | A house's tag raise and defeat test see the turn pass; later houses' defeats are not yet known to an earlier end test. Assigned-tag raises see own surrender and defeat effects; due tech-tree/sidebar work sees tag actions, but completed ordinary power/radar work does not (S-0414 claims 16 and 18). Defeated houses keep raises; cleanup-removed houses have no update. Draw order | Claim 8, scenario O7 part B; S-0414 scenarios V7, V11, V12, V13 and V15 |
 | 8 | Orders given in this tick's cycle | 7 | Objects act on the orders from the next tick; a hold order does not stop a progress step of this tick; draw order | Claims 7 and 8, scenarios O2 and O7 part C |
@@ -752,9 +765,11 @@ whose timing S-0402 owns; they do not change claim 12's precedence:
 
 **Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
 procedure, sub-tick observables and falsifiers for same-tick aircraft access to the assigned
-orders, exclusion of turn-pass releases and zero scenario draws during assignment. Its
-planted-bomb variant tests enrollment before the shared cycle where reachable. End-of-tick
-samples alone do not establish the boundary; an unresolved sub-tick comparison is inconclusive.
+orders, exclusion of turn-pass releases and zero scenario draws during assignment.
+A timer-driven planted-bomb release belongs on the excluded, turn-pass side of this
+comparison, not before the cycle. A pre-cycle release fixture would need a distinct
+cause before row 17, not the timed-bomb countdown. End-of-tick samples alone do not
+establish the boundary; an unresolved sub-tick comparison is inconclusive.
 
 **Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
 purpose-made maps, at game speed index 6, with director and mods off except the named test data.
@@ -1065,7 +1080,7 @@ scenarios' timing expectations use the stated index.
   does in the base scenario. That means the terrain object stands between W and B, so that W's
   removal costs the terrain object its turn instead of B.
 
-**Scenario O10: planted bombs and storm bolts destroy before the turn pass (claim 1, rows 2 and
+**Scenario O10: carrier-turn planted bombs versus pre-turn storm bolts (claim 1, rows 5 and
 3).**
 - *Common part:* a flat test map with no aircraft and no terrain entries.
   - *V,* the destroyed object: a computer test vehicle, the last entry in the map's vehicle
@@ -1097,14 +1112,19 @@ scenarios' timing expectations use the stated index.
   - *Observable:* per tick, T's health, V's presence and the ticks on which Y fires.
   - *Runs:* repeated until at least 5 runs are V-counted and at least 5 are Y-counted, up to 40.
     If either count stays below 5, that half of the scenario is inconclusive.
-  - *Expected:* in every V-counted run T takes no hit from a shot fired in tick *b*: T's health
-    does not drop in tick *b* or *b* + 1. In every Y-counted run Y fires in tick *b*. Y fires in
-    every second tick throughout.
-  - *Falsified if:* in a V-counted run T's health drops in tick *b* or *b* + 1, which means that V
-    fired in tick *b* before the bomb destroyed it. A bomb that went off in X's turn would give this
-    result, since V acts before X. Or, in a Y-counted run, Y does not fire in tick *b*, which means
-    that V left play in its own turn, so that its removal cost Y, directly after it, its turn
-    (claim 10). A bomb that went off at the start of V's own turn would give this result.
+  - *Expected:* with claim 10's switch on, every Y-counted run has no Y shot in tick *b*:
+    V's removal during its own turn costs Y its turn. Y resumes in tick *b* + 1. With the
+    switch off, Y fires in tick *b*. This observer result, not carrier silence alone,
+    distinguishes carrier-turn detonation from a shared pre-turn pass.
+    For a V-counted run using ordinary attack firing, V dies before that firing opportunity
+    and T takes no new hit in ticks *b* or *b* + 1. An opportunity-firing variant may instead
+    shoot before detonation (S-0519 claim 4); record the shot without treating it as a
+    different detonation phase. Exclude runs with other counting removals or a skipped
+    carrier turn before the due check.
+  - *Falsified if:* with the switch on and these controls, Y fires in tick *b*. A pre-turn
+    removal costs Y no turn. A detonation in X's later turn also cannot undo Y's turn.
+    An ordinary attack shot by V before detonation falsifies that local firing expectation,
+    but an opportunity shot does not falsify carrier-turn detonation.
 - *Part B, storm bolt.*
   - *Setup:* the common part, with V's health field set to 1. Superweapons are allowed in the game
     settings. The human player owns a ready, powered weather superweapon building, with test data
@@ -1113,10 +1133,12 @@ scenarios' timing expectations use the stated index.
   - *Procedure:* fire the storm at V's cell, then give no orders.
   - *Observable:* per tick, T's health, V's presence and the ticks on which Y fires.
   - *Runs:* as part A.
-  - *Expected:* as part A.
-  - *Falsified if:* as part A. A bolt whose damage came in the turn of its own animation, which
-    enters play when the storm creates it and so comes after V, would give the first result; a
-    strike at the start of V's own turn would give the second.
+  - *Expected:* in every V-counted run, V fires no shot in tick *b* and T takes no new hit
+    in ticks *b* or *b* + 1. In every Y-counted run, Y fires in tick *b* and continues its
+    every-second-tick cadence: V left play before the turn pass, so costs Y no turn.
+  - *Falsified if:* V fires in tick *b*, or Y misses its due shot in tick *b* with no other
+    counting removal. A bolt whose damage came in its own animation's later turn could
+    allow V to fire; a strike removing V in V's own turn would instead cost Y its turn.
 
 **Scenario O11: boarding an open-topped transport and getting out (claim 3).**
 - *Setup:* a flat test map, with its override sections. T is a computer test vehicle, unarmed, with

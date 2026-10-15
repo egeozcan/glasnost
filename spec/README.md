@@ -88,7 +88,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings) | combat | 1 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 20 | approved | — |
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 21 | approved | — |
-| [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 23 | approved | — |
 | [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 12 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 29 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 30 | approved | — |
@@ -122,3 +121,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 23 | approved | — |
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 20 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 17 | approved | — |
+| [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 24 | approved | — |
