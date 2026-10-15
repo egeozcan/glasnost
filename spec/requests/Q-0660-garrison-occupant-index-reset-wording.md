@@ -1,9 +1,9 @@
 ---
 id: Q-0660
 title: When the garrison occupant index returns to 0 (S-0311 Terms against S-0308 and S-0313)
-status: open
+status: answered
 related: [S-0311, S-0308, S-0313]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need

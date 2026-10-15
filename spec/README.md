@@ -105,7 +105,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 15 | approved | — |
 | [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 12 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 8 | approved | — |
-| [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 4 | approved | — |
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 3 | approved | — |
 | [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 5 | approved | — |
 | [S-0522](movement/S-0522-paradrops.md) | Parachutes and drops | movement | 3 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 4 | approved | — |
 | [S-0606](structures/S-0606-vehicle-bunker.md) | Vehicle bunker | structures | 2 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 4 | approved | — |
+| [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 5 | approved | — |

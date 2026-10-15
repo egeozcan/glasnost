@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0660]
 supersedes: []
 ---
 
@@ -19,7 +19,8 @@ supersedes: []
 How infantry occupy a building whose type can be garrisoned: which units may enter which building,
 when, in what order and up to what number. It also covers how a civilian garrison building changes
 hands with its occupants, and how occupants leave or are lost: an evacuation order, the building
-being badly damaged, destroyed, sold or erased, a map trigger, or an assault. Skirmish only; network
+being badly damaged, destroyed, sold or erased, a map trigger, an assault, or an occupant's own
+house being defeated. Skirmish only; network
 games and campaigns are out of scope.
 
 Neighbouring specs own the rest:
@@ -268,10 +269,7 @@ Neighbouring specs own the rest:
     positive-health buildings are not excluded, and mind control of the assaulter does not exclude
     it. A type with both marks instead uses claim 1 alone and never assaults.
 
-    On a passing attempt, the raise of claim 3 sees the occupants still inside. Every occupant
-    is then removed, from the last to the first, each with the
-    assaulter weapon's occupant animation at the muzzle point of its position in the list (S-0313
-    Terms). The assaulter does not go inside: it has its destination cleared and scatters as in
+    On a passing attempt, the raise of claim 3 sees the occupants still inside. Every occupant is then removed during that attempt, with the assaulter weapon's occupant animation at a muzzle point described by S-0313 Terms. The removal order and the correspondence between an occupant and an animation position are not specified here: the available measurement does not distinguish them. The assaulter does not go inside: it has its destination cleared and scatters as in
     claim 4. The building, now empty, follows claim 8 at its next turn when it is a civilian
     garrison building.
 
@@ -301,8 +299,9 @@ Neighbouring specs own the rest:
 
 16. **Hits on the building do not pass through to occupants.** Weapon and warhead hits do not
     directly damage, remove or evict individual occupants. They can still cause the building-level
-    evacuation, destruction or erasure of claims 9, 13 and 15. Occupants otherwise leave or are lost
-    only through claims 10 to 14 and their causes. No hit is rejected because the target is garrisoned.
+    evacuation, destruction or erasure of claims 9, 13 and 15. House defeat is a distinct source
+    of damage to the occupants themselves (claim 19), not weapon damage passing through the
+    building. No hit is rejected because the target is garrisoned.
     - Backing: `measurable` (scenario G12) for its tested weapons. The universal absence of any
       other occupant-damage path is `unmeasured`: a finite weapon sample cannot exclude every
       combination of imported weapon and warhead fields.
@@ -318,29 +317,60 @@ Neighbouring specs own the rest:
     - Confidence: medium
 
 18. **Occupant changes and the shared firing index.** The shared occupant/muzzle index
-    (S-0313 claim 6; S-0308 claim 13) is an integer counted from 0. An eviction or clearing
-    action resets it to 0 before any occupant is released or removed. This applies to evacuation,
-    failed-exit removal, assault and erasure (claims 10 to 15). The reset belongs to the
-    whole-building action, not to a test that the last occupant has gone. Consequently, during
-    such an action, an occupant's release or removal while others still await release or removal
-    does not preserve the pre-action index or reduce it modulo the remaining count: the action
-    has already reset it. Reoccupation starts with index 0; entries append occupants (claim 5)
-    and do not themselves advance the index.
+    (S-0313 claim 6; S-0308 claim 13) is an integer counted from 0. After a completed eviction
+    or clearing action it is 0. This applies to evacuation, failed-exit removal, assault and
+    erasure (claims 10 to 15). Reoccupation starts with index 0. Additional entries append
+    occupants (claim 5) and retain the index, rather than resetting or advancing it.
+    This specifies the completed action, without requiring an order between its index reset
+    and individual releases or removals. None of these actions offers selective evacuation.
+    The distinct selective death caused by house defeat has claim 19's rule, not this reset.
+    - Backing: `measurable` (G14) for completed deploy-evacuation/assault reset, reoccupation
+      and additional entry. Reset on other eviction causes, including failed-exit removal, is
+      `unmeasured` here: G6 to G13 observe departures but do not isolate the firing index across
+      each cause. The index of an erased building is `unmeasured`: the building has no subsequent
+      shot through which to observe it. Reset timing relative to individual releases/removals is
+      also `unmeasured`: no validated fixture interleaves a shot or credited destruction within
+      the action. Such timing is not an implementation constraint (Cross-spec changes required).
+    - Confidence: high
 
-    These actions do not provide a selective evacuation order. A hit on the building does not
-    kill one occupant inside it (claim 16), and assault removes every occupant, rather than
-    killing one and leaving a surviving garrison. No independent single-occupant departure or
-    death during normal skirmish play is established here. This claim therefore supplies no
-    hypothetical index-repair rule for such an event. The limited individual removal during
-    set-up described by S-0311 claim 15 is not evidence of a selective skirmish order.
-    - Backing: `measurable` for the index after evacuation, clearing and reoccupation, and
-      retention on an additional entry (G14). The reset before the first release or removal
-      is `unmeasured`: these actions complete within one tick, and no validated fixture makes
-      another attack or credited destruction observe the intermediate garrison. Exhaustive
-      exclusion of an independent selective gameplay loss is also `unmeasured`: no such
-      fixture has been established. Q-0660 remains partly open for that case.
-    - Confidence: high (whole-building actions and additional entry); medium (absence of an
-      independent selective gameplay loss)
+19. **Skirmish departure and death inventory.** The following events have different scopes.
+    A change to the building is not, by itself, a change to any occupant's own house (claim 17).
+
+    | Event | Occupants affected | Result and index rule |
+    |---|---|---|
+    | Building deploy order, civilian red-health evacuation, map eviction or house-wide hunt | all | eviction, claims 9 to 13; completed-action index 0 |
+    | Sale | all | eviction with inside fallback, claim 13; completed-action index 0 |
+    | Destruction of the building, including a killing weapon hit or a map action's killing hit | all | eviction, claim 13; completed-action index 0 |
+    | Assault | all | clearing, claim 14; completed-action index 0 |
+    | Completed temporal erasure of the building | all | removal, claim 15; completed-action index 0 |
+    | Nonlethal weapon hits without building-level evacuation or erasure | none | no occupant damage or departure, claim 16; no index change from the hit |
+    | Engineer capture, mind control or another ownership change of the building | none | occupants and their houses retained, claim 17; no index reset |
+    | Superweapon teleport | none | does not select a building or its off-map occupants, S-0513 claim 34 |
+    | Packing a building up into a vehicle | whole-building outcome, not selective release | S-0415 claim 9 owns release versus suppression; stock garrisonable types do not pack up |
+    | Defeat or surrender of an occupant's own house while the building belongs to a surviving house | that house's occupants only | individual killing hits under S-0414 claim 5; no eviction or index reset |
+
+    The last row is an exception to the proposed absence of selective skirmish death. Occupants
+    keep their owners, so a mixed-house garrison can lose one house's occupant while another
+    house's occupants survive inside. Even without a mixed garrison, a building transferred
+    away from its occupants' house survives that house's defeat while its occupants are hit.
+    Defeat does not require a unit to be on the map before delivering its killing hit.
+
+    Such a death retains the numeric firing index: it neither resets it nor reduces it modulo
+    a new count. It also does not perform the individual occupancy removal described for
+    set-up in S-0311 claim 15. The original can consequently retain a dead occupant among its
+    firing choices. Continued firing or experience selection through that dead choice has
+    no specified safe result here; a deterministic safety policy needs a project-lead decision.
+    This is not evidence that the surviving occupants are compacted and renumbered.
+    - Backing: `measurable` for the completed whole-building departure outcomes through G6 to
+      G14, with index-reset coverage limited as in claim 18; ordinary hits through G12,
+      ownership transfer through G10, and defeat hits and numeric
+      index retention in a foreign-owned building through G15. Mixed-house selective death is
+      `unmeasured`: no validated fixture supplies the required differently owned entrants.
+      Other ownership-change causes retain claim 17's limitations. Superweapon teleport selection and
+      pack-up rules inherit their cited owners' backing. Unsafe subsequent firing/credit is
+      `unmeasured`: no unsafe continuation is proposed as a confirming run.
+    - Confidence: high (group actions and defeat's off-map inclusion); medium (selective
+      mixed-house consequence, retained index and dead firing choice)
 
 ## Formulas
 
@@ -439,7 +469,8 @@ Ordering as observed:
 | `[EVA_StructureGarrisoned]`, `[EVA_StructureAbandoned]` (EVA file) | the two announcements | as S-0701 | as S-0701 |
 | `OccupantAnim` (rules, weapon) | assault animation (claim 14); also drawing of occupant fire | animation name | none |
 | `MuzzleFlash`*n* (art, building) | muzzle points (claim 14) | as S-0313 | as S-0313 |
-| No user-data field | shared occupant/muzzle index and action reset (claim 18) | runtime integer, not imported | initially 0 (S-0313 claim 6) |
+| No user-data field | shared occupant/muzzle index and action reset (claims 18 and 19) | runtime integer, not imported | initially 0 (S-0313 claim 6) |
+| No additional user-data field | defeat hits on occupants (claim 19) | event rule, not imported | S-0414 claim 5 and S-0303 Import mapping own the defeat hit and its warhead |
 
 The initial absent defaults above have high confidence and `unmeasured` backing here: no fixture
 removes the supplying stock layer and distinguishes an initial default from a retained earlier
@@ -601,8 +632,11 @@ garrison outcome of claim 2 replaces the engineer outcome. Prepare each occupied
 by sending A's ordinary occupiers into a civilian building, then use a timed change-owner trigger
 (S-0011 claim 24), attached only to that building, to transfer it to B. Record that the occupants
 remain inside under owner A and the building is B-owned before issuing the assault order.
-An occupant loss or owner change during this transfer falsifies claim 17; do not silently discard
-such a run as an assault setup failure. Use separate
+For a separate transfer-index subcase, use three occupants, let the garrison fire once and stop
+at index 1; record that same index immediately after transfer, voiding this subcase if another
+shot intervenes. This index preparation is not required for the other assault subcases.
+An occupant loss or owner change during this transfer falsifies claim 17; an index change
+falsifies claim 19. Do not silently discard such a result as an assault setup failure. Use separate
 mutually allied-B and enemy-B runs, and an empty enemy copy. Make the buildings capturable and
 damage the allied copy enough to offer a repair order while preserving positive health and staying
 above the red ratio. Keep the assaulter out of the occupants' firing range until its order is given.
@@ -656,13 +690,16 @@ occupant deaths. An escaping occupant, retained off-map occupant after completio
 death registration falsifies the rule. A separate interrupted-erasure run may record when occupants
 are lost, but that timing has no predicted result here and cannot confirm the claim.
 
-**G12. Hits do not pass through (claim 16).** Setup: one garrisoned building per tested stock weapon
+**G12. Hits do not pass through (claims 16 and 19).** Setup: one garrisoned building per tested stock weapon
 class (bullets, flame, gas, radiation and explosives), occupants with recorded health, and an empty
 control building for each weapon. Procedure: land nonlethal hits without reaching the forced-
-evacuation threshold; record damage to each building, then evacuate. Observable: hit acceptance,
-occupant count and occupant health. Expected: building hits are accepted as on the control, count
-is unchanged, and every occupant has its entry health. Any garrison-specific hit rejection,
-occupant loss or occupant health decrease falsifies the corresponding part. These tests do not
+evacuation threshold; record damage to each building, then evacuate. Before the hits, fire once
+from a three-occupant garrison and stop at index 1. Void a run if another shot or whole-building
+emptying intervenes before the post-hit index observation. Observable: hit acceptance, occupant
+count, occupant health and index before/after the hits. Expected: building hits are accepted as on
+the control, count is unchanged, every occupant has its entry health, and the index stays 1.
+Any garrison-specific hit rejection, occupant loss, occupant health decrease or index change
+falsifies the corresponding part. These tests do not
 prove the universal absence of a path in every possible weapon-field combination.
 
 **G13. Trigger eviction and house-wide hunt (claims 11 and 13).** Setup: a civilian building with
@@ -694,21 +731,61 @@ ownership. The first shooter and muzzle must again be the first occupant and 0; 
 falsifies the clearing reset. These observations test the completed action, not an intermediate
 single-occupant loss. No test weapon that kills occupants through the building is assumed.
 
+**G15. Defeated occupants in a surviving building (claim 19).** Use the common setup with
+`garrison-defeat.map`, adding a third isolated living contender so that defeating A need not
+leave only one side. A enters three identifiable occupiers into a civilian building, fires
+exactly one ordinary shot at a durable target and stops. Verify index 1. A timed building-only
+ownership trigger then transfers the building to B as in G10; verify that occupants still
+belong to A. With the building no longer attacking and all occupants still inside, surrender A
+through normal input. Record the surrender-processing tick, building health and owner,
+occupant health, destruction-counter effects and the numeric index read-only. Observe during
+that processing before later firing or removal can use the dead occupants. Expected: A's
+occupants receive defeat's killing hits despite being off-map, the B-owned building is not
+hit by A's surrender, no whole-building eviction occurs, and the index remains 1. A reset or
+modulo repair, an eviction caused solely by the occupants' defeat, or exclusion of their hits
+because they are off-map falsifies that part. Repeat three fresh runs. The original's local
+end delay does not prevent observing the surrender tick. Do not continue an unsafe attack
+as a test of a promised credit recipient. This tests numeric retention without assuming a
+validated mixed-house garrison fixture; that selective-survival consequence remains unmeasured.
+
 ## Open questions
 
-- Q-0660: whether an independent event in normal skirmish play can remove or kill just one
-  occupant while leaving others inside, outside the whole-building actions of claim 18, and
-  what index rule that event would have. No such event or validated data-only fixture has
-  been established. S-0311 claim 15 owns the distinct set-up removal case; any experience
-  selection from an index that no longer names an occupant belongs to S-0311 claim 8.
+- Q-0660's original index questions are answered by claims 18 and 19: whole-building actions
+  reset on completion, additional entry retains the index, and an occupant's own-house defeat
+  can kill it independently without index repair. Safe firing and experience selection after
+  a dead occupant remains among the choices are not answered; S-0308, S-0313 and S-0311 must
+  coordinate a project-lead safety decision, rather than infer compaction or a safe recipient.
 - Whether an exit ring cell outside the map or outside the usable area can qualify (claim 10).
 - Which conditions, other than standing-position occupancy, can make placement fail after an
   exit cell qualifies (claim 11). G7 records any such losses without predicting them.
 - Whether any skirmish cause other than map action code 6 and the original's computer player
   sends the house-wide hunt order of claim 13.
 
+## Cross-spec changes required
+
+Joint sign-off must confirm these coordinated changes; the current S-0311 claim 15 and
+S-0308 claim 13 still require reset before individual releases/removals, unlike claim 18 here.
+That requirement is withdrawn as an unobserved intermediate ordering, not replaced by a claim
+that the original resets later.
+
+- **S-0311 claim 15 and its firing-occupant term:** require index 0 after completed eviction or
+  clearing, without constraining reset relative to individual releases/removals. Distinguish
+  claim 19's defeat hits and unchanged numeric index from the limited set-up compaction case.
+  Claim 8's safe experience recipient after a retained dead choice needs the lead decision below.
+- **S-0308 claim 13 and its index table:** use the same completed-action reset and additional-entry
+  retention. Replace the unresolved absence of selective skirmish death with claim 19's
+  own-house-defeat counterexample; do not infer compaction or modulo repair.
+- **S-0313 claim 6:** retain completed-action reset without intermediate ordering, but replace
+  the unresolved selective-death premise with claim 19's defeat counterexample and unchanged
+  numeric index. Dead-choice muzzle safety shares the lead decision below.
+
 ## Questions for the project lead
 
+- Select a deterministic safety departure for claim 19's dead occupant remaining among the
+  firing choices. The original's numeric-index retention does not determine whether our engine
+  should compact survivors, which survivor should fire next, or who should receive experience.
+  Coordinate the decision with S-0308 claim 13, S-0313 claim 6 and S-0311 claims 8 and 15.
+  No safe continuation is invented here, and no quirk switch is proposed for an undefined result.
 - With no civilian house (Edge cases), adopt leaving the owner unchanged and skipping abandoned
   feedback? The unsafe original outcome is `unmeasured`, confidence low: no deliberate unsafe-data
   run is proposed. This is not reachable with stock skirmish data.
