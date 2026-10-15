@@ -1,9 +1,9 @@
 ---
 id: Q-0790
 title: Pad depot tether with an empty place 0, and the depot's movement-arrival exchange
-status: open
+status: answered
 related: [S-0314, S-0215, S-0503]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
