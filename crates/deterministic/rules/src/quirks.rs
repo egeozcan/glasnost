@@ -1447,15 +1447,15 @@ pub struct Quirks {
     // spec: S-0522 claim 4 and Edge cases
     #[serde(default = "on")]
     pub paradrop_west_edge_start_row: bool,
-    /// A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection. Not implemented yet (wave 2).
+    /// A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection.
     // spec: S-0512 claim 10; S-0213 table T1 (fire superweapon)
     #[serde(default = "on")]
     pub second_stage_order_unchecked: bool,
-    /// The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind. Not implemented yet (wave 2).
+    /// The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind.
     // spec: S-0513 claim 8 and Edge cases; S-0410 claim 12
     #[serde(default = "on")]
     pub superweapon_kind_as_list_position: bool,
-    /// A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp. Not implemented yet (wave 2).
+    /// A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp.
     // spec: S-0513 claim 40; S-0214 Terms (being erased, phasing in)
     #[serde(default = "on")]
     pub warp_hold_persists: bool,
@@ -1659,11 +1659,11 @@ pub struct Quirks {
     // spec: S-0608 claim 12 and Edge cases
     #[serde(default = "on")]
     pub drain_position_check_vehicles_only: bool,
-    /// In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first. Not implemented yet (wave 2).
+    /// In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first.
     // spec: S-0513 claim 4 and Edge cases; S-0611 claim 4 and Edge cases
     #[serde(default = "on")]
     pub superweapon_block_one_layer: bool,
-    /// When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible. Not implemented yet (wave 2).
+    /// When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible.
     // spec: S-0513 State and ordering and Edge cases; S-0611 claim 4
     #[serde(default = "on")]
     pub superweapon_list_cut_by_removal: bool,
