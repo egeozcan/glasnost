@@ -21,11 +21,15 @@
 //!   to the float, hover and amphibious classes, ground closed to float.
 //! - Hover: HOVR (a gun hovercraft with the hovering locomotor and class
 //!   and the amphibious zone, built at FACT once NAVY and LAB stand; S-0503).
+//! - Transports (S-0507): TRUK (an unarmed wheeled transport for four,
+//!   size limit 2) and LIFT (the same, amphibious and hovering), both
+//!   built at FACT.
 //! - Map: a flat clear square of side [`SIZE`] (cell coordinates 0 … 2·SIZE
 //!   on both axes), start waypoints 0 and 1 on opposite sides of the
 //!   middle, and an ore field beside each; [`map_diagonal`] puts the starts
 //!   on a diagonal with a third ore field between them; [`map_naval`] adds a
-//!   sea along the north side. [`catalogue`] has the water tile.
+//!   sea along the north side; [`map_strait`] a strait between the starts.
+//!   [`catalogue`] has the water tile.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -213,6 +217,21 @@ pub fn ruleset() -> Ruleset {
     hovr.primary = Some("Gun".into());
     hovr.turret = Some(true);
     hovr.combat.primary_fire_flh = Some([80, 0, 60]);
+    // An unarmed wheeled transport for four (S-0507), and an unarmed
+    // hovering one that crosses water too (S-0503): the AI ferries
+    // infantry in the cheaper one over land, in the hovering one across
+    // water.
+    let mut truk = vehicle(500, 7, 600);
+    truk.passengers = Some(4);
+    truk.size_limit = dec("2");
+    truk.econ.prerequisite = Some(vec!["RADR".into()]);
+    let mut lift = vehicle(500, 7, 900);
+    lift.econ.prerequisite = Some(vec!["RADR".into()]);
+    lift.locomotion_class = Some(LocomotionClass::Hover);
+    lift.locomotor = Some(Locomotor::Hover);
+    lift.movement_zone = Some(MovementZone::Amphibious);
+    lift.passengers = Some(4);
+    lift.size_limit = dec("2");
     for (n, u) in [
         ("MCV", mcv),
         ("MINR", minr),
@@ -220,6 +239,8 @@ pub fn ruleset() -> Ruleset {
         ("LNCH", lnch),
         ("BOAT", boat),
         ("HOVR", hovr),
+        ("TRUK", truk),
+        ("LIFT", lift),
     ] {
         r.sim.vehicles.insert(n.into(), u);
         push(&mut r, "vehicles", n);
@@ -452,6 +473,27 @@ pub fn map_naval() -> Map {
 /// The offset along y, from the middle, of the sea's southernmost row in
 /// [`map_naval`].
 pub const SEA_DY: i32 = -9;
+
+/// Half the width of the strait of [`map_strait`], in cells.
+pub const STRAIT_HALF: i32 = 4;
+
+/// The strait map: [`map`] with a strait of water tiles from the north
+/// edge to the south edge between the starts (the columns within
+/// [`STRAIT_HALF`] cells of the middle), so that no ground unit walks from
+/// one base to the other: infantry crosses by transport.
+pub fn map_strait() -> Map {
+    let mut m = map();
+    let mid = at(0, 0).x;
+    let cells: Vec<CellXY> = m.cells.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        if (c.x - mid).abs() <= STRAIT_HALF
+            && let Some(cell) = m.cells.get_mut(c)
+        {
+            cell.tile = WATER_TILE;
+        }
+    }
+    m
+}
 
 /// The lobby setup (S-0412): two AI houses, Alpha and Beta, random start
 /// positions, every other setting at the rules' default.

@@ -1056,8 +1056,8 @@ pub fn host_jumps(w: &mut World, host: ObjectId) {
     }
 }
 
-/// The host, a transport, lets a passenger out (claim 12): a hook for the
-/// transports topic, which our engine does not model yet.
+/// The host, a transport, lets a passenger out (claim 12), called by the
+/// transports topic (S-0507 claims 10 and 13).
 pub fn host_unloading(w: &mut World, host: ObjectId) {
     suppress_and_exit(w, host);
 }

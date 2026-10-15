@@ -150,8 +150,18 @@ pub struct UnitRules {
     pub jumpjet: bool,
     /// Veteran and elite ability names.
     pub abilities: (Vec<String>, Vec<String>),
-    /// Passengers.
+    /// Passengers: the capacity of a transport (S-0507 Terms).
     pub passengers: i32,
+    /// Size, a double (S-0507 Terms, claim 1).
+    pub size: F64,
+    /// Size limit, a double (S-0507 Terms, claim 1).
+    pub size_limit: F64,
+    /// Open-topped transport (S-0507 claim 14).
+    pub open_topped: bool,
+    /// Dropship flag (S-0507 claim 13).
+    pub dropship: bool,
+    /// Turret count (S-0507 claim 11).
+    pub turret_count: i32,
     /// Infantry sequence entries by kind (S-0107 claim 1).
     pub sequences: BTreeMap<String, rs::SequenceEntry>,
     /// Deployer flag.
@@ -1434,7 +1444,18 @@ fn unit_rules(
             .map_or(F64::ZERO, |d| d.single_value(mode)),
         jumpjet: b(u.jumpjet),
         abilities: (u.veteran_abilities.clone(), u.elite_abilities.clone()),
+        // spec: S-0507 Import mapping (Passengers absent: 0, not a transport)
         passengers: u.passengers.unwrap_or(0),
+        // spec: S-0507 Import mapping (Size absent: 1.0)
+        size: dec(&u.size, mode).unwrap_or_else(|| F64::from_i64(1, mode)),
+        // spec: S-0507 Import mapping (SizeLimit absent: 0.0, no replacement value)
+        size_limit: dec(&u.size_limit, mode).unwrap_or(F64::ZERO),
+        // spec: S-0507 Import mapping (OpenTopped absent: no)
+        open_topped: b(u.open_topped),
+        // spec: S-0507 Import mapping (IsDropship absent: no)
+        dropship: b(u.is_dropship),
+        // spec: S-0507 Import mapping (TurretCount absent: 0)
+        turret_count: u.turret_count.unwrap_or(0),
         sequences: u.sequences.clone(),
         deployer: b(u.deployer),
         // spec: S-0214 Import mapping (UndeployDelay absent: −1, none)

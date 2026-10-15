@@ -892,7 +892,7 @@ fn infantry_on(
     } else {
         Action::Nothing
     };
-    // spec: S-0214 table I value x (rows x1 and x2; x3 and x4 need a docking answer)
+    // spec: S-0214 table I value x (rows x1 to x4)
     let x = (unit_or_building(w, t)
         && allied(w, actor, t)
         && passengers(w, t)
@@ -905,7 +905,7 @@ fn infantry_on(
         {
             Some(Action::NoEnter)
         } else {
-            None
+            docking_verdict(w, t, actor)
         }
     })
     .flatten();
@@ -1118,8 +1118,33 @@ fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
             Action::NoDeploy
         };
     }
-    // spec: S-0214 table VD row VD6 (a transport that carries no passengers now; transports hold none yet)
-    Action::NoDeploy
+    // spec: S-0214 table VD row VD6 (a transport that carries no passengers now)
+    if crate::transport::count(w, actor) == 0 {
+        return Action::NoDeploy;
+    }
+    // spec: S-0214 table VD row VD7 (the first passenger cannot move on the cell's land, or in the air without hovering)
+    if crate::transport::passenger_cannot_leave(w, actor) {
+        return Action::NoDeploy;
+    }
+    // spec: S-0214 table VD row VD8 (deploy readiness, for transports S-0507 claim 7)
+    if crate::transport::may_unload(w, actor) {
+        Action::Deploy
+    } else {
+        Action::NoDeploy
+    }
+}
+
+/// The transport verdicts from a docking answer (S-0214 table I rows x3 and
+/// x4, table V rows q2 and q3): accepts gives enter, refuses no-enter,
+/// neither nothing.
+fn docking_verdict(w: &World, t: ObjectId, actor: ObjectId) -> Option<Action> {
+    match crate::transport::answer(w, t, actor) {
+        // spec: S-0214 table I row x3 and table V row q2 (docking answer accepts: enter)
+        crate::transport::Answer::Accepts => Some(Action::Enter),
+        // spec: S-0214 table I row x4 and table V row q3 (docking answer refuses: no-enter)
+        crate::transport::Answer::Refuses => Some(Action::NoEnter),
+        crate::transport::Answer::Neither => None,
+    }
 }
 
 /// A vehicle on an object (S-0214 table V).
@@ -1175,7 +1200,7 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         // spec: S-0214 table V row n3 (an accepting allied building: enter)
         Action::Enter
     };
-    // spec: S-0214 table V value q (row q1: a moving transport refuses)
+    // spec: S-0214 table V value q (rows q1 to q3 apply to an allied passenger-carrying target other than the actor)
     let q = if !matches!(
         n,
         Action::Attack | Action::RepairVehicle | Action::AreaGuard | Action::NoEnter
@@ -1183,10 +1208,14 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         && allied(w, actor, t)
         && t != actor
         && passengers(w, t)
-        && kind(w, t).is_some_and(Kind::is_mobile)
-        && moving(w, t)
     {
-        Action::NoEnter
+        if kind(w, t).is_some_and(Kind::is_mobile) && moving(w, t) {
+            // spec: S-0214 table V row q1 (a moving mobile target)
+            Action::NoEnter
+        } else {
+            // spec: S-0214 table V rows q2 to q4 (the docking answer; neither keeps n)
+            docking_verdict(w, t, actor).unwrap_or(n)
+        }
     } else {
         n
     };
@@ -1251,7 +1280,8 @@ fn aircraft_on(
         }
         // spec: S-0214 table AC row AC7
         Action::Deploy => {
-            if passengers(w, actor) {
+            // spec: S-0214 table AC row AC7 (the aircraft carries passengers now)
+            if crate::transport::count(w, actor) > 0 {
                 Action::Deploy
             } else {
                 Action::Nothing

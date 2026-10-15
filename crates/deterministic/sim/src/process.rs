@@ -71,6 +71,10 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
             if crate::econ::harvest::in_unloading_state(w, id) {
                 return false;
             }
+            // spec: S-0215 claim 11 (in the middle of letting its passengers out under its own unload processing, S-0507 table U)
+            if crate::transport::letting_out(w, id) {
+                return false;
+            }
             // spec: S-0215 claim 11 (the two vehicle-factory conditions)
             if crate::econ::release::holds_back(w, id) {
                 return false;
@@ -594,8 +598,18 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Repair), Kind::Building) if crate::depot::is_depot(w, id) => {
             crate::depot::process_repair(w, id)
         }
+        // spec: S-0215 claim 29 and S-0507 claim 5 (enter toward a transport: the loading exchange)
+        (Some(Behaviour::Enter), Kind::Infantry | Kind::Vehicle)
+            if crate::transport::entering_transport(w, id) =>
+        {
+            crate::transport::process_enter(w, id)
+        }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
+        }
+        // spec: S-0415 claim 1 rank 1 and S-0507 claims 8 to 12 (a vehicle with passenger capacity above 0 unloads passengers)
+        (Some(Behaviour::Unload), Kind::Vehicle) if crate::transport::vehicle_transport(w, id) => {
+            crate::transport::process_unload(w, id)
         }
         (Some(Behaviour::Unload), Kind::Vehicle)
             if crate::econ::harvest::unload_is_harvesting(w, id) =>

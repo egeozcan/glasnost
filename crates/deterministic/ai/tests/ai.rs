@@ -637,3 +637,81 @@ fn a_slave_miner_side_earns_income() {
         false
     });
 }
+
+/// `n` free land cells around `c`, nearest first.
+fn free_cells(w: &World, c: glasnost_map::CellXY, n: usize) -> Vec<glasnost_map::CellXY> {
+    let mut v: Vec<glasnost_map::CellXY> = (-6..=6)
+        .flat_map(|dy| (-6..=6).map(move |dx| glasnost_map::CellXY::new(c.x + dx, c.y + dy)))
+        .filter(|&k| {
+            w.cells.usable(k)
+                && w.cells
+                    .cell(k)
+                    .is_some_and(|x| x.land != glasnost_map::terrain::land::WATER)
+                && w.cells
+                    .occ(k, glasnost_sim::world::Layer::Ground)
+                    .is_some_and(|o| o.empty())
+        })
+        .collect();
+    v.sort_by_key(|k| ((k.x - c.x).pow(2) + (k.y - c.y).pow(2), k.y, k.x));
+    v.truncate(n);
+    v
+}
+
+// The ferry (S-0507, PLAN §4.7): on the strait map no rifleman walks to
+// the enemy; the AI sends idle riflemen aboard its hovering transport with
+// a click on it, carries them over the water and lets them out on the far
+// shore with a click on the transport, by orders only.
+#[test]
+fn ferries_infantry_across_a_strait() {
+    let map = fixture::map_strait();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-strait",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the strait skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let mid = fixture::at(0, 0).x;
+    let side = (yard.x - mid).signum();
+    let cells = free_cells(&g.world, glasnost_map::CellXY::new(yard.x, yard.y + 5), 4);
+    assert_eq!(cells.len(), 4, "room beside the yard");
+    let lift = testkit::spawn(&mut g.world, Kind::Vehicle, "LIFT", 0, cells[0], 0);
+    let riders: Vec<ObjectId> = cells[1..]
+        .iter()
+        .map(|&c| testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, c, 0))
+        .collect();
+    let mut boarded = false;
+    let mut riding: Vec<ObjectId> = Vec::new();
+    let mut across = None;
+    let limit = g.world.tick + 6000;
+    step_until(&mut g, limit, |w| {
+        let now: Vec<ObjectId> = riders
+            .iter()
+            .copied()
+            .filter(|&p| glasnost_sim::transport::riding(w, p) == Some(lift))
+            .collect();
+        boarded |= !now.is_empty();
+        for &p in &riding {
+            if !now.contains(&p)
+                && let Some(o) = w.obj(p).filter(|o| o.on_map && o.health > 0)
+            {
+                let c = o.pos.cell();
+                if (c.x - mid) * side < -fixture::STRAIT_HALF {
+                    across = Some(c);
+                }
+            }
+        }
+        riding = now;
+        across.is_some()
+    });
+    assert!(boarded, "the riflemen boarded the ferry");
+    let c = across.expect("a rifleman was let out across the strait");
+    assert_ne!(
+        g.world.cells.cell(c).map(|x| x.land),
+        Some(glasnost_map::terrain::land::WATER),
+        "on land"
+    );
+}

@@ -859,3 +859,85 @@ fn depot_state_round_trips() {
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
     assert_eq!(health(&l, v), health(&w, v));
 }
+
+/// A damaged hovering vehicle (S-0503) docked at a fresh depot by a
+/// click, past its settling step, with the depot then sold; returns the
+/// world and the vehicle once it has lost contact. `strands` sets
+/// `quirks.depot_loss_strands_hover`.
+fn hover_after_depot_sale(strands: bool) -> (World, ObjectId) {
+    let mut r = rules();
+    r.globals.quirks.depot_loss_strands_hover = strands;
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("SKIMMER".into());
+    r.sim.vehicles.insert(
+        "SKIMMER".into(),
+        UnitType {
+            locomotion_class: Some(LocomotionClass::Hover),
+            locomotor: Some(Locomotor::Hover),
+            movement_zone: Some(MovementZone::Amphibious),
+            ..wheel(600)
+        },
+    );
+    // A 1 × 1 depot: its position and its docking point share one cell.
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("PAD".into());
+    let mut pad = r.sim.buildings["DEPOT"].clone();
+    pad.foundation = Some([1, 1]);
+    // Build-up frames, so that the sale's build-down ends and the depot
+    // leaves (S-0408 claims 4 and 17, S-0108 claim 5).
+    pad.econ.buildup_frames = Some(10);
+    r.sim.buildings.insert("PAD".into(), pad);
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD");
+    let v = spawn(&mut w, Kind::Vehicle, "SKIMMER", 0, 6, 1);
+    w.obj_mut(v).unwrap().health = 300;
+    open(&mut w);
+    click_enter(&mut w, v, d);
+    assert!(
+        run_until(&mut w, 900, |w| depot::locomotor_off(w, v)),
+        "the hover docks and settles"
+    );
+    sell::sell(&mut w, ALPHA, d);
+    assert!(run_until(&mut w, 5, |w| contact(w, v).is_none()));
+    // Once the sold depot has left the cell: a destination given while a
+    // depot occupies it would switch the locomotor on (claim 22).
+    assert!(
+        run_until(&mut w, 900, |w| w.obj(d).is_none_or(|o| !o.on_map)),
+        "the sale ends"
+    );
+    (w, v)
+}
+
+// spec: S-0314 claim 22 and Edge cases (quirks.depot_loss_strands_hover on: a hovering vehicle whose depot is sold after its settling step keeps its locomotor off and cannot move); S-0503 (hover::tick obeys it)
+#[test]
+fn sold_depot_strands_a_hover_end_to_end() {
+    let (mut w, v) = hover_after_depot_sale(true);
+    assert!(depot::locomotor_off(&w, v));
+    let o = w.obj(v).unwrap();
+    let before = (o.pos.x, o.pos.y);
+    assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
+    for _ in 0..300 {
+        tick::step(&mut w);
+    }
+    let o = w.obj(v).unwrap();
+    assert_eq!((o.pos.x, o.pos.y), before, "the stranded hover stays put");
+}
+
+// spec: S-0314 Edge cases (quirks.depot_loss_strands_hover off: losing depot contact switches the locomotor on); S-0503 (the hover moves again)
+#[test]
+fn sold_depot_frees_a_hover_with_the_quirk_off() {
+    let (mut w, v) = hover_after_depot_sale(false);
+    assert!(!depot::locomotor_off(&w, v));
+    let o = w.obj(v).unwrap();
+    let before = (o.pos.x, o.pos.y);
+    assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
+    for _ in 0..300 {
+        tick::step(&mut w);
+    }
+    let o = w.obj(v).unwrap();
+    assert_ne!((o.pos.x, o.pos.y), before, "the hover moves away");
+}

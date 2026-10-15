@@ -408,6 +408,10 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
         if dist(w, o.pos, p, false) <= d as u64 {
             // spec: S-0503 claim 7 (no snap: it keeps its position and chooses its next heading point)
             with(w, id, |s| s.point = None);
+            // spec: S-0507 claim 6 (arriving at the cell of the transport it is entering: it boards, or is turned away)
+            if crate::transport::arrival(w, id) {
+                return;
+            }
             choice = choose_next(w, id);
             // spec: S-0417 claim 7; Q-0693 (interim: an arrival at the heading point is a cell-arrival update, after the next choice)
             crate::econ::release::arrival(w, id);

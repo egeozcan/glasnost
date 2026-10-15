@@ -279,10 +279,9 @@ pub fn in_the_air(w: &World, id: ObjectId) -> bool {
     crate::combat::weapon::airborne_by_height(w, id)
 }
 
-/// The passengers an aircraft carries. Seam: no object carries passengers
-/// in our engine yet (S-0507).
-fn passengers(_w: &World, _id: ObjectId) -> i32 {
-    0
+/// The number of passengers an aircraft carries now (S-0507 claim 3).
+fn passengers(w: &World, id: ObjectId) -> i32 {
+    crate::transport::count(w, id)
 }
 
 /// A passenger carrier (claim 1) that now carries none (claim 19).
@@ -1148,12 +1147,34 @@ fn report_entered(w: &mut World, id: ObjectId, k: ObjectId) {
 /// started without a kill (its locomotor switched off). Returns whether a
 /// crash started.
 pub fn start_crash(w: &mut World, id: ObjectId, living: bool) -> bool {
+    start_crash_hit(w, id, living, None)
+}
+
+/// As [`start_crash`], with the killing hit that credits the passengers'
+/// deaths (S-0312 claim 16); without one, they are credited to no one.
+pub fn start_crash_hit(
+    w: &mut World,
+    id: ObjectId,
+    living: bool,
+    hit: Option<&crate::combat::damage::Hit>,
+) -> bool {
     if !is_aircraft(w, id) || height(w, id) <= 0 {
         return false;
     }
     if st(w, id).crash.is_some() {
         return true;
     }
+    let none = crate::combat::damage::Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    // spec: S-0312 claim 16 (an object that starts to crash loses all its passengers, credited to the attacker, before its tumbling draws)
+    crate::transport::kill_passengers(w, id, hit.unwrap_or(&none));
     let mode = w.rules().mode;
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0312 claim 16 (tumbling: one unit-interval value, one ranged draw over 0 to 1, one more unit-interval value)
@@ -2417,6 +2438,8 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         Some(Behaviour::Retreat) => retreat(w, id),
         Some(Behaviour::SpyPlaneApproach) => spy_approach(w, id),
         Some(Behaviour::SpyPlaneOverfly) => spy_overfly(w, id),
+        // spec: S-0507 claim 13 (an air transport in unload)
+        Some(Behaviour::Unload) => crate::transport::process_air_unload(w, id),
         _ => NO_RULE_DELAY,
     }
 }

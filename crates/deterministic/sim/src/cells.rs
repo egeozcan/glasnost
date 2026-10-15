@@ -357,6 +357,17 @@ impl Cells {
         }
     }
 
+    /// Puts an object back into a cell layer's list at index `at`, where
+    /// [`Self::leave`] took it from.
+    pub fn restore(&mut self, c: CellXY, l: Layer, id: ObjectId, at: usize) {
+        if let Some(i) = self.idx(c) {
+            let list = &mut self.lists[i][li(l)];
+            if !list.contains(&id) {
+                list.insert(at.min(list.len()), id);
+            }
+        }
+    }
+
     /// An object leaves a cell layer.
     pub fn leave(&mut self, c: CellXY, l: Layer, id: ObjectId) {
         if let Some(i) = self.idx(c) {

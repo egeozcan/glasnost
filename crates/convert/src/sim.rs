@@ -407,6 +407,12 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("guard_range", "GuardRange", Dec),
     ("sight", "Sight", Int),
     ("passengers", "Passengers", Int),
+    // spec: S-0507 Import mapping (Size, SizeLimit floating point; IsDropship boolean; EnterTransportSound, LeaveTransportSound sound names)
+    ("size", "Size", Dec),
+    ("size_limit", "SizeLimit", Dec),
+    ("is_dropship", "IsDropship", Bool),
+    ("enter_transport_sound", "EnterTransportSound", Text),
+    ("leave_transport_sound", "LeaveTransportSound", Text),
     ("storage", "Storage", Int),
     (
         "threat_avoidance_coefficient",
@@ -2192,3 +2198,7 @@ mod naval_tests;
 #[cfg(test)]
 #[path = "sim_hover_tests.rs"]
 mod hover_tests;
+
+#[cfg(test)]
+#[path = "sim_transport_tests.rs"]
+mod transport_tests;
