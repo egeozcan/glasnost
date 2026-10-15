@@ -151,7 +151,7 @@ pub fn sector_set(w: &World, c: CellXY, rho: i32) -> Vec<Sector> {
 }
 
 /// The candidates of the flying-object search (S-0303 claim 6, F7) for a
-/// detonation with centre cell `c` and spread `spread_cells` (the
+/// detonation with centre cell `c` and truncated spread `spread_trunc` in cells (the
 /// warhead's spread S): the tracked objects of the sector set in sector
 /// order, each once; with `quirks.flying_search_sectors` off every tracked
 /// object once, in registration order.

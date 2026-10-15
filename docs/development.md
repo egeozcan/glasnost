@@ -299,6 +299,40 @@ Provisional rules of M5a, each tied to a request:
 | `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 
+## Simulation (M6a: missiles)
+
+S-0506 (missiles and the spawn controller) is built in `glasnost_sim::spawn` (the controller and its slots), `glasnost_sim::rocket` (rocket flight) and `glasnost_sim::combat::flying` (the flying-object registry of S-0303 claim 6 and F7). Its rules are `SimRules::missiles` (`spawn::MissileRules`: each spawner type's slots, count, regeneration and reload, and the three rocket parameter sets A, B and C from the general section), imported by `glasnost_convert` (spawn keys, rocket sets, the aircraft trailer). The ledger is [docs/m6-claims/S-0506.md](m6-claims/S-0506.md); the tests are in `crates/deterministic/sim/tests/claims_s0506.rs`.
+
+- **Spawn controller (claims 1 to 13).** `objects::create` calls `spawn::created`, which makes the full count of docked slot objects off the map and sets the first pass at creation + 20. `spawn::turn`, from the tick pipeline after the behaviour step, runs a pass every 10 ticks: the slot steps in index order, then the controller step (`spawn::pass`). A spawner weapon's shot (`combat::fire`) launches nothing and calls `spawn::shot`, which sets the pending target. The pass launches docked slots by claim 6's spacing (9 or 20 ticks), places them at the fire point raised by 10 with F2's facing, and releases them onto the rail (`OnRail`, with the rail time of claim 8) once every slot is preparing or empty; the controller then resets and cools down. Death, removal and owner change go through `spawn::killed`, `spawn::removing` and `spawn::owner_changed` (claim 13).
+- **Rocket flight (claims 14 to 21, F1 to F9).** A rocket-type object runs `rocket::tick` in place of a locomotor. Its phases are fixing the aim, pause, tilt or raise, ascent, cruise (plain or lazy) and descent. It moves by F1 only into legal cells and stalls at the map edge under the quirk. It detonates at its nose point F9 through `combat::area::detonate`, with the set's damage and warhead (elite ones for an elite launch), and then leaves play. Trailers appear every 3 ticks on the shared timer. A rocket destroyed above the terrain keeps flying (`rocket::keeps_flying_when_destroyed`, called from `combat::death`).
+- **Hooks into other specs.**
+  - S-0301 claim 9: rank 2 *busy* while a vehicle launches, rank 4 *rearming* via `spawn::any_alive`; `spawn::firing_answer` from `combat::behave`.
+  - S-0309 claim 4: `spawn::impossible` keeps the target (`combat::acquire`).
+  - S-0303: flying candidates and the half distance in `combat::area`; S-0312: interception through `combat::death`.
+  - S-0311 claim 8: an untrainable missile-spawn object's experience goes to its launcher (`combat::veterancy`, `spawn::launcher_of`).
+  - S-0214: `targeting::movable` is false while 0 < launching count < *N* (`spawn::partly_launched`).
+  - S-0504 claim 3 / S-0207 claim 6: `drive::begin_track` waits while `spawn::track_held`; `spawn::launching_count(w, spawner) -> i32` is public.
+  - In the air: `combat::weapon::in_air` uses the height test for rocket types.
+- **Seams for other lanes.**
+  - S-0501 claims 35 and 36: `spawn::aircraft_launched`, `spawn::aircraft_attack` and `spawn::aircraft_return` only set the destination or target. Carrier aircraft do not fly yet, so they never dock (`spawn::docks` is ready).
+  - `spawn::kamikaze_orders` is not called from the pipeline.
+  - `spawn::owner_changed` has no caller until owner change exists.
+  - `spawn::magnet_held` answers false (no magnetic beam).
+  - Other seams: EMP and locomotor-warhead resets, building docking points and tunnel heading points, and the set-C take-off animation (no import key names it).
+- **Naval stand-in.** The set-B end-to-end test uses a two-slot launcher on the driving locomotor in place of a Dreadnought-like vessel, because the ship locomotor (`naval.rs`) is still a scaffold.
+
+Provisional rules of M6a, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `rocket::raw_atan` | the surrogate table `glasnost_num::tables::ATAN` stands for the raw arctangent T(i); lazy-cruise and descent pitches may differ in the last bits | Q-0610 |
+| `combat::weapon::in_air` | a set-A or set-B rocket is in the air by the 208-lepton height test in every phase | Q-0611 |
+| `rocket::place`, `objects` | a rocket missile is in no cell list and marks no occupancy; area damage reaches it only through the flying search once tracked (after tilt or raise) | Q-0612 |
+| `rocket::tick` | a destroyed rocket keeps its phase timers and moves only by F1; it detonates after its first positive-speed movement attempt | Q-0613 |
+| `combat::flying::moved` | a crossing object goes to the end of its new sector's list | Q-0614 |
+| `rocket::tick`, `tick` | the aim-fixing tick does nothing else; each later tick counts one tick of pause, tilt or raise; the tick that reaches cruise altitude switches without accelerating; the pass runs after behaviour processing and before movement and firing | Q-0615 |
+| `spawn::pass` | "clearing the spawner's target clears the pending target" (claim 3) is applied at the start of each pass when the spawner's own target is empty, because our engine clears targets in many places | none (approximation of claim 3) |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
@@ -454,7 +488,6 @@ Known limits:
 
 - Icons are drawn through the icon palette of S-0103 claim 13 (`palette::icon_palette_565`: `CAMEO.PAL` through claim 1's conversion, the middle shade row, the 16-bit step; black with an importer warning when the file is missing, our engine's departure). The file is read with each game's files, not once at program start, so a side's archives that hold a different copy would change it between games (claim 13's session lifetime is not modelled).
 - With no radar building, the radar box says "No radar" (S-0410).
-- A vehicle whose weapon is a spawner (the V3 launcher's rocket is a spawned object) takes an attack order but never fires: its firing check answers *rearming* (S-0301 claim 9 rank 4: no spawned object of its own is alive, and our engine spawns none). Spawned aircraft and the rocket locomotor are M6 scope (PLAN §5, M6: air and Rocket), so this is expected until M6. The fix lane's `spawner_weapon_attack` logs the answer.
 - A terror drone fires its weapon at a vehicle instead of latching on as a parasite: parasites belong to the special-abilities specs (S-0214 Terms), not written yet (spec batch 5). Until then the drone uses its weapon like any other unit.
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).

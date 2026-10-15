@@ -960,3 +960,522 @@ fn set_b_launcher_attacks_in_play() {
     assert!(detonations >= 2);
     assert!(w.obj(victim).unwrap().health < h0);
 }
+
+fn phase_of(w: &World, x: ObjectId) -> Option<Phase> {
+    w.obj(x)
+        .and_then(|o| o.rocket.as_ref())
+        .and_then(|r| r.phase)
+}
+
+/// Shoots LNA at a hostile VICTIM 8 cells east and runs until its missile
+/// reaches `phase`; returns the world, the launcher, the victim and the
+/// missile.
+fn fly_until(r: &Ruleset, phase: Phase) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut w = game(r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let x = controller(&w, lna).slots[0].object.unwrap();
+    spawn::shot(&mut w, lna, Target::Object(victim));
+    assert!(testkit_run_until(&mut w, 300, |w| phase_of(w, x) == Some(phase)));
+    (w, lna, victim, x)
+}
+
+fn warhead(w: &World, name: &str) -> u32 {
+    w.rules()
+        .combat
+        .warheads
+        .iter()
+        .position(|h| h.name == name)
+        .unwrap() as u32
+}
+
+fn blast(w: &mut World, at: Pos) {
+    let wh = warhead(w, "RKW");
+    glasnost_sim::combat::area::detonate(
+        w,
+        glasnost_sim::combat::area::Detonation {
+            point: at,
+            damage: 30,
+            warhead: Some(wh),
+            source: None,
+            house: None,
+            resources: false,
+        },
+    );
+}
+
+// spec: S-0506 claim 15 and S-0303 claim 6 (a rocket missile is found by the flying-object search only after its tilt or raise: a blast at it in pause misses it, in ascent hits it)
+#[test]
+fn claim_15_tracked_only_after_tilt() {
+    let r = rules();
+    let (mut w, _, _, x) = fly_until(&r, Phase::Pause);
+    let p = w.obj(x).unwrap().pos;
+    let h = w.obj(x).unwrap().health;
+    blast(&mut w, Pos::new(p.x, p.y, p.z + 1));
+    assert_eq!(w.obj(x).unwrap().health, h, "not tracked in pause");
+    let (mut w, _, _, x) = fly_until(&r, Phase::Ascent);
+    let p = w.obj(x).unwrap().pos;
+    let h = w.obj(x).unwrap().health;
+    assert!(glasnost_sim::combat::flying::tracked(&w, x));
+    blast(&mut w, Pos::new(p.x, p.y, p.z + 1));
+    assert!(w.obj(x).is_none_or(|o| o.health < h), "tracked in ascent");
+}
+
+// spec: S-0506 claim 9 (a slot object destroyed while it belongs to its slot frees the slot with a regeneration countdown at once)
+#[test]
+fn claim_9_loss_notification() {
+    let r = rules();
+    let (mut w, lna, _, x) = fly_until(&r, Phase::Pause);
+    // The slot is on the rail or preparing; kill the missile on the ground.
+    w.obj_mut(x).unwrap().health = 0;
+    glasnost_sim::combat::death::kill(&mut w, x, &hit(10));
+    let c = controller(&w, lna);
+    assert_eq!(c.slots[0].state, SlotState::Empty);
+    assert_eq!(c.slots[0].until, w.tick + 50);
+}
+
+fn hit(amount: i32) -> glasnost_sim::combat::damage::Hit {
+    glasnost_sim::combat::damage::Hit {
+        amount,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    }
+}
+
+// spec: S-0506 claim 20 (a missile destroyed on the ground, height below 1: removed at once without a detonation)
+#[test]
+fn claim_20_ground_removal() {
+    let r = rules();
+    let (mut w, _, _, x) = fly_until(&r, Phase::Pause);
+    let p = w.obj(x).unwrap().pos;
+    let ground = w.surface_at(p.x, p.y);
+    w.obj_mut(x).unwrap().pos = Pos::new(p.x, p.y, ground);
+    w.obj_mut(x).unwrap().health = 0;
+    w.effects.clear();
+    glasnost_sim::combat::death::kill(&mut w, x, &hit(10));
+    assert!(w.obj(x).is_none());
+    assert!(
+        !w.effects
+            .iter()
+            .any(|e| matches!(e, Effect::Detonation { .. }))
+    );
+}
+
+// spec: S-0506 claim 20 (destroyed in pause: no detonation until the first positive-speed movement attempt, Q-0613 for the phases)
+#[test]
+fn claim_20_destroyed_in_pause() {
+    let r = rules();
+    let (mut w, _, _, x) = fly_until(&r, Phase::Pause);
+    w.obj_mut(x).unwrap().health = 0;
+    glasnost_sim::combat::death::kill(&mut w, x, &hit(10));
+    assert!(w.obj(x).is_some(), "above the terrain it keeps flying");
+    let mut det_phase = None;
+    for _ in 0..60 {
+        let before = phase_of(&w, x);
+        w.effects.clear();
+        testkit::run(&mut w, 1);
+        if w.effects
+            .iter()
+            .any(|e| matches!(e, Effect::Detonation { damage: 300, .. }))
+        {
+            det_phase = before;
+            break;
+        }
+    }
+    assert_eq!(det_phase, Some(Phase::Ascent));
+}
+
+// spec: S-0506 claim 13 (a spawner destroyed while a missile is preparing: the missile is released and flies on)
+#[test]
+fn claim_13_killed_spawner_releases_preparing() {
+    let r = rules();
+    let mut w = game(&r);
+    let lnb = spawn_at(&mut w, "LNB", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    spawn::shot(&mut w, lnb, Target::Object(victim));
+    assert!(testkit_run_until(&mut w, 120, |w| controller(w, lnb).slots
+        [0]
+    .state
+        == SlotState::Preparing));
+    let x = controller(&w, lnb).slots[0].object.unwrap();
+    let docked = controller(&w, lnb).slots[1].object.unwrap();
+    w.obj_mut(lnb).unwrap().health = 0;
+    glasnost_sim::combat::death::kill(&mut w, lnb, &hit(500));
+    assert!(w.obj(x).is_some());
+    assert!(spawn::kamikaze(&w, x));
+    assert!(
+        w.obj(docked).is_none(),
+        "the docked one is removed silently"
+    );
+}
+
+// spec: S-0506 claim 8 and Edge cases quirks.raised_missile_rail_time_from_set_b (a set-C missile's rail time is set B's pause + tilt; off: set C's own)
+#[test]
+fn claim_8_set_c_rail_time() {
+    for from_b in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.raised_missile_rail_time_from_set_b = from_b;
+        // Set C's own pause + tilt (5 + 9) differs from set B's (3 + 8).
+        r.sim.general.c_misl_tilt_frames = Some(9);
+        let mut w = game(&r);
+        let lnc = spawn_at(&mut w, "LNC", 0, 0, 0, 0);
+        let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+        spawn::shot(&mut w, lnc, Target::Object(victim));
+        assert!(testkit_run_until(&mut w, 120, |w| controller(w, lnc).slots
+            [0]
+        .state
+            == SlotState::OnRail));
+        let expected = if from_b { 3 + 8 } else { 5 + 9 };
+        assert_eq!(
+            controller(&w, lnc).slots[0].until,
+            w.tick - 1 + expected,
+            "from_b {from_b}"
+        );
+    }
+}
+
+// spec: S-0506 claim 14 (the aim point: a building's centre, a cell's centre, a moving unit's step end; quirks.rocket_aim_at_heading_point off: its position)
+#[test]
+fn claim_14_heading_point() {
+    use glasnost_sim::rocket::heading_point;
+    let mut r = rules();
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("BIG".into());
+    r.sim.buildings.insert(
+        "BIG".into(),
+        glasnost_rules::sim::BuildingType {
+            strength: Some(500),
+            foundation: Some([3, 2]),
+            ..Default::default()
+        },
+    );
+    let mut w = game(&r);
+    let big = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "BIG",
+        1,
+        testkit::mid(SIZE, 4, 4),
+        0,
+    );
+    let p = w.obj(big).unwrap().pos;
+    // spec: S-0506 claim 14 (position + 128 × (W − 1), 128 × (H − 1))
+    assert_eq!(
+        heading_point(&w, Target::Object(big)),
+        Some(Pos::new(p.x + 256, p.y + 128, p.z))
+    );
+    let c = testkit::mid(SIZE, -3, 2);
+    assert_eq!(heading_point(&w, Target::Cell(c)), Some(Pos::centre(c, 0)));
+    // A moving unit: the end of its step.
+    let v = spawn_at(&mut w, "VICTIM", 1, 0, 6, 0);
+    open(&mut w);
+    let mv = glasnost_sim::orders::Order::Behaviour {
+        actor: v,
+        behaviour: glasnost_sim::rules::Behaviour::Move,
+        attack_move: false,
+        target: None,
+        dest: Some(Target::Cell(testkit::mid(SIZE, 6, 6))),
+    };
+    w.obj_mut(v).unwrap().owner = Some(ALPHA);
+    assert!(orders::issue(&mut w, ALPHA, mv));
+    assert!(testkit_run_until(&mut w, 60, |w| w
+        .obj(v)
+        .unwrap()
+        .drive
+        .as_ref()
+        .is_some_and(|d| d.track.is_some())));
+    let (tx, ty) = w
+        .obj(v)
+        .unwrap()
+        .drive
+        .as_ref()
+        .unwrap()
+        .track
+        .as_ref()
+        .unwrap()
+        .target;
+    let hp = heading_point(&w, Target::Object(v)).unwrap();
+    assert_eq!((hp.x, hp.y), (tx, ty));
+    assert_ne!(
+        (hp.x, hp.y),
+        (w.obj(v).unwrap().pos.x, w.obj(v).unwrap().pos.y)
+    );
+    let mut r2 = r.clone();
+    r2.globals.quirks.rocket_aim_at_heading_point = false;
+    let rules2 = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r2, "synthetic-test"));
+    let mut w2 = w.clone();
+    w2.rules = Some(rules2);
+    assert_eq!(
+        heading_point(&w2, Target::Object(v)),
+        Some(w2.obj(v).unwrap().pos)
+    );
+}
+
+// spec: S-0506 claim 16 and F4 (speed grows by a each tick up to the type speed; not reduced in descent)
+#[test]
+fn f4_speed() {
+    use glasnost_num::{F64, Rounding};
+    use glasnost_sim::rocket::next_speed;
+    let rz = Rounding::TowardZero;
+    let a = F64::from_i64(5, rz)
+        .div(F64::from_i64(2, rz), rz)
+        .to_f32(rz);
+    let mut v = F64::ZERO;
+    for _ in 0..3 {
+        v = next_speed(v, a, 6, rz);
+    }
+    assert_eq!(v, F64::from_i64(6, rz));
+    assert_eq!(next_speed(F64::ZERO, a, 6, rz), a.to_f64());
+}
+
+// spec: S-0506 F1 (facing 0 moves towards map north, 16384 towards map east; pitch π/2 straight up)
+#[test]
+fn f1_step() {
+    use glasnost_num::{F32, F64, Rounding};
+    use glasnost_sim::rocket::step;
+    let rz = Rounding::TowardZero;
+    let v = F64::from_i64(100, rz);
+    let p0 = Pos::new(5000, 5000, 300);
+    let n = step(p0, v, F32(0), 0, rz);
+    assert!(n.y < 5000 && (n.x - 5000).abs() <= 1 && n.z == 300, "{n:?}");
+    let e = step(p0, v, F32(0), 16384, rz);
+    assert!(e.x > 5000 && (e.y - 5000).abs() <= 1, "{e:?}");
+    let up = glasnost_num::geom::direction_constants().0.to_f32(rz);
+    let u = step(p0, v, up, 0, rz);
+    assert_eq!((u.x, u.y), (5000, 5000));
+    assert!(u.z > 390);
+}
+
+// spec: S-0506 F3 (tilt pitch: α at 0, β at the end, linear between; a zero tilt time takes the endpoint)
+#[test]
+fn f3_tilt() {
+    use glasnost_num::{F32, F64, Rounding};
+    use glasnost_sim::rocket::tilt_pitch;
+    let rz = Rounding::TowardZero;
+    let one = F32(0x3f80_0000); // nocite: 1.0 as a single
+    let zero = F32(0);
+    let half_pi = glasnost_num::geom::direction_constants().0;
+    assert_eq!(tilt_pitch(zero, one, 0, 10, rz), F32(0));
+    assert_eq!(tilt_pitch(zero, one, 10, 10, rz), half_pi.to_f32(rz));
+    assert_eq!(tilt_pitch(zero, one, 3, 0, rz), half_pi.to_f32(rz));
+    let mid = tilt_pitch(zero, one, 5, 10, rz).to_f64();
+    let expect = half_pi.div(F64::from_i64(2, rz), rz);
+    assert_eq!(mid.to_f32(rz), expect.to_f32(rz));
+}
+
+// spec: S-0506 F5 (plain cruise pitch falls by τ to 0 and never below; a nonpositive pitch is unchanged)
+#[test]
+fn f5_plain_pitch() {
+    use glasnost_num::{F32, F64, Rounding};
+    use glasnost_sim::rocket::plain_pitch;
+    let rz = Rounding::TowardZero;
+    let s = |n: i64, d: i64| {
+        F64::from_i64(n, rz)
+            .div(F64::from_i64(d, rz), rz)
+            .to_f32(rz)
+    };
+    let tau = s(1, 10);
+    assert_eq!(plain_pitch(s(1, 20), tau, rz), F32(0));
+    let neg = s(-1, 4);
+    assert_eq!(plain_pitch(neg, tau, rz), neg);
+    let p = plain_pitch(s(1, 2), tau, rz);
+    assert!(p.to_f64().lt(s(1, 2).to_f64()) && p.to_f64().gt(F64::ZERO));
+}
+
+// spec: S-0506 F6 (raw table arctangent A: odd, T(0) = 0, an index beyond 4096 gives the single π/2; Q-0610 surrogate table)
+#[test]
+fn f6_raw_atan() {
+    use glasnost_num::{F64, Rounding};
+    use glasnost_sim::rocket::raw_atan;
+    let rz = Rounding::TowardZero;
+    assert_eq!(raw_atan(F64::ZERO, rz), F64::ZERO);
+    let big = F64::from_i64(1_000_000, rz);
+    let hp = glasnost_num::geom::direction_constants()
+        .0
+        .to_f32(rz)
+        .to_f64();
+    assert_eq!(raw_atan(big, rz), hp);
+    assert_eq!(raw_atan(big.negated(), rz), hp.negated());
+    let one = F64::from_i64(1, rz);
+    assert_eq!(raw_atan(one.negated(), rz), raw_atan(one, rz).negated());
+}
+
+// spec: S-0506 F7 (descent pitch: turns towards the line of sight by at most τ; reaches it when within τ)
+#[test]
+fn f7_descent_pitch() {
+    use glasnost_num::{F32, F64, Rounding};
+    use glasnost_sim::rocket::descent_pitch;
+    let rz = Rounding::TowardZero;
+    let tau = F64::from_i64(1, rz)
+        .div(F64::from_i64(20, rz), rz)
+        .to_f32(rz);
+    // Aim straight below: the line of sight is −π/2 (ρ = 0).
+    let p1 = descent_pitch((0, 0, -500), F32(0), tau, true, rz);
+    assert_eq!(p1, tau.to_f64().negated().to_f32(rz));
+    // Aim level ahead: ℓ = 0; a pitch within τ goes to 0.
+    let small = F64::from_i64(1, rz)
+        .div(F64::from_i64(100, rz), rz)
+        .to_f32(rz);
+    assert_eq!(descent_pitch((1000, 0, 0), small, tau, true, rz), F32(0));
+}
+
+// spec: S-0506 F9 (nose point: L cos p ahead along the heading, L sin p up)
+#[test]
+fn f9_nose() {
+    use glasnost_num::{F32, Rounding};
+    use glasnost_sim::rocket::nose;
+    let rz = Rounding::TowardZero;
+    let p0 = Pos::new(5000, 5000, 300);
+    let n = nose(p0, 200, F32(0), 16384, rz);
+    assert!(
+        (n.x - 5200).abs() <= 1 && (n.y - 5000).abs() <= 1 && n.z == 300,
+        "{n:?}"
+    );
+    let up = glasnost_num::geom::direction_constants().0.to_f32(rz);
+    let u = nose(p0, 200, up, 0, rz);
+    assert_eq!((u.x, u.y), (5000, 5000));
+    assert!((u.z - 500).abs() <= 1);
+}
+
+// spec: S-0506 claim 18 and Edge cases (quirks.rocket_stalls_at_map_edge off: a step out of the legal cells detonates)
+#[test]
+fn claim_18_map_edge_quirk_off() {
+    let mut r = rules();
+    r.globals.quirks.rocket_stalls_at_map_edge = false;
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let x = controller(&w, lna).slots[0].object.unwrap();
+    glasnost_sim::rocket::place(&mut w, x, Pos::new(10, 10, 300), 0, lna);
+    {
+        let o = w.obj_mut(x).unwrap();
+        let rs = o.rocket.as_mut().unwrap();
+        rs.phase = Some(Phase::Ascent);
+        rs.aim = Some(Pos::new(10, 10, 0));
+        rs.speed = glasnost_num::F64::from_i64(40, glasnost_num::Rounding::TowardZero);
+    }
+    testkit::run(&mut w, 1);
+    assert!(w.obj(x).is_none(), "it detonates at the edge");
+}
+
+// spec: S-0501 Terms, S-0308 Airborne and Q-0611 (a rocket-type object is in the air by the 208-lepton height test; the half distance of S-0303 claim 10 applies to it)
+#[test]
+fn q0611_in_air() {
+    let r = rules();
+    let (w, _, _, x) = fly_until(&r, Phase::Pause);
+    assert!(!glasnost_sim::combat::weapon::in_air(&w, x));
+    let (w, _, _, x) = fly_until(&r, Phase::Cruise);
+    assert!(glasnost_sim::combat::weapon::in_air(&w, x));
+}
+
+// spec: S-0506 claims 7 and 8 and S-0501 claims 35 and 36 (a non-missile slot aircraft is sent to the step direction 0 neighbour of the spawner's cell, then set on the controller target at release and attacking)
+#[test]
+fn carrier_slot_cycle() {
+    let mut r = rules();
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("HAWK".into());
+    r.sim.aircraft.insert(
+        "HAWK".into(),
+        UnitType {
+            strength: Some(80),
+            speed: Some(10),
+            spawned: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim
+        .vehicles
+        .insert("CAR".into(), launcher("HAWK", 1, "Launch"));
+    r.sim.vehicles.get_mut("CAR").unwrap().missile_spawn = Some(false);
+    r.registries.get_mut("vehicles").unwrap().push("CAR".into());
+    let mut w = game(&r);
+    let car = spawn_at(&mut w, "CAR", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let x = controller(&w, car).slots[0].object.unwrap();
+    w.obj_mut(car).unwrap().target = Some(Target::Object(victim));
+    spawn::shot(&mut w, car, Target::Object(victim));
+    // spec: S-0506 claims 4 and 5 (slot steps run before the controller step, so the launch pass that makes the slot preparing also releases it)
+    // The aircraft's own flight is the aircraft lane's (a seam here), so the
+    // hooks are read straight after a pass, before the aircraft's turn.
+    assert!(testkit_run_until(&mut w, 120, |w| controller(w, car).state
+        == ControllerState::Launching));
+    spawn::pass(&mut w, car);
+    assert_eq!(controller(&w, car).slots[0].state, SlotState::Attacking);
+    let cell = w.obj(car).unwrap().pos.cell();
+    let (dx, dy) = glasnost_sim::regions::STEPS[0];
+    assert_eq!(
+        w.obj(x).unwrap().dest,
+        Some(Target::Cell(glasnost_map::CellXY::new(
+            cell.x + dx,
+            cell.y + dy
+        )))
+    );
+    assert!(w.obj(x).unwrap().on_map);
+    assert_eq!(w.obj(x).unwrap().target, Some(Target::Object(victim)));
+    // spec: S-0506 claim 8 (no missile released: no reset, the controller keeps its target and cools down)
+    assert_eq!(controller(&w, car).state, ControllerState::CoolingDown);
+    // The target leaves play: attacking → returning at the next pass.
+    glasnost_sim::objects::remove(&mut w, victim);
+    spawn::pass(&mut w, car);
+    assert_eq!(controller(&w, car).slots[0].state, SlotState::Returning);
+    assert_eq!(w.obj(x).unwrap().dest, Some(Target::Object(car)));
+}
+
+// spec: S-0506 Edge cases and S-0303 claim 6 (quirks.ground_detonation_misses_aircraft: a blast at the terrain surface does not search flying objects; off: it does, at half distance for an object in the air)
+#[test]
+fn ground_detonation_misses_aircraft() {
+    for misses in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.ground_detonation_misses_aircraft = misses;
+        let (mut w, _, _, x) = fly_until(&r, Phase::Cruise);
+        let p = w.obj(x).unwrap().pos;
+        let h = w.obj(x).unwrap().health;
+        let ground = w.surface_at(p.x, p.y);
+        blast(&mut w, Pos::new(p.x, p.y, ground));
+        let hit = w.obj(x).is_none_or(|o| o.health < h);
+        assert_eq!(hit, !misses, "misses {misses}");
+    }
+}
+
+// spec: S-0506 Edge cases (reset with a target out of range at adoption: the controller resets and launches nothing) and claim 5 (the S-0307 range test from where the spawner stands)
+#[test]
+fn reset_when_out_of_range_at_adoption() {
+    let mut r = rules();
+    r.sim.weapons.get_mut("Launch").unwrap().range = dec("3");
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    w.obj_mut(lna).unwrap().target = Some(Target::Object(victim));
+    spawn::shot(&mut w, lna, Target::Object(victim));
+    assert_eq!(controller(&w, lna).pending, Some(Target::Object(victim)));
+    testkit::run(&mut w, 25);
+    let c = controller(&w, lna);
+    assert_eq!(c.state, ControllerState::Idle);
+    assert_eq!((c.target, c.pending), (None, None));
+    assert_eq!(c.slots[0].state, SlotState::Docked);
+    let x = c.slots[0].object.unwrap();
+    assert!(!w.obj(x).unwrap().on_map);
+}
+
+// spec: S-0506 F6 (lazy curve pitch: at the recorded distance with no height difference the pitch is P_f × π/2; with the aim straight below, ρ = 0, ℓ = −π/2 and q = 0)
+#[test]
+fn f6_lazy_pitch() {
+    use glasnost_num::{F64, Rounding};
+    use glasnost_sim::rocket::lazy_pitch;
+    let rz = Rounding::TowardZero;
+    let pf = F64::from_i64(3, rz)
+        .div(F64::from_i64(5, rz), rz)
+        .to_f32(rz);
+    let hp = glasnost_num::geom::direction_constants().0;
+    let at_start = lazy_pitch((1000, 0, 0), 1000, pf, true, rz);
+    assert_eq!(at_start, pf.to_f64().mul(hp, rz).to_f32(rz));
+    let below = lazy_pitch((0, 0, -400), 1000, pf, true, rz);
+    assert_eq!(below, hp.negated().to_f32(rz));
+}
