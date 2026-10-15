@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -369,8 +369,13 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     the net descent, because ordinary altitude adjustment can still apply. That claim also owns
     its sinking branch. A crashable vehicle using jumpjet movement uses the crash motion of
     S-0502 claim 18, with that claim's idle-update and magnetic-lift qualifications. The
-    non-rocket impact rules below still belong to this claim. For other crashable movement
-    modes, the owning movement spec supplies the motion. The following impact rules exclude rocket missiles: S-0506 claim 20 owns their
+    ordinary non-rocket impact rules below still belong to this claim. Magnetic drops are
+    different: S-0607 claims 16 to 19 own a dropped seized unit's impact, including clear-cell
+    survival and sinking. Only a vehicle whose type can crash retains this claim's ordinary
+    crash-end exception (S-0607 claim 18); a dropped seized aircraft does not (S-0607 claim 19).
+    The magnetic drop itself is not this claim's crash start: it neither kills passengers nor
+    takes tumbling draws (S-0607 claim 13). For other crashable movement
+    modes, the owning movement spec supplies the motion. The following impact rules also exclude rocket missiles: S-0506 claim 20 owns their
     interception outcomes, with detonation governed by S-0506 claim 19. An intercepted rocket
     above the terrain starts to crash but keeps rocket-flight movement and its full detonation
     damage on the next positive-speed movement attempt, including a rejected map-edge attempt.
@@ -378,7 +383,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     is removed without a rocket detonation. Interception neither restarts nor suspends the
     rocket's phase timer, and adds no crash-fall displacement: pause and tilt keep its position
     fixed, raise keeps its ordinary rise, and positive-speed motion follows S-0506 claim 20.
-    For the non-rocket crash, when it reaches the ground:
+    For an ordinary non-rocket crash within this claim's scope, when it reaches the ground:
     - if it was shot down, its death weapon goes off at the impact point (claim 6, even if it already
       went off at the moment of death because the aircraft was exploding), and it leaves play,
     - if it was still alive (a crash started without a kill), it is destroyed by damage equal to its
@@ -386,7 +391,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0502 scenario J12 for jumpjet crash motion, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9.
+    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, and their independence from height; rocket interception inherits S-0506
       claim 20's confidence; jumpjet motion inherits S-0502 claim 18's confidence,
@@ -395,8 +400,12 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 ### Buildings
 
 17. **What a destroyed building does to the objects in contact with it.** When a building is
-    destroyed, every object in contact with it (glossary *contact*, for example a vehicle leaving
-    its factory or docked at it) is destroyed by damage of ten times its own strength with the
+    destroyed, this claim treats the objects it held in contact just before the destroying hit
+    (glossary *contact*, for example a vehicle leaving its factory or docked at it), except for
+    its bunkered vehicle. That vehicle is let out first under S-0606 claim 13 and is neither
+    destroyed nor sent away by this claim; it has no immunity to other damage from the attack
+    or death effects. A vehicle still entering, with contact but no bunker link, remains an
+    ordinary contact for this rule. Each included contact is destroyed by damage of ten times its own strength with the
     demolition warhead, ignoring defences, with the no-escape marker and with no attacker, when the
     spatial distance from the building's reference point (S-0204 claim 4) to the contact's position
     is less than 256 leptons, or whatever the distance when the building is a helipad. Any other
@@ -405,7 +414,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     the original removes every occupant without killing it: no occupant death, kill or survivor.
     S-0508 owns the eviction quirks and their alternatives, including keeping occupants inside
     when its no-exit-removal quirk is off.
-    - Backing: `measurable` (scenario D12; S-0508 scenarios G7 and G8 for eviction)
+    - Backing: `measurable` (scenario D12; S-0606 scenario K5 for bunker destruction,
+      S-0508 scenarios G7 and G8 for eviction)
     - Confidence: high (the distance rule, the helipad rule and the damage); low (which situations
       of play are contacts at that moment); eviction inherits S-0508 claims 10 to 12's confidence
 
@@ -587,12 +597,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Confidence: medium
 
 24. **Absorbed passengers.** When a building that absorbs units or infantry is destroyed, its
-    absorbed passengers come out one after another, each into the next foundation cell in the cell
-    order of S-0302 (claim 13), whether or not the previous passenger could be placed: the first
-    passenger uses the first cell, the second the second, and so on, and the survivors of claim 18
+    absorbed passengers come out most-recently-entered first (S-0605 claim 14), each into the
+    next foundation cell in the cell order of S-0302 (claim 13), whether or not the previous
+    passenger could be placed: the most recently entered passenger uses the first cell, the
+    next most recent the second, and so on, and the survivors of claim 18
     start after the last cell used. A vehicle comes out at the cell centre, an infantry unit on a
     free standing position. Each gets out facing the building's facing and receives the scatter
-    request of claim 12. Once out, a passenger is given no further order when its house is
+    request of claim 12. A passenger that comes out keeps its owner and counts again towards
+    that owner's crate infantry count if it was not already counted (S-0605 claim 14).
+    Once out, a passenger is given no further order when its house is
     human-controlled and is put on the *hunt* behaviour when it is computer-controlled (S-0215; which
     one our engine applies depends on the owner, claim 25). One that cannot be placed
     dies, credited to the building's charge planter (Terms), if any, and otherwise to no one (not to
@@ -602,8 +615,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     stop at the last foundation cell: with more passengers than cells it places the further
     passengers at unspecified positions (Edge cases, *Absorbed passengers beyond the last cell*).
     - Backing: `measurable` (scenario D16)
-    - Confidence: medium for the placement and the credit; high for the cell order and for the
-      survivors starting after the last cell used; medium for the *hunt* behaviour
+    - Confidence: medium for the placement and the credit; high for the passenger order, crate
+      infantry count restoration, cell order and survivors starting after the last cell used,
+      medium for the *hunt* behaviour
 
 ### Computer-controlled houses
 
@@ -1055,7 +1069,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 7 | vehicle | crate (claim 14) | the crate's |
 | 8 | vehicle | crash, sinking or leaving play (claim 15); passengers still inside die at the start of a crash (claim 16) | crash: three |
 | 4 | aircraft | explosion animation only with a nonempty explosion list, then crash or leaving play (claim 16) | one list pick only with a nonempty list; crash: three |
-| 4 | building | contacts and garrison eviction (claim 17), including removal without occupant deaths when no exit qualifies | the contacts' deaths and successful occupants' scatter requests |
+| 4 | building | bunkered vehicle let out and excluded from contact treatment (S-0606 claim 13), then other contacts and garrison eviction (claim 17), including removal without occupant deaths when no exit qualifies | the contacts' deaths and successful occupants' scatter requests |
 | 5 | building | claim 19 (a) to (h), with claim 23 inside (c), claim 22 inside (d), and claims 24 and 18 inside (g); claim 18's cells start after the cells claim 24 used | as listed |
 | 6 | building | rubble and crate, leaving play (claims 20, 21); for a type with the explodes flag or a building being sold, awaiting removal instead | the crate's (when it leaves now) |
 | later turn | building awaiting removal | after the general part of its own eligible turn: leaves play and its cells before the second round of claims 18 and 19 (g), then passengers die; removal completes and rubble and crate are placed in this same turn (claim 21) | the second round's, then the crate's |
@@ -1066,8 +1080,9 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | living grappling host | cull under S-0614 claim 11 | sinking without a hit or health change, regardless of weight |
 | positive-health sinking vehicle | another killing hit | credit, raises and applicable death effects again; 1 health only under the ordinary reprieve, otherwise claim 32's zero-health/removal outcome |
 | alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
-| non-rocket crashing object | reaches the ground, was shot down | death weapon, leaves play |
-| non-rocket crashing object | reaches the ground, was alive | destroyed by its remaining health, detonation |
+| ordinary non-rocket crashing object within claim 16's scope | reaches the ground, was shot down | death weapon, leaves play |
+| ordinary non-rocket crashing object within claim 16's scope | reaches the ground, was alive | destroyed by its remaining health, detonation |
+| dropped seized unit | fall ends | S-0607 claims 16 to 19 own the outcome; only a crashable vehicle retains claim 16's ordinary crash-end exception, not an aircraft |
 | alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled; health becomes the greater of 1 health point and one quarter of its type's strength, truncated toward zero |
 | prone cyborg | lethal hit | dies (S-0107 claim 17) |
 | alive eligible building | lethal hit of a delay-kill warhead | 1 health point, countdown of *T* ticks (claim 3) |
@@ -1475,6 +1490,8 @@ a normal input or named-data setup that starts a living crash is established; it
 measurable backing in this revision. S-0501 scenario AC5 tests dead flying-aircraft crash
 motion, distinguishing the counter contribution from net descent. Rocket interception is
 instead tested by S-0506 scenario R13, not by D11's ordinary impact expectations.
+Magnetic drops use S-0607 scenarios L3 to L6, including L4's crashable-vehicle and aircraft
+variants; D11's ordinary impact predictions do not override those outcomes.
 
 **D12. Contacts of a destroyed building (claim 17).** *Setup:* a stock building type that produces
 vehicles, destroyed while a vehicle is leaving it; a stock building type that harvesters dock at,
@@ -1483,6 +1500,12 @@ credit. *Expected:* the vehicles in contact within 256 leptons of the building's
 destroyed with no kill credit. Variant b: a stock building type with the helipad flag destroyed
 while an aircraft is docked on it: the aircraft is destroyed whatever its distance. *Falsified if:*
 they survive, the docked aircraft of variant b survives, or either contact death credits an attacker.
+For bunker contacts, use S-0606 scenario K5: compare an occupied bunker with an entering
+vehicle that holds contact but no bunker link. Record the relation just before the destroying
+hit and isolate collateral damage. Expected: the bunkered vehicle is let out without this
+claim's demolition hit or run-away instruction. An entering vehicle at a flat 2 × 2 bunker's
+docking-cell centre is within 256 leptons and receives the ordinary contact hit. Treating the
+released bunkered vehicle as such a contact, or exempting the entrant, falsifies the distinction.
 
 **D13. Survivors (claim 18).** *Setup:* a test 3 × 3 building with the crewed flag, explodes flag
 off and no sale in progress, whose refund gives *C* = 5 (at least five times the divisor of the
@@ -1594,10 +1617,15 @@ leptons from the building's position (a unit goes to the centre of the cell of i
 the cell centre itself can lie somewhat beyond 768 leptons).
 
 **D16. Absorbed passengers (claim 24).** *Setup:* a stock absorbing building given named map
-overrides to keep its explodes flag off, holding three infantry, destroyed while not being sold.
-*Observable:* each passenger's release cell, initial facing and behaviour before scatter.
-*Expected:* the first three foundation cells in cell order each receive one passenger, facing
-the building; the human player's passengers receive only the scatter request. Variant b: the
+overrides to keep its explodes flag off, holding three individually identifiable infantry
+entered in a recorded order, destroyed while not being sold.
+*Observable:* each passenger's release cell, initial facing, owner and behaviour before scatter,
+and its owner's crate infantry count immediately before and after release.
+*Expected:* the first three foundation cells in cell order receive the passengers in reverse
+entry order, facing the building. Each released passenger keeps its owner and, if uncounted,
+adds 1 to that owner's crate infantry count; the human player's passengers receive only the
+scatter request. Entry-order release, a changed owner or a missing count restoration falsifies
+these predictions. Variant b: the
 same building with the crewed flag on and *C* ≥ 1, 100 deaths. Survivors and per-cell smudge steps
 start after the first three cells in this single round. This does not exclude claim 19(a)'s
 central smudge or smudges whose nearby point falls into a neighbouring cell: replay the step's
