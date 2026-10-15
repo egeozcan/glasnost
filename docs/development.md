@@ -671,8 +671,10 @@ Provisional rules of M6b bridges, each tied to a request:
 | `bridges::blow::heads_to` | a drive or ship vehicle's heading point has no stored height of its own: its test takes the unit's height, so it coincides with the track-end test | Q-0676 |
 | `fall::land` | the bomb mark is spent on landing, after the landing hit | Q-0677 |
 
-S-0511 revision 4 answers Q-0710 and Q-0712 to Q-0718; their rows are retired.
+S-0511 revision 4 answers Q-0710 and Q-0712 to Q-0718, and S-0511 claim 22 with S-0202 claim 13 answer Q-0719 and Q-0711; their rows are retired.
 
+- **Map-generator stream (S-0202 claim 13, Q-0711).** `map_rng` starts every game at seed 0, independently of the game seed. A game is a fresh session in our engine; the stream state an earlier game of the same session would leave is not carried over (a seam).
+- **Centre-cell target loss (claim 22, Q-0719).** `bridges::drop_cell_targets`: a mobile object whose attack target is the centre cell reverts a suspended behaviour first (restoring target and destination), then a still-equal target is cleared; an aircraft in *attack* restarts its run stage (`air::restart_run`); projectiles aimed at the cell lose their target. Destinations naming the cell stay.
 - **Drops (claim 9, Q-0712 and Q-0713).** A drop keeps target, destination, queued destinations, path and movement state. Its marks move at once (`bridges::blow::move_marks`): a stationary unit's standing-position mark or present flag goes from the deck record to the ground record; a moving one's reservation at its heading point is cleared at that point's height. The deferred transfer is gone.
 - **Falling (claim 10, Q-0713; S-0301 revision 14).** The fall step and any landing hit run before the behaviour processing in `tick::object_turn`. A unit still falling after it does not advance and cannot fire: the firing check answers *illegal* at rank 4 for a falling firer. A surviving landing lifts both in the same turn.
 - **Heading hits (claims 11 and 15, Q-0718).** `bridges::blow::heads_to` compares movement points with P, the cell's centre at floor + 416 (claim 11) or at its floor (claim 15). Walk and hover use their heading point's cell and stored height within 104 leptons; drive and ship use their current track's end cell with the unit's height. An object destination is not excluded, and a destination alone is not a heading point.
