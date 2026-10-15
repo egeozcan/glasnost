@@ -3,7 +3,7 @@ id: Q-0600
 title: Which speed makes a driving vehicle or a ship "moving now" for wakes?
 status: answered
 related: [S-0207, S-0504, S-0203]
-answered-by: [S-0504]
+answered-by: [S-0504, S-0207]
 ---
 
 ## Need
