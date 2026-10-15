@@ -24,8 +24,13 @@
 //!   the order a person gives, at the seen enemy cell with the most seen
 //!   enemies around it and none of the house's own objects; a ready
 //!   paradrop (S-0522) is fired at a free usable land cell near home, and
-//!   the paratroopers that land join its army (the other kinds are not
-//!   used, and it does not build for a paradrop);
+//!   the paratroopers that land join its army; a ready iron curtain goes on
+//!   a group of its own armed vehicles fighting seen enemies, a force shield
+//!   on its buildings with seen enemies at them, a spy plane at the enemy
+//!   base, and the teleport takes a group of its armed vehicles (first
+//!   stage) to a free block next to the enemy base (second stage), each with
+//!   the order a person gives (it builds only for the missile and storm
+//!   kinds, not for these);
 //! - **selling out**: a house with no income for a long while and too few
 //!   credits for an army unit sells its buildings one by one for their
 //!   refunds and builds army units with them, and builds no more buildings;
@@ -91,6 +96,17 @@ const ASHORE: i64 = 4; // nocite: tuning of our own opponent
 /// The radius, in cells, around a superweapon's target cell within which
 /// seen enemies count for its worth and the house's own objects forbid it.
 const STRIKE_RADIUS: i64 = 3; // nocite: tuning of our own opponent
+/// The fewest of its own armed vehicles in an effect block for an iron
+/// curtain or a teleport source.
+const GROUP_MIN: usize = 3; // nocite: tuning of our own opponent
+/// The fewest of its own buildings in an effect block for a force shield.
+const SHIELD_MIN: usize = 2; // nocite: tuning of our own opponent
+/// Cells from a group of vehicles within which a seen enemy counts as a
+/// fight for an iron curtain.
+const FIGHT: i64 = 10; // nocite: tuning of our own opponent
+/// The nearest and farthest ring around the enemy base, in cells, at which
+/// the teleport's second stage lands.
+const LAND_RINGS: (i32, i32) = (4, 9); // nocite: tuning of our own opponent
 /// The nearest and farthest ring around home, in cells, at which a
 /// paradrop is aimed.
 const DROP_RINGS: (i32, i32) = (3, 8); // nocite: tuning of our own opponent
@@ -214,10 +230,12 @@ impl Brain {
         }
     }
 
-    /// Fires every ready missile or storm superweapon of the house (granted,
-    /// ready and not suspended: what its sidebar icon shows) at
-    /// [`Brain::strike_cell`], with the fire order a person gives; a storm
-    /// only while no storm is under way (a person sees one).
+    /// Fires every ready superweapon of the house (granted, ready and not
+    /// suspended: what its sidebar icon shows) at the cell its kind's chooser
+    /// gives ([`Brain::strike_cell`] for a missile or storm, and so on), with
+    /// the fire order a person gives; a storm only while no storm is under
+    /// way (a person sees one), a teleport's first stage only while no source
+    /// is held.
     fn fire_superweapons(&self, w: &World, out: &mut Vec<Order>) {
         use glasnost_sim::superweapons::{StormState, SwKind, charge};
         let h = self.house();
@@ -231,12 +249,150 @@ impl Brain {
                 Some(SwKind::Missile) => self.strike_cell(w),
                 Some(SwKind::Storm) if w.sw.storm.state == StormState::Idle => self.strike_cell(w),
                 Some(SwKind::Paradrop | SwKind::AmerParadrop) => self.drop_cell(w),
+                Some(SwKind::IronCurtain) => self.curtain_cell(w),
+                Some(SwKind::ForceShield) => self.shield_cell(w),
+                Some(SwKind::SpyPlane) => self.script.attack_goal(w),
+                Some(SwKind::Chrono) if !Self::has_source(w, h) => self.group_cell(w),
+                Some(SwKind::ChronoWarp) if Self::has_source(w, h) => self.landing_cell(w),
                 _ => None,
             };
             if let Some(cell) = cell {
                 out.push(Order::FireSuperweapon { sw: i, cell });
             }
         }
+    }
+
+    /// Whether a first-stage teleport record of the house holds a picked
+    /// source, so that a second stage has something to send (S-0513
+    /// claim 34).
+    fn has_source(w: &World, h: HouseId) -> bool {
+        use glasnost_sim::superweapons::{SwKind, charge};
+        w.rules()
+            .superweapons
+            .types
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.kind == Some(SwKind::Chrono))
+            .any(|(i, _)| charge::get(w, h, i as u32).is_some_and(|r| r.source.is_some()))
+    }
+
+    /// Whether `o` is an armed ground vehicle of the plan's army that may
+    /// stand in an effect block of an iron curtain or a teleport.
+    fn army_vehicle(&self, w: &World, o: &glasnost_sim::world::Object) -> bool {
+        o.kind == Kind::Vehicle
+            && scripted::role_of(w, tech::type_of(o)) == Some(scripted::Role::Army)
+            && !glasnost_sim::combat::veterancy::type_combat(w, o.id).is_some_and(|t| t.organic)
+    }
+
+    /// The cell of an effect block (S-0513 claim 4: the cell and its eight
+    /// neighbours) holding the most of the house's armed vehicles, at least
+    /// [`GROUP_MIN`], with none of its infantry or organic units (the
+    /// curtain kills infantry, claim 23, and the teleport kills organic
+    /// units, claim 35) and no unit of anyone else (both would protect or
+    /// send them too); the first in cell order on equal counts. With
+    /// `fight`, a seen enemy must be within [`FIGHT`] cells.
+    fn vehicle_block(&self, w: &World, fight: bool) -> Option<CellXY> {
+        let house = self.house();
+        let enemies = self.script.seen_enemies(w);
+        let mine: Vec<(CellXY, bool)> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Building)
+            .filter(|o| o.owner == Some(house))
+            .map(|o| (o.pos.cell(), self.army_vehicle(w, o)))
+            .collect();
+        let others: Vec<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner != Some(house))
+            .map(|o| o.pos.cell())
+            .collect();
+        let near = |a: CellXY, b: CellXY| (a.x - b.x).abs() <= 1 && (a.y - b.y).abs() <= 1;
+        mine.iter()
+            .filter(|&&(_, army)| army)
+            .map(|&(c, _)| c)
+            .filter(|&c| {
+                !fight || enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT)
+            })
+            .filter(|&c| !mine.iter().any(|&(m, army)| !army && near(m, c)))
+            .filter(|&c| !others.iter().any(|&o| near(o, c)))
+            .map(|c| (mine.iter().filter(|&&(m, army)| army && near(m, c)).count(), c))
+            .filter(|&(n, _)| n >= GROUP_MIN)
+            .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
+            .map(|(_, c)| c)
+    }
+
+    /// An iron curtain's cell: a block of the house's armed vehicles that
+    /// is fighting.
+    fn curtain_cell(&self, w: &World) -> Option<CellXY> {
+        self.vehicle_block(w, true)
+    }
+
+    /// A teleport source's cell: a block of the house's armed vehicles.
+    fn group_cell(&self, w: &World) -> Option<CellXY> {
+        self.vehicle_block(w, false)
+    }
+
+    /// A force shield's cell: the building of the house with the most of
+    /// its buildings in the block, at least [`SHIELD_MIN`], where a seen
+    /// enemy stands within [`DEFEND`] cells and no unit of anyone else is
+    /// in the block; the first in cell order on equal counts.
+    fn shield_cell(&self, w: &World) -> Option<CellXY> {
+        let house = self.house();
+        let enemies = self.script.seen_enemies(w);
+        let buildings: Vec<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.kind == Kind::Building)
+            .filter(|o| o.owner == Some(house))
+            .map(|o| o.pos.cell())
+            .collect();
+        let others: Vec<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner != Some(house))
+            .map(|o| o.pos.cell())
+            .collect();
+        let near = |a: CellXY, b: CellXY| (a.x - b.x).abs() <= 1 && (a.y - b.y).abs() <= 1;
+        buildings
+            .iter()
+            .copied()
+            .filter(|&c| enemies.iter().any(|&(_, e)| dist2(e, c) <= DEFEND * DEFEND))
+            .filter(|&c| !others.iter().any(|&o| near(o, c)))
+            .map(|c| (buildings.iter().filter(|&&b| near(b, c)).count(), c))
+            .filter(|&(n, _)| n >= SHIELD_MIN)
+            .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
+            .map(|(_, c)| c)
+    }
+
+    /// The teleport's second-stage cell: the first cell, ring by ring
+    /// around the enemy base from [`LAND_RINGS`]'s nearest ring outwards,
+    /// in cell order within a ring, whose whole effect block is usable
+    /// land with nothing standing on it.
+    fn landing_cell(&self, w: &World) -> Option<CellXY> {
+        let goal = self.script.attack_goal(w)?;
+        let taken: std::collections::BTreeSet<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map)
+            .map(|o| o.pos.cell())
+            .collect();
+        let free = |c: CellXY| {
+            w.cells.usable(c)
+                && !taken.contains(&c)
+                && w.cells
+                    .cell(c)
+                    .is_some_and(|x| x.land != land::WATER && x.land != land::ROCK)
+        };
+        (LAND_RINGS.0..=LAND_RINGS.1).find_map(|r| {
+            (-r..=r)
+                .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
+                .filter(|&(dx, dy)| dx.abs().max(dy.abs()) == r)
+                .map(|(dx, dy)| CellXY::new(goal.x + dx, goal.y + dy))
+                .find(|&c| {
+                    (-1..=1).all(|dy| (-1..=1).all(|dx| free(CellXY::new(c.x + dx, c.y + dy))))
+                })
+        })
     }
 
     /// A paradrop's cell: the first cell, ring by ring around home from
