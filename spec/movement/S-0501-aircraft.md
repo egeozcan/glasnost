@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -19,13 +19,17 @@ supersedes: []
 How fixed-wing and rotor aircraft fly: their height, horizontal speed, landing and take-off; how
 an armed aircraft carries out an attack run and spends its ammunition; how it finds, reserves,
 lands on and is serviced at a pad; how the number of pad-bound aircraft a house may build follows
-from its pads; and how aircraft launched from a carrier live, return and are replaced. Missiles
-launched from a spawning object are S-0506. The spy plane's dispatch and reveal are planned S-0513 and the
+from its pads; and the flight and return of non-missile aircraft launched from a carrier.
+The shared spawn-controller cycle, including replacement, reload and release, belongs to
+S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The spy plane's dispatch and reveal are planned S-0513 and the
 delivery of paratroopers and cargo is planned S-0522; only their flight is covered here.
 **Paired correction.** S-0407 claim 16 and its Import mapping must use claim 30's helipad
 accounting and absent docking-place count of 1, not 0, and share the list-only capacity quirk.
 Its queue-time build-limit quirk remains owned there. S-0314 claims 4 and 5 can replace their
 unmeasured aircraft-step limitation with claims 26 and 27 and scenario AC16 here.
+S-0504 claim 3 must qualify its carrier example by S-0506's launching count: preparing
+non-missile aircraft alone do not impose a movement hold. S-0506 claim 10 must describe that
+hold as preventing the next step, not freezing an already active step (claim 35 here).
 
 This spec covers skirmish; network games and campaigns are out of scope. Player houses controlled
 by our AI use the human-controlled rules below. Computer-only behaviour described here records
@@ -83,8 +87,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   buildings (claim 30).
 - **pad-aircraft list**: the game-wide list of aircraft types counted against the pad total.
 - **standard delay**: S-0215 claim 6, *D*<sub>r</sub> + *U*(0, 2) on the scenario stream.
-- Spawn-controller terms (*spawn controller*, *spawned type*, *spawn slot*, *slot object*, *slot
-  state* and its values, *controller target*, *release*) are S-0506's (Terms).
+- Spawn-controller terms (*spawn controller*, *spawner*, *spawned type*, *spawn slot*, *slot
+  object*, *slot state* and its values, *controller state*, *controller target*, *pending target*,
+  *launch pass*, *launch spacing*, *launching count*, *regeneration*, *reload* and *release*)
+  follow S-0506 claims 1 to 9 and 11 to 13. A **carrier slot aircraft** here is a non-missile slot
+  object using this spec's ordinary aircraft flight, not a rocket missile.
 
 ## Behaviour
 
@@ -541,27 +548,34 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Backing: `measurable` (scenario AC20)
     - Confidence: medium
 
-35. **Carrier slot aircraft.** A spawn slot (S-0506) whose spawned type is an aircraft runs these
-    flight steps. At launch its requested placement is 10 leptons above the spawner's firing
-    point, but actual placement is subject to claim 1's height replacement. It
-    gets a *move* to the neighbouring cell of the spawner's cell in step direction 0 (glossary).
-    While preparing, it gets a *move* to the neighbour in step direction 4. While attacking, every
-    controller pass gives it the controller target and queues *attack* again; it flies its own
-    runs (claims 12 to 17). When it has no ammunition or there is no target, it forgets its
-    target, gets the spawner as destination and *move*, and becomes returning. A returning aircraft with ammunition left resumes attacking when
-    the controller gets a target again. Otherwise a returning aircraft that stands in the spawner's cell less than 20 leptons above the spawner is taken off
-    the map and starts reloading for the spawner's imported spawn-reload time; when that ends it is docked
-    with full ammunition and full health. Elsewhere it keeps being sent to the spawner. A slot
-    aircraft may land in a cell that already holds another slot aircraft (Formula F7).
+35. **Carrier slot aircraft flight.** S-0506 claims 1 to 9 and 11 to 13 own the shared slot
+    cycle; table T4 supplies only the preparing, attacking and returning flight of a carrier
+    slot aircraft. Launch placement is requested 10 leptons above the spawner's firing point
+    (S-0506 claim 7), but claim 1 can replace that height. At launch the aircraft gets *move*
+    toward the neighbouring cell of the spawner's cell in step direction 0 (glossary).
+    Its attack runs follow claims 12 to 17. A returning aircraft is taken off the map only in
+    the spawner's cell and with the signed integer world-height difference
+    *z*ₐ − *z*ₛ < 20 leptons. This is not an absolute-distance test: there is no lower bound,
+    so an aircraft below the spawner also satisfies the height condition. Reload and the
+    subsequent full-health, full-ammunition docked state follow S-0506 claim 9. A slot aircraft
+    may land in a cell that already holds another slot aircraft (Formula F7).
+    A ship's launch movement hold is S-0504 claim 3: a positive launching count prevents the
+    next step, not completion of a step already begun. Use S-0506's launching count, not its
+    controller state: preparing non-missile aircraft do not by themselves raise that count.
     - Backing: `measurable` (scenario AC21)
     - Confidence: high
 
-36. **Loss of a slot aircraft.** When a slot aircraft dies, or is a kamikaze, its slot becomes
-    empty and is refilled after the spawner's regeneration time (S-0506 claim 9). A slot aircraft
-    that is removed from play while still alive and not kamikaze leaves its slot unchanged.
-    - Backing: `measurable` (scenario AC21); `unmeasured` for live removal without release,
-      because no normal-input setup has been established that generates that notification
-    - Confidence: medium
+36. **Loss of a slot aircraft.** S-0506 claim 9 owns loss notification and regeneration.
+    A notification for a slot aircraft with health below 1 or already released empties its slot
+    immediately and starts its regeneration countdown; it need not wait for impact or final
+    removal. Crash start can therefore free the slot while the old aircraft is still falling.
+    A notification for a living, unreleased non-missile aircraft leaves its slot unchanged.
+    Spawner destruction, ownership change and the other slot-clearing events follow S-0506
+    claim 13; release of a non-missile aircraft through that rule starts its crash (S-0506
+    claim 12), rather than letting it return to the carrier.
+    - Backing: `measurable` (scenario AC21); `unmeasured` for loss notification of a living,
+      unreleased aircraft, because no normal-input setup has been established that generates it
+    - Confidence: high
 
 37. **Random draws traced here.** The following draws use the scenario stream (S-0202 claim 10),
     with inclusive integer ranges as in S-0202 claim 4:
@@ -692,7 +706,7 @@ division truncated toward zero.
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | Climb step | 20 | leptons per tick | 10 when carrying passengers (F1) |
-| Descent divisor | 20 | — | F2 |
+| Descent divisor | 20 | dimensionless | F2 |
 | Descent step bounds | 20 … 50 | leptons per tick | F2 |
 | Dead aircraft floor | 1 | lepton | F2 |
 | Slow-speed floor | 0.1 | fraction | F4 |
@@ -719,8 +733,8 @@ division truncated toward zero.
 | Ticks per game minute | 900 | ticks | F10 (S-0215 claim 6) |
 | Unarmed guard recheck | 45 | ticks | claim 29 |
 | Landing spot near own cell | 256 | leptons | F8 |
-| Dock-type distance weight | 1/4 | — | F8 |
-| Slot return height | 20 | leptons above the spawner | claim 35 |
+| Dock-type distance weight | 1/4 | dimensionless | F8 |
+| Slot return height bound | 20 | leptons, signed world-height difference | strictly below, no lower bound (claim 35) |
 | Requested slot launch height | 10 | leptons above the firing point | placement may replace it (claim 35) |
 | Smoke chance | 10 alive, 80 dead | out of 100 | claim 37 |
 | Splash shift range | −170 … 170 | leptons | claim 37 |
@@ -792,6 +806,19 @@ this spec's tests (Terms).
 | settled in *sleep* | service step, target held, ammunition at least ⌊*A*/2⌋ | no round, no repair, no release |
 | settled in *sleep* | service step, nothing to do, or cannot pay | released: fall back to rest, *guard* forced |
 | *guard* on the pad, target, ammunition ≥ ⌊*A*/2⌋ | its processing | *attack*; takes off; the reservation ends |
+
+**T4. Carrier slot aircraft flight.** Events are evaluated at S-0506 claim 2's launch passes.
+The shared slot states and release decision remain S-0506 claims 4 and 8's rules.
+
+| Slot state | Event | Next state | Flight effect |
+|---|---|---|---|
+| preparing | controller target present | preparing, until shared release | *move* toward the spawner-cell neighbour in step direction 4 |
+| preparing | no controller target | returning | clear target, spawner as destination, *move* |
+| attacking | ammunition left and controller target present | attacking | receive controller target and queue *attack* again |
+| attacking | no ammunition or no controller target | returning | clear target, spawner as destination, *move* |
+| returning | ammunition left and controller target present | attacking | receive controller target and queue *attack* |
+| returning | otherwise, same cell as spawner and signed world-height difference < 20 leptons | reloading | taken off the map, reload countdown begins (S-0506 claim 9) |
+| returning | otherwise | returning | clear target, spawner as destination, *move* again |
 
 **Ordering.**
 - A queued behaviour started at the end-of-update opportunity can already cause the pending
@@ -890,8 +917,7 @@ Run each variant five times unless stated otherwise. Use scripted normal input a
 per-tick recorder for positions, heights, facings, current and queued behaviours, ammunition,
 health, credits, contacts, current and target speed fractions, held height and shot events.
 The observed area is the test aircraft's route, its targets and every candidate pad or landing
-cell named by the variant; keep the bystander outside that area. The bench can drive input and
-collect these logs. No game-state writes, patched executable or injected instrumentation are allowed.
+cell named by the variant; keep the bystander outside that area. Scripted normal input can drive the game and a read-only recorder can collect these logs. No game-state writes, patched executable or injected instrumentation are allowed.
 
 Where stock types or normal orders cannot expose a branch, the scenario explicitly names a
 **test-map override**. These are the glossary's named-test-file allowance, not stock-data claims.
@@ -1099,13 +1125,26 @@ listed in Open questions are not claimed confirmed by these scenarios.
 - **AC21 Carrier aircraft (claims 35 and 36).** Attack with a carrier and record each slot's
   launch request, actual position, first two destinations, target, return, off-map interval,
   health and ammunition. Expected: directions 0 then 4, aircraft's own attack runs, return when
-  empty or target-free, pickup only in the spawner cell below the relative-height threshold,
-  then reload completion at the next controller pass after the spawner's reload time. Relaunch
+  empty or target-free, and pickup only in the spawner cell with signed world-height difference
+  strictly below 20 leptons. Record world heights separately: a difference of 20 must not pass,
+  while 19 does. If normal flight and carrier motion can produce a negative difference,
+  it must pass too; failure to reach that variant is a coverage gap, not confirmation of an
+  absolute-height test. Preparing without a controller target must return rather than continue
+  moving to the direction-4 neighbour. Expect reload completion at the next controller pass
+  at or after the spawner's reload countdown expires. Relaunch
   with full health and ammunition. Restore a target during an ammunition-bearing return:
   expect attack resumed, not unconditional continued return. Kill one aircraft: its slot's
-  regeneration countdown starts at its loss notification (which may precede impact), and
-  replacement waits for a controller pass after that countdown. Live non-kamikaze removal
-  without loss is not claimed covered by this test.
+  regeneration countdown starts at its crash-start loss notification, not impact, and
+  replacement waits for a controller pass at or after that countdown expires. Destroy or
+  change ownership of the carrier during a sortie: its linked aircraft start to crash under
+  S-0506 claims 12 and 13 rather than return. A notification while a non-missile aircraft is
+  living and unreleased is not claimed covered by this test.
+  Issue a move order to the carrier both between steps and during a step, recording its
+  launching count separately from controller state and preparing aircraft. Expect S-0504
+  claim 3's next-step hold only while that count is positive, with a current step completing.
+  Ordinary preparing non-missile aircraft alone must not cause that hold. A positive-count
+  variant needs a missile-spawning ship; record that separately rather than inferring it from
+  the carrier's controller being in its launching state.
 - **AC22 Random draws (claim 37).** Use the permitted random-state recorder in addition to the
   per-tick records. Compare a healthy aircraft with a damaged one below the smoke threshold
   at height 0 and above it, and the same aircraft during crash. Expected above 0: one
