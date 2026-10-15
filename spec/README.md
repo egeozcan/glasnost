@@ -120,7 +120,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 26 | approved | — |
 | [S-0417](structures/S-0417-factory-unloading.md) | Factory unloading (doors, exit movement and rally destinations) | structures | 14 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 25 | approved | — |
-| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 30 | approved | — |
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 28 | approved | — |
 | [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 4 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 27 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 40 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 41 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 32 | approved | — |
+| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 31 | approved | — |
