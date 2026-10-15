@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -183,10 +183,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   distinction, not a promise of damage on arrival. It issues the same capture order as
   *capture*. Skirmish arrival outcomes follow S-0509 claims 6 and 7.
 - **Recycling building.** A building whose type turns units that enter it into credits.
-- **Bridge repair hut.** A building type that an engineer enters to repair a bridge. The cursor's
-  destroyed-bridge test is S-0511 claim 21's, around the hut, not the actual repair selection
-  around the entering engineer of S-0511 claim 18. They can disagree; no discriminating layout
-  is established. Entry effects check neither the hut's owner nor alliance and, with
+- **Bridge repair hut.** A building type that an engineer enters to repair a bridge. The cursor
+  uses S-0511 claim 21's exact test: the last qualifying candidate in the hut cell's 5 × 5 block,
+  in increasing y then increasing x order, and that candidate's low-piece run or high-candidate
+  bridge-link traversal. It is not a nearest-link test or the actual repair selection around
+  the entering engineer of S-0511 claim 18. The cursor and actual repair can select different
+  bridges; S-0511 claim 21 supplies the mixed-candidate and link-chain measurement variants. Entry effects check neither the hut's owner nor alliance and, with
   `quirks.repair_consumes_engineer_always` at its original default, use up the engineer even
   when nothing is repaired (S-0511 claim 17). With that switch off, entry is refused when
   claim 18 would repair nothing, leaving the engineer alive; S-0511 owns the switch.
@@ -1215,7 +1217,7 @@ undefined.
 |---|---|---|
 | I1 | *g* is toggle select | toggle select |
 | I2 | Engineer; the target carries a planted bomb visible to the acting player (S-0519 claim 10) | disarm bomb |
-| I3 | Engineer; the target a repairable building, not vehicle-like, that is a bridge repair hut | repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair; no owner or alliance test |
+| I3 | Engineer; the target a repairable building, not vehicle-like, that is a bridge repair hut | repair building when S-0511 claim 21's last-candidate selection and low-run or high-link traversal offer repair, else no-repair; no owner or alliance test |
 | I4 | Engineer below full health (the engineer's own health ratio, F2); the target an engineer-friendly building that is a hospital | enter |
 | I5 | Engineer; the target an engineer-friendly building at full health | recycle if the building recycles, else no-repair |
 | I6 | Engineer; the target any other engineer-friendly building | repair building |
@@ -1424,7 +1426,7 @@ cell is inside the usable area.
 | Row | Infantry and cell | Final action |
 |---|---|---|
 | IC1 | *c*′ is move; not a jumpjet type; not an in-place deployer in its deployed state; the cell is a tunnel entrance | enter tunnel if it can use the tunnel, else no-enter tunnel |
-| IC2 | Engineer; fog of war is on, and the cell shows a remembered building under fog that is a bridge repair hut | repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair; no owner or alliance test (low for the fog case) |
+| IC2 | Engineer; fog of war is on, and the cell shows a remembered building under fog that is a bridge repair hut | repair building when S-0511 claim 21's last-candidate selection and low-run or high-link traversal offer repair, else no-repair; no owner or alliance test (low for the fog case) |
 | IC3 | Engineer; fog of war is on, and the cell shows a remembered repairable building under fog | capture (low) |
 | IC4 | Healing actor; *c*′ is attack | area guard |
 | IC5 | A jumpjet type; *c*′ is move or no-move; a tunnel cell | nothing |
@@ -1940,7 +1942,8 @@ cell, by table GC). Falsified if any of these differs.
   health and at a health ratio below the capture field (a named test rules file sets the capture
   field to 50 %), an enemy building that is neither capturable nor spyable, an own damaged
   building, an own undamaged building, a bridge repair hut with its bridge destroyed and intact
-  under S-0511 claim 21's cursor test (repeat with own, allied and enemy huts), a
+  (repeat with own, allied and enemy huts), plus S-0511 claim 21's mixed-candidate and
+  link-chain variants, a
   neutral garrisonable building, an allied hospital (tried with a plain armed infantry unit, hurt
   and unhurt, since a healing actor's own rows come first), an allied hospital whose type is repairable
   (a named test rules file makes it so if needed), at full health and damaged, tried with the
@@ -1962,8 +1965,10 @@ cell, by table GC). Falsified if any of these differs.
   not that action (row I8 needs force-fire not held). The orders: a capture order for capture,
   damaging entry and repair building alike (table M: *as for capture*, which needs only that
   the actor is movable). For the hut, *repair building* or *no-repair* follows S-0511 claim 21's
-  cursor test regardless of hut owner. Do not infer claim 18's actual repair choice from that
-  cursor: B12 and B13 test the two separately, and B14 tests entry effects. For the enemy
+  last-candidate selection and low-run or high-link traversal regardless of hut owner.
+  Include B13's mixed-candidate and link-chain variants: a different candidate choice or a
+  nearest-link-only result falsifies the claim. Do not infer S-0511 claim 18's actual repair
+  choice from that cursor: B12 and B13 test the two separately, and B14 tests entry effects. For the enemy
   capturable building, let the engineer arrive in both health cases, with no intervening
   owner change, sale or erasure. Expected: capture in both, not a damage-only entry above
   the click threshold (S-0509 claims 6 and 7, E4). A damage-only outcome falsifies this
