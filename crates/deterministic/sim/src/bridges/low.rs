@@ -12,7 +12,13 @@ use crate::world::{Layer, ObjectId, World};
 /// Writes `role` of `family` and `line` on the strip across `line` centred
 /// on `centre` (claims 13 and 14) and recalculates the changed cells. The
 /// cells are written whatever they held before. Returns the cells.
-pub fn write_strip(w: &mut World, centre: CellXY, family: Family, line: Line, role: Role) -> Vec<CellXY> {
+pub fn write_strip(
+    w: &mut World,
+    centre: CellXY,
+    family: Family,
+    line: Line,
+    role: Role,
+) -> Vec<CellXY> {
     let o = pieces::low_overlay(family, line, role);
     let mut cells = Vec::new();
     for (place, c) in pieces::strip(line, centre).into_iter().enumerate() {
@@ -58,9 +64,8 @@ pub fn kill_check(w: &mut World, c: CellXY, destroyed: bool) {
             .is_some_and(|u| u.jumpjet_locomotor);
         let unit = matches!(kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft);
         // spec: S-0511 claim 15 (it could not enter the cell as it now is; the cell became destroyed and the type has jumpjet locomotion; or it is an aircraft)
-        let hit = kind == Kind::Aircraft
-            || (unit && !could_enter(w, id, c))
-            || (destroyed && jumpjet);
+        let hit =
+            kind == Kind::Aircraft || (unit && !could_enter(w, id, c)) || (destroyed && jumpjet);
         if hit {
             blow::ground_hit(w, id);
         }
@@ -196,6 +201,7 @@ pub fn reevaluate(w: &mut World, n: CellXY, line: Line) {
         Some(Role::D(1) | Role::X) => 2,
         _ => 0,
     };
+    // spec: S-0511 claim 14 (b = 4 for I₅, D₀, D₁, S′; b = 8 for D₂, X)
     let b = match role_in(w, pb, family, line) {
         Some(Role::I(5) | Role::D(0) | Role::D(1) | Role::S2) => 4,
         Some(Role::D(2) | Role::X) => 8,

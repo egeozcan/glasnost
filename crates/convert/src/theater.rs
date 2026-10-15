@@ -14,7 +14,8 @@ use std::collections::BTreeMap;
 use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::terrain::{
-    BridgePositions, Roles, TileAnim, TileCatalogue, TileCell, TileInfo, UNSET, UNSET_DESTROYABLE_CLIFF, UNSET_POSITION,
+    BridgePositions, Roles, TileAnim, TileCatalogue, TileCell, TileInfo, UNSET,
+    UNSET_DESTROYABLE_CLIFF, UNSET_POSITION,
 };
 use glasnost_vfs::Vfs;
 use glasnost_vfs::theater::Theater;
@@ -390,7 +391,10 @@ impl Catalogue {
         let bridge_positions = BridgePositions {
             top_left: [position("BridgeTopLeft1"), position("BridgeTopLeft2")],
             top_right: [position("BridgeTopRight1"), position("BridgeTopRight2")],
-            bottom_right: [position("BridgeBottomRight1"), position("BridgeBottomRight2")],
+            bottom_right: [
+                position("BridgeBottomRight1"),
+                position("BridgeBottomRight2"),
+            ],
             bottom_left: [position("BridgeBottomLeft1"), position("BridgeBottomLeft2")],
             middle: [position("BridgeMiddle1"), position("BridgeMiddle2")],
         };

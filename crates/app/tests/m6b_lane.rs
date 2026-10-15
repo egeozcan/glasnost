@@ -445,9 +445,8 @@ fn bridge_hut(w: &World) -> Option<ObjectId> {
                 .get(o.type_index as usize)
                 .is_some_and(|b| b.building.bridge_repair_hut);
         let c = o.pos.cell();
-        let near = (-3..=3).any(|dx| {
-            (-3..=3).any(|dy| w.cells.is_bridge(CellXY::new(c.x + dx, c.y + dy)))
-        });
+        let near = (-3..=3)
+            .any(|dx| (-3..=3).any(|dy| w.cells.is_bridge(CellXY::new(c.x + dx, c.y + dy))));
         (hut && near).then_some(o.id)
     })
 }

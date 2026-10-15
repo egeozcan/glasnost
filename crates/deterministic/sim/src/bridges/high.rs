@@ -217,11 +217,13 @@ fn lower_pier(w: &mut World, r: CellXY) {
 
 /// The pier column (S-0511 Terms) in decreasing-cross-coordinate,
 /// reference, increasing-cross-coordinate order.
+// spec: S-0511 Terms (the pier column's three cells)
 fn column(r: CellXY, line: Line) -> [CellXY; 3] {
     pieces::strip(line, r)
 }
 
 /// The pre-collapse levels of the pier column.
+// spec: S-0511 Terms (the pier column's three cells)
 fn column_levels(w: &World, r: CellXY, line: Line) -> [(CellXY, i32); 3] {
     column(r, line).map(|c| (c, w.cells.cell(c).map_or(0, |x| i32::from(x.level))))
 }
@@ -237,6 +239,7 @@ pub fn attempt_pier(
     ctx: &mut Ctx,
 ) -> bool {
     let f = line.step();
+    // spec: S-0511 claim 6 (states 0 to 2 fail; state 3 collapses)
     if k < 3 {
         // spec: S-0511 claim 6 (states 0 to 2: state 3, a damage notice both ways; fails)
         set_pier(w, r, family, line, 3);
@@ -246,6 +249,7 @@ pub fn attempt_pier(
     }
     // spec: S-0511 claim 6 (state 3: collapse; succeeds)
     let pre = column_levels(w, r, line);
+    // spec: S-0511 claim 6 (a collapsed pier is in state 4)
     set_pier(w, r, family, line, 4);
     lower_pier(w, r);
     // spec: S-0511 claim 6 (the column's blow-ups at pre-collapse heights, decreasing cross coordinate, reference, increasing)
@@ -309,6 +313,7 @@ fn pier_notice(
     if next == k {
         return;
     }
+    // spec: S-0511 claim 6 (states 1 to 3 are set; state 4 is a collapse)
     if next < 4 {
         set_pier(w, r, family, line, next);
         return;
@@ -361,7 +366,12 @@ pub fn is_far_piece(w: &World, c: CellXY, line: Line, ramps_only: bool) -> bool 
 
 /// The nearest cell from `from` toward the start side, `from` included,
 /// that satisfies `is`, within the map.
-pub fn walk_back(w: &World, from: CellXY, line: Line, is: impl Fn(CellXY) -> bool) -> Option<CellXY> {
+pub fn walk_back(
+    w: &World,
+    from: CellXY,
+    line: Line,
+    is: impl Fn(CellXY) -> bool,
+) -> Option<CellXY> {
     let f = line.step();
     let mut c = from;
     loop {
@@ -486,6 +496,7 @@ pub fn name_cell(w: &mut World, c: CellXY, enable: bool) {
     // spec: S-0212 Terms and claim 3 (links within 3 cells of the named cell)
     let within = |l: &BridgeLink| l.within(c, 3);
     if w.cells.links.iter().any(within) {
+        // spec: S-0212 Terms and claim 3 (links within 3 cells of the named cell)
         for l in w.cells.links.iter_mut().filter(|l| l.within(c, 3)) {
             l.enabled = enable;
         }
@@ -507,6 +518,7 @@ pub fn name_cell(w: &mut World, c: CellXY, enable: bool) {
         if !links.iter().any(within) {
             return;
         }
+        // spec: S-0212 Terms and claim 3 (links within 3 cells of the named cell)
         for l in links.iter_mut().filter(|l| l.within(c, 3)) {
             l.enabled = enable;
         }

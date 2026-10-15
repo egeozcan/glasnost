@@ -22,8 +22,7 @@ pub fn hut_cell(w: &World, hut: ObjectId) -> Option<CellXY> {
 pub fn is_hut(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         o.kind == Kind::Building
-            && w
-                .rules()
+            && w.rules()
                 .buildings
                 .get(o.type_index as usize)
                 .is_some_and(|b| b.building.bridge_repair_hut)
@@ -100,7 +99,11 @@ fn bridge_cell(w: &World, c: CellXY) -> Option<CellXY> {
 }
 
 /// The section cell and line of bridge cell `b` (claim 16).
-fn section_cell(w: &World, b: CellXY, filter: Option<Family>) -> Option<(CellXY, Line, Option<Family>)> {
+fn section_cell(
+    w: &World,
+    b: CellXY,
+    filter: Option<Family>,
+) -> Option<(CellXY, Line, Option<Family>)> {
     if w.cells.is_bridge(b) {
         // spec: S-0511 claim 16 (a high-bridge cell gives its section cell)
         let s = pieces::section_marking(w, b)?;
@@ -114,6 +117,7 @@ fn section_cell(w: &World, b: CellXY, filter: Option<Family>) -> Option<(CellXY,
     let d = line.across();
     // spec: S-0511 claim 16 and Constants (t: the distance to the nearest cell without the body mark across, toward increasing y on an x bridge, increasing x on a y bridge; 1 ≤ t ≤ 4; the section cell displaced by (t − 2) d)
     let t = (1..=4).find(|&t| !w.cells.body(at(b, d, t)))?;
+    // spec: S-0511 claim 16 (the section cell displaced by (t − 2) d)
     Some((at(b, d, t - 2), line, None))
 }
 
@@ -171,6 +175,7 @@ pub fn demolish(w: &mut World, hut: ObjectId) {
     // spec: S-0511 claim 16 and Constants (up to three attempts at S, then up to three at the cell before the endpoint)
     super::attempts(w, start, 3);
     if let Some(e) = end {
+        // spec: S-0511 claim 16 and Constants (up to three attempts at the cell before the endpoint)
         super::attempts(w, at(e, f, -1), 3);
     }
 }
@@ -230,8 +235,7 @@ pub fn engineer_entered_hut(w: &mut World, engineer: ObjectId, hut: ObjectId) ->
         return false;
     };
     let engineer_type = e.kind == Kind::Infantry
-        && w
-            .rules()
+        && w.rules()
             .unit(e.kind, e.type_index)
             .is_some_and(|u| u.engineer);
     if !engineer_type || !is_hut(w, hut) {
@@ -387,6 +391,7 @@ fn repair_from(w: &mut World, c: CellXY, line: Line, filter: Option<Family>) {
             // spec: S-0511 claim 18 (a selected pier is restored, with the bridge selected from the cell two steps toward its start side, before its own far-side span receives sections)
             restore_pier(w, r, line);
             high::name_cell(w, r, true);
+            // spec: S-0511 claim 18 (the bridge selected from the cell two steps toward the start side)
             repair_from(w, at(start, f, -2), line, filter);
             repair_span(w, start, line, family);
         }
@@ -402,6 +407,7 @@ fn restore_pier(w: &mut World, r: CellXY, line: Line) {
     let cells = pieces::tile_cells(w, r);
     // spec: S-0511 claim 19 (the pier's tile goes back to state 0 on all its cells, whatever state it was in)
     high::set_pier(w, r, family, line, 0);
+    // spec: S-0511 claim 19 (a collapsed pier, state 4, also regains its height)
     if k == 4 {
         if w.rules().quirks.pier_repair_partial_height {
             // spec: S-0511 claim 19 and Constants (the reference cell and its two neighbours across each rise by 4 height levels)
@@ -491,7 +497,9 @@ fn place_section(w: &mut World, c: CellXY, line: Line, family: Family) {
         // spec: S-0511 claim 19 (data 0 along x, 9 along y)
         cell.overlay_data = pieces::data_of(line, pieces::State::Intact);
     }
-    let Some(s) = pieces::section_in(w, c) else { return };
+    let Some(s) = pieces::section_in(w, c) else {
+        return;
+    };
     // spec: S-0511 claim 19 (each placement marks its four cells, S-0211 claim 15, and clears their bridge-body mark)
     w.cells.clear_body(&s.cells());
     w.cells.mark_high_bridge(c, o);

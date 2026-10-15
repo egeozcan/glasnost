@@ -174,6 +174,7 @@ impl Default for Roles {
 /// −1 when unset (matching no tile). Index 0 holds the key ending in 1,
 /// index 1 the key ending in 2.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+// spec: S-0511 Import mapping (two keys per position, ending in 1 and 2)
 pub struct BridgePositions {
     /// Start ramps along x (`BridgeTopLeft1`, `BridgeTopLeft2`).
     pub top_left: [i32; 2],
@@ -193,6 +194,7 @@ pub const UNSET_POSITION: i32 = -1; // spec: S-0511 Import mapping (absent: −1
 
 impl Default for BridgePositions {
     fn default() -> Self {
+        // spec: S-0511 Import mapping (two keys per position, both unset)
         let u = [UNSET_POSITION; 2];
         Self {
             top_left: u,

@@ -2459,9 +2459,9 @@ impl Builder<'_> {
             let what = format!("[{}] {k}", show(section));
             let got = self.field(state.as_ref(), form, &what);
             if field == "bridge_explosions"
-                && got.as_ref().is_none_or(|n| {
-                    matches!(&n.value, glasnost_rules::jsonc::Value::Array(v) if v.is_empty())
-                })
+                && got.as_ref().is_none_or(
+                    |n| matches!(&n.value, glasnost_rules::jsonc::Value::Array(v) if v.is_empty()),
+                )
             {
                 // spec: S-0511 Edge cases (an empty bridge-explosion list: the importer warns)
                 self.warn(0, 0, format!(

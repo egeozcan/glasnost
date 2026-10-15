@@ -66,6 +66,7 @@ pub fn along(line: Line, c: CellXY) -> i32 {
 
 /// The three cells of the strip across `line` centred on `c`, in increasing
 /// cross coordinate (S-0511 Terms, *low strip*).
+// spec: S-0511 Terms (a low strip has three cells)
 pub fn strip(line: Line, c: CellXY) -> [CellXY; 3] {
     let d = line.across();
     // spec: S-0511 Terms (low strip: (x, y − 1), (x, y), (x, y + 1) along x; (x − 1, y), (x, y), (x + 1, y) along y)
@@ -79,11 +80,14 @@ const ROLE_TILES: i32 = 16; // spec: S-0010 claim 25 (16 tiles each)
 /// role is read first (S-0010 claim 25); an unset role has no tiles.
 pub fn tile_q(w: &World, tile: i32) -> Option<(Family, i32)> {
     let roles = w.catalogue.as_ref()?.roles;
-    [(Family::Bridge, roles.bridge), (Family::Wooden, roles.wooden_bridge)]
-        .into_iter()
-        .find(|&(_, s)| s >= 0 && (s..s + ROLE_TILES).contains(&tile))
-        // spec: S-0511 F1 (q = tile number − role start + 1)
-        .map(|(f, s)| (f, tile - s + 1))
+    [
+        (Family::Bridge, roles.bridge),
+        (Family::Wooden, roles.wooden_bridge),
+    ]
+    .into_iter()
+    .find(|&(_, s)| s >= 0 && (s..s + ROLE_TILES).contains(&tile))
+    // spec: S-0511 F1 (q = tile number − role start + 1)
+    .map(|(f, s)| (f, tile - s + 1))
 }
 
 /// The tile number of position `q` of `family`'s role.
@@ -113,7 +117,10 @@ pub enum Piece {
 pub fn piece_of_q(w: &World, q: i32) -> Option<Piece> {
     let b = w.catalogue.as_ref()?.bridge_positions;
     // spec: S-0511 Terms (a position the theater leaves unset matches no tile)
-    let is = |set: [i32; 2]| set.iter().any(|&p| p != glasnost_map::terrain::UNSET_POSITION && p == q);
+    let is = |set: [i32; 2]| {
+        set.iter()
+            .any(|&p| p != glasnost_map::terrain::UNSET_POSITION && p == q)
+    };
     // spec: S-0511 Terms (start ramps: top-left along x, top-right along y)
     if is(b.top_left) {
         return Some(Piece::StartRamp(Line::X));
@@ -279,6 +286,7 @@ pub struct Section {
 impl Section {
     /// Its four marked cells in claim 5's blow-up order: the section cell,
     /// one and two steps along d, one step against it.
+    // spec: S-0511 claim 5 (a section marks four cells)
     pub fn cells(&self) -> [CellXY; 4] {
         // spec: S-0511 claim 5 (section cell, one step along the marking direction, two steps along it, one step against it)
         [
@@ -307,7 +315,7 @@ pub fn section_in(w: &World, c: CellXY) -> Option<Section> {
 /// marking direction, two steps against it, and one step along it
 /// (Q-0717).
 pub fn section_marking(w: &World, c: CellXY) -> Option<Section> {
-    // Q-0717 (interim: own cell, then one and two steps against the marking direction, then one step along it)
+    // spec: S-0511 claim 2; Q-0717 (interim: own cell, then one and two steps against the marking direction, then one step along it)
     for k in [0, 1, 2, -1] {
         for d in [(0, -1), (-1, 0)] {
             let o = at(c, d, -k);
@@ -339,6 +347,7 @@ pub enum State {
 }
 
 /// The state of a section of `line` with overlay data `v` (S-0511 Terms).
+// spec: S-0511 Terms (the section states along x and along y)
 pub fn state_of(line: Line, v: u8) -> State {
     match (line, v) {
         // spec: S-0511 Terms (along x: intact 0 to 3, 4 chipped start, 5 chipped far, 6 damaged, 7 open start, 8 open far)
@@ -359,6 +368,7 @@ pub fn state_of(line: Line, v: u8) -> State {
 
 /// The overlay data of state `s` (S-0511 Terms); intact gives 0 along x and
 /// 9 along y (claim 19).
+// spec: S-0511 Terms and claim 19 (the overlay data of each section state)
 pub fn data_of(line: Line, s: State) -> u8 {
     match (line, s) {
         // spec: S-0511 Terms and claim 19 (along x: intact 0, 4, 5, 6, 7, 8)
@@ -443,6 +453,7 @@ pub const LOW_BASES: [(Family, Line, u8); 4] = [
 ];
 
 /// A role's displacement from *t*₀ along `line` (S-0511 Import mapping).
+// spec: S-0511 Import mapping (each role's displacement from t₀)
 pub fn displacement(line: Line, r: Role) -> u8 {
     match (r, line) {
         // spec: S-0511 Import mapping (I₀ to I₅: 0 to 5; D₀ to D₂: 6 to 8)
@@ -465,6 +476,7 @@ pub fn displacement(line: Line, r: Role) -> u8 {
 }
 
 /// The role of displacement `k` along `line`.
+// spec: S-0511 Terms (strip classes I₀ to I₅ and D₀ to D₂)
 fn role_of(line: Line, k: u8) -> Option<Role> {
     let all = [
         Role::I(0),
@@ -555,7 +567,14 @@ mod tests {
                 if let Some(r) = role_of(l, k) {
                     let o = low_overlay(f, l, r);
                     assert!(seen.insert(o), "overlay {o} bound twice");
-                    assert_eq!(low_of(o), Some(Low { family: f, line: l, role: r }));
+                    assert_eq!(
+                        low_of(o),
+                        Some(Low {
+                            family: f,
+                            line: l,
+                            role: r
+                        })
+                    );
                 }
             }
         }

@@ -306,7 +306,10 @@ fn tagged(m: &mut Map, cells: &[CellXY]) {
             first: Some(0),
             chain: vec![0],
         }],
-        cell_tags: cells.iter().map(|c| ((c.x as i16, c.y as i16), 0)).collect(),
+        cell_tags: cells
+            .iter()
+            .map(|c| ((c.x as i16, c.y as i16), 0))
+            .collect(),
         ..Default::default()
     };
 }
@@ -371,7 +374,11 @@ fn claim_1_area_damage_is_gated() {
     w.econ.settings.bridge_destruction = Some(false);
     assert!(bridges::cell_attempts(&mut w, c));
     assert_eq!(data(&w, c), None, "lost after its second attempt");
-    assert_eq!(data(&w, at(2, 0)), Some(8), "the start-side neighbour is open on its far side");
+    assert_eq!(
+        data(&w, at(2, 0)),
+        Some(8),
+        "the start-side neighbour is open on its far side"
+    );
 }
 
 // spec: S-0511 claim 1 (the ion-cannon warhead bypasses the chance draws: up to four attempts on a high test, one on a low test)
@@ -396,9 +403,17 @@ fn claim_1_ion_cannon_attempts() {
     let mut w = game(&r, &m2);
     w.econ.settings.bridge_destruction = Some(true);
     blast(&mut w, at(3, 0), 416, "BLAST");
-    assert_eq!(data(&w, at(3, 0)), None, "the high section is lost in up to four attempts");
+    assert_eq!(
+        data(&w, at(3, 0)),
+        None,
+        "the high section is lost in up to four attempts"
+    );
     blast(&mut w, at(2, 6), 0, "BLAST");
-    assert_eq!(role(&w, at(2, 6)), Some(Role::D(0)), "a low test makes one attempt");
+    assert_eq!(
+        role(&w, at(2, 6)),
+        Some(Role::D(0)),
+        "a low test makes one attempt"
+    );
 }
 
 // spec: S-0511 claim 1 (a successful attempt from area damage makes every object whose target is the centre cell drop it; Q-0719)
@@ -414,7 +429,11 @@ fn claim_1_success_drops_cell_targets() {
     w.obj_mut(v).unwrap().target = Some(Target::Cell(c));
     w.obj_mut(u).unwrap().target = Some(Target::Cell(at(4, 0)));
     blast(&mut w, c, 416, "BLAST");
-    assert_eq!(w.obj(v).unwrap().target, Some(Target::Cell(c)), "a failed attempt keeps it");
+    assert_eq!(
+        w.obj(v).unwrap().target,
+        Some(Target::Cell(c)),
+        "a failed attempt keeps it"
+    );
     blast(&mut w, c, 416, "BLAST");
     assert_eq!(data(&w, c), None);
     assert_eq!(w.obj(v).unwrap().target, None);
@@ -471,7 +490,11 @@ fn claim_4_notices() {
     bridges::attempt(&mut w, at(4, 0));
     assert_eq!(data(&w, at(3, 0)), Some(5));
     bridges::attempt(&mut w, at(2, 0));
-    assert_eq!(data(&w, at(3, 0)), Some(6), "chipped on the other side → damaged");
+    assert_eq!(
+        data(&w, at(3, 0)),
+        Some(6),
+        "chipped on the other side → damaged"
+    );
     // Lose x = 2: x = 3 becomes open on its start side.
     bridges::attempt(&mut w, at(2, 0));
     assert_eq!(data(&w, at(3, 0)), Some(7));
@@ -534,16 +557,35 @@ fn claim_6_direct_pier_attempts() {
     for c in [at(4, -1), at(4, 1), at(5, 0)] {
         assert_eq!(pier_k(&w, c), Some(3), "every cell of the tile");
     }
-    assert_eq!(data(&w, at(3, 0)), Some(5), "damage notice to the start side");
-    assert_eq!(data(&w, at(5, 0)), Some(4), "damage notice to the section of the pier's span start");
+    assert_eq!(
+        data(&w, at(3, 0)),
+        Some(5),
+        "damage notice to the start side"
+    );
+    assert_eq!(
+        data(&w, at(5, 0)),
+        Some(4),
+        "damage notice to the section of the pier's span start"
+    );
     let mut ctx = Ctx::default();
-    assert!(high::attempt_pier(&mut w, r, Family::Bridge, Line::X, 3, &mut ctx));
+    assert!(high::attempt_pier(
+        &mut w,
+        r,
+        Family::Bridge,
+        Line::X,
+        3,
+        &mut ctx
+    ));
     assert_eq!(pier_k(&w, r), Some(4));
     assert_eq!(&ctx.blown[..3], &[at(4, -1), r, at(4, 1)]);
     for c in [at(4, -1), r, at(4, 1), at(5, 0)] {
         assert_eq!(w.cells.cell(c).unwrap().level, 0, "4 − 4");
     }
-    assert_eq!(data(&w, at(3, 0)), Some(8), "loss notice: open on its far side");
+    assert_eq!(
+        data(&w, at(3, 0)),
+        Some(8),
+        "loss notice: open on its far side"
+    );
 }
 
 // spec: S-0511 claim 6 (notice table: loss notice on the start side of a pier in state 0 → 3; a pier chipped on the arriving side ignores it with quirks.pier_loss_notice_skips_chipped, becomes 3 without)
@@ -775,7 +817,10 @@ fn claim_13_low_strip_attempts() {
     }
     assert!(!bridges::attempt(&mut w, at(4, 0)));
     assert_eq!(role(&w, at(4, 0)), Some(Role::E2));
-    assert!(!bridges::attempt(&mut w, at(4, 0)), "a damaged end piece: no change");
+    assert!(
+        !bridges::attempt(&mut w, at(4, 0)),
+        "a damaged end piece: no change"
+    );
     assert_eq!(role(&w, at(4, 0)), Some(Role::E2));
     assert!(!bridges::attempt(&mut w, at(0, 0)));
     assert_eq!(role(&w, at(0, 0)), Some(Role::S2));
@@ -788,8 +833,16 @@ fn claim_14_neighbour_re_evaluation() {
     low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
     let mut w = game(&ruleset(), &m);
     bridges::attempt(&mut w, at(2, 0));
-    assert_eq!(role(&w, at(1, 0)), Some(Role::I(5)), "s = 1 (D₀ on the increasing side)");
-    assert_eq!(role(&w, at(3, 0)), Some(Role::I(4)), "s = 4 (D₀ on the decreasing side)");
+    assert_eq!(
+        role(&w, at(1, 0)),
+        Some(Role::I(5)),
+        "s = 1 (D₀ on the increasing side)"
+    );
+    assert_eq!(
+        role(&w, at(3, 0)),
+        Some(Role::I(4)),
+        "s = 4 (D₀ on the decreasing side)"
+    );
     bridges::attempt(&mut w, at(2, 0));
     assert_eq!(role(&w, at(1, 0)), Some(Role::D(2)), "s = 2 (X)");
     assert_eq!(role(&w, at(3, 0)), Some(Role::D(1)), "s = 8 (X)");
@@ -845,7 +898,10 @@ fn claim_15_kill_check() {
     let car = spawn(&mut w, Kind::Vehicle, "CART", at(2, 1));
     let jet = spawn(&mut w, Kind::Vehicle, "JET", at(2, -1));
     bridges::attempt(&mut w, at(2, 0));
-    assert!(alive(&w, car) && alive(&w, jet), "damaged road is enterable");
+    assert!(
+        alive(&w, car) && alive(&w, jet),
+        "damaged road is enterable"
+    );
     bridges::attempt(&mut w, at(2, 0));
     assert!(!alive(&w, car), "destroyed: the car cannot enter water");
     assert!(!alive(&w, jet), "a jumpjet type dies in a destroyed cell");
@@ -1003,7 +1059,11 @@ fn claim_18_repair_walk_bound() {
             w.cells.bridge_body[i] = false;
         }
         hut::repair(&mut w, at(5, 0));
-        assert_eq!(data(&w, at(3, 0)).is_some(), unbounded, "unbounded {unbounded}");
+        assert_eq!(
+            data(&w, at(3, 0)).is_some(),
+            unbounded,
+            "unbounded {unbounded}"
+        );
     }
 }
 
@@ -1022,7 +1082,10 @@ fn claim_19_high_bridge_repair() {
         let mut w = game(&r, &m);
         bridges::attempts(&mut w, at(4, 0), 2);
         bridges::attempts(&mut w, at(7, 0), 2);
-        assert!(bridges::attempt(&mut w, at(8, 0)), "open on its start side: one attempt");
+        assert!(
+            bridges::attempt(&mut w, at(8, 0)),
+            "open on its start side: one attempt"
+        );
         assert_eq!(w.cells.cell(at(5, -1)).unwrap().level, 0);
         hut::repair(&mut w, at(7, 0));
         for x in [5, 6, 7, 9] {

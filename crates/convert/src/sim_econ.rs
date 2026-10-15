@@ -618,7 +618,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
     ("min_unit_count", DIALOG, "MinUnitCount", Int, "S-0412"),
     ("max_unit_count", DIALOG, "MaxUnitCount", Int, "S-0412"),
     ("short_game", DIALOG, "ShortGame", Bool, "S-0412"),
-    ("bridge_destruction", DIALOG, "BridgeDestruction", Bool, "S-0511"),
+    (
+        "bridge_destruction",
+        DIALOG,
+        "BridgeDestruction",
+        Bool,
+        "S-0511",
+    ),
     ("crates", DIALOG, "Crates", Bool, "S-0412"),
     ("mcv_redeploys", DIALOG, "MCVRedeploys", Bool, "S-0412"),
     (
