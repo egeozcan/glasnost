@@ -2,13 +2,13 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0700, Q-0701, Q-0702, Q-0703, Q-0704, Q-0705, Q-0706]
+requests: [Q-0700, Q-0701, Q-0702, Q-0703, Q-0704, Q-0705, Q-0706, Q-0672, Q-0673]
 supersedes: []
 ---
 
@@ -373,9 +373,18 @@ This spec does not repeat what other specs own:
     **Replacement destination.** With no original-team membership, use map waypoint 700 as the
     centre of S-0501 claim 40's replacement-cell search, including that claim's circle samples,
     scenario draws and first-accepted tie rule, with integer radii 0 through 31 cells.
-    The waypoint cell itself is retained if the search fails. The original can instead use a passenger's team
-    waypoint; that team choice is outside scope. Passing F7, rather than failing it, causes this
-    replacement (`quirks.air_unload_reselects_clear_destination`).
+    An undefined marker supplies cell coordinates (0, 0), not the aircraft's own cell or its
+    previous destination. The search still runs around that centre: one scenario ranged draw
+    over 0 through 7 per attempted radius, including radius 0 even when all its samples are
+    unusable. Exhausting radii 0 through 31 therefore takes 32 such draws. A successful search
+    uses its first accepted cell. Failure retains the search centre as destination, not the
+    previous destination: with an undefined marker this is the placeholder cell at (0, 0).
+    S-0501 claim 18's end-of-update placeholder cleanup still applies; this is the destination
+    immediately after selection, not a promise that it survives that update. Initial map
+    loading skips the search and its draws, retaining the centre (S-0501 claim 40).
+    The original can instead use a passenger's team waypoint; that team choice is outside
+    scope. Passing F7, rather than failing it, causes this replacement
+    (`quirks.air_unload_reselects_clear_destination`).
 
     **Release placement.** Position 1 is removed from the passenger order for this attempt.
     Its desired world position is the aircraft's exact world position, not its cell centre.
@@ -385,19 +394,40 @@ This spec does not repeat what other specs own:
     the last tested neighbour (direction 2) respectively supply the facing and movement destination.
     Facing is the chosen direction times 8192 facing units, not the aircraft's body facing.
     The aircraft itself does not obstruct this placement; other occupants still count normally.
-    An infantry unit at surface height uses S-0208 claim 3's choice at the desired point with
-    that aircraft excluded; a desired centre therefore uses the same draw and right/left/bottom
-    preferences as claim 10. This is not the serving-neighbour placement search of claim 10.
+    Placement distinguishes passenger kinds and integer world height:
+
+    | Passenger and aircraft height | Position on successful placement | Standing-position choice |
+    |---|---|---|
+    | infantry, exactly at terrain surface height at the aircraft's horizontal point | S-0208 claim 3's chosen horizontal position in that same cell, retaining terrain height at the aircraft's original horizontal point | occupant-aware, excluding only the aircraft; a centre-class desired point takes one scenario ranged draw over 0 through 3 with claim 10's preferences, a side-class point uses its non-random row; refusal means placement failure |
+    | infantry, above terrain surface height | aircraft's exact horizontal position and world height | none, and no standing-position draw; no projection to the surface below |
+    | vehicle, at or above terrain surface height | aircraft's exact horizontal position and world height | none, no standing-position draw and no nearby-cell search |
+
+    For both kinds the ordinary placement entry test must also find the aircraft's own cell
+    *clear*, with no requested entry direction or level. A clear exit neighbour alone does
+    not establish this. In an ordinary active-game release of a live off-map vehicle passenger,
+    this own-cell entry refusal is the placement obstacle: there is no additional infantry
+    position-capacity test or vehicle-specific exit search. General inability to place an
+    object still counts as failure, not permission to bypass entry. Placement never lowers
+    either kind to terrain: if the supplied world height is below terrain height at its
+    horizontal point, it is raised to that terrain height, preserving horizontal coordinates.
+    These height comparisons and choices are integer leptons, without rounding. The surface
+    infantry choice is not the serving-neighbour placement search of claim 10.
+
+    Vehicles use exactly the same exit-facing and movement-neighbour preference and all-blocked
+    fallback as infantry above. Neither kind inherits the aircraft's body facing. This describes
+    the appearance instant, before subsequent locomotion, falling or landing.
 
     Successful placement queues *move* toward that neighbour; there is no separate scatter request.
     Failed placement leaves the unit off-map, removed from the passenger order: it is not put
     back for a later retry and this release does not award a kill. The original's team join is
     out of scope. The lifetime of a failed, off-map unit remains unmeasured (Open questions).
-    - Backing: `measurable` (T11 and T13) for ordinary release and flight phases.
+    - Backing: `measurable` (T11, T13 and T15) for ordinary release, height/kind placement,
+      undefined-marker replacement and flight phases.
       `unmeasured` for tether inhibition until an ordinary-contact witness is found, the
       all-neighbours-blocked fallback and failed-unit lifetime; T13 proposes discriminating runs.
-    - Confidence: high for phase delays, non-dropship branch and direction preference; medium
-      for placement, replacement search and the all-blocked fallback
+    - Confidence: high for phase delays, non-dropship branch, direction preference,
+      height/kind placement and undefined-marker centre, failure retention and draw count,
+      and medium for the all-blocked fallback
 
 ### Open-topped transports
 
@@ -585,10 +615,13 @@ not additional imported fields.
 |---|---|---|---|---|
 | Aircraft type sections | `Dock` | eligible dock types for claim 13's dropship search | building-type list | empty list; S-0501 claim 21 and its import mapping |
 | Map tube definitions | `[Tubes]` | recorded tube entrances used by claim 7 | tube entrance, exit and direction list, owned by S-0212 claim 7 | no tubes |
-| Map marker section (S-0009 claim 15) | `700` | ordinary air-unload replacement centre | waypoint cell encoding | undefined marker; S-0009 claim 15 |
+| Map marker section (S-0009 claim 15) | `700` | ordinary air-unload replacement centre | waypoint cell encoding; value 0 is undefined | undefined marker, consumed by claim 13 as cell (0, 0), with search and draws still enabled |
 
 The cruise height and flight guidance in claim 13 use S-0501 claims 5 and 6's imported
-flight fields and defaults, not a new transport-only altitude.
+flight fields and defaults, not a new transport-only altitude. Claim 13's release height,
+standing-position bypass and shared neighbour preference are engine rules, not additional
+imported fields. Passenger kinds come from their infantry or vehicle type registry (S-0004
+claim 1); neither kind needs an extra transport-release flag.
 
 ## Measurement scenarios
 
@@ -822,6 +855,38 @@ credited. Any surviving carried unit, extra attacker kill or independent passeng
 animation falsifies the corresponding part. Sale and direct removal without death are
 additional variants only if ordinary skirmish input witnesses are found: do not inject orders
 or write state to create them. S-0408 claim 11 establishes no such sale input.
+
+**T15. Release height and undefined marker (claim 13; Q-0672 and Q-0673).** Use the shared
+setup and a named test map defining a non-dropship air transport with room for an infantry
+passenger and a small vehicle. Arrange an ordinary map placement or flight state that reports
+stopped with no destination above terrain; merely hovering with unfinished flight is not
+sufficient (S-0501 claim 40). If no ordinary-input witness reaches this state, record that
+variant as inconclusive rather than write state. Unload, then repeat landed, centred and
+off-centre, once per kind/height/position variant. Record exact positions, terrain heights,
+facings, entry outcomes, destinations and scenario random state at the appearance instant,
+before passenger movement. Expect airborne infantry and vehicles to retain aircraft horizontal
+coordinates and height, without a standing-position draw. Landed infantry use the occupant-aware
+choice and its centre-class draw; landed vehicles retain exact aircraft coordinates without
+that choice or a nearby search. Both kinds face and move by the same first-clear neighbour.
+Block the own cell with another object while leaving a preferred neighbour clear: an own-cell
+entry refusal must still fail placement. Observe later falling separately; it must not be
+mistaken for surface placement. Surface projection, a vehicle cell-centre snap/search, a
+standing-position draw for elevated infantry, or success through a refused own cell falsifies
+the corresponding rule.
+
+For replacement, use three map variants: marker 700 absent, explicitly undefined, and defined
+at a distant usable cell. Fly a loaded aircraft toward a clear destination and order unload.
+At each selection processing record the previous destination, selected destination and draws,
+separating search draws from the standard-delay draw and later movement processing. The first
+two variants search around (0, 0), not either aircraft position or previous destination.
+Compare every sampled candidate and first accepted result to S-0501 claim 40. Repeat on a
+map whose usable area has no accepted candidate within any of the 32 sampled radii around
+(0, 0). Expect 32 search draws and placeholder destination immediately after selection, even
+if end-of-update cleanup removes it. The defined-marker control instead searches around its
+marker and keeps that marker if unsuccessful. No search, another centre, retention of the
+old destination on failure, or skipped draws for unusable radii falsifies the respective
+part. One run per map variant suffices with recorded random state; initial-loading draw
+suppression requires a separate ordinary map-loading witness if reachable.
 
 ## Open questions
 
