@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,16 +45,16 @@ and S-0215 claim 10's jump-time target-loss and reversion contract with those co
 Retain S-0207 claim 20 e and S-0209 claim 1's aircraft reservation lifecycle and shared
 `quirks.teleport_aircraft_ground_reservation` alongside the vehicle contract above.
 Claims 20–22 include the ship refresh, chase-cut and retry rules of S-0504 claim 9.
-**Required S-0504 correction:** claim 9 must replace its floating-point Euclidean-root
-definition with the spatial table-root distance of claim 20 and S-0204 claim 5,
-truncated toward zero to integer leptons, for both refresh and chase cutting.
-There is no ship-specific exact-root exception. The shared `quirks.table_root_distance`
-alternative applies as stated under Formulas. Hand off that correction with this draft.
-The currently approved S-0504 distance wording contradicts this contract.
+S-0504's current draft claim 9 now agrees with the spatial table-root distance of claim 20
+and S-0204 claim 5, truncated toward zero to integer leptons, for both refresh and chase
+cutting. There is no ship-specific exact-root exception. The shared
+`quirks.table_root_distance` alternative applies as stated under Formulas. Hand off these
+coordinated texts together; the currently approved S-0504 distance wording still contradicts
+this contract.
 Claim 25a completes the aircraft landing footprint search used by S-0501 claim 41.
-S-0501 owns building and fallback-object selection and map-edge destinations; its former
-footprint uncertainty must be removed at the coordinated hand-off. Equal-distance fallback
-objects are a separate S-0501 question, not the nearby search's candidate tie rule.
+S-0501 claim 41 owns building and fallback-object selection, including equal-distance
+fallback objects, and the unchecked no-result landing destination. Those caller rules are
+separate from the nearby search's candidate tie rule. Retain the coordinated texts at hand-off.
 At hand-off update the approved index to match this draft.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
 and absence of additional search draws. S-0215 claim 38 and F11–F12 supply the upstream
@@ -1442,7 +1442,13 @@ Terms specific to this spec:
     - Backing: `measurable` (P26 for timing, queue, final-search parameters and presence
       of scenario draws; S-0215 claim 38 and B37 for centre preference and radius-then-direction
       draws and F11–F12's geometry and record maintenance; claim 25 and P16 run (u)
-      for the nearby search's no-draw rule).
+      for the nearby search's no-draw rule). Precedence and retention of a separately
+      set base centre, and a start-assigned cell before any building refresh, inherit
+      S-0215 claim 38's `unmeasured` backing: B37 supplies no repeatable ordinary
+      setup or map action setting either record for a neutral or special house.
+      A price-factor change alone not refreshing the records also inherits that claim's
+      `unmeasured` backing; no scenario isolates it from a building event. These limits
+      do not qualify the no-base correction, building refresh or draw rules.
       The player-house exclusion is the glossary's scope rule
     - Confidence: high for same-tick assignment, the queue and presence of a ranged draw.
       Medium for the final-search parameters
@@ -1552,6 +1558,7 @@ Terms specific to this spec:
     | Random crate placement (S-0520 claim 3) | the candidate cell supplied by S-0520 claim 3 | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Unit crate placement fallback (S-0520 claim 13) | the crate cell | the awarded unit type's | *normal* | none | never | no | no | none |
     | Paradrop target adjustment (S-0522 claim 1) | the target cell | *foot* | *normal* | none | never | no | no | none |
+    | Air-strike aircraft placement (S-0519 claim 17) | the strike's arrival cell | *winged* | *normal* | none | never | no | no | none |
     | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
@@ -1567,8 +1574,8 @@ Terms specific to this spec:
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
-    The trigger-crate, random-crate, unit-crate fallback and paradrop rows allow bridge
-    cells and ask for no no-overlay condition. For trigger and random crates, selection
+    The trigger-crate, random-crate, unit-crate fallback, paradrop and air-strike rows
+    allow bridge cells and ask for no no-overlay condition. For trigger and random crates, selection
     is not placement: a selected cell outside the height-aware usable area or holding
     any overlay is refused without another nearby search around that centre. S-0524
     claim 4 owns trigger placement; S-0520 claim 3 owns random placement's subsequent
@@ -1666,7 +1673,8 @@ Terms specific to this spec:
     action tick for trigger crate placement (S-0524 claim 4), placement-attempt tick for
     random crate placement (S-0520 claim 3), pickup tick for unit-crate placement fallback
     (S-0520 claim 13), launch tick for paradrop
-    target adjustment (S-0522 claim 1), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
+    target adjustment (S-0522 claim 1), start tick for air-strike aircraft placement
+    (S-0519 claim 17), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
     harvester step-off (S-0402 claim 13), release tick for
     aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
     tick for the house-selected destination after give-up (claim 23a). The base-record
@@ -1687,7 +1695,8 @@ Terms specific to this spec:
       search settings and post-selection refusal (S-0520 scenario CR1), for unit-crate
       fallback settings (S-0520 scenario CR9), for paradrop
       target-adjustment settings and retention of the original target after refusal
-      (S-0522 scenario P1), for the
+      (S-0522 scenario P1), for air-strike placement settings and the shared placement
+      cell selected at the start tick (S-0519 scenario T17), for the
       final nearby search after give-up (P26), for base-record-refresh parameters
       (S-0215 B37, with P26's refresh comparison), and for both free-unit searches and the no-overlay
       condition (S-0402 scenario H13 parts b and c), for the rectangular deployment-site
@@ -1768,14 +1777,17 @@ Terms specific to this spec:
     41 supplies a reference cell: claim 25's minimum table-root distance applies, with
     equal distances resolved by the earliest collected position, not tick modulo. The
     1 × 1 other-object fallback search has no reference and uses tick modulo instead.
-    These 1 × 1 searches also return the selected cell unchanged. None of these searches
+    These 1 × 1 searches also return the selected cell unchanged. When no candidate
+    qualifies, the no-result value is map cell coordinates (0, 0), not a successful
+    selection of a usable cell. S-0501 claim 41 owns the unchecked use of that value by
+    the own-cell replacement caller and its quirk alternative. None of these searches
     draws from a random stream.
 
     S-0501 claims 34, 37 and 41 already answer the caller settings, no-building fallback
     and edge-selection parts of Q-0634. Comparing buildings or equally distant fallback
     objects belongs to S-0501 claim 41, not this footprint-selection rule.
-    - Backing: `measurable` (P28)
-    - Confidence: high for the nine-cell tests, unchanged result and absence of draws.
+    - Backing: `measurable` (P28; S-0501 scenario AC25 for the unchecked no-result value)
+    - Confidence: high for the nine-cell tests, unchanged result, no-result value and absence of draws.
       Medium for the shared collection, visibility and tie rules, as in claim 25
 
 ### Linked vehicles
@@ -3490,7 +3502,7 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 - The mechanical-walker locomotor also computes paths. Whether it uses claim 22's blockage
   modes and claim 20's immediate refresh like the driving locomotor is not established.
   Ship refresh, chase-cut and retry rules are included in claims 20–22. S-0504 claim 9
-  needs the distance correction explicitly listed in the Summary; its timing rules agree.
+  now agrees in its current draft; retain the coordinated hand-off listed in the Summary.
   The lepton-scale refresh boundary and table-root distinction remain unmeasured for
   driving and ships: neither P5 nor S-0504 N11 supplies a discriminating boundary setup.
   Hovering chase-cut, fresh-search delay and blocked-step rules are
