@@ -2,11 +2,11 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 25
+revision: 26
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295]
 supersedes: []
@@ -82,8 +82,9 @@ selection at the later jump. Retain the distinction between infantry's discarded
 remembered point and absent new deck standing-position mark, and vehicles'
 remembered-point clearing and additional deck placement mark (S-0207 claim 20 a/e,
 S-0209 claim 1). The shared `quirks.teleport_vehicle_ground_reservation` governs
-vehicles, not infantry. Jump-time target loss and override reversion, including
-the live erasing-lock exception and preservation of a different restored target,
+vehicles, not infantry. Jump-time target loss follows S-0207 claim 20 e, including
+its exception for an attacker whose airstrike is aimed at the living target, not an
+erasing lock. Override reversion and preservation of a different restored target
 remain S-0215 claim 10's rules for the jump, not new infantry landing-choice rules.
 
 ## Terms
@@ -888,7 +889,11 @@ used by this spec:
     no jump and the destination is removed. No path between departure and landing is required.
     The point is fixed when the destination is supplied, not followed as the object moves.
     S-0207 claim 20 e owns the height at the actual jump, which can differ from the point chosen
-    here on a bridge. An infantry unit reserves its chosen standing position, not a
+    here on a bridge. It also owns jump-time target loss: an attacker whose airstrike is aimed
+    at the living jumping target retains it; an erasing lock gives no such exception.
+    Override reversion and retention of a different restored target follow S-0215 claim 10.
+    These target-retention rules carry those claims' backing and confidence.
+    An infantry unit reserves its chosen standing position, not a
     vehicle-present mark (S-0209 claim 1). The reservation uses the chosen point's height:
     it goes into the deck record when its cell carries a high bridge and its height is at
     least 416 leptons above the terrain surface at that point, and into ground otherwise.
