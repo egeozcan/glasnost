@@ -236,7 +236,8 @@ will need a "carries a cell" field separate from its carrier for S-0011 claims 2
   retirement. Whoever owns S-0207 should check it first: S-0207 claim 23 now defines *s* as
   trunc(*s*₂ × ρ) at the wake check, with the current fraction, not a remembered rate. The code
   (`drive.rs:1433-1438`) reads `DriveState::step` from the latest drive tick, which matches only
-  if `step` is always this tick's post-movement rate.
+  if `step` is always this tick's post-movement rate. Retired with S-0504 (M6a naval units):
+  `drive::wake_check` now reads `drive::progress` with the current ρ, and the interim row is gone.
 - No request is answered by the 13 specs on this list: none changed its `requests:` front matter.
   Q-0610 to Q-0616 were added during the round by the S-0506 lane and are still `open`
   (`answered-by: []`), so their interim rules (`docs/development.md:350-356`) stay.
