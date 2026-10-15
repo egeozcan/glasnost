@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -850,6 +850,13 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     (0, 0). Choose the first accepted cell. Failure of all 32 radii, initial map loading,
     or an absent destination retains the original destination, without a replacement.
     These are eight samples per radius, not a scan of every cell of a square ring.
+
+    The air-unload caller is S-0507 claim 13. Its undefined replacement marker supplies
+    centre cell (0, 0); the search and its direction draws still run, including the draw
+    for radius 0. Exhaustion takes 32 ranged draws and returns that centre placeholder,
+    not the aircraft's previous destination. Initial map loading retains the centre without
+    search draws. Claim 41's end-of-update placeholder cleanup still applies after this
+    selection, with the fall-back to rest of claim 18.
 
     After destination selection, flight takes that destination's heading point, now with the
     aircraft as requesting actor. For a cell this is its centre at its surface height; for

@@ -1,9 +1,9 @@
 ---
 id: Q-0673
 title: The air-unload replacement centre when map waypoint 700 is undefined
-status: open
+status: answered
 related: [S-0507, S-0009, S-0501]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

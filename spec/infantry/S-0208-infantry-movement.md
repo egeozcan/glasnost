@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 30
+revision: 31
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -326,14 +326,21 @@ used by this spec:
      passenger leaving a vehicle transport. Its centre-class choice takes one ranged draw over
      0 to 3 from the scenario random stream, with table O's right/left/bottom preferences.
      Placement keeps that chosen position without another occupancy choice or position draw.
-   - S-0507 claim 13 uses the aircraft's exact world position, not its cell centre, as the
-     desired point for an infantry passenger released at surface height. Only the aircraft
-     itself is excluded from occupancy for this release; all other occupants still count.
-     A centre-class desired point uses the same randomized preferences; a side-class point
-     uses the corresponding non-random row. This is not S-0507 claim 10's neighbouring-cell choice.
+   - S-0507 claim 13 uses this choice for an infantry passenger only when the aircraft's
+     integer world height equals the terrain surface height at its exact horizontal point.
+     The desired point is the aircraft's exact world position, not its cell centre. Only the
+     aircraft itself is excluded from occupancy; all other occupants still count. A centre-class
+     desired point uses the same randomized preferences; a side-class point uses its non-random
+     row. Successful placement keeps the chosen horizontal position but retains terrain height
+     at the aircraft's original horizontal point, rather than recomputing it at the chosen point.
+     This is not S-0507 claim 10's neighbouring-cell choice. Above terrain surface height,
+     release instead preserves the aircraft's exact horizontal position and world height,
+     without any standing-position choice or standing-position draw. These height comparisons
+     use integer leptons without rounding.
 
    S-0507 claims 10 and 13 own these release placements and their failure outcomes; their
-   backing is `measurable` (S-0507 scenario T13), with medium confidence for placement.
+   backing is `measurable` (S-0507 scenarios T13 and T15), with medium confidence for vehicle-transport
+   placement and high confidence for the air-release height distinction.
    They do not create a walking-target reservation merely by choosing a point.
 
    For an ordinary walker, the chosen position is reserved at once: from the tick on which the walker chooses it, the

@@ -1,9 +1,9 @@
 ---
 id: Q-0672
 title: Where an air transport's release puts a passenger above surface height, and a vehicle passenger
-status: open
+status: answered
 related: [S-0507, S-0208, S-0501]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

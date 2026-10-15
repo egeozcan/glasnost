@@ -1,9 +1,9 @@
 ---
 id: Q-0674
 title: Depot tether without the pad flag, departure-candidate tests and the queued-entry immobilized check
-status: open
+status: answered
 related: [S-0314, S-0215, S-0404, S-0209, S-0211]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

@@ -754,6 +754,33 @@ pub struct General {
     /// `[General] DisabledDisguiseDetectionPercent` (S-0309 claim 25 part g).
     #[serde(default)]
     pub disguise_detection_percent: Option<Vec<i32>>,
+    /// `[General] CloakingStages` *N*, the game-wide number of cloaking stages (S-0516 claim 1).
+    #[serde(default)]
+    pub cloaking_stages: Option<i32>,
+    /// `[General] CloakDelay` *d*, minutes, a decimal (S-0516 F3).
+    #[serde(default)]
+    pub cloak_delay: Option<Decimal>,
+    /// `[AudioVisual] CloakSound`, the game-wide cloak sound (S-0516 claim 15).
+    #[serde(default)]
+    pub cloak_sound: Option<String>,
+    /// `[General] AlliedDisguise`, an infantry type name (S-0516 claim 32).
+    #[serde(default)]
+    pub allied_disguise: Option<String>,
+    /// `[General] SovietDisguise`, an infantry type name (S-0516 claim 32).
+    #[serde(default)]
+    pub soviet_disguise: Option<String>,
+    /// `[General] ThirdDisguise`, an infantry type name (S-0516 claim 32).
+    #[serde(default)]
+    pub third_disguise: Option<String>,
+    /// `[General] DefaultMirageDisguises`, terrain-object type names (S-0516 claim 33 (c)).
+    #[serde(default)]
+    pub default_mirage_disguises: Option<Vec<String>>,
+    /// `[General] InfantryBlinkDisguiseTime`, ticks (S-0516 claim 33 (b)).
+    #[serde(default)]
+    pub infantry_blink_disguise_time: Option<i32>,
+    /// `[General] AttackCursorOnDisguise` (S-0516 Import mapping, S-0214 claim 6).
+    #[serde(default)]
+    pub attack_cursor_on_disguise: Option<bool>,
     /// `[AudioVisual] Gravity` (S-0306 Terms; *g* of S-0503 F6).
     #[serde(default)]
     pub gravity: Option<i32>,
@@ -1495,6 +1522,24 @@ pub struct CombatFields {
     /// `Cloakable`: whether an underwater type can be submerged (S-0504 Terms; S-0516, wave 2).
     #[serde(default)]
     pub cloakable: Option<bool>,
+    /// `CloakStop`, the cloak-stop flag (S-0516 claim 3).
+    #[serde(default)]
+    pub cloak_stop: Option<bool>,
+    /// `CloakingSpeed` *S*, ticks per stage (S-0516 claim 1).
+    #[serde(default)]
+    pub cloaking_speed: Option<i32>,
+    /// `Sensors`, the sensors flag (S-0516 claims 13 and 18).
+    #[serde(default)]
+    pub sensors: Option<bool>,
+    /// `SensorsSight` *R*, cells (S-0516 claims 22 and 23).
+    #[serde(default)]
+    pub sensors_sight: Option<i32>,
+    /// `CanDisguise` (S-0516 claims 30 to 34).
+    #[serde(default)]
+    pub can_disguise: Option<bool>,
+    /// `DisguiseWhenStill` (S-0516 claim 33).
+    #[serde(default)]
+    pub disguise_when_still: Option<bool>,
     /// `Organic` (S-0308 table N, S-0314 claim 10).
     #[serde(default)]
     pub organic: Option<bool>,
@@ -1679,6 +1724,18 @@ pub struct CombatFields {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BuildingType {
+    /// `CloakGenerator` (S-0516 claims 19 and 20).
+    #[serde(default)]
+    pub cloak_generator: Option<bool>,
+    /// `CloakRadiusInCells` *r*, cells, kept as a signed 8-bit value (S-0516 claims 19, 20 and 23).
+    #[serde(default)]
+    pub cloak_radius_in_cells: Option<i32>,
+    /// `SensorArray` (S-0516 claim 23).
+    #[serde(default)]
+    pub sensor_array: Option<bool>,
+    /// `DetectDisguiseRange`, cells (S-0516 claim 40).
+    #[serde(default)]
+    pub detect_disguise_range: Option<i32>,
     /// `Strength`.
     #[serde(default)]
     pub strength: Option<i32>,
@@ -2010,6 +2067,9 @@ pub struct TerrainObjectType {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WeaponType {
+    /// `DisguiseFakeBlinkTime`, ticks (S-0516 claim 39).
+    #[serde(default)]
+    pub disguise_fake_blink_time: Option<i32>,
     /// `Damage`.
     #[serde(default)]
     pub damage: Option<i32>,
@@ -2204,6 +2264,9 @@ pub struct ProjectileType {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct WarheadType {
+    /// `MakesDisguise` (S-0516 claim 31).
+    #[serde(default)]
+    pub makes_disguise: Option<bool>,
     /// `Wall`.
     #[serde(default)]
     pub wall: Option<bool>,

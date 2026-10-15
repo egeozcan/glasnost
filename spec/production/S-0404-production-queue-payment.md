@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -501,7 +501,11 @@ addition:
 One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*S*ₓ + *r*, *S*ᵧ + *r*), just outside the left or the right edge of the local area. The aircraft appears at that cell's centre facing 0 and its *move* is forced: to the rally point, otherwise to the nearby destination of S-0417 claim 14, otherwise with no destination. Result *released*. |
 
     Our engine reproduces each foundation's exit list exactly (`quirks.foundation_exit_lists`,
-    Edge cases). Ground and naval unloading, doors, exit movement and qualified post-contact
+    Edge cases). Every supported imported foundation word has a present exit list, including
+    the empty list for 0 × 0. Exhausting that list does not trigger a perimeter search.
+    Unsupported words follow S-0108 claim 8's foundation selection and fallback; they do not
+    define arbitrary dimensions or select an absent-list perimeter alternative.
+    Ground and naval unloading, doors, exit movement and qualified post-contact
     destinations belong to S-0417. Its claim 10 supplies the infantry initial destination.
     Only subsequent no-rally walk-out remains open there (Open question 3). Claim 15 below
     supplies aircraft pad positions. S-0501 claim 30 owns the house-wide pad-bound aircraft
@@ -818,7 +822,7 @@ Ordering consequences:
 | `Cloning` (rules, building type) | cloning building (claim 14) | boolean | no |
 | `PoseDir` (rules, `AudioVisual`) | pose direction of an aircraft released onto a dock (claim 13) | integer, 1/256 turn | 0 |
 | `AirportBound` (rules, aircraft type) | the type must return to a dock: no edge entry (claim 13) | form owned by S-0407 Import mapping | S-0407 |
-| `Foundation` (art, building type) | foundation word, which selects the exit list (Constants) and the centre used for aircraft pad positions (claim 15) | owned by S-0406 Import mapping | S-0406 |
+| `Foundation` (art, building type) | foundation word, which selects a present exit list (Constants), empty for the zero-size word, and the centre used for aircraft pad positions (claim 15); unsupported words do not define arbitrary dimensions | named vocabulary and two-art-section selection, S-0108 claim 8 | S-0108 claim 8's selection and fallback |
 | `Helipad` (rules, building type) | pad-building flag enabling docking displacements (claim 15) | boolean | no |
 | `UnitRepair` (rules, building type) | repair-building flag also enabling docking displacements (claim 15) | boolean | no |
 | `NumberOfDocks` (rules, building type) | imported docking-place count *d* used for displacement selection (claim 15) and max(*d*, 1) contact places (S-0417 claim 14) | integer | 1 |
@@ -1241,7 +1245,11 @@ Test data only; stock building types keep their own exit data.
   Expect the listed first-accepted order and gaps, not a full outside ring. This static
   blocking procedure does not distinguish repeated identical entries. An unlisted exit,
   a different first accepted candidate, or success with the empty list and door flags off
-  falsifies that case.
+  falsifies that case. Also test an unsupported foundation word in the image-named art
+  section, with no overriding foundation in the type-id section. Expect S-0108 claim 8's
+  1 × 1 fallback and its listed exit candidates, not dimensions suggested by the unsupported
+  text or a new perimeter search. Record the selected foundation and first accepted exit.
+  Any other foundation or candidate order falsifies this import case.
 - (e) Door kinds: a test infantry factory with each door kind in turn and an exit displacement.
   Repeat with all three flags, blocking successive door cells. Observable: exit cell, appearance
   point and facing. Expected: the available door cell is used first in claim 13's order and the

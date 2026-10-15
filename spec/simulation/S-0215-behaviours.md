@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1855,10 +1855,13 @@ apply in our engine to the actors of every player house.
     | a one-place depot already holds another vehicle's contact | second vehicle makes an ordinary click | permission fails; no second enter order, waiting queue or displacement of the first contact (S-0314 claims 16–17) |
     | approaching with contact | destination guidance | S-0314 claim 18 supplies the building destination and per-vehicle docking point for ordinary land depots and naval yards, and the separate obsolete-unloading exception |
     | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
-    | completing entry | separate completed-entry confirmation | the vehicle can turn toward 16384 facing units (map east); once no longer moving, tethered to the contacted building and still in enter, it reports arrival; confirmation also establishes tether if absent (S-0314 claim 17) |
+    | completing entry | separate completed-entry confirmation, when supplied | confirmation can establish tether, but an ordinary repair depot without pad or unloading flags does not supply it to an untethered entering vehicle; the vehicle can turn toward 16384 facing units (map east) and reports arrival once no longer moving, already tethered to the contacted building and still in enter (S-0314 claim 17) |
 
     Behaviour starts still obey claims 3, 7 and 11: the completion is not a forced start of
-    either queued behaviour. Neither the click nor the contact reservation is a paid repair.
+    either queued behaviour. The movement-arrival exchange establishes no tether. At an ordinary
+    depot without the pad or unloading flags, a vehicle may therefore remain untethered through
+    waiting, settling and working; none of those repair phases creates a tether (S-0314 claim 17).
+    Neither the click nor the contact reservation is a paid repair.
     S-0314 claim 6 and S-0504 claim 8 own waiting, settling, stopping during repair and payment.
     Foundation passability is unchanged (S-0209 claim 5); a docking point does not teleport
     the vehicle or make every intervening foundation cell traversable.
@@ -1879,8 +1882,10 @@ apply in our engine to the actors of every player house.
     claim 5 owns the ordinary order changes, with depot details in S-0314 claims 20 to 23:
     - repeated enter to the same contacted depot is ignored apart from route termination only
       while the vehicle is already in *enter*, not while docked in *sleep*,
-    - a docked vehicle normally retains contact and tether under new orders, with the
-      replacement-entry and same-depot-entry exceptions of S-0314 claim 20,
+    - an untethered vehicle releases contact under any other replacement order, even while
+      sleeping, settling or working at a no-pad depot. A move order cannot retain remote repair
+      in that case. A tethered, docked vehicle normally retains contact and tether under new
+      orders, with the replacement-entry and same-depot-entry exceptions of S-0314 claim 20,
     - a vehicle with a queued depot entry retries once per eligible vehicle turn, after
       that turn's movement, self-healing, due behaviour processing and completed locomotor
       restoration (S-0314 claim 23). This is separate from the current *enter* processing's
@@ -1888,7 +1893,14 @@ apply in our engine to the actors of every player house.
       queues *enter* with a readiness-dependent immediate start and assigns the destination
       that turn, but does not process the new behaviour synchronously. A place freed before
       the retry is available in that tick; competing retries follow object-turn order, not
-      order-arrival time. Claim 23 owns skipped retries and inactive-depot clearing,
+      order-arrival time. Still-active chrono phase-in skips retry and retains queued entry.
+      inability to move from a parasite hold, pulse disable, deactivation, magnetic lift or
+      locomotor replacement alone does not skip retry on an otherwise ordinary living turn.
+      Erasure can exclude that turn before retry is reached. Movement-caused open-topped
+      passenger position updates precede retry; an attached parasite's same-turn delivery
+      follows it, so a hold or lethal hit from that delivery cannot undo contact already taken.
+      This adds no passenger-sync phase or second movement. S-0314 claim 23 owns these
+      exclusions and ordering consequences, and inactive-depot clearing,
     - S-0314 claim 22 owns the run-away notice on sale: clearing a depot destination,
       changing *sleep* or *enter* to *guard*, and the possible scatter request. It also owns
       release on destruction and existing-contact power consequences. S-0314 claim 21 owns
@@ -1905,7 +1917,8 @@ apply in our engine to the actors of every player house.
     - Backing: `measurable` (scenario B12; S-0507 T5 and T6 for loading replies,
       S-0314 H16 and H19 for reservation, tether and movement arrival, H18 for orders,
       queued entry, run-away notices and other interruption consequences, H22 for late
-      queued retries and next-turn processing; scenario B39 for depot processing and orders).
+      queued retries, phase-in gating, passenger/parasite ordering and next-turn processing,
+      and scenario B39 for depot processing and orders).
       For transport loading, the existing-tether exception inherits S-0507 claim 5's
       `unmeasured` backing; repair-specific tether observations are the H19 cases above.
       Repair-specific tether, movement arrival and docking-point selection inherit

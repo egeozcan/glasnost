@@ -23,6 +23,12 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
     ("naval_targeting", "NavalTargeting", Int, "S-0308"),
     ("underwater", "Underwater", Bool, "S-0308, S-0504"),
     ("cloakable", "Cloakable", Bool, "S-0504, S-0516"),
+    ("cloak_stop", "CloakStop", Bool, "S-0516"),
+    ("cloaking_speed", "CloakingSpeed", Int, "S-0516"),
+    ("sensors", "Sensors", Bool, "S-0516"),
+    ("sensors_sight", "SensorsSight", Int, "S-0516"),
+    ("can_disguise", "CanDisguise", Bool, "S-0516"),
+    ("disguise_when_still", "DisguiseWhenStill", Bool, "S-0516"),
     ("organic", "Organic", Bool, "S-0308, S-0314"),
     ("unnatural", "Unnatural", Bool, "S-0308"),
     ("naval", "Naval", Bool, "S-0308"),
@@ -165,6 +171,15 @@ const INFANTRY_COMBAT: &[Row] = &[
 
 /// Combat fields of building types (`BuildingType`).
 const BUILDING_COMBAT: &[Row] = &[
+    ("cloak_generator", "CloakGenerator", Bool, "S-0516"),
+    ("cloak_radius_in_cells", "CloakRadiusInCells", Int, "S-0516"),
+    ("sensor_array", "SensorArray", Bool, "S-0516"),
+    (
+        "detect_disguise_range",
+        "DetectDisguiseRange",
+        Int,
+        "S-0516",
+    ),
     (
         "eligible_for_delay_kill",
         "EligibleForDelayKill",
@@ -233,6 +248,12 @@ const WEAPON_COMBAT: &[Row] = &[
     ("camera", "Camera", Bool, "S-0501"),
     ("disk_laser", "DiskLaser", Bool, "S-0301"),
     ("decloak_to_fire", "DecloakToFire", Bool, "S-0301"),
+    (
+        "disguise_fake_blink_time",
+        "DisguiseFakeBlinkTime",
+        Int,
+        "S-0516",
+    ),
     ("lobber", "Lobber", Bool, "S-0306"),
     ("never_use", "NeverUse", Bool, "S-0308"),
     ("drain_weapon", "DrainWeapon", Bool, "S-0308"),
@@ -279,6 +300,7 @@ const PROJECTILE_COMBAT: &[Row] = &[
 
 /// Combat fields of warheads (`Verses` has its own reading).
 const WARHEAD_COMBAT: &[Row] = &[
+    ("makes_disguise", "MakesDisguise", Bool, "S-0516"),
     ("cell_spread", "CellSpread", Dec, "S-0302, S-0303"),
     ("percent_at_max", "PercentAtMax", Dec, "S-0302, S-0303"),
     ("prone_damage", "ProneDamage", Dec, "S-0302"),
@@ -346,6 +368,51 @@ const AI: &[u8] = b"AI"; // spec: S-0314 Import mapping (`[AI]`)
 
 /// Game-wide combat fields: our name, section, key, form, spec.
 const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
+    ("cloaking_stages", GENERAL, "CloakingStages", Int, "S-0516"),
+    ("cloak_delay", GENERAL, "CloakDelay", Dec, "S-0516"),
+    ("cloak_sound", AUDIO_VISUAL, "CloakSound", Text, "S-0516"),
+    (
+        "allied_disguise",
+        GENERAL,
+        "AlliedDisguise",
+        Ref(Kind::Infantry),
+        "S-0516",
+    ),
+    (
+        "soviet_disguise",
+        GENERAL,
+        "SovietDisguise",
+        Ref(Kind::Infantry),
+        "S-0516",
+    ),
+    (
+        "third_disguise",
+        GENERAL,
+        "ThirdDisguise",
+        Ref(Kind::Infantry),
+        "S-0516",
+    ),
+    (
+        "default_mirage_disguises",
+        GENERAL,
+        "DefaultMirageDisguises",
+        Refs(Kind::TerrainObjects),
+        "S-0516",
+    ),
+    (
+        "infantry_blink_disguise_time",
+        GENERAL,
+        "InfantryBlinkDisguiseTime",
+        Int,
+        "S-0516",
+    ),
+    (
+        "attack_cursor_on_disguise",
+        GENERAL,
+        "AttackCursorOnDisguise",
+        Bool,
+        "S-0516",
+    ),
     (
         "v3_rocket_type",
         GENERAL,

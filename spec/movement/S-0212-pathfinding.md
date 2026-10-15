@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -135,6 +135,10 @@ claim, and S-0104 (lighting) for the *ion storm*, a global effect (table T5). Th
   *blocked*s apart, this spec always writes "outcome *blocked*" or "category *blocked*".
 - From S-0215 (behaviours): *behaviour* and the behaviour names *move*, *guard*, *area guard* and
   *retreat*, to *queue* a behaviour, to *fall back to rest*; *destination*.
+- From S-0503 claims 15–16: a hovering unit's **movement destination**, the locomotor's
+  three-dimensional destination point, distinct from its **order-level destination**, the
+  destination seen by behaviours and factory report tests. An accepted stop can clear the
+  latter while retaining the former.
 - From S-0213 (human orders): the *order* and the *rally point* order of its claim 20, which this
   spec cites as users of the nearby-cell search (claim 25). No rule of S-0213 is used otherwise: how
   a unit is ordered, and when an order applies, belong to S-0213 and S-0214.
@@ -1288,6 +1292,12 @@ Terms specific to this spec:
       S-0209 claims 7 to 10 for the walk locomotor),
     - and, with the driving, ship or hovering locomotor, in the chase case below.
 
+    For a hovering unit, the destination used by its movement completion and path searches
+    in claims 20–23 is its movement destination, not its order-level destination. A search
+    targets the movement destination's cell even when an accepted stop has cleared the
+    order-level destination. S-0503 claim 16 owns when stop retains that point and the
+    stored path; clearing the order-level destination alone does not require a new path.
+
     When a path is recomputed as the last stored step begins, the unit still takes that old step,
     and the new path's first step is dropped: the unit continues with the new path's second step
     from the cell the old step reached (`quirks.path_refresh_keeps_old_step`). When the new path's
@@ -1308,7 +1318,8 @@ Terms specific to this spec:
     The walk locomotor cuts no stored path for a chased unit either.
     - Backing: `measurable` (scenario P5, and P9's train refresh run for the train rule; P5 run 1i
       for the absence of the refresh in the walk locomotor; S-0504 N11 for ship refresh
-      timing). The exact lepton-scale refresh boundary and the distinction between the
+      timing; S-0503 H12 and H15 for the hover movement/order-level destination split).
+      The exact lepton-scale refresh boundary and the distinction between the
       table root and an exact Euclidean root are `unmeasured` for both driving and ships:
       P5 and S-0504 N11 place the heading point well beyond the threshold, not at a
       qualifying separation where the two roots change the refresh decision. They test
@@ -1355,11 +1366,16 @@ Terms specific to this spec:
     failure. This covers first-check *cloaked blocker*, *blocked*, *friendly obstacle*,
     *enemy obstacle* and *stationary friendly*. Later ordinary retries without a heading
     point wait for that new timer, while another first-check refusal can bypass it again.
+    An accepted person's stop clears the ordinary retry delay, so a hover retaining its
+    movement destination is immediately eligible for a later ordinary search; the absence
+    of an order-level destination does not otherwise waive the timer gate. Eligibility is
+    not itself a search, and only an actual fresh search restarts *R* (S-0503 claim 16).
     S-0207 claim 19 gives the waits
     this produces when a hovering unit discards its path while its target is in range.
     - Backing: `measurable` (S-0207 scenario D21 run 4 for the retained-destination hovering
       retry wait after success, scenario P19 for its failed-search and failed-gate cases,
       P18's hover variant and S-0503 H9 for immediate-search timer restarts,
+      S-0503 H12 and H15 for the two destinations and stop-time retry eligibility,
       scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
       exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
       re-paths and C19 for the immediate new path). P25(a, b) additionally reads the retry
@@ -1434,8 +1450,21 @@ Terms specific to this spec:
     during that refusal does not recompute the cached distance. A resulting refusal
     can suppress travel under S-0503 claims 7 and 12; search failure alone cannot.
     This permits no later travel ticks once the move has ended.
+
+    Search failure is not the same as refusal of a hovering heading-point choice.
+    S-0503 claim 15 owns the arrival consequences: a deferred search or a search failing
+    during a non-refusing choice restores the vehicle-present flag at the actual position
+    and produces a cell-arrival update. Failure in the initial arrival path update that
+    clears the movement destination and heading point can instead prevent that choice:
+    without a contacted object in the present cell, there is no restoration or update.
+    Same-cell contact can still permit choice without a movement destination. These
+    outcomes remain subject to that claim's hold and cached-travel qualifications.
+    After an accepted stop, an equal retained movement destination and heading point can
+    still complete with a non-refusing no-point choice and an update; unequal points
+    follow the no-movement-destination arrival cases (S-0503 claim 16).
     - Backing: `measurable` (P3, P4, P7 runs 5, 5b and 6, P8, P11; P19 for ship and hovering
-      units in row 3; S-0503 H3 and H9 for cached arrival-tick travel).
+      units in row 3; S-0503 H3 and H9 for cached arrival-tick travel, H12 and H15
+      for retained movement destinations and the arrival-search outcome distinctions).
       `unmeasured` for destination retention and restart with locomotors other
       than driving, ship and hovering: no scenario tests those locomotors after this failure,
       and the rule remains a low-confidence assumption (Open questions). The neutral/special
@@ -3226,6 +3255,18 @@ that tick's F3–F4 travel of S-0503, despite speed fields being zeroed during r
 No later travel occurs after the move ends. Suppression solely because the search
 failed, or later travel without a new move, falsifies this rule; no qualifying arrival
 is inconclusive.
+For the destination distinction, use S-0503 H12 and H15's stop and arrival fixtures.
+Record both destinations, heading point, stored path, search ticks, retry timer,
+vehicle-present flags, contact and cell-arrival updates. Expected: accepted stop clears
+its order-level destination and ordinary retry delay, but equal full three-dimensional
+movement destination and heading point survive that request. Any subsequent search
+uses the retained movement destination's cell and starts *R*. Qualify arrival traces
+separately for failure before choice, failure inside non-refusing choice, and timer-deferred
+choice. Expect the flag/update outcomes of S-0503 claim 15, not a uniform failed-search
+reaction; H15's same-cell-contact and held cases must be distinguished. Loss of equal
+points at stop, a search aimed at the absent order-level destination, or contrary
+flag/update outcomes in a qualifying trace falsifies the corresponding rule. No
+qualifying trace is inconclusive.
 
 **P20. Deck steps over sloping ground (claim 10).** Use P4 K2's high bridge over dry
 clear ground, with the same unit and recorder. Named test maps change only the height and tile

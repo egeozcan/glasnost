@@ -100,6 +100,13 @@ pub enum Effect {
         /// The crusher's position.
         pos: Pos,
     },
+    /// A cloak event (S-0516 claim 26): selections are pruned on it.
+    Cloak {
+        /// The object.
+        id: ObjectId,
+        /// What happened.
+        event: crate::cloak::machine::CloakEvent,
+    },
 }
 
 /// The sounds of [`Effect::Sound`].
@@ -146,6 +153,8 @@ pub enum Sound {
     /// The game-wide bridge repair sound (S-0511 claim 17), at the hut's
     /// position, for every player.
     RepairBridge,
+    /// The game-wide cloak sound (S-0516 claim 15), at the object.
+    Cloak,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

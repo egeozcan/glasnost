@@ -855,6 +855,8 @@ pub struct SimRules {
     pub missiles: crate::spawn::MissileRules,
     /// Aircraft flight and pads (S-0501).
     pub air: crate::air::AirRules,
+    /// Cloak and disguise (S-0516).
+    pub cloak: crate::cloak::CloakRules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -1261,6 +1263,7 @@ impl SimRules {
         Self {
             missiles,
             air: crate::air::AirRules::new(r, mode),
+            cloak: crate::cloak::CloakRules::new(g, &names, mode),
             econ,
             triggers: crate::triggers::Rules::new(r),
             combat,

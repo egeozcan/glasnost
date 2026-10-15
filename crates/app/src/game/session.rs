@@ -222,6 +222,10 @@ impl Session {
             "the drawn copy and the game start alike"
         );
         let local = local_house(&setup).ok_or("the setup has no person's house")?;
+        if let Some(l) = loaded.live.as_mut() {
+            // spec: S-0516 claims 28 and 29 (the battlefield drawn through the local player's eyes)
+            l.set_viewer(Some(local));
+        }
         let radar = Radar::new(
             &game.world,
             loaded.map.theater,
