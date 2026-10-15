@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683]
+requests: [Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674]
 supersedes: []
 ---
 
@@ -69,6 +69,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 - **Depot contact, docking place.** Contact and tether have S-0215's Terms meanings. A docking
   place is one of the depot's contact places, reserved by an accepted entry request (claim 17).
   Contact can exist before the vehicle reaches the building.
+- **Moving destination.** For claim 17 only: the vehicle has a movement destination and its
+  locomotor currently reports movement. A destination on a stationary vehicle is not a moving
+  destination; neither is locomotor movement without a destination.
 - **Queued entry.** A vehicle's standing intention to enter one depot. While it holds one, the
   vehicle requests a contact place again on every tick (claim 23).
 - **Docking point.** The world position the depot supplies for that vehicle's approach and
@@ -201,7 +204,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
 6. **Repair depot.** Write *K*<sub>u</sub> for the vehicle repair count and *D* for the depot's
    processing delay (Formulas F1). Claims 16 to 18 describe contact and entry, and claims 20 to 24
-   how contact ends. A repair depot treats a vehicle docked on it in three phases:
+   how contact ends. A repair depot treats its serviced vehicle in contact, tethered or not,
+   in three phases:
    - *Waiting.* At each processing, normally *D* ticks apart, the depot checks whether the
      vehicle stands still within the starting distance of its docking point: strictly less than
      100 leptons for ordinary locomotors, or 200 leptons for ship and hovering locomotors.
@@ -252,7 +256,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    step, which reports *not needed*, before it is sent away. A vehicle that is sent away moves to
    the depot's rally point when the depot has one (S-0213, claim 20), and otherwise to an exit cell
    selected by claim 25. With no selected cell and no rally point, no departure is ordered and
-   contact is retained. A failed departure from working leaves the vehicle in settling with
+   contact is retained. The working step's repair-complete event and announcement are still
+   attempted, with the same owner and suppression tests, even when departure fails; the later
+   settling *not needed* retries remain silent. A failed departure from working leaves the vehicle in settling with
    a 1-tick retry. A failed departure while already settling retains that phase and retries
    after *D* ticks.
    A selected destination queues *move* without immediate start, replaces the destination,
@@ -521,12 +527,20 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
     For a depot with the pad flag and neither resource-unloading nor obsolete-unloading flag,
     the repeated request establishes tether when the vehicle occupies the cell containing the
-    depot's foundation centre and either has no moving destination or the first contacted
-    vehicle's truncated spatial distance from that centre is greater than 128 leptons. It need
-    not be at the supplied docking point, have stopped, or have entered settling. A moving destination nearer the centre postpones this
-    exchange. Without the pad flag this ordinary repeated-request exchange sets no tether.
-    Completed-entry confirmation also establishes a tether if one was not already present.
-    There is no rule that every foundation cell, or initial reservation, tethers the vehicle.
+    depot's foundation centre and either has no moving destination (Terms) or the vehicle in
+    contact place 0 is more than 128 leptons from that centre. This is the distance to place 0's
+    vehicle's current world position, including height, not its destination or the requesting
+    vehicle unless that vehicle occupies place 0. Distance is the floating-point Euclidean
+    spatial distance truncated toward zero to integer leptons. Thus an integer distance of
+    exactly 128 does not pass. No distance to a movement destination is tested.
+    It need not be at the supplied docking point, have stopped, or have entered settling.
+    Without the pad flag this ordinary repeated-request exchange sets no tether.
+    A separate completed-entry confirmation can establish tether when received, but an
+    ordinary repair depot without pad, resource-unloading or obsolete-unloading flags does
+    not supply that confirmation to an untethered entering vehicle. The movement-arrival
+    exchange below does not establish tether either. Such a vehicle can remain untethered
+    throughout waiting, settling and working: paid repair does not require tether. Neither
+    initial reservation nor occupying a foundation or docking-point cell by itself sets it.
 
     Reaching the destination cell is distinct from first contact. The completed-entry exchange
     can turn a tethered vehicle toward 16384 facing units (map east) and report arrival once it
@@ -544,9 +558,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     leptons. It is not claim 6's distance to the docking point and never takes a paid step.
     Simultaneous requests are claim 23's; servicing with more than one imported contact place
     is in Edge cases.
-    - Backing: `measurable` (H16 a and c, H19 a; contact, tether, behaviours and processing
-      ticks recorded separately). Flag combinations absent from stock are `unmeasured`: the
-      stock-only scenarios cannot establish them.
+    - Backing: `measurable` (H16 a and c, H19 a and c; contact, tether, behaviours and processing
+      ticks recorded separately). The place-0 distinction and pad combinations not reachable
+      with stock types are `unmeasured`; H19 d proposes discriminating named test data.
     - Confidence: high (capacity, repeated request, cell test and absence of initial tether),
       medium (stock approach observations and early guard start)
 
@@ -606,6 +620,11 @@ only the vehicle in that place.
       and has *enter* as its behaviour, is ignored entirely.
     - An *approaching* vehicle given any other order loses its contact at once, so the place is
       free for another vehicle in the same tick. Its queued entry (claim 23) is cleared too.
+      This includes an untethered vehicle already in *sleep*, settling or working at a depot
+      without the pad flag (claim 17). Repair phase does not confer docked-order retention.
+      A move order therefore releases that vehicle, and it cannot retain remote repair by
+      that order. Claim 21's continued steps require retained contact; no repair phase
+      creates a missing tether.
     - A *docked* vehicle keeps both contact and tether whatever order it is given, with two
       exceptions. First, a vehicle holds one contact, so a successful entry request to another
       building releases the depot. Second, an enter order on the same depot ends the docking.
@@ -613,7 +632,7 @@ only the vehicle in that place.
       refusal for a vehicle standing on the depot (claim 16) clears its contact and queued
       entry. A vehicle at full health loses its contact at once. Otherwise the order runs
       normally, and claim 21 decides what the depot then does.
-    - Backing: `measurable` (H18 a).
+    - Backing: `measurable` (H18 a; H19 c for untethered repair-phase interruption).
     - Confidence: high (approaching release, ignored repeat), medium (docked retention under
       each order kind), low (same-depot enter order while docked)
 
@@ -694,8 +713,19 @@ only the vehicle in that place.
     For a vehicle receiving an ordinary living turn, the retry is after that turn's locomotor
     movement, self-healing and due behaviour processing, and after completed locomotor
     replacement has been dealt with. It is not an orders-phase batch, not before movement,
-    and not an extra behaviour processing. It is skipped on a turn excluded by the vehicle's
-    immobilized-state check; queued entry is retained. An inactive remembered depot clears
+    and not an extra behaviour processing. The formerly named immobilized-state check is
+    specifically chrono phase-in, not a generic inability to move. If phase-in is still active
+    at retry time, the retry is skipped and queued entry retained. Erasure can exclude the
+    ordinary living turn before this retry is reached.
+    A parasite hold, electromagnetic-pulse disable, deactivation, magnetic lift or an active
+    locomotor replacement does not itself skip this retry on an otherwise ordinary living
+    turn. Completing a locomotor replacement is dealt with before the retry. Acquiring contact
+    does not thereby clear any of those states or guarantee that movement or behaviour can start.
+    An attached parasite's same-turn step is later than the retry: contact acquisition can
+    therefore precede a hold or lethal damage delivered by that step. Open-topped passenger
+    position updates caused by this turn's movement occur with the position change, before
+    the retry, not in a new passenger-sync phase after it (S-0507 claim 14).
+    An inactive remembered depot clears
     the queued entry. A newly current *enter* is first eligible for due processing on a later
     vehicle turn; movement already performed this turn is not repeated.
 
@@ -710,8 +740,8 @@ only the vehicle in that place.
     depot that holds no contact, the vehicle asks for entry at once. If it is refused, it takes
     no contact and does not queue.
     - Backing: `measurable` (H18 f; H22 for local turn ordering, same-tick acquisition and
-      next-turn processing). The immobilized-state and inactive-reference cases are
-      `unmeasured`: a stock-only setup distinguishing each check has not been established.
+      next-turn processing and the state/parasite/passenger distinctions). The inactive-reference
+      case is `unmeasured`: a stock-only setup distinguishing that check has not been established.
     - Confidence: high (event order, retry position, queue/start distinction and automatic
       entry), medium (stock observations of refusal and the full-health case)
 
@@ -741,7 +771,12 @@ only the vehicle in that place.
     The foundation-list and otherwise-perimeter rows are alternatives, not successive fallback
     searches: exhausting a present list produces no cell. S-0404's Constants and
     `quirks.foundation_exit_lists` own the lists and the switch's alternative; this selection
-    uses those same lists. Door-kind and naval preferences do not stop a later row being tried
+    uses those same lists. Every supported imported foundation word has a present list,
+    including the present empty list for 0 × 0. There is no supported arbitrary-size foundation
+    with an absent list merely because its dimensions were not listed: foundation-word parsing
+    is S-0108 claim 8's, including its fallback rather than a new arbitrary rectangle. Consequently
+    an ordinary imported non-hospital depot does not reach the absent-list perimeter alternative.
+    Door-kind and naval preferences do not stop a later row being tried
     when their candidates all fail. No supplied preferred cell is used for repair departure.
 
     Every candidate must be a legal map cell and give the *free* result from the vehicle's
@@ -749,7 +784,12 @@ only the vehicle in that place.
     or source cell. A high-bridge candidate consequently uses deck-level entry as specified by
     S-0209's entry-layer rules. All non-free results reject it, including temporary obstruction
     and a result that would only make an ordinary moving vehicle wait. Where the table says
-    yes, the vehicle's locomotion-specific cell-entry test must also give free. This is not
+    yes, the vehicle's locomotion-specific cell-entry test must also give free. For driving
+    locomotion (both wheeled and tracked), hovering locomotion and ship locomotion, that
+    additional test always gives free: it adds no terrain, occupancy, motion, power or
+    connectivity restriction and cannot reject a cell the ordinary test accepted. S-0209
+    claim 5b already states the absence of an additional restriction for these locomotors.
+    Its underground exception is outside this spec's scope. This is not
     a route search and imposes no additional reach-region, shortest-path, nearest-water or
     approach-side preference. A candidate in a non-blocking foundation cell can be chosen.
     The search consumes no random draw and does not rotate its starting candidate with the
@@ -759,7 +799,8 @@ only the vehicle in that place.
     random destination, automatic scatter or forced contact release. Claim 6 gives the retained
     contact and retry, and the rally-point and guard-spot overrides. A successful ordinary
     release uses the selected cell as its movement destination, not a new appearance position.
-    - Backing: `measurable` (H21). Door kinds combined with repair, the hospital/list bypass,
+    - Backing: `measurable` (H21, including named-test departures using ordinary locomotors
+      and foundation words). Door kinds combined with repair, the hospital/list bypass,
       a missing rather than empty exit list, and signed coordinate wrap are `unmeasured`:
       no stock-only setup exercising those combinations is established. Foundation-list
       contents and their quirks inherit S-0404's backing. No measurement record is claimed.
@@ -874,9 +915,9 @@ Backing and confidence are claim 15's.
 | State | Event | Result |
 |---|---|---|
 | no depot contact | successful entry request with a place free | contact assigned before arrival (claim 17) |
-| completed entry exchange | vehicle still, tethered and entering | depot queues repair; vehicle queues sleep (claim 17) |
-| waiting for a docked vehicle | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
-| waiting for a docked vehicle | moving or outside its starting distance | waiting, next processing after *D* ticks |
+| entering with contact, tether present or absent | arrival in the supplied docking-point cell | depot queues repair; vehicle queues sleep, without creating tether (claim 17) |
+| waiting for a contacted vehicle, tethered or not | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
+| waiting for a contacted vehicle, tethered or not | moving or outside its starting distance | waiting, next processing after *D* ticks |
 | settling scheduled | later processing finds the vehicle still and its locomotor settled | settling step (claim 3) |
 | settling | *not needed* | sent away |
 | settling | *cannot pay* | asks again after *D* ticks |
@@ -1032,12 +1073,13 @@ alternatives are design rules, not claims of oracle measurements.
 | Art, building section, `DockingOffset0`, `DockingOffset1`, and subsequent numbered entries | displacement from the foundation centre including height (claim 18) | integer triple, leptons; only indices below the imported docking-place count are read | keep the value in force; a newly added place starts at (0, 0, 0) |
 | Rules, building section, `WeaponsFactory` | vehicle-factory flag: naval departure preferences (claim 25), not fixed docking-point selection | boolean | no |
 | Rules, building section, `Weeder` | obsolete-unloading flag: fixed docking point (claim 18); excluded from claim 17's ordinary pad exchange | boolean | no |
-| Rules, building section, `Helipad` | pad flag in claim 17's tether exchange | boolean | no |
+| Rules, building section, `Helipad` | pad flag in claim 17's tether exchange; repair without it does not implicitly tether on arrival | boolean | no |
+| Rules, vehicle section, `Locomotor`, `SpeedType` | movement method and locomotion class for claim 25's tests; driving covers wheeled and tracked classes, whose additional test is always free | movement-method identifier (S-0207); class name (S-0211 claim 3) | owned by S-0207 and S-0211; no repair-specific default |
 | Rules, building section, `Refinery`, `Bunker` | resource-unloading and tank-bunker exclusions (claims 17 and 18); their separate entry rules are not redefined here | booleans | both no |
 | Rules, building section, `GDIBarracks`, `NODBarracks`, `YuriBarracks` | first, second and third barracks door kinds for claim 25's optional preferences | booleans | all no |
 | Rules, building section, `Naval`; vehicle section, `MovementZone` | naval permission comparison and amphibious exception (claim 16) | boolean; named movement zone, S-0504 claim 7 | no; S-0211 owns the zone default |
 | Rules, building section, `Bib` | bib in the foundation-blocking test (claim 18) | boolean, S-0209 claim 5 | no |
-| Art, building section, `Foundation` | foundation shape during approach and departure (claims 18 and 25), including dimensions and exit list | foundation word, S-0406 and S-0404 Constants | S-0406 |
+| Art, building section, `Foundation` | foundation shape during approach and departure (claims 18 and 25), including dimensions and present exit list; an unsupported word does not define arbitrary dimensions | foundation word, S-0108 claim 8 and S-0404 claim 13's lists | S-0108 claim 8's art-section selection and fallback |
 | Rules, `[IQ]`, `RepairSell` | house skill level threshold for automatic building repair and sale (claim 8) | integer | 3; keeps |
 | Rules, `[AI]`, `CreditReserve` | repair reserve (claim 12) | signed integer credits | 1000; a missing or empty key keeps the value in force |
 | Rules, `[IQ]`, `SellBack` | additional sale threshold (claim 14) | integer; unsigned interpretation at the comparison | 2; keeps |
@@ -1649,6 +1691,18 @@ damaged to half strength unless a part says otherwise.
   follow entry processings after the vehicle first occupies a foundation cell.
   (b) Use a stock docking displacement off the centre of its cell where one exists. Compare
   the final driving/ship position with both that cell's centre and the supplied point.
+  (c) At an ordinary depot without the pad flag, repeat move orders during waiting, settling
+  and working, separately. Record contact, tether, health and credits before and after each.
+  Expect no arrival tether, continued paid repair without an order, but immediate release
+  on a new move order in every phase; no later remote repair under that lost contact.
+  (d) Where stock flags cannot separate these cases, propose a named test map with two depot
+  test types differing only in the pad flag, with neither unloading flag. Give them two contact
+  places and arrange requester and place-0 vehicle at distinguishable positions. Record
+  repeated-request ticks, destinations, locomotor movement, both world positions and tether.
+  Test a stationary requester with a destination, then a moving requester with a destination,
+  while place 0's integer spatial distance is 128 and then 129 leptons. Only the latter
+  distance enables the moving-requester case; the stationary requester needs neither distance.
+  Actual measurement remains unmeasured until such a separated setup is achieved.
 - **Expected:** no tether on initial contact; ordinary pad tether follows claim 17's centre-cell
   condition, not first foundation occupancy or first repair. A new order before tether frees
   contact, and one after tether retains it subject to claim 20. Repeated entry does not run
@@ -1656,7 +1710,10 @@ damaged to half strength unless a part says otherwise.
   the docking cell's centre. Paid repair still waits on the supplied-point distance gate.
 - **Falsification:** tether at reservation, unconditional foundation-cell refusal during
   continuing entry, or exact off-centre snapping. If no stock type separates a tested condition
-  (including pad combinations), report it untested rather than editing its rules.
+  (including pad combinations), report it untested rather than editing its rules except for
+  the explicitly named test map of part d. Tether created solely by no-pad repair arrival,
+  retention after an untethered working-phase move order, using the requester's destination
+  distance, or treating a stationary destination as moving would falsify the added cases.
 
 ### H20 — Moving out of settling range (Q-0681)
 
@@ -1686,15 +1743,34 @@ damaged to half strength unless a part says otherwise.
   At the yard, separate the three naval preferences from the first exit-list candidate.
   Repeat selected layouts with different seeds and completion ticks. Finally set an ordinary
   rally point outside the candidate set and repeat with every exit candidate blocked.
+  Also record the repair-complete event and announcement at the working step that fails to
+  depart, and at the following silent settling retries. Keep other repair events outside the
+  suppression distance.
+  For the additional-test distinction, propose a named test map with otherwise identical depot
+  types using a supported foundation and the first door kind, and test vehicles using driving
+  (wheeled and tracked), hovering and ship locomotion on compatible land/water. Present legal
+  candidates with ordinary entry result free, including occupied non-blocking foundation cells
+  and cells separated by impassable terrain from the vehicle's current position. Record both
+  the candidate entry outcome and chosen departure; no second restriction rejects a free cell.
+  For list presence, use named test art entries with a supported foundation, the zero-size word
+  and an unsupported word. Record the imported foundation and departure candidates. Supported
+  words use their present lists, zero-size has a present empty list and no perimeter fallback,
+  and the unsupported word follows the ordinary foundation parser's fallback, not its written
+  dimensions. These are proposed named test files, removed afterwards.
 - **Expected:** first suitable candidate in the stated order; no seed/tick rotation, no search
   farther out, and no automatic scatter. All blocked with no rally leaves contact held and no
   departure order. Failure from working gives a 1-tick settling retry, and further unsuccessful
   settling retries are *D* ticks apart. Opening a candidate permits release
-  at a later due retry. A rally point overrides even a failed exit search, but not the original
+  at a later due retry. The failed working departure still attempts the repair-complete event
+  and announcement; subsequent settling *not needed* retries do not. A rally point overrides
+  even a failed exit search, but not the original
   non-human guard-spot exception of claim 6.
 - **Falsification:** different preference order, accepting a non-free entry result, changing
   the pick solely with seed/tick, widening the search, releasing contact with no destination,
-  or remaining held despite a rally-point override. A bridge part requires a legal stock
+  or remaining held despite a rally-point override. A free candidate refused solely by the
+  additional test for any of the four named movement cases, or an unsupported foundation
+  word creating its own perimeter-sized building, also falsifies the relevant added claim.
+  A bridge part requires a legal stock
   placement that actually presents a bridge candidate; otherwise leave that part unmeasured.
 A departure-destination and contact-event trace is a proposed harness addition, not a change made here.
 
@@ -1708,15 +1784,30 @@ A departure-destination and contact-event trace is a proposed harness addition, 
   move order at a known tick. Record each waiter's movement, due behaviour processing,
   self-healing if applicable, retry/contact tick, queued/current behaviour and destination.
   Reverse the waiters' original order-arrival order without reversing their turn order.
+  In separate runs apply a parasite hold, deactivation or magnetic lift to a waiting vehicle,
+  and record whether it gets an ordinary living turn, whether a retry occurs, and whether contact
+  is acquired despite inability to move. A named test map may supply a pulse-disabled test
+  vehicle for the electromagnetic-pulse case, with no executable change. Separately teleport
+  a waiter and record phase-in and retry ticks, including completion of the replacement
+  locomotor. Record hold timers and health immediately around a due attached-parasite step.
+  Use an open-topped transport as another waiter and record passenger positions at each
+  transport position change and retry. These named-test extensions need an ordered read-only
+  event trace; a missing ordinary turn is not evidence of a retry-specific state gate.
 - **Expected:** each retry is after that vehicle's movement, due behaviour and self-healing,
   not a pre-movement or orders-phase batch. The first eligible retry after release wins,
   including in the release tick if its turn is later. A waiter that already retried waits for
   another tick. Successful retry may make *enter* current and assign its destination at once,
   but adds neither a second movement nor same-turn processing of the new *enter* behaviour.
+  Still-active chrono phase-in skips retry and keeps the queued entry. A hold, pulse disable,
+  deactivation, lift or replacement alone does not skip it on a turn that reaches retry.
+  Movement-caused passenger position propagation precedes retry; retry precedes the attached
+  parasite's step, so a same-turn newly applied hold does not retroactively cancel acquisition.
 - **Falsification:** FIFO allocation independent of actual turn order, a mandatory one-tick
   reservation delay, a pre-movement retry, or a second same-turn movement/enter processing.
-- **Tool:** propose a read-only ordered event trace in the existing bench; do not infer local
-  ordering from a video frame containing only the end-of-tick positions.
+  A generic movement-disable gate excluding one of the stated non-phase-in cases on an
+  otherwise ordinary turn, retry before movement-caused passenger propagation, or retry
+  after the same-turn parasite step falsifies the respective added claim.
+The measurement scenario requires a read-only record of the ordered events; end-of-tick positions in a video frame alone are insufficient to establish local ordering.
 
 ## Open questions
 
