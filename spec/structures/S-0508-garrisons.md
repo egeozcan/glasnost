@@ -2,7 +2,7 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -31,25 +31,24 @@ Neighbouring specs own the rest:
   (S-0307 claim 4),
 - when a sale puts the occupants out (S-0408 claim 9) and how a destroyed building's contacts and
   survivors leave (S-0312 claims 17 and 18),
-- the effects of a building ownership change (planned S-0509 Terms, claim 12),
-- engineers and capture (planned S-0509), transports (S-0507) and special attacks (planned S-0519),
+- the effects of a building ownership change (S-0509 claim 12),
+- engineers and capture (S-0509), transports (S-0507) and special attacks (planned S-0519),
 - the drawing of occupied buildings (S-0108 claim 2) and the announcements (S-0701 claim 28).
 
-Cross-spec changes required at hand-off: S-0701 claim 28 must use claim 6's entering-unit owner
-for garrisoned feedback and claim 8's building-turn abandonment gate, rather than a generic
-local-building occupancy change. S-0516 must remove its garrison-protection hit rejection, which
-conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import mapping below).
+Cross-spec change required at hand-off: S-0311 claim 9 must include claim 14's reversed assault
+kill credit, including destruction bookkeeping for an assaulter that remains alive.
 
 ## Terms
 
 - **Garrisonable type.** A building type whose occupiable flag is set (Import mapping). S-0214 and
-  planned S-0509 use the same word. A *garrisoned building* (glossary) is a building of such a type with at
+  S-0509 use the same word. A *garrisoned building* (glossary) is a building of such a type with at
   least one occupant.
 - **Occupant.** An infantry unit inside a garrisonable building: S-0213's *garrison occupants*
   (Terms) are the occupants of one building. It is off the map and out of play
   (glossary, *in play*), keeps its own owner, and is neither destroyed nor removed. A building's
   occupants form an ordered list: the *first occupant* is the one that has been inside longest.
-- **Occupant capacity.** A garrisonable type's maximum number of occupants (Import mapping).
+- **Occupant capacity.** A garrisonable type's imported occupant limit (Import mapping), tested
+  for equality as claim 1 specifies, not as a general upper bound.
 - **Occupier type, assaulter type.** Infantry types marked as able to garrison, and as able to clear
   an enemy garrison, respectively (Import mapping). A type with both marks behaves as an occupier
   type only.
@@ -76,18 +75,25 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
    - the building is not being erased (glossary),
    - the unit's type is an occupier type,
    - the building belongs to the unit's own house, or to a passive house (glossary, S-0009 Terms),
-   - the building has fewer occupants than its occupant capacity,
-   - the building is not badly damaged (S-0108 Terms, compared as S-0108 states, with health above
-     zero),
+   - the building's occupant count is not equal to its occupant capacity,
+   - the building does not have both positive health and a badly damaged health ratio (S-0108
+     Terms, compared as S-0108 states),
    - the unit is not mind-controlled (S-0214 Terms).
 
    Alliance plays no part: an allied player's infantry may not garrison your building, and you may
-   not garrison an enemy's. A capacity of zero lets no unit in. This test is the "can garrison" test
-   of S-0214 row I8 and the occupiable-building test that S-0215 names in its Terms.
+   not garrison an enemy's. An empty building with capacity zero lets no unit in. The capacity
+   test is equality, not an upper bound: a negative capacity does not stop entries, and a count
+   already above capacity does not stop them either (quirk, Edge cases). The damage test itself
+   adds no positive-health requirement when the building has zero or negative health, though
+   destruction normally prevents such an arrival.
+   This test is the "can garrison" test of S-0214 row I8 and the occupiable-building test that
+   S-0215 names in its Terms.
    - Backing: `measurable` (scenarios G1 and G2) for owner, type, capacity, damage, sale and
      mind control. The build-up, unusable-centre and erasure gates are `unmeasured`: no data-only
      fixture is established that delivers an already ordered entrant during those states, rather
-     than merely having the cursor reject its order.
+     than merely having the cursor reject its order. Over-capacity and non-positive-health
+     arrivals are also `unmeasured`: no validated fixture establishes either arrival state.
+     G1's negative-capacity variant distinguishes equality from an upper-bound test.
    - Confidence: high (owner, capacity, badly damaged, sale, mind control); medium (built up,
      usable area, being erased)
 
@@ -95,10 +101,10 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
    to enter when it arrives at the end of a walking step (S-0208 claim 22) in a cell that holds a
    building, while its behaviour is *capture* and that building is its *destination*. Its target does
    not count, and *area guard* or *patrol* do not count: an occupier type arriving in those cases
-   follows planned S-0509 claims 1 and 2 instead and does not garrison. When that general building-entry
+   follows S-0509 claims 1 and 2 instead and does not garrison. When that general building-entry
    test is met, it can still give one general entry raise; that is not a garrison entry raise.
    Any building destination counts, garrisonable or not: one that fails the test is refused (claim 4), even a vehicle-like building (S-0214 Terms)
-   that planned S-0509 claim 1 would otherwise hand to a hijack. Planned S-0509 has no outcome at that same arrival,
+   that S-0509 claim 1 would otherwise hand to a hijack. S-0509 has no outcome at that same arrival,
    so its general entry raise does not happen for it.
    - Backing: `measurable` (scenarios G1 and G3) for ordered capture arrivals. The target-only,
      area-guard, patrol and vehicle-like cases are `unmeasured`: no data-only fixture is established
@@ -117,7 +123,7 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
 
 4. **Refusal.** When the attempt fails the test, the unit has its destination cleared and receives a
    scatter request whose threat point is the building's centre, forced and move-anywhere (S-0208
-   claims 11 to 13), as an engineer refusal does (planned S-0509 claim 4). It stays on the map.
+   claims 11 to 13), as an engineer refusal does (S-0509 claim 4). It stays on the map.
    - Backing: `measurable` (scenarios G1 and G2)
    - Confidence: high
 
@@ -143,7 +149,7 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
 
 7. **Owner follows the first occupant.** At each of its own turns, a civilian garrison building that
    has at least one occupant and belongs to the civilian house changes owner to the first
-   occupant's house. This is a building ownership change (planned S-0509 Terms). It happens at the
+   occupant's house. This is a building ownership change (S-0509 claim 12). It happens at the
    building's turn, not at the entry: in the tick of the entry the building may still belong to
    the civilian house (scenario G5). A garrisonable building of any other tech level never changes
    owner through this spec.
@@ -201,8 +207,10 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
     - Confidence: high (order and the skipped corner); medium (the entry outcome used)
 
 11. **Putting occupants out.** With an exit cell, the occupants are put on the map in that one cell,
-    from the last occupant to the first, within the same tick. Each faces facing 0 and takes a
-    standing position in the cell as S-0208 claim 3 chooses for a unit placed at the cell's centre.
+    from the last occupant to the first, within the same tick. Each faces facing 0 and is placed
+    at the cell's centre on its terrain surface, ignoring standing-position occupancy for this
+    placement. Several released occupants can therefore overlap at the centre. There is no
+    random draw to choose a standing position, unlike S-0208 claim 3's ordinary position choice.
     An occupant that cannot be placed is removed (not destroyed). Each placed occupant then, before
     the next one is placed:
     - has its target cleared,
@@ -217,8 +225,9 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
       makes its post-eviction team membership observable. Removal on placement failure is also
       `unmeasured`: G7 tests crowding, but cannot guarantee a qualifying cell followed by a failed
       placement. The conditional rule does not assert that crowding necessarily causes failure.
-    - Confidence: high (order of placement, target cleared, scatter); medium (standing positions,
-      the removal of an occupant that cannot be placed); low (team and hunting)
+    - Confidence: high (order of placement, centre placement without a position draw, target
+      cleared, scatter); medium (the removal of an occupant that cannot be placed); low (team
+      and hunting)
 
 12. **When no cell qualifies.** If no cell of the exit ring qualifies:
     - with inside fallback, the inside fallback cell is the exit cell and claim 11 applies (this is
@@ -267,14 +276,25 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
     Terms). The assaulter does not go inside: it has its destination cleared and scatters as in
     claim 4. The building, now empty, follows claim 8 at its next turn when it is a civilian
     garrison building.
+
+    **Reversed kill credit.** For each removed occupant, the surviving assaulter is recorded as
+    destroyed by that occupant, not the other way round. The assaulter's destruction notifications
+    are raised and its house's loss bookkeeping runs; the occupant receives the kill credit and
+    any experience, using S-0311 claims 7, 8 and 10 with the assaulter as victim. This does not
+    damage or remove the assaulter or cause its normal death animation. The occupants themselves
+    are removed without their own destruction notifications. Scoring exemptions still apply
+    (quirk, Edge cases).
     - Backing: `measurable` (scenario G10, named test data) for occupied/enemy/allied eligibility,
-      capacity, damage, mind control, both-mark precedence and clearing. The one-way alliance
-      distinction and the build-up, sale, unusable-centre and erasure gates are `unmeasured`: G10
-      establishes neither an asymmetric-alliance arrival nor an already ordered assaulter arriving
-      during those building states. The exact animation position and reverse removal order are
+      capacity, damage, mind control, both-mark precedence, clearing and reversed kill credit.
+      Nonzero score and experience for a hostile occupant are `unmeasured`: no validated
+      data-only fixture gives a locally ordered assaulter occupants of another house. G10's
+      same-house case tests the reversed notifications and counters, not a nonzero gain.
+      The one-way alliance distinction and the build-up, sale, unusable-centre and erasure gates
+      are `unmeasured`: G10 establishes neither an asymmetric-alliance arrival nor an already
+      ordered assaulter arriving during those building states. The exact animation position and reverse removal order are
       also `unmeasured`: simultaneous identical animations do not identify which removed occupant
       produced which animation, and no discriminating fixture is established.
-    - Confidence: medium (whether a removal counts as a kill: Open questions)
+    - Confidence: medium
 
 15. **Erasure.** When a building with occupants is erased (glossary, *being erased*), its occupants
     are removed with it, without death and without being put out.
@@ -307,9 +327,11 @@ conflicts with claim 16. S-0011 needs claim 13's two action mappings (Import map
 
 > Inside fallback cell = (x₀ + W − 1, y₀ + H − 1). Integer cell coordinates.
 
-> A garrisonable building accepts an occupier while occupants < capacity. Integer comparison.
+> The capacity gate accepts exactly when occupants ≠ capacity. Exact integer comparison.
 
-Badly damaged is S-0108's comparison (binary64), with health above zero.
+The damage gate rejects exactly when health > 0 and health / type maximum health ≤ red ratio.
+The ratio and comparison use binary64 as in S-0108; no integer rounding is applied. This is a
+rejection condition, not a requirement that an accepted building have positive health.
 
 ## Constants
 
@@ -339,13 +361,22 @@ Ordering as observed:
   one turn.
 - Within one eviction: the exit cell is chosen once; occupants are placed from the last to the
   first, and each gets its scatter request before the next one is placed. This can distinguish
-  the standing positions assigned to identifiable occupants and the order of their scatter draws.
+  the order of identifiable occupants' placement and scatter draws. Placement itself draws no
+  random value for a standing position.
   It does not guarantee which unit completes a walking step first.
 - At a sale, the occupants leave after the absorbed passengers and before the sale survivors
   (S-0408 claim 9).
 
 ## Edge cases and quirks
 
+- **`quirks.garrison_capacity_equality`** (default: on). Claim 1 refuses exactly at capacity,
+  rather than at or above it. A negative capacity admits occupants indefinitely, subject to the
+  other gates. Fixed behaviour: entry requires occupant count < capacity, so non-positive
+  capacity permits no entry.
+- **`quirks.assaulter_reversed_kill_credit`** (default: on). Claim 14 records the assaulter as
+  destroyed by each occupant even though it survives. Fixed behaviour: each removed occupant
+  instead receives destruction notifications and loss bookkeeping, with kill credit and
+  experience for the assaulter under the ordinary rules. The assaulter still survives and scatters.
 - **`quirks.garrison_exit_skips_corner`** (default: on). The exit search never tries the corner
   cell (x₀ − 1, y₀ − 1). With every other exit ring cell blocked and that corner free, the
   occupants are lost (or put inside, with inside fallback). Fixed behaviour: the corner is tried
@@ -390,11 +421,9 @@ The initial absent defaults above have high confidence and `unmeasured` backing 
 removes the supplying stock layer and distinguishes an initial default from a retained earlier
 value. Referenced defaults inherit their owning specs' backing.
 
-For claim 13's map actions, code 111 selects the first eligible building attached to the firing
-trigger and evicts without hunting or inside fallback. Code 6 reads its number slot as a house
-value under S-0011 claim 23 and sends that house's units hunting, including its garrison evictions.
+For claim 13's map actions, trigger action 111 selects the first eligible building attached to the firing trigger and evicts its occupants without hunting or inside fallback. The house-wide hunt action, trigger action 6, interprets its number slot as a house value under S-0011 claim 23 and sends that house's units hunting, including occupants released by its garrison evictions.
 Other action encoding belongs to S-0011. These two action mappings share G13's measurable backing
-and medium confidence. S-0011 needs corresponding action-table entries in the same hand-off.
+and medium confidence. S-0011 claim 33 and its Import mapping own the corresponding action entries.
 
 ## Measurement scenarios
 
@@ -428,6 +457,10 @@ Observable: offered orders, occupant counts, entry tick, destination and scatter
 against S-0208 claims 11 to 13. First entry removes the unit from play in its arrival tick, not from
 the game. A named map variant with occupant capacity zero offers no garrison order. Cursor results
 alone do not establish how an otherwise unreachable failed arrival would behave.
+A second named variant sets occupant capacity to −1 and orders two occupiers in, one at a time.
+Both entries succeed: refusal of either otherwise eligible entry falsifies the equality test.
+On our engine with the capacity-equality quirk off, neither entry is allowed. This comparison
+uses invented test data, not a stock capacity.
 
 **G2. Alliance, sale, damage and mind control (claims 1 and 4).** Setup: G1's map with a B-owned
 non-civilian garrisonable building, a sellable A-owned garrisonable building, an A mind controller,
@@ -454,7 +487,7 @@ issuing the order and none on the refused arrival.
 Any other count or an increment before arrival falsifies this. Area-guard and patrol arrivals are
 not test parts: no fixture establishes their required building destination or target. Claim 2
 states the conditional distinction: they never garrison, but a qualifying general entry can raise
-under planned S-0509 claims 1 and 2.
+under S-0509 claims 1 and 2.
 
 **G4. Feedback (claims 6 and 8).** Setup: two nearby civilian buildings and A's infantry.
 Procedure: enter with one
@@ -501,8 +534,9 @@ level ground, with impassable blockers at chosen ring cells. Procedure: deploy t
 separate subcases leave each ranked cell and all lower-ranked cells clear, blocking all higher-ranked
 ones; this tests every rank of claim 10, not just the first two. Observable: first placement cell,
 facing, standing positions and tick. Expected: the highest-ranked clear cell is used for all
-occupants in that tick, facing 0, with positions chosen under S-0208 claim 3. Repeat at full imported
-capacity. A named map variant changes one occupier's movement permissions so the two occupier types
+occupants in that tick, facing 0, each initially at the same cell centre, with no standing-position
+choice draw. Sample before scatter movement advances them; a later walking position is not the
+placement position. Repeat at full imported capacity. A named map variant changes one occupier's movement permissions so the two occupier types
 have different entry outcomes under S-0209 on a chosen land-type test cell. Enter that type first,
 then last in separate runs, with all higher-ranked alternatives blocked. The choice must follow the first occupant's entry
 outcome alone. A lower-ranked cell, selection based on a later occupant, or different placement
@@ -518,8 +552,8 @@ counts, separated from the building's own destruction and any building survivors
 and (c) remove all occupants with no occupant death, kill or survivor; (b) uses the inside
 fallback cell, subject to claim 11's placement success. Falsified by a corner exit, an occupant
 remaining inside after an original-mode eviction, or an occupant death registration. Sale survivors
-are not evidence that garrison occupants escaped. Also replay with each quirk disabled on our
-engine: the corner becomes the last choice with the corner quirk off; a fully blocked eviction
+are not evidence that garrison occupants escaped. Also replay with each exit quirk disabled on
+our engine: the corner becomes the last choice with the corner quirk off; a fully blocked eviction
 without fallback leaves the occupants inside with the removal quirk off. These last replays test
 the specified alternatives, not the original.
 
@@ -529,9 +563,10 @@ entry, and let the building attack a separate target. Procedure: evacuate by dep
 placement order, standing positions, facing, target, health, experience, behaviour and scatter
 requests before later automatic acquisition. A read-only random-state record may distinguish the
 scatter draws in the order specified by S-0208 claims 11 to 13. Expected: reverse entry-order
-placement in one chosen cell, each unit's target cleared and scatter requested before the next
-placement, preserved health/experience, and no hunt requested. The muzzle index is 0 immediately
-after eviction; re-garrison and check the first muzzle under S-0313 claim 6 as a visible control.
+placement at one chosen cell's centre, with no standing-position choice draw, each unit's target
+cleared and scatter requested before the next placement, preserved health/experience, and no hunt
+requested. An extra position-choice draw or a non-centre initial placement falsifies that part.
+The muzzle index is 0 immediately after eviction; re-garrison and check the first muzzle under S-0313 claim 6 as a visible control.
 Any retained target, reset state or non-reversed assignment falsifies that part. Which unit first
 finishes a later walking step is not a test of placement order.
 
@@ -547,8 +582,9 @@ such a run as an assault setup failure. Use separate
 mutually allied-B and enemy-B runs, and an empty enemy copy. Make the buildings capturable and
 damage the allied copy enough to offer a repair order while preserving positive health and staying
 above the red ratio. Keep the assaulter out of the occupants' firing range until its order is given.
-Use an existing weapon with a visible occupant animation. Procedure: give each variant the normal
-capture or repair order, verify *capture* behaviour and building destination, then record arrival.
+Use an existing assaulter weapon with a visible occupant animation. A named map variant makes
+the occupants' garrison weapon harmless so that the enemy-owned building cannot kill the entrant
+before arrival. Procedure: give each variant the normal capture or repair order, verify *capture* behaviour and building destination, then record arrival.
 Test the enemy occupied building, allied occupied building and empty enemy building separately.
 Repeat the enemy occupied case with every imported occupant place filled. Observable: entered-by counter, occupant count, animation points, assaulter
 position/destination/scatter, owner at the next building turn, kills and experience. Expected:
@@ -566,9 +602,26 @@ is A and it remains mind-controlled at arrival. These two arrivals clear the gar
 damage and mind control. They do not waive the shared building gates listed in claim 14.
 Falsified by an allied/empty assault, a full-capacity refusal, consumption of the assaulter, a raise
 whose counter effect sees occupants already cleared, or an extra red-ratio or mind-control assault
-gate. A damage run whose garrison already evacuated is void, not an assault refusal. Kill credit, experience and
-destroyed-event results are recorded to settle the open question, not assigned an expected value.
-Exact animation-to-occupant correspondence is not established by this scenario.
+gate. A damage run whose garrison already evacuated is void, not an assault refusal.
+
+For the kill-credit subcase, use scored infantry types, a trainable occupant and an assaulter
+without a veterancy-changing effect. Keep A and B mutually hostile, with A's occupants still
+inside the transferred B-owned building. Attach distinct repeating destruction counters to the
+A-owned assaulter and to each A-owned occupant. Start with one occupant, then repeat with two.
+Record counter effects, house kill/loss deltas and assaulter health and experience. Expected:
+each clearing raises the assaulter's destruction counter once per removed occupant, but none of
+the occupants' destruction counters. A receives both the infantry kill and loss bookkeeping per
+occupant, since A owns both the credited occupant and the falsely recorded victim. The assaulter
+remains alive at its arrival health and receives no kill experience. Use rookie occupants so
+that same-house zero kill value does not trigger a cap reduction of pre-existing experience.
+Neither house gains score value for these same-house credits (S-0311 claim 7). Credit to the
+assaulter, occupant destruction notifications, an assaulter death or absent assaulter
+notifications falsifies the corresponding original-mode prediction. Nonzero experience and
+score for hostile occupants remain unmeasured until a validated fixture supplies such occupants
+without requiring orders in another player's name. On our engine with reversed
+kill credit disabled, the notifications and credit instead identify the occupants as victims
+and the assaulter as killer. Exact animation-to-occupant correspondence is not established by
+this scenario.
 
 **G11. Erasure (claim 15).** Setup: a garrisoned civilian building, an enemy stock erasing unit,
 and a control empty copy. Give each occupant a destroyed-event counter and note starting kill/loss
@@ -603,13 +656,9 @@ from ordinary nearby auto-acquisition. Team-membership changes remain outside th
 
 ## Open questions
 
-- Whether the assault removal of claim 14 counts as a kill for the assaulter's house (score,
-  experience) and raises the occupants' destroyed events. Test in G10.
 - Whether an exit ring cell outside the map or outside the usable area can qualify (claim 10).
-- Whether occupants beyond the number of free standing positions in the exit cell are removed
-  (claim 11), or always placed. Test with a full-capacity garrison in G7.
-- Whether the owner change of claims 7 and 8 plays the "building captured" announcement or any
-  other effect that an engineer capture has and this change does not (planned S-0509 claim 12).
+- Which conditions, other than standing-position occupancy, can make placement fail after an
+  exit cell qualifies (claim 11). G7 records any such losses without predicting them.
 - Whether any skirmish cause other than map action code 6 and the original's computer player
   sends the house-wide hunt order of claim 13.
 
