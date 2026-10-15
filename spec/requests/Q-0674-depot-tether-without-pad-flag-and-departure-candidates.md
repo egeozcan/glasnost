@@ -7,7 +7,7 @@ answered-by: []
 ---
 
 ## Need
-S-0314 revision 39 answers Q-0680 to Q-0683, but three points it raises cannot be built
+S-0314 revision 17 answers Q-0680 to Q-0683, but three points it raises cannot be built
 without guessing. The code is `depot::process_enter` (tether), `depot::exit_cell` and
 `econ::release::present_exit_list` (claim 25) and `tick::object_turn` (claim 23's retry).
 
