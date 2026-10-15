@@ -2,13 +2,13 @@
 id: S-0310
 title: Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0601]
 supersedes: []
 ---
 
@@ -31,7 +31,7 @@ Glossary terms are used as defined there (*facing*, *signed facing difference*, 
 *turning*, *turn rate*, *homing projectile*, *omni-fire weapon*, *locomotor moving the vehicle*.
 From S-0214: *healing actor* (called *healer* here), *counts as a vehicle*, *health ratio*
 and *full health*. From S-0215:
-*turreted building*, *voxel turret*, *turn-rate field*, the turret snap and its bound (claim 32,
+*turreted building*, *turn-rate field*, the turret snap and its bound (claim 32,
 F8). From S-0107: *interruptible* (Terms and table T1), which decides which infantry sequences
 may be broken off. From S-0313: a building's *primary fire pixel shift* and *turret anchor's pixel
 shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). In addition:
@@ -66,8 +66,11 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
   (the structures specs); it counts for the turret flag of the building (claim 4).
 - **Aiming point of a building.** The point from which a turreted building measures the
   direction of its target (claim 4).
-- **Building with a voxel turret, building with a sprite turret.** A building with the turret flag
-  whose turret is drawn from a voxel model (an imported art flag), or from sprites.
+- **Building with a voxel turret, building with a sprite turret.** A turreted building whose own
+  type's imported rules voxel-turret flag is set, or is not set, respectively. These categories
+  for aiming depend on that flag, not on whether a turret image successfully loads. The same
+  flag selects S-0215 claim 32's voxel-turret category, subject to the correction listed in
+  Changes for other specs.
 - **Fighter.** An aircraft type with the imported fighter flag (S-0501 claim 11).
 - **Passenger carrier.** An aircraft marked at placement because it carries passengers; the mark
   remains after they leave (S-0501 claim 1).
@@ -114,12 +117,17 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    direction of the target is measured from the building's *aiming point* to the target's
    reference point. The aiming point is the building's reference point, shifted as follows:
 
-   | The building's art | Shift of the aiming point |
+   | The building's imported settings | Shift of the aiming point |
    |---|---|
    | gives a primary fire pixel shift | that shift |
    | gives none, and its turret anchor's pixel shift is not zero | the turret anchor's pixel shift |
    | gives none, and its turret anchor's pixel shift is zero | none |
 
+   The primary fire pixel shift comes from the building's image art. The turret anchor's
+   pixel shift and voxel-turret flag come only from the rules section named by the building
+   type, not from its image art. Aiming uses the same imported anchor pair and voxel-turret
+   flag as firing (S-0313 claim 10), with no separate art value or art fallback. Rules-layer
+   omission retains the current setting as in S-0313 claim 10.
    Both screen pixel shifts are converted to leptons by S-0313, F3. A
    building with a sprite turret has *τ* = 2048 facing units, whatever the projectile. A building
    with a voxel turret has *τ* = 0: it must point exactly at the target
@@ -128,13 +136,15 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 
    The turret snap belongs to S-0215 (claim 32 and F8 own the snap, its conditions and its bound,
    and give no switch disabling the snap itself). It acts only on a building to which this
-   check has answered *not facing*, and a snapped building can fire in the tick of the snap unless another answer applies
-   (S-0215, claim 32). Because *τ* = 0, every aim error above 0 of a building with a voxel
-   turret gives *not facing*, so every such aim error within the snap bound is snapped, and every
+   check has answered *not facing*, within the non-SAM attack behaviour covered by S-0215
+   claim 32. A snapped building can fire in the tick of the snap unless another answer applies.
+   Within that behaviour, because *τ* = 0, every aim error above 0 that reaches the aiming test
+   gives *not facing*, so every such aim error within the snap bound is snapped, and every
    one if the turn-rate field is 0. With the sprite tolerance (switch off), only aim errors above
-   2048 are.
-   - Backing: `measurable` (scenario T4; the snap is S-0215's scenario)
-   - Confidence: high (the tolerances and the flag); medium (the aiming point and the rule for
+   2048 can trigger that snap.
+   - Backing: `measurable` (scenario T4; S-0313 scenario P8 for the shared rules source, and
+     the snap is S-0215's scenario)
+   - Confidence: high (the tolerances, the flag and the shared rules source); medium (the aiming point and the rule for
      installed upgrades)
 
 5. **Infantry and aircraft.** Infantry never get *not facing*: an infantry unit fires in whatever
@@ -233,8 +243,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    A type with both the visceroid and the deploy-to-fire flags therefore deploys on *can fire*, and
    its animation stage is not set.
 
-   A deploy-to-fire vehicle gets *must deploy* when the vehicle-specific reasons and the general part
-   of the check (claim 6) would let the shot through, and its cell does not allow it to deploy
+   A deploy-to-fire vehicle gets *must deploy* when no higher-ranked refusal applies
+   (claim 6), and its cell does not allow it to deploy
    there (for example a sloped cell, a building in the cell, or a land
    type that does not allow it; the deploy specs own that cell test). It then neither fires nor
    deploys. *Must deploy* ranks above *moving*, *still turning* and *not facing* (State and
@@ -398,8 +408,10 @@ facing enters its tolerance, subject to the other refusals (T1 and T3).
 | `JumpJetTurn` (rules, infantry type) | jumpjet-turn flag (claim 8) | boolean | no |
 | `DeployToFire` (rules, vehicle type) | deploy-to-fire flag (claim 9) | boolean | no |
 | `ROT` (rules, projectile) | homing projectile when not 0 (S-0206) | integer | 0 |
-| `TurretAnimIsVoxel` (art, building image) | building with a voxel turret | boolean | no |
-| `PrimaryFirePixelOffset`, `TurretAnimX`, `TurretAnimY` (art, building image) | aiming point shift (claim 4; S-0313 owns the forms) | pixel pair; integers | none; 0 |
+| `TurretAnimIsVoxel` (rules, section named by building type) | building with a voxel turret (claim 4; S-0313 claim 10) | boolean | no |
+| `PrimaryFirePixelOffset` (art, building image) | primary fire pixel shift (claim 4; S-0313 claim 7) | two integers, pixels | not given |
+| `TurretAnimX` (rules, section named by building type) | horizontal component of turret anchor's pixel shift (claim 4; S-0313 claim 10) | integer, pixels | 0 |
+| `TurretAnimY` (rules, section named by building type) | vertical component of turret anchor's pixel shift (claim 4; S-0313 claim 10) | integer, pixels | 0 |
 | `UseSparkParticles`, `UseFireParticles` (rules, weapon) | spark-particle and fire-particle weapons (claims 7 and 8) | boolean | no |
 
 ## Measurement scenarios
@@ -462,16 +474,22 @@ the scenario's orders.
 
 **T4. Buildings.**
 - Setup: (a) a stock sprite turret defence, a stock voxel turret defence and a stock defence without
-  a turret, each given a target at a direction off its facing; for the voxel one, test turn-rate
+  a turret, each given a target at a direction off its facing. Use defences without the SAM flag
+  for snap observations; for the voxel one, test turn-rate
   fields 1, 5 and 0, and both homing and non-homing projectiles (the snap's own cases are
-  S-0215's scenario). (b) A named aiming-point test art file gives the
-  sprite turret defence a large primary fire pixel shift and a different nonzero turret-anchor
-  shift, with their aiming directions separated by more than 2048 facing units. A target stands
+  S-0215's scenario). Named aiming-point test rules set the voxel-turret flag in the building
+  type section. (b) A named aiming-point test art file gives the sprite turret defence a large
+  primary fire pixel shift; the test rules give it a different nonzero turret-anchor shift,
+  with their aiming directions separated by more than 2048 facing units. A target stands
   close to the building in a direction such that the direction from the shifted aiming point differs from the direction
   from the reference point by more than 2048. (c) A test rules file gives a stock building without a
   turret flag an installed upgrade whose type has the turret flag, and a target off the turret's
   facing. (d) Repeat (b) with no primary fire pixel shift and a large nonzero turret-anchor
-  pixel shift. (e) Repeat with neither shift, and a target off the turret facing.
+  pixel shift. (e) Repeat with neither shift, and a target off the turret facing. In (a),
+  (b) and (d), give the building a distinct image name and put conflicting turret-anchor and
+  voxel-turret settings in its image art as negative controls. Repeat with only those art
+  settings changed, keeping the primary fire pixel shift unchanged. S-0313 scenario P8
+  separately tests art-only, omitted and layered rules settings.
 - Procedure: order an attack in each case with every non-aiming refusal absent. Use close
   target positions that separate the candidate aiming directions by more than 2048 facing units.
 - Observable: turret facing per tick and the shot tick.
@@ -481,9 +499,12 @@ the scenario's orders.
   point and more than 2048 from the direction from the reference point. (c) The building turns its
   turret and fires only within 2048 of the target direction. (d) Aim follows the turret-anchor
   shift. (e) Aim follows the unshifted reference point. Homing changes neither building tolerance.
+  Changing only the art's turret-anchor or voxel-turret settings changes neither the aiming
+  direction nor the tolerance; both follow the rules type settings shared with firing.
 - Falsified if: the voxel turret fires with an aim error above 0; in (b) or (d) the shot comes
   within 2048 of only the unshifted direction; in (c) the building fires without aiming; in (e)
-  it uses a shifted direction; or homing changes a building's tolerance.
+  it uses a shifted direction; homing changes a building's tolerance; or an art-only
+  turret-anchor or voxel-turret change affects aiming or its tolerance.
 
 **T5. Infantry and aircraft.**
 - Setup: (a) an infantry unit given an attack order at a target behind it. (b) A stock aircraft that
@@ -563,14 +584,14 @@ the scenario's orders.
   attacks at least 30 ticks apart.
 - Procedure: attack each stationary target, record the first shot and the following 20 ticks,
   then stop attacking before changing target. No movement orders occur during the observation.
-- Observable: the animation stage every tick (recorder) and the drawn frames, the body facing, and
-  the shot tick.
+- Observable: the animation stage every tick (recorder) and the drawn frames, the current and
+  target body facings, and the shot tick.
 - Expected: at the shot the stage equals *S*<sub>*k*</sub> (the table in Constants), and then rises
-  by 5 at intervals of 5 ticks between rises (the first rise's phase is still open); the body
-  facing does not change; *d* = 4095 gives *S*<sub>0</sub> and 4096
+  by 5 at intervals of 5 ticks between rises (the first rise's phase is still open); neither
+  the current nor target body facing changes; *d* = 4095 gives *S*<sub>0</sub> and 4096
   gives *S*<sub>1</sub>.
-- Falsified if: the stage at the shot differs, rises with another period or step, or the body
-  facing is set to the target at once.
+- Falsified if: the stage at the shot differs, rises with another period or step, or either
+  body facing changes toward the target.
 
 **T10. Healers and *illegal*.**
 - Setup: a stock vehicle that is a healer (S-0214) with (a) a damaged own vehicle, (b) the same
@@ -598,6 +619,16 @@ the scenario's orders.
   once the general check allows firing after full health, or (c) keeps the target, or (d) drops it,
   (e) keeps the target once the general check passes; an accepted order in (g) heals the vehicle
   or keeps attacking it; (h) waits until the countdown ends.
+
+## Changes for other specs
+
+- **S-0215, claim 32 and its supporting definition, import mapping and snap scenario:** replace
+  the art-sourced voxel-turret classification with the building's own rules-type flag, shared
+  with claim 4 here and S-0313 claim 10. Art supplies no separate value or fallback. The snap
+  scenario must vary the rules flag, not an art mark, and should keep conflicting art settings
+  unchanged as a negative control. Its snap outcomes and bound do not change. This is a required
+  correction to the contrary definition and mapping currently in S-0215; sign-off must check
+  the two specs together.
 
 ## Open questions
 
