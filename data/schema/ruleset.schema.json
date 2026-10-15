@@ -8276,7 +8276,7 @@
           "default": true
         },
         "second_stage_order_unchecked": {
-          "description": "A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection. Not implemented yet (wave 2).",
+          "description": "A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection.",
           "type": "boolean",
           "default": true
         },
@@ -8531,7 +8531,7 @@
           "default": true
         },
         "superweapon_block_one_layer": {
-          "description": "In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first. Not implemented yet (wave 2).",
+          "description": "In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first.",
           "type": "boolean",
           "default": true
         },
@@ -8541,12 +8541,12 @@
           "default": true
         },
         "superweapon_kind_as_list_position": {
-          "description": "The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind. Not implemented yet (wave 2).",
+          "description": "The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind.",
           "type": "boolean",
           "default": true
         },
         "superweapon_list_cut_by_removal": {
-          "description": "When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible. Not implemented yet (wave 2).",
+          "description": "When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible.",
           "type": "boolean",
           "default": true
         },
@@ -8816,7 +8816,7 @@
           "default": true
         },
         "warp_hold_persists": {
-          "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp. Not implemented yet (wave 2).",
+          "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp.",
           "type": "boolean",
           "default": true
         },
