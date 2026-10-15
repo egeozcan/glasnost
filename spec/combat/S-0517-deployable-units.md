@@ -2,7 +2,7 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -78,9 +78,10 @@ Skirmish only. Network games and campaigns are out of scope.
      place.
    - Backing: `measurable` (P1 a and P8 a for overlapping non-bunkered types). The bunkered
      branch is owned by S-0415 claim 1, including its backing limitation, not newly established here.
-     S-0606 claim 11 establishes that fresh selection supplies no order route to the occupant,
-     and no player-input route to *unload* is known; it does not exclude every hotkey,
-     pre-existing selection or queued-order route.
+     S-0606 claim 11 establishes ordinary band-box exclusion, not a universal selection
+     refusal: the bunker link alone does not exclude ordinary click selection. An end-to-end
+     player-input route through selection and deploy to the occupant's *unload* remains
+     unestablished; band-box exclusion does not prove that route impossible.
    - Confidence: high
 
 2. **Deploy-fire vehicle.** At each processing of *unload*, a deploy-fire vehicle uses its own
@@ -790,9 +791,12 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   Expected: passenger handling wins when capacity is positive; otherwise non-in-place
   deploy-fire uses slot 0; otherwise harvesting wins over building deployment and in-place
   deployment, and building deployment wins over in-place deployment. Seeing the lower-priority
-  outcome while both recorded conditions hold falsifies claim 1. Bunkered vehicles are excluded:
-  S-0606 claim 11 establishes no fresh-selection route and no known player-input route to
-  *unload*, not the exclusion of every hotkey, pre-existing selection or queued-order route.
+  outcome while both recorded conditions hold falsifies claim 1. Bunkered vehicles are not
+  tested by these overlap variants. S-0606 claim 11 establishes ordinary band-box exclusion,
+  but no bunker-link-only click-selection refusal. Its scenario K6 separately tests pointing,
+  click selection and deploy to establish whether player input reaches *unload*. Failure of
+  band-box selection alone does not settle that route. The bunkered branch retains S-0415
+  claim 1's backing limitation until an input route is established.
 - (b) Disguise: give a grounded in-place vehicle permanent disguise capability as in S-0516
   claim 32, with no disguise-when-still reacquisition. Deploy, verify its disguise persists,
   and order undeploy without moving it or inflicting damage. Record the disguise flag at
@@ -825,10 +829,7 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   and its subsequent height when there is no presentation and hence no assigned destination.
 - Whether the stage count really advances by one stage per *d* ticks for every deploying type (F1).
   One stage is the vehicle's default step, and nothing known changes it.
-- Approved S-0415 claim 1 calls the deploy-fire weapon the deploy weapon. Its current draft
-  corrects this to slot 0 and the delay of claim 2 here. Confirm that correction at joint hand-off.
-- Approved S-0516 claim 34 describes disguise loss as leaving deployed mode. Its current draft
-  now specifies the first undeploy step, before animated completion, as claim 6 does here.
-  Confirm that correction at joint hand-off.
+- Approved S-0415 claim 1 already specifies the slot-0 weapon and the 14 + *u* tick delay, matching claim 2 here; no cross-spec change is indicated by this point.
+- Approved S-0516 claim 34 already specifies disguise loss when the undeploy step starts, matching claim 6 here; no cross-spec change is indicated by this point.
 - The rest of the approach search of a deploy-to-fire vehicle whose own cell fails (S-0307, Open
   questions; Q-0072).
