@@ -1174,3 +1174,18 @@ fn destroy_particle_systems_omit_no_type_items() {
         Some(&["Smog".to_owned(), "Glow".to_owned(), "Smog".to_owned()][..])
     );
 }
+
+/// spec: S-0303 Edge cases (departures: a retained debris maximum of −1 warns; every paired maximum 0 or −2 warns of the one pass that places nothing)
+#[test]
+fn debris_maximum_departures_warn() {
+    let base = "[Warheads]\n1=Neg\n2=Zero\n[Neg]\nMaxDebris=3\nDebrisTypes=Bit,Bob\nDebrisMaximums=-1,3\n\
+                [Zero]\nMaxDebris=3\nDebrisTypes=Bit,Bob\nDebrisMaximums=-2,0\n";
+    let (_, w) = direct(&[base], "", &[], &[], IniQuirks::default());
+    assert!(warned(&w, "Neg DebrisMaximums keeps a maximum of -1"));
+    assert!(!warned(&w, "Neg has MaxDebris 3 but every debris maximum"));
+    assert!(warned(
+        &w,
+        "Zero has MaxDebris 3 but every debris maximum is 0 or -2"
+    ));
+    assert!(!warned(&w, "Zero DebrisMaximums keeps a maximum of -1"));
+}

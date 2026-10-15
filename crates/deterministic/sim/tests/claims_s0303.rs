@@ -1317,3 +1317,95 @@ fn claim_24_defaults_of_bridge_and_barrel_damage() {
     let w = testkit::game_with(&r, SIZE, 1);
     assert_eq!(w.rules().combat.general.ammo_crate_damage, 80);
 }
+
+/// One detonation of a warhead throwing `lo`..=`hi` pieces at the listed
+/// types with the given maxima, after `seed` raw values: (pieces created
+/// per type, pieces per type by a reference model of F6, whether the draws
+/// taken agree).
+fn debris_case(maxima: &[i32], lo: i32, hi: i32, seed: u32) -> (Vec<i32>, Vec<i32>, bool) {
+    let names: Vec<String> = (0..maxima.len()).map(|i| format!("Chunk{i}")).collect();
+    let (mut w, s) = anim_world(|h| {
+        h.max_debris = Some(hi + 1);
+        h.min_debris = Some(lo);
+        h.anim_list = None;
+        h.debris_types = Some(names.clone());
+        h.debris_maximums = Some(maxima.to_vec());
+    });
+    for _ in 0..seed {
+        w.rng.raw();
+    }
+    let mut rng = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let mut left = i64::from(rng.ranged(lo, hi, half));
+    let m = maxima.len();
+    let never = maxima.iter().all(|&u| u == 0 || u == -2);
+    let mut want = vec![0; m];
+    let mut j = 0;
+    while left > 0 && !(never && j == m) {
+        let i = j % m;
+        let raw = i64::from(rng.raw() as i32);
+        // The model: |raw| wrapped to 32 bits, the divisor u + 1 wrapped,
+        // the remainder truncated toward zero, a zero divisor giving |raw|.
+        let a = i64::from((raw.abs() as u32) as i32);
+        let b = i64::from((maxima[i] as i64 + 1) as u32 as i32);
+        let r = if b == 0 { a } else { a % b };
+        let g = r.min(left);
+        want[i] += g.max(0) as i32;
+        left = i64::from((left - g) as u32 as i32);
+        j += 1;
+    }
+    w.effects.clear();
+    let p = centre(0, 0);
+    glasnost_sim::combat::projectile::projectile_detonation(&mut w, s, 10, p, None, None, p, false);
+    let got = anims(&w);
+    let got: Vec<i32> = names
+        .iter()
+        .map(|n| got.iter().filter(|(a, _)| a == n).count() as i32)
+        .collect();
+    (got, want, w.rng.taken() == rng.taken())
+}
+
+// spec: S-0303 F6 (a maximum of 2147483647 gives the wrapped divisor −2147483648, not a zero divisor: the remainder is |raw| itself, capped by the pieces left)
+#[test]
+fn f6_largest_maximum_wraps_the_divisor() {
+    for seed in 0..20 {
+        let (got, want, draws) = debris_case(&[2147483647, 1], 3, 5, seed);
+        assert_eq!(got, want, "seed {seed}");
+        assert!(draws, "seed {seed}");
+        assert!(got[0] > 0, "seed {seed}");
+    }
+}
+
+// spec: S-0303 Edge cases (departure: a retained maximum of −1 gives a zero divisor, and the remainder is |raw|, capped by the pieces left; no extra draw)
+#[test]
+fn f6_maximum_minus_one_takes_the_magnitude() {
+    for seed in 0..20 {
+        let (got, want, draws) = debris_case(&[-1, 2], 2, 4, seed);
+        assert_eq!(got, want, "seed {seed}");
+        assert!(draws, "seed {seed}");
+        assert!(got[0] > 0, "seed {seed}");
+    }
+}
+
+// spec: S-0303 F6 (a maximum below −1 behaves like the non-negative maximum −u − 2: −4 assigns 0 to 2 pieces, −2 none; the signed remainder follows |raw|)
+#[test]
+fn f6_negative_maxima_follow_the_signed_remainder() {
+    for seed in 0..20 {
+        let (got, want, draws) = debris_case(&[-4, -2, 1], 3, 6, seed);
+        assert_eq!(got, want, "seed {seed}");
+        assert!(draws, "seed {seed}");
+        assert_eq!(got[1], 0, "seed {seed}");
+        assert!(got[0] <= 6, "seed {seed}");
+    }
+}
+
+// spec: S-0303 Edge cases (departure: when every paired maximum is 0 or −2 the deals stop after one full pass over the types, having taken that pass's raw values)
+#[test]
+fn f6_never_placed_with_minus_two() {
+    for seed in 0..5 {
+        let (got, want, draws) = debris_case(&[-2, 0], 3, 5, seed);
+        assert_eq!(got, vec![0, 0]);
+        assert_eq!(got, want);
+        assert!(draws, "seed {seed}");
+    }
+}

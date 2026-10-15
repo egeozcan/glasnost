@@ -82,42 +82,41 @@ fn debris(w: &mut World, id: ObjectId) {
 /// Deals N pieces of debris to the listed types (S-0303 F6).
 pub fn deal_debris(w: &mut World, n: i32, types: &[String], maxima: &[i32], at: Pos) {
     let m = types.len();
+    // spec: S-0303 F6 (a non-positive total creates no pieces and takes no allocation draws)
     if m == 0 || n <= 0 {
         return;
     }
     let q = w.rules().quirks;
     // spec: S-0303 Edge cases (a missing maximum counts as 0)
     let max_of = |i: usize| maxima.get(i).copied().unwrap_or(0);
-    // spec: S-0303 Edge cases (debris that can never be placed: every maximum 0, so that every deal gives 0 pieces; a maximum of −1 or −2 gives 0 pieces too)
-    let never = (0..m).all(|i| (-2..=0).contains(&max_of(i)));
+    // spec: S-0303 Edge cases (departure: debris that can never be placed: every paired maximum 0 or −2, so every remainder is 0)
+    let never = (0..m).all(|i| matches!(max_of(i), 0 | -2));
     let mut left = n;
     let mut j: usize = 0;
-    loop {
-        if left <= 0 {
-            break;
-        }
+    while left > 0 {
         if never && j == m {
-            // spec: S-0303 Edge cases (debris that can never be placed: stop after one full pass over the types)
+            // spec: S-0303 Edge cases (departure: stop after one full pass over the types, having taken its raw values)
             break;
         }
         let i = j % m;
-        let u = max_of(i);
+        // spec: S-0303 F6 (bⱼ = wrap(uᵢ + 1): a maximum of 2147483647 gives the divisor −2147483648)
+        let b = max_of(i).wrapping_add(1);
         let raw = w.rng.raw() as i32;
-        // spec: S-0303 F6 (gⱼ = min(|rawⱼ| mod (uᵢ + 1), ℓⱼ), the magnitude-first remainder)
-        let mag = if raw == i32::MIN && q.random_magnitude_overflow {
-            raw
+        let g = if raw == i32::MIN && !q.random_magnitude_overflow {
+            // spec: S-0303 F6 and S-0202 claim 6 (switch off: the exact magnitude 2147483648, its remainder non-negative)
+            let a = i64::from(raw).abs();
+            let r = if b == 0 { a } else { a % i64::from(b) };
+            i32::try_from(r.min(i64::from(left))).unwrap_or(left)
         } else {
-            raw.wrapping_abs()
-        };
-        let g = if u + 1 == 0 {
-            0
-        } else {
-            (mag % (u + 1)).min(left)
+            // spec: S-0303 F6 (aⱼ = wrap(|rawⱼ|); gⱼ = min(aⱼ rem bⱼ, ℓⱼ), the remainder truncated toward zero with the sign of aⱼ)
+            // spec: S-0303 Edge cases (departure: a zero divisor, maximum −1, gives the remainder aⱼ; −2147483648 rem −1 is 0; S-0205 claim 3)
+            glasnost_num::int::rem(raw.wrapping_abs(), b).min(left)
         };
         for _ in 0..g.max(0) {
             effects::anim(w, &types[i], at);
         }
-        left -= g.max(0);
+        // spec: S-0303 F6 (ℓⱼ₊₁ = wrap(ℓⱼ − gⱼ): a negative allocation raises the remaining count)
+        left = left.wrapping_sub(g);
         j += 1;
     }
 }

@@ -1339,10 +1339,17 @@ impl Builder<'_> {
                 "{name} DebrisMaximums has fewer items than DebrisTypes; the missing maxima count as 0 (S-0303 F6)"
             ));
         }
-        if !types.is_empty() && maxima.iter().take(types.len()).all(|&m| m == 0) {
-            // spec: S-0303 Edge cases, S-0312 Edge cases (every maximum 0 with a positive count: one pass that places nothing)
+        let paired = |i: usize| maxima.get(i).copied().unwrap_or(0);
+        if !types.is_empty() && (0..types.len()).all(|i| matches!(paired(i), 0 | -2)) {
+            // spec: S-0303 Edge cases, S-0312 Edge cases (every paired maximum 0 or −2 with a positive count: one pass that places nothing)
             self.warn_at(key(t, "DebrisMaximums"), format!(
-                "{name} has MaxDebris {max} but every debris maximum is 0: our engine stops after one pass that places nothing (S-0303 F6, a departure)"
+                "{name} has MaxDebris {max} but every debris maximum is 0 or -2: our engine stops after one pass that places nothing (S-0303 F6, a departure)"
+            ));
+        }
+        if (0..types.len()).any(|i| paired(i) == -1) {
+            // spec: S-0303 Edge cases (departure: a zero debris-allocation divisor; the importer warns about a retained maximum of −1)
+            self.warn_at(key(t, "DebrisMaximums"), format!(
+                "{name} DebrisMaximums keeps a maximum of -1: the original stops with an error when it deals that type; our engine gives it min(|value|, pieces left) (S-0303 Edge cases, a departure)"
             ));
         }
     }
