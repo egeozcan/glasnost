@@ -2,13 +2,13 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0601]
 supersedes: []
 ---
 
@@ -190,6 +190,19 @@ S-0202: R(*a*, *b*). In addition:
    - Backing: `measurable` (scenario P7, test data)
    - Confidence: high (shifts, steps, and that the cell replaces the target)
 
+10. **Building turret settings have one rules source.** The turret anchor's pixel shift and
+    the voxel-turret and voxel-barrel flags come only from the building type's rules section,
+    through building-type rules import. The art section named by its image does not supply,
+    override or provide a fallback for these settings, even when the image name differs from
+    the type name. Rules layers apply as in S-0006 claim 1, keeping the current setting when
+    a later layer omits a key. The anchor pair used for firing in claim 8 is the same imported
+    pair used for aiming in S-0310 claim 4. The voxel-turret flag used in claim 8 is likewise
+    the flag used for that aiming tolerance. Neither use imports a separate art value.
+    The voxel-barrel flag selects claim 8's barrel row from the same rules source, although
+    that row's exact fire-point transform remains unresolved.
+    - Backing: `measurable` (scenario P8)
+    - Confidence: high
+
 ## Formulas
 
 **F1. Matrix composition** (claim 1). All matrices are 3 × 4 single-precision matrices, composed by
@@ -295,10 +308,18 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 | `MaxNumberOccupants` (rules, building type) | how many garrison muzzle points are read | integer | 0 |
 | `PrimaryFirePixelOffset` (art, building image) | primary fire pixel shift | two integers, pixels | not given |
 | `PrimaryFireDualOffset` (art, building image) | dual-shift flag (claim 7) | boolean | no |
-| `TurretAnimX`, `TurretAnimY` (rules, building type) | turret anchor's pixel shift (claim 8) | integers, pixels | 0 |
-| `TurretAnimIsVoxel`, `BarrelAnimIsVoxel` (rules, building type) | voxel turret, voxel barrel | boolean | no |
+| `TurretAnimX` (rules, section named by building type) | horizontal component of turret anchor's pixel shift (claims 8 and 10; also S-0310 claim 4) | integer, pixels | 0 |
+| `TurretAnimY` (rules, section named by building type) | vertical component of turret anchor's pixel shift (claims 8 and 10; also S-0310 claim 4) | integer, pixels | 0 |
+| `TurretAnimIsVoxel` (rules, section named by building type) | voxel turret (claims 8 and 10; also S-0310 claim 4) | boolean | no |
+| `BarrelAnimIsVoxel` (rules, section named by building type) | voxel barrel (claims 8 and 10) | boolean | no |
 | `SprayAttack` (rules, type) | spray-attack type | boolean | no |
 | `Turret` (rules, type) | turret flag (claim 3) | boolean | no |
+
+All four turret-animation keys above are read by building-type rules import from each
+applicable rules layer, not by image-art import. A missing key retains its current value,
+initially the Absent value above. Entries with these names in art, whether under the building's
+type name or its image name, have no effect (claim 10). The primary fire pixel shift and
+its dual-shift flag remain art settings, not members of this four-key rules group.
 
 ## Measurement scenarios
 
@@ -455,6 +476,32 @@ the user, not a request to alter the game.
 - Runs: record at least two full bursts per burst count, and repeat until the recorded first
   shifts cover all eight directions. Use recorded values, not a chosen seed; report any
   directions not yet observed as incomplete coverage.
+
+**P8. Rules source versus art source (Q-0601).**
+- Setup: use the common skirmish setup and named turret-source test rules and art files.
+  Give a turreted building a distinct image name, no primary fire pixel shift, and valid
+  turret and barrel models. Test each of the four settings independently: a nonzero
+  horizontal anchor, a nonzero vertical anchor, the voxel-turret flag, and the voxel-barrel
+  flag. For each setting use rules-only, art-only, conflicting rules/art, and omitted cases.
+  Include both the art section named by the image and the art section named by the type.
+- Procedure: start a fresh game for each case and order attacks on close neutral targets.
+  The read-only recorder logs the building type's effective anchor pair and both voxel
+  flags, turret facings, and projectile launch positions. For anchor and voxel-turret cases,
+  omit the voxel-barrel flag so claim 8's fully specified rows apply. Repeat the anchor
+  cases with and without a primary fire pixel shift to check S-0310 claim 4's precedence.
+  A further pair of test maps overrides each setting in rules, then omits it in an otherwise
+  present building-type section, to test retention of lower-layer settings.
+- Observable: the four effective imported settings, plus launch positions and the aiming
+  direction at the shot. The imported-settings recorder is a proposed harness addition.
+- Expected: only the rules type section supplies the four settings. Conflicting art loses,
+  art-only equals omitted, and changing the image name changes none of these four settings.
+  Rules overrides replace lower-layer values, and omission retains them. Launch positions
+  follow claim 8's non-barrel rows and aiming follows S-0310 claim 4 using the same anchor
+  pair and voxel-turret flag. For the barrel flag, compare the recorded effective flag only:
+  this scenario does not predict the unresolved barrel transform.
+- Falsified if: any effective setting follows art, an art-only value replaces the absent
+  default, or firing and aiming use different imported anchor pairs or voxel-turret flags.
+- Runs: two fresh games per file/setting variant, recording at least one full burst each.
 
 ## Open questions
 

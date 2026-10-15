@@ -1,9 +1,9 @@
 ---
 id: Q-0601
 title: Are a building's turret-animation keys read from its rules type or its art image?
-status: open
+status: answered
 related: [S-0313, S-0310]
-answered-by: []
+answered-by: [S-0313]
 ---
 
 ## Need
