@@ -124,6 +124,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
     crate::combat::heal::turn(w, id);
     let sinking = crate::naval::sinking(w, id);
+    // spec: S-0511 claim 10 (a dropped object falls on each of its own updates; the fall and any landing hit precede that turn's due behaviour processing, ordinary locomotion advance and firing check)
+    let fell = crate::fall::falling(w, id) && crate::fall::turn(w, id);
+    if w.obj(id).is_none_or(crate::combat::damage::dead) {
+        return;
+    }
     process::turn(w, id);
     if w.obj(id).is_none() {
         return;
@@ -157,12 +162,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let rocket = w.obj(id).is_some_and(|o| o.rocket.is_some());
     // spec: S-0614 claim 8 (a held unit does not move under the driving, ship, flying, teleporting and tunnelling locomotors; walking and rocket ignore the hold)
     let held = crate::parasite::held(w, id);
+    // spec: S-0511 claim 10 (while still falling after the fall step, no ordinary locomotion advance and no firing; a surviving landing lifts both refusals in the same turn)
     let falling = crate::fall::falling(w, id);
     let moved = match loco {
         // spec: S-0506 Terms (a rocket missile moves in the rocket-flight movement mode, claims 14 to 19)
         _ if rocket => crate::rocket::tick(w, id),
-        // spec: S-0511 claim 10 (a dropped object falls on each of its own updates; its locomotion has stopped); Q-0713 (interim: the fall step replaces the locomotor step)
-        _ if falling => crate::fall::turn(w, id),
+        _ if falling => fell,
         // spec: S-0507 claim 15 and S-0203 claim 3 (a passenger in play inside an open-topped transport has no movement of its own; its position is the transport's)
         _ if crate::transport::riding(w, id).is_some() => false,
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
@@ -208,8 +213,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Vehicle {
         crate::combat::fire::reload_turn(w, id);
         crate::combat::fire::firing_frame_turn(w, id);
-        // spec: S-0310 claim 9 (the vehicle's own firing step each tick it has a target); S-0214 Terms (a falling object is not able to fire); Q-0713 (interim: no firing step while falling)
-        let facing_error = !falling && crate::combat::behave::vehicle_step(w, id);
+        // spec: S-0310 claim 9 (the vehicle's own firing step each tick it has a target); S-0301 claim 9 rank 4 and S-0511 claim 10 (a unit still falling cannot fire; the check refuses it)
+        let facing_error = crate::combat::behave::vehicle_step(w, id);
         // The turret's target at the end of the tick (S-0206 claim 9), after the movement.
         turret::tick(w, id, facing_error);
     }
@@ -217,9 +222,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
         let in_progress = occupancy::in_progress(w, id);
         let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
         infantry::update(w, id, moved, in_progress, has_dest);
-        // spec: S-0107 claim 11 (firing, after the unit's sequence rules of the tick); Q-0713 (interim: no firing step while falling)
-        if !falling {
-            crate::combat::behave::infantry_step(w, id);
-        }
+        // spec: S-0107 claim 11 (firing, after the unit's sequence rules of the tick); S-0301 claim 9 rank 4 and S-0511 claim 10 (a unit still falling cannot fire, even with a firing sequence begun before the drop)
+        crate::combat::behave::infantry_step(w, id);
     }
 }

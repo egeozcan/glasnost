@@ -145,14 +145,13 @@ pub fn first_off_bridge(w: &World, x: CellXY, along_x: bool) -> Option<CellXY> {
 /// not destroyed, else the section whose overlay marks a high-bridge cell,
 /// else a pier in state 0 to 3 at one of its cells without a deck. Then,
 /// for a success on a high bridge, the span check (claim 7) and the named
-/// cell (claim 12); then the heading hits (claim 11) and the dropped
-/// objects' marks (Q-0712). Returns whether it succeeded.
+/// cell (claim 12); then the heading hits (claim 11). Returns whether it
+/// succeeded.
 pub fn attempt(w: &mut World, c: CellXY) -> bool {
     let mut ctx = Ctx::default();
     let ok = attempt_in(w, c, &mut ctx);
     // spec: S-0511 claim 11 (after an attempt has made its blow-ups, and after the connectivity change)
     blow::heading_hits(w, &ctx);
-    blow::transfer_marks(w, &ctx);
     ok
 }
 

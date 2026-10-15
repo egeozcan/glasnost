@@ -734,6 +734,61 @@ fn claim_9_blow_up() {
     assert!(booms > 0);
 }
 
+// spec: S-0511 claim 9 (the drop keeps target, destination, queued destinations, path and movement state; a stationary unit's deck mark or present flag is cleared and its ground mark made at once, so its former deck record is empty before claim 11 and no heading hit follows)
+#[test]
+fn claim_9_drop_keeps_orders_and_moves_marks() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let c = at(3, 0);
+    let top = spawn(&mut w, Kind::Vehicle, "CART", c);
+    onto_deck(&mut w, top);
+    let walker = spawn(&mut w, Kind::Infantry, "WALKER", c);
+    {
+        let h = w.obj(walker).unwrap().owner.unwrap();
+        let ground = *w.cells.occ(c, Layer::Ground).unwrap();
+        let p = (0..5).find(|&p| ground.taken(p)).unwrap();
+        w.cells
+            .clear_position(c, Layer::Ground, p, glasnost_sim::objects::occ_quirks(&w));
+        w.cells.leave(c, Layer::Ground, walker);
+        w.cells.enter(c, Layer::Deck, walker, false);
+        w.cells.mark_infantry(c, Layer::Deck, p, walker, h);
+        let o = w.obj_mut(walker).unwrap();
+        o.layer = Layer::Deck;
+        o.pos.z += 416;
+    }
+    // A unit heading to c at deck height, which would die if c's deck
+    // record were still marked.
+    let deck_z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+    let comer = spawn(&mut w, Kind::Infantry, "WALKER", at(3, 2));
+    w.obj_mut(comer).unwrap().walk.as_mut().unwrap().target = Some(centre(c, deck_z));
+    let far = at(6, 4);
+    {
+        let o = w.obj_mut(top).unwrap();
+        o.dest = Some(Target::Cell(far));
+        o.target = Some(Target::Cell(at(1, 4)));
+        o.queued_dests.push(Target::Cell(at(7, 4)));
+    }
+    bridges::attempts(&mut w, c, 2);
+    let o = w.obj(top).unwrap();
+    assert!(o.fall.falling && o.layer == Layer::Ground);
+    assert_eq!(o.dest, Some(Target::Cell(far)), "the destination is kept");
+    assert_eq!(o.target, Some(Target::Cell(at(1, 4))), "the target is kept");
+    assert_eq!(o.queued_dests, vec![Target::Cell(at(7, 4))]);
+    let deck = w.cells.occ(c, Layer::Deck).unwrap();
+    assert!(deck.empty(), "the former deck record is empty");
+    let ground = w.cells.occ(c, Layer::Ground).unwrap();
+    assert!(ground.vehicle_present(), "the ground flag is made at once");
+    assert!(
+        ground.marks.iter().flatten().any(|m| matches!(
+            m.by,
+            glasnost_sim::cells::Marker::Infantry(who, _) if who == walker
+        )),
+        "the walker's ground mark is made at once"
+    );
+    assert!(alive(&w, comer), "no heading hit: the deck record is empty");
+}
+
 // spec: S-0511 claim 10 (a dropped object falls 416 leptons and lands on its 30th update; with the bomb mark it dies on landing)
 #[test]
 fn claim_10_falling_and_landing() {
@@ -756,7 +811,39 @@ fn claim_10_falling_and_landing() {
     assert!(!alive(&w, top));
 }
 
-// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to it)
+// spec: S-0511 claim 10 and S-0301 claim 9 rank 4 (the fall step precedes behaviour processing, locomotion and the firing check; a falling firer is illegal; a still-falling unit neither advances nor fires)
+#[test]
+fn claim_10_falling_unit_neither_moves_nor_fires() {
+    use glasnost_sim::combat::check::{Answer, check};
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let top = spawn(&mut w, Kind::Vehicle, "CRUSHER", at(3, 0));
+    onto_deck(&mut w, top);
+    let foe = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(3, 3), 0);
+    w.obj_mut(top).unwrap().target = Some(Target::Object(foe));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert_eq!(
+        check(&w, top, Some(Target::Object(foe)), 0, true),
+        Answer::Illegal
+    );
+    let x0 = (w.obj(top).unwrap().pos.x, w.obj(top).unwrap().pos.y);
+    let health = w.obj(foe).unwrap().health;
+    for _ in 0..10 {
+        glasnost_sim::tick::step(&mut w);
+        let o = w.obj(top).unwrap();
+        assert!(o.fall.falling);
+        assert_eq!((o.pos.x, o.pos.y), x0, "no horizontal advance");
+    }
+    assert_eq!(w.obj(foe).unwrap().health, health, "no shot while falling");
+}
+
+/// The centre point of `c` at height `z`.
+fn centre(c: CellXY, z: i32) -> Pos {
+    Pos::new(256 * c.x + 128, 256 * c.y + 128, z)
+}
+
+// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its own height; a destination without a heading point does not count)
 #[test]
 fn claim_11_units_heading_onto_a_lost_deck() {
     for occupied in [true, false] {
@@ -764,17 +851,44 @@ fn claim_11_units_heading_onto_a_lost_deck() {
         high_x(&mut m, Family::Bridge, 0, 8, &[]);
         let mut w = game(&ruleset(), &m);
         let c = at(3, 0);
-        if occupied {
-            let top = spawn(&mut w, Kind::Vehicle, "CART", c);
-            onto_deck(&mut w, top);
-        }
-        let car = spawn(&mut w, Kind::Vehicle, "CART", at(3, 2));
+        let deck_z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+        // A walker whose heading point is P, and one whose heading point is
+        // c at its floor height.
+        let high = spawn(&mut w, Kind::Infantry, "WALKER", at(3, 2));
+        w.obj_mut(high).unwrap().walk.as_mut().unwrap().target = Some(centre(c, deck_z - 50));
+        let low = spawn(&mut w, Kind::Infantry, "WALKER", at(4, 2));
+        w.obj_mut(low).unwrap().walk.as_mut().unwrap().target = Some(centre(c, deck_z - 416));
+        // A vehicle whose destination is c, with no track.
+        let car = spawn(&mut w, Kind::Vehicle, "CART", at(2, 2));
         w.obj_mut(car).unwrap().dest = Some(Target::Cell(c));
-        let away = spawn(&mut w, Kind::Vehicle, "CART", at(4, 2));
-        w.obj_mut(away).unwrap().dest = Some(Target::Cell(at(4, 5)));
+        // A deck vehicle on a track that ends in c; its destination is elsewhere.
+        let tank = spawn(&mut w, Kind::Vehicle, "CART", at(2, 0));
+        onto_deck(&mut w, tank);
+        {
+            let o = w.obj_mut(tank).unwrap();
+            o.dest = Some(Target::Cell(at(6, 0)));
+            o.drive.as_mut().unwrap().track = Some(glasnost_sim::drive::Track {
+                d: 2,
+                e: None,
+                target: (256 * c.x + 128, 256 * c.y + 128),
+                target_cell: c,
+                next: 0,
+                last: (256 * c.x - 128, 256 * c.y + 128),
+                cells: vec![c],
+                crush: false,
+                exit: false,
+            });
+        }
+        if occupied {
+            // The high walker's reservation is in c's deck record.
+            let h = w.obj(high).unwrap().owner.unwrap();
+            w.cells.mark_infantry(c, Layer::Deck, 0, high, h);
+        }
         bridges::attempts(&mut w, c, 2);
-        assert_eq!(alive(&w, car), !occupied, "occupied {occupied}");
-        assert!(alive(&w, away));
+        assert_eq!(alive(&w, high), !occupied, "occupied {occupied}");
+        assert_eq!(alive(&w, tank), !occupied, "occupied {occupied}");
+        assert!(alive(&w, low), "a heading point at floor height");
+        assert!(alive(&w, car), "a destination is not a heading point");
     }
 }
 
