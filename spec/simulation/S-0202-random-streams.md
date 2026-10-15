@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -374,6 +374,12 @@ original's recording modes are retained as deferred context, not implementation 
         our engine's rule, not an additional oracle outcome.
       - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
         happens at a time the spec of that feature fixes, and the creation draw comes with it.
+        In particular, paratroopers are created at launch after their plane is successfully
+        placed, not when dropped (S-0522 claim 3). For each payload entry in list order,
+        the plane's creation draw precedes its arrival-cell draws and any placement draws,
+        then each paratrooper takes its creation draw. Failed plane placement creates no
+        paratroopers. S-0522 claim 16 owns this launch order and the later drop-attempt
+        standing-position and successful-drop parachute-animation draws.
     - **Parasite ranged choices.** S-0614 claims 9 and 10 own these choices on the
       scenario random stream. A drone parasite's delivery to a non-infantry host
       takes R(0, 1) after creating its effects and before its hit; an infantry
@@ -396,9 +402,9 @@ original's recording modes are retained as deferred context, not implementation 
       unsigned and reduced modulo the game-wide lightning sound list's length, after
       the bolt-animation choice and all that animation's creation draws, but before
       the explosion-animation and damage draws. It is taken regardless of audibility,
-      sound settings, view or shroud. An empty sound list takes no value. A strike at
-      exactly the previous strike's point ends after its bolt animation and takes no
-      sound-choice value. S-0701 claim 25 owns the sound and these guards.
+      sound settings, view or shroud. An empty sound list takes no value. Repeating a
+      previous strike's point does not suppress this choice or any later strike effects
+      and draws (S-0513 claim 18). S-0701 claim 25 owns the sound.
     - **Overlay placement.** Creating an overlay object takes no draw by itself. Some effects of
       placing it on a cell do:
       - *Bridge-building end markers.* The overlay types at positions 122 … 125 and 233 … 236 of
@@ -570,10 +576,11 @@ original's recording modes are retained as deferred context, not implementation 
       | Creation-derived report value: low-bit reduction and fixed normal report selection | `measurable` (S-0701 F2), high confidence |
       | Our engine retains, saves, restores and hashes the report value and exposes it to presentation without another draw | `unmeasured` design contract (Q-0327), high confidence; this is a requirement of our engine, not an oracle claim |
       | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
+      | Paradrop plane, arrival, placement and paratrooper creation order at launch; later drop draws | `measurable` (S-0522 P2/P3), high confidence |
       | Pack-up vehicle and temporary hidden-slave creation draws precede placement and old-group removal, including successful placement | `measurable` (S-0402 H24), high confidence; retaining these draws with the failed-pack-up quirk off is an `unmeasured` design rule |
       | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
       | Parasite explicit ranged choices, including six wake-displacement choices per push start and their ordering around effects and hits | `measurable` (S-0614 P8); high confidence for the explicit choices, medium for their composition with additional effect-creation choices, which remains unestablished |
-      | Lightning sound choice: stream, count, guards and position within a strike | `measurable` (S-0701 F6); high confidence for stream/count/order, medium for the same-point guard |
+      | Lightning sound choice: stream, count, empty-list gate, repeated-point non-suppression and position within a strike | `measurable` (Companion assignment and sound tests; S-0701 F6), high confidence |
       | Pre-placed objects: an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
       | Pre-placed objects: one that is created but cannot be placed has still taken its creation draw | `unmeasured` (no case is established in which the original creates a pre-placed object and then fails to place it: an entry on a cell that is not legal is unspecified there, and a vehicle is placed whatever occupies its cell, S-0009 claim 38) |
       | Bridges: number, form, order and base types of the piece draws | `measurable` (R8 A) |
@@ -1731,8 +1738,18 @@ The recorder is part of the measurement setup (the project lead has approved it)
   compare reversed line-creation order at one cancellation boundary, then a turn-pass
   replacement with an order-boundary start. S-0701 E1/F1 test sound-instance draw groups
   and the feedback chance from recorded unsynchronised states; F6 tests lightning's
-  scenario-stream choice with audible/silent, empty-list and repeated-point controls.
-  Their setups, observations and falsifiers are owned by those scenarios. No results
+  scenario-stream choice with audible/silent and empty-list controls. For repeated points,
+  use S-0513 SW7's storm fixture with its named test data, director and mods off, speed 4,
+  800 × 600 pixels and the read-only random-state recorder. Make two trigger clouds over
+  the same flat cell, with no other clouds and no terrain-height change between strikes.
+  Repeat for 20 strike pairs at exactly the same point, accounting separately for bolt,
+  explosion, damage and
+  debris draws under S-0513 claim 18. Expected: each strike with a nonempty sound list
+  takes its own raw sound-choice value after bolt-animation creation; the second strike
+  retains its later effects and draws. Suppression on the second strike falsifies the rule.
+  S-0522 P2/P3 test paratrooper creation at launch, after plane placement, separately from
+  the later drop-attempt and parachute-animation draws of S-0522 claim 16.
+  The companion scenarios own their other setups, observations and falsifiers. No results
   from them are claimed here, and none measures the between-house design extension.
 
 - **R15, post-game winner-score requests (claim 16).** Use S-0414 V18's purpose-made
