@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -211,7 +211,11 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    it has a destination other than its present cell, and its cell holds a building. A destination
    object other than a cell is not treated as its own cell for this test. The vehicle-factory
    contact also suppresses a report on that factory's cell with a different destination; the
-   building test already covers that case.
+   building test already covers that case. These tests read the order-level destination,
+   not a hovering locomotor's possibly retained movement destination (S-0503 claim 16).
+   An accepted person's stop breaks contact under S-0213 claim 8, so a later hover
+   arrival update must not be treated as a report through an unchanged factory contact.
+   That order is refused while tethered; it is not a way to stop a normal tethered exit.
 
    With no destination, or with its own cell as destination, u can report even on K's foundation.
    Thus a normal exit track can report at E itself, without a separate move off the foundation.
@@ -230,23 +234,40 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
 
    **Cell-arrival updates of a hovering vehicle.** S-0503 claim 15 owns these events:
    a clear heading-point choice produces an update at u's actual, pre-travel position,
-   including the immediate first choice of S-0503 claim 5. An arrival-time choice that
-   succeeds without supplying a heading point also produces an update, with the actual-cell
-   occupancy mark restored. This includes normal completion in the contacted factory's
-   cell. Arrival alone, destination clearing alone and cell-edge crossings do not guarantee
-   an update: S-0503 claim 15 gives the precise choice/contact conditions and exclusions.
-   The report tests above apply at those actual positions, not at the chosen heading point.
-   Thus an immediate clear choice on a building cell with a different destination still
-   suppresses the report; choosing a point does not itself end the tether.
+   including the immediate first choice of S-0503 claim 5. Its arrival outcome table,
+   rather than search success alone, decides updates without a new heading point:
+   - A non-refusing choice with no point restores the actual-position occupancy mark
+     and produces an update. This includes a path update deferred by the retry delay, a search that
+     fails during choice, and no movement destination with contact in the present cell
+     when the vehicle is not held.
+   - A search that fails in the initial arrival path update and clears the movement
+     destination and heading point produces no update without same-cell contact.
+     With that contact, claim 15's no-movement-destination contact row applies instead.
+   - No movement destination and no same-cell contact gives no choice or update.
+     A refused choice, including a held vehicle, gives no update from that choice.
+
+   These are S-0503 claim 15's movement-destination tests, distinct from this claim's
+   order-level report tests. Normal completion in the contacted factory's cell can
+   therefore update without a new heading point, but arrival alone, destination clearing
+   alone and cell-edge crossings do not guarantee an update. The report tests above
+   apply at the actual pre-travel position, not at the chosen heading point or a position
+   reached by a final already-computed travel step. Thus an immediate clear choice on a
+   building cell with a different order-level destination still suppresses the report.
+   Choosing a point does not itself end the tether.
    - Backing: `measurable` (U2, U8 for normal exits and the report at E). The *enter* and
      *unload* exceptions and the different-destination building-cell suppression are
      `unmeasured` here: no release setup retaining those conditions on an arrival
      update is established. The chain-point update is `unmeasured` here: no scenario part in
      this spec produces a chained curve while tethered, and a factory exit has no chain point.
-     Hover update events inherit S-0503 claim 15's `measurable` backing (H8).
+     Hover update events inherit S-0503 claim 15's `measurable` backing (H8 and H15).
+     The destination distinction and accepted-stop contact break inherit S-0503 claim 16
+     (H12 and H15) and S-0213 claim 8's backing, including its unmeasured contact-break
+     qualification; they are not an established tethered-exit stop setup.
    - Confidence: high (tests, the two update events, the report only at E on the exit track),
      medium (normal arrival consequence). Hover update confidence is inherited from
      S-0503 claim 15: high for clear choices, medium for exceptional completion cases.
+     The destination distinction and stop consequences inherit S-0503 claim 16 and
+     S-0213 claim 8's confidence.
 
 8. **Run-away destination.** A vehicle factory gives the run-away reply to the clear report.
    These are precedence rules, not a required internal implementation sequence:
@@ -730,8 +751,22 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   pre-travel position, with report suppression if it is a building cell with a different
   destination. A compulsory next-tick first choice, an update at the chosen point rather
   than the actual position, or a report despite that suppression falsifies the rule.
-  Compare later update events, contact and tether against S-0503 claim 15 and H8, not
-  cell-edge crossings or destination clearing alone.
+  Compare later update events, contact and tether against S-0503 claim 15's arrival
+  outcome table and H8/H15, not cell-edge crossings or destination clearing alone.
+  Record both the order-level destination and the hovering movement destination,
+  plus search timing, retry delay, held state and same-cell contact. Where H15's
+  conditional stock fixtures establish a deferred search or a failure during choice,
+  expect an update despite no new point; a refusal instead gives none. An initial
+  arrival-update failure clearing the movement destination and point gives no update
+  without same-cell contact. With no movement destination but same-cell contact and
+  no hold, expect an update. The opposite result falsifies the corresponding row.
+  Score only established fixtures, not an assumed ability to manufacture contact.
+  For stop controls use S-0503 H12/H15 and S-0213 claim 8: tethered stops are refused,
+  while an accepted stop clears the order-level destination and breaks contact even
+  if movement quantities survive. A later update alone must not count as a report to
+  the former factory. An accepted tethered stop or surviving contact after an accepted
+  stop falsifies the relevant order rule; a run without an eligible untethered contact
+  supplies no measurement of that contact break.
   Expect ρ = ½ to persist only until a reset listed
   in S-0503 claim 4. In particular, a 0-lepton provisional step with heading exactly
   towards the heading point resets ρ to 1, without itself setting hover speed to 1.
