@@ -22,8 +22,10 @@
 //!   has none, before going on with the tech climb; every tick, a ready
 //!   missile or storm superweapon (as the sidebar shows it) is fired with
 //!   the order a person gives, at the seen enemy cell with the most seen
-//!   enemies around it and none of the house's own objects (the other
-//!   kinds are not used);
+//!   enemies around it and none of the house's own objects; a ready
+//!   paradrop (S-0522) is fired at a free usable land cell near home, and
+//!   the paratroopers that land join its army (the other kinds are not
+//!   used, and it does not build for a paradrop);
 //! - **selling out**: a house with no income for a long while and too few
 //!   credits for an army unit sells its buildings one by one for their
 //!   refunds and builds army units with them, and builds no more buildings;
@@ -89,6 +91,9 @@ const ASHORE: i64 = 4; // nocite: tuning of our own opponent
 /// The radius, in cells, around a superweapon's target cell within which
 /// seen enemies count for its worth and the house's own objects forbid it.
 const STRIKE_RADIUS: i64 = 3; // nocite: tuning of our own opponent
+/// The nearest and farthest ring around home, in cells, at which a
+/// paradrop is aimed.
+const DROP_RINGS: (i32, i32) = (3, 8); // nocite: tuning of our own opponent
 
 /// The default plan of an AI house: types by role, two harvesters, waves of
 /// six (tuning of our own opponent).
@@ -218,19 +223,40 @@ impl Brain {
         let h = self.house();
         for (i, t) in w.rules().superweapons.types.iter().enumerate() {
             let i = i as u32;
-            let aimed = match t.kind {
-                Some(SwKind::Missile) => true,
-                Some(SwKind::Storm) => w.sw.storm.state == StormState::Idle,
-                _ => false,
-            };
             let ready = charge::get(w, h, i).is_some_and(|r| r.granted && r.ready && !r.suspended);
-            if aimed
-                && ready
-                && let Some(cell) = self.strike_cell(w)
-            {
+            if !ready {
+                continue;
+            }
+            let cell = match t.kind {
+                Some(SwKind::Missile) => self.strike_cell(w),
+                Some(SwKind::Storm) if w.sw.storm.state == StormState::Idle => self.strike_cell(w),
+                Some(SwKind::Paradrop | SwKind::AmerParadrop) => self.drop_cell(w),
+                _ => None,
+            };
+            if let Some(cell) = cell {
                 out.push(Order::FireSuperweapon { sw: i, cell });
             }
         }
+    }
+
+    /// A paradrop's cell: the first cell, ring by ring around home from
+    /// [`DROP_RINGS`]'s nearest ring outwards, in cell order within a ring,
+    /// that is inside the usable area and holds no object.
+    fn drop_cell(&self, w: &World) -> Option<CellXY> {
+        let home = self.script.home(w)?;
+        let taken: std::collections::BTreeSet<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map)
+            .map(|o| o.pos.cell())
+            .collect();
+        (DROP_RINGS.0..=DROP_RINGS.1).find_map(|r| {
+            (-r..=r)
+                .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
+                .filter(|&(dx, dy)| dx.abs().max(dy.abs()) == r)
+                .map(|(dx, dy)| CellXY::new(home.x + dx, home.y + dy))
+                .find(|&c| w.cells.usable(c) && !taken.contains(&c))
+        })
     }
 
     /// The seen enemy's cell with the most seen enemies within
