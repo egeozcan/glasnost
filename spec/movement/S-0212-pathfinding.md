@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371]
 supersedes: []
@@ -1504,6 +1504,7 @@ Terms specific to this spec:
     | Failed ordinary approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
     | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4); none when that read gives no reach region | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
+    | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
     | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
@@ -1517,6 +1518,10 @@ Terms specific to this spec:
     | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
+
+    The parasite-exit row gives the original host-mobility search. S-0614 claim 13 owns
+    when that search is needed and its `quirks.parasite_exit_search_host_mobility`
+    alternative, which uses the parasite's class and zone instead.
 
     The failed-approach row and both free-unit searches exclude bridge cells. The teleporting
     landing row and the infantry teleport fallback row allow them and ask for no no-overlay condition. Only the first free-unit search requires
@@ -1598,7 +1603,8 @@ Terms specific to this spec:
     scatter, click-handling tick for move orders and rally points (S-0213 claim 20 and S-0214
     claim 11), failure tick for ordinary approach failure, landing-point fixation tick for
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
-    processing tick for idle harvester step-off (S-0402 claim 13), release tick for
+    exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
+    harvester step-off (S-0402 claim 13), release tick for
     aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
     tick for the house-selected destination after give-up (claim 23a). The base-record
     refresh uses the tick of its building entry, removal or owner-change event (S-0215
@@ -1613,6 +1619,7 @@ Terms specific to this spec:
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
       parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
+      parasite-exit host-mobility parameters (S-0614 scenario P4), for the
       final nearby search after give-up (P26), for base-record-refresh parameters
       (S-0215 B37, with P26's refresh comparison), and for both free-unit searches and the no-overlay
       condition (S-0402 scenario H13 parts b and c), for the rectangular deployment-site
