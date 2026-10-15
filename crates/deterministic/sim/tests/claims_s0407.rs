@@ -759,6 +759,97 @@ fn claim_16_dock_bound() {
     }
 }
 
+fn pad_total(w: &World, h: u8) -> i32 {
+    w.houses[usize::from(h)].econ.tech.pad_total
+}
+
+// spec: S-0407 claim 16 and S-0501 claim 30 (the pad total: only helipad buildings count; an absent docking-place count adds 1, an explicit 0 adds 0; a saved running total grown on placement, moved on an owner change, shrunk on removal and never below 0)
+#[test]
+fn claim_16_pad_total_running() {
+    let mut r = ruleset();
+    let pad = |docks: Option<i32>, helipad: bool| {
+        let mut b = plain(100);
+        b.helipad = Some(helipad);
+        b.econ.number_of_docks = docks;
+        b
+    };
+    add_building(&mut r, "PADX", pad(None, true));
+    add_building(&mut r, "PADZ", pad(Some(0), true));
+    add_building(&mut r, "PADT", pad(Some(3), true));
+    add_building(&mut r, "NOTPAD", pad(Some(4), false));
+    let mut w = game(&r);
+    assert_eq!(pad_total(&w, 0), 0);
+    let x = building(&mut w, "PADX", 0, 0, 0);
+    assert_eq!(pad_total(&w, 0), 1, "an absent count adds its default 1");
+    building(&mut w, "PADZ", 0, 4, 0);
+    assert_eq!(pad_total(&w, 0), 1, "an explicit 0 adds 0");
+    building(&mut w, "NOTPAD", 0, 0, 4);
+    assert_eq!(
+        pad_total(&w, 0),
+        1,
+        "a building without the helipad flag adds nothing"
+    );
+    let t3 = building(&mut w, "PADT", 0, 4, 4);
+    assert_eq!(pad_total(&w, 0), 4);
+    // An owner change moves the count.
+    w.obj_mut(t3).unwrap().owner = Some(HouseId(1));
+    glasnost_sim::econ::events::owner_changed(&mut w, t3, Some(H));
+    assert_eq!((pad_total(&w, 0), pad_total(&w, 1)), (1, 3));
+    // Removal subtracts, never below 0.
+    w.houses[1].econ.tech.pad_total = 2;
+    objects::remove(&mut w, t3);
+    assert_eq!(pad_total(&w, 1), 0, "the floor of 0");
+    objects::remove(&mut w, x);
+    assert_eq!(pad_total(&w, 0), 0);
+}
+
+// spec: S-0501 claim 30 and F12, S-0407 claim 16 (quirks.pad_limit_counts_list_only: on, a pad-bound type outside the list is limited by the list types only; off, its own present objects and line copies count too)
+#[test]
+fn claim_16_pad_limit_counts_list_only() {
+    for (list_only, accepted) in [(true, 1), (false, 0)] {
+        let mut r = ruleset();
+        r.globals.quirks.pad_limit_counts_list_only = list_only;
+        r.sim.buildings.get_mut("AIRPAD").unwrap().helipad = Some(true);
+        r.sim
+            .buildings
+            .get_mut("AIRPAD")
+            .unwrap()
+            .econ
+            .number_of_docks = Some(2);
+        r.registries
+            .get_mut("aircraft")
+            .unwrap()
+            .push("PADA".into());
+        let mut a = r.sim.aircraft["PLANE"].clone();
+        a.econ.airport_bound = Some(true);
+        r.sim.aircraft.insert("PADA".into(), a);
+        // PADA is not on the list; the list names only PLANE.
+        r.sim.general.economy.pad_aircraft = Some(vec!["PLANE".into()]);
+        let mut w = game(&r);
+        building(&mut w, "AIRPAD", 0, 0, 0);
+        testkit::spawn(
+            &mut w,
+            Kind::Aircraft,
+            "PADA",
+            0,
+            testkit::mid(SIZE, 6, 6),
+            0,
+        );
+        ready(&mut w);
+        set_credits(&mut w, 0, 100_000);
+        let pa = t(&w, Kind::Aircraft, "PADA");
+        assert!(issue(&mut w, 0, Order::Build { what: pa }));
+        step(&mut w);
+        issue(&mut w, 0, Order::Build { what: pa });
+        step(&mut w);
+        assert_eq!(
+            line(&w, 0, pa).unwrap().queue.len(),
+            accepted,
+            "list only {list_only}"
+        );
+    }
+}
+
 // spec: S-0407 claim 16 and S-0404 claim 10 (T12 run 6: a dock-bound copy queued past its limit is accepted but does not start once the first is released; control L = 2 starts it)
 #[test]
 fn claim_16_queued_copy_needs_the_allowance() {

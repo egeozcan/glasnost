@@ -53,7 +53,7 @@ pub struct Exit {
 
 /// K's contact places *n* = max(*d*, 1), *d* the imported docking-place
 /// count (S-0417 claim 14).
-fn contact_places(w: &World, k: ObjectId) -> u32 {
+pub fn contact_places(w: &World, k: ObjectId) -> u32 {
     // spec: S-0417 claim 14 and S-0404 Import mapping (NumberOfDocks, rules, absent 1; n = max(d, 1))
     let d = building_rules(w, k).map_or(1, |b| b.raw.econ.number_of_docks.unwrap_or(1));
     d.max(1) as u32
@@ -62,7 +62,7 @@ fn contact_places(w: &World, k: ObjectId) -> u32 {
 /// The first of K's places no unit is in contact through (S-0417 claim
 /// 14: a place is free while no unit is in contact through it); `limit`
 /// when every place below it is held.
-fn first_free_place(w: &World, k: ObjectId, limit: u32) -> u32 {
+pub fn first_free_place(w: &World, k: ObjectId, limit: u32) -> u32 {
     let held: std::collections::BTreeSet<u32> = w
         .objects
         .values()
