@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,8 +21,8 @@ aimed, which cells and objects it reaches, when its parts happen, who is credite
 against it, and how its effects combine. Covered: the nuclear strike, the weather storm, the
 invulnerability superweapon (iron curtain), the force shield, the two-stage teleport superweapon
 (chronosphere), the paradrop dispatch and the spy plane. Skirmish only; network games and
-campaigns are out of scope. The Yuri superweapons (psychic domination, genetic mutation, psychic
-reveal) are M7 and are not covered here.
+campaigns are out of scope. Psychic reveal is covered by S-0610 claims 13 to 15. The other Yuri
+superweapons (psychic domination and genetic mutation) are M7 and are not covered here.
 
 **What this spec does not restate.**
 - **Charge, readiness, firing and refusal:** S-0512. In particular the order checks and the
@@ -38,8 +38,10 @@ reveal) are M7 and are not covered here.
   warhead's delayed detonation and nuke flash, S-0306 claim 25.
 - **Lighting:** the nuke flash and the storm lighting, S-0104 claim 2.
 - **Power:** the timed blackout the force shield starts, S-0405 claim 6.
-- **Sight:** area reveals, S-0409 claim 17 (no M6 superweapon uses one); ordinary sight,
-  S-0409 claims 2 and 5 to 8.
+- **Sight:** area reveals, S-0409 claim 17 (no M6 superweapon uses one); psychic reveal,
+  S-0610 claims 13 to 15; ordinary sight, S-0409 claims 2 and 5 to 8.
+- **Psychic sensors:** membership and ownership changes, S-0610 claim 9; point-distance reach,
+  S-0610 claim 10.
 - **Aircraft flight:** the spy plane's approach, overfly, exit and removal, S-0501 claims 10 and 34.
 - **Paradrop delivery:** S-0522 claims 1 to 16.
 - **Trigger actions:** S-0011 claim 30 hands the lightning storm at a waypoint to this spec; S-0524
@@ -134,16 +136,18 @@ reveal) are M7 and are not covered here.
      under claims 42 and 43
    - Confidence: high
 
-4. **Effect blocks and swept layers.** The invulnerability superweapon and the teleport warp act on
-   the objects listed in the nine cells of an effect block (F1). The observable recipient sequence and scenario-stream state after the effect are those produced by the F1 cell order and, within each cell, the listing order of S-0209 claim 13. An object that is listed in none of those cells
-   is not reached: an aircraft in flight, a passenger inside a transport, an occupant inside a
-   building, an object that is off the map. A building listed in several cells of the block is
-   reached once for each of them. For a cell that carries a high bridge (S-0511), only the deck
-   layer is swept, so objects on the ground or water under the bridge are not reached; for any
-   other cell only the ground layer is swept
+4. **Effect blocks and swept layers.** The invulnerability superweapon and teleport warp affect
+   the objects listed in the nine cells of an effect block (F1). Their observable recipient
+   sequence and resulting scenario-stream state match F1's cell order and S-0209 claim 13's
+   listing order within each cell. Objects listed in none of those cells are not reached:
+   aircraft in flight, passengers inside transports, occupants inside buildings, and objects
+   off the map. A building listed in several cells receives an application for each listing.
+   In a high-bridge cell (S-0511), objects on the deck are affected and objects on the ground or
+   water beneath it are not; in every other cell, only ground-layer objects are affected
    (`quirks.superweapon_block_one_layer`, default on = original; off: both layers of a
-   high-bridge cell are swept, deck first). The trigger action that applies invulnerability at a
-   waypoint always sweeps the ground layer only (claim 22).
+   high-bridge cell are affected, with deck-layer effects preceding ground-layer effects in
+   the observable recipient sequence). The waypoint invulnerability trigger action always
+   affects only the ground layer (claim 22).
    - Backing: `measurable` for recipients and ordering (SW9 parts b and g, SW12 parts e and f).
      Repeated application to a building listed in multiple cells is `unmeasured`: the same-tick
      protection replacement has no distinct observable in these tests
@@ -202,8 +206,9 @@ reveal) are M7 and are not covered here.
 
    A one-time record does not use a building at all (claim 10).
    - Backing: `measurable` (scenario SW2 parts b, c and e, including named test data for
-     multiple silo types and a busy silo). Electromagnetic-pulse independence is `unmeasured`:
-     no stock skirmish pulse delivery is established here
+     multiple silo types and a busy silo). Health and power independence are `unmeasured`:
+     those parts do not vary them independently. Electromagnetic-pulse independence is
+     `unmeasured`: no stock skirmish pulse delivery is established here
    - Confidence: high for the type rule; medium for "owned longest" and for the busy-silo case
 
 8. **The silo's launch.** When the chosen silo accepts the launch:
@@ -214,17 +219,19 @@ reveal) are M7 and are not covered here.
      (with stock data, the nuclear strike's own weapon; see
      `quirks.superweapon_kind_as_list_position`, Edge cases), owned by the silo, carrying that
      weapon's damage and warhead, with top speed 255 leptons per tick and a start speed of 10
-     straight up, from the silo's first firing position (S-0313). The silo's take-off animation
+     leptons per tick straight up, from the silo's first firing position (S-0313). The silo's take-off animation
      appears there. The silo's door animation runs alongside and does not delay the missile,
    - the silo then plays its launch animation phases and returns to guarding (presentation).
 
    The upward missile flies straight up under S-0306 claim 11. When its warhead has the
    missile-maker flag it does no damage at its burst: it is replaced by the falling missile
-   (claim 9). Its burst height is its projectile type's detonation altitude, an absolute height
-   (S-0306 claim 11). Without the flag it detonates where it bursts, as an ordinary projectile, and
-   no missile falls.
-   - Backing: `measurable` for stock flight (SW2 part a) and the type-list-position weapon
-     choice (SW2 part g). A non-missile-making upward warhead is `unmeasured`: no scenario part
+   (claim 9). Its detonation altitude is an absolute world-height threshold, not a height above
+   the silo or target terrain. The altitude test bursts it when its new world height exceeds
+   that threshold, without clamping to it (S-0306 claim 11); another detonation condition in
+   that claim may end flight earlier. Without the flag it detonates where it bursts, as an
+   ordinary projectile, and no missile falls.
+   - Backing: `measurable` for stock flight (SW2 part a), the altitude distinction (SW2 part h)
+     and the type-list-position weapon choice (SW2 part g). A non-missile-making upward warhead is `unmeasured`: no scenario part
      here replaces that flag to isolate its ordinary detonation
    - Confidence: high
 
@@ -232,11 +239,16 @@ reveal) are M7 and are not covered here.
    created over the recorded target cell: a projectile of the payload weapon, owned by the
    upward missile's owner (the silo, or no object if the silo has left play), with the payload
    weapon's damage, warhead and speed (S-0306 claim 1), aimed at the target cell. It starts at the
-   cell centre at the terrain surface height plus the *upward* projectile type's detonation
-   altitude (no bridge lift), moving straight down with start speed 1 lepton per tick, and accelerates under
-   S-0306 claim 11 (F10). Its own projectile type must have a detonation altitude above its start
-   height, or it bursts on its first turn (S-0306 claim 11).
-   - Backing: `measurable` (scenario SW2 part a)
+   cell centre with world height equal to the target terrain surface height plus the *upward*
+   projectile type's detonation-altitude value, with no bridge lift (F8). This reuses the value
+   as a height above the target terrain; it does not inherit the upward missile's actual burst
+   height, and it is not the upward flight's absolute-height test of claim 8. Thus raising the
+   target terrain raises the falling missile's start height, without changing that upward
+   threshold. The falling missile starts straight down at 1 lepton per tick and accelerates
+   under S-0306 claim 11 and formula F10. Its own projectile type's detonation altitude remains
+   an absolute world-height threshold: a new position above it causes a burst on the first
+   turn, even though the missile is descending.
+   - Backing: `measurable` (scenario SW2 parts a and h)
    - Confidence: high
 
 10. **One-time nuclear strike.** A launch of a one-time record (S-0512 claim 12) creates the falling
@@ -254,10 +266,15 @@ reveal) are M7 and are not covered here.
     missile leaves play, so in a silo launch it disappears at the upward missile's burst and the
     falling missile has none. The marker is shown to a viewing player only while all of these hold:
     the viewer's house is not allied with the launching house (a house is allied with itself); the
-    viewer's house owns a building with a psychic-detection radius that is in operation
-    (S-0405); and that building's reference point is within its radius, in cells times 256, of the
-    target cell's centre (spatial distance, S-0204 claims 5 and 6, truncated, at most the radius).
-    The test is re-evaluated in every update of the marker. This is presentation.
+    viewer's house owns a psychic sensor from the set defined by S-0610 claim 9 that is in
+    operation (S-0405); and that sensor's reference point is within its psychic-detection radius
+    of the target cell's centre. Reach uses the point-to-point spatial distance of S-0610
+    claim 10, heights included: coordinate differences are integer leptons, their squares and
+    sum are evaluated in floating point, and S-0204 claim 5's table root is truncated toward
+    zero to integer leptons. The resulting distance must be at most 256 times the radius in
+    whole cells, an integer comparison. No building-size subtraction applies. Sensor membership
+    follows placement and capture under S-0610 claim 9. The reach and operating tests are
+    re-evaluated in every update of the marker. This is presentation.
     - Backing: `measurable` (scenario SW4)
     - Confidence: medium (the operating test of the detection building)
 
@@ -359,7 +376,8 @@ reveal) are M7 and are not covered here.
 
 18. **A strike.** In each weather update, before any new cloud is made, every cloud that is still
     *pending* strikes once its animation's current frame exceeds ⌊*F* / 2⌋, *F* being the frame
-    count of the cloud's image; pending clouds are taken newest first. This applies in every storm
+    count of the cloud's image. For clouds striking in the same update, damage, animation
+    choices and the resulting scenario-stream state match newest-cloud-first strike order. This applies in every storm
     state: a trigger-created cloud needs no raging storm to produce its bolt or damage.
     A cloud whose image has
     *F* ≤ 2 frames never strikes. A strike at the cloud's cell, in that update:
@@ -378,9 +396,10 @@ reveal) are M7 and are not covered here.
       (S-0211): R(2, 4) pieces, each chosen by R(0, *n* − 1) over the game-wide metallic debris
       list of *n* entries.
 
-    Damage lands in the same tick as the bolt appears. The draw order of a strike is: bolt choice,
-    bolt animation draws, sound choice, explosion animation draws, damage draws, debris count, then
-    for each piece its choice and its animation draws. Debris pieces deal what their animations
+    Damage lands in the same tick as the bolt appears. The scenario-stream state and choices
+    observed for a strike match this order: bolt choice and animation-creation draws; sound
+    choice; explosion-animation draws; damage draws; debris-count draw; and, for each debris
+    piece, its choice and animation-creation draws. Debris pieces deal what their animations
     deal (S-0109).
     - Backing: `measurable` (scenario SW7 parts d and e)
     - Confidence: high; medium for the debris condition
@@ -490,7 +509,8 @@ reveal) are M7 and are not covered here.
     with *t*₀ ≤ *t* < *t*₀ + *D* (F7), whether it is on the map, inside a transport or out of play,
     and whatever happens to its owner. A duration of 0 or less protects nothing (an infantry unit
     still dies). There is no weakening phase: protection is complete until it ends.
-    - Backing: `measurable` (SW10 parts a and f)
+    - Backing: `measurable` for on-map, transport and ownership cases (SW10 parts a and f).
+      Other out-of-play states are `unmeasured`: those parts do not isolate their timer expiry
     - Confidence: high
 
 27. **What protection refuses besides damage.** Apart from S-0302 claim 8 and S-0303 claim 15, a
@@ -534,7 +554,7 @@ reveal) are M7 and are not covered here.
 
 30. **Blackout of the launching house.** A force-shield launch starts a timed blackout of the
     launching house (S-0405 claim 6) whose length is the force-shield blackout length (Import
-    mapping), before any building is shielded.
+    mapping). The house is already blacked out when protection begins on any reached building.
     - Backing: `measurable` (scenario SW11 part c)
     - Confidence: high
 
@@ -579,9 +599,9 @@ reveal) are M7 and are not covered here.
     Its unchecked acceptance and the first stage's recharge are S-0512 claims 10 and 11, not an
     additional readiness test here. A launch of the teleport-warp kind at a destination cell plays the blast
     animations (one at the source centre, one at the destination centre), ends the source marker,
-    and goes through the listed objects of the source cell's effect block (claim 4), of any house.
-    Infantry units, vehicles and aircraft are examined in the cell listing order, not grouped
-    by kind; buildings and other objects are never moved. An object in the air (an aircraft or
+    and affects the listed objects of the source cell's effect block (claim 4), of any house.
+    The observable recipient sequence for infantry, vehicles and aircraft follows claim 4,
+    not a grouping by kind; buildings and other objects are never moved. An object in the air (an aircraft or
     jumpjet in flight) is left alone. A naval parasite inside an examined object is released
     with 500 ticks of suppression before any other effect of the warp on that object
     (S-0614 claim 12). This release occurs whether the object is killed, left in place or joins
@@ -741,7 +761,8 @@ reveal) are M7 and are not covered here.
     No plane, with an illegal cell or no spy plane type, still counts as carried out (S-0512 claim
     8). There is no announcement.
     - Backing: `measurable` for plane count and arrival (SW15 part a). Failed placement and
-      invalid-cell orders are `unmeasured`: no normal-input fixture is established here
+      invalid-cell orders are `unmeasured`: no normal-input fixture is established here.
+      A missing spy plane type is `unmeasured`: SW15 does not remove that type
     - Confidence: high
 
 44. **The camera sight.** The spy plane reveals through its own sight, refreshed as a *camera*:
@@ -759,7 +780,9 @@ reveal) are M7 and are not covered here.
     (S-0409 claim 8) may restore the ordinary radius. When the plane is removed or dies its sight
     ends (S-0409 claim 8); explored cells stay explored. A spy type with no primary weapon gives no
     camera (departure: the original does not handle it safely; our engine warns).
-    - Backing: `measurable` (scenario SW15 parts b and c)
+    - Backing: `measurable` for camera sight and sound (scenario SW15 parts b and c).
+      The missing-weapon fallback is `unmeasured` design behaviour: the original has no safe
+      reference outcome
     - Confidence: high for the radius, gate and cadence; medium for the interplay with the ordinary
       refresh
 
@@ -812,6 +835,11 @@ reveal) are M7 and are not covered here.
   present cloud cell (*x*′, *y*′). Integers, cells.
 - **F7. Protection window.** Protected in tick *t* exactly when *t* − *t*₀ < *D*, i.e. for *D*
   ticks counting the start tick, provided *t* ≥ *t*₀ and *D* > 0. Integer ticks, no rounding.
+- **F8. Silo-launched falling missile start height.** *z*₀ = *h*(*c*) + *A*_up, where *h*(*c*)
+  is the terrain surface height at the target cell centre and *A*_up is the upward projectile
+  type's detonation-altitude value. Integer leptons, no rounding or bridge lift. This is a
+  creation-height formula only; each missile's vertical-flight detonation test still compares
+  its new absolute world height against its own type's threshold (S-0306 claim 11).
 
 ## Constants
 
@@ -870,7 +898,9 @@ Absent-key defaults are in Import mapping.
 - The storm's update comes before the turn pass (S-0203 claim 1, row 3), so an object a strike
   kills takes no turn in that tick, and within one update every pending cloud strikes before any
   new cloud is made.
-- For a curtain or warp, the observable recipient sequence and scenario-stream state after the effect are those produced by F1's effect-block cell order and S-0209 claim 13's listing order within each cell. Backing: `measurable` (SW9 part g); confidence: high.
+- For a curtain or warp, the observable recipient sequence and resulting scenario-stream state
+  match F1's cell order and S-0209 claim 13's listing order within each cell. Backing:
+  `measurable` (SW9 part g); confidence: high.
 - With `quirks.superweapon_list_cut_by_removal` on (default = original), when a reached object
   leaves its cell immediately during its own effect, later listed objects in that cell are not
   reached. With it off, objects listed when the effect begins remain eligible to be reached.
@@ -942,7 +972,7 @@ can reliably force its effect-creation failure through ordinary input.
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
-| superweapon type sections | `Type` | superweapon kind (the kind words of S-0512's Import mapping; the Yuri words are M7) | word, S-0512 | no kind |
+| superweapon type sections | `Type` | superweapon kind (S-0512; psychic reveal: S-0610 claims 13 to 15, other Yuri effects: M7) | word, S-0512 | no kind |
 | superweapon type sections | `Action` | aim action, claims 1 and 2 | action word | none (no aiming; S-0512) |
 | superweapon type sections | `WeaponType` | the silo's upward weapon (claim 8) | weapon name | none |
 | superweapon type sections | `StartSound`, `SpecialSound` | force-shield sounds (claim 32) | sound name | none |
@@ -1072,6 +1102,22 @@ is not under test.
   a visibly different upward weapon, retaining valid missile-producing projectiles for both.
   Expected: the silo fires the index-0 type's weapon, not the fired type's weapon. The latter
   projectile instead falsifies the list-position weapon rule.
+  (h) Use SW2-h.map with a silo on flat ground and targets at two different terrain levels,
+  plus a high-bridge target. Keep the weapons and projectile types unchanged. Record each
+  missile's world height and vertical velocity read-only at creation and on each turn,
+  together with the target surface height, upward type's altitude threshold and tick labels.
+  Predict the upward flight with S-0306 claim 11 and formula F10, including threshold overshoot.
+  Repeat with a silo on raised terrain firing at the original flat target, to distinguish
+  world height from height above the silo. Expected: the upward altitude test uses the same
+  absolute threshold for all targets and both silo elevations. The falling missile starts at
+  F8, rising by exactly the target surface-height difference
+  between runs and gaining no bridge lift. A start at the upward missile's actual burst
+  height, at the threshold alone, or with added deck height falsifies claim 9. A threshold
+  shifted by target or silo terrain, or a burst clamped to the threshold, falsifies claim 8.
+  In a separate SW2-h-low.map variant, lower only the falling type's threshold below its
+  predicted first-turn world height; expected: it bursts on its first turn despite descending.
+  A continued descent falsifies that threshold rule. Do not count bridge-crossing or other
+  earlier detonations as evidence for an altitude test.
 - **SW3 — one-time strike (claims 10, 12).** Grant a one-time nuclear strike by trigger; fire at a
   flat cell with a vehicle; repeat at a high bridge. Record height versus tick, impact tick and
   kill credit. Expected: F2's initial height and downward velocity followed by S-0306 claim 11's
@@ -1080,9 +1126,15 @@ is not under test.
 - **SW4 — warning marker (claim 11).** Four houses: launcher, an ally of the launcher with a
   psychic sensor near the target, an enemy with an operating psychic sensor near the target, and
   an enemy whose sensor is switched off. Fire a silo strike and a one-time strike, viewing each
-  house in turn; expected: only the operating enemy sensor's house sees the marker; for the silo
-  strike it vanishes when the upward missile bursts. Repeat with the sensor just inside and just
-  outside its radius.
+  house in separate runs. Expected: only the operating enemy sensor's house sees the marker.
+  For the silo strike it vanishes when the upward missile bursts. Record sensor reference points
+  and target centres in integer leptons. Repeat at the inclusive reach boundary of claim 11
+  and just outside it, including a height difference. Expected: height counts and sensor
+  foundation size does not extend reach. Capture the sensor before a later strike: membership
+  follows the new owner under S-0610 claim 9. A marker seen without an operating owned sensor,
+  missed at a reachable inclusive boundary, seen outside reach, or retained for the old owner
+  solely through the captured sensor falsifies the corresponding condition. A boundary that
+  distinguishes the table root from an exact root is not established here.
 - **SW6 — storm request and start (claims 14, 15).** (a) Fire the weather superweapon in tick *T*; record
   the activation tick (lighting change, radar outage); expected *T* + *L* (an order is
   applied after the weather update, so the countdown's first decrease is in tick *T* + 1), and
@@ -1108,6 +1160,11 @@ is not under test.
   Use two same-tick trigger clouds over distinct targets to test newest-first strike and death
   draws. Named test maps give cloud images one, two and several frames: the first two never
   strike. Repeat a zero-damage strike to test the absence of damage and explosion draws.
+  In SW7-e.map use multiple bolt and sound choices, animation types with known creation
+  draws and a lethal non-infantry target producing debris. Record the stream, chosen bolt,
+  sound, explosion, death effects and each debris choice. Expected: choices and final stream
+  state match claim 18's sequence, including each debris animation's draws before the next
+  debris choice. Any differing choice, draw count or final state falsifies that sequence.
 - **SW8 — end, credit, height (claims 17, 19, 20).** (a) Record the tick the lighting returns; expected:
   the first weather update after clearing begins that finds no present cloud at its start,
   specifically one update after removal of the last present cloud. Use a named map with a storm
@@ -1188,7 +1245,11 @@ is not under test.
   no unit requirement, and the marker moves to the new source. (b) A 3 × 3 block with own tanks, an enemy tank, own
   infantry and a teleporter-flag infantry; expected: tanks move (the enemy too), ordinary infantry
   die credited to the launcher, the teleporter infantry moves. (c) Expected: the block's shape is
-  kept; infantry keep their position within the cell; vehicles end at cell centres. (d) Use a
+  kept; infantry keep their position within the cell; vehicles end at cell centres. Repeat
+  with an aircraft landed on open ground, recording its within-cell position before and after:
+  expected unchanged position within the corresponding destination cell. A changed relative
+  cell, rotated block, retained off-centre vehicle position or lost infantry/aircraft position
+  within the cell falsifies the corresponding part of claim 36. (d) Use a
   stationary, newly created tank with no previous warp or reinforcement hold, an empty flat
   destination and no deaths or removals that could cost it a turn. Record the applied order
   tick *t*_L, old-position presence, disappearance, placement, arrival effects and phasing-end
