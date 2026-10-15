@@ -1,9 +1,9 @@
 ---
 id: Q-0730
 title: The exact words a superweapon type's kind and link fields accept
-status: open
+status: answered
 related: [S-0512, S-0513]
-answered-by: []
+answered-by: [S-0512]
 ---
 
 ## Need

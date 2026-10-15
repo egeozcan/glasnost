@@ -2,13 +2,13 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0742]
+requests: [Q-0742, Q-0730, Q-0731, Q-0737]
 supersedes: []
 ---
 
@@ -135,9 +135,7 @@ between a fire order and the effect.
    - Backing: `measurable` (scenario X3)
    - Confidence: high
 
-5. **Charging and becoming ready.** In every house update, before that update's checks of claim 2
-   (a), a granted record that is not suspended, not ready and whose clock is running becomes ready
-   when its remaining time has reached 0. A record whose clock started with remaining time *R* in
+5. **Charging and becoming ready.** In a house update, a granted record whose clock is running and whose remaining time has reached 0 becomes ready if it is neither suspended nor already ready. If that update also includes a check under claim 2 (a), the record requests its ready announcement even if the check then removes it; a low-power change that suspends it in that update prevents completion. A record whose clock started with remaining time *R* in
    the house update of tick *s* therefore becomes ready in the house update of tick *s* + *R*; an
    ordinary record granted in tick *g*, charging without interruption, becomes ready in tick
    *g* + *T*. Becoming ready requests the announcement of S-0701 claim 28 only for the local
@@ -233,9 +231,14 @@ between a fire order and the effect.
     preserves that time instead. In either case, readiness returns only at an eligible charge
     check under claim 5: the time must have expired and suspension must have ended. One-time first stages follow claim 12. The fire order of the second
     stage is carried out without any check of its own record or of the first stage: it takes the
-    first stage's last picked source, starts the second effect stage (S-0513), and then sets the
+    first stage's last picked source, starts the second effect stage (S-0513 claim 34), and then sets the
     first stage's record not ready, with its clock restarted with remaining time *T* from that tick.
-    That restart requires the linked first-stage record to be granted. It happens even when that
+    Before any source has ever been picked, the source is cell (0, 0), in integer cell coordinates,
+    not an absent selection that cancels the effect. The ordinary warp effect uses that coordinate
+    and its effect block even when it lies outside the playable area; it does not substitute the
+    destination or the giving building. A granted linked first stage restarts from *T* anyway,
+    whether it was ready or still charging. With the unchecked-order quirk off, no source selection
+    means refusal, with neither effect nor restart. That restart requires the linked first-stage record to be granted. It happens even when that
     first stage is suspended, and its clock then runs through the suspension, so the suspension
     time is not added (`quirks.superweapon_restart_ignores_suspension`, default on = original,
     claim 14 shares it; off: a suspended first stage restarts with its clock stopped at *T*).
@@ -248,8 +251,8 @@ between a fire order and the effect.
     Picking a source, in our engine, does not repeat the first stage's ready announcement and does
     not restart its flash window (claim 17). The original repeats both in the next house update,
     because it treats the still-expired clock as a new completion.
-    - Backing: `measurable` (scenario X6) for source retention, completion, restart and repeated
-      announcement. First-stage firing through claim 8's suspension bypass and unchecked
+    - Backing: `measurable` (scenarios X6 and X17) for source retention, initial source,
+      completion, restart and repeated announcement. First-stage firing through claim 8's suspension bypass and unchecked
       second-stage orders on a suspended linked first stage are `unmeasured`: suspension cancels
       sidebar targeting, so the proposed normal-input test cannot issue them
     - Confidence: high for the repeated completion announcement; medium for the two-stage contract
@@ -441,7 +444,26 @@ between a fire order and the effect.
     nuke aim action, not the missile kind, subject to the separate kind-presence test of S-0520
     claim 21. A newly registered type has no action unless one is imported. An absent action
     keeps the previous layer's action; an unrecognised action word instead sets no action.
-    - Backing: `measurable` (scenario X13)
+    An empty written value also keeps the previous action, initially no action: it supplies no
+    entry under S-0001 claim 11. The complete action-word vocabulary is in Import mapping.
+    Its entries are distinct actions for matching, including words not normally used by a
+    superweapon; recognition does not promise that a battlefield click issues a superweapon
+    order for every action. Selecting an otherwise fireable icon with no aim action issues
+    that selected type's fire order at cell (0, 0), without entering aiming. Any recognised
+    nonzero action instead enters aiming; this alone does not spend the charge. S-0513
+    claims 1 and 2 own subsequent aim offers and aimed-click order selection.
+    - Backing: `measurable` (scenarios X13 and X16)
+    - Confidence: high
+
+24. **Kind and link vocabulary.** The kind and second-stage link use the same twelve-word
+    vocabulary in Import mapping, with case-insensitive matching of the complete word. No
+    alternate spellings are recognised by inserting or removing hyphens, underscores or internal
+    spaces. Ordinary text trimming follows S-0003 claim 1; it is not punctuation removal.
+    An unknown word, an omitted field or an empty written value keeps the previous layer's
+    kind or link respectively. A new type initially has neither kind nor link. In particular,
+    the no-kind description is not a special word that clears an earlier kind. Invalid link
+    use remains subject to claim 11.
+    - Backing: `measurable` (scenario X15)
     - Confidence: high
 
 ## Formulas
@@ -574,9 +596,9 @@ Observable ordering:
 | `FlashSidebarTabFrames` (rules, superweapon) | flash window *F* in ticks, claim 17; −1 means unlimited | integer | −1 |
 | `PreClick` (rules, superweapon) | first-stage flag | boolean | no |
 | `PostClick` (rules, superweapon) | second-stage flag | boolean | no |
-| `PreDependent` (rules, superweapon) | second stage's link: a kind word as for `Type`; kind numbers start at 0 in the order below | word | none |
-| `Type` (rules, superweapon) | superweapon kind, matched without regard to case; an unknown word keeps the previous kind | word, mapping below | none (no kind) |
-| `Action` (rules, superweapon) | aim action, claim 23; `Nuke` maps to the nuke action used by S-0520 claim 21, `None` maps to no action | action word, case-insensitive; an unknown word sets no action | keeps previous action; initially no action |
+| `PreDependent` (rules, superweapon) | second stage's link, claim 24: the same twelve kind words as `Type`; kind numbers start at 0 in the order below | complete word, case-insensitive; unknown or empty keeps previous link | keeps previous link; initially none |
+| `Type` (rules, superweapon) | superweapon kind, claim 24 | complete word, case-insensitive, mapping below; unknown or empty keeps previous kind | keeps previous kind; initially no kind |
+| `Action` (rules, superweapon) | aim action, claim 23; complete vocabulary below | complete word, case-insensitive; unknown nonempty word sets no action; empty `Action=` keeps previous action | keeps previous action; initially no action |
 | `UseChargeDrain` (rules, superweapon) | drain-mode flag, claim 19 | boolean | no |
 | `ManualControl` (rules, superweapon) | manual-charge flag, claim 20 | boolean | no |
 | `AuxBuilding` (rules, superweapon) | auxiliary building type for the giving-building test | building type name | none |
@@ -597,18 +619,53 @@ Kind words for `Type` and `PreDependent`, in kind-number order (0 to 11):
 
 | Word | Kind |
 |---|---|
-| multi-missile kind | missile |
-| iron-curtain kind | iron curtain |
-| lightning-storm kind | storm |
-| chronosphere kind | chronosphere |
-| chronosphere-warp kind | chronosphere second stage |
-| parachute-drop kind | paradrop |
-| American parachute-drop kind | American paradrop |
-| psychic-dominator kind | dominator |
-| spy-aircraft kind | spy plane |
-| genetic-conversion kind | genetic converter |
-| force-shield kind | force shield |
-| psychic-reveal kind | psychic reveal |
+| `multimissile` | missile |
+| `ironcurtain` | iron curtain |
+| `lightningstorm` | storm |
+| `chronosphere` | chronosphere |
+| `chronowarp` | chronosphere second stage |
+| `paradrop` | paradrop |
+| `amerparadrop` | American paradrop |
+| `psychicdominator` | dominator |
+| `spyplane` | spy plane |
+| `geneticconverter` | genetic converter |
+| `forceshield` | force shield |
+| `psychicreveal` | psychic reveal |
+
+Both vocabulary tables give literal accepted words in lower case; any case variant is accepted.
+The complete accepted `Action` vocabulary follows. Every word denotes a distinct matching action,
+except that case variants of the same word are identical. `None` is no action; `Nuke` is the
+nuke action used by S-0520 claim 21. Recognition of a word is separate from cursor presentation
+and click dispatch (S-0513 claims 1 and 2). Hyphens, underscores and internal spaces are not
+ignored. Confidence: high; backing: `measurable` (X16).
+
+| Action word | Action word | Action word |
+|---|---|---|
+| `none` | `move` | `nomove` |
+| `enter` | `self` | `attack` |
+| `harvest` | `select` | `toggleselect` |
+| `capture` | `eaten` | `repair` |
+| `sell` | `sellunit` | `nosell` |
+| `norepair` | `sabotage` | `tote` |
+| `dontuse2` | `dontuse3` | `nuke` |
+| `dontuse4` | `dontuse5` | `dontuse6` |
+| `dontuse7` | `dontuse8` | `guardarea` |
+| `heal` | `damage` | `grepair` |
+| `nodeploy` | `noenter` | `nogrepair` |
+| `togglepower` | `notogglepower` | `entertunnel` |
+| `noentertunnel` | `ironcurtain` | `lightningstorm` |
+| `chronosphere` | `chronowarp` | `paradrop` |
+| `placewaypoint` | `tibsunbug` | `enterwaypointmode` |
+| `followwaypoint` | `selectwaypoint` | `loopwaypointpath` |
+| `dragwaypoint` | `attackwaypoint` | `enterwaypoint` |
+| `patrolwaypoint` | `areaattack` | `ivanbomb` |
+| `noivanbomb` | `detonate` | `detonateall` |
+| `disarmbomb` | `selectnode` | `attacksupport` |
+| `placebeacon` | `selectbeacon` | `attackmovenav` |
+| `attackmovetar` | `demolish` | `amerparadrop` |
+| `psychicdominator` | `spyplane` | `geneticconverter` |
+| `forceshield` | `noforceshield` | `airstrike` |
+| `psychicreveal` | — | — |
 
 A ready announcement is selected by superweapon kind, under S-0701 claim 28: missile, iron-curtain, storm, chronosphere, paradrop (including American paradrop), dominator, spy-plane, genetic-converter, force-shield and psychic-reveal kinds each request their corresponding kind-specific ready announcement. A chronosphere second-stage type and a type with no kind request no ready announcement.
 
@@ -903,6 +960,73 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   its overlay, a drain state loses it, or any label's selected entry or original position differs.
   Record the original F3 boundary error separately from our exact-stage display rule. These
   captures check the original reference look; they do not impose its shell layout on our engine.
+
+**X15: kind and link words (claim 24; Q-0730).**
+- *Setup:* named test map `S0512-kind-words.map` and named local rules layers
+  `S0512-kind-base.ini` and `S0512-kind-override.ini`. Use the common skirmish settings,
+  positive charge times and independently identifiable countdown records. The base supplies a
+  known kind and valid link; each override changes just one word from Import mapping. Keep
+  links within the type list. Include newly registered types with no base kind or link.
+- *Procedure:* test each of the twelve literal words, its lower-case and mixed-case versions,
+  and variants with inserted hyphens, underscores or internal spaces. Also test omission, an
+  empty written value, an unrelated word and the explicit no-action word as a kind or link.
+  Grant and charge the type, then fire. For links, grant the possible linked first stages and
+  fire a one-time second stage, recording which first-stage countdown restarts.
+- *Observable:* ready-announcement kind, launched effect, and which countdown restarts.
+- *Expected:* literal words and case variants choose the table's kind or link. Every nonmatching
+  spelling, omission or empty value preserves the base choice; without a base choice it leaves
+  no kind or link. Do not execute an invalid-link order in the latter case: claim 11 specifies
+  the safe departure, not a reproducible original outcome. For a newly registered no-kind type,
+  a grant can still charge but produces no kind-specific ready announcement or launch effect.
+- *Falsified if:* any accepted spelling selects a different kind, punctuation variants are
+  accepted as aliases, or unknown/empty input clears or replaces the base choice. Keep records
+  independent, so the first-action-match rule cannot obscure which type was fired.
+
+**X16: complete action vocabulary and empty values (claim 23; Q-0731).**
+- *Setup:* named test map `S0512-action-words.map`, using the common settings. In fresh games
+  override a single ordinary, non-first-stage curtain-kind type's aim action with each word in
+  the complete Import mapping table. Give it a one-time grant and a visible icon. Do not change
+  the effect kind when changing the action. No other selected units may intercept aiming.
+- *Procedure:* select the ready icon, record whether it enters aiming without firing, then
+  cancel without a battlefield click. Repeat with case variants and an unrelated word. For
+  layering, first give the type a nuke aim action in a named base layer, then omit its action,
+  write an empty value, write a whitespace-only value, or use the explicit no-action word in
+  the map layer. Repeat the empty cases on a newly registered type with no earlier action.
+- *Observable:* targeting mode, whether selecting the icon immediately consumes the one-time
+  record, and X13's crate selection for the layered nuke-action control. Record aim offers
+  with the read-only recorder; do not infer word recognition solely from cursor artwork.
+- *Expected:* every listed word other than no action enters aiming and leaves the record
+  unspent until an order is issued. Explicit no action and unknown nonempty words instead
+  issue the no-aim fire order of claim 23, at cell (0, 0). Case variants are identical.
+  Empty and whitespace-only values behave exactly like omission: they preserve the base
+  nuke action and X13's earlier crate match, or remain no action on a new type. They do not
+  clear an existing action. Different listed words are separate matches under S-0513 claim 2,
+  and for actions dispatched as superweapon orders, repeat its SW1 part d with two shared-action
+  types and a different-action control.
+- *Falsified if:* a listed nonzero action behaves as no action, an unknown word is retained as
+  a new action, case changes recognition, or an empty value clears the inherited action.
+
+**X17: second stage before any source pick (claim 10; Q-0737).**
+- *Setup:* named test map `S0512-no-source.map`, common settings, no earlier first-stage order.
+  Permanently grant the linked first stage and give it a visible countdown. Give the second
+  stage a one-time grant and a visible icon using an existing imported icon reference, with
+  its ordinary warp aim action and valid link. Put identifiable mobile objects around the
+  first stage's giving building and around a chosen destination, away from cell (0, 0).
+- *Procedure:* fire only the second stage at recorded tick *L*. Run once while the granted
+  first stage is still charging and once after it is ready. As controls, fire after an ordinary
+  source pick, and run with the first stage never granted. Keep power full.
+- *Observable:* first-stage countdown and readiness, destination effects, radar-event cell
+  coordinates, and any objects moved or killed. Use the read-only recorder for the source
+  radar event when its cell is outside the visible map; video alone cannot identify that cell.
+- *Expected:* without a pick the source event uses cell (0, 0); the warp is attempted under
+  S-0513 claim 34, not suppressed for lack of a pick. Units merely near the giving building
+  are not substituted as recipients. In both granted variants the first stage becomes not
+  ready and restarts at *T* in tick *L*, becoming ready at *L* + *T*. The never-granted
+  control does not acquire a charge or become granted. With the unchecked-order quirk off,
+  our engine refuses the no-pick order and changes neither effects nor charge.
+- *Falsified if:* no-pick alone suppresses the destination effect or restart, a different source
+  coordinate is used, or the granted first stage preserves its old remaining time. An empty
+  default source block producing no moved units is not evidence that the order was refused.
 
 ## Open questions
 

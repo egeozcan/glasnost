@@ -1,9 +1,9 @@
 ---
 id: Q-0737
 title: A second-stage (warp) order when the first stage has never picked a source
-status: open
+status: answered
 related: [S-0512, S-0513]
-answered-by: []
+answered-by: [S-0512]
 ---
 
 ## Need

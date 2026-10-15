@@ -1,9 +1,9 @@
 ---
 id: Q-0731
 title: Which aim action words exist, and whether an empty action field is no action
-status: open
+status: answered
 related: [S-0512, S-0513]
-answered-by: []
+answered-by: [S-0512]
 ---
 
 ## Need
