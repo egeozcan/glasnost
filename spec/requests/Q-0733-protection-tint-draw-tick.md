@@ -1,9 +1,9 @@
 ---
 id: Q-0733
 title: The exact tick of the protection tint's draw
-status: open
+status: answered
 related: [S-0513]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0740
 title: The storm strike's debris test and where its debris appears
-status: open
+status: answered
 related: [S-0513, S-0303, S-0109]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

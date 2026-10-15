@@ -1,9 +1,9 @@
 ---
 id: Q-0739
 title: The bolt image height H that sets the storm cloud's height
-status: open
+status: answered
 related: [S-0513, S-0109]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

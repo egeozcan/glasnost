@@ -1,9 +1,9 @@
 ---
 id: Q-0735
 title: How long a silo stays in its launch sequence and refuses a new launch
-status: open
+status: answered
 related: [S-0513, S-0512]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

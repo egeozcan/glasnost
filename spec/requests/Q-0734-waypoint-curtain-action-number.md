@@ -1,9 +1,9 @@
 ---
 id: Q-0734
 title: The action number of the waypoint invulnerability trigger action
-status: open
+status: answered
 related: [S-0513, S-0524, S-0011]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

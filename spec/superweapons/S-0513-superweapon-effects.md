@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0742]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740]
 supersedes: []
 ---
 
@@ -85,6 +85,10 @@ presentation and swept-layer rules below also apply where those specs cite them.
 - **Storm owner.** The house the storm credits for its strikes. It can be no house.
 - **Cloud, strike.** A *cloud* is a storm cloud animation placed over a cell. When it matures it
   makes a *strike*: the *storm bolt* of S-0203 Terms with its damage.
+- **Cloud stage.** The integer playback stage of S-0109 claim 1, not the displayed image-frame
+  number when the animation has a nonzero start field. Claim 46 gives its storm thresholds.
+- **Strike witness.** The ground-layer infantry, vehicle, aircraft or building selected by
+  the distance test of claim 18. This is not a search of neighbouring cells.
 - **Warp group.** The mobile objects one teleport warp moves or kills (claim 34).
 - **Leaving stage, arrival hold.** The period from a warp member's first update after launch
   until departure, including the update at which its fixed 60-tick wait expires (claim 39), and
@@ -252,7 +256,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
      weapon's damage and warhead, with top speed 255 leptons per tick and a start speed of 10
      leptons per tick straight up, from the silo's first firing position (S-0313). The silo's take-off animation
      appears there. The silo's door animation runs alongside and does not delay the missile,
-   - the silo then plays its launch animation phases and returns to guarding (presentation).
+   - the silo then plays its launch animation phases and returns to guarding. Its picture is
+     presentation, but the busy interval is game state (claim 47).
 
    The upward missile flies straight up under S-0306 claim 11. When its warhead has the
    missile-maker flag it does no damage at its burst: it is replaced by the falling missile
@@ -391,7 +396,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
       trigger actions) is below the separation. The first try that does not fail makes one cloud; at
       most one scatter cloud is made per period.
 
-    A cloud is *present* from its creation until its animation reaches its last frame. Clouds
+    A cloud is *present* from its creation until a weather update finds its cloud stage at
+    least its current image's frame count minus 1 (claim 46). Clouds
     prefer nothing: no unit or building is sought. A cloud is placed over a cell regardless of
     shroud and of the usable area.
     - Backing: `measurable` (scenario SW7 parts a to c, with the random-state recorder)
@@ -406,12 +412,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Confidence: high; medium for the floating-point height (F4)
 
 18. **A strike.** In each weather update, before any new cloud is made, every cloud that is still
-    *pending* strikes once its animation's current frame exceeds ⌊*F* / 2⌋, *F* being the frame
-    count of the cloud's image. For clouds striking in the same update, damage, animation
+    *pending* strikes once its cloud stage exceeds ⌊*F* / 2⌋, *F* being the frame
+    count of the cloud's current image (claim 46). For clouds striking in the same update, damage, animation
     choices and the resulting scenario-stream state match newest-cloud-first strike order. This applies in every storm
     state: a trigger-created cloud needs no raging storm to produce its bolt or damage.
-    A cloud whose image has
-    *F* ≤ 2 frames never strikes. A strike at the cloud's cell, in that update:
+    An ordinary image-length forward cloud as in claim 46 whose image has
+    *F* ≤ 2 frames never strikes. Custom playback that survives beyond that limit
+    still uses the stage test above. A strike at the cloud's cell, in that update:
     - creates a bolt animation chosen by one raw value modulo the bolt list length, at the cell
       centre at the terrain surface (visual only),
     - plays a lightning sound (S-0701 claim 25),
@@ -421,11 +428,29 @@ presentation and swept-layer rules below also apply where those specs cite them.
       warhead's explosion animation is the storm explosion animation, except that a water splash
       replaces it as for any warhead on water (S-0303). No damage and no explosion when the storm
       damage is 0,
-    - leaves debris when the unit nearest the cell centre before the damage was not infantry and
-      either something in the cell changed by the damage (its building, its nearest unit or its
-      height level), or the cell held nothing and its land type is road, rock, wall or weeds
-      (S-0211): R(2, 4) pieces, each chosen by R(0, *n* − 1) over the game-wide metallic debris
-      list of *n* entries.
+    - leaves debris when its pre-damage strike witness is not infantry (no witness also passes)
+      and either the first ground-layer building, strike witness or cell height level differs
+      after damage, or there was neither a ground-layer building nor a strike witness before
+      damage and the land type was road, rock, wall or weeds (S-0211): R(2, 4) pieces, each
+      chosen by R(0, *n* − 1) over the game-wide metallic debris list of *n* entries.
+
+    The strike witness is selected only from the cell's ground-layer listing, including
+    buildings and landed aircraft as well as infantry and vehicles, but excluding terrain
+    objects. Deck objects and aircraft not in that listing do not count. For each candidate,
+    let *x* and *y* be its position's integer lepton coordinates modulo 256, in 0 … 255.
+    Its distance is trunc(*r*(*x*² + *y*²)) leptons, where *r* is S-0204 claim 5's table
+    square root: squares and sum are evaluated in floating point and the root truncates
+    toward zero. The reference is the cell's top corner, not its centre; height and
+    foundation size do not enter. The smallest resulting integer distance wins, with ties
+    going to the first candidate in S-0209 claim 13's listing order. The post-damage
+    witness uses the same test. Mere health loss without a changed witness, building or
+    height does not trigger debris. “Held nothing” means no qualifying witness
+    and no ground-layer building, not an empty object list: a terrain object alone does
+    not prevent this condition.
+
+    Every debris animation is created at the strike point: the cell centre at its height
+    level plus the high-bridge lift, with no additional 20-lepton lift and no horizontal
+    displacement. This is distinct from the bolt's terrain-surface point.
 
     Damage lands in the same tick as the bolt appears. The scenario-stream state and choices
     observed for a strike match this order: bolt choice and animation-creation draws; sound
@@ -433,7 +458,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     piece, its choice and animation-creation draws. Debris pieces deal what their animations
     deal (S-0109).
     - Backing: `measurable` (scenario SW7 parts d and e)
-    - Confidence: high; medium for the debris condition
+    - Confidence: high for the witness, empty-cell test and debris creation point; medium
+      for changes to the cell height caused by damage
 
 19. **End and clearing.** A raging storm whose duration is not the endless value (−1) begins
     *clearing* in the first weather update in which its start tick plus duration is below the
@@ -441,7 +467,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     also begins clearing, but only while raging. While clearing, clouds already made still strike
     as claim 18 says. The storm becomes *idle* in the first weather update after the one in which
     clearing began that finds no present cloud at its start: its owner becomes no house and the
-    lighting is re-evaluated. A cloud that reaches its last frame is removed in that update, so the
+    lighting is re-evaluated. A cloud at claim 46's presence threshold is removed in that
+    update, so the
     storm becomes idle one weather update after the last cloud's removal; with no clouds at all,
     in the weather update right after clearing began.
 
@@ -480,6 +507,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
 21. **Unsafe storm data (departure).** The original does not handle these safely. Our engine warns
     at import and behaves as stated:
     - an empty cloud animation list: no cloud is made,
+    - a selected cloud type with no image, or a nonempty bolt list whose first type has
+      no image: no cloud is made (the header reads needed by claims 16, 18 and F4 are unsafe),
     - an empty bolt animation list: the cloud height term *h*_c of F4 is 0, and strikes make no bolt
       animation but otherwise happen,
     - no storm warhead: strikes deliver no damage,
@@ -496,10 +525,14 @@ presentation and swept-layer rules below also apply where those specs cite them.
     warp, or already has that warp pending (claims 34 and 39), is skipped. A non-mobile object other than a building (a terrain object, for
     example) is unaffected. Each reached object is treated by its kind (claims 23 to 25).
 
-    The trigger action that applies invulnerability at a waypoint acts on the ground layer of the
-    waypoint cell's effect block (whatever the bridge), with no launching house and without the
-    leaving-stage skip.
-    - Backing: `measurable` (scenario SW9 parts a and b)
+    The trigger action numbered 109 applies invulnerability at its waypoint-slot cell
+    (Import mapping). It acts on the ground layer of the waypoint cell's effect block
+    (whatever the bridge), with no launching house and without the leaving-stage skip.
+    It uses the same imported curtain duration, not an action-supplied duration or house.
+    It creates the curtain invoke animation at the waypoint cell centre's terrain surface
+    plus 5 leptons, with no bridge lift. It raises no radar event and makes no activation
+    announcement; ordinary animation creation effects still apply.
+    - Backing: `measurable` (scenario SW9 parts a and b, SW19)
     - Confidence: high
 
 23. **Infantry die under the curtain.** Every reached infantry unit receives a hit of its type's whole
@@ -623,14 +656,21 @@ presentation and swept-layer rules below also apply where those specs cite them.
     There is exactly one ranged draw R(−5, 5) from the scenario stream for each application
     that reaches Initial dimming. It occurs in turn *q* + 10 with uninterrupted turns.
     For a launch applied after the turn pass in tick *t*₀ this is *t*₀ + 11, not *t*₀ + 10.
+    This is identical for curtain and force shield and for buildings and mobile objects
+    that take these protected turns; force shield itself protects buildings only (claim 31).
     Expiry or restart before that turn prevents that application's draw. No turns means no
     phase transitions or draw; elapsed phase time is still in game ticks, not counted turns.
+    A missed due turn postpones the transition to the next protected turn, but there is
+    no independently scheduled draw due at application plus 10. For example, after entering
+    Bright hold, an object absent across its expiry draws on its first protected turn back.
+    An object absent across the expiry of Initial rise instead enters Bright hold on its
+    return, starts a fresh 4-tick hold then, and draws only when that hold expires.
     The draw is game state; the brightness and colour are presentation.
     - Backing: `measurable` (SW10 parts e and g). Ordinary opaque pixel composition and
       the additional drawing cases inherit S-0102 claim 34's backing (D44).
       The unresolved variants in Open questions are not assigned guessed values
-    - Confidence: high for phase lengths, factors, draw timing relative to *q* and the three
-      colour-selection rows; medium for the launch-to-first-turn boundary
+    - Confidence: high for phase lengths, factors, draw timing relative to *q*, the ordinary
+      post-turn launch boundary and the three colour-selection rows
 
 ### Force shield
 
@@ -671,10 +711,14 @@ presentation and swept-layer rules below also apply where those specs cite them.
     from 0, under `quirks.superweapon_kind_as_list_position` (Edge cases). With stock data this
     is the warp type. If another type occupies that position, the player aims that other type,
     not necessarily the linked second stage. A new pick replaces the source and its marker. When the player leaves warp aiming without firing, the marker ends; the
-    recorded source stays until replaced. The source cell need not hold any object. S-0512 claim 10
+    recorded source stays until replaced. The source cell need not hold any object.
+    The marker is created regardless of which house is local, taking its ordinary animation
+    creation draws on the scenario stream (S-0202 claim 10; S-0109 claim 13). Hiding it and
+    silencing it for a non-launching viewer does not undo or suppress those draws. It is not
+    a draw-free local click effect. S-0512 claim 10
     gives source retention and the charge contract: an ordinary completed first stage keeps its
     charge, and source selection alone does not commit the warp.
-    - Backing: `measurable` (scenario SW12 parts a and h)
+    - Backing: `measurable` (scenario SW12 parts a and h; SW22 for marker draws)
     - Confidence: high
 
 34. **The warp group.** The second-stage order uses the linked first stage's last picked source.
@@ -874,6 +918,96 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Backing: `measurable` (scenario SW15 part d)
     - Confidence: medium
 
+46. **Cloud playback and the weather observation boundary (Q-0732).** The cloud uses ordinary
+    animation playback, not a separate one-frame-per-tick storm clock. The storm tests its
+    stage against the frame count *F* of its current image, not against a stored middle-event
+    field. S-0109 claims 2 to 5 supply the rate conversion, random delay, speed normalisation,
+    first-update exclusion and missed-update rules. In particular a zero stage delay freezes
+    the stage; it is not replaced by 1 tick. The cloud is created with one pass and without
+    a creator-requested loop delay, reverse or damage suppression. Imported playback flags
+    and fields still apply under S-0109 claims 6 to 17.
+
+    For an ordinary forward cloud with start field 0, end equal to *F*, no follow-up or
+    special playback flags, no missed turns and effective delay *d* ≥ 1 ticks, let *c* be
+    its creation tick and *u* its first animation-update tick. Its first advance is
+    *a* = max(*c* + *d*, *u* + 1), and advance *j* ≥ 1 is in tick
+    *a* + (*j* − 1)*d*. All quantities are integers; no rounding beyond the imported delay.
+    Weather precedes animation turns, so for *F* ≥ 3 the strike is in tick
+    *a* + ⌊*F*/2⌋*d* + 1, and the cloud ceases to be present in tick
+    *a* + (*F* − 2)*d* + 1. In the usual before-turn creation case *u* = *c*, these
+    reduce to *c* + (⌊*F*/2⌋ + 1)*d* + 1 and *c* + (*F* − 1)*d* + 1.
+    The latter is not the animation's deletion tick. A cloud may strike and cease to be
+    present in the same weather update. With *F* of 1 or 2 under these same playback
+    conditions it is removed before a striking stage survives to a weather update and
+    never strikes. For other imported
+    playback, use the actual stages under S-0109 rather than these forward-pass formulas.
+
+    S-0109 claim 25's middle image frame equals ⌊*F*/2⌋ only when the image that supplied
+    that derived field has the same frame count as the cloud's current image. A theater
+    replacement can break that equality. Neither *F* = 2μ nor a guessed missing middle
+    field reconstructs *F*: odd frame counts already disprove that equation.
+    - Backing: `measurable` (SW20); unusual playback inherits S-0109's individual backings
+    - Confidence: high
+
+47. **Busy silo interval (Q-0735).** With one ordinary building turn each tick and no
+    intervening order, sale, erasure or interruption, a silo accepting a post-turn launch
+    in tick *t* emits its upward missile in *t* + 1, changes its launch picture in *t* + 2,
+    and queues *guard* in *t* + 8. A second post-turn launch starts a new sequence in
+    *t* + 8 or later, not immediately after take-off. The new missile leaves on the next
+    building turn. The 1-tick and 6-tick processing waits are engine constants and do not
+    depend on image frame counts, animation rates or the animation-completion flag.
+
+    While launch is current and no different behaviour is queued, another launch does not
+    queue a missile or restart the sequence. It still replaces the house's recorded target
+    and plays the launch sounds (claim 7). An already-created upward missile keeps its own
+    target; a replacement before its creation changes that missile's target. If a different
+    behaviour is already queued, the new launch replaces that queued behaviour and starts a
+    fresh launch immediately, even while launch is current. These are the ordinary current
+    and queued behaviour slots of S-0215, not a missile queue. The initial 8-tick result
+    assumes those slots are not otherwise changed.
+    - Backing: `measurable` (SW21); exceptional externally queued behaviours are
+      `unmeasured` here because no independent normal-input fixture is established
+    - Confidence: high for processing waits and the queue rule; medium for uninterrupted
+      absolute tick labels before oracle confirmation
+
+48. **Other work during a warp: confirmed boundary and unresolved turns (Q-0738).** A
+    vehicle, infantry unit or landed aircraft that is still in its leaving stage after
+    its warp update skips ordinary self-healing, behaviour processing, movement, firing
+    and turret turning in that turn. It drops target and destination. S-0215 claim 2
+    already owns that behaviour-processing exclusion; S-0314 claims 9 and 10's healing
+    requires reaching ordinary update work. Thus those turns must not be treated as
+    ordinary living turns with only driving disabled. The pending
+    application is not itself that leaving-stage test: the member's first following turn
+    can reach ordinary work before entering the leaving stage. Its former driving
+    locomotion does not continue driving it while the superweapon warp controls movement.
+    Protection's elapsed duration still runs even on a turn that skips its brightness
+    phase processing (claim 29).
+
+    The full continuation contract at departure, off-map retries, placement, arrival and
+    hold expiry remains unmeasured here. In particular the single-warp-update-per-tick
+    assumption in claim 39 is not proof that every kind gets exactly one such update:
+    a turn can reach a warp update before ordinary work and another movement opportunity
+    later. Do not infer that the warp step is the whole turn until arrival, or that the
+    hold test necessarily precedes every kind's other work, from T2 alone.
+    - Backing: `measurable` for the leaving-stage exclusions and stopped driving (SW23).
+      Exact continuation and per-kind absolute timeline are `unmeasured`: the interaction
+      between early warp work, ordinary movement work and placement has not been fully
+      established. SW23 is the proposed discriminating observation, not confirmation
+    - Confidence: high for the leaving-stage exclusion; low for the unresolved boundaries
+
+49. **Invalid warp cells: no established safe refusal (Q-0741 parts 2 and 3).** No
+    destination-legality test is established that would leave a source member in place
+    merely because its corresponding destination cell is off the map. The ordinary
+    parasite release and organic death tests of claim 34 still precede selection of that
+    landing point. Likewise, failure of a nearby-cell search is not established to retain
+    the old landing point: the landing point is replaced using the search result without
+    a success test. The subsequent observable position and fate for these two exceptional
+    cases remain unspecified here, not a promised retry-in-place or immediate death.
+    - Backing: `unmeasured`: the remaining invalid-cell and failed-search point conversion
+      and subsequent placement outcomes have not been traced completely; SW24 proposes
+      the normal-input edge and exhausted-search observations
+    - Confidence: high that the proposed early legal-cell refusal is absent; low for final fate
+
 ## Formulas
 
 - **F1. Effect block.** For centre cell (*x*, *y*), the nine cells in order are
@@ -902,7 +1036,18 @@ presentation and swept-layer rules below also apply where those specs cite them.
   product in double-precision floating point with S-0205 claim 5's rounding policy, then
   truncates toward zero to integer leptons. The operations defining *k* use that same policy. Examples:
   image heights *H* of 0 or 1 pixels give −3 leptons, 2 pixels give 3 leptons,
-  100 pixels give 344 leptons, and 200 pixels give 693 leptons.
+  100 pixels give 344 leptons, and 200 pixels give 693 leptons. *H* is the image header's
+  canvas height, not a frame's stored rectangle height or the cloud image's height.
+  This is a world-position value, not merely a drawing displacement. The lightning damage
+  point and bolt point of claim 18 do not inherit it, but the cloud's own ordinary animation
+  damage is delivered at its own position (S-0109 claim 17); ordinary animation middle
+  events also retain their height tests (S-0109 claim 14). Import it even when an ordinary
+  stock cloud delivers no such damage. A missing first-bolt image does not supply a
+  readable zero-height header in the original: that cloud-creation path is unsafe.
+  Our engine warns and makes no cloud for that request (bad-data departure, no switch),
+  rather than claiming the original uses *H* = 0. Backing: `measurable` (SW8 part c,
+  SW25) for existing images and height-dependent animation effects; `unmeasured` design
+  for the missing-image fallback. Confidence: high.
 - **F5. Storm timing.** A request in tick *T* before the weather update, with countdown *L* ≥ 1 and
   none running, starts the storm in tick *T* + *L* − 1. Approach warnings come in ticks
   *T* + *L* − 225*k* − 1 for integers *k* ≥ 1 for which that tick is at least *T* and less
@@ -969,7 +1114,7 @@ Absent-key defaults are in Import mapping.
 | clearing | weather update with no present cloud | idle; owner none; lighting re-evaluated |
 | any | weather update | pending clouds strike first (claim 18) |
 
-**T2. A warp group member.**
+**T2. A warp group member under claim 39's stated one-update-per-tick, uninterrupted-survivor assumption.**
 
 | State | Event | Result |
 |---|---|---|
@@ -1097,7 +1242,10 @@ can reliably force its effect-creation failure through ordinary input.
 | `[General]` | `LightningWarhead` | storm warhead | warhead name | none: departure (claim 21) |
 | `[General]` | `LightningPrintText` | storm-message flag | boolean | yes |
 | `[General]` | `WeatherConClouds` | cloud animation list | list of animation names | empty: departure |
-| `[General]` | `WeatherConBolts` | bolt animation list; first entry's image height in F4 | list of animation names | empty: departure |
+| `[General]` | `WeatherConBolts` | bolt animation list; first entry's image header canvas height in F4 | list of animation names; image resolved under S-0007 claim 14 | empty: claim 21; nonempty list with missing first image: no cloud and warning (F4) |
+| resolved cloud image | image header frame count | *F* in claims 16, 18 and 46 | integer count of image frames, not twice the middle field | missing image: unsafe storm threshold access; no cloud and warning in our engine |
+| cloud animation art section | `Rate`, `RandomRate`, `Normalized`, `Start`, `End`, `LoopStart`, `LoopEnd`, `LoopCount`, `Reverse`, `PingPong`, `Shadow`, `Next` | actual stage history used by claim 46 | forms and defaults of S-0109 claims 2 to 9, 15 and 25; creator supplies one pass | S-0109 Import mapping, not an invented delay of 1 |
+| map `[Actions]` | action code 109 | waypoint curtain, claim 22 | S-0011 claim 33's waypoint slot, eighth action item, letter-encoded waypoint; no number-slot house or duration | S-0011 claim 33's missing/invalid waypoint rules |
 | `[General]` | `WeatherConBoltExplosion` | storm explosion animation | animation name | none |
 | `[General]` | `MetallicDebris` | debris list (claim 18) | list of animation names | empty: no debris |
 | `[AudioVisual]` | `StormSound` | storm sound (claim 15) | sound name | none |
@@ -1268,6 +1416,16 @@ is not under test.
   sound, explosion, death effects and each debris choice. Expected: choices and final stream
   state match claim 18's sequence, including each debris animation's draws before the next
   debris choice. Any differing choice, draw count or final state falsifies that sequence.
+  In additional named fixtures place infantry closer to the centre but farther from the
+  top corner than a vehicle, then reverse their top-corner distances. Kill the vehicle
+  without removing the infantry: expected debris depends on the pre-hit top-corner
+  witness, not the centre-nearest unit. Set equal truncated distances and reverse listing
+  order to test ties, including distances with unequal squared sums but equal truncated
+  roots. Repeat with a ground building, a deck vehicle, a ground vehicle under the deck
+  and a lone terrain object on road. Expected: claim 18's ground-only witness and empty
+  test. Record each debris creation point read-only before its first turn: exactly the
+  strike point, including bridge lift but no extra lift. Different witness, tie, empty
+  result or creation position falsifies the corresponding subclaim.
 - **SW8 — end, credit, height (claims 17, 19, 20).** (a) Record the tick the lighting returns; expected:
   the first weather update after clearing begins that finds no present cloud at its start,
   specifically one update after removal of the last present cloud. Use a named map with a storm
@@ -1332,7 +1490,14 @@ is not under test.
   for uninterrupted turns, hence 11 ticks after a normal post-turn launch. Record the first
   protected turn separately from the launch. Repeat with protection shorter than that and
   with reapplication before the phase: no draw for an interrupted start. Record each protected
-  object's draw separately, not a combined count contaminated by invocation animations. (f) Load a protected vehicle into a
+  object's draw separately, not a combined count contaminated by invocation animations.
+  Repeat for a curtain-protected building and a force-shielded building: the same *q* + 10
+  rule. Load a protected unit after its first protected turn but before its Initial rise
+  expires, and separately during Bright hold, and unload while protection remains.
+  Expected: the next protected turn advances only one expired phase; returning during
+  expired Initial rise starts a new 4-tick hold, whereas returning during expired Bright
+  hold draws at once. Any draw taken while absent, skipped intervening phase or a
+  universal application-plus-10 schedule falsifies claim 29. (f) Load a protected vehicle into a
   transport, wait beyond expiry, and unload under fire: protection has expired. Capture a
   protected vehicle in a named map through an ownership-change trigger: timer expiry is unchanged.
   Named maps with zero and negative durations confer no protection but retain infantry kills.
@@ -1492,6 +1657,65 @@ is not under test.
   announcement falsifies the corresponding part of claim 5. Sounds still follow S-0701's
   ordinary priority and cooldown rules; compare only runs where those rules admit playback.
 
+- **SW19 — waypoint curtain (claim 22).** A named map fires action 109 at a waypoint with
+  ground infantry and a vehicle, repeated beneath a high bridge with a deck vehicle. Use
+  arbitrary unused number-slot values in separate otherwise identical runs. Record health,
+  protection expiry, invocation height, sound and radar events. Expected: ground infantry
+  die without house credit, ground vehicle gains the imported curtain duration, deck
+  vehicle is unaffected, invocation at surface plus 5 leptons without bridge lift, no
+  activation announcement or radar event. Changing the unused values changes nothing.
+- **SW20 — cloud clock (claim 46).** Named cloud-image fixtures of 3, 5 and 8 frames,
+  ordinary forward one-pass playback, effective delays 1, 2 and 4 ticks, no other clouds.
+  Create by a waypoint strike before the turn pass, then by weather, recording creation,
+  first update, each stage, bolt creation and present-cloud membership read-only. Expected:
+  the two threshold ticks of claim 46; animation deletion is separately recorded. Repeat
+  with delay 0: stage remains 0 and no strike for these images. A named theater replacement
+  with a different frame count tests the current-image threshold rather than stored μ.
+  A different stage advance or weather tick falsifies the corresponding formula. Observe
+  naturally recorded seeds for a random-rate variant and use its drawn effective delay.
+- **SW21 — silo busy boundary (claim 47).** Named map with two ready, non-one-time nuclear
+  types on one silo's two superweapon fields. Fire at different targets with gaps of 0,
+  1, 2, 7, 8 and 9 ticks in separate runs. No other behaviour orders. Record current and
+  queued behaviour, processing ticks, missiles and their targets. Expected: no second
+  sequence for gaps below 8, a second sequence and next-turn missile for gaps of 8 or 9.
+  Gap 0 replaces the first missile's target; replacements after its creation do not.
+  Repeat with altered launch-picture lengths and rates only: the boundary is unchanged.
+  Any queued extra missile, length-dependent boundary or earlier acceptance falsifies it.
+- **SW22 — source-marker draws (claim 33).** In skirmish, record the stream at source
+  picks by the local house and by another house's scripted normal play in separate runs,
+  accounting for all other draws. A named marker type with a distinctive random-rate
+  draw isolates its creation. Expected: its creation draws in both cases, but visibility
+  and sound only for its launching viewer. No network-game test is required or claimed.
+- **SW23 — warp turn continuation (claim 48).** Extend SW12(d) with a damaged self-healing
+  vehicle already driving, a turret aimed away from its body, and an unreachable harmless
+  enemy target; also test teleporter infantry and landed aircraft separately. Record each
+  member's health, position, target, destination, turret facing, warp stage and number of
+  warp updates on every tick through arrival and hold expiry. Named test data supply
+  healing every tick and a long redirected hold. Expected confirmed portion: no old
+  driving after launch and no ordinary healing, firing, processing or turret progress
+  on turns that remain leaving. Any such progress falsifies that exclusion. For the
+  unresolved portions record whether ordinary work resumes on departure, placement or
+  arrival, and whether two warp updates occur within one turn; these distinguish the
+  whole-turn-only hypothesis from continuation, rather than assuming either outcome.
+- **SW24 — exceptional warp cells (claim 49).** Source block in the interior and
+  destination centre on a legal map edge: place a normal vehicle, organic infantry and
+  an infected naval host in source cells mapped outside the map. Record parasite exit,
+  deaths, pending flags, landing points and all later positions. Separately block every
+  candidate through the nearby search's full radius, verified read-only, and record
+  each search's result and replaced landing point. Expected confirmed portion: ordinary
+  source-side parasite release and organic death occur, not an early whole-cell refusal.
+  Final fate and failed-search conversion have no established expected value; this
+  proposal is exploratory and must not be reported as confirming a retry-in-place rule.
+- **SW25 — bolt header height (F4).** Extend SW8(c) with two images having equal stored
+  rectangles but unequal canvas heights, then equal canvas heights but unequal rectangles.
+  Expected: cloud world height follows canvas height alone. Use a named damaging cloud
+  animation with a documented ordinary-animation warhead and targets at distinct heights:
+  its own deliveries originate at the cloud height while the lightning hit stays at
+  claim 18's strike point. Record world positions and health per advance. A cloud-height
+  change following rectangle size, or lightning inheriting cloud altitude, falsifies F4.
+  Missing-image fallback is tested only in our engine: warning, no cloud, no invented
+  zero-height header. The original's unsafe access is not a stable oracle expectation.
+
 Genetic mutation's shared swept-layer rule and absence of a list cut are tested by S-0611
 claim 4's scenario MU4. The added launch-feedback rows retain their owning specs' scenarios:
 S-0611 claim 2 (MU1 part a and MU11) for genetic mutation, and S-0612 claim 1 (PD1) for
@@ -1519,5 +1743,15 @@ for these two kinds.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
-- Failed nearby-cell searches and invalid warp destinations lack a traced safe outcome.
+- Q-0738: claim 48 answers the leaving-stage exclusion and old driving question, but exact
+  per-kind continuation while pending, departing, off-map, placed, arriving and ending the
+  hold remains open. Reconcile claim 39/T2's one-update assumption and claim 40's turn
+  boundary with SW23 before treating their illustrative absolute ticks as unconditional.
+- Q-0741 parts 2 and 3: claim 49 records the absence of the proposed safe guards, but final
+  invalid-destination and exhausted-search placement/fate remain open (SW24). Part 1's
+  marker creation draws are answered by claim 33 and SW22.
+- Q-0732: rate/frame-count timing is claim 46, using S-0109 claims 2 to 5 and 25; Q-0733
+  was already answered by claim 29's first-protected-turn rule, now explicit about skipped
+  phases. Q-0734 is claim 22 and Import mapping, Q-0735 is claim 47, Q-0739 is F4,
+  Q-0740 is claim 18. No oracle measurements are claimed.
 

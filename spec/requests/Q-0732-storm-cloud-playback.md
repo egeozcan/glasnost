@@ -1,9 +1,9 @@
 ---
 id: Q-0732
 title: Frame count and frame timing of a storm cloud for its strike and end
-status: open
+status: answered
 related: [S-0513, S-0109]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
