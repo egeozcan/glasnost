@@ -2,7 +2,7 @@
 id: S-0509
 title: Engineers and capture
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -207,10 +207,17 @@ Neighbouring specs own the rest:
     buildings (claim 8). Nothing else sets it: a takeover (claim 17), a trigger transfer and every
     other ownership change leave it alone. Nothing clears it during the game. Trigger event code 3
     tests this mark for its specified house: whether that house has ever lost a building to an
-    engineer capture. No other gameplay effect of the mark is specified here.
-    - Backing: `measurable` (scenario E7) for capture, trigger transfer and persistence for the
-      observed interval. `unmeasured` for every other transfer and persistence for an arbitrary
-      game duration: E7 cannot exercise every transfer or duration.
+    engineer capture. This is a code-matched event, not a polled condition: an unlatched event
+    needs a raise with code 3 as well as the mark (S-0011 claim 8). On a repeating tag, a
+    satisfied event can remain latched and satisfy later raises of other codes (S-0011 claim 9).
+    Mark persistence alone therefore promises no later firing, and a firing from an existing
+    latch does not demonstrate that the mark persists. No other gameplay effect of the mark is
+    specified here.
+    - Backing: `measurable` (scenario E7's read-only mark observations) for capture, trigger
+      transfer and persistence for the observed interval. Event-code-3 firing tests remain
+      `unmeasured` until E7's matching-raise fixture is established. Every other transfer and
+      persistence for an arbitrary game duration are `unmeasured`: E7 cannot exercise every
+      transfer or duration.
     - Confidence: high
 
 ### Building ownership change
@@ -515,12 +522,25 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
   trigger changes, unlike capture's own transfer, can occur between entry raises. These results
   do not distinguish tag carry-over before ownership change from carry-over after it; neither
   order alone is confirmed or falsified by E6.
-- **E7. Lost-to-capture mark (claim 11).** A test map with a trigger on event code 3 for house X,
-  with a visible action. Capture an X building: expected to fire. Transfer an X building by trigger
-  instead: expected not to fire. Use fresh games for these controls so an earlier capture
-  cannot leave the mark set. In the capture run, return the building by trigger and evaluate a
-  fresh event-code-3 trigger after 90 ticks: expected to fire again. Falsified by no event after
-  capture, an event after trigger transfer alone, or the later event failing after return.
+- **E7. Lost-to-capture mark (claim 11).** Use a read-only recorder to observe house X's mark
+  before and after an engineer captures an X building. Expected: initially clear, then set.
+  Return the building by trigger and observe the mark for a further 90 ticks: expected to stay
+  set. In a fresh game, transfer an X building by trigger without any engineer capture:
+  expected to stay clear. A different recorded mark falsifies the corresponding prediction.
+  If the recorder cannot identify the mark independently, these observations are inconclusive.
+
+  Trigger-firing variant, pending a fixture: first establish a normal-play action that delivers
+  a code-3 raise to the test tag, recording its code and tick read-only. Neither an engineer
+  capture nor a timed evaluation is assumed to deliver that raise. No such controlled fixture
+  is currently established. Once one exists, use an enabled fresh, unlatched event-code-3
+  trigger for X with a visible counter, and deliver a confirmed matching raise after capture:
+  expected to fire. In a fresh no-capture trigger-transfer control, the same confirmed raise
+  must not fire it. For persistence, use a separate fresh, previously disabled trigger enabled
+  only after return and the 90-tick interval, then deliver another confirmed code-3 raise:
+  expected to fire. Use independent event positions without timer aliasing (S-0011 claim 9).
+  Opposite results falsify these predictions only with the matching raises and absence of prior
+  latches established. A later firing through an existing latch is not a persistence test.
+  no matching raise makes the firing variant inconclusive, not a failure.
 - **E8. Planted bomb (claim 13).** Plant a timed bomb on an enemy power plant, then capture it
   before detonation. Expected: no explosion, ever, and health unchanged. Repeat on a garrisonable
   civilian building owned by the enemy: expected the bomb explodes on schedule. Record the
@@ -556,12 +576,14 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
 - **E12. Vehicle-like takeover (claim 17).** A test-map override gives a 1 × 1 building type an
   undeploy-into vehicle. Order a vehicle thief into an enemy building of that type. Expected: the
   building changes to the thief's house when the thief reaches its cell, the thief is removed, an
-  entered-by trigger on the building fires once, and an event-code-3 trigger for the old owner
-  does not fire. Give the thief a repeating destroyed-by-anything counter: expected one firing
+  entered-by trigger on the building fires once, and the old owner's initially clear
+  lost-to-capture mark stays clear, observed read-only as in E7. An event-code-3 non-firing is
+  evidence only with E7's confirmed matching-raise fixture and a fresh unlatched event. Give the thief a repeating destroyed-by-anything counter: expected one firing
   and no death sequence, death effect or kill/loss count. The building's entry action also changes
   its carriers to a third house: final owner must still be the thief's house, showing that the
   entry action precedes takeover. Falsified by different timing, owner, counts, a surviving thief,
-  a killing effect or a lost-to-capture event. Repeat on an allied but other-house building:
+  a killing effect or a newly set lost-to-capture mark. A code-3 firing falsifies the prediction
+  only under the matching-raise conditions above. Repeat on an allied but other-house building:
   expected the same takeover and removal. Carry-over timing and own-house arrivals remain
   unmeasured as claim 17 states.
 - **E13. Uncapturable after ordering (claim 3 row 5).** A named test-map override makes a repairable
@@ -584,12 +606,6 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
   from either silent transfer cause, or missing eligible capture feedback with all S-0701 gates
   satisfied. If requests cannot be distinguished from queue suppression, that variant is
   inconclusive. Passive-new-owner and two-non-local-owner transfers remain unmeasured.
-
-## Changes for other specs
-
-- S-0408, Edge cases and quirks, original computer-player note: replace the ownership-change
-  upgrade-sale description with S-0509 claim 16's initial-owner/passive-house conditions and
-  repeated top-upgrade removal with full refunds. It is not universally just one top upgrade.
 
 ## Open questions
 
