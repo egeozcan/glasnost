@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -335,6 +335,14 @@ confidence and proposed measurements remain those of the owning claims.
    in the update order, unless a removal costs it that turn (claim 10). An object that had already
    taken its turn in that tick before it left play and entered play again takes this turn only
    with the switch of claims 10 and 11 on (claim 11).
+   **Within-turn falling and landing.** S-0511 claim 10 owns the ordinary infantry and
+   vehicle case: the fall step and any landing hit precede due behaviour processing,
+   ordinary locomotion advance and the firing check in that turn. A unit still falling
+   after the step can process due behaviour, but neither advances its ordinary locomotion
+   nor fires. A surviving landing removes those falling-specific refusals in the same
+   turn. Falling is not a missed turn under claim 10 here, nor a separate tick part.
+   - Backing for this local ordering: `measurable` (S-0511 scenario B3, turn-order variant)
+   - Confidence for this local ordering: high, as in S-0511 claim 10
    - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
      after its own turn: claim 11's backing (`unmeasured`).
    - Confidence: high
@@ -787,6 +795,12 @@ whose timing S-0402 owns; they do not change claim 12's precedence:
 | No data key | — | engine behaviour | fixed | claim 12's vehicle behaviour-start and processing precedence over a due group update; S-0402 claim 22 owns directed harvesting and its imported flags, and S-0215 claims 6 and 11 own processing delays and start gates |
 
 ## Measurement scenarios
+
+**Within-turn falling and landing (claim 4).** S-0511 scenario B3's turn-order variant
+supplies the setup, procedure, observables and falsifiers: due behaviour remains possible
+during descent, ordinary movement and firing do not, and a protected survivor's landing
+is visible to those later checks in the same turn. This tests local ordering within a
+turn, not a shared falling phase.
 
 **Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
 procedure, sub-tick observables and falsifiers for same-tick aircraft access to the assigned
