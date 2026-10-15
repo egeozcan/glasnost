@@ -99,6 +99,7 @@ enum RadarKind {
     UnitProduced,
     UnitLost,
     AllyAttacked,
+    UnitRepaired,
 }
 
 impl RadarKind {
@@ -111,6 +112,8 @@ impl RadarKind {
             RadarKind::UnitProduced => (2, 200),
             RadarKind::UnitLost => (8, 200),
             RadarKind::AllyAttacked => (8, 600),
+            // spec: S-0701 F7 (unit repaired 2, 400)
+            RadarKind::UnitRepaired => (2, 400),
         }
     }
 }
@@ -660,6 +663,20 @@ impl Audio {
                 {
                     self.announce(Announcement::UnitReady);
                 }
+            }
+            // spec: S-0314 claim 6; S-0701 claim 28 (repair complete: the depot owner's, only when it is the local player, through the F7 kind unit repaired at the depot; suppressed with the event)
+            Sound::UnitRepaired => {
+                if house.is_some()
+                    && house == self.local
+                    && let Some(p) = pos
+                    && self.radar_event(RadarKind::UnitRepaired, cell_of(p), w.tick)
+                {
+                    self.announce(Announcement::RepairComplete);
+                }
+            }
+            // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
+            Sound::LowFunds if house.is_some() && house == self.local => {
+                self.announce(Announcement::LowFunds);
             }
             _ => {}
         }

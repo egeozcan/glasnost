@@ -774,6 +774,7 @@ impl Builder<'_> {
                 }
                 self.building_art_econ(&mut econ, index, t);
                 self.upgrade_sale_warnings(t);
+                self.depot_docks_warning(t);
                 self.deploy_facing_warning(t);
                 if let Some(word) = self.factory_kind(t) {
                     rec.put("factory", jsonc::string(word.to_string()));
@@ -825,6 +826,27 @@ impl Builder<'_> {
             ));
         }
         held
+    }
+
+    /// The importer warning of S-0314 Edge cases (several contact places):
+    /// a repair depot with a rules `NumberOfDocks` above 1.
+    fn depot_docks_warning(&mut self, t: &TypeRec) {
+        let repair = fold(t.keys.get(&b"UnitRepair"[..]), None, |v, _| {
+            value::boolean(v)
+        });
+        let docks = fold(t.keys.get(&b"NumberOfDocks"[..]), None, |v, e| {
+            value::integer(v).map(|n| (n, e.layer, e.line))
+        });
+        if repair == Some(true)
+            && let Some((n, layer, line)) = docks
+            && n > 1
+        {
+            // spec: S-0314 Edge cases (several contact places: the importer warns for a count above 1 on a repair depot)
+            self.warn(layer, line, format!(
+                "buildings {} NumberOfDocks={n} on a repair depot: the original services only place 0; our engine services the lowest occupied place, one at a time (S-0314 Edge cases)",
+                show(&t.name)
+            ));
+        }
     }
 
     /// The importer warnings of S-0408 Edge cases: a non-turret upgrade

@@ -241,6 +241,8 @@ fn sell_building(w: &mut World, id: ObjectId) {
             packs,
         });
     }
+    // spec: S-0314 claim 22 (a depot that starts selling gives every vehicle in contact a run-away notice)
+    crate::depot::sale_started(w, id);
 }
 
 /// A sell order on a vehicle or aircraft (S-0408 claim 11).
@@ -583,6 +585,8 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
     if o.health <= 0 {
         return SELLING_DELAY;
     }
+    // spec: S-0314 claim 22 (at its next processing the selling depot releases every contact)
+    crate::depot::selling_processing(w, id);
     let tick = w.tick;
     let sale = o.econ.sale.clone().unwrap_or(Sale {
         stage: Stage::Ordered,

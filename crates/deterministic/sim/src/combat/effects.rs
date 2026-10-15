@@ -111,6 +111,13 @@ pub enum Sound {
     /// A rocket missile's take-off sound at the end of its tilt or raise
     /// (S-0506 claim 15): `of` is the missile's type, `pos` its position.
     TakeOff,
+    /// A depot finished repairing a vehicle (S-0314 claim 6, S-0701 claim
+    /// 28): the repair-complete announcement and the *unit repaired* radar
+    /// event, for the depot's owner at the depot's position.
+    UnitRepaired,
+    /// The low-funds announcement of a depot that cannot pay (S-0314 claim
+    /// 6), for the depot's owner.
+    LowFunds,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

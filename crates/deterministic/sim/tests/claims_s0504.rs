@@ -1118,6 +1118,80 @@ fn claim_12_yard_docking_point() {
     assert_eq!(naval::yard_docking_point(&w, depot), None);
 }
 
+/// A damaged SKIFF clicked onto a repairing NAVYARD on the lake, run until
+/// it is docked asleep at the yard's docking point.
+fn ship_docked_at_yard() -> (World, ObjectId, ObjectId) {
+    let mut w = world(rules());
+    for h in &mut w.houses {
+        h.credits = 10_000;
+    }
+    let yard = at(&mut w, "NAVYARD", 0, 5, 3);
+    let skiff = at(&mut w, "SKIFF", 0, -4, 0);
+    w.obj_mut(skiff).unwrap().health = 200;
+    open(&mut w);
+    let r = targeting::click(
+        &mut w,
+        ALPHA,
+        &[skiff],
+        ClickOn::Object(yard),
+        Modifiers::default(),
+    );
+    assert!(
+        r.orders.iter().any(|o| matches!(o, Order::Behaviour { behaviour: Behaviour::Enter, .. })),
+        "the click over the yard is enter: {:?}",
+        r.orders
+    );
+    for o in r.orders {
+        assert!(orders::issue(&mut w, ALPHA, o));
+    }
+    let mut docked = false;
+    for _ in 0..1500 {
+        tick::step(&mut w);
+        if glasnost_sim::depot::tethered(&w, skiff)
+            && w.obj(skiff).unwrap().beh.current == Some(Behaviour::Sleep)
+        {
+            docked = true;
+            break;
+        }
+    }
+    assert!(docked, "the ship docks at its yard");
+    (w, yard, skiff)
+}
+
+// spec: S-0504 claims 8, 12 and 14 and S-0314 claims 6 and 16 to 18 (a damaged ship clicked onto its repairing yard docks at the yard's fixed point, passes the 200-lepton waiting gate, is repaired step by step at its owner's cost and is sent away)
+#[test]
+fn claim_14_ship_repaired_at_yard() {
+    let (mut w, yard, skiff) = ship_docked_at_yard();
+    let o = w.obj(yard).unwrap();
+    let c = o.pos.cell();
+    assert_eq!(
+        w.obj(skiff).unwrap().pos.cell(),
+        CellXY::new(c.x + 2, c.y + 1)
+    );
+    let credits = w.houses[0].credits;
+    let mut done = false;
+    for _ in 0..6000 {
+        tick::step(&mut w);
+        if w.obj(skiff).unwrap().contact.is_none() {
+            done = true;
+            break;
+        }
+    }
+    assert!(done, "sent away");
+    assert_eq!(w.obj(skiff).unwrap().health, 300);
+    assert!(w.houses[0].credits < credits, "its owner paid");
+}
+
+// spec: S-0504 claim 14 and S-0314 claim 20 (a docked vessel keeps its contact and tether under a move order)
+#[test]
+fn claim_14_docked_ship_keeps_contact_under_a_move() {
+    let (mut w, yard, skiff) = ship_docked_at_yard();
+    click_move(&mut w, skiff, cell(-4, 4));
+    tick::step(&mut w);
+    assert_eq!(w.obj(skiff).unwrap().contact, Some(yard));
+    assert!(glasnost_sim::depot::tethered(&w, skiff));
+}
+
 /// Kills a fresh SKIFF, runs 20 ticks of its descent, then hits it again
 /// lethally when `again`; returns the height and health just after, and the
 /// tick at which it leaves play.

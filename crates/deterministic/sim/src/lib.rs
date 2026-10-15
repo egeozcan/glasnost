@@ -23,6 +23,7 @@ pub mod combat;
 pub mod consts;
 pub mod corridor;
 pub mod crush;
+pub mod depot;
 pub mod drive;
 pub mod econ;
 pub mod infantry;

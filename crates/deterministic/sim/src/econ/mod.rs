@@ -37,7 +37,8 @@ pub mod victory;
 /// link*): a harvester docked at a refinery (S-0402 claim 10) or a unit
 /// released by a factory (S-0417 claims 2 and 10).
 pub fn tethered(w: &crate::world::World, id: crate::world::ObjectId) -> bool {
-    release::tethered(w, id) || harvest::tethered(w, id)
+    // spec: S-0314 claim 17 (the completed depot entry exchange tethers too)
+    release::tethered(w, id) || harvest::tethered(w, id) || crate::depot::tethered(w, id)
 }
 
 /// Gives object `id` the destination `dest` (none clears it) and tells the

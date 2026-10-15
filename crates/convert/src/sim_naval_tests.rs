@@ -133,3 +133,17 @@ fn cloakable_coverage() {
         (Field, "S-0308, S-0504".into())
     );
 }
+
+/// spec: S-0314 Edge cases and Import mapping (NumberOfDocks above 1 on a repair depot: the importer warns; the count is still imported; a count of 1, or a building without the repair flag, gives no warning)
+#[test]
+fn depot_with_several_places_warns() {
+    let text = "[BuildingTypes]\n1=Bay\n2=Pad\n3=Lot\n\
+                [Bay]\nUnitRepair=yes\nNumberOfDocks=2\n\
+                [Pad]\nUnitRepair=no\nNumberOfDocks=3\n\
+                [Lot]\nUnitRepair=yes\nNumberOfDocks=1\n";
+    let (s, w) = sim(text);
+    assert_eq!(s.buildings["Bay"].econ.number_of_docks, Some(2));
+    assert!(warned(&w, "buildings Bay NumberOfDocks=2 on a repair depot"));
+    assert!(!warned(&w, "buildings Pad NumberOfDocks"));
+    assert!(!warned(&w, "buildings Lot NumberOfDocks"));
+}

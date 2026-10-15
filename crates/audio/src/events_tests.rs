@@ -1468,3 +1468,43 @@ fn instance_draws_take_the_shared_stream() {
     assert!(u.taken() > before, "the pass drew from the shared stream");
     assert_eq!(a.mixer().rng(), &own, "the mixer's own stream is untouched");
 }
+
+// spec: S-0314 claim 6; S-0701 claim 28 and F7 (repair complete: the depot owner's announcement when it is the local player, through the unit repaired radar event, 2 cells and 400 ticks; a nearby event suppresses it)
+#[test]
+fn depot_repair_complete_announcement() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = |h: u8| Effect::Sound {
+        sound: Sound::UnitRepaired,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: Some(at),
+    };
+    let mut a = announcing(&w, &[(Announcement::RepairComplete, "Fixed")]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1)], &mut u);
+    assert!(!announced(&mut a, 1000), "another house's depot: nothing");
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(announced(&mut a, 2000), "the local player's depot announces");
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(!announced(&mut a, 3000), "a nearby unit repaired event suppresses it");
+}
+
+// spec: S-0314 claim 6 (the depot's low-funds announcement: the local player's only, no suppression)
+#[test]
+fn depot_low_funds_announcement() {
+    let w = world();
+    let fx = |h: u8| Effect::Sound {
+        sound: Sound::LowFunds,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: None,
+    };
+    let mut a = announcing(&w, &[(Announcement::LowFunds, "Funds")]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1)], &mut u);
+    assert!(!announced(&mut a, 1000));
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(announced(&mut a, 2000));
+}

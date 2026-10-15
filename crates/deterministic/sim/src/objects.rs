@@ -124,6 +124,7 @@ pub fn create_converted(
         drive: matches!(loco, Locomotor::Drive | Locomotor::Ship).then(DriveState::new),
         walk: (loco == Locomotor::Walk).then(WalkState::default),
         infantry: (kind == Kind::Infantry).then(InfantryState::default),
+        depot: crate::depot::DepotState::default(),
         teleport: (loco == Locomotor::Teleport).then(crate::teleport::TeleportState::default),
         spawn: None,
         rocket: None,
