@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -159,7 +159,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   is inside a tunnel while its type has the deploy-to-fire flag (Import mapping). Infantry,
   aircraft and buildings always pass it.
 - **Deploy readiness.** Whether an object can carry out a deploy now, by its kind. Never on a
-  tunnel cell or at a tunnel's edge (*tunnel cell* below). A building never has it. An aircraft has
+  tunnel cell (the marked-cell or edge predicate below; S-0507 claim 7). A building never has it. An aircraft has
   it when it is not disabled and its type can carry passengers. An infantry unit has it when its
   type deploys in place, and, if its type has an undeploy delay, when it is neither deployed nor
   undeploying nor within the timer that follows a deploy. A vehicle has it when it is not
@@ -245,9 +245,16 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   change any result (claim 2).
 - **Terrain-fire weapon.** A weapon whose type carries the terrain-fire flag (Import mapping).
 - **Rock overlay.** An overlay whose type carries the rock flag (Import mapping).
-- **Tunnel cell.** A cell whose land type is the tunnel land type, or a cell that the original
-  counts as lying at the edge of one (low for the edge rule). A *tunnel entrance* is a cell whose
-  tile is a tunnel tile.
+- **Tunnel cell.** For these input rules, a tunnel-marked cell or a tunnel edge for unloading
+  as used by S-0507 claim 7. A cell is *tunnel-marked* only when its land type is tunnel and it
+  is recorded as the entrance of an existing map tube (S-0212 claim 7); tunnel land alone does
+  not qualify. A cell is an *edge* when, in map north or map west, either its first neighbour
+  is tunnel-marked and its second is not, or its second is tunnel-marked and its third is not.
+  All cells in the chosen sequence through the non-marked cell must exist. No south, east or
+  diagonal test is added. Thus non-tunnel-land cells one or two cells south or east of the last
+  marked cell of a tunnel band can qualify. Confidence: high; backing: `measurable`
+  (S-0507 claim 7, scenario T7). A *tunnel entrance* for the cell-action tables is instead a
+  cell whose tile is a tunnel tile.
 - **Destroyable-cliff cell.** A cell whose tile number *t* satisfies *s* ≤ *t* ≤ *s* + 1 and
   0 ≤ *t* < *N*, where *s* is the start of the theater's destroyable-cliff role (S-0010) and *N*
   the theater's tile count: the role covers two tile numbers. The same rule holds whether or not
@@ -2700,8 +2707,7 @@ or gives a selection response falsifies its corresponding type-expansion rule.
 - Whether the command bar with its attack-move button is available in a default skirmish.
 - Which disguises are overlay types (scenery check), and how often a disguise belongs to no house
   in stock data.
-- Several low-confidence details are stated only by their effect and are not identified: the rule
-  by which a cell counts as lying at the edge of a tunnel (Terms, *tunnel cell*); the
+- Two low-confidence details are stated only by their effect and are not identified: the
   neighbour step that anchors a foundation wider or deeper than 2 cells (row VD2); and the relaxed
   entry test of row GC10.
 - Row BC3: a building with no weapon in its first slot gets *attack* on a cell. Since row GC4
@@ -2723,9 +2729,9 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   part D).
 - Whether a unit below the surface can be selected (Terms, *can be selected*; the T10 line for
   row b2 records it). Cloak and scenery-disguise exclusions are settled by S-0516 claims 26 and 36.
-- Transport readiness is S-0507 claim 7's. Its tunnel-edge classification and unreachable
-  tube-interior and non-bunker building-cell witnesses remain that claim's stated uncertainties,
-  not an open bridge or water rule here.
+- Transport readiness is S-0507 claim 7's, including its exact tunnel-marked/edge predicate.
+  Ordinary-input witnesses for tube-interior and non-bunker building-cell readiness remain
+  open there, not the tunnel-edge geometry or the bridge and water rules here.
 - Whether an object of the allied bystander can be clicked while it stands in shroud, which Scenario T7
   step (c) needs.
 - Which movement zone a building type has when its section sets none (row B10), and whether S-0211's
