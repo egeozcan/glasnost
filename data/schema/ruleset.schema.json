@@ -8235,8 +8235,18 @@
           "type": "boolean",
           "default": true
         },
+        "repeated_lightning_strike_suppressed": {
+          "description": "Off (the original): every lightning-strike action makes a cloud, repeated ones at one waypoint included; on: after one cloud made by the action at a waypoint, further actions at that waypoint make none.",
+          "type": "boolean",
+          "default": false
+        },
         "resource_timers_carry_over": {
           "description": "Resource timers carry over between games of one session.",
+          "type": "boolean",
+          "default": true
+        },
+        "restoration_failed_return_removes_unit": {
+          "description": "A starting-building restoration whose forced placement fails removes a displaced unit that cannot be put back at its original position; off: such a unit is kept and placed at a nearby cell instead.",
           "type": "boolean",
           "default": true
         },
@@ -8649,6 +8659,16 @@
           "description": "The tread entry is used for no current sequence on water only, not beach.",
           "type": "boolean",
           "default": true
+        },
+        "trigger_crate_expiry_while_disabled": {
+          "description": "Off (the original): an uncollected trigger crate never expires while crates are off; on: it expires after its assigned lifetime. Not consulted yet (crates, S-0520, are not built).",
+          "type": "boolean",
+          "default": false
+        },
+        "trigger_crate_respects_setting": {
+          "description": "Off (the original): the create-crate action ignores the crate setting; on: it has no effect while crates are off. Not consulted yet (crates, S-0520, are not built).",
+          "type": "boolean",
+          "default": false
         },
         "turn_rate_negative_wrap": {
           "description": "A negative turn-rate field acts through its remainder modulo 256.",
@@ -10920,6 +10940,14 @@
             "type": "string"
           }
         },
+        "bright": {
+          "description": "`Bright`, the flash permission of the demolition warhead (S-0524\nclaim 6, I2); absent: false.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "causes_delay_kill": {
           "description": "`CausesDelayKill` (S-0302 claim 16).",
           "type": [
@@ -10930,6 +10958,17 @@
         },
         "cell_spread": {
           "description": "`CellSpread` S, cells (S-0303), a single.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "combat_light_size": {
+          "description": "`CombatLightSize`, the flash-size fraction (S-0524 claim 6, I2), a\nsingle; absent: 0.",
           "anyOf": [
             {
               "$ref": "#/$defs/Decimal"
