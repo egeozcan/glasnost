@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -365,7 +365,8 @@ S-0501 claim 20.
    - Confidence: high for the construction; medium for radial segments and the aircraft exceptions
 
 8. **Placement.** The projectile is placed at the fire point (claim 5 for dropping ones) and enters
-   play (S-0203 claim 4). Its first turn is in the same tick.
+   play (S-0203 claim 4). Its first turn is in the same tick unless an earlier removal in the
+   turn pass costs it that turn (State and ordering).
    - Backing: `measurable` through S-0203 scenario O1
    - Confidence: high
 
@@ -607,23 +608,30 @@ S-0501 claim 20.
       | the condition above does not hold, and *D*_R < 32 | the target's reference point |
       | neither | unchanged |
 
-      All comparisons are strict. Inaccurate and airburst projectiles keep their own position.
+      All comparisons are strict. Inaccurate and airburst projectiles are not snapped by (b) or
+      (c); the raise of (a) still applies.
     - Backing: `measurable` (scenario P13; P24 for the raise of (a))
     - Confidence: medium
 
 21. **Several detonations.** Ordinary detonation damage is S-0303's area damage at the detonation
-    point. A latching weapon is an exception (S-0614 claim 1): its detonation makes no area-damage
-    hit, whether or not the parasite latches. It attempts to latch onto the projectile's target
-    object regardless of the detonation point's distance from that object; a cell target or a
-    target that no longer exists gives a failed latch. S-0614 claim 1 owns that delivery and
-    leaves later visual effects unchanged.
+    point. A projectile whose warhead has the parasite flag is an exception (S-0303 claim 2):
+    its detonation bypasses area damage, whether attachment succeeds or fails. Its later
+    explosion animation and debris remain unchanged. This exception applies only to projectile
+    detonations, not to non-projectile producers using the same warhead. For a latching weapon,
+    S-0614 claim 1 owns delivery: it attempts to latch onto the projectile's target object
+    regardless of the detonation point's distance from that object; a cell target or a target
+    that no longer exists gives a failed latch.
     What each ordinary area-damage detonation passes to S-0303 (Terms there; glossary
     *detonation*) is:
     the projectile's damage amount at that moment (the shot's damage, less the points that claim 18
     took in earlier turns; the same amount for every cluster detonation), the warhead of the shot's
     weapon, and the attacker and attacking house that S-0302 (claim 1) gives a projectile's
-    detonation: the firer and its house while the firer has not been killed since the shot, neither
-    otherwise (claim 17). The nuclear wait of claim 25 changes none of these. The children of an
+    detonation: the firer and its house unless, between the shot and detonation, the firer was
+    killed, removed from the game by any other means or, believed, started to cloak; neither is
+    carried in those cases. Loading the firer into a closed transport is believed not to end
+    this attribution. These are S-0302 claim 1's rules and confidence qualifications, also used by
+    S-0303 claim 14; claim 17 here concerns continued flight, not attribution. The nuclear wait
+    of claim 25 does not preserve attribution against any of those intervening events. The children of an
     airburst (below) are projectiles of their own: each passes the damage amount and warhead of the
     airburst weapon and takes the firer of the projectile that launched it, so the same
     attacker rule applies at their detonation.
@@ -646,11 +654,16 @@ S-0501 claim 20.
       the draw of each; P14 variant d, with the random-state recorder, for the ranged draw and raw
       value after every detonation, the last included, for a cluster count of 1 and of 3, and for
       no draw at a cluster count of 0; S-0302's scenarios D13, D17 and D24, which own the rule, for the attacker and attacking house
-      that each detonation carries; S-0614 scenarios P1 and P3 for the latching-weapon exception),
+      that each detonation carries; S-0614 scenarios P1 and P3 for the parasite-projectile
+      exception; S-0303 scenario A14 variant o for its later explosion animation and debris),
       and `unmeasured` for the case of a projectile that leaves play during its own detonation (no such
-      case is established)
+      case is established) and for loss of attribution through a firer's removal by a means other
+      than killing or starting to cloak (S-0302 claim 1 identifies no reproducible setup).
+      The cloak and closed-transport cases use S-0302 scenario D24 parts b5 and b4 respectively.
     - Confidence: high for the count, the draw after each detonation and the absence of area
-      damage for a latching weapon; medium for the children and distance-independent latching
+      damage for a parasite-warhead projectile; medium for the children, distance-independent
+      latching and killed-firer attribution; low for the cloak and closed-transport attribution,
+      as in S-0302 claim 1
 
 ### Eligibility and line of fire
 
@@ -718,7 +731,8 @@ S-0501 claim 20.
     holds, and leaves play in that turn. So the damage of such a shot lands one animation length
     after the projectile arrives, not on arrival (S-0203 claim 5 d). A projectile whose warhead has
     any other name detonates as every other projectile does, whatever the superweapon settings say.
-    - Backing: `measurable` (scenario P19; its run d for the comparison without regard to case)
+    - Backing: `measurable` (scenario P19; its run d for the comparison without regard to case
+      and run e for the absent fireball-animation type)
     - Confidence: medium (the selection by name and the wait: high; the radar event and the
       creation of the animation at the snapped position: medium)
 
@@ -1162,8 +1176,8 @@ that no fix would change.
   solution for distance *d* but none for *d* + 1, the sign of the original's launch angle is
   unspecified: nothing that this spec describes determines it. Our engine treats a failed
   *d* + 1 solve as θ′ ≥ θ (launch at θ); fixed, no switch, no warning (it is not a data problem).
-  This is neither of the glossary's two departure cases but a design choice, so it needs the
-  project lead's acceptance (Questions for the project lead).
+  This design-choice departure was accepted under the project lead's delegated sign-off
+  (Questions for the project lead).
 - **`quirks.zero_distance_arc`** (default on). An arcing shot whose impact point lies exactly
   below the fire point (planar distance 0, Δ*z* < 0) is launched by F4's zero-distance rule
   (claim 6 a): with a start speed above 0 a lob goes straight up and the flatter shot straight
@@ -1394,8 +1408,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   24: the claim 4 radius and direction (the impact point at 256 to 512 from the aim point, which
   changes only the launch direction), then the claim 9 radius and direction; the detonation point as in (d).
 - Falsified if: any distance lies outside its band, the chi-square test of the main run rejects
-  evenly spread directions (*p* ≤ 0.01), or the draw count differs (in particular four draws in
-  (e), or two in (d)).
+  evenly spread directions (*p* ≤ 0.01), or the draw count differs (in particular two draws in
+  (e), or four in (d)).
 - Variant f (open-topped reduction, claim 4 and S-0307 claim 13): the flak-scattering weapon of
   variant b with a range of 10 cells, fired by a stock vehicle that the test file makes an
   open-topped transport with that weapon, carrying one infantry passenger whose type's primary
@@ -1501,9 +1515,11 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Observable: detonation tick and point, and the start-of-turn height in the detonating turn.
 - Runs: 1.
 - Expected: detonation in the first turn whose new position lies in the target cell, with a
-  start-of-turn height below 208, at that position (no target object, so no snapping).
-- Falsified if: it flies through the cell, or detonates in the cell with a start-of-turn height of
-  208 or more.
+  start-of-turn height below 208. The detonation point is given by claim 20: a cell target can
+  snap too, so use the recorded velocity and F9 to predict whether it stays at the new position
+  or moves to the cell's reference point.
+- Falsified if: it flies through the cell, detonates by the reached-cell row with a start-of-turn
+  height of 208 or more, or its detonation point differs from claim 20's predicted point.
 
 **P8. Vertical projectiles (claims 1, 2, 5, 6, 11).**
 - Setup: a large flat open map, so that a level shot flies at least 60 cells before it leaves the
@@ -1559,8 +1575,10 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   target 10 cells away (the shot then leaves a quarter turn clockwise of the body facing, claim 7,
   so the first signed facing difference is about 16384). Run f (near-target factor): turn rate
   20, speed field 25, the same firer and a stationary target 8 cells away, arm field 1000.
-  Run g (no target): as run a, with the target destroyed by another weapon when the projectile is
-  half way (the missile safety altitude is the 500 of the test file). Run h (launch pitch): as run a with the target on
+  Run g (no target): as run a, but with an anti-air projectile and a hovering aircraft target
+  destroyed by another weapon when the projectile is half way, while still airborne (as in P11
+  run a). A ground target would leave a cell target instead and cannot test this case. The
+  missile safety altitude is the 500 of the test file. Run h (launch pitch): as run a with the target on
   ground 4 levels higher, 5 cells away. Run i (length kept by the rebuild, claim 15): turn rate 5,
   acceleration 3, speed field 0 (top speed 0), course lock duration 0, a stationary target vehicle
   on ground 4 levels higher, 2 cells away (so direct mode by distance, and the goal pitch is well
@@ -1909,6 +1927,13 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   reference to it) re-spelt in lower case, so that the warhead type is first registered, and so
   stored, in lower case (S-0004 claim 7). Expected: as run a. Falsified if it behaves as run b
   (health falls on arrival, no flash, no animation).
+- Run e (absent fireball-animation type): use run a with a named loose rules copy that removes
+  the fireball type from the animation list and removes every reference that would register it
+  indirectly (S-0004). The recorder must confirm no type is registered under that name before
+  the shot; otherwise the run is void. Record one shot's arrival, flash, radar event, animation
+  creation and health loss. Expected: the flash and radar event still occur on arrival, no
+  fireball animation is created, and health falls in that same projectile turn with no waiting
+  interval. A created fireball or a postponed health loss in a valid run falsifies the rule.
 
 **P20. Radial fire segments (claims 2, 7).**
 - Setup: the test file gives a stock turreted vehicle 4 radial fire segments and a weapon with a
@@ -1929,6 +1954,7 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 
 **P21. Dropping projectiles (claims 5, 8; T1).**
 - Setup: a test aircraft with a weapon whose projectile has the dropping flag, not inaccurate,
+  and turn-rate field 5 (so neither aircraft velocity exception of claim 7 applies),
   flying over an enemy ground vehicle; the test file gives the weapon a lateral fire-point shift of
   100 leptons (S-0313) so that the fire point differs from the aircraft's position.
 - Observable: the firer's position and aiming facing and the projectile's first position and first
