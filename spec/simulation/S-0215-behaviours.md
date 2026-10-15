@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2066,10 +2066,14 @@ apply in our engine to the actors of every player house.
       such as the opportunity-fire flag).
 
     *Sticky* is not in this list, although it is processed as *guard*. *Area guard* and *hunt*
-    search from their processing instead (claims 26 and 27). Every search, whoever runs it,
-    restarts the targeting timer with *N* + *U*(0, 2) ticks, where *N* is the game-wide area-guard
-    targeting delay if the current behaviour is *area guard* and the normal targeting delay
-    otherwise (Import mapping). Which targets a search leaves as opportunity targets is owned by
+    search from their processing instead (claims 26 and 27). Every search covered by S-0309
+    claim 4 restarts the targeting timer with *N* + *U*(0, 2) ticks, where *N* is the game-wide
+    area-guard targeting delay if the current behaviour is *area guard* and the normal targeting
+    delay otherwise (Import mapping). The charging break-off search of S-0518 claim 15 and
+    S-0309 claim 1 runs inside infantry attack processing without waiting for or restarting the
+    targeting timer, and takes no targeting-timer draw. Its replacement can be attacked in that
+    same processing. Claim 33's observable ordering of processing draws before per-tick-search
+    draws does not govern this inside-processing search. Which targets a search leaves as opportunity targets is owned by
     S-0309 (claims 23 and 24). On each tick, an actor whose target is an opportunity target drops it if its current
     behaviour is *ambush*, *construction*, *enter*, *harmless*, *missile*, *open*, *repair*,
     *selling*, *sleep*, *stop*, *unload* or *wait* (an actor whose current behaviour is *none*
@@ -2102,8 +2106,9 @@ apply in our engine to the actors of every player house.
     - Backing: `measurable` (scenario B10 for the timer reset and the behaviour lists, with case e
       for the drop rule and part a; scenario B27, case a for part d, case b for part b and case c
       for part c; the attack-move exception by S-0309, scenario A6, parts d, g and l; the
-      paragraph on actors with an attack-move memory by scenario B27, case e)
-    - Confidence: high (the timer reset, the behaviour lists, the attack-move exception and parts a
+      paragraph on actors with an attack-move memory by scenario B27, case e; the charging
+      break-off exception by S-0518 scenario TC3 and S-0309 scenario A17)
+    - Confidence: high (the timer reset, the charging break-off exception, the behaviour lists, the attack-move exception and parts a
       to d); medium (the passive-search conditions, owned elsewhere, and the paragraph on actors
       with an attack-move memory)
 
@@ -2574,9 +2579,11 @@ leptons (Import mapping), with no factor and no limit; when no rules layer gives
 uses the first form of *L* instead (claim 36 b, a departure). The actor drops its target and returns when
 the distance of F4 (with the building reduction) is greater than *L*.
 
-**F6. Targeting timer.** On every automatic search, the targeting timer is set to
-*N* + *U*(0, 2) ticks, where *N* is the area-guard targeting delay (current behaviour *area guard*)
-or the normal targeting delay (otherwise), both integers in ticks.
+**F6. Targeting timer.** On every automatic search covered by S-0309 claim 4, the targeting
+timer is set to *N* + *U*(0, 2) ticks, where *N* is the area-guard targeting delay (current
+behaviour *area guard*) or the normal targeting delay (otherwise), both integers in ticks.
+The charging break-off search of S-0518 claim 15 leaves this timer unchanged and takes no
+targeting-timer draw (claim 33).
 
 **F7. Retaliation reach for human-controlled owners.** The actor overrides to *attack* against an
 attacker it cannot reach if ρ₃(actor, attacker) ≤ (*S* + 0.5) × 256, *S* the type's sight in cells
@@ -2788,10 +2795,11 @@ properties (rate, anti-air rate) of the behaviour that is current (claim 5).
 
 **T2. Delays and draws of the general-purpose processings** (mobile actors), plus the infantry rows
 of claims 23 and 27; see the claims for the other kind-specific rules. "Std" is the standard delay *D*<sub>r</sub> + *U*(0, 2). The draw column counts
-draws of the processing itself; a target search it runs adds the search's own draws (one *U*(0, 2)
-for the targeting timer, claim 33, plus the draws S-0309 gives in its claim 12: none for an actor
-of a player house, and the disguise draws of its claim 25, part g, for the neutral and special
-houses).
+draws of the processing itself; a target search it runs adds the search's own draws. A search
+covered by S-0309 claim 4 adds one *U*(0, 2) for the targeting timer (claim 33); the charging
+break-off search of S-0518 claim 15 adds no targeting-timer draw. Candidate draws are those
+S-0309 gives in its claim 12: none for an actor of a player house, and the disguise draws of its
+claim 25, part g, for the neutral and special houses.
 
 | Behaviour | Outcome | Delay (ticks) | Draws |
 |---|---|---|---|
@@ -3124,10 +3132,7 @@ Any other value *c* gives *w*(trunc(*c* × 256)) leptons, with *w* of F1, or 0 w
 two), and it is converted to a signed 32-bit integer as F1 converts *p*.
 For example 4.5 cells give 1152 leptons and 0.3 cells (held as 0.300000011920929) give 76.
 
-The infantry type singled out by name in claim 30 is the one whose type name is `DESO`, compared
-without regard to case. This name is fixed in the original's program, not taken from data: a mod
-that renames that type loses the rule, and a mod that gives another type this name gains it
-(`quirks.named_deploy_area_fire`, Edge cases and quirks).
+The infantry type singled out by name in claim 30 is identified by a type name fixed in the original's program and compared without regard to case. The literal name is omitted here: a mod that renames that type loses the rule, and a mod that gives another type the hard-coded name gains it (`quirks.named_deploy_area_fire`, Edge cases and quirks).
 
 The guard-area veterancy ability and the explosive-charges veterancy ability are entries of the
 veterancy ability lists (veterancy specs).
@@ -4595,7 +4600,11 @@ D17 d3 for immediate fresh search and same-tick follow-up; and S-0208 claim 19 w
 claim 10 here for teleport landing and target-loss/reversion. Retain claim 2's phase-in
 processing, claim 11's unchanged factory ready mark and claim 13's restoration hand-off
 to S-0207 claim 21; S-0417's release and temporary driving do not supply exceptions to
-them. These are coordination checks, not additional rules of this spec.
+them. Confirm claim 33's charging break-off exception with S-0309 claims 1 and 4 and
+S-0518 claim 15. Also retain claim 37's approach trigger, destination retention and processing
+contract with S-0307 claims 15 to 25, S-0212 claim 25's failed-approach parameters and
+S-0208 claims 3, 17 and 21's position-choice and walking outcomes. These are coordination
+checks, not additional rules of this spec.
 
 ## Questions for the project lead
 
