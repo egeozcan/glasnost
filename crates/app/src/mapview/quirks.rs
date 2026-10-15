@@ -164,7 +164,7 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "slot_values_replace_animation_adjustments",
-        "S-0102 claim 17: the on state is drawn; the off state (the slot's values added to the type's) is not implemented, as the animation type's own depth and sort adjustments are not imported",
+        "S-0102 claim 17: the on state is drawn; the off state (the slot's values added to the type's) is not implemented",
     ),
     // S-0103
     (
@@ -250,43 +250,19 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     // S-0109
     (
         "anim_damage_starts_at_one",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_followup_keeps_step",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_followup_start_doubled",
-        "S-0109: animation playback is not implemented",
+        "S-0109 claim 17: animation damage over time is simulation state and is not modelled",
     ),
     (
         "anim_hide_at_level_15",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_loop_count_wrap",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_loop_end_from_sprite",
-        "S-0109: animation playback is not implemented",
+        "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
     ),
     (
         "anim_low_detail_shows_cloaked",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_pingpong_lower_turn",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_reverse_raw_loop_end",
-        "S-0109: animation playback is not implemented",
+        "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
     ),
     (
         "anim_translucency_levels",
-        "S-0109: animation playback is not implemented",
+        "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
     ),
     // S-0111
     (
@@ -466,6 +442,9 @@ mod tests {
             OverlayQuirks::default().named().to_vec(),
             PaletteQuirks::default().named().to_vec(),
             ShroudQuirks::default().named().to_vec(),
+            crate::mapview::anims::AnimQuirks::default()
+                .named()
+                .to_vec(),
         ]
         .concat();
         assert!(

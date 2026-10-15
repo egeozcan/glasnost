@@ -153,6 +153,24 @@ pub struct AnimType {
     pub normal_light: bool,
     /// New-theater type.
     pub new_theater: bool,
+    /// Rate field ρ as given (S-0109 claim 2).
+    pub rate: Option<i32>,
+    /// Normalised to the game speed (S-0109 claim 4).
+    pub normalized: bool,
+    /// Loop start λ<sub>s</sub>.
+    pub loop_start: i32,
+    /// Loop count *L*.
+    pub loop_count: i32,
+    /// Ping-pong flag (S-0109 claim 9).
+    pub ping_pong: bool,
+    /// Random loop delay pair, in updates (S-0109 claim 11).
+    pub random_loop_delay: (i32, i32),
+    /// Follow-up type name (S-0109 claim 15).
+    pub next: Option<Vec<u8>>,
+    /// Animation depth adjustment (S-0102 claim 13).
+    pub z_adjust: i32,
+    /// Animation sort adjustment (S-0102 claim 5).
+    pub y_sort_adjust: i32,
 }
 
 /// Reads an animation type's drawing fields from its art section.
@@ -200,6 +218,24 @@ pub fn read_anim(art: &Document, image: &[u8]) -> AnimType {
         // spec: S-0109 Import mapping (Theater, NewTheater); Terms (new-theater type: the flag
         // without the theater flag)
         new_theater: flag(b"NewTheater", false) && !flag(b"Theater", false),
+        // spec: S-0109 Import mapping (Rate absent: delay 1; Normalized, PingPong absent no;
+        // LoopStart, LoopCount absent 0; RandomLoopDelay absent 0,0; Next absent none)
+        rate: int(b"Rate"),
+        normalized: flag(b"Normalized", false),
+        loop_start: int(b"LoopStart").unwrap_or(0),
+        loop_count: int(b"LoopCount").unwrap_or(0),
+        ping_pong: flag(b"PingPong", false),
+        random_loop_delay: art.value(image, b"RandomLoopDelay").map_or((0, 0), |v| {
+            let ([d1, d2], _) = value::int_tuple_or::<2>(v, [0, 0]);
+            (d1, d2)
+        }),
+        next: art
+            .value(image, b"Next")
+            .map(|v| value::text(v, usize::MAX).to_vec())
+            .filter(|n| !n.is_empty() && !value::is_no_type(n)),
+        // spec: S-0102 Import mapping (ZAdjust, YSortAdjust absent 0)
+        z_adjust: int(b"ZAdjust").unwrap_or(0),
+        y_sort_adjust: int(b"YSortAdjust").unwrap_or(0),
     }
 }
 
@@ -252,14 +288,43 @@ pub fn shown_at(t: &AnimType, detail: i32) -> bool {
 /// whose fade level is 0 (S-0109 claim 20, *t* = 0, stage *k* = 0), at the
 /// player's detail level `detail`, its sprite holding `n` image frames.
 pub fn first_translucency(t: &AnimType, detail: i32, n: i32) -> u8 {
+    translucency(t, detail, 0, end_in_play(t, n))
+}
+
+/// The fade code of a translucent-flag type at stage `k` with end field
+/// `e` in play (S-0109 claim 20, F4's integer reduction).
+pub fn fade_code(k: i32, e: i32) -> u8 {
+    let (k, e) = (i64::from(k), i64::from(e));
+    // spec: S-0109 F4 (E > 0: 5k ≥ 3E, 5k > 2E, 5k > E; E = 0: k > 0 gives 3; E < 0: 5k > 3E,
+    // 5k > 2E, 5k > E)
+    let three = match e.cmp(&0) {
+        std::cmp::Ordering::Greater => 5 * k >= 3 * e,
+        std::cmp::Ordering::Equal => k > 0,
+        std::cmp::Ordering::Less => 5 * k > 3 * e,
+    };
+    if three {
+        3
+    } else if e != 0 && 5 * k > 2 * e {
+        2
+    } else if e != 0 && 5 * k > e {
+        1
+    } else {
+        0
+    }
+}
+
+/// The translucency code of an animation of type `t` whose translucency
+/// level is 0 (S-0109 claim 20: every animation but a building's slot
+/// animations), at stage `k` with end field `e` in play, at the player's
+/// detail level `detail`.
+pub fn translucency(t: &AnimType, detail: i32, k: i32, e: i32) -> u8 {
     // spec: S-0109 claim 20 (below the translucency detail field the code is 0)
     if detail < t.translucency_detail {
         return 0;
     }
     if t.translucent {
-        // spec: S-0109 claim 20, F4 (fade by progress: k = 0 exceeds 0.6 E, 0.4 E and 0.2 E only
-        // when E < 0, giving code 3)
-        if end_in_play(t, n) < 0 { 3 } else { 0 }
+        // spec: S-0109 claim 20, F4 (fade by progress)
+        fade_code(k, e)
     } else if t.translucency > 0 {
         // spec: S-0109 claim 20 (a field of 25, 50 or 75 gives 1, 2 or 3; any other positive value 0)
         match t.translucency {
@@ -399,5 +464,18 @@ mod tests {
         assert_eq!(code("[A]\nTranslucent=yes\n", 2), 0);
         assert_eq!(code("[A]\nTranslucent=yes\nEnd=-5\n", 2), 3);
         assert_eq!(code("[A]\n", 2), 0);
+    }
+
+    /// spec: S-0109 claim 20 and F4 (a translucent-flag type fades by its
+    /// progress k through its end E: code 3 from 5k ≥ 3E, 2 from 5k > 2E,
+    /// 1 from 5k > E, for E > 0; E = 0 gives 3 once k > 0)
+    #[test]
+    fn translucent_fade_by_progress() {
+        let codes: Vec<u8> = (0..10).map(|k| fade_code(k, 10)).collect();
+        assert_eq!(codes, [0, 0, 0, 1, 1, 2, 3, 3, 3, 3]);
+        assert_eq!(fade_code(0, 0), 0);
+        assert_eq!(fade_code(1, 0), 3);
+        let t = read_anim(&doc("[A]\nTranslucent=yes\n"), b"A");
+        assert_eq!(translucency(&t, 2, 6, 10), 3);
     }
 }

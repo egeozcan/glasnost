@@ -755,10 +755,12 @@ fn animation_start_sound() {
         Effect::Anim {
             name: "PUFF".into(),
             pos: Pos::new(0, 0, 0),
+            delay: None,
         },
         Effect::Anim {
             name: "Silent".into(),
             pos: Pos::new(0, 0, 0),
+            delay: None,
         },
     ];
     a.tick(&w, &fx, &mut u);

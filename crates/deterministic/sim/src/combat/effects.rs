@@ -14,6 +14,11 @@ pub enum Effect {
         name: String,
         /// Where.
         pos: Pos,
+        /// The stage delay the creation's ranged draw gave (S-0109 claim 3),
+        /// when the simulation took one; `None` when the type's range holds
+        /// one value or the rules do not list the type. Only the drawing
+        /// reads it: the simulation keeps no playback clock.
+        delay: Option<i32>,
     },
     /// A detonation happened (S-0303).
     Detonation {
@@ -143,9 +148,10 @@ pub enum Sound {
 /// a shot's or a death's animations stand in it is not established (S-0203
 /// claim 2, `unmeasured`).
 pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
-    crate::load::anim_created_at(w, name, Some((pos.x, pos.y, pos.z)));
+    let delay = crate::load::anim_created_at(w, name, Some((pos.x, pos.y, pos.z)));
     w.effects.push(Effect::Anim {
         name: name.to_owned(),
         pos,
+        delay,
     });
 }

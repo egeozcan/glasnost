@@ -1482,7 +1482,7 @@ fn building_fires_and_their_draws() {
             .effects
             .iter()
             .filter_map(|e| match e {
-                Effect::Anim { name, pos } => Some((name.clone(), pos.cell())),
+                Effect::Anim { name, pos, .. } => Some((name.clone(), pos.cell())),
                 _ => None,
             })
             .collect();

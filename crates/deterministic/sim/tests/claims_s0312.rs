@@ -227,7 +227,7 @@ fn anims(w: &World) -> Vec<(String, Pos)> {
     w.effects
         .iter()
         .filter_map(|e| match e {
-            Effect::Anim { name, pos } => Some((name.clone(), *pos)),
+            Effect::Anim { name, pos, .. } => Some((name.clone(), *pos)),
             _ => None,
         })
         .collect()

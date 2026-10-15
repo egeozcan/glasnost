@@ -557,7 +557,7 @@ impl Audio {
     fn effect(&mut self, w: &World, e: &Effect, unsync: &mut Rng) {
         match e {
             // spec: S-0701 claim 22, S-0109 claim 13 (an animation's start sound, positional, any owner)
-            Effect::Anim { name, pos } => {
+            Effect::Anim { name, pos, .. } => {
                 let s = self.names.anim_report(name).map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }

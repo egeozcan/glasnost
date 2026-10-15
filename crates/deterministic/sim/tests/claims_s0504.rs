@@ -197,7 +197,7 @@ fn wakes(w: &World) -> Vec<Pos> {
     w.effects
         .iter()
         .filter_map(|e| match e {
-            Effect::Anim { name, pos } if name == WAKE => Some(*pos),
+            Effect::Anim { name, pos, .. } if name == WAKE => Some(*pos),
             _ => None,
         })
         .collect()

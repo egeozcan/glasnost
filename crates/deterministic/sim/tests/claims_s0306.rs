@@ -2068,7 +2068,7 @@ fn trailers(s: &S) -> Vec<Pos> {
     s.w.effects
         .iter()
         .filter_map(|e| match e {
-            glasnost_sim::combat::effects::Effect::Anim { name, pos } if name == "TRAIL" => {
+            glasnost_sim::combat::effects::Effect::Anim { name, pos, .. } if name == "TRAIL" => {
                 Some(*pos)
             }
             _ => None,
