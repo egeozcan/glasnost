@@ -324,6 +324,18 @@ fn superweapon_kind_link_and_action_words_layer() {
     assert!(w.iter().any(|m| m.contains("S-0512 claim 24")));
 }
 
+// spec: S-0513 claim 43 and Import mapping (the spy plane count compares the lengths of the compact creating infantry-reference list and the independently parsed count list: empty items and no-type names are omitted, an unknown name or a vehicle's name counts as an entry; S-0522 claim 2)
+#[test]
+fn spy_plane_count_lists_are_the_resolved_ones() {
+    let base = "[VehicleTypes]\n0=Truck\n[Truck]\nStrength=1\n\
+[General]\nAllyParaDropInf=Fresh,,Truck,none,<none>,Other\nAllyParaDropNum=1,2,3\n";
+    let (s, _) = import_with_map(base, "");
+    let g = &s.general.superweapons;
+    let inf = g.ally_para_drop_inf.clone().unwrap_or_default();
+    assert_eq!(inf.len(), 3, "resolved entries, not text tokens: {inf:?}");
+    assert_eq!(g.ally_para_drop_num.as_ref().map(Vec::len), Some(3));
+}
+
 #[test]
 fn one_text() {
     assert!(is_one_text("10e-1"));

@@ -610,6 +610,54 @@ fn descent(r: &Ruleset) -> (World, ObjectId, Vec<i32>) {
     (w, first, steps)
 }
 
+/// The total sensor-disc count of house `h` (the discs of its sensor units).
+fn disc_total(w: &World, h: u8) -> i32 {
+    w.cloak
+        .sensors
+        .iter()
+        .filter(|((hh, _), _)| *hh == h)
+        .map(|(_, n)| *n)
+        .sum()
+}
+
+#[test]
+fn claim9_12_release_adds_the_sensor_disc_at_the_release_cell_and_landing_keeps_it() {
+    // spec: S-0522 claim 9 (revision 5: a release adds any mobile sensor coverage at once at the release cell, with no adjacency reveal; descent does not relocate it) and claim 12 (landing supplies S-0516 claim 22's cell-arrival update, also in the same cell, before the parachute ends)
+    let mut r = rules();
+    {
+        let w = r.sim.infantry.get_mut("WALKER").unwrap();
+        w.combat.sensors = Some(true);
+        w.combat.sensors_sight = Some(2);
+    }
+    let mut w = game(&r);
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    // One round: this is the only drop, so no second trooper adds a disc.
+    hold(&mut w, p, x, y, 0, 1);
+    let first = transport::passengers(&w, p)[0];
+    assert_eq!(disc_total(&w, ALPHA.0), 0, "a passenger covers nothing");
+    assert!(paradrop::attempt(&mut w, p));
+    let release = w.obj(first).unwrap().pos.cell();
+    let disc = |w: &World| w.obj(first).unwrap().cloak.disc;
+    assert_eq!(
+        disc(&w),
+        Some((ALPHA, release)),
+        "the disc exists in the release tick, at the release cell"
+    );
+    assert!(w.cloak.sensors.contains_key(&(ALPHA.0, release)));
+    // Descent moves nothing; the landing keeps the disc at the same cell.
+    let mut ticks = 0;
+    while falling(&w, first) {
+        step(&mut w);
+        ticks += 1;
+        assert!(ticks < 5000);
+        assert_eq!(disc(&w), Some((ALPHA, release)), "not moved in the air");
+    }
+    assert_eq!(w.obj(first).unwrap().pos.cell(), release);
+    assert_eq!(disc(&w), Some((ALPHA, release)));
+    assert!(w.cloak.sensors.contains_key(&(ALPHA.0, release)));
+}
+
 #[test]
 fn claim12_parachute_recurrence_and_landing() {
     // spec: S-0522 claim 12 and F5 (S-0511 F3 with the parachute recurrence v′ = max(v − 1, floor) while the parachute is attached; landing below 1 lepton: height 0, no damage, stand)
