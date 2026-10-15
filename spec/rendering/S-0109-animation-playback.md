@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -859,7 +859,12 @@ advance of the same update. So:
 - **`quirks.anim_fast_rate_freezes`** (default: on). A rate field above 900 gives a delay of 0, so
   the animation never advances or ends through playback (claim 2). Off: a positive rate gives *d* =
   max(1, ⌊900 / ρ⌋). Rates of 0 or below still give 0 in both settings, except that −1
-  keeps the held delay (claim 2).
+  keeps the held delay (claim 2). This conversion also supplies the delay used for a
+  vehicle's in-place deploy and undeploy completion (S-0517 claim 7). Thus a rate above 900
+  can stall that transition under `quirks.deploy_stall_zero_delay`; turning
+  `quirks.anim_fast_rate_freezes` off removes that fast-rate cause of the stall, but does
+  not change the zero-delay rule for other rates. S-0517 claim 7 owns completion timing,
+  backing and confidence.
 - **`quirks.anim_random_rate_collapse`** (default: on). A random rate pair is clamped after
   conversion, so an ascending pair collapses to its faster end and takes no draw (claim 3). Off:
   the converted pair is put in order and the delay is a ranged draw over [min(*d*<sub>1</sub>,
@@ -1051,6 +1056,13 @@ building that can cloak), it sets them in the test map's override section, which
   - Runs: one.
   - Expected: it shows its first image frame on every one of the 600 ticks and is not removed.
   - Falsified if: any other image frame is recorded, or it is removed within the 600 ticks.
+  - Vehicle variant: use S-0517 scenario P1's named in-place deploy test vehicle on the
+    ground, with this presentation, no random rate or normalisation, and end field 5.
+    Give a deploy order and record transition state for 600 ticks, once. Expected in the
+    oracle: no completion, as for P1 Z's zero-rate presentation. Completion falsifies the
+    fast-rate stall. On our engine only, repeat with `quirks.anim_fast_rate_freezes` off
+    and `quirks.deploy_stall_zero_delay` on: the delay is 1 tick and completion follows
+    S-0517 claim 7. This last comparison tests the design alternative, not the oracle.
 - **AN3 (claims 3, 12).** Test types R1 (random rate 225, 450: ascending) and R2 (random rate 450,
   225: descending), played by a trigger action.
   - Observable: the hold per image frame of each run, and its first image frame; with a recorder

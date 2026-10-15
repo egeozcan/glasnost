@@ -65,7 +65,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0308](combat/S-0308-weapon-choice.md) | Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons) | combat | 5 | approved | — |
 | [S-0417](structures/S-0417-factory-unloading.md) | Factory unloading (doors, exit movement and rally destinations) | structures | 11 | approved | — |
 | [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 2 | approved | — |
-| [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 20 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 20 | approved | — |
 | [S-0313](combat/S-0313-firing-positions.md) | Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack) | combat | 3 | approved | — |
 | [S-0310](combat/S-0310-turrets-facing-for-fire.md) | Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving) | combat | 4 | approved | — |
@@ -122,3 +121,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 1 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings) | combat | 1 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 20 | approved | — |
+| [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 21 | approved | — |
