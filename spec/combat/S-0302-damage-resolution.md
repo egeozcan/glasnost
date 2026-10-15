@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -79,7 +79,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   spec. For an ordinary projectile detonation it is the projectile's damage when it detonates:
   the shot damage of
   claim 2, less whatever S-0306 (claim 18) took off it in flight, then scaled for prism support
-  when applicable (S-0518 claim 9 and F1). Special effects that replace area damage deliver no
+  when applicable (S-0518 claim 9 and F1). A disc-laser detonation instead delivers its held shot
+  damage unchanged (S-0615 claims 12 and 16). Special effects that replace area damage deliver no
   ordinary hit; electric charging is one such effect (S-0518 claim 11).
 - **Distance *r*.** The integer distance in leptons from the detonation point to the target that
   S-0303 gives with each hit; 0 for a hit that has no detonation point.
@@ -165,7 +166,11 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | The elimination of a house's remaining objects (S-0414 claim 5) | yes | yes | none | none |
    | Bridge destruction: ground-layer hits, landing hits after a deck drop, hits on units heading onto a lost deck, and low-strip kill checks (S-0511 claims 9–11 and 15) | yes | yes | none | none |
    | Crushing by trains (S-0210) | yes | S-0210 says | S-0210 says | S-0210 says |
-   | The damage of a damaging animation, such as a burning one (S-0109, claim 17) | not traced | not traced | not traced | not traced |
+   | Disc laser detonation (S-0615 claim 16) | no | no | the firer | none (`quirks.disc_laser_no_house`) |
+   | Genetic mutation, explosion mode (S-0611 claim 3) | no | no | none | the launching house |
+   | Genetic mutation, cell mode (S-0611 claim 4) | yes | no | none | the launching house |
+   | Psychic domination area damage (S-0612 claim 9) | no | no | none | the current storm owner, or none (below) |
+   | The area detonation of a damaging animation, such as a burning one (S-0109 claim 17) | no | no | none | none |
 
    The crate explosion and napalm rows describe their direct hits only; their additional area
    damage follows S-0303 with neither attacker nor attacking house (S-0520 claims 16 and 17).
@@ -176,9 +181,21 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    Other sources are believed to deliver damage that ignores defences too (side effects of some
    superweapons, the surfacing of tunnelling units); their owning specs give their markers,
    attacker and house. A detonation and a wave never ignore defences and never carry the
-   no-escape marker. Whether the damage of a damaging animation is a detonation in that sense,
-   and which attacker and house it carries, is not traced: S-0109 (claim 17) says what such an
-   animation delivers and when, and the combat specs own the rest.
+   no-escape marker. A damaging animation's owner house is not passed to its damage: even an
+   owned animation delivers its area detonation without an attacker or attacking house.
+   S-0109 claim 17 owns the delivered amount, warhead and timing.
+
+   Mutation's explosion mode delivers 10 000 health points with its explosion warhead; cell mode
+   delivers the infantry type's whole strength, at distance 0 leptons, with its cell warhead
+   (S-0611 claims 3 and 4). These are distinct deliveries, not two stages of one hit.
+
+   Domination samples the current storm owner before that tick's storm update, including cleanup.
+   This includes the latest requesting house while a storm is pending, but is none before any
+   request and after cleanup, not the owner of the last completed storm. Under
+   `quirks.dominator_damage_storm_house` (default on = original), this is the attacking house.
+   Off, it is the dominating house (S-0612 claim 9). The disc laser's absent attacking house is
+   governed by `quirks.disc_laser_no_house` (default on = original; off, the firer's house),
+   owned by S-0615 claim 16. Its attacker still supplies ordinary kill credit (claim 14).
 
    *The attacker of a projectile's detonation.* The detonation carries the object that fired the
    projectile as its attacker, and that object's owner as its attacking house, unless at some time
@@ -211,10 +228,15 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      radiation exposure through S-0525 claims 9 and 10, scenarios RF1 and RF7,
      gas-particle hits through S-0613 claim 13 and scenarios G4 and G10,
      planted bombs and suicide hits through S-0519 scenarios T6, T7 and T12, and
-     crate hits through S-0520 scenarios CR10 and CR12, with heal-all exceptions in D32),
-     `unmeasured` (a damaging animation's row:
-     its hit metadata is not established, so no expected outcome can yet be supplied for a
-     discriminating test; a firer removed
+     crate hits through S-0520 scenarios CR10 and CR12, with heal-all exceptions in D32,
+     mutation through S-0611 claims 3 and 4, scenarios MU1, MU2, MU4 and MU11,
+     domination through S-0612 claim 9, scenario PD5 part b,
+     disc-laser damage and attacker through S-0615 claim 16, scenarios DL1 and DL4, and
+     damaging-animation metadata through D33),
+     `unmeasured` (the disc laser's absent explicit attacking house: ordinary kill credit falls
+     back to its attacker and no discriminating house-only effect is identified (S-0615 claim 16),
+     and mutation's unset no-escape marker in cell mode: only infantry receive it, so vehicle crew
+     escape cannot distinguish the marker; a firer removed
      from the game in flight by some means other than a killing hit or a cloak: no such means is
      identified, so no scenario can set it up; the wave's
      attacking house column, and the absent attacking house of a planted-bomb detonation:
@@ -225,7 +247,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      does not provide a crewed target and an escape-chance control, so it cannot distinguish
      the marker values; the other believed scripted sources mentioned outside the table:
      no precise source setup and expected metadata are established here)
-   - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
+   - Confidence: high (detonations and waves never ignore defences and never carry no-escape,
+     mutation, domination, disc-laser and damaging-animation metadata; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
      owner; radiation-exposure and gas-particle metadata; crate-hit and suicide-hit metadata),
      medium (planted-bomb metadata; a
@@ -236,18 +259,19 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      the parasite-delivery row and the bridge-destruction row),
      low (the storm bolt,
      which the superweapon specs own; the ore burst's attacker and house, which follow from
-     claim 20 having no source object and house; the damaging-animation row, which is
-     not traced; that the detonations of a
+     claim 20 having no source object and house; that the detonations of a
      firer that starts to cloak carry neither attacker nor house; that those of a firer loaded into
      a closed transport still carry it; the other believed scripted sources without established
      setups)
 
 ### Firing side
 
-2. **Shot damage.** When an object fires a weapon, the projectile carries the shot damage *D*ₛ of
-   Formulas F1. *D*ₛ is fixed at the moment of firing from the weapon's damage field *D*: a change of
-   the firer's firepower multiplier or veterancy after the shot does not change it. The
-   projectile's type may lower it in flight (S-0306, claim 18); the detonation delivers the damage
+2. **Shot damage.** When an object fires a weapon, the projectile, or the disc laser created
+   instead of a projectile (S-0615 claim 12), carries the shot damage *D*ₛ of Formulas F1.
+   *D*ₛ is fixed at the moment of firing from the weapon's damage field *D*: a change of
+   the firer's firepower multiplier or veterancy after the shot does not change it. A disc laser
+   delivers its held *D*ₛ at its final step (S-0615 claim 16), without projectile flight loss.
+   For a projectile, the projectile's type may lower it in flight (S-0306, claim 18); the detonation delivers the damage
    the projectile has at that moment to each object it reaches (S-0303), except that prism support
    scales it after flight loss and before area damage: without integer wrap, the delivered amount
    is ⌊*D*ₜ × *M* / 256⌋, with integer *D*ₜ the damage remaining at detonation and integer *M*
@@ -275,13 +299,15 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      projectile flies; D29 parts a and b for the veteran combat factor, and for the rule that the
      firepower multipliers and the veteran combat factor leave a non-positive *D* unchanged,
      and D15 part d for a promotion during flight; S-0518 scenarios PS1 for support scaling
-     and TC1 and TC4 for electric-charge area-damage bypass); `unmeasured` (the 0 carried by sonic-wave and
+     and TC1 and TC4 for electric-charge area-damage bypass; S-0615 scenarios DL1, DL4 and
+     DL6 for disc-laser shot damage and the firing-side factors); `unmeasured` (the 0 carried by sonic-wave and
      fire-particle weapons, which is an amount the projectile carries; what such weapons observably
      deal is the wave's and the particles' own damage, which specs not yet written own, so no
      scenario of this spec can tell it; the combined result when a firer is in two or three of the
      three situations, which D20 cannot set up, since no known firer is in any two of them at once)
    - Confidence: high (the plain case, the firepower multipliers, each of the three multipliers
-     alone, the sign rule, support scaling and electric-charge area-damage bypass),
+     alone, the sign rule, support scaling, electric-charge area-damage bypass and disc-laser
+     shot damage),
      medium (that a crate picked up in flight changes nothing; the 0 carried
      by those weapons); low (that a promotion in flight changes nothing; the combined result of
      two or three of the multipliers, which no scenario reaches)
@@ -2037,6 +2063,21 @@ parts use their stated replay checks and rejection thresholds instead.
   health. Any different health delta falsifies the corresponding rule. S-0520 CR10 supplies
   the ordinary heal-all and transport controls; CR12 tests the separate direct damaging hits.
 
+- **D33 (claim 1: damaging-animation hit metadata).** Use a tiny named test map at speed 2,
+  director and mods off, with one bystander computer player kept away from the test area under
+  the glossary's void rule. A named animation-damage fixture gives an ordinary damaging animation
+  a known owner, damage and game-wide warhead, with no secondary effects; compare an ownerless
+  copy. Place isolated infantry and crewed vehicle targets within the area, with enough health
+  for several advances. Use two armour/versus settings that give different predicted ordinary
+  losses, and a separate lethal run with guaranteed crew escape and a legal free exit.
+  *Procedure:* let each animation advance without other attacks. *Record:* health per advance,
+  kills and losses credited to houses, and surviving crew, using the read-only recorder and
+  frame capture. *Expected:* ordinary defended area losses in both ownership cases, no attacking
+  house credited with kills, and crew escape on a lethal hit. The victim's house still records
+  its loss. *Falsified if:* animation ownership supplies kill credit, damage bypasses the stated
+  defences, or the lethal animation hit alone suppresses the guaranteed crew escape. S-0109
+  claim 17 supplies the per-advance amount; S-0312 claim 13 supplies the escape control.
+
 ## Open questions
 
 - From which side the alliance tests are made is not settled. Alliance is one-way (glossary,
@@ -2059,9 +2100,6 @@ parts use their stated replay checks and rejection thresholds instead.
   claim 7, its release by a sonic warhead and its silent removal when it leaves while suppressed).
   Those effects do not depend on any rule of this spec, so they happen even when claim 8 stops
   the hit; this spec does not cover them further.
-- The markers, attacker and attacking house of the damage that a damaging animation delivers (claim
-  1, last table row; S-0109, claim 17) are not traced; the combat and structures specs should
-  confirm them.
 - How long a crumbling terrain object stays in play, and when it leaves (claim 20), is not traced; a
   terrain spec should own it.
 - The value of the fixed factor by which a building's light-source intensity is scaled on *now
