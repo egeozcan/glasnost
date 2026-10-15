@@ -2,11 +2,11 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0216, Q-0470]
 supersedes: []
@@ -123,9 +123,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   displacements, in whole screen pixels (x to the right, y downward). Both are fields of the
   building's rules section, not of its art (import mapping; S-0108 reads the same two fields for
   its turret slot animation), and both are 0 when absent (claims 9 and 37).
-- **Cloak state.** Each object is in one of four cloak states: *uncloaked*, *cloaking* (fading
+- **Cloak state.** S-0516 claim 1 defines the four cloak states: *uncloaked*, *cloaking* (fading
   out), *cloaked*, *uncloaking* (fading in). Only *uncloaked* counts as fully visible here
-  (claim 31). Which events change the state belongs to the special-abilities specs.
+  (claim 31). S-0516 owns the cloak-state transitions.
 - **Turn rate.** A facing that turns toward a target facing does so at a turn rate *ω*, an integer
   (values above 127 count as 127). The turn's duration and per-tick step are integers (formula
   F9): a turn of *Δ* facing units (the shorter way round) takes *Θ = ⌊|Δ| / (256 ω)⌋* ticks and
