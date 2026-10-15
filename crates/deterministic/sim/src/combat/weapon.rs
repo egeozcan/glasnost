@@ -203,7 +203,12 @@ fn deployed_infantry_slot(w: &World, firer: ObjectId) -> Option<usize> {
         .and_then(|s| s.seq)
         .is_some_and(crate::infantry::Seq::is_deploy);
     // spec: S-0308 claim 8 (deploying: the deploy weapon index; in an open-topped transport the passenger index; else 0)
-    let i = if deployed { tc.deploy_fire_weapon } else { 0 };
+    let i = if deployed {
+        tc.deploy_fire_weapon
+    } else {
+        // spec: S-0308 claim 8 (not deploying, inside an open-topped transport with a passenger weapon index not −1: that index; else 0)
+        crate::transport::passenger_weapon_index(w, firer).map_or(0, |x| x as i32)
+    };
     // spec: S-0308 Edge cases (an index outside 0 … 17 is treated as 0, a departure)
     Some(if (0..SLOTS as i32).contains(&i) {
         i as usize
@@ -230,6 +235,13 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
         return weapon_number(w, firer);
     }
     // Row 2 (a garrisoned building) needs occupants, which the structures specs own.
+    let passenger = crate::transport::passenger_weapon_index(w, firer);
+    if !q.passenger_weapon_needs_secondary
+        && let Some(i) = passenger
+    {
+        // spec: S-0308 Edge cases (passenger_weapon_needs_secondary off: row 4 applies before row 3)
+        return i;
+    }
     let p = slot_weapon(w, firer, 0);
     let s = slot_weapon(w, firer, 1);
     let sec_never = s.is_some_and(|s| r.combat.weapon(s).never_use);
@@ -240,7 +252,10 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
     if sec_never {
         return 0;
     }
-    // Row 4 (a passenger of an open-topped transport) needs transports, which their specs own.
+    if let Some(i) = passenger {
+        // spec: S-0308 table P row 4 and claim 10 (a passenger of an open-topped transport whose type's passenger weapon index is not −1: that index)
+        return i;
+    }
     // spec: S-0308 Terms and S-0609 Terms (a gattling type is a gattling-flagged type that is also a multi-weapon type; only it reads the stage)
     if tc.multi_weapon && tc.gattling {
         // spec: S-0308 claim 7 (slot 2s + 1 against an object in the air when the anti-air test passes, else 2s)

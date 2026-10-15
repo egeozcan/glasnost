@@ -218,8 +218,52 @@ fn mark_killed(w: &mut World, id: ObjectId) {
     w.effects.push(Effect::Killed { id, pos: o.pos });
 }
 
-/// Takes a dead object out of play (S-0203 claim 6).
+/// Takes a dead object out of play (S-0203 claim 6). A transport's
+/// passengers still inside leave with it: they die when it is a vehicle
+/// whose type can crash (S-0312 claim 12, second row: on the ground it
+/// cannot crash), credited to no one (Q-0702 interim: the row names no
+/// credit), and are otherwise removed with it (Q-0702).
 pub fn leave_play(w: &mut World, id: ObjectId) {
+    let crash_row = w.obj(id).is_some_and(|o| {
+        o.kind == Kind::Vehicle
+            && w.rules()
+                .unit(o.kind, o.type_index)
+                .is_some_and(|u| u.vehicle.crashable)
+    });
+    if crash_row && crate::transport::count(w, id) > 0 {
+        let none = Hit {
+            amount: 0,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        };
+        // spec: S-0312 claim 12 (a type that can crash, on the ground: its passengers die when it leaves play)
+        crate::transport::kill_passengers(w, id, &none);
+    }
+    crate::transport::remove_passengers(w, id);
+    crate::objects::remove(w, id);
+}
+
+/// The death of a passenger inside a transport (S-0312 claims 5, 12 and
+/// 16): credited to the attacker of the killing hit, its destruction
+/// raises fire, and it shows no death effects of its own and takes no
+/// draws for them; it is then removed.
+pub fn passenger_death(w: &mut World, id: ObjectId, hit: &Hit) {
+    if w.obj(id).is_none() {
+        return;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        ob.health = 0;
+    }
+    mark_killed(w, id);
+    // spec: S-0312 claim 5 (each death is credited to the attacker of the killing hit)
+    crate::combat::damage::credit(w, id, hit);
+    // spec: S-0312 claim 5 (tagged passengers still receive destruction notifications; their actions complete before that passenger is removed)
+    destruction_raises(w, id, hit);
+    // spec: S-0312 claim 5 (no death effects of their own and no draws for them; the passenger is removed)
     crate::objects::remove(w, id);
 }
 
@@ -272,6 +316,10 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::spawn::killed(w, id);
     // spec: S-0312 table, step 1 (debris)
     debris(w, id);
+    // spec: S-0312 table, step 2 and claim 5 (an exploding object: passengers die, in the order held, before the death weapon)
+    if exploding(w, id) {
+        crate::transport::kill_passengers(w, id, hit);
+    }
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon)
     if exploding(w, id)
         && let Some((wp, dmg)) = death_weapon(w, id)
@@ -292,7 +340,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
             // spec: S-0312 claim 10 and table rows 4 and 8 (a vessel that sinks shows neither of claim 9's animations and takes neither list pick; its health is restored to 1 health point)
             let sinks = crate::naval::sinks_at_kill(w, id);
             if sinks {
-                // Passengers (claim 12) need transports.
+                // spec: S-0312 claim 12 (passengers claim 5 has not killed, before the crew, claim 13)
+                passengers_of_destroyed_vehicle(w, id, hit, crashable);
                 crew(w, id, hit);
                 if let Some(ob) = w.obj_mut(id) {
                     ob.health = 1; // spec: S-0312 claim 10 (its health is restored to 1 health point); claim 32 table row 1 (again at a further killing hit)
@@ -326,7 +375,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 let name = tc.destroy_anim[k].clone();
                 effects::anim(w, &name, o.pos);
             }
-            // Passengers (claim 12) need transports.
+            // spec: S-0312 claim 12 (after the vehicle's animations, before the crew, claim 13)
+            passengers_of_destroyed_vehicle(w, id, hit, crashable);
             crew(w, id, hit);
             if already_sinking && !crashable {
                 // spec: S-0312 claims 15 and 32 table row 2 (a vessel already sinking that fails claim 10's conditions ends at 0 health after claim 9's animations and draws; a type that cannot crash stays in play, still sinking: S-0504 claim 4 goes on, tick::object_turn)
@@ -349,7 +399,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 return;
             }
             // spec: S-0312 claim 16 (an aircraft above the terrain starts to crash and stays in play until it hits the ground, S-0501 claim 9)
-            if crate::air::start_crash(w, id, false) {
+            if crate::air::start_crash_hit(w, id, false, Some(hit)) {
                 return;
             }
             // spec: S-0312 claim 16 (an aircraft on the ground leaves play at once) and S-0506 claim 20 (a rocket missile on the ground: removed at once, no detonation)
@@ -359,6 +409,25 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Terrain => {}
     }
     let _ = half;
+}
+
+/// The passengers of a destroyed vehicle that claim 5 has not killed
+/// (S-0312 claim 12 and its table).
+fn passengers_of_destroyed_vehicle(w: &mut World, id: ObjectId, hit: &Hit, crashable: bool) {
+    if crate::transport::count(w, id) == 0 {
+        return;
+    }
+    // spec: S-0312 claim 12 (more than 208 leptons above the terrain: all die, credited to the attacker)
+    let high = w.height_above_surface(id) > 208;
+    if high || (!crashable && crate::transport::bomb_marked(w, id)) {
+        // spec: S-0312 claim 12 (high, or a bomb mark on a type that cannot crash: all die)
+        crate::transport::kill_passengers(w, id, hit);
+    } else if crashable {
+        // spec: S-0312 claim 12 (a type that can crash: they stay inside, and die when it starts to crash or leaves play, death::leave_play)
+    } else {
+        // spec: S-0312 claim 12 (otherwise each passenger in turn gets out)
+        crate::transport::escape(w, id, hit);
+    }
 }
 
 /// An infantry unit's death (S-0107 claim 17).

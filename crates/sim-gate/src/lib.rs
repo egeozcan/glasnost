@@ -20,6 +20,10 @@
 //! (`golden/duel-naval.txt`). Each duel is also saved and loaded at the
 //! first tick with a rocket in flight and the first tick with an aircraft in
 //! the air.
+//!
+//! M6b: the fixture's AI ferries infantry in a hovering transport (S-0507);
+//! every full duel must load a passenger and let one out, and is saved and
+//! loaded at the first tick with a passenger aboard.
 
 use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
@@ -123,11 +127,23 @@ fn in_flight(w: &glasnost_sim::world::World) -> (bool, bool) {
     (rocket, plane)
 }
 
+/// The objects that ride in a transport now, with their transports
+/// (S-0507), in id order.
+fn riders(
+    w: &glasnost_sim::world::World,
+) -> Vec<(glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId)> {
+    w.objects
+        .values()
+        .filter_map(|o| Some((o.id, o.transport.riding?)))
+        .collect()
+}
+
 /// The state hash of an AI duel after each tick until the game is over or
-/// `ticks` ticks ran; saved and loaded halfway and at the first tick with a
-/// rocket in flight and with an aircraft in the air (panics when the loaded
-/// game hashes differently). With `flies`, a full run must have flown
-/// both.
+/// `ticks` ticks ran; saved and loaded halfway, at the first tick with a
+/// rocket in flight, with an aircraft in the air and with a passenger
+/// aboard a transport (panics when the loaded game hashes differently).
+/// With `flies`, a full run must have flown both. Every full run must have
+/// loaded a passenger into a transport and let one out (M6b, S-0507).
 fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<String> {
     let mut g = Game::new(
         fixture::rules(),
@@ -139,13 +155,17 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
     .expect("the synthetic duel loads");
     let mut out = Vec::new();
     let (mut rocket_saved, mut plane_saved) = (false, false);
+    let (mut aboard_saved, mut loads, mut unloads) = (false, 0, 0);
+    let mut before = riders(&g.world);
     while g.world.tick < ticks {
         let (rocket, plane) = in_flight(&g.world);
         let first_rocket = rocket && !rocket_saved;
         let first_plane = plane && !plane_saved;
+        let first_aboard = !before.is_empty() && !aboard_saved;
         rocket_saved |= rocket;
         plane_saved |= plane;
-        if g.world.tick == ticks / 2 || first_rocket || first_plane {
+        aboard_saved |= !before.is_empty();
+        if g.world.tick == ticks / 2 || first_rocket || first_plane || first_aboard {
             let loaded = Game::load(&g.save(), fixture::rules(), fixture::catalogue())
                 .expect("the duel's save loads");
             assert_eq!(
@@ -157,10 +177,26 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
         }
         g.step();
         out.push(g.state_hash());
+        let now = riders(&g.world);
+        let alive = |id| g.world.obj(id).is_some_and(|o| o.on_map && o.health > 0);
+        loads += now.iter().filter(|r| !before.contains(r)).count();
+        // Let out: on the map again beside a transport that still stands
+        // (not the escape from a destroyed one).
+        unloads += before
+            .iter()
+            .filter(|&&(p, t)| !now.contains(&(p, t)) && alive(p) && alive(t))
+            .count();
+        before = now;
         // As the skirmish: stop after the tick in which the game ends.
         if g.outcome().is_some() {
             break;
         }
+    }
+    if ticks >= SKIRMISH_TICKS {
+        assert!(
+            loads > 0 && unloads > 0 && aboard_saved,
+            "{name}: the full duel loads a transport ({loads}) and unloads one ({unloads})"
+        );
     }
     if flies && ticks >= SKIRMISH_TICKS {
         assert!(

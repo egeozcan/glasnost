@@ -204,6 +204,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         let d = root_floor(dist2(here, tp), q.table_root_distance, r.mode);
         if d < ARRIVAL {
             arrive(w, id, target);
+            // spec: S-0507 claim 6 (arriving at the cell of the transport it is entering: it boards, or is turned away)
+            if crate::transport::arrival(w, id) {
+                return true;
+            }
             // spec: S-0208 State and ordering (on the arrival tick, after the placement: claim 17's in-range stop, then claim 16's end-of-walk test)
             approach_stop(w, id);
             // spec: S-0208 claim 22 (the snap to the walking target raises the current cell's entered-by tag, after claim 17's destination clear; every intermediate standing-position arrival raises it)

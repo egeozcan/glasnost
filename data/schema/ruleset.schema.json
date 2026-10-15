@@ -8286,7 +8286,7 @@
           "default": true
         },
         "transport_load_truncated": {
-          "description": "A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded. Not implemented yet (wave 2).",
+          "description": "A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.",
           "type": "boolean",
           "default": true
         },
@@ -8346,17 +8346,17 @@
           "default": true
         },
         "unload_facing_gap_no_wrap": {
-          "description": "The gap between a neighbour's direction and the rear facing is not taken the short way round; off: the short way. Not implemented yet (wave 2).",
+          "description": "The gap between a neighbour's direction and the rear facing is not taken the short way round; off: the short way.",
           "type": "boolean",
           "default": true
         },
         "unload_failed_exit_gunner_handover": {
-          "description": "A failed exit changes the gunner's weapon number to position 1's mode index; off: unchanged. Not implemented yet (wave 2).",
+          "description": "A failed exit changes the gunner's weapon number to position 1's mode index; off: unchanged.",
           "type": "boolean",
           "default": true
         },
         "unload_second_round_skips_rear": {
-          "description": "The second unloading round starts one step clockwise of the rear; off: it tries the rear direction first. Not implemented yet (wave 2).",
+          "description": "The second unloading round starts one step clockwise of the rear; off: it tries the rear direction first.",
           "type": "boolean",
           "default": true
         },
@@ -9239,6 +9239,14 @@
           ],
           "default": null
         },
+        "enter_transport_sound": {
+          "description": "`EnterTransportSound`, a sound name (S-0507 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "fearless": {
           "description": "`Fearless`.",
           "type": [
@@ -9368,6 +9376,14 @@
           ],
           "default": null
         },
+        "is_dropship": {
+          "description": "`IsDropship`, the dropship flag of an air transport (S-0507 Import\nmapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "is_simple_deployer": {
           "description": "`IsSimpleDeployer`.",
           "type": [
@@ -9421,6 +9437,14 @@
           "description": "`LargeVisceroid` (S-0009 claim 46, S-0202 Import mapping).",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "leave_transport_sound": {
+          "description": "`LeaveTransportSound`, a sound name (S-0507 Import mapping).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -9690,6 +9714,28 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "size": {
+          "description": "`Size`, the size a passenger counts (S-0507 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size_limit": {
+          "description": "`SizeLimit`, the largest size of one passenger a transport takes\n(S-0507 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "slowdown_distance": {
           "description": "`SlowdownDistance`, leptons.",

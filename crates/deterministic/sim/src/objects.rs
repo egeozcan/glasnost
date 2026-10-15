@@ -133,6 +133,7 @@ pub fn create_converted(
         naval: None,
         // spec: S-0503 Terms (a hovering vehicle keeps its hover state)
         hover: (loco == Locomotor::Hover).then(|| crate::hover::HoverState::new(w.rules().mode)),
+        transport: crate::transport::TransportState::default(),
         crush_slowdown: false,
         targeting_timer: 0,
         last_turn: -1,
@@ -308,6 +309,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     }
     // spec: S-0614 claim 15 (a host taken off the map releases its parasite at once)
     crate::parasite::leaving(w, id);
+    // spec: S-0507 claim 15 (an open-topped transport leaving the map: its passengers lose their targets)
+    crate::transport::leaving_map(w, id);
     crate::econ::events::leaving_map(w, id, false);
     // spec: S-0209 claim 1 (an aircraft going inside clears its object-present mark)
     crate::air::clear_mark(w, id);
@@ -357,6 +360,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
     crate::parasite::leaving(w, id);
+    // Q-0702 (interim: a transport removed with passengers inside takes them out of play with it; a removed passenger leaves its transport's passenger order)
+    crate::transport::removing(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)

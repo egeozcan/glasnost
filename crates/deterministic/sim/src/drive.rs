@@ -1136,6 +1136,10 @@ pub(crate) fn blocked_step(w: &mut World, id: ObjectId) {
 /// it begins no further track.
 fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
     let ended = spend(w, id);
+    // spec: S-0507 claim 6 (arriving at the cell of the transport it is entering: it boards, or is turned away)
+    if ended && crate::transport::arrival(w, id) {
+        return true;
+    }
     // spec: S-0207 claim 19 (a) (at a track target, not between track targets; it does not wait for a behaviour processing)
     if ended
         && crate::walk::arrival_stop_holds(w, id)
