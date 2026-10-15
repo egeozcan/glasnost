@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -116,6 +116,11 @@ addition:
    no area hits, whether or not attachment succeeds (S-0614 claim 1). Its later explosion
    animation and debris are not suppressed by that exception. This is a projectile-producer
    rule, not an exclusion for other producers using the same warhead.
+   A projectile whose warhead has the air-strike flag likewise makes no area hits, whether
+   or not it calls or redirects a strike (S-0519 claim 16). Neither this exception nor the
+   parasite exception suppresses radiation creation, the explosion animation, warhead debris
+   or the light flash where configured. The air-strike exception is also a projectile-producer
+   rule, not an exclusion for other producers using the same warhead.
    A projectile detonation that selects the electric-charge effect likewise bypasses ordinary
    area damage at any target (S-0518 claim 11), even when it registers no charger. This bypass
    does not suppress shared effects: radiation creation before effect selection, or the later
@@ -124,7 +129,8 @@ addition:
    - Backing: `measurable` (scenario A1, variant e, for the inert flag; A14, variant f, for the
      damage amount 0; S-0614 scenarios P1 and P3 for parasite-projectile area-hit suppression,
      and A14 variant o for their later animation and debris; S-0518 scenarios TC1 and TC4 for
-     electric-charge area-damage bypass and preserved common effects),
+     electric-charge area-damage bypass and preserved common effects; S-0519 scenario T16
+     for air-strike area-hit suppression and preserved common effects),
      `unmeasured` for area damage without a warhead (no producer with a
      reproducible named-data setup for that case is established) and for the projectile without
      a warhead (the original stops, so there is no effect value to compare)
@@ -622,13 +628,20 @@ lies outside the list (Edge cases).
 
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). A non-positive *N* creates no pieces and takes no allocation or type-choice draws. This non-positive-total case is `unmeasured`: A15 and A19 use positive totals, not a setup producing a non-positive total. Confidence: high. All debris is created at the projectile position *Q* (claim 22).
 
-For a nonempty retained type list of *m* types, let *t*ᵢ and *u*ᵢ be the type and signed maximum at index *i*, with indices counted from 0. Define the allocation state at assignment *j* by remaining count *ℓ*ⱼ, initially *ℓ*₀ = *N*. If *ℓ*ⱼ > 0, the next scenario-random-stream value is *raw*ⱼ and the selected type index is *i*ⱼ = *j* rem *m*, using the ordinary non-negative remainder. The assignment quantities are
+For a nonempty retained type list of *m* types, let *t*ᵢ and *u*ᵢ be the type and signed maximum at index *i*, with indices counted from 0. Allocation begins with *N* pieces remaining. The first allocation uses type *t*₀; subsequent allocations cycle through the retained types in list order, returning to *t*₀ after *t*ₘ₋₁. An allocation is made only while pieces remain.
 
-> *a*ⱼ = wrap(|*raw*ⱼ|), *b*ⱼ = wrap(*u*ᵢⱼ + 1), *g*ⱼ = min(*a*ⱼ rem *b*ⱼ, *ℓ*ⱼ), *ℓ*ⱼ₊₁ = wrap(*ℓ*ⱼ − *g*ⱼ).
+For each allocation, one scenario-random-stream value *raw* is used. The quantities determining that allocation and the remaining count are:
 
-Here “wrap” is S-0205 claim 1's signed 32-bit wrap. The remainder uses signed division truncated toward zero (S-0205 claims 2–3), so its sign follows *a*ⱼ, not *b*ⱼ. This is the magnitude-first rule of S-0202 claim 6, extended here to signed divisors. Thus a maximum below −1 normally behaves like the non-negative maximum −*u* − 2: −2 assigns zero pieces, while −4 assigns 0 to 2 pieces. A maximum of 2147483647 gives the wrapped divisor −2147483648, not a zero divisor. A maximum of −1 gives a zero divisor, and its departure is specified under Edge cases. For the exceptional raw value −2147483648, *a*ⱼ stays negative under the default of S-0202 claim 6; signed remainder and the wrap of the remaining count still apply, and a non-positive *g*ⱼ creates no pieces. With `quirks.random_magnitude_overflow` off (S-0202 claim 6), *a*ⱼ is instead the exact magnitude |*raw*ⱼ|, including 2147483648; the remainder is then non-negative. The magnitude and its quotient may use that wider non-negative integer domain, while *b*ⱼ and the remaining count retain signed 32-bit wrap.
+| Quantity | Meaning |
+|---|---|
+| *a* = wrap(|*raw*|) | Magnitude quantity, with the signed 32-bit wrap described below |
+| *b* = wrap(*u*ᵢ + 1) | Divisor associated with the selected type |
+| *g* = min(*a* rem *b*, *ℓ*) | Number assigned to the selected type, capped by the currently remaining count *ℓ* |
+| New remaining count | wrap(*ℓ* − *g*) |
 
-The assigned quantity *g*ⱼ contributes that many pieces of type *t*ᵢⱼ. The allocation ends at the least assignment index *j* for which *ℓ*ⱼ₊₁ ≤ 0; its random value is included. Pieces assigned at index *j* are created before the allocation value for index *j* + 1 is drawn. Draws caused by creating pieces occur between allocation values and are not themselves allocation values *raw*ⱼ. If no such *j* exists, the non-terminating case is described under Edge cases: debris that can never be placed.
+“Wrap” is S-0205 claim 1's signed 32-bit wrap. The remainder uses signed division truncated toward zero (S-0205 claims 2–3), so its sign follows *a*, not *b*. This is the magnitude-first rule of S-0202 claim 6, extended here to signed divisors. Thus a maximum below −1 normally behaves like the non-negative maximum −*u* − 2: −2 assigns zero pieces, while −4 assigns 0 to 2 pieces. A maximum of 2147483647 gives the wrapped divisor −2147483648, not a zero divisor. A maximum of −1 gives a zero divisor, and its departure is specified under Edge cases. For the exceptional raw value −2147483648, *a* stays negative under the default of S-0202 claim 6; signed remainder and the wrap of the remaining count still apply, and a non-positive allocation creates no pieces. With `quirks.random_magnitude_overflow` off (S-0202 claim 6), *a* is instead the exact magnitude |*raw*|, including 2147483648; the remainder is then non-negative. The magnitude and its quotient may use that wider non-negative integer domain, while the divisor and remaining count retain signed 32-bit wrap.
+
+The allocation's result contributes *g* pieces of its selected type. The allocation ends when the resulting remaining count is 0 or less; the random value used for that allocation is included. Pieces assigned by an allocation are created before the random value for the next allocation is drawn. Draws caused by creating pieces occur between allocation values and are not themselves allocation values. If no allocation reduces the remaining count to 0 or less, the non-terminating case is described under Edge cases: debris that can never be placed.
 
 If the warhead lists no debris types, the detonation creates *N* animations, each selected by
 entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by
@@ -881,6 +894,7 @@ warnings above are design rules, not claimed oracle observations.
 | no user-data key | within-sector arrival order and alternative global tracking order (claim 11, F7) | fixed behaviour; `quirks.flying_search_sectors` is an engine option, not an imported field | sector search on |
 | rules, warhead section, `Parasite` | parasite flag: projectile area damage replaced by attachment (claim 2; S-0614 claim 1) | boolean | no |
 | rules, warhead section, `ElectricAssault` | electric-charge effect: when selected, replaces projectile area damage but preserves shared effects (claim 2; S-0518 claim 11) | boolean | no |
+| rules, warhead section, `Airstrike` | air-strike flag: designation projectiles make no area hits but preserve shared effects (claim 2; S-0519 claim 16) | boolean (S-0003) | no |
 | rules, warhead section, `PercentAtMax` | edge fraction *p* | decimal (single) | 1.0 |
 | rules, warhead section, `Verses` | versus values *v* (F3; S-0003 claim 13 owns the parse, S-0305 the order of the armour classes) | percent list | 100 % each |
 | rules, warhead section, `Wall`, `Wood`, `WallAbsoluteDestroyer` | wall flags (claim 16) | boolean | no |
