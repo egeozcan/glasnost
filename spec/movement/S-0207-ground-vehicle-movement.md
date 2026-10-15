@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -503,7 +503,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     A vehicle that chains a curve also has a cell-arrival update at the chain-point transition
     (claim 8); crossing a cell boundary mid-track or turning in place is not such an update.
     This does not give a refinery the chain-point report: S-0402 claim 10 requires track
-    completion.
+    completion. Repair-depot approaches, including the docking-cell stopping rule at track
+    completion and the distinction between the supplied docking point and the stopping
+    position, are governed by S-0314 claim 18. That rule does not change these tracks.
 
     A vehicle at rest has *ρ* = 0, so with the acceleration flag on its first tick from rest gives it
     *ρ* = clamp(min(*a*, *ρ*ₜ), 0, 1) and it earns trunc(*s*₂ × *ρ*), unless an earlier row of claim
@@ -1266,6 +1268,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       reply is owned and backed by S-0301 claim 9, not independently tested here. The retained-target
       phasing-in-end branch is `unmeasured`: run 7 supplies only a conditional protocol,
       and no reachable setup preserving a target through this interval is established.
+      F9's distinction between different nonpositive delays is `unmeasured`: run 5 tests
+      their shared next-tick completion, not the stored delay, and completion timing cannot
+      distinguish those values.
     - Confidence: part a's vehicle destination restriction inherits S-0517 claim 9's
       confidence (high for refusal, low for the carried exception); jumpjet landing cancellation
       inherits S-0502 claim 16's confidence. High for parts d, e and f and F9 (the whole move was read); medium for part b
@@ -1460,16 +1465,33 @@ this distance too: off, *d*ₙ = ⌊√*n*⌋. Under `quirks.drive_nearest_from_
 *w* are replaced by (*x* mod 256) − 128 and (*y* mod 256) − 128, so the distance is measured from
 the cell's centre. Unit: leptons.
 
-**F9 Phasing-in delay** (claim 20 f). Integer arithmetic throughout. *d* = ⌊*r*(*n*)⌋, with *n* =
-Δ*x*² + Δ*y*² + Δ*z*² the squared distance in leptons from the object's position before the jump
-to *L*, and *r* the table square root of S-0204 (Formulas F1), as in F5 (the switch
-`quirks.table_root_distance` covers it too). With the trigger flag on, *q* = trunc(*d* / *k*), the
-division truncating toward zero, where *k* is the distance factor; with it off, *q* = 0. Then
-*D* = *q* when max(*q*, 0) > *m*, and *D* = *m* otherwise, where *m* is the minimum delay. Finally,
-when *d* < *g*, the range minimum, *D* = *m* whatever *q* is. An object whose type has the
-harvester flag of a vehicle type gets *D* = 0 and does not phase in. Unit: ticks. *D* is not
-always max(*q*, *m*): when *m* is negative, *D* = *q* even for a smaller negative *q*. Every *D* ≤ 0
-ends phasing in on the tick after the jump (claim 20 f), so the difference cannot be observed.
+**F9 Phasing-in delay** (claim 20 f). Let *n* = Δ*x*² + Δ*y*² + Δ*z*² be the squared distance
+in square leptons from the object's position before the jump to *L*, and *d* = ⌊*r*(*n*)⌋ in
+integer leptons. The distance calculation has F5's floating-point domain and rounding, with
+the table square root of S-0204 claim 5; `quirks.table_root_distance` covers it too. The delay
+calculation below uses integer arithmetic. Let *k* be the distance factor in leptons per tick,
+*m* the minimum delay in ticks and *g* the range minimum in leptons. The auxiliary delay *q*
+in ticks is defined by these mutually exclusive cases:
+
+| Condition | *q* (ticks) |
+|---|---|
+| Trigger flag on, *k* ≠ 0 | trunc(*d* / *k*), division toward zero |
+| Trigger flag off | 0 |
+
+The zero-factor case with the trigger on is the bad-data departure in Edge cases and quirks:
+the original stops with a program error; our engine uses *q* = 0 and warns.
+
+| Mutually exclusive condition | *D* (ticks) |
+|---|---|
+| Object has the harvester flag of a vehicle type | 0; no phasing in |
+| No such flag, *d* < *g* | *m* |
+| No such flag, *d* ≥ *g*, max(*q*, 0) > *m* | *q* |
+| No such flag, *d* ≥ *g*, max(*q*, 0) ≤ *m* | *m* |
+
+For a non-harvester with *d* ≥ *g*, *D* is not always max(*q*, *m*): when *m* is negative,
+*D* = *q* even for a smaller negative *q*. Every non-harvester delay *D* ≤ 0 ends phasing in
+on the tick after the jump (claim 20 f), so those different negative delays have the same
+observable completion tick. The harvester exception instead has no phasing-in state.
 
 ## Constants
 
@@ -2089,7 +2111,8 @@ of the give-up test is imported as S-0209 says.
 
 All scenarios run under the glossary's *measurement setup* on a purpose-made flat map of clear
 ground, unless the scenario says otherwise, at game speed index 2 unless a scenario chooses another index (claim G3 of the glossary
-makes these tick-based results speed-independent), with director and external mods off.
+makes these tick-based movement results speed-independent), with no engine add-ons or mods
+apart from each scenario's named test files.
 Use one human house and one bystander computer player kept outside the test lanes and cells.
 Those lanes and cells are the observed area. Void a run if an unnamed bystander object enters
 that area, acts on a test object, or the bystander is defeated before recording ends. Named
@@ -2105,12 +2128,12 @@ in them are invented test values:
 - the owner's country speed factor for vehicles set to 1.0,
 - for the uphill and downhill factors, 1.0 unless the scenario says otherwise.
 
-The vehicle starts at full health and without veterancy. No scenario's expected result depends on a
-random draw except the scatter cases that explicitly record draws, so each variant runs once
-unless the scenario gives a run count. "Arrival at
+The vehicle starts at full health and without veterancy unless a scenario says otherwise. Each
+variant runs once unless the scenario gives a run count; random-dependent sub-tests use their
+stated draw-recording and qualifying-run conditions. "Arrival at
 cell *k*" means the first tick at whose end the vehicle's position is at or past the centre of the *k*-th cell of the route, along
-its direction of travel. (When a move continues, the next track starts in the same tick, so the
-position at the end of that tick is already a little past the centre.) Paths are logged as the
+its direction of travel. (When claim 12 permits the next track to begin in the same tick,
+the position at the end of that tick may already be a little past the centre.) Paths are logged as the
 sequence of cells the vehicle's track targets pass through, because which steps the pathfinder
 chooses is not part of this spec. Where a scenario needs a particular path, it uses corridors one
 cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (S-0211).
@@ -2656,7 +2679,7 @@ cell before *X*.
     has no destination only once it stands still, the first run is inconclusive and only the
     second applies.
   - (j) Factory clearing. Use S-0417 U5's stock ground vehicle factory and blocked exit apron
-    cell E, game speed index 2, director and mods off, with a bystander computer player kept
+    cell E, game speed index 2, no engine add-ons or unrelated mods, with a bystander computer player kept
     outside the observed factory and neighbouring cells. Place an idle drive vehicle in E,
     then in a separate run in an occupied neighbour of E while a persistent scatter-refusing
     unit blocks E. Record requests, destinations, current and queued behaviours and scenario
@@ -2713,7 +2736,7 @@ cell before *X*.
 **D20: speed estimate in a shot's lead (claim 18; Q-0071).**
 - *Setup:* a tiny flat skirmish map with a human-controlled driving target and an enemy
   firer using a stock weapon whose launch exposes lead under S-0306 P2. Keep a bystander
-  computer player outside the observed lane. Use stock rules, director off and mods off,
+  computer player outside the observed lane. Use stock rules with no engine add-ons or mods,
   game speed index 2. A read-only recorder logs launch position, initial projectile velocity,
   target reference point, body facing, speed fraction and positions each tick, including the
   target state used at aim time rather than a later movement update in that tick. The observed
@@ -2734,7 +2757,7 @@ cell before *X*.
   are invented test values, not stock values. Log the bonus factor as well as the fraction.
   Capture three qualifying launches in each control. F2a must still predict their aim points.
   An estimate that omits either changed factor falsifies claim 18. These data-only controls
-  otherwise use the common setup, with director and external mods off.
+  otherwise use the common setup, with no engine add-ons or unrelated mods.
 - *Observable:* reconstruct the aim point from the launch under S-0306 P2, then compare
   its lead displacement with S-0306 F6 using F2a at the recorded fraction. Use the imported
   stock factors without copying them into this scenario. Record enough launches away from
@@ -2750,7 +2773,8 @@ cell before *X*.
 - The scenario records launches and fractions without changing the oracle.
 
 **D21: an approaching vehicle once its target is in range (claim 19; Q-0072).**
-- *Setup:* a tiny flat skirmish map, stock rules, director off and mods off, any game speed. Two
+- *Setup:* a tiny flat skirmish map, stock rules apart from the named test file below, no engine
+  add-ons or unrelated mods, any game speed. Two
   straight lanes of clear ground 25 cells long and 2 cells apart (for run 2, two lanes of open
   water). A named test file, removed after the run, gives the attacker's type a weapon with an
   invented range field of 5 cells and damage 1, a turret, and gives the target's type an invented
@@ -2914,7 +2938,7 @@ cell before *X*.
     Missing either test draw, reversed assignment or delayed creation falsifies the claim.
   - Run 13 (vehicle bridge reservations, Q-0240). At game speed index 2, use a high bridge
     over traversable flat ground, a human house and one bystander computer player kept away,
-    director and mods off. Use the stock chrono miner and separately *T*. Observe the bridge,
+    no engine add-ons or unrelated mods. Use the stock chrono miner and separately *T*. Observe the bridge,
     its approaches and the departure cell; void runs with unrelated bystander interference or
     defeat. Start once below deck height and once on a deck, so the search's deck mode differs.
     Supply a clear bridge-cell destination by scripted input; record both occupancy records,
@@ -2939,7 +2963,7 @@ cell before *X*.
     Without a captured pre-jump interval, that part is inconclusive, not a pass.
   - Run 14 (aircraft bridge cleanup, Q-0310). Repeat run 11 at game speed index 2
     on a high bridge over traversable flat ground, with a human house and one bystander
-    computer player kept away, director and mods off. The named test map supplies an
+    computer player kept away, no engine add-ons or unrelated mods. The named test map supplies an
     aircraft type with teleporting locomotion; all other data are stock. Observe only
     the bridge, departure and landing cells; void unrelated bystander interference or
     its defeat. Use the read-only recorder for both occupancy records, listings, height,
@@ -2957,7 +2981,7 @@ cell before *X*.
     compare against S-0209's tables, not against a fictitious ground-listed aircraft.
   - Run 15 (removal with remembered and pending reservations, Q-0356). Use run 13's
     vehicle and run 14's aircraft on the same isolated bridge over traversable ground,
-    game speed index 2, director and mods off. In separate trials destroy each object
+    game speed index 2, no engine add-ons or unrelated mods. In separate trials destroy each object
     after an uninterrupted deck landing, after a landing on clear ground off the
     bridge, and after a replacement destination has been accepted but before its jump.
     Add a first-jump trial removed after fixation but before any landing. Use weapons
@@ -2986,14 +3010,15 @@ cell before *X*.
   cannot be damaged or is treated differently by the crusher.
 
   - Run 16 (landing-cell crate pickup). On a tiny flat skirmish map at speed index 2,
-    with director and mods off, crates disabled for random replacement, give the human house
+    with no engine add-ons or unrelated mods, crates disabled for random replacement, give the human house
     an existing base and place a fixed money crate by a map trigger on an empty cell.
     Order the stock chrono miner to jump onto it. Record position, cell-arrival event,
     crate presence and credits each tick, with within-tick event order where available.
     Expect placement and the arrival event before pickup, crate removal and a money award
     on the jump tick under S-0520 claim 12. A crate remaining despite passing the pickup
     gates, pickup before landing, or pickup delayed to a later tick falsifies the rule.
-    Use scripted input and the bench recorder at 800×600 with a recorded seed and one job.
+    Use scripted input and a read-only recorder at 800×600; record the seed and run one trial
+    at a time.
     A named test-map control with fixed unit contents and a successful unit placement tests
     that the pickup's ground-step refusal does not reverse the completed teleport landing.
     Record the created unit and collector positions; a return to the departure cell falsifies
@@ -3001,7 +3026,7 @@ cell before *X*.
 
 **D23: temporary drive and return to teleporting (claim 21; Q-0233).**
 - *Setup:* S-0417 U6's stock vehicle factory and produced chrono miner, a human house,
-  one bystander computer player kept away, game speed index 2, director and mods off.
+  one bystander computer player kept away, game speed index 2, no engine add-ons or unrelated mods.
   Record position, active movement kind, destination, pending landing point, phasing-in
   state and occupancy marks each tick. Observe the factory, exit track, apron and ordered
   destinations; void a run if an unrelated bystander object acts there or it is defeated.
@@ -3034,7 +3059,8 @@ cell before *X*.
 
 **D24: cell-tag arrival timing (claim 22; Q-0268 part 1).**
 - *Setup:* a tiny named test map, human house and one bystander computer player kept
-  away, game speed index 2, stock data, director and mods off. Give selected cells
+  away, game speed index 2, stock data apart from named test overrides, no engine add-ons or
+  unrelated mods. Give selected cells
   independent one-time entered-by tags with an any-house event and an observable
   variable-setting action (S-0011). Use an ordinary drive vehicle and a chrono miner.
   Named type data may supply a non-harvester teleporter for the phasing-in control,
@@ -3072,7 +3098,8 @@ cell before *X*.
   discriminating fixture or sufficiently resolved recording for those three comparisons.
 
 **D25. Driving wakes (claim 23).** Use a tiny flat map with water, a bank and a high bridge,
-stock data, director and mods off, at game speed index 2. Record tick numbers, positions,
+stock data apart from named test overrides, no engine add-ons or unrelated mods, at game
+speed index 2. Record tick numbers, positions,
 heading points, body turning and wake creation during three water crossings, turning at rest,
 and travel below the bridge. Repeat on land and, where accessible, on the deck. A named test
 map gives the same water-capable vehicle the driving locomotor, then repeats with only the
@@ -3116,8 +3143,8 @@ sub-test inconclusive. This proposes recorder observations, not an already compl
 Void any run where an unnamed bystander object reaches the observed area or acts on a test
 object, or the bystander is defeated before the recording ends.
 
-**D26. Driving launch hold (claim 6).** Repeat S-0504 N4 at game speed index 2, director and
-mods off, using its stock carrier and missile-vessel controls. In named diagnostic map variants,
+**D26. Driving launch hold (claim 6).** Repeat S-0504 N4 at game speed index 2, with no engine
+add-ons or unrelated mods, using its stock carrier and missile-vessel controls. In named diagnostic map variants,
 change only each vessel's locomotor to driving. Give a move order during launching, and separately
 initiate launching during travel. Record launching state, position, track endpoints and destination
 per tick for three launches of each kind. Expected: an existing track finishes, no new track begins
