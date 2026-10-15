@@ -201,7 +201,8 @@ Q-0520 is answered by S-0102 revision 15, claim 33 and its Import mapping: for `
 
 | Where | Placeholder | Request |
 |---|---|---|
-| — | None at present. | — |
+| `mp_triggers::replace` | a restored building takes the placed timing of S-0406 claim 17, not the deployed one | Q-0840 |
+| `mapview::live::shadow_anchor` | an aircraft counts as marked on a bridge deck only when its layer is the deck layer | Q-0841 |
 
 Revision 17 of S-0105 answers Q-0215 question 7 (F8's record-low relation, MS-25 and MS-28); `render::voxel::section_order` already computes it, and `section_order_is_f8_relation`, `section_order_ms25_pair_winners` and `section_order_ms28_rows` check it.
 
@@ -825,11 +826,11 @@ S-0524 is built in `glasnost_sim::mp_triggers`, on the trigger runtime of S-0011
 
 - **Import.** The converter reads each action's fourth to seventh items into `Action::items` (code 40's rectangle) and the trigger's field 8 into `TriggerDef::carry_over`. The demolition warhead's `Bright` and `CombatLightSize` are read into `WarheadRules::bright` and `light_size`.
 - **Storm, strike and nuclear actions (claims 1 to 3).** Code 102 requests a storm through `storm::request`, owned by the trigger's owner house. Code 90 makes a cloud through `mp_triggers::lightning_strike`, which records the waypoint for `quirks.repeated_lightning_strike_suppressed`. Code 95 launches the payload through `nuke::waypoint`.
-- **Demolition blast and flash (claims 5 and 6).** `demolition_blast` makes five area detonations with the demolition warhead and no source or house, then calls `bridges::cell_attempts`. `light_flash` pushes an `Effect::Trigger` with code 66, the waypoint point and the flash-size level as its number; the presentation does not draw it yet.
+- **Demolition blast and flash (claims 5 and 6).** An undefined marker acts at the stand-in point (128, 128, 0) and makes no bridge attempt. `demolition_blast` makes five area detonations with the demolition warhead and no source or house, then calls `bridges::cell_attempts`. `light_flash` pushes an `Effect::Trigger` with code 66, the waypoint point and the flash-size level as its number; the presentation does not draw it yet.
 - **Ambient (claim 7).** `TriggerState::mp.ambient` holds the base and target values code 73 set; the renderer does not read them yet.
-- **Local area (claim 8).** `resize_local_area` sets the footprint's local area, recalculates every legal cell, recomputes the passability categories and rebuilds the reach regions.
-- **Restoration (claim 9).** `record_starting_buildings` runs in `load::new_game` after the game-start terrain pass. `restore_starting_buildings` heals a recorded building that is still there, and otherwise replaces it, displacing mobile ground units.
-- **Entries (claims 10 to 12).** `carry_over` moves a flagged tag to the captured or hijacked object. `capture_seam`, `hijack_seam`, `consuming_entry_seam` and `retaining_entry_seam` hold the raise order for S-0509, S-0312 claim 13's hijack, S-0510 and S-0508 when those are built.
+- **Local area (claim 8).** Shrinking touches no object (it does not remove, move, stop or switch off buildings or units; an excluded power source and an excluded building still count; an ordered attack on an object outside is still an attack). `resize_local_area` sets the footprint's local area, recalculates every legal cell, recomputes the passability categories and rebuilds the reach regions.
+- **Restoration (claims 9 and 13).** The record is in creation order with top-left cells; a building of the type and house that covers the recorded cell with any foundation cell is healed; otherwise a fresh building is placed by ordinary during-play placement (construction queued, Q-0840) and the ground-layer occupants of its foundation are re-placed in reverse lifting order by the 1 x 1 nearby search from their old cells, facing 0, removed when no cell is found. `record_starting_buildings` runs in `load::new_game` after the game-start terrain pass. `restore_starting_buildings` heals a recorded building that is still there, and otherwise replaces it, displacing mobile ground units.
+- **Entries (claims 10 to 14).** An infantry unit arriving at a transport raises its tag once before the acceptance test (`transport::arrival`); vehicle boarding, depot and refinery docking and pad landing raise nothing (tested in the owning claim files); capture makes no ownership-change raise; `vehicle_like_entry_seam` is new. `carry_over` moves a flagged tag to the captured or hijacked object. `capture_seam`, `hijack_seam`, `consuming_entry_seam` and `retaining_entry_seam` hold the raise order for S-0509, S-0312 claim 13's hijack, S-0510 and S-0508 when those are built.
 - **Quirks.** `restoration_failed_return_removes_unit` (on), `repeated_lightning_strike_suppressed`, `trigger_crate_respects_setting` and `trigger_crate_expiry_while_disabled` (off: off is the original) are new (443 with the upgrade switches of S-0215). The two crate switches are not consulted, because crates (S-0520) are not built.
 - **Save format 28.** The trigger definitions' new fields, the warhead's flash fields and `TriggerState::mp` are new state, and they are hashed.
 - **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=trigger-coverage cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` starts every offered map and counts its trigger events and actions as implemented, seamed or outside the subset (`mp_triggers::event_coverage`, `action_coverage`).
@@ -842,15 +843,10 @@ Provisional rules of M6b multiplayer triggers, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `mp_triggers::number_waypoint` | codes 63 and 66 at an absent waypoint marker have no effect, with a note | Q-0760 |
-| `mp_triggers::resize_local_area` | buildings and units left outside a shrunk local area are not affected | Q-0761 |
-| `mp_triggers` seams | transport, pad, dock and refinery entries raise no tag | Q-0762 |
-| `mp_triggers::record_starting_buildings`, `holder` | the record is in house order, then object order, and processed in that order; each building records its top-left cell; a building holds the recorded cell when any of its foundation cells is that cell | Q-0763 |
-| `mp_triggers::replace` | the replacement is created complete, as a pre-placed building, facing 0; ground-layer mobile objects in the foundation cells are displaced by S-0212 claim 25's substitution search from their old cell, keeping their facing; a unit with no result is removed | Q-0764 |
-| `mp_triggers::capture_seam` | tag carry-over comes before the ownership change | Q-0765 |
+| `mp_triggers::replace` | a restored building takes the placed timing of S-0406 claim 17 (the ready mark at the last build-up stage), not the deployed one | Q-0840 |
 | `mp_triggers::resolve_house` | position values A to H take the house at that start position; S-0009 claim 29's rule for header counts of 9 or more is not applied | — |
 
-Q-0799 interim (airborne shadow point): `mapview::build::vehicle_voxels` draws a flying aircraft's shadow at its position lowered to the terrain level of its cell (`level × 104` leptons, never above its own height); the body keeps its lifted point. The paradrop plane's flight height (1500 leptons in the lane) is drawn.
+Aircraft shadow anchor (S-0105 claim 40, Q-0799 answered): `mapview::build::vehicle_voxels` draws an aircraft shadow at the projection of its horizontal position at the terrain height there (`Mobile::shadow`, from `live::shadow_anchor`; a map-only scene reads the terrain from the map), 60 pixels higher over a qualifying high bridge, whatever its flight height. Q-0841 interim: an aircraft counts as marked on a deck only when its layer is the deck layer. Vehicle shadow anchors stay as the body point (open in S-0105). The paradrop plane's flight height (1500 leptons in the lane) is drawn.
 
 ## Own AI (M5b)
 
