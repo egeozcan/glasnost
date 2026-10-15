@@ -66,14 +66,6 @@ pub struct TheaterQuirks {
     /// `quirks.role_one_past_end` (S-0010 claim 4): a role naming the first
     /// missing tileset number starts at the tile count. Off: it is unset.
     pub role_one_past_end: bool,
-    /// `quirks.variant_origin_mismatch` (S-0010 claim 13): the origin cell
-    /// of a multi-cell tile chooses its image with its own coordinates.
-    /// Off: every cell of a placed tile uses the divided origin coordinates.
-    pub variant_origin_mismatch: bool,
-    /// `quirks.variant_cell_missing` (S-0010 claim 24): a cell whose shown
-    /// variant has no tile cell at its index paints nothing. Off: it paints
-    /// the plain image's tile cell.
-    pub variant_cell_missing: bool,
     /// `quirks.theater_five_forced_unset_roles` (S-0010 claim 4): the theater
     /// with index 5 forces seven roles unset. Off: they use their declared
     /// values.
@@ -85,8 +77,6 @@ impl Default for TheaterQuirks {
         // spec: S-0010 Edge cases (every switch defaults to the original)
         Self {
             role_one_past_end: true,
-            variant_origin_mismatch: true,
-            variant_cell_missing: true,
             theater_five_forced_unset_roles: true,
         }
     }
@@ -158,7 +148,6 @@ pub fn variant_image(
     (w, h): (i32, i32),
     n: usize,
     p8: &[u8; 64],
-    origin_mismatch: bool,
     marked: bool,
 ) -> usize {
     if marked {
@@ -166,12 +155,8 @@ pub fn variant_image(
         return 0;
     }
     let (w, h) = (w.max(1), h.max(1));
-    // spec: S-0010 Formulas ((X, Y) = (x, y) for t = 0, else the origin divided by the size, truncated)
-    let (cx, cy) = if t == 0 && origin_mismatch {
-        (x, y)
-    } else {
-        ((x - t.rem_euclid(w)) / w, (y - t.div_euclid(w)) / h)
-    };
+    // spec: S-0010 claim 13 and Formulas ((X, Y) = the tile's origin cell divided by the size, truncated, for every sub-tile: our engine's correction, no switch)
+    let (cx, cy) = ((x - t.rem_euclid(w)) / w, (y - t.div_euclid(w)) / h);
     // spec: S-0010 claim 13 and Constants (the 4 × 4 pattern with at most 4 images, the plain image included, else the 8 × 8 pattern)
     let p = if n < 4 {
         P4[cy.rem_euclid(4) as usize][cx.rem_euclid(4) as usize]
@@ -689,32 +674,28 @@ mod tests {
         Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new())
     }
 
-    /// spec: S-0010 claim 13 (image P mod (n + 1); P4 for at most 4 images; origin divided by the size)
+    /// spec: S-0010 claim 13 (image P mod (n + 1); P4 for at most 4 images; origin divided by the size, the origin cell included)
     #[test]
     fn claim_13_variant_choice() {
         let p8 = [7u8; 64];
         // One-cell tile with 2 images: P4 at (x mod 4, y mod 4), mod 2.
-        assert_eq!(variant_image((5, 2), 0, (1, 1), 1, &p8, true, false), 3 % 2);
-        assert_eq!(variant_image((6, 7), 0, (1, 1), 3, &p8, true, false), 3);
+        assert_eq!(variant_image((5, 2), 0, (1, 1), 1, &p8, false), 3 % 2);
+        assert_eq!(variant_image((6, 7), 0, (1, 1), 3, &p8, false), 3);
         // More than 4 images: the 8 × 8 pattern.
-        assert_eq!(variant_image((6, 7), 0, (1, 1), 4, &p8, true, false), 7 % 5);
+        assert_eq!(variant_image((6, 7), 0, (1, 1), 4, &p8, false), 7 % 5);
         // A 2 × 2 tile placed with its origin at (6, 9): sub-tile 3 is cell (7, 10), X = 3, Y = 4.
         assert_eq!(
-            variant_image((7, 10), 3, (2, 2), 3, &p8, true, false),
+            variant_image((7, 10), 3, (2, 2), 3, &p8, false),
             usize::from(P4[0][3])
         );
-        // The origin cell uses its own coordinates (6, 9) with the quirk, (3, 4) without.
+        // The origin cell uses the divided coordinates (3, 4) like the rest of its tile.
         assert_eq!(
-            variant_image((6, 9), 0, (2, 2), 3, &p8, true, false),
-            usize::from(P4[1][2])
-        );
-        assert_eq!(
-            variant_image((6, 9), 0, (2, 2), 3, &p8, false, false),
+            variant_image((6, 9), 0, (2, 2), 3, &p8, false),
             usize::from(P4[0][3])
         );
         // An origin beyond the low edge: truncation toward zero, non-negative remainders.
         assert_eq!(
-            variant_image((0, 0), 1, (2, 1), 3, &p8, true, false),
+            variant_image((0, 0), 1, (2, 1), 3, &p8, false),
             usize::from(P4[0][0])
         );
     }
@@ -734,14 +715,14 @@ mod tests {
         let mut patterned = Vec::new();
         for y in 0..8 {
             for x in 0..8 {
-                patterned.push(variant_image((x, y), 0, (1, 1), 3, &p8, true, false));
-                assert_eq!(variant_image((x, y), 0, (1, 1), 3, &p8, true, true), 0);
+                patterned.push(variant_image((x, y), 0, (1, 1), 3, &p8, false));
+                assert_eq!(variant_image((x, y), 0, (1, 1), 3, &p8, true), 0);
             }
         }
         assert!(patterned.contains(&1));
         // Four variants (five images) use the 8 × 8 pattern, never table P4.
-        assert_eq!(variant_image((0, 0), 0, (1, 1), 4, &p8, true, false), 7 % 5);
-        assert_eq!(variant_image((0, 0), 0, (1, 1), 4, &p8, true, true), 0);
+        assert_eq!(variant_image((0, 0), 0, (1, 1), 4, &p8, false), 7 % 5);
+        assert_eq!(variant_image((0, 0), 0, (1, 1), 4, &p8, true), 0);
     }
 
     /// spec: S-0010 claim 14 (entries 0 … 7, no clash with earlier index neighbours, 64 … 4096 draws)

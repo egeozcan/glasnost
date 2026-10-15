@@ -12,9 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
-use glasnost_convert::theater::{
-    Catalogue, TheaterQuirks, alternate_image_mark, variant_image, variant_pattern,
-};
+use glasnost_convert::theater::{Catalogue, alternate_image_mark, variant_image, variant_pattern};
 use glasnost_fmt::hva::Hva;
 use glasnost_fmt::image::IndexedImage;
 use glasnost_fmt::shp::Shp;
@@ -1266,7 +1264,6 @@ impl Builder<'_> {
         if self.map.fill_draws > 0 && self.cells_loaded.is_none() {
             self.note(notes::WATER_FILL);
         }
-        let q = TheaterQuirks::default();
         // spec: S-0010 claim 14, S-0202 claim 11 (the 8 × 8 pattern from the unsynchronised stream, built afresh at map load)
         let mut stream = glasnost_sim::rng::Rng::new(super::live::SANDBOX_SEED);
         let (p8, _) = variant_pattern(|| stream.raw());
@@ -1346,7 +1343,6 @@ impl Builder<'_> {
                 (plain.width, plain.height),
                 f.variants.len(),
                 &p8,
-                q.variant_origin_mismatch,
                 marked,
             );
             let file = if v == 0 {
@@ -1365,17 +1361,21 @@ impl Builder<'_> {
             self.built.shown_tiles.insert(c, (upper(&name), index));
             let cell_images = match image.cells.get(index).copied().flatten() {
                 Some(i) => i,
-                // spec: S-0010 claim 24 (quirks.variant_cell_missing: an empty position paints nothing)
-                None if !q.variant_cell_missing => {
-                    match plain.cells.get(s.max(0) as usize).copied().flatten() {
-                        Some(i) => i,
-                        None => continue,
+                // spec: S-0010 claim 24 (missing tile cells: the plain image's tile cell at t mod (w × h) instead, our engine's correction with no switch; none there either: nothing painted)
+                None => match plain
+                    .cells
+                    .get(s.rem_euclid((plain.width * plain.height).max(1)) as usize)
+                    .copied()
+                    .flatten()
+                {
+                    Some(i) => i,
+                    None => {
+                        self.drop_object(
+                            "cell paints nothing: neither its shown image nor the plain image has a tile cell there",
+                        );
+                        continue;
                     }
-                }
-                None => {
-                    self.drop_object("cell paints nothing: its shown image has no tile cell there");
-                    continue;
-                }
+                },
             };
             let (img, dep, _, _, extra) = cell_images;
             let level = i32::from(cell.level);

@@ -2559,14 +2559,6 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "importer (convert::layers::LayerQuirks), S-0104 claim 12",
     ),
     (
-        "variant_origin_mismatch",
-        "importer (convert::theater::TheaterQuirks), S-0010 claim 13",
-    ),
-    (
-        "variant_cell_missing",
-        "importer (convert::theater::TheaterQuirks), S-0010 claim 24",
-    ),
-    (
         "anti_air_rate_layer_reset",
         "importer (convert::layers::LayerQuirks), S-0215 claim 21",
     ),
@@ -2709,6 +2701,8 @@ mod tests {
         // Switches a spec names only to withdraw them.
         const WITHDRAWN: &[&str] = &[
             "alliance_message_slot_colour", // spec: S-0413 Edge cases (fixed with no switch; the old switch must not survive)
+            "variant_origin_mismatch",      // spec: S-0010 claim 13 (corrected with no switch)
+            "variant_cell_missing",         // spec: S-0010 claim 24 (corrected with no switch)
         ];
         let q = Quirks::default();
         let have: std::collections::BTreeSet<&str> =
