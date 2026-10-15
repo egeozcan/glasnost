@@ -13,10 +13,6 @@
 //!
 //! An air transport's unload phase is likewise its *unload* behaviour's
 //! progress count, with [`air_phase`]'s numbering (claim 13).
-//!
-//! Interim rules tied to requests: an air transport's release placement
-//! away from surface height and of a vehicle passenger (Q-0672), and the
-//! replacement centre when map waypoint 700 is undefined (Q-0673).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -1289,7 +1285,7 @@ fn selection(w: &mut World, t: ObjectId) {
     // spec: S-0507 claim 13 and Edge cases (quirks.air_unload_reselects_clear_destination: a passing destination is replaced; off, a failing one)
     let replace = passes == w.rules().quirks.air_unload_reselects_clear_destination;
     if replace {
-        // spec: S-0507 claim 13 (no original-team membership: map waypoint 700 is the centre); Q-0673 (interim: an undefined waypoint stands for cell (0, 0), as S-0011 claim 33's actions)
+        // spec: S-0507 claim 13 and Import mapping (no original-team membership: map waypoint 700 is the centre; an undefined marker supplies cell (0, 0) and the search still runs)
         let centre = w
             .triggers
             .waypoints
@@ -1297,7 +1293,7 @@ fn selection(w: &mut World, t: ObjectId) {
             .map_or(CellXY::new(0, 0), |&(x, y)| {
                 CellXY::new(i32::from(x), i32::from(y))
             });
-        // spec: S-0507 claim 13 (S-0501 claim 40's replacement-cell search, radii 0 … 31; the waypoint cell itself is retained if it fails)
+        // spec: S-0507 claim 13 (S-0501 claim 40's replacement-cell search, radii 0 … 31 with one draw each; failure retains the search centre, the placeholder (0, 0) with an undefined marker)
         let c = crate::air::replacement_search(w, t, centre).unwrap_or(centre);
         crate::econ::assign_destination(w, t, Some(Target::Cell(c)));
         return;
@@ -1367,33 +1363,44 @@ fn release(w: &mut World, t: ObjectId) {
 }
 
 /// Where a passenger released by air transport `t` is put (claim 13), or
-/// `None` when an infantry unit finds no standing position.
+/// `None` when the placement fails: an infantry unit at surface height that
+/// finds no standing position, or an aircraft cell whose entry outcome for
+/// the passenger is not clear.
 fn release_position(w: &mut World, t: ObjectId, p: ObjectId) -> Option<Pos> {
     let o = w.obj(t)?.clone();
     let kind = w.obj(p)?.kind;
     // spec: S-0507 claim 13 (the desired world position: the aircraft's exact world position, not its cell centre)
     let (x, y) = (o.pos.x, o.pos.y);
-    if kind != Kind::Infantry {
-        // Q-0672 (interim: a vehicle passenger is put at the aircraft's exact horizontal position)
-        w.note("Q-0672: a vehicle passenger of an air transport is put at the aircraft's position");
-        return Some(Pos::new(x, y, w.surface_at(x, y)));
-    }
-    if crate::air::height(w, t) != 0 {
-        // Q-0672 (interim: away from surface height the infantry choice is made all the same, at the surface below)
-        w.note("Q-0672: an infantry passenger released away from surface height uses the surface choice below the aircraft");
-    }
+    // spec: S-0507 claim 13 (integer leptons: the terrain surface height at the aircraft's horizontal point)
+    let surface = w.surface_at(x, y);
     let c = o.pos.cell();
-    // spec: S-0507 claim 13 and S-0208 claim 3 (the desired point's class; a centre class takes the ranged draw, a side class its non-random row)
-    let class = crate::walk::position_class(x.rem_euclid(256), y.rem_euclid(256), true);
-    // spec: S-0507 claim 13 and S-0208 claim 3 (only the aircraft itself is excluded from occupancy: its object-present mark is set aside for the choice)
+    // spec: S-0507 claim 13 and S-0208 claim 3 (only the aircraft itself is excluded from occupancy: its object-present mark is set aside)
     let had = crate::air::set_aside_mark(w, t);
-    let k = crate::walk::choose_position(w, c, Layer::Ground, class, false);
+    let at = if kind == Kind::Infantry && o.pos.z == surface {
+        // spec: S-0507 claim 13 (infantry exactly at surface height: S-0208 claim 3's occupant-aware choice in the same cell; a centre class takes the ranged draw, a side class its non-random row; refusal fails the placement)
+        let class = crate::walk::position_class(x.rem_euclid(256), y.rem_euclid(256), true);
+        crate::walk::choose_position(w, c, Layer::Ground, class, false).map(|k| {
+            let (u, v) = crate::walk::standing_point(k);
+            // spec: S-0208 table P (a standing position within the cell); S-0507 claim 13 (keeping the terrain height at the aircraft's original horizontal point)
+            Pos::new(256 * c.x + u, 256 * c.y + v, surface)
+        })
+    } else {
+        // spec: S-0507 claim 13 (infantry above surface height and every vehicle: the aircraft's exact horizontal position and height, with no standing-position draw and no nearby search; a height below the terrain is raised to it)
+        Some(Pos::new(x, y, o.pos.z.max(surface)))
+    };
+    // spec: S-0507 claim 13 (for both kinds the ordinary placement entry test must also find the aircraft's own cell clear, with no requested entry direction or level; a refusal fails the placement)
+    let reference = occupancy::reference_level(w, t);
+    // spec: S-0507 claim 13 (the aircraft itself does not obstruct this placement: its listed entry is set aside too; other occupants count normally)
+    let listed = w.cells.list(c, o.layer).iter().position(|&x| x == t);
+    w.cells.leave(c, o.layer, t);
+    let at = at.filter(|_| enters(w, p, c, reference));
+    if let Some(i) = listed {
+        w.cells.restore(c, o.layer, t, i);
+    }
     if had {
         crate::air::restore_mark(w, t);
     }
-    let (u, v) = crate::walk::standing_point(k?);
-    let (px, py) = (256 * c.x + u, 256 * c.y + v); // spec: S-0208 table P (a standing position within the cell)
-    Some(Pos::new(px, py, w.surface_at(px, py)))
+    at
 }
 
 /// Every passenger of transport `t` dies with it, credited by `hit`, one

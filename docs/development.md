@@ -608,14 +608,7 @@ S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Pas
 
   An air transport lets its passengers out once it has landed, or once it has stopped in the air with no destination.
 
-Provisional rules of M6b transports, each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `transport::release_position` | a vehicle passenger of an air transport is put at the aircraft's exact horizontal position on the surface; an infantry passenger released while the aircraft is above surface height takes the surface choice in the cell below | Q-0672 |
-| `transport::selection` | with map waypoint 700 undefined, the replacement search is centred on cell (0, 0), as S-0011 claim 33's actions take an undefined waypoint | Q-0673 |
-
-The Q-0700 to Q-0707 rows are retired: S-0507 revision 4 answers Q-0700 (claim 10 placement), Q-0701 (claim 8 shore search), Q-0702 (claim 16 removal cleanup), Q-0703 (claim 9 alliance object), Q-0704 (the tunnel edge of Terms and claim 7), Q-0705 (claim 13 phases) and Q-0706 (claim 11 delay, already built), and S-0312 revision 26 answers Q-0707 (claim 12: the dying vehicle is left out of the escape entry tests, now with its vehicle-present flag as well).
+M6b transports have no provisional rules left. S-0507 revision 5 answers Q-0672 (claim 13: an air transport releases infantry above the surface and every vehicle at its exact position and height, with no standing-position choice, and the own cell must be clear for both kinds) and Q-0673 (an undefined waypoint 700 supplies cell (0, 0), the search still runs and its failure keeps that centre); their rows are retired. The Q-0700 to Q-0707 rows were retired before: S-0507 revision 4 answers Q-0700 (claim 10 placement), Q-0701 (claim 8 shore search), Q-0702 (claim 16 removal cleanup), Q-0703 (claim 9 alliance object), Q-0704 (the tunnel edge of Terms and claim 7), Q-0705 (claim 13 phases) and Q-0706 (claim 11 delay, already built), and S-0312 revision 26 answers Q-0707 (claim 12: the dying vehicle is left out of the escape entry tests, now with its vehicle-present flag as well).
 
 ## Simulation (M6b: bridges)
 
