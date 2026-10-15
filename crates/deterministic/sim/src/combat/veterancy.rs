@@ -80,7 +80,6 @@ pub fn destruction_credited(
     house: Option<crate::world::HouseId>,
 ) {
     let rules = w.rules_arc();
-    let mode = rules.mode;
     let Some(v) = w.obj(victim).cloned() else {
         return;
     };
@@ -135,9 +134,18 @@ pub fn destruction_credited(
         // spec: S-0311 Edge cases (zero_kill_value_caps off: a kill value of 0 never changes experience)
         return;
     }
+    let ar = actual_cost(w, obj);
+    gain(w, obj, value, ar);
+}
+
+/// The experience gain of S-0311 F3 for a kill value `value` and the
+/// credited object's actual cost `ar` (also S-0614 F5, the cull).
+pub fn gain(w: &mut World, obj: ObjectId, value: i32, ar: i32) {
+    let rules = w.rules_arc();
+    let mode = rules.mode;
+    let Some(oo) = w.obj(obj) else { return };
     // spec: S-0311 F3 (s = RZ₅₃(e + RZ₅₃(V / RZ₅₃(A_r × ρ))); e′ = RZ₂₄(c) if c ≤ s or s is NaN, else RZ₂₄(s))
     let e = oo.combat.experience.to_f64();
-    let ar = actual_cost(w, obj);
     let g = &rules.combat.general;
     let s = e.add(
         F64::from_i64(i64::from(value), mode).div(

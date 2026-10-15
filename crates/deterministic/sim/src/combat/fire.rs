@@ -243,6 +243,12 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         tob.combat.expected_health = tob.combat.expected_health.wrapping_sub(e);
     }
     after_shot(w, firer, weapon);
+    // spec: S-0614 claim 1 (a latching weapon: the firer leaves the map and travels inside the projectile)
+    if let Some(carrier) = launched
+        && crate::parasite::latching(w, weapon)
+    {
+        crate::parasite::fired(w, firer, carrier, target);
+    }
     true
 }
 

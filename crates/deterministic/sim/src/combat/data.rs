@@ -118,6 +118,10 @@ pub struct WeaponRules {
     pub omni_fire: bool,
     /// Area-fire flag.
     pub area_fire: bool,
+    /// Launch-inside flag (S-0614 Terms).
+    pub limbo_launch: bool,
+    /// Animation list: the per-direction delivery animation (S-0614 claim 9).
+    pub anim: Vec<String>,
 }
 
 impl WeaponRules {
@@ -295,6 +299,12 @@ pub struct WarheadRules {
     pub is_locomotor: bool,
     /// Registered under the nuclear warhead name (S-0306 claim 25).
     pub nuke: bool,
+    /// Parasite flag (S-0614 Terms).
+    pub parasite: bool,
+    /// Paralysis length P, ticks (S-0614 claims 6, 7).
+    pub paralyzes: i32,
+    /// Cull flag (S-0614 claim 11).
+    pub culling: bool,
 }
 
 impl WarheadRules {
@@ -577,6 +587,10 @@ pub struct VehicleCombat {
     pub suppression_threshold: i32,
     /// Missile spawn.
     pub missile_spawn: bool,
+    /// Can carry a parasite (S-0614 claim 2).
+    pub parasiteable: bool,
+    /// Re-select flag (S-0614 claim 19, presentation).
+    pub reselect_if_limboed: bool,
 }
 
 /// The building-only combat fields.
@@ -722,6 +736,10 @@ pub struct CombatGeneral {
     pub barrel_particle: Option<String>,
     /// Metallic debris list.
     pub metallic_debris: Vec<String>,
+    /// Wake animation (S-0614 claim 10; S-0312).
+    pub wake: Option<String>,
+    /// Default spark system (S-0614 claim 9).
+    pub default_spark_system: Option<String>,
     /// Nullify animation.
     pub nullify_anim: Option<String>,
     /// Lightning warhead.
@@ -958,6 +976,10 @@ pub fn tables(
                 is_locomotor: b(h.is_locomotor),
                 // spec: S-0306 claim 25 and Import mapping (the nuclear warhead name, compared without regard to case)
                 nuke: n.eq_ignore_ascii_case("NUKE"),
+                // spec: S-0614 Import mapping (Parasite absent: no; Paralyzes absent: 0; Culling absent: no)
+                parasite: b(h.parasite),
+                paralyzes: h.paralyzes.unwrap_or(0),
+                culling: b(h.culling),
             }
         })
         .collect();
@@ -1020,6 +1042,9 @@ pub fn tables(
                 fire_once: b(w.fire_once),
                 omni_fire: b(w.omni_fire),
                 area_fire: b(w.area_fire),
+                // spec: S-0614 Import mapping (LimboLaunch absent: no; Anim absent: empty)
+                limbo_launch: b(w.limbo_launch),
+                anim: w.anim.clone().unwrap_or_default(),
             }
         })
         .collect();
@@ -1216,6 +1241,10 @@ pub fn vehicle_combat(u: &rs::UnitType, mode: Rounding) -> VehicleCombat {
         // spec: S-0315 Constants (suppression threshold absent: 0)
         suppression_threshold: u.suppression_threshold.unwrap_or(0),
         missile_spawn: b(u.missile_spawn),
+        // spec: S-0614 Import mapping (Parasiteable absent: yes for all three type kinds)
+        parasiteable: u.parasiteable.unwrap_or(true),
+        // spec: S-0614 Import mapping (ReselectIfLimboed absent: no)
+        reselect_if_limboed: b(u.reselect_if_limboed),
     }
 }
 
@@ -1368,6 +1397,9 @@ pub fn combat_rules(
         barrel_debris: g.barrel_debris.clone().unwrap_or_default(),
         barrel_particle: g.barrel_particle.clone(),
         metallic_debris: g.metallic_debris.clone().unwrap_or_default(),
+        // spec: S-0614 Import mapping (Wake as S-0312; DefaultSparkSystem default not established: none)
+        wake: g.wake.clone(),
+        default_spark_system: g.default_spark_system.clone(),
         nullify_anim: g.weapon_nullify_anim.clone(),
         lightning_warhead: warhead(&g.lightning_warhead),
         bolt_explosion: g.weather_con_bolt_explosion.clone(),

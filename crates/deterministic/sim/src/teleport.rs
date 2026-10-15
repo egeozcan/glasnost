@@ -189,8 +189,8 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         set_state(w, id, st);
         return;
     };
-    // spec: S-0207 claim 20 (a) (dropped while phasing in; the electromagnetic pulse, paralysis and being erased have no state in our engine)
-    if st.phasing.is_some() {
+    // spec: S-0207 claim 20 (a) (dropped while phasing in or held, S-0614 Terms; the electromagnetic pulse and being erased have no state in our engine)
+    if st.phasing.is_some() || crate::parasite::held(w, id) {
         st.for_dest = None;
         set_state(w, id, st);
         drop_destination(w, id);
@@ -554,6 +554,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         }
         return false;
     }
+    // spec: S-0614 claim 8 (a held unit does not move under the teleporting locomotor)
+    if crate::parasite::held(w, id) {
+        return false;
+    }
     match st.landing {
         Some(l) if l != o.pos => {
             jump(w, id, l);
@@ -614,6 +618,8 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     if let Some(warp) = r.warp_out.clone() {
         crate::load::anim_created_at(w, &warp, Some((o.pos.x, o.pos.y, o.pos.z)));
     }
+    // spec: S-0207 claim 20 (e) and S-0614 claim 12 (a parasite inside exits before the host leaves its old position)
+    crate::parasite::host_jumps(w, id);
     let old = o.pos.cell();
     let new = l.cell();
     let high = w.cells.idx(new).is_some_and(|i| w.cells.deck[i]);

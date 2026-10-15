@@ -195,6 +195,8 @@ pub fn repair_step(w: &mut World, id: ObjectId) -> Option<StepOutcome> {
     }
     let size = step_size(w, id);
     crate::seams::pay(w, house, cost);
+    // spec: S-0314 claim 3 and S-0614 claim 12 (a repair step that goes ahead makes the parasite leave)
+    crate::parasite::repair_step(w, id);
     // spec: S-0314 claim 3 (health plus the step size below the strength: more needed; otherwise health becomes the strength: done)
     let (health, out) = if i64::from(h) + i64::from(size) < i64::from(s) {
         (h + size, StepOutcome::MoreNeeded)

@@ -281,6 +281,10 @@ pub fn check(
     if crate::teleport::phasing_in(w, firer) {
         return Answer::Rearming;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)
+    if crate::parasite::held_spawner(w, firer, weapon) {
+        return Answer::Impossible;
+    }
     // spec: S-0301 claim 9 rank 4 (a spawner weapon none of whose spawned aircraft is alive: rearming; no spawned aircraft exist in our engine)
     if wr.spawner {
         return Answer::Rearming;
@@ -321,6 +325,18 @@ pub fn check(
         {
             return Answer::Illegal;
         }
+        // spec: S-0301 claim 9 rank 9 and S-0614 claim 5 (the parasite tests of a latching weapon against a mobile unit)
+        if let Target::Object(x) = tg
+            && w.obj(x).is_some_and(|ob| ob.kind.is_mobile())
+            && crate::parasite::latching(w, weapon)
+            && crate::parasite::shot_illegal(w, firer, x)
+        {
+            return Answer::Illegal;
+        }
+    }
+    // spec: S-0301 claim 9 rank 9 and S-0614 claim 8 (a held organic firer: illegal)
+    if crate::parasite::held_organic(w, firer) {
+        return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 10 (the range test, when asked for)
     if with_range && !range::in_range(w, firer, Some(weapon), target, None) {
