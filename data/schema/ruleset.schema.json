@@ -7256,6 +7256,11 @@
           "type": "boolean",
           "default": true
         },
+        "landing_own_cell_no_result": {
+          "description": "When the own-cell landing search near a close building finds no cell, the landing destination becomes the placeholder at map cell (0, 0), which the aircraft discards at the end of its update and is given again, possibly heading for that map corner; off: the failed search counts as no successful building choice and the other-object fallback follows, with the chosen building counted like any other own-house object, and finally the aircraft's own cell.",
+          "type": "boolean",
+          "default": true
+        },
         "last_bale_lost": {
           "description": "The last bale taken from a cell yields nothing.",
           "type": "boolean",

@@ -1265,6 +1265,10 @@ pub struct Quirks {
     // spec: S-0501 claim 21 and F9, Edge cases
     #[serde(default = "on")]
     pub pad_distance_overflow: bool,
+    /// When the own-cell landing search near a close building finds no cell, the landing destination becomes the placeholder at map cell (0, 0), which the aircraft discards at the end of its update and is given again, possibly heading for that map corner; off: the failed search counts as no successful building choice and the other-object fallback follows, with the chosen building counted like any other own-house object, and finally the aircraft's own cell.
+    // spec: S-0501 claim 41, F8 and Edge cases
+    #[serde(default = "on")]
+    pub landing_own_cell_no_result: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded. Not implemented yet (wave 2).
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -1904,6 +1908,7 @@ impl Default for Quirks {
             aircraft_smoke_scenario_draw: true,
             pad_limit_counts_list_only: true,
             pad_distance_overflow: true,
+            landing_own_cell_no_result: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -2747,6 +2752,10 @@ impl Quirks {
                 self.pad_limit_counts_list_only,
             ),
             ("pad_distance_overflow", self.pad_distance_overflow),
+            (
+                "landing_own_cell_no_result",
+                self.landing_own_cell_no_result,
+            ),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
             (
