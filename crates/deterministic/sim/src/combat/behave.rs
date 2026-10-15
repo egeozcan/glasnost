@@ -351,24 +351,22 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
             Answer::CanFire => {
                 let gate = upgrade_gate(w, id);
                 if gate == Some(false) && rules.quirks.upgrade_attack_weapon_gate {
-                    // spec: S-0215 claim 32 (a failed upgrade weapon gate: no firing attempt; target, attack and ready mark kept, 1 tick)
-                    // Q-0798 interim: an animation-delayed building starts no delayed shot either.
+                    // spec: S-0215 claim 32 and S-0301 claim 14 (a failed upgrade weapon gate: no firing attempt and no delayed shot, with the original quirk setting; target, attack and ready mark kept, 1 tick)
                     return 1;
                 }
-                if b.building.anim_delayed_fire {
-                    // spec: S-0301 claim 14 (an animation-delayed building starts its delayed shot instead)
-                    // Q-0798 interim: with a passing gate too, the delayed single shot and no paired attempts.
+                if gate == Some(true) {
+                    // spec: S-0215 claim 32 and S-0301 claims 9 and 14 (a passing gate: a primary attempt, then a secondary attempt with no firing check of its own, whatever rearm the primary began; immediately, also for an animation-delayed building, and starting no delayed shot)
+                    // spec: S-0301 claim 9 (a secondary slot that resolves to no weapon: the attempt does nothing, `fire::shot` returns before any change or draw)
+                    crate::combat::fire::shot(w, id, 0, t);
+                    crate::combat::fire::shot(w, id, 1, t);
+                } else if b.building.anim_delayed_fire {
+                    // spec: S-0301 claim 14 (the ordinary path, the gate not applying or quirks.upgrade_attack_weapon_gate off with a failed gate: an animation-delayed building starts its delayed shot instead)
                     let d = b.building.delayed_fire_delay;
                     if let Some(ob) = w.obj_mut(id) {
                         ob.combat.delayed_shot = Some(tick.wrapping_add((d - 1).max(0)));
                     }
-                } else if gate == Some(true) {
-                    // spec: S-0215 claim 32 and S-0301 claim 9 (a passing gate: a primary attempt, then a secondary attempt with no firing check of its own, whatever rearm the primary began)
-                    // Q-0798 interim: a secondary attempt with no weapon in slot 1 does nothing.
-                    crate::combat::fire::shot(w, id, 0, t);
-                    crate::combat::fire::shot(w, id, 1, t);
                 } else {
-                    // spec: S-0215 claim 32 (no installed upgrade, or quirks.upgrade_attack_weapon_gate off with a failed gate: the ordinary selected-weapon attempt)
+                    // spec: S-0215 claim 32 (no applicable gate, or quirks.upgrade_attack_weapon_gate off with a failed gate: the ordinary selected-weapon attempt)
                     crate::combat::fire::shot(w, id, slot, t);
                 }
                 1
@@ -431,12 +429,13 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
 }
 
 /// The upgrade weapon gate of a non-SAM building (S-0215 claim 32):
-/// `None` with no installed upgrade, else whether the first installed
-/// upgrade's ordinary weapons pass.
+/// `None` when the gate does not apply (a zero upgrade count or an empty
+/// position 1), else whether the upgrade in position 1 passes with its
+/// ordinary weapons.
 pub fn upgrade_gate(w: &World, id: ObjectId) -> Option<bool> {
-    use crate::combat::weapon::{building_type_slot, installed_upgrades};
-    // spec: S-0215 claim 32 (the first installed upgrade, even when another supplies the weapon chosen; Q-0798 interim: the first nonempty position)
-    let u = installed_upgrades(w, id).next()?;
+    use crate::combat::weapon::{building_type_slot, gate_upgrade};
+    // spec: S-0215 claim 32 and S-0406 claim 12 (position 1 only, even when another position supplies the weapon chosen; never the first occupied higher position nor the latest installation)
+    let u = gate_upgrade(w, id)?;
     // spec: S-0215 claim 32 (its ordinary primary and secondary, not their elite replacements)
     let Some(p) = building_type_slot(w, u, 0) else {
         // spec: S-0215 claim 32 (no primary: the gate fails)

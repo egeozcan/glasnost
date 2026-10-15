@@ -387,7 +387,12 @@ fn depart(w: &mut World, id: ObjectId, m: Member) {
 /// without releasing a parasite (claim 39).
 fn lift_off(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
+    // spec: S-0516 claim 22 (superweapon teleport: the member's removal and appearance are not ordinary leaving-play and entering-play sensor changes; its sensor disc stays at the old recorded cell through departure, landing retries and appearance, and moves at the arrival-effects update)
+    let disc = w.obj_mut(id).and_then(|ob| ob.cloak.disc.take());
     crate::econ::events::leaving_map(w, id, false);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.cloak.disc = disc;
+    }
     if o.kind == Kind::Aircraft {
         // spec: S-0209 claim 1 (an aircraft leaving clears its object-present mark)
         crate::air::clear_mark(w, id);
@@ -669,14 +674,18 @@ fn arrive(w: &mut World, id: ObjectId, m: Member) {
     }
     let warp_out = r.warp_out.clone();
     let pos = w.obj(id).map_or(o.pos, |x| x.pos);
+    let gone = fate_done
+        && w.obj(id)
+            .is_none_or(|x| crate::combat::damage::dead(x) || crate::naval::sinking(w, id));
+    if !gone {
+        // spec: S-0516 claim 22 (a surviving member's cell-arrival update comes at this arrival-effects update, after the arrival sound and the arrival-fate test and before the landing animation and the arrival hold: its disc transfers to the destination and the adjacent sensor test applies; a member killed by the fate test gets none; it does not wait for its own locomotor or the hold)
+        crate::cloak::machine::cell_movement_completed(w, id);
+    }
     if let Some(a) = warp_out {
         // spec: S-0513 claim 39 (the warp-out animation at the new position)
         crate::combat::effects::anim(w, &a, pos);
     }
-    if fate_done
-        && w.obj(id)
-            .is_none_or(|x| crate::combat::damage::dead(x) || crate::naval::sinking(w, id))
-    {
+    if gone {
         set_member(w, id, None);
         return;
     }

@@ -421,7 +421,12 @@ fn claim_25_no_departure_cell_keeps_contact() {
         tick::step(&mut w);
     }
     assert_eq!(contact(&w, v), Some(d), "contact retained");
-    assert_eq!(w.obj(v).unwrap().dest, None, "no departure ordered");
+    // spec: S-0207 claim 26 and S-0215 claim 29 (the accepted entry's building destination is retained at the docking cell; no departure cell was ordered)
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(Target::Object(d)),
+        "no departure ordered"
+    );
     assert_eq!(sounds(&w, Sound::UnitRepaired), 0);
     objects::remove(&mut w, blockers[0]);
     let dd = d_rep(&w);
@@ -1253,11 +1258,11 @@ fn claim_17_driving_movement_report() {
     assert_eq!(w.obj(v).unwrap().pos.cell(), c.cell());
 }
 
-// spec: S-0314 claims 17 and 18, S-0207 claim 25 (Q-0794 question 3: an accepted enter order from rest in the supplied docking point's cell supplies that point to the driving locomotor despite cell equality, with no search or track; the retained order-level destination makes it a moving destination, so the pad exchange does not tether at the repeated request); Q-0797 (interim: the next drive update at rest in the goal cell removes the order-level destination, and the point with it)
+// spec: S-0314 claims 17 and 18, S-0207 claim 25 (Q-0794 question 3: an accepted enter order from rest in the supplied docking point's cell supplies that point to the driving locomotor despite cell equality, with no search or track; the retained order-level destination makes it a moving destination, so the pad exchange does not tether at the repeated request); S-0207 claim 26 (Q-0797: the destination names a building, so the drive updates at rest in its docking point's cell remove neither destination)
 #[test]
 fn claim_17_same_cell_enter_supplies_the_point() {
     let mut r = rules();
-    r.sim.buildings.get_mut("PAD").unwrap().econ.docking_offsets = Some(vec![[0, 512, 0]]);
+    r.sim.buildings.get_mut("PAD").unwrap().econ.docking_offsets = Some(vec![[0, 400, 0]]);
     let mut w = game(&r);
     let d = depot_at(&mut w, "PAD");
     let v = truck(&mut w, 0, 1, 3, 300);
@@ -1283,10 +1288,85 @@ fn claim_17_same_cell_enter_supplies_the_point() {
     depot::process_enter(&mut w, v);
     assert!(!docked(&w, v), "no tether at the repeated request");
     assert_eq!(w.obj(v).unwrap().pos, pos);
-    // Q-0797 interim: the drive update at rest in the goal cell removes
-    // the order-level destination, and with it the point.
-    tick::step(&mut w);
+    // spec: S-0207 claim 26 (a building destination is kept by locomotion updates at rest in the supplied point's cell: cell equality removes neither the order-level destination nor the point)
+    for _ in 0..3 {
+        glasnost_sim::drive::tick(&mut w, v);
+    }
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(d)));
+    assert_eq!(glasnost_sim::drive::goal(&w, v), Some(dp));
+    assert_eq!(w.obj(v).unwrap().pos, pos);
+}
+
+/// A truck in guard in the pad depot's docking-point cell with the accepted
+/// same-cell enter order, the docking point offset `offset` in y and the
+/// truck's height raised by `dz`.
+fn guard_row_scene(offset: i32, dz: i32) -> (World, ObjectId, ObjectId) {
+    let mut r = rules();
+    r.sim.buildings.get_mut("PAD").unwrap().econ.docking_offsets = Some(vec![[0, offset, 0]]);
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD");
+    let v = truck(&mut w, 0, 1, 3, 300);
+    open(&mut w);
+    w.obj_mut(v).unwrap().pos.z += dz;
+    assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+    orders::apply_pending(&mut w);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(d)), "accepted");
+    assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
+    (w, d, v)
+}
+
+// spec: S-0207 claim 26 (third row: at rest in guard with the locomotor destination point present, the vehicle's world point equal to it in all three coordinates removes the goal, a building destination included, and the point with it)
+#[test]
+fn claim_26_guard_row_removes_the_building_goal_at_the_exact_point() {
+    let (mut w, _d, v) = guard_row_scene(512, 0);
+    let dp = glasnost_sim::drive::goal(&w, v).expect("point");
+    assert_eq!(w.obj(v).unwrap().pos, dp, "all three coordinates equal");
+    glasnost_sim::drive::tick(&mut w, v);
+    assert_eq!(w.obj(v).unwrap().dest, None, "goal removed");
     assert!(!glasnost_sim::drive::goal_present(&w, v));
+}
+
+// spec: S-0207 claim 26 (the guard row needs exact integer-lepton equality of all coordinates; the same cell, a horizontal displacement inside it, or a height difference is insufficient, and a building destination is not removed by cell equality)
+#[test]
+fn claim_26_guard_row_needs_exact_equality() {
+    for (offset, dz) in [(400, 0), (512, 1)] {
+        let (mut w, d, v) = guard_row_scene(offset, dz);
+        let dp = glasnost_sim::drive::goal(&w, v).expect("point");
+        assert_eq!(w.obj(v).unwrap().pos.cell(), dp.cell(), "same cell");
+        assert_ne!(w.obj(v).unwrap().pos, dp, "not the same point");
+        for _ in 0..3 {
+            glasnost_sim::drive::tick(&mut w, v);
+        }
+        assert_eq!(
+            w.obj(v).unwrap().dest,
+            Some(Target::Object(d)),
+            "offset {offset}, dz {dz}"
+        );
+        assert!(glasnost_sim::drive::goal_present(&w, v));
+    }
+}
+
+// spec: S-0215 claim 29 (Q-0797: an accepted entry with contact and no approach destinations keeps the building destination through due enter processings at the docking-point cell; the movement arrival's queued sleep is not a removal of the order-level destination)
+#[test]
+fn s0215_claim_29_entry_keeps_the_building_destination() {
+    let mut r = rules();
+    r.sim.buildings.get_mut("PAD").unwrap().econ.docking_offsets = Some(vec![[0, 400, 0]]);
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD");
+    let v = truck(&mut w, 0, 1, 3, 300);
+    open(&mut w);
+    assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+    orders::apply_pending(&mut w);
+    for _ in 0..3 {
+        depot::process_enter(&mut w, v);
+        glasnost_sim::drive::tick(&mut w, v);
+    }
+    depot::movement_arrival(&mut w, v);
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(Target::Object(d)),
+        "kept through the repeated processings and the arrival exchange"
+    );
 }
 
 // spec: S-0314 claim 17 (with place 0 empty, a requester with a moving destination cannot tether through the exchange; one without a moving destination still can)

@@ -2170,7 +2170,7 @@ fn launched(w: &World) -> Vec<glasnost_sim::combat::data::WeaponId> {
     w.projectiles.values().map(|p| p.weapon).collect()
 }
 
-// spec: S-0308 claim 12 (slot i comes from the first installed upgrade, in installation order, whose type has a weapon there; always its ordinary slot, whatever the host's rank; only then the building's own slot)
+// spec: S-0308 claim 12 and S-0406 claim 12 (slot i comes from the first upgrade position, in increasing position order up to the count, whose type has a weapon there; always its ordinary slot, whatever the host's rank; only then the building's own slot)
 #[test]
 fn s0308_claim_12_upgrades_supply_weapons() {
     use glasnost_sim::combat::weapon::slot_weapon;
@@ -2211,7 +2211,7 @@ fn s0308_claim_12_upgrades_supply_weapons() {
     assert_eq!(slot_weapon(&w, t, 1), Some(wid(&w, "ZAP")));
 }
 
-// spec: S-0215 claim 32 (the gate: the first installed upgrade's ordinary weapons; a primary, and both slots the same type, a primary burst above 1, or a secondary burst above 1)
+// spec: S-0215 claim 32 and S-0406 claim 12 (the gate: position 1's upgrade, its ordinary weapons; a primary, and both slots the same type, a primary burst above 1, or a secondary burst above 1)
 #[test]
 fn s0215_claim_32_upgrade_gate_predicate() {
     let cases: [(Option<&str>, Option<&str>, Option<[&str; 2]>, bool); 8] = [
@@ -2299,7 +2299,7 @@ fn s0215_claim_32_passing_gate_paired_attempts() {
     attack(&mut w, t);
     assert_eq!(behave::building_process(&mut w, t), 1);
     assert_eq!(launched(&w), [wid(&w, "ZAP"), wid(&w, "ZAP")]);
-    // Q-0798 interim: a secondary attempt with no weapon does nothing.
+    // spec: S-0301 claim 9 (a secondary attempt with no weapon does nothing)
     let r = upgrade_rules(None, &[("U1", Some("ZAPB"), None, None)]);
     let (mut w, t, _) = upgraded(&r, &["U1"]);
     attack(&mut w, t);
@@ -2349,4 +2349,182 @@ fn s0215_claim_32_upgrade_only_defence_searches_and_attacks() {
     assert_eq!(behave::building_process(&mut w, t), 1);
     assert!(launched(&w).is_empty());
     assert_eq!(w.obj(t).unwrap().beh.current, Some(Behaviour::Attack));
+}
+
+// ---------------------------------------------------------------------------
+// Q-0798: the upgrade pair, the empty secondary and animation delay (S-0301
+// claims 9 and 14, S-0215 claim 32), and the upgrade positions (S-0406
+// claim 12).
+
+/// `upgrade_rules` with the host building animation-delayed (20 ticks).
+fn delayed_upgrade_rules(host: Option<&str>, ups: &[Up]) -> Ruleset {
+    let mut r = upgrade_rules(host, ups);
+    let b = r.sim.buildings.get_mut("TOWERZ").unwrap();
+    b.is_anim_delayed_fire = Some(true);
+    b.delayed_fire_delay = Some(20);
+    r
+}
+
+// spec: S-0301 claim 9 (an attempt whose secondary slot resolves to no weapon does nothing: no shot, no burst-counter change, no rearm-countdown change, no ammunition use and no random draw; the primary shot's burst position and rearm delay stay intact); S-0215 claim 32 (F17)
+#[test]
+fn s0301_claim_9_empty_secondary_attempt_does_nothing() {
+    let r = upgrade_rules(None, &[("U1", Some("ZAPB"), None, None)]);
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    let mut only_primary = w.clone();
+    let target = only_primary.obj(t).unwrap().target.unwrap();
+    assert!(fire::shot(&mut only_primary, t, 0, target));
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    let (a, b) = (w.obj(t).unwrap(), only_primary.obj(t).unwrap());
+    assert_eq!(
+        a.combat, b.combat,
+        "burst, rearm and ammunition as after the primary alone"
+    );
+    assert_eq!(a.combat.burst, 1, "the first shot of a burst of 2");
+    assert_eq!(
+        w.rng.taken(),
+        only_primary.rng.taken(),
+        "no draw from the secondary"
+    );
+    assert_eq!(launched(&w).len(), 1);
+}
+
+// spec: S-0215 claim 32 and S-0301 claim 14 (Q-0798: a passing gate makes the pair immediately in that processing even for an animation-delayed building, starting no delayed shot; an empty secondary does nothing, also then)
+#[test]
+fn s0301_claim_14_passing_gate_beats_animation_delay() {
+    let r = delayed_upgrade_rules(None, &[("U1", Some("ZAP"), Some("ZAP"), None)]);
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(
+        launched(&w),
+        [wid(&w, "ZAP"), wid(&w, "ZAP")],
+        "the pair, at once"
+    );
+    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, None, "no delayed shot");
+    // The empty secondary: only the primary, immediately, no delayed shot.
+    let r = delayed_upgrade_rules(None, &[("U1", Some("ZAPB"), None, None)]);
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(launched(&w), [wid(&w, "ZAPB")]);
+    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, None);
+}
+
+// spec: S-0215 claim 32 and S-0301 claim 14 (a failed gate with the original quirk setting starts neither an attempt nor a delayed shot; with quirks.upgrade_attack_weapon_gate off the ordinary path applies, including the animation delay; a bypassed gate (no upgrade) uses the ordinary delayed shot)
+#[test]
+fn s0301_claim_14_failed_gate_and_bypass_with_animation_delay() {
+    let mut r = delayed_upgrade_rules(Some("ZAP2"), &[("U1", Some("ZAP"), None, None)]);
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert!(launched(&w).is_empty());
+    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, None, "no delayed shot");
+    r.globals.quirks.upgrade_attack_weapon_gate = false;
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert!(launched(&w).is_empty(), "the ordinary delayed shot, not yet made");
+    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, Some(w.tick + 19));
+    let (mut w, t, _) = upgraded(&r, &[]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, Some(w.tick + 19));
+}
+
+// spec: S-0406 claim 12 and S-0215 claim 32 (the attack gate applies only with a nonzero count and an occupied position 1: a level-2 installation records position 2 and leaves the gate bypassed, a later level-less one records position 3; the provider order is 2 then 3)
+#[test]
+fn s0406_claim_12_level_skip_bypasses_the_gate() {
+    use glasnost_sim::combat::weapon::{installed_upgrades, slot_weapon};
+    let mut r = upgrade_rules(
+        Some("ZAP2"),
+        &[
+            ("U1", Some("ZAP"), None, None),
+            ("U2", Some("ZAPB"), Some("ZAPB"), None),
+        ],
+    );
+    r.sim.buildings.get_mut("U1").unwrap().econ.powers_up_to_level = Some(2);
+    let (w, t, _) = upgraded(&r, &["U1", "U2"]);
+    let b = &w.obj(t).unwrap().econ.building;
+    assert_eq!(b.upgrade_count, 3);
+    assert_eq!(b.upgrades[0], None, "position 1 stays empty");
+    assert!(b.upgrades[1].is_some() && b.upgrades[2].is_some());
+    assert_eq!(
+        behave::upgrade_gate(&w, t),
+        None,
+        "the failing U1 in position 2 imposes no gate"
+    );
+    let order: Vec<u32> = installed_upgrades(&w, t).collect();
+    assert_eq!(order, [b.upgrades[1].unwrap(), b.upgrades[2].unwrap()]);
+    assert_eq!(slot_weapon(&w, t, 0), Some(wid(&w, "ZAP")), "position 2 first");
+    assert_eq!(
+        slot_weapon(&w, t, 1),
+        Some(wid(&w, "ZAPB")),
+        "position 3 supplies the slot 2 lacks"
+    );
+}
+
+// spec: S-0406 claim 12 (count 0 after a turret-upgrade sale: retained positions supply no weapons and no gate; a new level-less installation at count 0 records position 1 and activates that position's gate, higher retained positions staying ineligible until the count reaches them, where a later installation replaces the retained type)
+#[test]
+fn s0406_claim_12_count_zero_retains_positions_without_effect() {
+    use glasnost_sim::combat::weapon::{installed_upgrades, slot_weapon};
+    let r = upgrade_rules(
+        Some("ZAP2"),
+        &[
+            ("U1", Some("ZAP"), Some("ZAP"), None),
+            ("U2", Some("ZAPB"), None, None),
+            ("U3", Some("ZAP"), None, None),
+        ],
+    );
+    let (mut w, t, _) = upgraded(&r, &["U1", "U2"]);
+    let (u1, u2) = {
+        let b = &w.obj(t).unwrap().econ.building;
+        (b.upgrades[0].unwrap(), b.upgrades[1].unwrap())
+    };
+    // A turret-upgrade sale leaves count 0 and the recorded types.
+    w.obj_mut(t).unwrap().econ.building.upgrade_count = 0;
+    assert_eq!(installed_upgrades(&w, t).count(), 0, "no provider at count 0");
+    assert_eq!(behave::upgrade_gate(&w, t), None, "no gate at count 0");
+    assert_eq!(
+        slot_weapon(&w, t, 0),
+        Some(wid(&w, "ZAP2")),
+        "the host's own weapon"
+    );
+    // A new installation records position 1 and the gate tests it (U3: a
+    // single-shot primary only, which fails).
+    let u3 = glasnost_sim::objects::type_index(w.rules(), Kind::Building, b"U3").unwrap();
+    glasnost_sim::econ::placement::add_upgrade(&mut w, t, u3);
+    let b = &w.obj(t).unwrap().econ.building;
+    assert_eq!((b.upgrade_count, b.upgrades[0]), (1, Some(u3)));
+    assert_eq!(b.upgrades[1], Some(u2), "position 2 stays recorded");
+    assert_ne!(Some(u1), b.upgrades[0]);
+    assert_eq!(behave::upgrade_gate(&w, t), Some(false), "position 1's gate");
+    assert_eq!(
+        installed_upgrades(&w, t).collect::<Vec<_>>(),
+        [u3],
+        "position 2 not yet eligible"
+    );
+    // The next installation replaces position 2's retained type.
+    let u1b = glasnost_sim::objects::type_index(w.rules(), Kind::Building, b"U1").unwrap();
+    glasnost_sim::econ::placement::add_upgrade(&mut w, t, u1b);
+    let b = &w.obj(t).unwrap().econ.building;
+    assert_eq!((b.upgrade_count, b.upgrades[1]), (2, Some(u1b)));
+}
+
+// spec: S-0406 claim 12 (a count above 3, as on the wall tower: there is no fourth valid position; the provider search considers positions 1 to 3 only and the gate still refers to position 1)
+#[test]
+fn s0406_claim_12_count_above_three_has_three_positions() {
+    use glasnost_sim::combat::weapon::installed_upgrades;
+    let r = upgrade_rules(
+        Some("ZAP2"),
+        &[
+            ("U1", Some("ZAP"), Some("ZAP"), None),
+            ("U2", Some("ZAPB"), None, None),
+            ("U3", Some("ZAP"), None, None),
+        ],
+    );
+    let (mut w, t, _) = upgraded(&r, &["U1", "U2", "U3"]);
+    w.obj_mut(t).unwrap().econ.building.upgrade_count = 4;
+    assert_eq!(installed_upgrades(&w, t).count(), 3);
+    assert_eq!(behave::upgrade_gate(&w, t), Some(true), "position 1 passes");
 }

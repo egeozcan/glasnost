@@ -92,6 +92,12 @@ pub struct Generator {
     /// *idle generator*).
     #[serde(default)]
     pub phase: FieldPhase,
+    /// Whether the building was in operation at its last turn (S-0516 claim
+    /// 20: the field reacts to changes in operation, not to its level). A
+    /// new generator records out of operation, so its first turn in
+    /// operation is a change.
+    #[serde(default)]
+    pub was_on: bool,
 }
 
 /// A cloak generator's field state (S-0516 Terms, claim 20): idle means

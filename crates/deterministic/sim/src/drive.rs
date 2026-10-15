@@ -1507,9 +1507,14 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         if o.dest.is_none() {
             return false;
         }
+        // spec: S-0207 claim 26 (the first locomotion update without an active track removes a cell goal in the vehicle's cell, and a guard goal at the exact point, in that update's tick; also the assignment tick when assignment precedes the update)
+        if goal_cleanup(w, id) {
+            return false;
+        }
         if o.path.steps.is_empty() {
             let goal = path::goal_cell(w, id);
             if goal == Some(o.pos.cell()) || goal.is_none() {
+                // spec: S-0207 claim 26 (a building goal in its supplied point's cell is kept: cell equality alone removes neither destination)
                 arrive_or_rest(w, id);
                 return false;
             }
@@ -1567,29 +1572,56 @@ fn set_budget_zero(w: &mut World, id: ObjectId) {
     }
 }
 
-/// A track target reached with no further step (S-0207 claim 11).
+/// A track target reached with no further step (S-0207 claim 11): the
+/// vehicle is at rest. Completion alone leaves the order-level destination
+/// in place (claim 26, final track); the next update that begins without a
+/// track decides its removal ([`goal_cleanup`]).
 fn arrive_or_rest(w: &mut World, id: ObjectId) {
-    let at_goal = {
-        let goal = path::goal_cell(w, id);
-        let here = w.obj(id).map(|o| o.pos.cell());
-        goal.is_none() || goal == here
-    };
     let keeps = w.rules().quirks.drive_leftover_kept_at_rest;
-    if let Some(ob) = w.obj_mut(id) {
-        if let Some(d) = ob.drive.as_mut() {
-            // spec: S-0207 claim 11 (a vehicle at rest has ρ = 0)
-            d.rho = F64::ZERO;
-            // spec: S-0207 claim 3 and Edge cases (a vehicle that comes to rest keeps its leftover budget; quirks.drive_leftover_kept_at_rest off: cleared)
-            if !keeps {
-                d.budget = 0;
-            }
-        }
-        if at_goal {
-            // Q-0797 (interim: a driving or ship vehicle at rest in its order-level destination's goal cell has that destination removed by its locomotion update, and with it the locomotor destination point of S-0207 claim 25, even after a same-cell assignment)
-            ob.dest = None;
-            ob.path.steps.clear();
+    if let Some(d) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
+        // spec: S-0207 claim 11 (a vehicle at rest has ρ = 0)
+        d.rho = F64::ZERO;
+        // spec: S-0207 claim 3 and Edge cases (a vehicle that comes to rest keeps its leftover budget; quirks.drive_leftover_kept_at_rest off: cleared)
+        if !keeps {
+            d.budget = 0;
         }
     }
+}
+
+/// The removal of the order-level goal by a locomotion update that begins
+/// without an active track (S-0207 claim 26); whether the goal was removed.
+/// A cell goal is removed while the vehicle occupies that cell, whatever the
+/// behaviour and with no search, height tolerance or exact alignment. A
+/// building goal is not removed by cell equality; only a vehicle at rest in
+/// guard whose world point equals the locomotor destination point in all
+/// three coordinates loses it too. With approach destinations the goal is
+/// abandoned and the vehicle falls back to rest (S-0215 claim 13), as for a
+/// give-up. Removing the destination clears the locomotor destination point
+/// at once (claim 25, `goal`).
+fn goal_cleanup(w: &mut World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(dest) = o.dest else { return false };
+    let building = matches!(dest, Target::Object(t) if w.obj(t).is_some_and(|x| x.kind == Kind::Building));
+    let goal_c = path::goal_cell(w, id);
+    let here = o.pos.cell();
+    // spec: S-0207 claim 26 (an order-level cell destination, the vehicle occupying that cell: removed; a building destination never, by cell equality alone). Q-0830 interim: a destination naming a unit is taken as a cell destination (its supplied point's cell)
+    let cell_goal = !building && (goal_c.is_none() || goal_c == Some(here));
+    // spec: S-0207 claim 26 (at rest in guard, the locomotor destination point present and equal to the vehicle's world point in x, y and z: the same removal, a building destination included)
+    let guard_goal = o.beh.current == Some(Behaviour::Guard) && goal(w, id) == Some(o.pos);
+    if !cell_goal && !guard_goal {
+        return false;
+    }
+    let approach = !o.queued_dests.is_empty();
+    arrive_or_rest(w, id);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.dest = None;
+        ob.path.steps.clear();
+    }
+    if approach {
+        // spec: S-0207 claim 26 (with approach destinations the current goal is abandoned and the vehicle falls back to rest, S-0215 claim 13, with any replacement goal that rule supplies)
+        process::fall_back(w, id, false);
+    }
+    true
 }
 
 /// Whether a vehicle on the driving or ship locomotor is *moving now* for

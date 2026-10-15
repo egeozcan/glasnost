@@ -660,6 +660,8 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         // spec: S-0207 claim 22 (the jump tick's arrival update, any object kind) and S-0417 claim 10 (a released, tethered teleporting infantry unit reports clear on its jump's arrival update, before the entered-by raise; no foundation-exit or destination test, no run-away reply)
         crate::econ::release::arrival(w, id);
     }
+    // spec: S-0516 claims 13 and 22 (a teleporting mover of any kind has its cell-arrival update at the destination in the jump tick, after position, height and layer placement and a vehicle's arrival reporting and crushing, before the landing cell's entered-by actions and crate pickup: the sensor disc moves, then the adjacent sensor test; no cell between departure and landing gets one)
+    crate::cloak::machine::cell_movement_completed(w, id);
     // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
     crate::objects::arrival_raise(w, id);
     if let Some(ob) = w.obj_mut(id) {

@@ -462,49 +462,21 @@ pub fn late_turn(w: &mut World, id: ObjectId) {
     super::disguise::turn(w, id);
 }
 
-/// Where a mover's cell-arrival update (S-0516 Terms, claims 13 and 22)
-/// comes from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ArrivalSource {
-    /// Its locomotor's own events: driving and ship track arrival
-    /// (`drive::spend`), a walker's arrival and snap (`walk::tick`), a
-    /// hover's non-refusing heading-point choices (`hover`).
-    Locomotor,
-    /// Ordinary flight: no cell-arrival update at all.
-    Flight,
-    /// A locomotor claim 22's table has no row for (teleporting, rocket and
-    /// the locomotors not moved yet, jumpjets among them): the cloak update
-    /// after its centre cell changed (Q-0795, interim).
-    CloakTurn,
-}
-
-fn arrival_source(w: &World, id: ObjectId) -> ArrivalSource {
-    use crate::rules::Locomotor;
-    let Some(u) = w.obj(id).and_then(|o| w.rules().unit(o.kind, o.type_index)) else {
-        // Q-0795 (interim: a mover without a locomotor row has its cell-arrival update at the cloak update after its centre cell changed)
-        return ArrivalSource::CloakTurn;
-    };
-    match u.locomotor {
-        // spec: S-0516 claim 22 (driving or ship tracks: arrival at the cell centre; walking: arrival and snap to the standing position; hovering: S-0503 claim 15's non-refusing choices and restorations)
-        Locomotor::Drive | Locomotor::Ship | Locomotor::Walk | Locomotor::Hover => {
-            ArrivalSource::Locomotor
-        }
-        // spec: S-0516 claim 22 (ordinary flying aircraft: none from taking off, flight across cells, destination arrival or landing)
-        Locomotor::Fly => ArrivalSource::Flight,
-        // Q-0795 (interim: a locomotor outside claim 22's table has its cell-arrival update at the cloak update after its centre cell changed)
-        Locomotor::Teleport | Locomotor::Rocket | Locomotor::None => ArrivalSource::CloakTurn,
-    }
-}
-
 /// The cell-arrival update of a vehicle, infantry unit or aircraft (S-0516
 /// Terms, claims 13 and 22): a mobile sensor's disc moves to its current
 /// cell, even the cell it was already centred on, then a fully cloaked
-/// mover takes the adjacent sensor test. The driving and ship locomotors
-/// call it on reaching a track target (`drive::spend`), the walking one at
-/// its arrival on a walking target (`walk::tick`), the hovering one at each
-/// non-refusing heading-point choice (`hover`); ordinary flight never does.
-/// Other locomotors take it in the cloak turn ([`turn`]) when the centre
-/// cell changed (Q-0795, interim).
+/// mover takes the adjacent sensor test. Its sources, by claim 22's table:
+/// the driving and ship locomotors on reaching a track target
+/// (`drive::spend`), the walking one at its arrival on a walking target
+/// (`walk::tick`), the hovering one at each non-refusing heading-point
+/// choice (`hover`), the teleporting one in the jump tick
+/// (`teleport::jump`), a superweapon warp member at its arrival-effects
+/// update (`superweapons::warp`), and a completed fall landing (`fall`).
+/// Ordinary flight and rocket flight never supply one. A jumpjet's
+/// touchdown, an underground mover's emergence, mechanical walking and
+/// drop-pod descent are seams (S-0502 and the unused locomotors are not
+/// built). Entering play alone, unloading included, is not one: the disc is
+/// added by [`entered_map`] with no adjacency test.
 pub fn cell_movement_completed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     if !o.on_map || !o.kind.is_mobile() {
@@ -533,10 +505,6 @@ pub fn flight_cell_crossed(w: &mut World, id: ObjectId) {
 fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.cell = Some(c);
-    }
-    if arrival_source(w, id) == ArrivalSource::CloakTurn {
-        // Q-0795 (interim: movement outside S-0516 claim 22's table has its cell-arrival update at the cloak turn after the centre cell changed)
-        cell_movement_completed(w, id);
     }
     // spec: S-0516 claim 6 (re-evaluated when it enters a cell)
     reevaluate(w, id);

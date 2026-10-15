@@ -88,16 +88,37 @@ pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
     tc.slots[i]
 }
 
-/// A building's installed upgrade types, first installed first (S-0308
-/// claim 12): its upgrade positions 1 to 3 in order (Q-0798 interim).
+/// A building's weapon-providing upgrade types in provider order (S-0308
+/// claim 12 with S-0406 claim 12): positions 1 through the used upgrade count
+/// *c* (at most 3), in increasing position number, skipping empty positions.
+/// Positions above *c* do not take part even when still occupied, and a count
+/// of 0 supplies no provider. Installation history decides nothing: the
+/// positions do.
 pub fn installed_upgrades(w: &World, id: ObjectId) -> impl Iterator<Item = u32> + '_ {
-    let ups = w
+    let (ups, count) = w
         .obj(id)
         .filter(|o| o.kind == Kind::Building)
-        .map(|o| o.econ.building.upgrades)
+        .map(|o| (o.econ.building.upgrades, o.econ.building.upgrade_count))
         .unwrap_or_default();
-    // Q-0798 interim: position order is installation order, also after a sale or a level skip.
-    ups.into_iter().flatten()
+    // spec: S-0406 claim 12 (weapon provider table: positions 1 through c in increasing order, c from 1 to 3; count 0: no upgrade participates; count above 3: positions 1 to 3 only, the bad-data departure)
+    let n = usize::try_from(count.clamp(0, 3)).unwrap_or(0);
+    ups.into_iter().take(n).flatten()
+}
+
+/// The upgrade type whose weapons gate a building's attacks (S-0215 claim 32
+/// with S-0406 claim 12): the type recorded in position 1, only while the
+/// used upgrade count is nonzero. An empty position 1 bypasses the gate and
+/// never substitutes a higher position.
+pub fn gate_upgrade(w: &World, id: ObjectId) -> Option<u32> {
+    let b = w
+        .obj(id)
+        .filter(|o| o.kind == Kind::Building)
+        .map(|o| &o.econ.building)?;
+    // spec: S-0406 claim 12 (attack gate: applies only when the count is nonzero and position 1 is occupied; it tests that position's type only)
+    if b.upgrade_count == 0 {
+        return None;
+    }
+    b.upgrades[0]
 }
 
 /// The ordinary slot-`i` weapon of a building type, if any.
