@@ -6824,6 +6824,11 @@
           "type": "boolean",
           "default": true
         },
+        "bridge_cursor_unrelated_link": {
+          "description": "The repair cursor offers repair at an enabled first nearby link that has neither endpoint at the traversal cell; off: such links are skipped and the first link with that endpoint decides, none giving no cursor.",
+          "type": "boolean",
+          "default": true
+        },
         "bridge_event_band_short": {
           "description": "The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell.",
           "type": "boolean",
@@ -7526,6 +7531,16 @@
         },
         "hover_elevated_heading_point": {
           "description": "A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too.",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_flag_clear_height_only": {
+          "description": "Clearing a vehicle-present flag picks the deck by the point's height alone, while setting also needs a high bridge; off: clearing needs the high bridge too.",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_idle_arrival_reservation": {
+          "description": "Clearing the last heading point at an arrival with no destination and no choice keeps its old reservation; off: that reservation is released and the actual position is marked instead.",
           "type": "boolean",
           "default": true
         },

@@ -22,7 +22,7 @@ use glasnost_sim::bridges::pieces::{self, Family, Line, Role};
 use glasnost_sim::bridges::{self, high, hut};
 use glasnost_sim::combat::area::{self, Detonation};
 use glasnost_sim::combat::effects::{Effect, Sound};
-use glasnost_sim::rules::{Kind, SimRules};
+use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -416,7 +416,7 @@ fn claim_1_ion_cannon_attempts() {
     );
 }
 
-// spec: S-0511 claim 1 (a successful attempt from area damage makes every object whose target is the centre cell drop it; Q-0719)
+// spec: S-0511 claims 1 and 22 (a successful attempt from area damage makes every object whose attack target is the centre cell itself drop it; a neighbouring cell's target stays)
 #[test]
 fn claim_1_success_drops_cell_targets() {
     let mut m = base();
@@ -440,6 +440,55 @@ fn claim_1_success_drops_cell_targets() {
     assert_eq!(w.obj(u).unwrap().target, Some(Target::Cell(at(4, 0))));
 }
 
+// spec: S-0511 claim 22 (a suspended behaviour is reverted first, restoring target and destination; a destination naming the centre cell stays; a projectile aimed at the cell loses it, one aimed at a neighbouring cell keeps it; no new behaviour)
+#[test]
+fn claim_22_revert_and_projectile_target_loss() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 6, &[]);
+    let mut w = game(&ruleset(), &m);
+    w.econ.settings.bridge_destruction = Some(true);
+    let c = at(3, 0);
+    let v = spawn(&mut w, Kind::Vehicle, "CART", at(3, 8));
+    let u = spawn(&mut w, Kind::Vehicle, "CART", at(4, 8));
+    let mover = spawn(&mut w, Kind::Vehicle, "CART", at(5, 8));
+    // An override in effect on v: guard put aside with u as target and a destination.
+    {
+        let o = w.obj_mut(v).unwrap();
+        o.target = Some(Target::Cell(c));
+        o.beh.current = Some(Behaviour::Attack);
+        o.beh.suspended = Some(Behaviour::Guard);
+        o.beh.aside = Some((Some(Target::Object(u)), Some(Target::Cell(at(1, 9)))));
+    }
+    w.obj_mut(mover).unwrap().dest = Some(Target::Cell(c));
+    let current = w.obj(mover).unwrap().beh.current;
+    let wp = w
+        .rules()
+        .combat
+        .weapons
+        .iter()
+        .position(|x| x.projectile.is_some())
+        .unwrap() as u32;
+    let from = w.obj(u).unwrap().pos;
+    let hit = glasnost_sim::combat::projectile::launch(&mut w, u, wp, Target::Cell(c), from, 10)
+        .expect("a projectile at the centre cell");
+    let miss =
+        glasnost_sim::combat::projectile::launch(&mut w, u, wp, Target::Cell(at(4, 0)), from, 10)
+            .expect("a projectile at the neighbouring cell");
+    blast(&mut w, c, 416, "BLAST");
+    blast(&mut w, c, 416, "BLAST");
+    assert_eq!(data(&w, c), None, "the attempt succeeded");
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "reverted");
+    assert_eq!(o.beh.suspended, None);
+    assert_eq!(o.target, Some(Target::Object(u)), "restored target");
+    assert_eq!(o.dest, Some(Target::Cell(at(1, 9))), "restored destination");
+    let o = w.obj(mover).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(c)), "a destination is not erased");
+    assert_eq!(o.beh.current, current, "no new behaviour");
+    assert_eq!(w.projectiles[&hit].target, None);
+    assert_eq!(w.projectiles[&miss].target, Some(Target::Cell(at(4, 0))));
+}
+
 // spec: S-0511 claim 2 (a high-bridge cell: the section whose overlay marks it; a pier at a sub-tile without a deck; other pier cells and other cells: nothing, the attempt fails)
 #[test]
 fn claim_2_what_an_attempt_acts_on() {
@@ -455,6 +504,46 @@ fn claim_2_what_an_attempt_acts_on() {
     assert_eq!(pier_k(&w, at(4, 0)), Some(3));
     // A plain cell: nothing.
     assert!(!bridges::attempt(&mut w, at(0, 9)));
+}
+
+// spec: S-0511 claim 2 (the responsible section: no search for another overlay when it is missing; a non-collapsed pier tile of a family at the attempted cell supplies the family over a replaced responsible overlay, and claim 3 acts on the responsible cell's retained state; a state outside the section-state table gives no change and is not a no-deck pier attempt)
+#[test]
+fn claim_2_responsible_section() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let (r, c) = (at(2, 0), at(2, -1));
+    assert_eq!(w.cells.responsible(c), Some(r));
+    // The responsible overlay removed: the deck stays and nothing else is searched.
+    let before: Vec<Option<u8>> = (0..8).map(|x| data(&w, at(x, 0))).collect();
+    w.cells.grid.get_mut(r).unwrap().overlay = NO_OVERLAY;
+    assert!(w.cells.is_bridge(c));
+    assert!(!bridges::attempt(&mut w, c));
+    for x in (0..8).filter(|&x| x != 2) {
+        assert_eq!(data(&w, at(x, 0)), before[x as usize], "x = {x}");
+    }
+    // A replacement overlay that is neither a low piece nor a section, and
+    // a pier tile of the bridge family at the attempted cell.
+    let other = 1;
+    assert!(pieces::low_of(other).is_none() && pieces::high_of(other).is_none());
+    w.cells.grid.get_mut(c).unwrap().tile = tile(Family::Bridge, M1);
+    for (v, lost) in [(99, false), (6, true)] {
+        let cell = w.cells.grid.get_mut(r).unwrap();
+        cell.overlay = other;
+        cell.overlay_data = v;
+        assert_eq!(bridges::attempt(&mut w, c), lost, "retained state {v}");
+        let cell = w.cells.cell(r).unwrap();
+        if lost {
+            assert_eq!(
+                cell.overlay, NO_OVERLAY,
+                "the replacement overlay is removed"
+            );
+            assert!(!w.cells.is_bridge(c));
+        } else {
+            assert_eq!((cell.overlay, cell.overlay_data), (other, v), "no change");
+            assert_eq!(pier_k(&w, c), Some(0), "not a pier attempt");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -588,6 +677,78 @@ fn claim_6_direct_pier_attempts() {
     );
 }
 
+// spec: S-0511 Terms (Pier: a state replacement changes the eight-neighbour-connected component of cells with exactly the reference cell's pre-change tile number; a different tile laid over part of the pier, a disconnected copy and a different-state tile stay; a diagonal same-tile copy changes with it) and claim 6 (a collapse sets every changed cell to the reference level − 4)
+#[test]
+fn claim_6_pier_tile_component() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let t = tile(Family::Bridge, M1);
+    put_tile(&mut m, at(4, 1), 0, 0, 4); // laid over part of the pier
+    put_tile(&mut m, at(6, 1), t, 0, 6); // a diagonal-only copy, touching (5, 0)
+    put_tile(&mut m, at(3, -2), t + 1, 0, 4); // a different state, touching (4, -1)
+    put_tile(&mut m, at(4, -4), t, 0, 4); // the same tile, not connected
+    let mut w = game(&ruleset(), &m);
+    let r = at(4, 0);
+    let tile_at = |w: &World, c: CellXY| w.cells.cell(c).unwrap().tile;
+    assert!(!bridges::attempt(&mut w, r));
+    for c in [at(4, -1), r, at(5, 0), at(6, 1)] {
+        assert_eq!(tile_at(&w, c), t + 3, "{c:?} in the component");
+    }
+    assert_eq!(tile_at(&w, at(4, 1)), 0, "the overlaid cell stays");
+    assert_eq!(
+        tile_at(&w, at(3, -2)),
+        t + 1,
+        "a different state does not join"
+    );
+    assert_eq!(tile_at(&w, at(4, -4)), t, "a disconnected copy stays");
+    assert!(bridges::attempt(&mut w, r));
+    for c in [at(4, -1), r, at(5, 0), at(6, 1)] {
+        assert_eq!(tile_at(&w, c), t + 4);
+        assert_eq!(
+            w.cells.cell(c).unwrap().level,
+            0,
+            "{c:?}: the reference level 4 − 4"
+        );
+    }
+    assert_eq!(
+        w.cells.cell(at(4, 1)).unwrap().level,
+        4,
+        "not a changed cell"
+    );
+    assert_eq!(w.cells.cell(at(3, -2)).unwrap().level, 4);
+}
+
+// spec: S-0511 Terms (Pier: a position in both non-collapsed pier ranges is read along x, x states 0 to 3 before y states 0 to 3; an x match only at collapsed state 4 does not override a non-collapsed y match; repair's start-piece selection reads the axis-specific sub-tile)
+#[test]
+fn terms_overlapping_pier_ranges() {
+    let mut m = base();
+    put_tile(&mut m, at(0, 0), tile(Family::Bridge, M1 + 2), 7, 0);
+    let mut w = game(&ruleset(), &m);
+    let mut c = (*catalogue()).clone();
+    // An invented theater whose y pier range starts two positions after the x one.
+    c.bridge_positions.middle = [M1, M1 + 2];
+    w.catalogue = Some(Arc::new(c));
+    use pieces::Piece::Pier;
+    assert_eq!(pieces::piece_of_q(&w, M1 + 2), Some(Pier(Line::X, 2)));
+    assert_eq!(pieces::piece_of_q(&w, M1 + 3), Some(Pier(Line::X, 3)));
+    assert_eq!(
+        pieces::piece_of_q(&w, M1 + 4),
+        Some(Pier(Line::Y, 2)),
+        "x-collapsed, y-live"
+    );
+    assert_eq!(pieces::piece_of_q(&w, M1 + 6), Some(Pier(Line::Y, 4)));
+    // Read along y, the cell at sub-tile 7 is a y pier's start piece.
+    assert_eq!(
+        pieces::pier_along(&w, at(0, 0), Line::Y),
+        Some((Family::Bridge, 0))
+    );
+    assert!(high::is_start_piece(&w, at(0, 0), Line::Y));
+    assert!(
+        !high::is_start_piece(&w, at(0, 0), Line::X),
+        "sub-tile 5 starts along x"
+    );
+}
+
 // spec: S-0511 claim 6 (notice table: loss notice on the start side of a pier in state 0 → 3; a pier chipped on the arriving side ignores it with quirks.pier_loss_notice_skips_chipped, becomes 3 without)
 #[test]
 fn claim_6_pier_notice_table() {
@@ -651,6 +812,52 @@ fn claim_7_span_cap() {
         bridges::attempts(&mut w, at(-6, 0), 2);
         let isolated = data(&w, at(-8, 0)).is_none();
         assert_eq!(isolated, !cap, "cap {cap}");
+    }
+}
+
+// spec: S-0511 claim 7 (finding the span: from the named loss cell, the first marked neighbour's section, then the nearest start piece toward the start side up to the legal-map boundary, passing over non-bridge cells)
+#[test]
+fn claim_7_start_search_passes_over_a_gap() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[]);
+    for x in [1, 2] {
+        m.cells.get_mut(at(x, 0)).unwrap().overlay = NO_OVERLAY;
+    }
+    let mut w = game(&ruleset(), &m);
+    // Neither a deck nor a bridge-body cell: a non-bridge gap.
+    w.cells.clear_body(&[at(1, 0), at(2, 0)]);
+    assert!(!w.cells.is_bridge(at(1, 0)) && !w.cells.body(at(1, 0)));
+    bridges::attempts(&mut w, at(6, 0), 2);
+    for x in [3, 4, 5] {
+        assert_eq!(
+            data(&w, at(x, 0)),
+            None,
+            "x = {x}: isolated from the start ramp"
+        );
+    }
+    for x in [0, 7, 8, 9] {
+        assert!(data(&w, at(x, 0)).is_some(), "x = {x} touches an end");
+    }
+}
+
+// spec: S-0511 claims 6 and 7 (a direct pier collapse checks both adjacent spans, the start-side span first; Q-0678 interim: the far-side search accepts the collapsed pier as its span's start)
+#[test]
+fn claim_7_pier_collapse_checks_both_spans() {
+    for (tag, name) in [(at(2, 0), "start side"), (at(8, 0), "far side")] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 12, &[5]);
+        tagged(&mut m, &[tag]);
+        let mut w = game(&ruleset(), &m);
+        // A missing section in each span.
+        bridges::attempts(&mut w, at(3, 0), 2);
+        bridges::attempts(&mut w, at(9, 0), 2);
+        assert_eq!(data(&w, at(3, 0)), None);
+        assert_eq!(data(&w, at(9, 0)), None);
+        let f0 = fired(&w);
+        assert!(!bridges::attempt(&mut w, at(5, 0)));
+        assert!(bridges::attempt(&mut w, at(5, 0)));
+        assert_eq!(pier_k(&w, at(5, 0)), Some(4));
+        assert_eq!(fired(&w) - f0, 1, "{name}: one band pass");
     }
 }
 
@@ -734,6 +941,61 @@ fn claim_9_blow_up() {
     assert!(booms > 0);
 }
 
+// spec: S-0511 claim 9 (the drop keeps target, destination, queued destinations, path and movement state; a stationary unit's deck mark or present flag is cleared and its ground mark made at once, so its former deck record is empty before claim 11 and no heading hit follows)
+#[test]
+fn claim_9_drop_keeps_orders_and_moves_marks() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let c = at(3, 0);
+    let top = spawn(&mut w, Kind::Vehicle, "CART", c);
+    onto_deck(&mut w, top);
+    let walker = spawn(&mut w, Kind::Infantry, "WALKER", c);
+    {
+        let h = w.obj(walker).unwrap().owner.unwrap();
+        let ground = *w.cells.occ(c, Layer::Ground).unwrap();
+        let p = (0..5).find(|&p| ground.taken(p)).unwrap();
+        w.cells
+            .clear_position(c, Layer::Ground, p, glasnost_sim::objects::occ_quirks(&w));
+        w.cells.leave(c, Layer::Ground, walker);
+        w.cells.enter(c, Layer::Deck, walker, false);
+        w.cells.mark_infantry(c, Layer::Deck, p, walker, h);
+        let o = w.obj_mut(walker).unwrap();
+        o.layer = Layer::Deck;
+        o.pos.z += 416;
+    }
+    // A unit heading to c at deck height, which would die if c's deck
+    // record were still marked.
+    let deck_z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+    let comer = spawn(&mut w, Kind::Infantry, "WALKER", at(3, 2));
+    w.obj_mut(comer).unwrap().walk.as_mut().unwrap().target = Some(centre(c, deck_z));
+    let far = at(6, 4);
+    {
+        let o = w.obj_mut(top).unwrap();
+        o.dest = Some(Target::Cell(far));
+        o.target = Some(Target::Cell(at(1, 4)));
+        o.queued_dests.push(Target::Cell(at(7, 4)));
+    }
+    bridges::attempts(&mut w, c, 2);
+    let o = w.obj(top).unwrap();
+    assert!(o.fall.falling && o.layer == Layer::Ground);
+    assert_eq!(o.dest, Some(Target::Cell(far)), "the destination is kept");
+    assert_eq!(o.target, Some(Target::Cell(at(1, 4))), "the target is kept");
+    assert_eq!(o.queued_dests, vec![Target::Cell(at(7, 4))]);
+    let deck = w.cells.occ(c, Layer::Deck).unwrap();
+    assert!(deck.empty(), "the former deck record is empty");
+    let ground = w.cells.occ(c, Layer::Ground).unwrap();
+    assert!(ground.vehicle_present(), "the ground flag is made at once");
+    assert!(
+        ground.marks.iter().flatten().any(|m| matches!(
+            m.by,
+            glasnost_sim::cells::Marker::Infantry(who, _) if who == walker
+        )),
+        "the walker's ground mark is made at once"
+    );
+    assert!(alive(&w, comer), "no heading hit: the deck record is empty");
+}
+
 // spec: S-0511 claim 10 (a dropped object falls 416 leptons and lands on its 30th update; with the bomb mark it dies on landing)
 #[test]
 fn claim_10_falling_and_landing() {
@@ -756,7 +1018,39 @@ fn claim_10_falling_and_landing() {
     assert!(!alive(&w, top));
 }
 
-// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to it)
+// spec: S-0511 claim 10 and S-0301 claim 9 rank 4 (the fall step precedes behaviour processing, locomotion and the firing check; a falling firer is illegal; a still-falling unit neither advances nor fires)
+#[test]
+fn claim_10_falling_unit_neither_moves_nor_fires() {
+    use glasnost_sim::combat::check::{Answer, check};
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let top = spawn(&mut w, Kind::Vehicle, "CRUSHER", at(3, 0));
+    onto_deck(&mut w, top);
+    let foe = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(3, 3), 0);
+    w.obj_mut(top).unwrap().target = Some(Target::Object(foe));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert_eq!(
+        check(&w, top, Some(Target::Object(foe)), 0, true),
+        Answer::Illegal
+    );
+    let x0 = (w.obj(top).unwrap().pos.x, w.obj(top).unwrap().pos.y);
+    let health = w.obj(foe).unwrap().health;
+    for _ in 0..10 {
+        glasnost_sim::tick::step(&mut w);
+        let o = w.obj(top).unwrap();
+        assert!(o.fall.falling);
+        assert_eq!((o.pos.x, o.pos.y), x0, "no horizontal advance");
+    }
+    assert_eq!(w.obj(foe).unwrap().health, health, "no shot while falling");
+}
+
+/// The centre point of `c` at height `z`.
+fn centre(c: CellXY, z: i32) -> Pos {
+    Pos::new(256 * c.x + 128, 256 * c.y + 128, z)
+}
+
+// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its own height; a destination without a heading point does not count)
 #[test]
 fn claim_11_units_heading_onto_a_lost_deck() {
     for occupied in [true, false] {
@@ -764,17 +1058,44 @@ fn claim_11_units_heading_onto_a_lost_deck() {
         high_x(&mut m, Family::Bridge, 0, 8, &[]);
         let mut w = game(&ruleset(), &m);
         let c = at(3, 0);
-        if occupied {
-            let top = spawn(&mut w, Kind::Vehicle, "CART", c);
-            onto_deck(&mut w, top);
-        }
-        let car = spawn(&mut w, Kind::Vehicle, "CART", at(3, 2));
+        let deck_z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+        // A walker whose heading point is P, and one whose heading point is
+        // c at its floor height.
+        let high = spawn(&mut w, Kind::Infantry, "WALKER", at(3, 2));
+        w.obj_mut(high).unwrap().walk.as_mut().unwrap().target = Some(centre(c, deck_z - 50));
+        let low = spawn(&mut w, Kind::Infantry, "WALKER", at(4, 2));
+        w.obj_mut(low).unwrap().walk.as_mut().unwrap().target = Some(centre(c, deck_z - 416));
+        // A vehicle whose destination is c, with no track.
+        let car = spawn(&mut w, Kind::Vehicle, "CART", at(2, 2));
         w.obj_mut(car).unwrap().dest = Some(Target::Cell(c));
-        let away = spawn(&mut w, Kind::Vehicle, "CART", at(4, 2));
-        w.obj_mut(away).unwrap().dest = Some(Target::Cell(at(4, 5)));
+        // A deck vehicle on a track that ends in c; its destination is elsewhere.
+        let tank = spawn(&mut w, Kind::Vehicle, "CART", at(2, 0));
+        onto_deck(&mut w, tank);
+        {
+            let o = w.obj_mut(tank).unwrap();
+            o.dest = Some(Target::Cell(at(6, 0)));
+            o.drive.as_mut().unwrap().track = Some(glasnost_sim::drive::Track {
+                d: 2,
+                e: None,
+                target: (256 * c.x + 128, 256 * c.y + 128),
+                target_cell: c,
+                next: 0,
+                last: (256 * c.x - 128, 256 * c.y + 128),
+                cells: vec![c],
+                crush: false,
+                exit: false,
+            });
+        }
+        if occupied {
+            // The high walker's reservation is in c's deck record.
+            let h = w.obj(high).unwrap().owner.unwrap();
+            w.cells.mark_infantry(c, Layer::Deck, 0, high, h);
+        }
         bridges::attempts(&mut w, c, 2);
-        assert_eq!(alive(&w, car), !occupied, "occupied {occupied}");
-        assert!(alive(&w, away));
+        assert_eq!(alive(&w, high), !occupied, "occupied {occupied}");
+        assert_eq!(alive(&w, tank), !occupied, "occupied {occupied}");
+        assert!(alive(&w, low), "a heading point at floor height");
+        assert!(alive(&w, car), "a destination is not a heading point");
     }
 }
 
@@ -1151,9 +1472,9 @@ fn claim_20_low_bridge_repair() {
     }
 }
 
-// spec: S-0511 claim 21 (the cursor offers repair over a hut when its low run holds a destroyed piece, or when the nearby link of a high bridge is not enabled)
+// spec: S-0511 claim 21 (a low candidate: its own row's contiguous run must hold a destroyed piece; damage alone does not offer repair)
 #[test]
-fn claim_21_repair_cursor() {
+fn claim_21_low_candidate() {
     let mut m = base();
     low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
     let mut w = game(&ruleset(), &m);
@@ -1163,14 +1484,83 @@ fn claim_21_repair_cursor() {
     assert!(!hut::repair_offered(&w, h), "damage alone");
     bridges::attempt(&mut w, at(2, 0));
     assert!(hut::repair_offered(&w, h), "destroyed");
+}
 
+/// The cursor fixture: a high bridge along x from 0 to 8 (its link runs
+/// from (−1, 0) to (8, 0)) and a lone start-ramp tile (position 0 within the
+/// role) at sub-tile 15 in (1, 1). That tile's origin is (−2, −2), so its
+/// probe (1, 2) from the origin is (−1, 0), the link's first end. With
+/// `chain`, a low span along y from (8, −5) ends at (8, 0) as well.
+fn cursor_map(chain: bool) -> Map {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    put_tile(&mut m, at(1, 1), tile(Family::Bridge, START_X), 15, 0);
+    if chain {
+        put_tile(&mut m, at(8, -5), tile(Family::Bridge, START_Y), 7, 0);
+    }
+    m
+}
+
+// spec: S-0511 claim 21 (the last candidate of the hut's 5 × 5 block; the probe table from the placed tile's origin, S-0307 claim 23; the initial traversal cell is the probe; an enabled link ending there is crossed and the next probe is one cell past its other end; no link near a probe or a disabled link decides)
+#[test]
+fn claim_21_high_link_traversal() {
+    // The block of (1, 3) holds one candidate, (1, 1).
+    let mut w = game(&ruleset(), &cursor_map(false));
+    let h = hut(&mut w, at(1, 3));
+    assert!(
+        !hut::repair_offered(&w, h),
+        "crossing the intact link to (8, 0): no link near (9, 0)"
+    );
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert!(!w.cells.links[0].enabled);
+    assert!(
+        hut::repair_offered(&w, h),
+        "the disabled link offers repair"
+    );
+
+    // The low span (8, −5)–(8, 0) is disabled; it is not near the first
+    // probe, but it is the only link near (9, 0).
+    let mut w = game(&ruleset(), &cursor_map(true));
+    let ls = &w.cells.links;
+    assert_eq!(ls.len(), 2);
+    assert!(ls.iter().any(|l| l.first == at(8, -5) && !l.enabled));
+    assert!(ls.iter().any(|l| l.first == at(-1, 0) && l.enabled));
+    let h = hut(&mut w, at(1, 3));
+    assert!(
+        hut::repair_offered(&w, h),
+        "the intact link is crossed, then the disabled one offers repair"
+    );
+}
+
+// spec: S-0511 claim 21 (the last qualifying cell in increasing y, then x; a tile at positions 6 to 15 has no probe and gives no repair cursor even when an earlier candidate would)
+#[test]
+fn claim_21_last_candidate_decides() {
+    let mut m = cursor_map(false);
+    // A pier tile (position 6) after (1, 1) in the block of (1, 3).
+    put_tile(&mut m, at(2, 4), tile(Family::Bridge, M1), 0, 0);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(1, 3));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert!(!w.cells.links[0].enabled);
+    assert!(!hut::repair_offered(&w, h));
+}
+
+// spec: S-0511 claim 21 and Edge cases (quirks.bridge_cursor_unrelated_link: on, an enabled first link with neither end at the traversal cell offers repair; off, such links are skipped and no endpoint link means no repair cursor)
+#[test]
+fn claim_21_unrelated_link_quirk() {
+    // The block of (0, 2) ends on the start ramp's sub-tile 8 cell (0, 0):
+    // origin (0, −2), probe (1, 0), which is not an end of the intact link.
     let mut m = base();
     high_x(&mut m, Family::Bridge, 0, 8, &[]);
     let mut w = game(&ruleset(), &m);
-    let h = hut(&mut w, at(3, 3));
-    assert!(!hut::repair_offered(&w, h));
-    bridges::attempts(&mut w, at(3, 0), 2);
-    assert!(hut::repair_offered(&w, h));
+    let h = hut(&mut w, at(0, 2));
+    assert!(w.cells.links[0].enabled);
+    assert!(hut::repair_offered(&w, h), "quirk on: the intact bridge");
+    let mut r = ruleset();
+    r.globals.quirks.bridge_cursor_unrelated_link = false;
+    let mut w = game(&r, &m);
+    let h = hut(&mut w, at(0, 2));
+    assert!(!hut::repair_offered(&w, h), "quirk off");
 }
 
 // spec: S-0511 State and ordering (bridge state: overlays, alternate looks, pier levels, falls and the map-generator stream survive a save and load with the same state hash)
@@ -1196,4 +1586,22 @@ fn bridge_state_save_round_trip() {
         glasnost_sim::tick::step(&mut l);
     }
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
+}
+
+// spec: S-0202 claim 13 (the map-generator stream starts an ordinary-map game in its seed-0 state, whatever the game seed)
+#[test]
+fn map_generator_stream_starts_at_seed_zero() {
+    let rules = Arc::new(SimRules::new(&ruleset(), "synthetic-bridges"));
+    for seed in [5, 77] {
+        let w = glasnost_sim::load::new_game(
+            rules.clone(),
+            &base(),
+            catalogue(),
+            &testkit::setup(seed),
+        )
+        .expect("synthetic map loads");
+        let mut got = w.map_rng.clone().unwrap();
+        let mut want = glasnost_sim::rng::Rng::new(0);
+        assert_eq!(got.raw(), want.raw(), "seed {seed}");
+    }
 }

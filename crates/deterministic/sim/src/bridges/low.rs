@@ -37,18 +37,18 @@ pub fn write_strip(
     cells
 }
 
-/// Whether unit `id` could enter `c` as it now is (Q-0714: the terrain and
-/// passability for its class and zone on the ground layer, occupants not
-/// counted).
-fn could_enter(w: &World, id: ObjectId, c: CellXY) -> bool {
-    let Some(o) = w.obj(id) else { return true };
-    let r = w.rules_arc();
-    let Some(u) = r.unit(o.kind, o.type_index) else {
-        return true;
+/// Whether unit `id` could not enter `c` as it now is (claim 15): its own
+/// kind's entry outcome of S-0209 claims 4 and 5 is *blocked*.
+fn blocked(w: &World, id: ObjectId, c: CellXY) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0511 claim 15 (no reference height level: a low strip carries no high bridge, so its ground layer and record count, S-0209 Terms)
+    let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    // spec: S-0511 claim 15 (the object's own-kind entry outcome of S-0209 claims 4 and 5, occupants and overlays included, the locomotor's cell admission included; only blocked, outcome 7, counts)
+    let outcome = match o.kind {
+        Kind::Infantry => crate::occupancy::infantry_outcome(w, id, c, level),
+        _ => crate::occupancy::vehicle_outcome(w, id, c, level),
     };
-    // Q-0714 (interim: the land and passability test of S-0211 for the object's class and zone on the ground layer; occupants are not counted)
-    crate::passability::enterable_by_class(&r, w, c, u.class, u.zone, false)
-        && crate::passability::restricted_allows(w, c, u.restricted_to, false)
+    outcome == crate::occupancy::Outcome::Blocked
 }
 
 /// The kill check of claim 15 for one changed cell; `destroyed` when it
@@ -64,21 +64,21 @@ pub fn kill_check(w: &mut World, c: CellXY, destroyed: bool) {
             .is_some_and(|u| u.jumpjet_locomotor);
         let unit = matches!(kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft);
         // spec: S-0511 claim 15 (it could not enter the cell as it now is; the cell became destroyed and the type has jumpjet locomotion; or it is an aircraft)
-        let hit =
-            kind == Kind::Aircraft || (unit && !could_enter(w, id, c)) || (destroyed && jumpjet);
+        let hit = kind == Kind::Aircraft || (unit && blocked(w, id, c)) || (destroyed && jumpjet);
         if hit {
             blow::ground_hit(w, id);
         }
     }
     // spec: S-0511 claim 15 (then every unit in the ground layer of the other 24 cells of the block heading to the cell and unable to enter it)
+    // spec: S-0511 claim 15 (heading to the cell at its floor height, claim 11's test)
+    let z = blow::floor(w, c);
     for n in blow::block_others(c) {
         let ids: Vec<ObjectId> = w.cells.list(n, Layer::Ground).to_vec();
         for id in ids {
             let unit = w
                 .obj(id)
                 .is_some_and(|o| matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft));
-            // Q-0718 (interim: the floor-height condition is taken as met)
-            if unit && blow::heading_cell(w, id) == Some(c) && !could_enter(w, id, c) {
+            if unit && blow::heads_to(w, id, c, z) && blocked(w, id, c) {
                 blow::ground_hit(w, id);
             }
         }

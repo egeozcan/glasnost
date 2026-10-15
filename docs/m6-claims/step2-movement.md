@@ -175,6 +175,7 @@ New quirk switches: none.
 | Claim | Bucket | Change | Code location / evidence |
 |---|---|---|---|
 | 15 (d) and backing | (c) | The affected cells are now S-0511 claims 5 and 19's. The backing is inherited from them. | High-bridge destruction is not implemented (`bridges.rs:8-9`). |
+| 15 (a), rev 17 (historical responsibility) | (a) | A section's own cell selects itself; another marked cell selects its last coverer; no nearby substitute. | `Cells::section_self`, `Cells::covered_by`, `Cells::responsible`; `marking_keeps_historical_responsibility` in `claims_s0211.rs`. |
 
 ## S-0212 Pathfinding (rev 30 to 31)
 

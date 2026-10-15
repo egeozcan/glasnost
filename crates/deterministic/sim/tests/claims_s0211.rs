@@ -906,6 +906,35 @@ fn other_high_bridge_indices_mark_the_same_cells() {
     assert!(!deck_at(&w, cell(20, 0)), "another index marks nothing");
 }
 
+// spec: S-0211 claim 15 (a) (historical responsibility: a section's own cell selects itself even after another section covers it; a covered cell selects the last section that covered it)
+#[test]
+fn marking_keeps_historical_responsibility() {
+    let mut w = Scene::new().build();
+    let (a, b) = (cell(0, 0), cell(0, -1));
+    w.cells.mark_high_bridge(a, 24);
+    w.cells.mark_high_bridge(b, 24);
+    assert_eq!(
+        w.cells.responsible(a),
+        Some(a),
+        "covered later by b, still itself"
+    );
+    assert_eq!(w.cells.responsible(b), Some(b));
+    assert_eq!(
+        w.cells.responsible(cell(0, -2)),
+        Some(b),
+        "the last covering mark"
+    );
+    assert_eq!(w.cells.responsible(cell(0, -3)), Some(b));
+    assert_eq!(w.cells.responsible(cell(0, 1)), Some(a));
+    // The other order: the later covering mark replaces the earlier one.
+    let (c, d) = (cell(10, -1), cell(10, 0));
+    w.cells.mark_high_bridge(c, 24);
+    w.cells.mark_high_bridge(d, 24);
+    assert_eq!(w.cells.responsible(cell(10, -2)), Some(d));
+    assert_eq!(w.cells.responsible(c), Some(c));
+    assert_eq!(w.cells.responsible(cell(20, 0)), None, "never marked");
+}
+
 // spec: S-0211 claim 10 (ii) and (iii) (on a deck: any land type, but a wall overlay still refuses the zones (iii) does not list)
 // spec: S-0211 Edge cases (a wall overlay under a bridge deck)
 #[test]

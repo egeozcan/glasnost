@@ -986,6 +986,88 @@ fn air_selection_without_destination_checks_stopped() {
     assert_eq!(o.dest, None);
 }
 
+/// Releases position 1 of landed LIFTER `t` raised `up` leptons above the
+/// terrain, returning the aircraft's position.
+fn release_at(w: &mut World, t: ObjectId, up: i32) -> Pos {
+    w.obj_mut(t).unwrap().pos.z += up;
+    w.obj_mut(t).unwrap().beh.progress = transport::air_phase::RELEASE;
+    let pos = w.obj(t).unwrap().pos;
+    transport::process_air_unload(w, t);
+    pos
+}
+
+// spec: S-0507 claim 13 (release placement by passenger kind and height: infantry above the surface and every vehicle at the aircraft's exact horizontal position and height, with no standing-position choice and no nearby search; both kinds face and move by the first clear neighbour)
+#[test]
+fn air_release_by_kind_and_height() {
+    let r = ruleset();
+    // Airborne infantry: the exact position and height; the standing-position
+    // choice from the cell centre would never give the centre.
+    let (mut w, t, ps) = landed_lifter(&r, 1);
+    let pos = release_at(&mut w, t, 300);
+    assert_eq!((pos.x.rem_euclid(256), pos.y.rem_euclid(256)), (128, 128));
+    let po = w.obj(ps[0]).unwrap();
+    assert!(po.on_map);
+    assert_eq!(
+        po.pos, pos,
+        "no standing-position choice, no projection to the surface"
+    );
+    assert_eq!(i32::from(po.body.value(w.tick)), 4 * 8192);
+    // A landed vehicle: the exact horizontal position, no choice or search.
+    let (mut w, t, _) = landed_lifter(&r, 0);
+    let v = at(&mut w, Kind::Vehicle, "BUGGY", 0, 6, 6);
+    put_in(&mut w, v, t);
+    let pos = release_at(&mut w, t, 0);
+    let vo = w.obj(v).unwrap();
+    assert!(vo.on_map);
+    assert_eq!(vo.pos, pos);
+    let c = pos.cell();
+    assert_eq!(
+        i32::from(vo.body.value(w.tick)),
+        4 * 8192,
+        "same preference as infantry"
+    );
+    assert_eq!(vo.dest, Some(Target::Cell(CellXY::new(c.x, c.y + 1))));
+    // An airborne vehicle keeps the aircraft's height.
+    let (mut w, t, _) = landed_lifter(&r, 0);
+    let v = at(&mut w, Kind::Vehicle, "BUGGY", 0, 6, 6);
+    put_in(&mut w, v, t);
+    let pos = release_at(&mut w, t, 300);
+    assert_eq!(w.obj(v).unwrap().pos, pos);
+}
+
+// spec: S-0507 claim 13 (the ordinary placement entry test must also find the aircraft's own cell clear; a refused own cell fails the placement even with a clear neighbour: the unit stays off the map, out of the passenger order)
+#[test]
+fn air_release_needs_a_clear_own_cell() {
+    let r = ruleset();
+    let (mut w, t, _) = landed_lifter(&r, 0);
+    let v = at(&mut w, Kind::Vehicle, "BUGGY", 0, 6, 6);
+    put_in(&mut w, v, t);
+    let c = w.obj(t).unwrap().pos.cell();
+    let _blocker = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, c, 0);
+    release_at(&mut w, t, 0);
+    assert!(!w.obj(v).is_some_and(|o| o.on_map), "not placed");
+    assert_eq!(transport::count(&w, t), 0);
+}
+
+// spec: S-0507 claim 13 and Import mapping (an undefined waypoint 700 supplies cell (0, 0); the search still runs with one draw per radius 0 to 31; failure keeps the centre (0, 0), not the previous destination)
+#[test]
+fn air_selection_without_waypoint_700_searches_around_the_origin() {
+    let r = ruleset();
+    let (mut w, t) = flying_lifter(&r);
+    assert!(!w.triggers.waypoints.contains_key(&700));
+    let mut w2 = w.clone();
+    let want = glasnost_sim::air::replacement_search(&mut w2, t, CellXY::new(0, 0));
+    let before = w.obj(t).unwrap().dest;
+    transport::process_air_unload(&mut w, t);
+    let o = w.obj(t).unwrap();
+    assert_ne!(o.dest, before, "not the previous destination");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(want.unwrap_or(CellXY::new(0, 0)))),
+        "the search around (0, 0); its centre when it fails"
+    );
+}
+
 // spec: S-0507 claim 16 (removal cleanup: passengers still carried are killed, nested passengers too, with no attacker credit and no death effects or draws)
 // spec: S-0408 claim 11 (a sold vehicle's remaining passengers die by that cleanup)
 #[test]

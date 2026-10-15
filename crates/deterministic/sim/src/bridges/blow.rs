@@ -6,7 +6,7 @@ use glasnost_num::F64;
 
 use crate::combat::damage::{self, Hit};
 use crate::rules::{Kind, Locomotor};
-use crate::world::{Layer, ObjectId, Pos, Target, World};
+use crate::world::{Layer, ObjectId, Pos, World};
 
 /// What one destroy attempt (or demolition, or repair) has done so far that
 /// later steps of it read.
@@ -14,9 +14,6 @@ use crate::world::{Layer, ObjectId, Pos, Target, World};
 pub struct Ctx {
     /// The blown-up cells, in blow-up order (claim 11).
     pub blown: Vec<CellXY>,
-    /// Objects dropped from a deck, whose marks move to the ground record
-    /// after the attempt's heading hits (Q-0712).
-    pub dropped: Vec<ObjectId>,
 }
 
 /// Claim 9's ground-layer hit: the object's current health, distance 0, the
@@ -53,92 +50,103 @@ pub fn blow_up(w: &mut World, c: CellXY, level: i32, ctx: &mut Ctx) {
     }
     let deck: Vec<ObjectId> = w.cells.list(c, Layer::Deck).to_vec();
     for id in deck {
-        drop_from_deck(w, c, id, ctx);
+        drop_from_deck(w, c, id);
     }
     explosions(w, c, level);
 }
 
 /// An object listed in `c`'s deck layer leaves the deck (claim 9): it moves
-/// to the ground layer of the same cell at its current position, its
-/// locomotion stops and it starts falling with the bomb mark (claim 10).
-fn drop_from_deck(w: &mut World, c: CellXY, id: ObjectId, ctx: &mut Ctx) {
-    let Some(o) = w.obj(id) else { return };
+/// to the ground layer of the same cell at its current position, its marks
+/// move at once, and it starts falling with the bomb mark (claim 10). Its
+/// orders and movement state are kept.
+fn drop_from_deck(w: &mut World, c: CellXY, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
     let building = o.kind == Kind::Building;
-    // spec: S-0511 claim 9 (it moves to the ground layer of the same cell at its current position)
+    // spec: S-0511 claim 9 (it moves to the ground layer of the same cell at its current position; no stop order: target, destination, queued destinations, path and movement in progress are kept)
     w.cells.leave(c, Layer::Deck, id);
     w.cells.enter(c, Layer::Ground, id, building);
     if let Some(ob) = w.obj_mut(id) {
         ob.layer = Layer::Ground;
-        // Q-0713 (interim: the destination, queued destinations and path are cleared and the movement in progress is reset; the target is kept)
-        ob.dest = None;
-        ob.queued_dests.clear();
-        ob.path.steps.clear();
-        if let Some(d) = ob.drive.as_mut() {
-            d.track = None;
-            d.turn = None;
-            d.turning_in_place = false;
-        }
     }
+    move_marks(w, c, id, &o);
     // spec: S-0511 claims 9 and 10 (it starts falling with the bomb mark)
     crate::fall::start(w, id, true);
-    ctx.dropped.push(id);
 }
 
-/// The marks a dropped object left in the deck record move to the ground
-/// record of the same cells (Q-0712), after the attempt's heading hits.
-pub fn transfer_marks(w: &mut World, ctx: &Ctx) {
+/// The marks of object `id` (state `o` before the drop) dropped from the
+/// deck of `c` (claim 9), made at once: a stationary infantry unit's
+/// standing-position mark and a stationary vehicle's present flag go from
+/// the deck record to the ground record; a moving one's reservation at its
+/// heading point is cleared at that point's height, with the deck flag its
+/// listing change clears.
+fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) {
     let q = crate::objects::occ_quirks(w);
-    for &id in &ctx.dropped {
-        let Some(o) = w.obj(id).cloned() else {
-            continue;
-        };
-        // Q-0712 (interim: the dropped object's deck marks move to the ground record once the attempt's heading hits are done)
-        match o.kind {
-            Kind::Infantry => {
-                let mut cells = vec![o.pos.cell()];
-                if let Some(t) = o.walk.as_ref().and_then(|s| s.target) {
-                    cells.push(t.cell());
-                }
-                for c in cells {
-                    let Some(rec) = w.cells.occ(c, Layer::Deck).copied() else {
-                        continue;
-                    };
-                    for (p, m) in rec.marks.iter().enumerate() {
-                        if let Some(crate::cells::Mark {
-                            by: crate::cells::Marker::Infantry(who, house),
-                            ..
-                        }) = m
-                            && *who == id
-                        {
-                            w.cells.clear_position(c, Layer::Deck, p as u8, q);
-                            w.cells.mark_infantry(c, Layer::Ground, p as u8, id, *house);
-                        }
-                    }
+    match o.kind {
+        Kind::Infantry => {
+            if let Some(t) = o.walk.as_ref().and_then(|s| s.target) {
+                // spec: S-0511 claim 9 (movement reservations are cleared at the locomotor's heading point, at that point's stored height)
+                let layer = crate::teleport::reservation_layer(w, t);
+                w.cells.clear_infantry(t.cell(), layer, id, q);
+                return;
+            }
+            let Some(rec) = w.cells.occ(c, Layer::Deck).copied() else {
+                return;
+            };
+            for (p, m) in rec.marks.iter().enumerate() {
+                if let Some(crate::cells::Mark {
+                    by: crate::cells::Marker::Infantry(who, house),
+                    ..
+                }) = m
+                    && *who == id
+                {
+                    // spec: S-0511 claim 9 (a stationary infantry unit's standing-position mark is cleared on deck and the corresponding ground mark is made immediately)
+                    w.cells.clear_position(c, Layer::Deck, p as u8, q);
+                    w.cells.mark_infantry(c, Layer::Ground, p as u8, id, *house);
                 }
             }
-            Kind::Vehicle => {
-                if let Some(h) = o.hover.as_ref() {
-                    let mut moved = h.claims.clone();
-                    for (c, l) in moved.iter_mut() {
-                        if *l == Layer::Deck {
-                            w.cells.claim_vehicle(*c, Layer::Deck, false);
-                            w.cells.claim_vehicle(*c, Layer::Ground, true);
-                            *l = Layer::Ground;
-                        }
-                    }
-                    if let Some(hs) = w.obj_mut(id).and_then(|ob| ob.hover.as_mut()) {
-                        hs.claims = moved;
-                    }
-                } else if let Some(d) = o.drive.as_ref() {
-                    // The drive claims carry no layer: they were made on the deck.
-                    for &c in &d.claims {
-                        w.cells.claim_vehicle(c, Layer::Deck, false);
-                        w.cells.claim_vehicle(c, Layer::Ground, true);
-                    }
-                }
-            }
-            _ => {}
         }
+        Kind::Vehicle => {
+            if let Some(h) = o.hover.as_ref() {
+                let point = h.point;
+                let mut kept = Vec::new();
+                for &(cl, l) in &h.claims {
+                    let at_point = point.is_some_and(|p| {
+                        (cl, l) == (p.cell(), crate::teleport::reservation_layer(w, p))
+                    });
+                    if at_point || (cl, l) == (c, Layer::Deck) {
+                        // spec: S-0511 claim 9 (the reservation at the heading point, at its stored height, and the deck flag of the cell it leaves are cleared)
+                        w.cells.claim_vehicle(cl, l, false);
+                        if point.is_none() && (cl, l) == (c, Layer::Deck) {
+                            // spec: S-0511 claim 9 (a stationary vehicle's present flag: the ground flag is made immediately)
+                            w.cells.claim_vehicle(c, Layer::Ground, true);
+                            kept.push((c, Layer::Ground));
+                        }
+                    } else {
+                        // spec: S-0511 claim 9 (unrelated marks remain until their ordinary clearing event)
+                        kept.push((cl, l));
+                    }
+                }
+                if let Some(hs) = w.obj_mut(id).and_then(|ob| ob.hover.as_mut()) {
+                    hs.claims = kept;
+                }
+            } else if let Some(d) = o.drive.as_ref() {
+                // The drive claims carry no layer of their own: they were
+                // made in the vehicle's layer, the deck.
+                for &cl in &d.claims {
+                    // spec: S-0511 claim 9 (the heading point's reservation and the deck flag of the cell it leaves are cleared)
+                    w.cells.claim_vehicle(cl, Layer::Deck, false);
+                }
+                let stationary = d.track.is_none();
+                if stationary {
+                    // spec: S-0511 claim 9 (a stationary vehicle's present flag: cleared on deck, the ground flag made immediately)
+                    w.cells.claim_vehicle(c, Layer::Ground, true);
+                }
+                if let Some(ds) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
+                    ds.claims = if stationary { vec![c] } else { Vec::new() };
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -216,30 +224,38 @@ pub fn low_form(w: &mut World, c: CellXY) {
     explosion_anim(w, &list, at);
 }
 
-/// The destination cell that a unit's locomotion heads to for claims 11
-/// and 15: drive and ship use the end of the track they follow, else the
-/// destination; walk and hover use the destination; an object destination
-/// does not count; other locomotion never heads (Q-0718).
-pub fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
-    let o = w.obj(id)?;
-    let u = w.rules().unit(o.kind, o.type_index)?;
-    let dest = match o.dest {
-        Some(Target::Cell(c)) => Some(c),
-        // Q-0718 (interim: an object destination does not count)
-        _ => None,
+/// The heading tolerance of claim 11, leptons.
+// spec: S-0511 claim 11 (a stored height within 104 leptons of P's)
+const HEADING_TOLERANCE: i32 = 104;
+
+/// Whether unit `id`'s locomotion is heading to the point at the centre of
+/// `c` at height `z` (claims 11 and 15): walk and hover by their heading
+/// point's cell and stored height; drive and ship by the same test or the
+/// end cell of their current track with the unit's own height, both only
+/// with a current heading point; other locomotion never.
+pub fn heads_to(w: &World, id: ObjectId, c: CellXY, z: i32) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return false;
     };
+    let near = |h: i32| (h - z).abs() <= HEADING_TOLERANCE;
+    // spec: S-0511 claim 11 (walk and hover: the current heading point, its cell c and its stored world height within 104 leptons; an object destination is not excluded)
+    let point = |p: Option<Pos>| p.is_some_and(|p| p.cell() == c && near(p.z));
     match u.locomotor {
-        // spec: S-0511 claim 11 (drive and ship: the end of the track it is following, if any, else its destination)
-        Locomotor::Drive | Locomotor::Ship => o
-            .drive
-            .as_ref()
-            .and_then(|d| d.track.as_ref())
-            .map(|t| t.target_cell)
-            .or(dest),
-        // spec: S-0511 claim 11 (walk and hover: their destination)
-        Locomotor::Walk | Locomotor::Hover => dest,
+        Locomotor::Walk => point(o.walk.as_ref().and_then(|s| s.target)),
+        Locomotor::Hover => point(o.hover.as_ref().and_then(|h| h.point)),
+        Locomotor::Drive | Locomotor::Ship => {
+            // spec: S-0207 Terms (a drive or ship vehicle's heading point: the target of the track it is on)
+            let Some(t) = o.drive.as_ref().and_then(|d| d.track.as_ref()) else {
+                // spec: S-0511 claim 11 (both drive and ship tests require a current heading point)
+                return false;
+            };
+            // spec: S-0511 claim 11 (the end cell of the unfinished current track with the unit's current world height, not a resampled height)
+            // Q-0676 (interim: the drive heading point has no stored height of its own; its test takes the unit's height, so it coincides with the track test)
+            t.target_cell == c && near(o.pos.z)
+        }
         // spec: S-0511 claim 11 (drop-pod, fly, jumpjet, rocket, teleport and tunnel locomotion do not count)
-        _ => None,
+        _ => false,
     }
 }
 
@@ -266,16 +282,25 @@ pub fn heading_hits(w: &mut World, ctx: &Ctx) {
         if w.cells.occ(c, Layer::Deck).is_none_or(|o| o.empty()) {
             continue;
         }
+        // spec: S-0511 claim 11 (P: the centre of c at its terrain floor + 416 leptons); S-0511 F2 (the floor of level ℓ is 104 ℓ)
+        let z = floor(w, c) + crate::teleport::DECK_HEIGHT;
         for n in block_others(c) {
             for layer in [Layer::Deck, Layer::Ground] {
                 let ids: Vec<ObjectId> = w.cells.list(n, layer).to_vec();
                 for id in ids {
-                    // Q-0718 (interim: the height condition, within 104 leptons of P's height, is taken as met)
-                    if heading_cell(w, id) == Some(c) {
+                    // spec: S-0511 claim 11 (each object whose locomotion is heading to P receives claim 9's ground-layer hit)
+                    if heads_to(w, id, c, z) {
                         ground_hit(w, id);
                     }
                 }
             }
         }
     }
+}
+
+/// The height of the terrain floor of `c`: 104 leptons per height level
+/// (claims 11 and 15).
+pub fn floor(w: &World, c: CellXY) -> i32 {
+    // spec: S-0511 F2 (Z = 104 ℓ for the cell's height level ℓ)
+    104 * w.cells.cell(c).map_or(0, |x| i32::from(x.level))
 }

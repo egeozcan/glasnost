@@ -942,7 +942,7 @@ fn hover_exit_across_own_foundation_reports_clear() {
     assert_eq!(o.beh.gate.door, Door::Closed);
 }
 
-// spec: S-0207 claim 22 (an own-locomotor teleport of any object kind has its arrival update in the jump tick); S-0417 claim 10 and S-0208 claim 23 (a tethered infantry unit reports clear on a cell-arrival update; no run-away reply); Q-0697 (interim: the jump's update is a tethered teleporting infantry unit's report); S-0417 claim 14 (the place is free again)
+// spec: S-0207 claim 22 (an own-locomotor teleport of any object kind has its arrival update in the jump tick); S-0417 claim 10 and S-0208 claim 23 (a tethered infantry unit reports clear on a cell-arrival update; no run-away reply); S-0417 claim 10 (the jump's arrival update is a tethered teleporting infantry unit's report, before the entered-by raise); S-0417 claim 14 (the place is free again)
 #[test]
 fn claim_10_teleporting_infantry_reports_at_its_jump() {
     let mut r = ruleset();

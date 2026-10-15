@@ -692,7 +692,7 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         crate::econ::release::arrival(w, id);
         crate::crush::at_cell_centre(w, id);
     } else if o.kind == Kind::Infantry {
-        // spec: S-0207 claim 22 (the jump tick's arrival update, any object kind) and S-0417 claim 10; Q-0697 (interim: a tethered teleporting infantry unit gives its clear report on it, as S-0208 claim 23's walker does on its arrival)
+        // spec: S-0207 claim 22 (the jump tick's arrival update, any object kind) and S-0417 claim 10 (a released, tethered teleporting infantry unit reports clear on its jump's arrival update, before the entered-by raise; no foundation-exit or destination test, no run-away reply)
         crate::econ::release::arrival(w, id);
     }
     // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
