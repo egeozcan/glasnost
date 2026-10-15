@@ -2,7 +2,7 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 18
+revision: 19
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -108,11 +108,14 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 - **Shadow draw point.** The screen point a shadow image is placed around. Claim 40
   gives it for aircraft; vehicle placement outside that claim remains open. The
   footprint's own displacement and scale (claim 31) are relative to this point.
+- **Aircraft deck mark.** The aircraft's own standing-on-deck state, whose landing,
+  climbing and departure transitions are owned by S-0501 claim 43. It is not inferred
+  from render layer, occupant listing or cell-layer occupancy flags.
 - **Aircraft shadow height** *a*. For claim 40 only, the aircraft's signed integer
   height above its current surface, in leptons: *a = z − H − b*, where *z* is its
   world height, *H* is the terrain surface height at its exact horizontal position
-  (S-0106 claim 2), and *b* is 416 leptons while the aircraft is marked on a bridge
-  deck, otherwise 0. This is not S-0501's altitude-guidance height.
+  (S-0106 claim 2), and *b* is 416 leptons while the aircraft deck mark is set
+  (S-0501 claim 43), otherwise 0. This is not S-0501's altitude-guidance height.
 - **Aircraft-like type.** A type with the aircraft-like flag (import mapping); its shadow is
   half size (claim 31).
 - **Depth-option type.** A type with the per-type depth-buffer option (claim 24).
@@ -923,6 +926,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     qualifying high bridge raises that point by exactly 60 screen pixels. Claim 31's
     footprint shift and scale and F10's copy placement still apply around this anchor.
     The anchor is not the body's lifted point or the centre of its visible silhouette.
+    The deck mark used here is S-0501 claim 43's aircraft deck mark, not a render
+    layer or occupancy inference: landing can set it, ordinary climbing clears it,
+    and horizontal flight or hovering alone leaves its previous value unchanged.
     - **Bridge qualification.** The current cell must be a high-bridge cell
       (S-0211 claim 15), and so must its neighbour one cell towards *y − 1* for a
       bridge whose axis is along cell x, or towards *x − 1* for an axis along cell y.
@@ -3151,19 +3157,33 @@ conformance for lead-confirmed departures, not an oracle experiment.
 - *Procedure:* record cruise over each terrain level, the slope and each bridge,
   record descent, pad hovering, landing, rest and take-off. Include the outermost
   marked bridge row with no qualifying neighbour and the first interior row.
-  Compare equal horizontal positions at different heights where available. Record
+  Compare equal horizontal positions at different heights where available. Add
+  S-0501 claim 43's landing and take-off transition test: on an interior bridge
+  cell with the qualifying neighbour, fly over unmarked, land from above, rest,
+  then take off. Use a human-owned landable aircraft with ordinary flying movement
+  and, if needed, a named test-map override making it landable and not pad-bound.
+  Repeat this route five times, with a non-bridge control. Never write the mark
+  with the recorder or assume a pad can be built on a bridge. Record
   a collapse control only after the deck's marks are removed. Void a run if the
   bystander affects the observed area.
 - *Observable:* recover the shadow anchor by matching the known claim 30/F10
   footprint, rather than equating a silhouette's centre with the object's point.
   Record its screen coordinates, terrain projection, bridge qualification and
-  aircraft height for every selected drawn frame. Scene-depth occlusion may hide
+  aircraft height for every selected drawn frame. During the transition route,
+  also record per tick the aircraft deck mark, world height, terrain height,
+  render layer, both occupant lists and cell-layer occupancy flags separately.
+  Scene-depth occlusion may hide
   footprint pixels; a frame without enough visible pixels is inconclusive.
 - *Expected:* the anchor is the terrain projection or exactly 60 rows above it
   according to claim 40, never the body's lifted point. Over ordinary terrain it
   stays fixed at equal horizontal positions as height changes. The bridge threshold
   includes equality; its neighbour test rejects the unpaired edge row. A pad adds
-  no new surface. A missing deck returns to terrain.
+  no new surface. A missing deck returns to terrain. The transition route starts
+  unmarked on flyover, acquires the mark on settling at deck height, rests with
+  *a = 0* and ground rendering, and clears the mark on the first ordinary climbing
+  tick. At that interior cell the shadow remains at the deck anchor across the
+  landing and take-off transitions whenever claim 40's height test still qualifies,
+  regardless of render-layer or occupant-list changes.
 - *Named test-data extensions:* when stock routes cannot sample exact thresholds,
   use a test map and named type overrides for landing/cruise positions, and a
   named placement fixture for signed heights, without altering the executable.
@@ -3177,6 +3197,8 @@ conformance for lead-confirmed departures, not an oracle experiment.
 - *Falsified if:* an eligible flying-locomotor shadow's recovered anchor differs
   from the surface rule, moves with height away from a bridge threshold, uses a
   pad roof, clamps to the body, or selects a deck without the specified neighbour.
+  A transition contrary to S-0501 claim 43 falsifies that transition rule; a shadow
+  anchor contrary to claim 40 using the recorded mark falsifies this anchor rule.
   The engine-conformance extension fails if a non-flying aircraft uses a different
   anchor under equal surface inputs. A reproducible original non-flying anchor
   other than *P + (0, L(a))* falsifies that recorded original rule, not the corrected
