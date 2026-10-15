@@ -2,11 +2,11 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226]
 supersedes: []
@@ -193,7 +193,7 @@ addition:
    | Idle: no item and empty queue | The item starts at once at progress 0, with balance owed *B* = *P* at that moment; the step period of S-0403 (claims 1 and 8) starts. No money is needed to start. A house with 0 credits can start an item and then wait for money at its first step (claim 4). |
    | Player hold, with an item of the ordered type | The order resumes the line (claim 5) and adds nothing. |
    | Done item of the ordered type | The item is left as it is, and nothing is added. |
-   | Any other line state | The type is added at the end of the queue unless the queue already holds the game-wide maximum number of queued types (Constants), in which case the order is refused. A type is also refused when its build limit forbids it at queue time; S-0407 (claim 16) owns that test, including how it counts the item in production, its rule for limits of 0 or below, and the different test for an aircraft type that must return to a dock. |
+   | Any other line state | The type is added at the end of the queue unless the queue already holds the game-wide maximum number of queued types (Constants), in which case the order is refused. A type is also refused when its build limit forbids it at queue time; S-0407 (claim 16) owns that test, including how it counts the item in production, its rule for limits of 0 or below, and the separate house-wide pad-capacity test for an aircraft type that must return to a dock (S-0501 claim 30). This capacity test does not replace the free-dock factory-eligibility test above. |
 
    A queue request refused at application by the queue limit or S-0407 claim 16's
    queue-time build-limit test requests the game-wide refusal sound only for the local
@@ -407,7 +407,10 @@ addition:
     | Place order with a cell | For an ordinary building or defence, adjacency and explored ground hold (S-0406, claim 6, with S-0411, claim 10). For an upgrade order, the upgrade-specific legality conditions of S-0406 claim 12 apply: adjacency does not, but explored ground still does. Applying the order does not judge adjacency or explored ground again; for an upgrade, its target ownership, compatibility and room conditions are checked again at application under S-0406 claim 12. |
 
     A legal build order is then applied or refused by claim 3 (the factory conditions, the
-    build-limit answer with the production allowance, the queue limit and S-0407's claim 16). This claim only lists the rules; each stays owned by the spec
+    build-limit answer with the production allowance, the queue limit and S-0407 claim 16's
+    queue-time test, including S-0501 claim 30's house-wide pad capacity for dock-bound aircraft).
+    A free dock at an eligible factory and remaining house-wide queue capacity are distinct
+    requirements, not one free slot per factory. This claim only lists the rules; each stays owned by the spec
     named. The original applies the building-line case differently (Edge cases); its interface never
     gives it.
     A type taken from the queue to start after a cancel or a release is started even when
@@ -501,7 +504,9 @@ One ranged draw *r* over 0 … *L*ₕ from the scenario stream gives the cell (*
     Edge cases). Ground and naval unloading, doors, exit movement and qualified post-contact
     destinations belong to S-0417. Its claim 10 supplies the infantry initial destination.
     Only subsequent no-rally walk-out remains open there (Open question 3). Claim 15 below
-    supplies aircraft pad positions. S-0417 claim 14 supplies the infantry exit-search entry
+    supplies aircraft pad positions. S-0501 claim 30 owns the house-wide pad-bound aircraft
+    queue-capacity test; it is not a release test and does not replace this claim's docking-place
+    check or claim 3's free-dock factory eligibility. S-0417 claim 14 supplies the infantry exit-search entry
     test, contact-place count and nearby destination of an edge-entering aircraft. Its nearby
     search takes no draw (S-0212 claim 25). Only initial-placement draws remain unresolved
     there (S-0417 Open question 8), apart from the no-rally walk-out question above. The
