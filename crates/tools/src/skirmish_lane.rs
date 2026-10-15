@@ -100,6 +100,12 @@ struct Game {
     /// Shots and kills of the game (S-0301, S-0312).
     shots: usize,
     killed: usize,
+    /// Passengers that boarded a transport and that were let out beside one
+    /// still standing (S-0507), and superweapon launches (S-0513), by the
+    /// own AI's games.
+    loads: usize,
+    unloads: usize,
+    launches: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     replay_ms: u128,
@@ -448,6 +454,8 @@ fn play_ai(
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let mut drained = 0usize;
+    // The (passenger, transport) pairs of the last tick.
+    let mut riding: BTreeSet<(u32, u32)> = BTreeSet::new();
     // `GLASNOST_AI_TRACE=n`: a timeline line per house every n ticks.
     let trace: i32 = std::env::var("GLASNOST_AI_TRACE")
         .ok()
@@ -464,10 +472,31 @@ fn play_ai(
             match e {
                 Effect::Shot { .. } => g.shots += 1,
                 Effect::Killed { .. } => g.killed += 1,
+                Effect::Superweapon {
+                    event: glasnost_sim::superweapons::SwEvent::Launch,
+                    ..
+                } => g.launches += 1,
                 _ => {}
             }
         }
         drained = w.effects.len();
+        let now: BTreeSet<(u32, u32)> = w
+            .objects
+            .keys()
+            .filter_map(|&p| Some((p.0, glasnost_sim::transport::riding(w, p)?.0)))
+            .collect();
+        g.loads += now.difference(&riding).count();
+        g.unloads += riding
+            .difference(&now)
+            .filter(|&&(p, t)| {
+                let alive = |i| {
+                    w.obj(glasnost_sim::world::ObjectId(i))
+                        .is_some_and(|o| o.on_map && o.health > 0)
+                };
+                alive(p) && alive(t)
+            })
+            .count();
+        riding = now;
         features(w, &mut g.features);
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
@@ -699,6 +728,30 @@ const UNIT_KEYS: [[&str; 5]; PLAYERS] = [
 /// (the tech climb); the owned ones count for the player houses only.
 fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
     let r = w.rules();
+    for h in 0..PLAYERS {
+        for i in 0..r.superweapons.types.len() {
+            let ready = glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                .is_some_and(|c| c.granted && c.ready && !c.suspended);
+            if ready {
+                // A ready superweapon: keyed by house and type position, by kind.
+                use glasnost_sim::superweapons::SwKind as K;
+                let key = match r.superweapons.types[i].kind {
+                    Some(K::Missile) => "ready: missile",
+                    Some(K::Storm) => "ready: storm",
+                    Some(K::IronCurtain) => "ready: iron curtain",
+                    Some(K::Chrono | K::ChronoWarp) => "ready: teleport",
+                    Some(K::Paradrop | K::AmerParadrop) => "ready: paradrop",
+                    Some(K::SpyPlane) => "ready: spy plane",
+                    Some(K::ForceShield) => "ready: force shield",
+                    Some(_) => "ready: other kind",
+                    None => "ready: no kind",
+                };
+                out.entry(key)
+                    .or_default()
+                    .insert((h * r.superweapons.types.len() + i) as u32);
+            }
+        }
+    }
     for (id, o) in &w.objects {
         let mut note = |k: &'static str| {
             out.entry(k).or_default().insert(id.0);
@@ -750,6 +803,13 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
                 }
                 if b.is_some_and(|b| b.gate) {
                     note("gates");
+                }
+                if r.superweapons
+                    .building_sw
+                    .get(o.type_index as usize)
+                    .is_some_and(|f| f.iter().flatten().next().is_some())
+                {
+                    note("superweapon buildings");
                 }
                 if role_of(w, tech::type_of(o)).is_none() {
                     note("climb buildings");
@@ -933,6 +993,13 @@ fn report(
             );
         }
         let _ = writeln!(s, "  combat: {} shots, {} killed", g.shots, g.killed);
+        if players != Players::Scripted {
+            let _ = writeln!(
+                s,
+                "  transports: {} loads, {} unloads; superweapon launches: {}",
+                g.loads, g.unloads, g.launches
+            );
+        }
         let f: Vec<String> = g
             .features
             .iter()
