@@ -465,4 +465,17 @@ mod tests {
         assert_eq!(code("[A]\nTranslucent=yes\nEnd=-5\n", 2), 3);
         assert_eq!(code("[A]\n", 2), 0);
     }
+
+    /// spec: S-0109 claim 20 and F4 (a translucent-flag type fades by its
+    /// progress k through its end E: code 3 from 5k ≥ 3E, 2 from 5k > 2E,
+    /// 1 from 5k > E, for E > 0; E = 0 gives 3 once k > 0)
+    #[test]
+    fn translucent_fade_by_progress() {
+        let codes: Vec<u8> = (0..10).map(|k| fade_code(k, 10)).collect();
+        assert_eq!(codes, [0, 0, 0, 1, 1, 2, 3, 3, 3, 3]);
+        assert_eq!(fade_code(0, 0), 0);
+        assert_eq!(fade_code(1, 0), 3);
+        let t = read_anim(&doc("[A]\nTranslucent=yes\n"), b"A");
+        assert_eq!(translucency(&t, 2, 6, 10), 3);
+    }
 }
