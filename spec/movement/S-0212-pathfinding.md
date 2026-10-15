@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1582,6 +1582,8 @@ Terms specific to this spec:
     | Trigger crate placement (S-0524 claim 4) | the waypoint-slot cell | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Random crate placement (S-0520 claim 3) | the candidate cell supplied by S-0520 claim 3 | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Unit crate placement fallback (S-0520 claim 13) | the crate cell | the awarded unit type's | *normal* | none | never | no | no | none |
+    | Transport shore approach (S-0507 claim 8) | the transport's cell | *wheel* | *normal* | none | never | no | no | none |
+    | Vehicle passenger exit (S-0507 claim 10) | the serving neighbour chosen by the exit rounds | the passenger's | *normal* | none | never | no | no | none |
     | Bunker exit (S-0606 claim 12) | the bunker's top-left foundation cell + (−1, +1) cells | the vehicle's | *normal* | none | never | no | no | none |
     | Paradrop target adjustment (S-0522 claim 1) | the target cell | *foot* | *normal* | none | never | no | no | none |
     | Air-strike aircraft placement (S-0519 claim 17) | the strike's arrival cell | *winged* | *normal* | none | never | no | no | none |
@@ -1600,8 +1602,8 @@ Terms specific to this spec:
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
-    The trigger-crate, random-crate, unit-crate fallback, bunker-exit, paradrop and air-strike rows
-    allow bridge cells and ask for no no-overlay condition. S-0606 claim 12 owns
+    The trigger-crate, random-crate, unit-crate fallback, transport-shore, vehicle-passenger-exit,
+    bunker-exit, paradrop and air-strike rows allow bridge cells and ask for no no-overlay condition. S-0606 claim 12 owns
     bunker-exit release and the still-unestablished outcome when that search finds no cell. For trigger and random crates, selection
     is not placement: a selected cell outside the height-aware usable area or holding
     any overlay is refused without another nearby search around that centre. S-0524
@@ -1612,6 +1614,15 @@ Terms specific to this spec:
     Its result replaces the target only when there is a result and it is not itself a
     water-role tile; otherwise the original target remains. This post-selection refusal
     does not cause another search.
+
+    Both transport rows use a 1 × 1-cell footprint. S-0507 claims 8 and 10 own their
+    unchecked no-result handling: although the search finds no cell, each caller uses
+    the placeholder at map cell (0, 0). Shore approach assigns it as destination and
+    waits 10 ticks, without trying an unloading neighbour in that processing. Vehicle
+    passenger exit attempts placement there, not at the serving neighbour's centre.
+    Its later movement destination remains the exit-round cell, even when a successful
+    search selected a different placement cell. These caller rules do not make (0, 0)
+    a qualifying result or prove reachability or placement success.
 
     The parasite-exit row gives the original host-mobility search. S-0614 claim 13 owns
     when that search is needed and its `quirks.parasite_exit_search_host_mobility`
@@ -1699,7 +1710,8 @@ Terms specific to this spec:
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
     action tick for trigger crate placement (S-0524 claim 4), placement-attempt tick for
     random crate placement (S-0520 claim 3), pickup tick for unit-crate placement fallback
-    (S-0520 claim 13), unload-processing tick for bunker exit (S-0606 claim 12), launch tick for paradrop
+    (S-0520 claim 13), unload-processing tick for transport shore approach and vehicle
+    passenger exit (S-0507 claims 8 and 10) and for bunker exit (S-0606 claim 12), launch tick for paradrop
     target adjustment (S-0522 claim 1), start tick for air-strike aircraft placement
     (S-0519 claim 17), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
     harvester step-off (S-0402 claim 13), release tick for
@@ -1736,7 +1748,12 @@ Terms specific to this spec:
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
       cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the
-      bunker-exit parameters (S-0606 claim 12): no player-input route to a bunkered vehicle's
+      transport shore approach and its unchecked no-result handling (S-0507 claim 8):
+      S-0507 T9 has not yet established its ordinary-order/map witness. Vehicle-passenger
+      exit settings and tick-modulo choice are `measurable` (S-0507 T13); its unchecked
+      no-result placement remains `unmeasured`, because no ordinary-input witness
+      separates it from the preceding exit-entry refusals (S-0507 claim 10).
+      `unmeasured` for the bunker-exit parameters (S-0606 claim 12): no player-input route to a bunkered vehicle's
       *unload* has been established. Confidence in those caller settings is high, but their
       reachability is low. `unmeasured` for the other
       parameters of the no-move rows and for the rows of orders onto an object: they differ from the
@@ -3512,6 +3529,19 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   Expect the earlier scan-order cell on every tick residue, with zero displacement and no
   search draw. Reverse the geometry and repeat. Tick-modulo alternation here, or a shift by
   one cell on either axis with either footprint size, falsifies the claim.
+
+**Transport caller checks (claim 25).** Use S-0507 T13's tiny flat skirmish map,
+stock-data setup with director and mods off, game-speed index 2 and 800 × 600.
+Unload a vehicle passenger through ordinary orders, varying the processing tick with
+candidate cells held fixed. Record the serving neighbour, passenger placement cell,
+subsequent movement destination and random-stream state read-only. Predict placement
+from the vehicle-passenger-exit row and the preferred sequence at that tick. Expected:
+tick-modulo selection, no search draw, and the exit-round movement destination retained
+independently of placement. A different placement, search draw or substituted movement
+destination falsifies that part. If no ordinary-order fixture yields multiple preferred
+candidates, the selection comparison is inconclusive. S-0507 T9 supplies the proposed
+shore witness; shore approach and both unchecked no-result cases retain the unmeasured
+qualifications of claim 25, rather than being confirmed by ordinary successful exits.
 
 ## Open questions
 
