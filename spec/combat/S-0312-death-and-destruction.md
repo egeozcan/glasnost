@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707]
 supersedes: []
 ---
 
@@ -285,7 +285,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     | Vehicle's height above the terrain | Type can crash (claim 15) | Bomb mark (claim 11) | Passengers |
     |---|---|---|---|
     | more than 208 leptons | any | any | all die, credited to the attacker |
-    | 208 leptons or less | yes | any | stay inside; they die when it starts to crash, or, when it is on the ground and so cannot crash, when it leaves play |
+    | 208 leptons or less | yes | any | stay inside; they die credited to the attacker when it starts to crash, or without attacker credit at removal when it is on the ground and cannot crash (S-0507 claim 16) |
     | 208 leptons or less | no | yes | all die, credited to the attacker |
     | 208 leptons or less | no | no | get out, as below |
 
@@ -297,6 +297,24 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     credited to the attacker, when the killing damage ignores defences, when it cannot enter the
     vehicle's cell (an entry outcome other than clear or moving blocker, S-0209 claim 4), or when
     it cannot be placed.
+
+    **Dying vehicle excluded (Q-0707).** The dying vehicle itself does not obstruct these
+    escape entry tests: it contributes neither a listed blocker nor its vehicle-present flag
+    (S-0209 claim 4). Other occupants still count normally; this is not a general exemption
+    for destroyed objects, nor a rule for ordinary unloading. Thus a stationary transport
+    alone on otherwise enterable open ground does not prevent its passengers escaping.
+    For comparison, if that vehicle were counted as an ordinary allied occupant, with no
+    movement in progress, no destination and no entry override, it would give *stationary
+    friendly*, outcome 6 (S-0209 claim 4, row WP16), not *clear* or *moving blocker*.
+    In an otherwise clear cell that outcome would kill the passenger under this claim's
+    entry gate. Other vehicle states use S-0209 claim 4's corresponding rows; there is no
+    single counterfactual outcome for every destroyed vehicle.
+
+    Any passengers still aboard at final removal die recursively without attacker credit
+    under S-0507 claim 16, with the suppressed passenger death effects and destruction
+    notifications of claim 5. This cleanup does not change credit for passengers already
+    killed during the killing hit or at crash start.
+
     A passenger that has got out is given no order beyond the scatter request when its house is
     human-controlled. When its house is computer-controlled, the original also puts it on the *hunt*
     behaviour (S-0215), unless the destroyed vehicle belonged to a team, which the passenger then
@@ -306,10 +324,12 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     This refines S-0203 claim 6e, which refers to this claim for whether passengers of a destroyed
     object die or get out; S-0203 claim 3 owns the in-play status of passengers of open-topped
     transports.
-    - Backing: `measurable` (scenario D9; variant e for the orders); `unmeasured` for the team join
+    - Backing: `measurable` (scenario D9; variant e for the orders, variant g for the scoped
+      exclusion and ordinary stationary-vehicle comparison; S-0507 scenario T14 for removal cleanup); `unmeasured` for the team join
       (the original's team system is outside our scope and has no counterpart in our engine, so
       nothing of ours depends on it, and no test map is planned for it)
-    - Confidence: high for the height rule and the escape; medium for the entry-outcome condition
+    - Confidence: high for the height rule, the escape, the dying-vehicle exclusion,
+      the conditional stationary-friendly comparison and uncredited removal cleanup; medium for the entry-outcome condition
       and the facing; medium for the orders; low for the team join
 
 13. **Crew.** After its passengers, a destroyed vehicle may leave a crew infantry unit at its
@@ -361,7 +381,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     and takes no draw: there is no fallback animation or fallback list. This rule is the same
     in flight and on the ground. It does not suppress animations or draws from the shared death
     effects, crash start or later impact. The aircraft then starts to crash if it is above the
-    terrain; otherwise it leaves play at once. An object that starts to crash loses all
+    terrain; otherwise it leaves play at once, and any passengers still aboard die without
+    attacker credit under S-0507 claim 16. An object that starts to crash loses all
     its passengers (credited to the attacker) and, unless it is infantry, takes three draws for its
     tumbling (one unit-interval value, one ranged draw over 0 to 1 that chooses the sense, one more
     unit-interval value). For an aircraft using ordinary flying movement, S-0501 claim 9 owns
@@ -391,9 +412,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9.
+    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
-      empty list, and their independence from height; rocket interception inherits S-0506
+      empty list, their independence from height, and uncredited passenger cleanup at removal.
+      Rocket interception inherits S-0506
       claim 20's confidence; jumpjet motion inherits S-0502 claim 18's confidence,
       medium for the non-rocket impact rules; low for the double death weapon
 
@@ -653,8 +675,11 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     point they give) as follows. Animation-specific smudge selection is owned by S-0202
     claim 15, including during-play creation and its size-dependent candidate preferences.
     The destruction forms below remain unchanged.
-    - *No smudge at one cell.* When the anchor cell is the map cell with both coordinates 0, nothing
-      is placed and no draw is taken.
+    - *Zero-coordinate exception.* With `quirks.destruction_smudge_zero_anchor` on (default,
+      the original), an anchor cell with both coordinates 0 receives no smudge and the smudge
+      choice takes no draw. With it off, that anchor uses the same fit, candidate and choice
+      rules as every other anchor, including the requirement that it lie on the map. Draws
+      already taken to choose the kind and nearby point are unaffected.
     - *Fit.* A smudge type of the kind fits at the anchor cell when the anchor cell lies on the map
       and every cell of its footprint (Terms) is flat (no slope), holds no overlay and no smudge, and
       has a tile whose tileset has the morphable flag (S-0010 claim 15). For this test only, a
@@ -679,8 +704,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     buildings). A smudge already in a footprint cell refuses the type, so a second destruction at
     the same place leaves no smudge where the first one did. These are the only draws a smudge
     choice takes.
-    - Backing: `measurable` (scenario D17; the draw count through the random-state recorder),
-      and `unmeasured` for a negative tile number other than the no-tile marker, since no practical
+    - Backing: `measurable` (scenario D17; the draw count through the random-state recorder).
+      The zero-coordinate exception is `unmeasured`: no reachable destruction-smudge setup
+      at that anchor is established. Its off setting is a design rule, not an observation.
+      A negative tile number other than the no-tile marker is also `unmeasured`, since no practical
       setup producing it is established (S-0010 claim 15)
     - Confidence: high for the candidates, the preference and the draw; medium for the absence of
       draws in placing; low for footprints beyond the map edge
@@ -1044,7 +1071,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | Directions of the nearby point | 256 | directions | F2 |
 | Map cell coordinate limit for the nearby point | 0 to 511 | cells | F2 |
 | Large-smudge preference | wider than 1 and taller than 1 | cells of a smudge footprint | claim 26, large form |
-| Cell that never receives a destruction smudge | both coordinates 0 | map cell | claim 26 |
+| Anchor excluded by the default destruction-smudge rule | both coordinates 0 | map cell | claim 26; `quirks.destruction_smudge_zero_anchor` |
 | Crew escape chance at a fresh start | 0.5 | chance (decimal) | claim 27 |
 | Sinking weight at a fresh start | 3.0 | weight units of the type's weight field | claim 27 |
 | Survivor divisors at a fresh start | 200, 100, 300 | credits per survivor, for sides 0, 1, 2 | claim 27 |
@@ -1152,6 +1179,13 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   can release up to twice the survivor count *C* in total, and it takes that round's draws. Off: it
   takes no second round; it leaves play and its cells, its remaining passengers die, and its
   rubble and crate are placed, taking no draws but the crate's. Turning it off changes every later draw.
+- **`quirks.destruction_smudge_zero_anchor`** (proposed; default: on, the original).
+  Claim 26 suppresses the smudge choice at an anchor with both cell coordinates 0, with
+  no smudge-choice draw. Off: apply the ordinary fit, candidate and choice rules there,
+  without bypassing map legality or any other fit requirement. Earlier kind and nearby-point
+  draws are unchanged. If candidates could fit there, omitting their choice can change the
+  scenario random stream and later gameplay; this is not classified as a drawing-only fix.
+  Reachability remains unestablished, so the original's exception is explicitly unmeasured.
 - **`quirks.smudge_footprints_beyond_map_edge`** (default: on, the original). Claim 26 tests only
   the anchor cell for lying on the map. A footprint cell beyond the map edge is tested as a
   placeholder cell that holds nothing and has the theater's first tile type; it passes when that
@@ -1190,9 +1224,9 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | rules, warhead section, `CausesDelayKill`, `DelayKillFrames`, `DelayKillAtMax` | delay-kill flag, *F*, *A* (F6) | boolean, integer, decimal (held as a single) | no; 5 ticks; 1.0 (as S-0302 Import mapping, which owns them) |
 | rules, building type section, `EligibleForDelayKill` | eligible for delayed death (claim 3) | boolean | no |
 | rules, type section, `Naval`, `Underwater`, `Organic`, `Weight` | sinking conditions (claim 10) | boolean, boolean, boolean, decimal | type specs |
-| rules, type section, `Crashable` | can crash (claims 12, 15); failure to start a crash removes the vehicle even on a first killing hit that meets the sinking conditions (claim 10) | boolean | no at type creation; later absence preserves the value in force |
+| rules, type section, `Crashable` | can crash (claims 12, 15); failed crash start removes the vehicle, including a first sinking hit (claim 10), and remaining passengers die without attacker credit (S-0507 claim 16) | boolean | no at type creation; later absence preserves the value in force |
 | rules, type section, `Crewed` | crewed flag (claim 13, F4, F5) | boolean | type specs |
-| rules, type section, `Passengers` | passenger capacity (claim 13) | integer | 0 |
+| rules, type section, `Passengers` | passenger capacity (claim 13); capacity and boarding are S-0507 claims 1 to 6. Destruction escape excludes the dying vehicle independently of this value (claim 12); removal cleanup is S-0507 claim 16 | integer | 0 |
 | rules, unit type section, `CarriesCrate` | crate carrier (claim 14) | boolean | no |
 | rules, building type section, `Helipad` | helipad (claim 17) | boolean | no |
 | rules, building type section, `UnitAbsorb`, `InfantryAbsorb` | absorbs units or infantry (claim 24) | boolean | no |
@@ -1425,7 +1459,29 @@ facing rounded by S-0204 F4 are expected. Survival in a refused cell, wrong cred
 facing falsifies f. Repeat c with a named flying vehicle of cruise height 208, then 209 leptons:
 for a non-crashable type the first releases passengers and the second kills them. Repeat d in
 flight at or below 208: passengers die at crash start, not impact. A reversed threshold result or
-surviving passenger after crash start falsifies those cases.
+surviving passenger after crash start falsifies those cases. In d record passenger destruction
+notifications, the attacker's kill count and experience: removal cleanup gives no passenger kill
+credit or passenger death effects; an attacker-credited passenger death at ground removal
+falsifies this result. For the aircraft counterpart use S-0507 scenario T14.
+
+Variant g (Q-0707): on a tiny flat skirmish map at speed index 2, director and mods off, kill a
+stationary stock transport carrying one infantry unit on otherwise empty enterable ground.
+Record the passenger's entry outcome and survival with the read-only recorder before scatter.
+Expect *clear* and escape despite the dying vehicle's presence until its removal. As an ordinary
+entry control, ask a same-house infantry unit with no target, tether or other entry override to
+walk into a stationary same-house vehicle's cell; the vehicle must have no destination or
+movement in progress. Expect *stationary friendly* (6), as S-0209 claim 4 row WP16, not the escape's
+*clear*. Also preplace a second stationary allied vehicle in the transport's cell on a named test
+map, keeping a passenger standing position free. Verify both vehicles are present before the
+hit and that the second survives the hit and death effects. The escaping passenger now gets
+*stationary friendly* and dies credited to the attacker: only its own dying transport is excluded.
+Void a run if the second vehicle moves, acquires a destination or dies before the escape test,
+or a bystander interferes. Use scripted mouse and keyboard input through the game's normal
+controls and a read-only recorder at 800×600, with one run at a time. Keep the common setup's
+human player and bystander opponent; record exact seeds and each object's identity without
+setting the random state. A blocker attributed to the dying transport in the empty
+case, failure of the stationary control, or omission of the surviving second vehicle falsifies g.
+This compares reachable original outcomes, not an altered escape test that counts the carrier.
 
 **D10. Crew (claims 13, 14).** *Setup:* a stock crewed vehicle with no passenger capacity, killed 500
 times; crew escape chance from stock data. *Observable:* share with a crew, crew types, crew health.
@@ -1687,7 +1743,11 @@ whose files gave other values. *Observable:* the share of kills with a crew; whe
 sinks; the largest survivor count per destruction. *Expected:* (a) a share within 3 standard errors
 of one half; (b) the vessel of weight 3.0 sinks and the one of 2.9 does not; (c) at most 5, 5 and 3
 survivors (1000 / 200, 1000 / 100 capped at 5, 1000 / 300 truncated); in the second runs, the earlier
-game's values. *Falsified if:* any of these differs.
+game's values. Record and replay each destruction's survivor chances and stopping point as well as the
+largest count: a different count from the replay falsifies the divisor even if no run exceeds
+its predicted maximum. For carry-over, name invented earlier-game values in the measurement
+record and compare with their predicted crew chance, sinking boundary and F5 count, rather
+than expecting a fresh-start reset. *Falsified if:* any of these differs.
 
 **D19. List items (claim 28).** *Setup:* named test files giving a test vehicle type an explosion
 list `none,X` (X a test animation) and a debris-animation list `<none>,Y` with a minimum and

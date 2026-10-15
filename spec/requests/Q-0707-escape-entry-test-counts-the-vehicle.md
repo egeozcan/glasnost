@@ -1,9 +1,9 @@
 ---
 id: Q-0707
 title: Whether a destroyed vehicle counts in its escaping passengers' entry test
-status: open
+status: answered
 related: [S-0312, S-0507, S-0209]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
