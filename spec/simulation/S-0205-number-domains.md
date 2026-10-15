@@ -2,11 +2,11 @@
 id: S-0205
 title: Number domains (integers, floating point, the round-toward-zero mode, conversions)
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -360,7 +360,7 @@ Observable ordering: none; the mode applies to every calculation alike.
   | S-0111, claim 12 (total passenger size) | Only where a sum is inexact, which with sizes read from data needs a negative size or a total of 2²⁹ or more | Each sum rounds to nearest, so it can reach the whole number above instead of stopping just below it |
   | S-0111, claim 14 (sum of the resource amounts) | Only when two non-zero amounts differ by a factor of 2²⁷ or more (the sum is exact otherwise, as S-0111 states) | The sum rounds to nearest |
   | S-0201 (pacing and freeze rules) | No (no floating point, stated there) | — |
-  | S-0202 (random streams, the companion draft of this spec), claim 6 (unit-interval value) | Yes | The largest unit-interval value is exactly 1 instead of 1 − 2⁻⁵³ |
+  | S-0202 (random streams), claim 6 (unit-interval value) | Yes | The largest unit-interval value is exactly 1 instead of 1 − 2⁻⁵³ |
   | S-0204, claim 5, F1 (table square root) | Only for *n* ≥ 2²⁴ square leptons (distances of 4096 leptons or more) | *n* is rounded to the nearest single instead of toward zero; about 1 in 2000 squared distances between 16 and 512 cells moves by one bucket of the table (as S-0204 states). Every spec that uses the table square root (S-0207 F5, S-0208 F1, S-0209 F1, S-0210 F2, S-0212 F6, S-0213 claim 7, S-0215 F4) inherits this |
   | S-0204, claim 8, F3 (direction) | No (stated there) | — |
   | S-0302, Formulas F1, F2, F3, F5, F6 and F7 | Yes | Each RZ₅₃ is RN₅₃ and each RZ₂₄ is RN₂₄; exact operations and results may coincide in both modes |
@@ -373,6 +373,7 @@ Observable ordering: none; the mode applies to every calculation alike.
   | S-0212, F3 (retry delay), F5 (threat term), F7 (threat tests) | Only for a field with a percent sign, or (F5, F7) a threat value of 2²⁹ or more; otherwise each product is exact, or (the absent-key default of F3) far from a whole number | Each product rounds to nearest |
   | S-0213, claim 7 (group destinations: the points along a placement line) | Yes | The floating-point steps along the line round to nearest; the conversion of each point to a cell still truncates |
   | S-0215, F1 (rate delay) | Only for a rate with a percent sign | The product rounds to nearest: `6%` gives 54 ticks instead of 53. A rate without a percent sign gives the same ticks in both settings (a rate written as 0.06 gives 53, from its single-precision reading) |
+  | S-0501, claim 4 and F3 (aircraft horizontal step), F4 (speed fraction) | Yes | Each sum and product rounds to nearest; the one-lepton sideways drift at body facings 32767 to 32772 and 49148 to 49155 disappears at positions of 1024 leptons and more (as S-0501 F3 states) |
 
 - **Integer division by zero, and −2147483648 ÷ −1** (departure, claim 3).
 - **Squares from the library power function** (claim 5). Our engine uses the exact square rounded
