@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -130,17 +130,18 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   locomotor while phasing in is dropped, not saved for the end (S-0207 claim 20 (a), (f)).
   This is separate from the click refusal of row GC1.
 - **Parasite.** An object that has latched onto a mobile unit and harms it from there (for
-  example a unit that climbs inside a vehicle, or one that grabs a ship). Its rules belong to the
-  special-abilities specs. A unit with a parasite on it may be held still by a paralysis timer
-  that the parasite starts.
+  example a unit that climbs inside a vehicle, or one that grabs a ship). Its rules belong to
+  S-0614. The parasite's *hold* is S-0614's hold timer (claims 7 and 8), not the separate
+  paralysed state used by these input rules.
 - **Spawned aircraft type, slave unit.** An aircraft type that a carrier-like unit launches and
   controls (Import mapping), and a unit that a slave master of S-0215 controls.
 - **Movable.** An own object that the player can move. For a mobile object all of these must
-  hold: it is not disabled; it is not being erased or phasing in; it is not held still by a
-  parasite's paralysis timer; it is not held inside a tank bunker; its type is not a spawned
+  hold: it is not disabled; it is not being erased or phasing in; it is not held
+  (S-0614 claims 7 and 8); it is not held inside a tank bunker; its type is not a spawned
   aircraft type; it is not a slave unit; it is not falling (for example under a parachute); and,
-  if it launches spawned aircraft, it is not in the middle of launching them while fewer than its
-  launch count are out. A building is movable when it is not paralysed and either it is
+  if it launches spawned aircraft, its launching count is not strictly between 0 and its spawn
+  count (S-0506 claim 10). These are S-0506's counts, not the number of aircraft away from the
+  spawner. A building is movable when it is not paralysed and either it is
   rally-capable, or its type undeploys into a vehicle; a construction yard counts only when the
   game is not a campaign game, the game option that lets construction yards be packed up again is
   on, and the yard is not mind-controlled. (The original also asks that the yard's house be
@@ -211,7 +212,10 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   ringed by cliffs. It is not the same as an impassable cell.
 - **Docking answer.** When a row asks whether the target accepts the actor now, the target answers
   through the contact exchange of S-0215 (and the building-kind behaviours). The answer is
-  *accepts*, *refuses* or neither. A full building or transport refuses. Asking changes nothing,
+  *accepts*, *refuses* or neither. A full building or transport refuses. A building also refuses
+  when exactly one of it and the unit is naval, unless the unit's movement zone is *amphibious*
+  (S-0504 claim 7). That exception removes only the naval-mismatch refusal, not other reasons
+  to refuse. Asking changes nothing,
   so when and how often an implementation asks (eagerly or lazily, once or many times) cannot
   change any result (claim 2).
 - **Terrain-fire weapon.** A weapon whose type carries the terrain-fire flag (Import mapping).
@@ -308,7 +312,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      G5 and G10; Scenario T6 also for an armed garrisoned building). Row G2, and the being-erased
      and phasing-in part of row GC1, by Scenario T9 parts A and B, which click at a tick timed to
      the state with scripted input. The own-jump duration and dropped-destination rule cited
-     in Terms are backed by S-0207 claim 20 and Scenario D22 runs 5 and 6.
+     in Terms are backed by S-0207 claim 20 and Scenario D22 runs 5 and 6. The launching-count
+     and hold exclusions in *movable* are backed by S-0506 claim 10 (R6) and S-0614 claims 7
+     and 8 (P1 and P9), respectively.
    - Confidence: medium
 
 5. **The attack-move gesture.** If the attack-move gesture is held (or attack-move mode is on)
@@ -390,7 +396,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 8. **Vehicles, aircraft and buildings on an object.** The final action of an own vehicle follows
    table V, of an own aircraft table AC and of an own building table B, in the same way.
-   - Backing: `measurable` (Scenarios T6, T9 part D and T10). Rows that the list after Scenario
+   - Backing: `measurable` (Scenarios T6, T9 part D and T10; S-0504 claim 7 and scenario N7
+     for the naval-mismatch docking refusal and amphibious exception). Rows that the list after Scenario
      T10 gives as `unmeasured` have no step, each with its reason.
    - Confidence: medium for table V; low for tables AC and B
 
@@ -1581,7 +1588,7 @@ Ordering consequences:
 | Infantry and vehicle types, `Teleporter` | self-teleporting type (claim 11) | boolean (S-0003) | no |
 | Infantry, vehicle and aircraft types, `MovementZone` | the zones *subterranean* and *fly* (claim 11; *fly* also in value *n* of table V); the underground type (Terms: the zone *subterranean*, in claims 6, 11 and row GC10); a building type's zone (row B10) | one of the thirteen zone names of S-0211 (claim 12), read as S-0211's Import mapping says | *normal* (S-0211, Import mapping) |
 | Aircraft types, `Spawned` | spawned aircraft type (Terms, *movable*) | boolean (S-0003) | no |
-| Vehicle and aircraft types, `SpawnsNumber` | launch count (Terms, *movable*) | integer (S-0003) | 0 |
+| Vehicle and aircraft types, `SpawnsNumber` | spawn count (Terms, *movable*; S-0506 claim 10) | integer (S-0003) | 0 |
 | Building types, `Repairable` | repairable building (rows I3 to I7, IC3) | boolean (S-0003) | yes |
 | Infantry and vehicle types, `DeployFire` | fires while deployed (rows I21, V3, IC7, VC5); deploy weapon (row VD4) | boolean (S-0003) | no |
 | Weapon `AreaFire` | deploy weapon fires over an area (value *v* of table I) | boolean (S-0003) | no |
@@ -1679,6 +1686,11 @@ issued. The cursor shape is observed on screen and used only to read the represe
 Each test is done once, because no click draws from the scenario random stream (response-choice
 and playback draws use the unsynchronised stream, which T2 part B reads). Where a
 scenario says "alone", that object is the only one selected, so that it is the representative.
+
+The cross-spec input checks use S-0506 claim 10's R6 for the launching-count exclusion,
+S-0614 claims 7 and 8's P1 and P9 for the hold exclusion, and S-0504 claim 7's N7 for
+naval-mismatch refusal with the amphibious exception. Those scenarios own the setups,
+procedures and falsifiers for these shared rules.
 
 **Scenario T1: representative (claim 1).** Select an unarmed engineer and an armed tank, with the
 engineer nearer to an enemy building. Hover over the building: expected the tank's action
