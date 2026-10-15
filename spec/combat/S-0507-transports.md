@@ -2,7 +2,7 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -184,11 +184,19 @@ This spec does not repeat what other specs own:
    If the transport is a gunner type, this is the boarding event of S-0308 claim 6. If the
    boarding unit is itself an open-topped transport, its own passengers lose their targets.
 
+   Boarding and ordinary unloading within the usable area preserve the passenger's cloak
+   state and stage (S-0516 claim 16). Elapsed game ticks consume its cloak delay during the
+   ride; boarding neither resets nor pauses it. A stored passenger's fading does not catch
+   up on unloading: an overdue stage permits at most one step on its next ordinary update.
+   Ordinary unloading does not force full cloak. S-0516 claim 16 owns these effects and
+   their measurement scenarios.
+
    **If it does not accept** (a refusal or *neither*), an infantry unit gives up its destination,
    queues *guard*, and scatters (glossary *scatter*) even if it would otherwise not.
    A refused vehicle likewise clears its destination, queues *guard*, and receives a forced
    scatter request.
-   - Backing: `measurable` (T3, T4, T6 and T12; T3 also tests boarding resets)
+   - Backing: `measurable` (T2, T3, T4, T6 and T12). T3 tests boarding resets.
+     S-0516 claim 16's scenarios test cloak persistence and timing.
    - Confidence: high for acceptance; medium for the refused infantry's reaction
 
 ### Unloading a vehicle transport
@@ -379,8 +387,9 @@ This spec does not repeat what other specs own:
     unusable. Exhausting radii 0 through 31 therefore takes 32 such draws. A successful search
     uses its first accepted cell. Failure retains the search centre as destination, not the
     previous destination: with an undefined marker this is the placeholder cell at (0, 0).
-    S-0501 claim 18's end-of-update placeholder cleanup still applies; this is the destination
-    immediately after selection, not a promise that it survives that update. Initial map
+    S-0501 claim 41's end-of-update placeholder cleanup still applies, with the resulting
+    fall-back to rest governed by S-0501 claim 18; this is the destination immediately after
+    selection, not a promise that it survives that update. Initial map
     loading skips the search and its draws, retaining the centre (S-0501 claim 40).
     The original can instead use a passenger's team waypoint; that team choice is outside
     scope. Passing F7, rather than failing it, causes this replacement
@@ -425,6 +434,9 @@ This spec does not repeat what other specs own:
       undefined-marker replacement and flight phases.
       `unmeasured` for tether inhibition until an ordinary-contact witness is found, the
       all-neighbours-blocked fallback and failed-unit lifetime; T13 proposes discriminating runs.
+      Initial-loading search suppression and below-terrain release clamping are also
+      `unmeasured`: no ordinary map-loading unload or below-terrain release witness is
+      established by T15.
     - Confidence: high for phase delays, non-dropship branch, direction preference,
       height/kind placement and undefined-marker centre, failure retention and draw count,
       and medium for the all-blocked fallback
@@ -627,8 +639,9 @@ claim 1); neither kind needs an extra transport-release flag.
 
 Use the glossary's measurement setup: tiny flat skirmish maps, a human observer and a
 bystander computer player kept outside the test area. The units and cells named below form
-that area; void any run with interference. Director and other mods are off. Use game-speed
-index 2 and 800 × 600, one run per part unless noted. A *test file* is a named map rules layer
+that area; void any run with interference. No engine add-ons or mods are active except the
+named test files allowed by the glossary's measurement setup. Use game-speed index 2 and
+800 × 600, one run per part unless noted. A *test file* is a named map rules layer
 removed after the run; all numbers below are invented test data, not stock values. Read ticks,
 positions, passengers, targets, behaviours and weapon numbers with a read-only recorder.
 Video and scripted ordinary input provide an independent view of orders and visible exits.
@@ -655,7 +668,10 @@ and no size limit, and an infantry type of size 3. The transport is landed.
   holds is selected by B and ordered through ordinary input to enter. House B is allied with the transport's owner; a
   controlled unit belongs to its controller's house, so without that alliance the answer would be
   *neither* (claim 2). *Expected:* it boards, and after unloading it belongs to its original house.
-- *Falsified if:* sizes limit the air transport, or the controlled unit is turned away.
+- *Alliance control:* repeat with an uncontrolled non-allied candidate and a free seat.
+  Expected: no *enter* action is offered. Restore alliance and expect *enter* again.
+- *Falsified if:* sizes limit the air transport, the controlled unit is turned away,
+  or either alliance-control cursor verdict differs.
 
 **T3. Last-in first-out (claims 3, 6 and 10).** A test vehicle transport with capacity 5 and a
 large size limit, on open flat ground. Board five distinguishable infantry types A, B, C, D, E in

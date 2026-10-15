@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 33
+revision: 34
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -712,10 +712,17 @@ rank* and *elite weapon*), *n*
    | WP22 | enemy object other than a terrain object, the walker unarmed | blocked | medium | C3 (b), (a3), (a4); C14 (a) |
    | WP23 | enemy building of a type marked as a bridge repair hut, the walker armed | blocked | medium | C15 (c) |
    | WP24 | other enemy building, the walker armed | enemy obstacle | medium | C15 (d) |
-   | WP25 | enemy infantry that appears friendly to the walker's house through a disguise, the walker armed | stationary friendly | medium | C3 (e) |
+   | WP25 | enemy infantry that appears disguised to the walker's house under S-0516 claim 35, the walker armed | stationary friendly | medium | C3 (e); no-house case below |
    | WP26 | other enemy infantry, the walker armed | none (it counts through the occupancy record) | high | C3 (a), (a2) |
    | WP27 | terrain object, such as a tree | none | medium | C16 (a) |
    | WP28 | any other enemy object (vehicles, aircraft), the walker armed | enemy obstacle | medium | C2 (c) |
+
+   Row WP25 includes a disguise with no disguise house when the other conditions of
+   S-0516 claim 35 hold. A missing disguise house does not by itself defeat that predicate.
+   This no-house infantry case is `unmeasured`: no ordinary skirmish disguise action is
+   known to create it. S-0516 claim 35 owns the predicate; its conditional observation
+   scenario applies if that state becomes available. Confidence: high for the no-house
+   predicate, medium for the entry outcome as in row WP25.
 
    A terrain object has no owner, so it is never allied (Terms *allied*) and always falls under the
    enemy rows. It gives no value of its own (row WP27), but it can still decide the outcome through

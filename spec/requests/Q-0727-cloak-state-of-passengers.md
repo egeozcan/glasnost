@@ -1,9 +1,9 @@
 ---
 id: Q-0727
 title: Cloak state of a self-cloaking vehicle that leaves a transport
-status: open
+status: answered
 related: [S-0516, S-0506]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2117,8 +2117,10 @@ is a yes-or-no flag per house and cell, not a count (S-0516 claims 19 and 20).
 owns when it is set (Terms, *discovered by H*, claim 16); S-0410 (claim 7) uses it.
 
 **disguise-detector coverage.** A per-house, per-cell signed count fed only by detector
-buildings. A positive count defeats disguises on that cell in both the game-state and
-presentation tests, but does not reveal cloaked objects (S-0516 claim 40).
+buildings. A positive count defeats infantry and vehicle disguises on that cell in the
+game-state test; disguised buildings and aircraft still appear disguised to every house,
+regardless of detector coverage (S-0516 claim 35). Coverage also affects the presentation
+test (S-0516 claim 37), but does not reveal cloaked objects (S-0516 claim 40).
 
 **explored, seen.** Two per-house states of every legal cell. An *explored* cell is free of
 *shroud* for the house; with *fog of war* on, a *seen* cell is also not under fog. The opposites are

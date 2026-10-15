@@ -1,9 +1,9 @@
 ---
 id: Q-0723
 title: Does every crush uncloak the crusher
-status: open
+status: answered
 related: [S-0516, S-0210]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

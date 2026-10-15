@@ -1,9 +1,9 @@
 ---
 id: Q-0729
 title: Cloak field growth past buildings, and the generator restart distance
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

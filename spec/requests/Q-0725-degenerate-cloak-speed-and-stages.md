@@ -1,9 +1,9 @@
 ---
 id: Q-0725
 title: Cloaking with a stage count of 1 or less, or a negative speed
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need
