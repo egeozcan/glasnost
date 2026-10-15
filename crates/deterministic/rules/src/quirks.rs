@@ -1369,7 +1369,7 @@ pub struct Quirks {
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub sensor_count_negative: bool,
-    /// A paradrop's arrival fallback uses the local point (1, ⌊width / 2⌋), with coordinates reversed from the north midpoint; off: (⌊width / 2⌋, 1). Not implemented yet (wave 2).
+    /// An edge-cell selection without an acceptable candidate (a paradrop's arrival cell, an aircraft's retreat or spy-plane exit destination) uses the local point (1, ⌊width / 2⌋), with coordinates reversed from the north midpoint; off: (⌊width / 2⌋, 1). Implemented for the aircraft edge cells of S-0501 claim 34; paradrops are wave 2.
     // spec: S-0522 Edge cases
     #[serde(default = "on")]
     pub paradrop_fallback_point: bool,
@@ -1421,7 +1421,7 @@ pub struct Quirks {
     // spec: S-0510 claim 6 and Edge cases
     #[serde(default = "on")]
     pub spy_theft_unbacked_gain: bool,
-    /// A paradrop's west scan starts at local row r − 1, which is row −1 when r = 0; off: it starts at row r modulo 2·height and continues cyclically. Not implemented yet (wave 2).
+    /// A paradrop's west scan starts at local row r − 1, which is row −1 when r = 0; off: it starts at row r modulo 2·height and continues cyclically. The draw is unchanged. Implemented for the aircraft edge cells of S-0501 claim 34; paradrops are wave 2.
     // spec: S-0522 claim 4 and Edge cases
     #[serde(default = "on")]
     pub paradrop_west_edge_start_row: bool,

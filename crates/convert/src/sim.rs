@@ -1542,6 +1542,25 @@ impl Builder<'_> {
         let state = t.keys.get(&b"Speed"[..]);
         if let Some(v) = fold(state, None, |v, _| value::integer(v)) {
             rec.put("speed", int_node(v));
+            // spec: S-0501 F6 (our engine's departure for a converted speed of 0: the strafing wait is 0, with an importer warning; −1 keeps the held value, S-0207 claim 1)
+            let at = state
+                .and_then(|s| {
+                    s.history
+                        .iter()
+                        .rev()
+                        .find(|e| matches!(e.what, What::Set(_)))
+                })
+                .map_or((0, 0), |e| (e.layer, e.line));
+            if matches!(kind, Kind::Aircraft) && v <= 0 && v != -1 {
+                self.warn(
+                    at.0,
+                    at.1,
+                    format!(
+                        "aircraft {} Speed {v} converts to 0; a strafing run's wait after its fifth pass is 0 in our engine (S-0501 F6)",
+                        show(&t.name)
+                    ),
+                );
+            }
         }
         if !matches!(kind, Kind::Vehicles | Kind::Infantry) {
             return;

@@ -13,7 +13,9 @@ use crate::rules::Locomotor;
 use glasnost_map::CellXY;
 use glasnost_num::F64;
 use glasnost_num::geom::{Facing, direction, root_floor};
-use glasnost_rules::sim::LocomotionClass;
+use glasnost_rules::sim::{LocomotionClass, MovementZone};
+
+use crate::regions::{Reach, reach_read};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::check::Answer;
@@ -91,10 +93,8 @@ struct Ty {
     cruise: i32,
     /// Slowdown distance *S*.
     slowdown: i32,
-    /// *V*, leptons per tick.
+    /// *V* (and F6's *V*ₜ), the converted type speed, leptons per tick.
     speed: i32,
-    /// *V*ₜ, the type's speed field.
-    speed_field: i32,
     /// Dock types, in list order (building registration indices).
     docks: Vec<u32>,
     selectable: bool,
@@ -124,10 +124,8 @@ fn ty(w: &World, id: ObjectId) -> Option<Ty> {
         cruise: e.flight_level.unwrap_or(r.air.flight_level),
         // spec: S-0501 Import mapping (SlowdownDistance absent: 500, S-0207)
         slowdown: u.slowdown_distance,
-        // spec: S-0501 claim 4 (V: the imported type speed, without bonuses)
+        // spec: S-0501 claim 4 (V: the imported type speed, without bonuses); F6 (Vₜ: the same converted speed of S-0207 claim 1, not the raw field)
         speed: u.speed,
-        // spec: S-0501 F6 (Vₜ: the type's speed field; Q-0635)
-        speed_field: u.raw.speed.unwrap_or(0),
         // spec: S-0501 Import mapping (Dock: building types in list order, absent empty)
         docks: e
             .dock
@@ -181,7 +179,10 @@ pub struct AirState {
     pub taking_off: bool,
     /// Landing.
     pub landing: bool,
-    /// Drawn in the ground layer (Q-0632).
+    /// Settled on the ground: placed there or touched down, until it takes
+    /// off. The render layer itself follows the height (claim 7: the
+    /// ground layer exactly at a height of 0 or below), so a docked aircraft
+    /// at a positive docking height is settled but in the top layer.
     pub ground: bool,
     /// The cell holding its object-present mark (S-0209 claim 1), while it
     /// is on the ground.
@@ -217,6 +218,15 @@ pub struct AirState {
     pub service: Option<i32>,
     /// The replacement target fraction for the next movement tick (claim 5).
     pub replaced: Option<F64>,
+    /// An unfinished flight (claim 40): a movement point accepted and not
+    /// yet completed by settling at its landing destination.
+    pub unfinished: bool,
+    /// The start tick of the *enter* whose first processing was made
+    /// (claim 24's 1-tick entry delay).
+    pub enter_of: Option<i32>,
+    /// *Enter* has recognised arrival on its pad and docks at its next
+    /// processing (claim 24).
+    pub enter_docking: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -252,10 +262,11 @@ pub fn height(w: &World, id: ObjectId) -> i32 {
 }
 
 /// This spec's *on the ground* test (S-0501 Terms): *h* at most the
-/// landing height 0, or drawn in the ground layer (Q-0632).
+/// landing height 0, or drawn in the ground layer, which applies exactly at
+/// a height of 0 or below (claim 7).
 pub fn on_ground(w: &World, id: ObjectId) -> bool {
-    // spec: S-0501 Terms (on the ground: h ≤ landing height 0, or in the ground layer)
-    st(w, id).ground || height(w, id) <= 0
+    // spec: S-0501 Terms (on the ground: h ≤ landing height 0, or in the ground layer) and claim 7 (the ground layer exactly when the height above the surface is at most 0, no hysteresis)
+    height(w, id) <= 0
 }
 
 /// The in-the-air answer of an aircraft (S-0501 Terms): S-0307's
@@ -400,7 +411,7 @@ pub fn placed(w: &mut World, id: ObjectId) {
     a.passenger_carrier |= passengers(w, id) > 0;
     a.entered = usable;
     let z = if ground {
-        // Q-0632 (interim): ground placement at the terrain height
+        // spec: S-0501 claim 1 (ground placement replaces the requested world height with the terrain height)
         a.ground = true;
         a.held = 0;
         a.mark = Some(cell);
@@ -496,13 +507,15 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
     }
     let _ = moved;
     if let Some(a) = st_mut(w, id) {
-        // Q-0632 (interim): a docked aircraft stands at its S-0404 claim 15 pad position, in the ground layer
+        // spec: S-0501 claim 1 (a later docking-position assignment is separate: S-0404 claim 15's docking position, its height included) and claim 40 (settled on its contact building: no unfinished flight)
         a.ground = true;
         a.held = 0;
         a.landing = false;
         a.taking_off = false;
         a.cur = F64::ZERO;
         a.tgt = F64::ZERO;
+        a.unfinished = false;
+        a.flying_to = None;
     }
     set_mark(w, id);
 }
@@ -603,20 +616,33 @@ pub fn crash_step(k: i32, h: i32, dead: bool) -> (i32, i32) {
     (k, h - k)
 }
 
-/// The flight point of a destination (Q-0631: the destination's own
-/// point); for the aircraft's own pad contact, its pad position.
+/// The flight point of a destination (claim 40): its heading point with
+/// the aircraft as requesting actor (S-0506 claim 14), the docking position
+/// for its own pad contact (S-0404 claim 15), and claim 6's height for an
+/// armed approach.
 pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
     if let Target::Object(k) = d
         && w.obj(id).is_some_and(|o| o.contact == Some(k))
         && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
     {
+        // spec: S-0501 claim 40 (pad guidance replaces a building point with the contacting aircraft's docking position, S-0404 claim 15)
         return crate::econ::release::pad_position(w, k, id).0;
     }
-    // Q-0631 (interim): the destination's own point; for an object its reference point (S-0204 claim 4)
-    match d {
-        Target::Object(k) => w.reference_point(k),
-        Target::Cell(_) => crate::process::target_pos(w, d),
+    // spec: S-0501 claim 40 (the destination's heading point with the aircraft as requesting actor: a cell's centre at its surface, a mobile object's next movement point or position, a building's centre)
+    let mut p = heading_point(w, d);
+    // spec: S-0501 claim 6 (a movement point accepted while the aircraft has a target and ammunition: its world height becomes the terrain height there plus the cruise height)
+    if w.obj(id).is_some_and(|o| o.target.is_some()) && ammo_left(w, id) {
+        let cruise = ty(w, id).map_or(0, |t| t.cruise);
+        p.z = w.surface_at(p.x, p.y) + cruise;
     }
+    p
+}
+
+/// The heading point of a destination (S-0506 claim 14).
+fn heading_point(w: &World, d: Target) -> Pos {
+    // spec: S-0501 claim 40 (S-0506 claim 14's destination heading point)
+    crate::rocket::heading_point_with(w, d, true)
+        .unwrap_or_else(|| crate::process::target_pos(w, d))
 }
 
 /// The truncated table root of the planar squared difference (S-0204
@@ -641,10 +667,21 @@ fn toward(w: &World, from: Pos, to: Pos) -> Facing {
     )
 }
 
-/// Whether the locomotor has stopped (Q-0631: current fraction 0 at the
-/// held height, or on the ground).
+/// Whether the locomotor has stopped (claim 40): no unfinished flight and
+/// no positive forward pitch. Pitch is not modelled (claim 38 leaves the
+/// pitch variants out), so it counts as 0.
 pub fn stopped(w: &World, id: ObjectId) -> bool {
+    // spec: S-0501 claim 40 (stopped only with no unfinished flight and no positive forward pitch; not the zero-current-fraction test)
+    !st(w, id).unfinished
+}
+
+/// The pre-revision-7 stop test, kept only for T1's ordinary-attacker
+/// firing row: at current fraction 0 and its held height, or on the
+/// ground, and not taking off. Under revision 7 alone an ordinary attacker
+/// hovers short of its spot with an unfinished flight and never fires.
+fn hovering_still(w: &World, id: ObjectId) -> bool {
     let a = st(w, id);
+    // interim: Q-0651 (an ordinary attacker hovering at fraction 0 at its held height, or on the ground, counts as stopped for T1's firing row, as before revision 7)
     (a.cur.eq_num(F64::ZERO) && height(w, id) == a.held && !a.taking_off)
         || (a.ground && !a.taking_off)
 }
@@ -702,13 +739,14 @@ fn start_landing(w: &mut World, id: ObjectId) {
 pub fn landing_accepted(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let c = o.pos.cell();
-    // spec: S-0501 F7 (the touchdown position inside the usable area)
-    if !w.cells.usable(c) {
-        return false;
-    }
-    let t = ty(w, id).unwrap_or_default();
+    landing_cell_ok(w, id, c, Target::Cell(c))
+}
+
+/// The object F7 finds in cell `c`'s ground layer for lander `id`: the
+/// first infantry, vehicle, aircraft or building other than the lander.
+fn f7_found(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
     // spec: S-0501 F7 (the ground cell layer, not the deck list; the first occupant found; Open question 7 for several)
-    let found = w.cells.list(c, Layer::Ground).iter().copied().find(|&x| {
+    w.cells.list(c, Layer::Ground).iter().copied().find(|&x| {
         x != id
             && w.obj(x).is_some_and(|ob| {
                 matches!(
@@ -716,21 +754,37 @@ pub fn landing_accepted(w: &World, id: ObjectId) -> bool {
                     Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
                 )
             })
-    });
-    match found {
+    })
+}
+
+/// Whether an object is spawned or has a spawn controller (F7).
+fn spawn_related(w: &World, x: ObjectId) -> bool {
+    w.obj(x).is_some_and(|ob| {
+        ob.spawn.is_some()
+            || w.rules()
+                .unit(ob.kind, ob.type_index)
+                .is_some_and(|u| u.raw.spawned.unwrap_or(false))
+    })
+}
+
+/// F7 for lander `id` on cell `c`; `wanted` is the destination object the
+/// competing-aircraft test compares against (the cell object itself at
+/// touchdown; claim 40's initial test uses the original destination).
+fn landing_cell_ok(w: &World, id: ObjectId, c: CellXY, wanted: Target) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0501 F7 (the touchdown position inside the usable area)
+    if !w.cells.usable(c) {
+        return false;
+    }
+    let t = ty(w, id).unwrap_or_default();
+    match f7_found(w, id, c) {
         Some(x) => {
             // spec: S-0501 F7 (the lander's own contact is accepted)
             if o.contact == Some(x) {
                 return true;
             }
             // spec: S-0501 F7 (a spawned lander and a found object with a spawn controller or of a spawned type)
-            t.spawned
-                && w.obj(x).is_some_and(|ob| {
-                    ob.spawn.is_some()
-                        || w.rules()
-                            .unit(ob.kind, ob.type_index)
-                            .is_some_and(|u| u.raw.spawned.unwrap_or(false))
-                })
+            t.spawned && spawn_related(w, x)
         }
         None => {
             let r = w.rules();
@@ -744,16 +798,133 @@ pub fn landing_accepted(w: &World, id: ObjectId) -> bool {
                 false,
             );
             let empty = w.cells.occ(c, Layer::Ground).is_none_or(|rec| rec.empty());
-            // spec: S-0501 F7 (no other aircraft in play has this cell as its destination)
-            let wanted = w.objects.values().any(|ob| {
-                ob.id != id
-                    && ob.kind == Kind::Aircraft
-                    && ob.on_map
-                    && ob.dest == Some(Target::Cell(c))
+            // spec: S-0501 F7 (no other aircraft in play has this cell object as its destination) and claim 40 (the initial test compares against the original destination object)
+            let competing = w.objects.values().any(|ob| {
+                ob.id != id && ob.kind == Kind::Aircraft && ob.on_map && ob.dest == Some(wanted)
             });
-            passable && empty && !wanted
+            passable && empty && !competing
         }
     }
+}
+
+/// The flight-reservation test of claim 39 for aircraft `id` on cell `c`;
+/// `with_self`: the searching aircraft itself counts as a reservation
+/// (firing spots).
+fn reservation_ok(w: &World, id: ObjectId, c: CellXY, with_self: bool) -> bool {
+    let Some(t) = ty(w, id) else { return false };
+    // spec: S-0501 claim 39 (a pad-bound aircraft passes)
+    if t.bound {
+        return true;
+    }
+    // spec: S-0501 claim 39 (a spawned aircraft passes when F7's found ground occupant is spawned or has a spawn controller)
+    if t.spawned && f7_found(w, id, c).is_some_and(|x| spawn_related(w, x)) {
+        return true;
+    }
+    // spec: S-0501 claim 39 (a placed, non-limbo infantry unit, vehicle or aircraft in the cell, or whose destination is that cell object, refuses; in firing-spot selection the searching aircraft counts too)
+    !w.objects.values().any(|ob| {
+        (with_self || ob.id != id)
+            && ob.on_map
+            && matches!(ob.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+            && (ob.pos.cell() == c || ob.dest == Some(Target::Cell(c)))
+    })
+}
+
+/// The firing spot of a non-strafer (claim 39) against target `tg`, with
+/// its selection draw; `None` when no circle has an eligible candidate.
+fn firing_spot(w: &mut World, id: ObjectId, tg: Target) -> Option<CellXY> {
+    let o = w.obj(id)?.clone();
+    let mode = w.rules().mode;
+    // spec: S-0501 claim 39 (T: the target's current position)
+    let tp = crate::process::target_pos(w, tg);
+    // spec: S-0501 claim 39 (rho: the firer's primary-weapon range of S-0307 claim 13)
+    let rho = crate::combat::range::firer_weapon_range(w, id, 0);
+    // spec: S-0501 claim 39 (the reference: the target's destination position for a mobile unit with a destination, else the aircraft's position)
+    let reference = match tg {
+        Target::Object(x) => w
+            .obj(x)
+            .filter(|t| matches!(t.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft))
+            .and_then(|t| t.dest)
+            .map(|d| crate::process::target_pos(w, d)),
+        Target::Cell(_) => None,
+    }
+    .unwrap_or(o.pos);
+    // spec: S-0501 claim 39 (radii rho − 256, rho − 512, …, only those strictly above 256; the largest circle with any eligible candidate)
+    let mut radius = rho - 256; // spec: S-0501 Constants (firing-spot radius interval 256)
+    // spec: S-0501 claim 39 (only radii strictly above 256)
+    while radius > 256 {
+        let mut records: Vec<CellXY> = Vec::new();
+        let mut best: Option<i32> = None;
+        // spec: S-0501 claim 39 (facings 0, 4096, …, 61440 in order)
+        for k in 0..16 {
+            let f = (k * 4096) as Facing; // spec: S-0501 Constants (firing-spot angular interval 4096)
+            // spec: S-0501 claim 39 (F3's trigonometry and truncation applied to T and the radius)
+            let (x, y) = crate::walk::step_point(tp.x, tp.y, f, radius, true, mode);
+            // spec: S-0501 claim 39 (the cell: integer division toward zero by 256)
+            let c = CellXY::new(x / 256, y / 256);
+            // spec: S-0501 claim 39 (inside the height-aware usable area and passing the reservation test, the aircraft itself counting; no passability or F7 test)
+            if !w.cells.usable(c) || !reservation_ok(w, id, c, true) {
+                continue;
+            }
+            // spec: S-0501 claim 39 (the score: the planar distance of the unsnapped candidate to the reference, S-0204 claim 5)
+            let score = planar(w, Pos::new(x, y, 0), reference);
+            // spec: S-0501 claim 39 (a record: the first eligible candidate or one scoring strictly below all before it)
+            if best.is_none_or(|b| score < b) {
+                best = Some(score);
+                records.push(c);
+            }
+        }
+        if let Some(&last) = records.last() {
+            let half = w.rules().quirks.ranged_draw_half_span;
+            // spec: S-0501 claim 37 (one U(0, 99) draw) and claim 39 (below 50 the last record's cell, else the preceding record's; with one record both use it)
+            let u = w.rng.ranged(0, 99, half);
+            let prev = records.len().checked_sub(2).map_or(last, |i| records[i]); // spec: S-0501 claim 39 (the preceding record; with one record the last)
+            return Some(if u < 50 { last } else { prev }); // spec: S-0501 claim 39 (below 50 the last record's cell)
+        }
+        radius -= 256; // spec: S-0501 Constants (firing-spot radius interval 256)
+    }
+    None
+}
+
+/// Claim 40's destination selection for *move*: the destination retained,
+/// or a replacement cell, with its draws.
+fn move_destination(w: &mut World, id: ObjectId, d: Target) -> Target {
+    let mode = w.rules().mode;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    // spec: S-0501 claim 40 (the cell at the destination's current position)
+    let centre = crate::process::target_pos(w, d).cell();
+    // spec: S-0501 claim 40 (retained when F7 accepts that cell, compared against the original destination, and the reservation test without self accepts the cell of its heading point)
+    if landing_cell_ok(w, id, centre, d) && reservation_ok(w, id, heading_point(w, d).cell(), false)
+    {
+        return d;
+    }
+    // spec: S-0501 claim 40 (radii 0 … 31 cells in increasing order)
+    for r in 0..32 {
+        // spec: S-0501 claim 40 (one U(0, 7) draw per radius: the first step direction)
+        let first = w.rng.ranged(0, 7, half);
+        // spec: S-0501 claim 40 (consecutive duplicates are not tested again; the remembered pair starts at (0, 0))
+        let mut last = (0, 0);
+        for i in 0..8 {
+            // spec: S-0501 claim 40 (eight clockwise directions wrapping modulo eight; facing 8192 times the index)
+            let dir = (first + i).rem_euclid(8);
+            let f = (dir * 8192) as Facing;
+            // spec: S-0501 claim 40 (F3's trigonometry in cell units with length equal to the radius, the sums truncated toward zero)
+            let (x, y) = crate::walk::step_point(centre.x, centre.y, f, r, true, mode);
+            if (x, y) == last {
+                continue;
+            }
+            last = (x, y);
+            let c = CellXY::new(x, y);
+            // spec: S-0501 claim 40 (a height-aware usable cell passing F7 and the reservation test without self; the first accepted)
+            if w.cells.usable(c)
+                && landing_cell_ok(w, id, c, Target::Cell(c))
+                && reservation_ok(w, id, c, false)
+            {
+                return Target::Cell(c);
+            }
+        }
+    }
+    // spec: S-0501 claim 40 (failure of all 32 radii retains the original destination)
+    d
 }
 
 /// The landing direction (claim 25): the contact's body facing rounded to
@@ -794,13 +965,19 @@ fn touchdown(w: &mut World, id: ObjectId) {
         a.cur = F64::ZERO;
         a.tgt = F64::ZERO;
         a.flying_to = None;
+        // spec: S-0501 claim 40 (landing settled: the completion clears the unfinished flight and the destination)
+        a.unfinished = false;
     }
     set_mark(w, id);
     let pad = o
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building) && pad_cell(w, k, id));
     set_dest(w, id, None);
-    if let Some(k) = pad {
+    // spec: S-0501 claim 24 (in enter, the processing after touchdown recognizes arrival and advances to docking, then the docking-position and entered-report stage follows)
+    let entering = o.beh.current == Some(Behaviour::Enter);
+    if let Some(k) = pad
+        && !entering
+    {
         dock(w, id, k);
     }
 }
@@ -847,7 +1024,7 @@ fn report_entered(w: &mut World, id: ObjectId, k: ObjectId) {
     if let Some(a) = st_mut(w, k)
         && a.service.is_none()
     {
-        // Q-0632 (interim): the first service step at the pad's first turn at or after the report
+        // spec: S-0501 claim 26 (an accepted entered report queues servicing without resetting the pad's timer; it becomes current at the pad's next per-tick start with its timer expired: in the report tick when the pad's turn has not passed, else the next tick)
         a.service = Some(t);
     }
 }
@@ -871,7 +1048,7 @@ pub fn start_crash(w: &mut World, id: ObjectId, living: bool) -> bool {
     let _ = w.rng.unit(mode);
     if let Some(a) = st_mut(w, id) {
         a.crash = Some(0);
-        // Q-0635 (interim): a crash started without a kill has its locomotor switched off
+        // spec: S-0501 claim 9 (a living crash: its locomotor is switched off; which states start one is Open question 9) and claim 36 (a release crash is a dead crash, not a living disabled fall)
         a.switched_off = living;
         a.landing = false;
         a.taking_off = false;
@@ -992,14 +1169,33 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let entering = o.beh.current == Some(Behaviour::Enter);
     a.holding = alive
         && !entering
-        && (dest_above.is_some_and(|z| z > 120) // spec: S-0501 claim 6 (more than 120 leptons above terrain)
+        && (dest_above.is_some_and(|z| z > HOLD_ABOVE)
             || (o.target.is_some() && ammo_left(w, id))
             || a.run_lock
             || !t.landable);
     // Claim 8: a new destination makes an aircraft on the ground (or landing) take off.
+    let mut dest = dest;
+    let mut dp = dp;
+    let mut d = d;
+    let mut dest_above = dest_above;
     let new_dest = dest.is_some() && dest != a.flying_to;
     if alive && new_dest {
+        if o.beh.current == Some(Behaviour::Move)
+            && let Some(orig) = dest
+        {
+            // spec: S-0501 claim 40 (ordinary move: the destination retained or a replacement cell sought before the movement point is accepted)
+            let sel = move_destination(w, id, orig);
+            if sel != orig {
+                set_dest(w, id, Some(sel));
+                dest = Some(sel);
+                dp = Some(flight_point(w, id, sel));
+                d = dp.map(|p| planar(w, here, p));
+                dest_above = dp.map(|p| p.z - w.surface_at(p.x, p.y));
+            }
+        }
         a.flying_to = dest;
+        // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
+        a.unfinished = true;
         if let Some(ob) = w.obj_mut(id) {
             ob.air = Some(a.clone());
         }
@@ -1014,11 +1210,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     // The held height in ordinary flight (claim 6).
     if alive && !a.landing && !a.ground {
         a.held = t.cruise;
-        // Q-0636 (interim): the destination height applies within 768 leptons only for a destination more than 120 leptons above the terrain
+        // spec: S-0501 claim 6 (below 768 leptons from the destination every marked approach uses the destination height minus the terrain height there)
         if a.holding
-            && d.is_some_and(|d| d < 768) // spec: S-0501 claim 6 (within 768 leptons of the destination)
+            && d.is_some_and(|d| d < 768) // spec: S-0501 claim 6 (below 768 leptons of the destination)
             && let Some(z) = dest_above
-            && z > HOLD_ABOVE
         {
             a.held = z;
         }
@@ -1028,7 +1223,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let cruise = t.cruise;
     let mut heading = None;
     if let Some(p) = dp {
-        let aim = if a.face_target {
+        // interim: Q-0651 (an ordinary attacker, neither strafer nor fighter, keeps flying toward its firing spot below 512 leptons, as before revision 7 when the spot was the target; it turns toward the target only once hovering, see `hovering_still`)
+        let ordinary = !strafer(w, id) && !fighter(w, id);
+        let aim = if a.face_target && (!ordinary || hovering_still(w, id)) {
             // spec: S-0204 claim 8 and S-0310 F1 (the direction of the target: toward its reference point)
             o.target
                 .map_or(p, |tg| crate::combat::range::target_point(w, tg))
@@ -1038,15 +1235,20 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         heading = Some(toward(w, here, aim));
     }
     let mut full_request = false;
+    let mut aim_body = false;
     if a.taking_off {
         let hh = cruise; // spec: S-0501 claim 8 (H = cruise height minus landing height 0)
-        // spec: S-0501 claim 8 (above H − trunc(H / 3) the heading stays; from trunc(H / 2) up to that threshold it aims at the destination and requests full speed)
-        if h0 > hh - hh / 3 {
+        // spec: S-0501 claim 8 (the thresholds H − trunc(H / 3) and trunc(H / 2))
+        let (upper, lower) = (hh - hh / 3, hh / 2);
+        if h0 > upper {
+            // spec: S-0501 claim 8 (above H − trunc(H / 3): the aiming facing is requested to match the current body facing; no body request)
             heading = None;
-        } else if h0 >= hh / 2 {
+            aim_body = true;
+        } else if h0 > lower {
+            // spec: S-0501 claim 8 (above trunc(H / 2), up to and including the upper threshold: the body faces the destination and full speed is requested)
             full_request = true;
         } else {
-            // Q-0636 (interim): below trunc(H / 2) the heading stays
+            // spec: S-0501 claim 8 (at or below trunc(H / 2): no new heading request; the previous request persists)
             heading = None;
         }
     }
@@ -1059,6 +1261,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     {
         // spec: S-0206 claim 1 (body turning)
         ob.body.turn_to(f, tick_now, t.turn_rate);
+        ob.turret = ob.body;
+    }
+    if aim_body && let Some(ob) = w.obj_mut(id) {
         ob.turret = ob.body;
     }
     // Horizontal motion (claim 4): forward along the body facing by ⌊V × f⌋.
@@ -1075,8 +1280,23 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 let middle = w.cells.footprint().width * 256 / 2; // spec: S-0204 claim 2 (256 leptons per cell)
                 let back = if np.x > middle { -128 } else { 128 }; // spec: S-0501 Constants (edge push-back 128 leptons)
                 let shifted = Pos::new(np.x + back, np.y, np.z);
-                // Q-0633 (interim): no further fallback position; it does not move this tick
-                np = if legal(shifted) { shifted } else { here };
+                np = if legal(shifted) {
+                    shifted
+                } else {
+                    // spec: S-0501 claim 4 (a random fallback 64 leptons from the shifted point: one raw draw, its low eight bits times 256 as the facing)
+                    let f = ((w.rng.raw() & 0xff) * 256) as Facing;
+                    // spec: S-0501 claim 4 (F3's displacement and truncation with length 64, no snapping)
+                    let (rx, ry) = crate::walk::step_point(shifted.x, shifted.y, f, 64, true, mode); // spec: S-0501 Constants (edge random fallback radius 64)
+                    let rc = Pos::new(rx, ry, np.z).cell();
+                    // spec: S-0501 claim 4 (either cell coordinate outside 0 … 511: the candidate is the shifted point itself)
+                    let cand = if (0..=511).contains(&rc.x) && (0..=511).contains(&rc.y) {
+                        Pos::new(rx, ry, np.z)
+                    } else {
+                        shifted
+                    };
+                    // spec: S-0501 claim 4 (neither candidate legal: no forward relocation this tick)
+                    if legal(cand) { cand } else { here }
+                };
             }
             move_to(w, id, np);
         }
@@ -1104,6 +1324,26 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         }
         if a.taking_off && nh >= a.held {
             a.taking_off = false;
+        }
+        // spec: S-0501 claim 4 (a living descending aircraft with a destination moves 5 more leptons toward its destination cell's centre, after the forward step and the height reduction, except in enter toward a helipad building)
+        let toward_helipad = o.beh.current == Some(Behaviour::Enter)
+            && matches!(dest, Some(Target::Object(k)) if helipad(w, k));
+        if alive
+            && nh < h
+            && !toward_helipad
+            && let Some(p) = dp
+        {
+            let c = p.cell();
+            let centre = Pos::centre(c, 0);
+            let now = w.obj(id).map_or(o.pos, |x| x.pos);
+            // spec: S-0501 claim 4 (the direction by S-0204 claim 8, F3's facing conversion and table trigonometry with step length 5, no clamp; the world height kept)
+            let f = toward(w, now, centre);
+            let (nx, ny) = crate::walk::step_point(now.x, now.y, f, 5, true, mode); // spec: S-0501 Constants (descent horizontal nudge 5 leptons)
+            let z = now.z;
+            move_to(w, id, Pos::new(nx, ny, z));
+            if let Some(ob) = w.obj_mut(id) {
+                ob.pos.z = z;
+            }
         }
     }
     if let Some(ob) = w.obj_mut(id) {
@@ -1278,6 +1518,17 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
 // ---------------------------------------------------------------------------
 // Pads (claims 21 to 28)
 
+/// Whether building `k` is a helipad building (claim 22).
+fn helipad(w: &World, k: ObjectId) -> bool {
+    w.obj(k).is_some_and(|b| {
+        b.kind == Kind::Building
+            && w.rules()
+                .buildings
+                .get(b.type_index as usize)
+                .is_some_and(|r| r.raw.helipad.unwrap_or(false))
+    })
+}
+
 /// Whether pad `k` accepts aircraft `id` (claim 22).
 pub fn accepts(w: &World, k: ObjectId, id: ObjectId) -> bool {
     let (Some(b), Some(o)) = (w.obj(k), w.obj(id)) else {
@@ -1444,54 +1695,120 @@ fn seek_pad(w: &mut World, id: ObjectId) -> Option<ObjectId> {
     request_contact(w, id, k).then_some(k)
 }
 
-/// The landing spot without a pad (F8).
+/// Claim 41's landing-search footprint test (S-0212 claim 25a) of the
+/// `size` × `size` rectangle at top-left `tl`, against reference reach
+/// region `reach` (none: no restriction).
+fn landing_footprint_ok(w: &World, tl: CellXY, size: i32, reach: Option<Reach>) -> bool {
+    let r = w.rules_arc();
+    for j in 0..size {
+        for i in 0..size {
+            // spec: S-0212 claim 25a (the cells (x + i, y + j), exact integer additions from the top-left)
+            let c = CellXY::new(tl.x + i, tl.y + j);
+            if w.cells.cell(c).is_none() {
+                return false;
+            }
+            let deck = w.cells.idx(c).is_some_and(|k| w.cells.deck[k]);
+            // spec: S-0212 claim 25a (the ground reach region for zone normal matches the reference's, unless the reference has none; no deck mode)
+            if let Some(rr) = reach
+                && reach_read(w, c, MovementZone::Normal, false) != rr
+            {
+                return false;
+            }
+            // spec: S-0212 claim 25a (the occupancy record empty as a whole: the deck record on a bridge cell, else the ground record)
+            let layer = if deck { Layer::Deck } else { Layer::Ground };
+            if !w.cells.occ(c, layer).is_some_and(|o| o.empty()) {
+                return false;
+            }
+            // spec: S-0212 claim 25a (enterable by foot and zone normal under S-0211 claim 10, a bridge cell as entered on its deck)
+            if !crate::passability::enterable_by_class(
+                &r,
+                w,
+                c,
+                Some(LocomotionClass::Foot),
+                MovementZone::Normal,
+                deck,
+            ) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// One landing search of claim 41 around `centre`: footprint `size`, the
+/// ground reach region of cell `reach_of` for zone normal, and an optional
+/// reference cell.
+fn landing_search(
+    w: &World,
+    centre: CellXY,
+    size: i32,
+    reach_of: CellXY,
+    reference: Option<CellXY>,
+) -> Option<CellXY> {
+    // spec: S-0501 claim 41 (the ground reach region for zone normal of the search's cell); S-0212 claim 25a (a reference without a reach region removes the restriction)
+    let rr = reach_read(w, reach_of, MovementZone::Normal, false);
+    let reach = (rr != Reach::None).then_some(rr);
+    // spec: S-0501 claim 41 (class foot, zone normal, no deck mode, bridges allowed, no height, no-overlay or burrowing condition); S-0212 claim 25a (only the top-left cell takes the height-aware usable-area test; the class, region and occupancy tests are the footprint's, on every cell)
+    let settings = crate::path::NearbySettings {
+        class: Some(LocomotionClass::Winged),
+        zone: MovementZone::Normal,
+        reach: None,
+        deck: false,
+        height: false,
+        reference,
+        no_bridges: false,
+        no_overlay: false,
+    };
+    let extra = |w: &World, c: CellXY| landing_footprint_ok(w, c, size, reach);
+    // spec: S-0212 claim 25a (the result is the selected top-left cell itself)
+    crate::path::nearby_filtered(
+        w,
+        centre,
+        crate::path::NearbyUse::Settings(settings),
+        Some(&extra),
+    )
+}
+
+/// The landing spot without a pad (F8, claim 41).
 pub fn landing_spot(w: &mut World, id: ObjectId) -> Option<CellXY> {
     let o = w.obj(id)?.clone();
     let t = ty(w, id)?;
     let own = o.pos.cell();
-    let zone = w.rules().unit(o.kind, o.type_index)?.zone;
     crate::regions::ensure(w);
-    let settings = || crate::path::NearbySettings {
-        // Q-0634 (interim): the nearby search with the track class, the type's movement zone, on the ground layer
-        class: Some(LocomotionClass::Track),
-        zone,
-        reach: None,
-        deck: false,
-        height: false,
-        reference: None,
-        no_bridges: false,
-        no_overlay: false,
+    let me = w.reference_point(id);
+    let q = w.rules().quirks;
+    let mode = w.rules().mode;
+    // spec: S-0501 F8 (the truncated table root of the spatial centre-to-centre squared difference)
+    let dist = |w: &World, x: ObjectId| -> i64 {
+        let c = w.reference_point(x);
+        let (dx, dy, dz) = (
+            i64::from(c.x - me.x),
+            i64::from(c.y - me.y),
+            i64::from(c.z - me.z),
+        );
+        root_floor(
+            (dx * dx + dy * dy + dz * dz) as u64,
+            q.table_root_distance,
+            mode,
+        ) as i64
     };
-    let spot = |w: &World, c: CellXY| {
-        crate::path::nearby(w, c, crate::path::NearbyUse::Settings(settings()))
-    };
+    let owner = o.owner;
     if !t.docks.is_empty()
-        && let Some(owner) = o.owner
+        && let Some(owner) = owner
     {
         let order = w.houses[usize::from(owner.0)].econ.acquired.clone();
         let mut best: Option<(i64, CellXY)> = None;
-        let me = w.reference_point(id);
         for b in order {
             let Some(bo) = w.obj(b) else { continue };
             if bo.kind != Kind::Building || bo.owner != Some(owner) || !bo.on_map {
                 continue;
             }
-            let Some(s) = spot(w, bo.pos.cell()) else {
+            let bc = bo.pos.cell();
+            // spec: S-0501 claim 41 (the building search: a 3 × 3 free footprint, the building cell's ground reach region, no reference cell)
+            let Some(s) = landing_search(w, bc, 3, bc, None) else {
                 continue;
             };
-            let c = w.reference_point(b);
-            let (dx, dy, dz) = (
-                i64::from(c.x - me.x),
-                i64::from(c.y - me.y),
-                i64::from(c.z - me.z),
-            );
-            let q = w.rules().quirks;
-            // spec: S-0501 F8 (the truncated table root of the spatial centre-to-centre squared difference)
-            let mut d = root_floor(
-                (dx * dx + dy * dy + dz * dz) as u64,
-                q.table_root_distance,
-                w.rules().mode,
-            ) as i64;
+            let mut d = dist(w, b);
             if bo.type_index == t.docks[0] {
                 // spec: S-0501 F8 (for the first dock type divided by 4, truncating)
                 d /= 4;
@@ -1502,45 +1819,176 @@ pub fn landing_spot(w: &mut World, id: ObjectId) -> Option<CellXY> {
             }
         }
         if let Some((d, s)) = best {
-            // spec: S-0501 F8 (below 256 leptons a free cell near its own cell; else the spot near the building)
-            return if d < 256 {
-                spot(w, own).or(Some(s))
-            } else {
-                Some(s)
-            };
+            // spec: S-0501 F8 (below 256 leptons)
+            if d < 256 {
+                // spec: S-0501 F8 (below 256 leptons a free cell near its own cell) and claim 41 (a 1 × 1 footprint, the own cell's ground reach region, the own cell as reference)
+                // Q-0650 (interim): when that own-cell search finds nothing, the spot near the chosen building
+                return landing_search(w, own, 1, own, Some(own)).or(Some(s));
+            }
+            // spec: S-0501 F8 (otherwise the free spot near the chosen building)
+            return Some(s);
         }
     }
-    // Q-0634 (interim): with no dock types or no building, the aircraft's own cell
+    // spec: S-0501 claim 41 (the fallback: other own-house infantry, vehicles, aircraft and buildings, not self and not in limbo; the smallest spatial table-root distance whose 1 × 1 search succeeds)
+    let mut cands: Vec<(i64, ObjectId)> = w
+        .objects
+        .values()
+        .filter(|x| {
+            x.id != id
+                && x.on_map
+                && owner.is_some()
+                && x.owner == owner
+                && matches!(
+                    x.kind,
+                    Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+                )
+        })
+        .map(|x| (dist(w, x.id), x.id))
+        .collect();
+    // spec: S-0501 claim 41 (the distance truncated to integer leptons; equal distances favour the object created earliest, across all four kinds; object numbers are given in creation order)
+    cands.sort();
+    for (_, x) in cands {
+        let Some(c) = w.obj(x).map(|x| x.pos.cell()) else {
+            continue;
+        };
+        // spec: S-0501 claim 41 (the other object's cell, a 1 × 1 footprint, otherwise the building-search settings); S-0212 claim 25a (no reference: tick modulo)
+        if let Some(s) = landing_search(w, c, 1, c, None) {
+            return Some(s);
+        }
+    }
+    // spec: S-0501 claim 41 (no successful object choice: the aircraft's own current cell, without another free-cell search)
     Some(own)
 }
 
-/// The edge cell of claim 34 (Q-0634: the nearest cell outside the usable
-/// area in its own row or column, no draw). A legal cell is preferred,
-/// since an aircraft that may leave the map is held back from illegal
-/// cells (claim 4); with none, the first cell beyond the usable area.
-pub fn edge_cell(w: &World, id: ObjectId) -> Option<CellXY> {
-    let c = w.obj(id)?.pos.cell();
+// ---------------------------------------------------------------------------
+// Edge cells (claims 34 and 37; S-0522 claims 4 and 5)
+
+/// The cell of local point (a, b) (S-0522 F2).
+fn local_cell(w: &World, a: i32, b: i32) -> CellXY {
     let fp = w.cells.footprint();
-    let limit = (fp.width + fp.height) * 2; // nocite: a search bound of our own, beyond any map's size
-    let dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]; // nocite: the four axis directions in our own order (Q-0634)
-    let mut legal: Option<(i32, CellXY)> = None;
-    let mut any: Option<(i32, CellXY)> = None;
-    for (dx, dy) in dirs {
-        for n in 1..=limit {
-            let p = CellXY::new(c.x + dx * n, c.y + dy * n);
-            if !w.cells.usable(p) {
-                // Q-0634 (interim): the nearest, the earlier direction on a tie
-                if any.is_none_or(|(bn, _)| n < bn) {
-                    any = Some((n, p));
-                }
-                if w.cells.cell(p).is_some() && legal.is_none_or(|(bn, _)| n < bn) {
-                    legal = Some((n, p));
-                }
-                break;
-            }
+    let [lx, ly, _, _] = fp.local;
+    // spec: S-0522 F2 (X = a + Lx, Y = b + Ly; x = ⌊(Y + 1) / 2⌋ + X, y = W + ⌊Y / 2⌋ − X, floor division)
+    let (x, y) = (a + lx, b + ly);
+    CellXY::new((y + 1).div_euclid(2) + x, fp.width + y.div_euclid(2) - x) // spec: S-0522 F2 (⌊(Y + 1) / 2⌋ + X, W + ⌊Y / 2⌋ − X)
+}
+
+/// A house's computed edge is computed again (S-0522 claim 5) because
+/// `building`, a building factory of the house, was marked primary: the
+/// edge whose midpoint (F3) is nearest the cell of its centre.
+pub fn recompute_edge(w: &mut World, building: ObjectId) {
+    let Some(b) = w.obj(building) else { return };
+    let Some(owner) = b.owner else { return };
+    // spec: S-0522 claim 5 (the reference cell is the cell of that building's centre)
+    let c = w.reference_point(building).cell();
+    let [_, _, lw, lh] = w.cells.footprint().local;
+    // spec: S-0522 F3 (the midpoints: north (⌊Lw / 2⌋, 1), east (Lw, Lh), south (⌊Lw / 2⌋, 2Lh), west (0, Lh))
+    let mids = [
+        (lw.div_euclid(2), 1),
+        (lw, lh),
+        (lw.div_euclid(2), 2 * lh),
+        (0, lh),
+    ];
+    let (q, mode) = (w.rules().quirks.table_root_distance, w.rules().mode);
+    let mut best: Option<(u64, u8)> = None;
+    for (e, &(a, bb)) in (0u8..).zip(mids.iter()) {
+        let m = local_cell(w, a, bb);
+        let (dx, dy) = (i64::from(c.x - m.x), i64::from(c.y - m.y));
+        // spec: S-0522 F3 (D = trunc(r((x − xₑ)² + (y − yₑ)²)) in cells, the table root of S-0204 claim 5)
+        let d = root_floor((dx * dx + dy * dy) as u64, q, mode);
+        // spec: S-0522 F3 (the smallest distance; ties to the smaller edge number)
+        if best.is_none_or(|(bd, _)| d < bd) {
+            best = Some((d, e));
         }
     }
-    legal.or(any).map(|(_, p)| p)
+    if let (Some((_, e)), Some(h)) = (best, w.houses.get_mut(usize::from(owner.0))) {
+        h.computed_edge = e;
+    }
+}
+
+/// The edge-cell selection of S-0522 claim 4 on edge `edge` (0 north,
+/// 1 east, 2 south, 3 west), with its draws.
+pub fn edge_cell_on(w: &mut World, edge: u8) -> CellXY {
+    let [_, _, lw, lh] = w.cells.footprint().local;
+    let q = w.rules().quirks;
+    let half = q.ranged_draw_half_span; // spec: S-0202 claim 4 (the ranged draw's half-span rule)
+    // spec: S-0522 claim 4 (a candidate is acceptable when its cell is outside the usable area by the height-aware test)
+    let ok = |w: &World, a: i32, b: i32| !w.cells.usable(local_cell(w, a, b));
+    let found = if lw <= 0 || lh <= 0 {
+        // A local area without positive size has no candidate points; the
+        // fallback point below applies (S-0522 claim 4).
+        None
+    } else {
+        match edge {
+            0 => {
+                // spec: S-0522 claim 4 (north: r = R(1, Lw); points ((i + r − 1) mod Lw, 0) in cyclic order)
+                let r = w.rng.ranged(1, lw, half);
+                (0..lw)
+                    .map(|i| ((i + r - 1).rem_euclid(lw), 0))
+                    .find(|&(a, b)| ok(w, a, b))
+            }
+            1 => {
+                // spec: S-0522 claim 4 (east: r = R(1, 2Lh); points (Lw, (i + r − 1) mod 2Lh))
+                let r = w.rng.ranged(1, 2 * lh, half);
+                (0..2 * lh) // spec: S-0522 claim 4 (east: 2Lh points)
+                    .map(|i| (lw, (i + r - 1).rem_euclid(2 * lh))) // spec: S-0522 claim 4 (east: (i + r − 1) mod 2Lh)
+                    .find(|&(a, b)| ok(w, a, b))
+            }
+            // spec: S-0522 claim 4 (edge 2 is south)
+            2 => {
+                // spec: S-0522 claim 4 (south: one R(1, Lw) draw discarded)
+                let _ = w.rng.ranged(1, lw, half);
+                // spec: S-0522 claim 4 (south: per column a, the first acceptable (a, 2Lh + j), j = 0 … 14)
+                let kept: Vec<(i32, i32)> = (0..lw)
+                    .filter_map(|a| {
+                        (0..=14)
+                            .map(|j| (a, 2 * lh + j))
+                            .find(|&(a, b)| ok(w, a, b))
+                    })
+                    .collect();
+                if kept.is_empty() {
+                    None
+                } else {
+                    // spec: S-0522 claim 4 (south: k = R(0, n − 1), the retained point k by increasing column)
+                    let k = w.rng.ranged(0, kept.len() as i32 - 1, half);
+                    kept.get(k as usize).copied()
+                }
+            }
+            _ => {
+                // spec: S-0522 claim 4 (west: r = R(0, 2Lh); rows rem(r − 1 + i, 2Lh) with the dividend's sign); Edge cases (quirks.paradrop_west_edge_start_row off: the first row is r mod 2Lh, then cyclic)
+                let r = w.rng.ranged(0, 2 * lh, half);
+                (0..2 * lh) // spec: S-0522 claim 4 (west: 2Lh rows)
+                    .map(|i| {
+                        let b = if q.paradrop_west_edge_start_row {
+                            (r - 1 + i) % (2 * lh) // spec: S-0522 claim 4 and Edge cases (rem(r − 1 + i, 2Lh))
+                        } else {
+                            (r + i).rem_euclid(2 * lh) // spec: S-0522 Edge cases (r mod 2Lh, then cyclic)
+                        };
+                        (0, b)
+                    })
+                    .find(|&(a, b)| ok(w, a, b))
+            }
+        }
+    };
+    let (a, b) = found.unwrap_or(if q.paradrop_fallback_point {
+        // spec: S-0522 claim 4 (no acceptable candidate: local point (1, ⌊Lw / 2⌋)); Edge cases (quirks.paradrop_fallback_point)
+        (1, lw.div_euclid(2))
+    } else {
+        // spec: S-0522 Edge cases (quirks.paradrop_fallback_point off: (⌊Lw / 2⌋, 1))
+        (lw.div_euclid(2), 1)
+    });
+    local_cell(w, a, b)
+}
+
+/// The edge cell of claim 34 for an aircraft: on its house's arrival edge
+/// (S-0522 claim 5), or with `opposite` on the edge opposite its house's
+/// computed edge (the spy plane's exit), selected as in S-0522 claim 4.
+fn arrival_edge_cell(w: &mut World, id: ObjectId, opposite: bool) -> Option<CellXY> {
+    let owner = w.obj(id)?.owner?;
+    // spec: S-0522 claim 5 (the computed edge; a map section's named edge is not read, S-0522 Open questions 1)
+    let e = w.houses.get(usize::from(owner.0))?.computed_edge;
+    // spec: S-0501 claim 34 (the spy exit is on the edge opposite the computed edge: north and south, east and west)
+    let e = if opposite { (e + 2) % 4 } else { e };
+    Some(edge_cell_on(w, e))
 }
 
 /// The pad's service step (claims 26 to 28), in the pad building's turn.
@@ -1580,7 +2028,11 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
         }
         let Some(o) = w.obj(x).cloned() else { continue };
         // spec: S-0501 claim 26 (an aircraft still flying in, in enter, or still moving is skipped)
-        if o.beh.current == Some(Behaviour::Enter) || !on_ground(w, x) || !pad_cell(w, k, x) {
+        if o.beh.current == Some(Behaviour::Enter)
+            || moving(w, x)
+            || !st(w, x).ground
+            || !pad_cell(w, k, x)
+        {
             continue;
         }
         settled = true;
@@ -1967,13 +2419,21 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return NO_RULE_DELAY;
     };
+    // spec: S-0501 claim 24 (entry begins with a 1-tick delay)
+    if st(w, id).enter_of != Some(o.beh.start_tick) {
+        if let Some(a) = st_mut(w, id) {
+            a.enter_of = Some(o.beh.start_tick);
+            a.enter_docking = false;
+        }
+        return 1; // spec: S-0501 claim 24 (entry begins with a 1-tick delay)
+    }
     let pad = o
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building));
     let Some(k) = pad else {
-        // spec: S-0501 claim 24 (a lost reservation: falls back to rest)
+        // spec: S-0501 claim 24 (a lost reservation: falls back to rest; the unlinked and fallback paths return 1 tick)
         fall_back(w, id);
-        return standard(w, id);
+        return 1; // spec: S-0501 claim 24 (the unlinked retry and fallback paths return 1 tick)
     };
     // spec: S-0501 claim 24 (each processing it asks to be loaded: the pad confirms the contact and the approach, or refuses)
     if !request_contact(w, id, k) {
@@ -1982,58 +2442,61 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
             ob.econ.exit = None;
         }
         fall_back(w, id);
-        return standard(w, id);
+        return 1; // spec: S-0501 claim 24 (the fallback path returns 1 tick)
     }
-    if on_ground(w, id) && pad_cell(w, k, id) {
-        // Already standing on its pad: it reports that it has entered.
+    let here = on_ground(w, id) && pad_cell(w, k, id);
+    if st(w, id).enter_docking && here {
+        // spec: S-0501 claim 24 (the docking-position and entered-report stage returns 1 tick)
         dock(w, id, k);
-        return standard(w, id);
+        return 1; // spec: S-0501 claim 24 (the docking-position and entered-report stage returns 1 tick)
+    }
+    if here {
+        // spec: S-0501 claim 24 (the processing that recognizes arrival advances to docking and returns 3 ticks)
+        if let Some(a) = st_mut(w, id) {
+            a.enter_docking = true;
+        }
+        return 3; // spec: S-0501 claim 24 (in contact during the approaching stage: 3 ticks)
+    }
+    if let Some(a) = st_mut(w, id) {
+        a.enter_docking = false;
     }
     if o.dest != Some(Target::Object(k)) {
         // spec: S-0501 claim 24 (on the ground but not on its destination pad: it takes off toward the pad)
         set_dest(w, id, Some(Target::Object(k)));
     }
-    // Q-0635 (interim): enter returns the standard delay
-    standard(w, id)
+    // spec: S-0501 claim 24 (in contact during the approaching stage it returns 3 ticks, with no standard-delay draw)
+    3
 }
 
 /// *Retreat* (claim 34).
 fn retreat(w: &mut World, id: ObjectId) -> i32 {
     if w.obj(id).is_some_and(|o| o.dest.is_none()) {
-        // spec: S-0501 claim 34 (no destination: a cell on its house's starting map edge; Q-0634)
-        let c = edge_cell(w, id);
+        // spec: S-0501 claim 34 (no destination: a cell on its house's arrival edge, S-0522 claim 5, selected as in S-0522 claim 4)
+        let c = arrival_edge_cell(w, id, false);
         set_dest(w, id, c.map(Target::Cell));
     }
-    standard(w, id)
+    3 // spec: S-0501 claim 34 (retreat processing has a delay of 3 ticks)
 }
 
 /// *Spy-plane approach* (claim 34).
 fn spy_approach(w: &mut World, id: ObjectId) -> i32 {
-    let (t, s) = (w.tick, stale(w));
     let Some(o) = w.obj(id).cloned() else {
         return NO_RULE_DELAY;
     };
     let frames = w.rules().air.camera_frames;
-    let Some(tg) = o.target else {
-        // spec: S-0501 claim 34 (no target: retreat starts)
-        if let Some(ob) = w.obj_mut(id) {
-            ob.beh.force(Behaviour::Retreat, t, s);
-            ob.dest = None;
-        }
-        return frames;
+    // spec: S-0501 claim 34 (the ground distance to the target below 769 leptons, or no target: overfly queued, the run lock held and an exit destination chosen)
+    let close = match o.target {
+        None => true,
+        Some(tg) => planar(w, o.pos, crate::process::target_pos(w, tg)) < 769,
     };
-    let tp = crate::process::target_pos(w, tg);
-    // spec: S-0501 claim 34 (the ground distance to the target below 769 leptons: overfly with the run lock and an edge destination)
-    if planar(w, o.pos, tp) < 769 {
-        let c = edge_cell(w, id);
-        if let Some(ob) = w.obj_mut(id) {
-            ob.beh.force(Behaviour::SpyPlaneOverfly, t, s);
-        }
+    if close {
+        let c = arrival_edge_cell(w, id, true);
+        queue(w, id, Behaviour::SpyPlaneOverfly);
         set_dest(w, id, c.map(Target::Cell));
         if let Some(a) = st_mut(w, id) {
             a.run_lock = true;
         }
-    } else {
+    } else if let Some(tg) = o.target {
         set_dest(w, id, Some(tg));
     }
     // spec: S-0501 claim 34 (the approach processing ends with the spy-plane camera frame count)
@@ -2043,10 +2506,11 @@ fn spy_approach(w: &mut World, id: ObjectId) -> i32 {
 /// *Spy-plane overfly* (claim 34; the reveal belongs to a planned spec).
 fn spy_overfly(w: &mut World, id: ObjectId) -> i32 {
     if w.obj(id).is_some_and(|o| o.dest.is_none()) {
-        let c = edge_cell(w, id);
+        // spec: S-0501 claim 34 (an absent destination is replaced by a new choice on the exit edge)
+        let c = arrival_edge_cell(w, id, true);
         set_dest(w, id, c.map(Target::Cell));
     }
-    standard(w, id)
+    3 // spec: S-0501 claim 34 (overfly processing has a delay of 3 ticks)
 }
 
 // ---------------------------------------------------------------------------
@@ -2095,15 +2559,16 @@ fn full_burst(w: &mut World, id: ObjectId, tg: Target) -> bool {
 /// The scatter request of a firing pass (claim 16).
 fn scatter(w: &mut World, id: ObjectId, tg: Target) {
     let c = crate::process::target_pos(w, tg).cell();
+    // spec: S-0501 claim 16 (the threat point is the aircraft's current position)
     let threat = w.obj(id).map(|o| o.pos);
-    // Q-0635 (interim): an unforced, not move-anywhere request with the aircraft's position as threat
+    // spec: S-0501 claim 16 (to the target's ground cell layer; forced and not move-anywhere; S-0209 claim 11's forwarding gates still apply)
     crate::scatter::cell_request(
         w,
         c,
         Layer::Ground,
         crate::scatter::ScatterRequest {
             threat,
-            forced: false,
+            forced: true,
             anywhere: false,
         },
     );
@@ -2121,10 +2586,15 @@ fn bare_rof(w: &World, id: ObjectId) -> i32 {
     primary(w, id).map_or(1, |wp| w.rules().combat.weapon(wp).rof)
 }
 
-/// F6: the wait after a strafing run's fifth shot.
-pub fn strafe_wait(range: i32, speed_field: i32) -> i32 {
-    // spec: S-0501 F6 (⌊(R + 1024) / Vₜ⌋; Q-0635: Vₜ at least 1)
-    (range + 1024) / speed_field.max(1)
+/// F6: the wait after a strafing run's fifth shot, `speed` the converted
+/// type speed.
+pub fn strafe_wait(range: i32, speed: i32) -> i32 {
+    if speed <= 0 {
+        // spec: S-0501 F6 (our engine's S-0205 claim 3 departure: a converted speed of 0 gives quotient 0; the importer warns)
+        return 0;
+    }
+    // spec: S-0501 F6 (⌊(R + 1024) / Vₜ⌋, integer division toward zero)
+    (range + 1024) / speed
 }
 
 /// The processing of *attack* (table T1).
@@ -2177,17 +2647,26 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             if let Some(tg) = tg
                 && ammo_left(w, id)
             {
-                if !is_strafer {
-                    let half = w.rules().quirks.ranged_draw_half_span;
-                    // spec: S-0501 claim 37 (a non-strafer finding a candidate: one U(0, 99) draw, before the standard delay)
-                    let _ = w.rng.ranged(0, 99, half);
-                }
-                // spec: S-0501 claim 12 (a strafer's firing spot is the target); Q-0630 (interim: the target for every attacker)
-                set_dest(w, id, Some(tg));
+                // spec: S-0501 claim 12 (a strafer's firing spot is the target) and claim 39 (a non-strafer's firing spot, its draw before the standard delay)
+                let spot = if is_strafer {
+                    Some(tg)
+                } else {
+                    firing_spot(w, id, tg).map(Target::Cell)
+                };
+                // spec: S-0501 T1 (the firing spot becomes the destination; approaching when it exists, else done)
+                set_dest(w, id, spot);
                 if let Some(s) = st_mut(w, id) {
                     s.face_target = false;
                 }
-                set_stage(w, id, Stage::Approaching);
+                set_stage(
+                    w,
+                    id,
+                    if spot.is_some() {
+                        Stage::Approaching
+                    } else {
+                        Stage::Done
+                    },
+                );
             } else {
                 set_stage(w, id, Stage::Done);
             }
@@ -2209,9 +2688,24 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             }
             let in_range = crate::combat::range::in_range(w, id, primary(w, id), Some(tgv), None);
             // spec: S-0501 T1 (a strafer within range, a fighter, or another aircraft whose locomotor has stopped: firing)
+            // interim: Q-0651 (for that last row a hovering attacker also counts as stopped, see `hovering_still`; while the firing check still answers not facing it stays approaching and turns in place toward the target)
+            if !is_strafer
+                && !is_fighter
+                && !stopped(w, id)
+                && hovering_still(w, id)
+                && matches!(
+                    crate::combat::check::check(w, id, Some(tgv), 0, true),
+                    Answer::NotFacing
+                )
+            {
+                if let Some(s) = st_mut(w, id) {
+                    s.face_target = true;
+                }
+                return Some(1);
+            }
             if (is_strafer && in_range)
                 || (!is_strafer && is_fighter)
-                || (!is_strafer && !is_fighter && stopped(w, id))
+                || (!is_strafer && !is_fighter && (stopped(w, id) || hovering_still(w, id)))
             {
                 set_stage(w, id, Stage::Firing);
                 return None;
@@ -2382,7 +2876,7 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                     // spec: S-0501 T1 (strafe pass 5: approaching; F6 ticks)
                     set_stage(w, id, Stage::Approaching);
                     let range = primary(w, id).map_or(0, |wp| w.rules().combat.weapon(wp).range);
-                    let vt = ty(w, id).map_or(1, |t| t.speed_field);
+                    let vt = ty(w, id).map_or(0, |t| t.speed);
                     Some(strafe_wait(range, vt))
                 } else {
                     set_stage(w, id, Stage::Strafe(n + 1));
@@ -2411,9 +2905,12 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
     }
 }
 
-/// "Not close enough" (Q-0630: the firing check's out-of-range answer).
+/// Not close enough (claim 12): the range test of S-0307 claims 7 to 11
+/// fails for the weapon selected against the target.
 fn not_close(w: &World, id: ObjectId, tg: Target) -> bool {
-    !crate::combat::range::in_range(w, id, primary(w, id), Some(tg), None)
+    // spec: S-0501 claim 12 (close enough: S-0307 claims 7 to 11's range test for the weapon selected against the current target, from claim 8's firing source point; not the last firing-check answer)
+    let wp = crate::combat::weapon::would_use(w, id, Some(tg)).1;
+    !crate::combat::range::in_range(w, id, wp, Some(tg), None)
 }
 
 /// The end of a run (claim 17).
