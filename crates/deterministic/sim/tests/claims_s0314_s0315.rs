@@ -445,6 +445,36 @@ fn quirk_negative_self_heal_counts_off() {
     assert_eq!(negative_counts(false), vec![3, 3, 0, 0]);
 }
 
+// spec: S-0314 claims 9 and 10 (rev 21) and S-0513 claim 48 (a vehicle, infantry unit or landed aircraft still in the warp's leaving stage after its warp update skips both individual and house-wide healing in that turn; a pending warp alone is the interim whole-turn rule of Q-0738, owned by the superweapon topic)
+#[test]
+fn claims_9_and_10_leaving_stage_skips_healing() {
+    use glasnost_sim::superweapons::warp::{Member, Stage};
+    let mut r = house_heal_rules(2, 1);
+    r.sim.vehicles.get_mut("TRUCK").unwrap().combat.self_healing = Some(true);
+    let mut w = game(&r);
+    spawn(&mut w, Kind::Building, "SHED", 0, 6, 6);
+    let held = spawn(&mut w, Kind::Vehicle, "TRUCK", 0, -2, 0);
+    let free = spawn(&mut w, Kind::Vehicle, "TRUCK", 0, 2, 0);
+    for &i in &[held, free] {
+        set_health(&mut w, i, 20);
+    }
+    let pos = w.obj(held).unwrap().pos;
+    w.obj_mut(held).unwrap().sw.warp = Some(Member {
+        stage: Stage::Leaving(0),
+        house: glasnost_sim::world::HouseId(0),
+        landing: pos,
+        redirected: false,
+    });
+    let g = gains(&mut w, &[held, free], 46);
+    // The control gains 1 at multiples of 14 (self-healing) and 4 at multiples of 15 (house-wide).
+    assert!(g.iter().any(|(t, v)| *t % 14 == 0 && v[1] > 0));
+    for (t, v) in &g {
+        assert_eq!(v[0], 0, "tick {t}: no healing while leaving");
+        let e = i32::from(*t % 14 == 0) + if *t % 15 == 0 { 4 } else { 0 };
+        assert_eq!(v[1], e, "tick {t}");
+    }
+}
+
 // spec: S-0314 claim 10 (a total that is not above 0 heals nothing: the house of the example above, left with a total of 5 by the quirk, heals; one at −2 does not)
 #[test]
 fn claim_10_non_positive_total_heals_nothing() {

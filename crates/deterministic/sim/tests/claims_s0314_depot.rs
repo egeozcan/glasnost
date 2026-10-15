@@ -284,6 +284,32 @@ fn end_to_end_click_repair_and_release() {
     );
 }
 
+// spec: S-0314 claim 17 and S-0524 claim 14 (ordinary vehicle service docking raises neither an entered-by notification on the depot's tag nor a destroyed-by-anything notification on the vehicle's tag for the entry; departure adds none; C16)
+#[test]
+fn claim_17_service_docking_raises_no_tag() {
+    let r = rules();
+    let mut w = testkit::game_with_triggers(&r, SIZE, 5, testkit::entry_triggers());
+    for h in &mut w.houses {
+        h.credits = 10_000;
+    }
+    let d = depot_at(&mut w, "DEPOT");
+    let v = truck(&mut w, 0, 7, 1, 300);
+    objects_tag(&mut w, d, "ENT");
+    objects_tag(&mut w, v, "DIE");
+    open(&mut w);
+    let f0 = w.triggers.fired;
+    click_enter(&mut w, v, d);
+    assert!(run_until(&mut w, 3000, |w| health(w, v) == 600 && contact(w, v).is_none()));
+    assert!(run_until(&mut w, 600, |w| w.obj(v).unwrap().dest.is_none()));
+    assert_eq!(w.triggers.fired, f0, "no raise reached a firing");
+    assert!(!w.triggers.variables[0] && !w.triggers.variables[1]);
+    assert!(w.obj(v).is_some(), "docking does not consume the vehicle");
+}
+
+fn objects_tag(w: &mut World, id: ObjectId, name: &str) {
+    glasnost_sim::triggers::object_tag(w, id, Some(name.as_bytes()));
+}
+
 fn k_u(w: &World) -> i32 {
     w.rules().combat.general.repair_count_vehicle
 }

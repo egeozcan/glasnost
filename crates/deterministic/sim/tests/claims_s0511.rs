@@ -1103,6 +1103,47 @@ fn centre(c: CellXY, z: i32) -> Pos {
     Pos::new(256 * c.x + 128, 256 * c.y + 128, z)
 }
 
+// spec: S-0511 claim 11 (rev 7, B6 negative-kind variants: drop-pod, fly, jumpjet, rocket, teleport and tunnel locomotion never count as heading to the cell, whatever their destination or track; an ordinary drive unit in the same block does; mech is an open question, not asserted)
+#[test]
+fn claim_11_other_locomotion_kinds_never_head_to_the_cell() {
+    use glasnost_rules::sim::Locomotor;
+    let c = at(3, 0);
+    for (loco, expect) in [
+        (Locomotor::Drive, true),
+        (Locomotor::DropPod, false),
+        (Locomotor::Fly, false),
+        (Locomotor::Jumpjet, false),
+        (Locomotor::Rocket, false),
+        (Locomotor::Teleport, false),
+        (Locomotor::Tunnel, false),
+    ] {
+        let mut r = ruleset();
+        r.sim.vehicles.get_mut("CART").unwrap().locomotor = Some(loco);
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 8, &[]);
+        let mut w = game(&r, &m);
+        let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+        let id = spawn(&mut w, Kind::Vehicle, "CART", at(2, 2));
+        let o = w.obj_mut(id).unwrap();
+        o.dest = Some(Target::Cell(c));
+        if let Some(d) = o.drive.as_mut() {
+            d.track = Some(glasnost_sim::drive::Track {
+                d: 2,
+                e: None,
+                target: (256 * c.x + 128, 256 * c.y + 128),
+                target_cell: c,
+                height: z,
+                next: 0,
+                last: (256 * c.x - 128, 256 * c.y + 128),
+                cells: vec![c],
+                crush: false,
+                exit: false,
+            });
+        }
+        assert_eq!(glasnost_sim::bridges::blow::heads_to(&w, id, c, z), expect, "{loco:?}");
+    }
+}
+
 // spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its stored track-start height (S-0207 claim 24), 0 for a factory exit track, or its own current height; a destination without a heading point does not count)
 #[test]
 fn claim_11_units_heading_onto_a_lost_deck() {

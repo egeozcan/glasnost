@@ -231,7 +231,11 @@ fn built(name: &str) -> (World, ObjectId, ObjectId) {
 }
 
 fn built_with(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId) {
-    let mut w = game(r);
+    built_in(game(r), name)
+}
+
+/// [`built_with`] in a given game.
+fn built_in(mut w: World, name: &str) -> (World, ObjectId, ObjectId) {
     let k = building(&mut w, "APAD", 0, 0, 0);
     ready(&mut w);
     set_credits(&mut w, 0, 100_000);
@@ -293,6 +297,32 @@ fn attack_take_off_run_return_rearm() {
     assert_eq!(w.obj(a).unwrap().pos, p);
     let full_ammo = run_until(&mut w, 500, |w| w.obj(a).unwrap().combat.ammo == 2);
     assert!(full_ammo, "rearms: {}", describe(&w, a));
+}
+
+// spec: S-0501 claim 24 and S-0524 claim 14 (ordinary pad landing, docking and departure add no entered-by raise on the pad's object tag and no destroyed-by-anything raise on the aircraft's own tag; C16)
+#[test]
+fn claim_24_pad_docking_raises_no_tag() {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let w = testkit::game_with_triggers(&r, SIZE, 7, testkit::entry_triggers());
+    let (mut w, k, a) = built_in(w, "JET");
+    glasnost_sim::triggers::object_tag(&mut w, k, Some(b"ENT"));
+    glasnost_sim::triggers::object_tag(&mut w, a, Some(b"DIE"));
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 10, 0);
+    let f0 = w.triggers.fired;
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 200, |w| air::height(w, a) > 0), "takes off");
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0), "spends its rounds");
+    assert!(
+        run_until(&mut w, 3000, |w| air::on_ground(w, a)
+            && w.obj(a).unwrap().contact == Some(k)
+            && w.obj(a).unwrap().beh.current == Some(Behaviour::Sleep)),
+        "docked: {}",
+        describe(&w, a)
+    );
+    testkit::run(&mut w, 100);
+    assert_eq!(w.triggers.fired, f0, "no raise reached a firing");
+    assert!(!w.triggers.variables[0] && !w.triggers.variables[1]);
 }
 
 // spec: S-0501 claims 4 to 8 and 33 (end to end: a move order flies the aircraft to the cell, where it lands); S-0417 claim 11 (the exit tether of a type that need not return to a dock ends when it leaves the ground)

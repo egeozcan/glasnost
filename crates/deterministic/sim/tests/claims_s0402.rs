@@ -175,6 +175,35 @@ fn claim_2_10_enter_order() {
     assert!(harvest::state_of(&w, h).tethered);
 }
 
+// spec: S-0402 claim 10 (Tag notifications) and S-0524 claim 14 (ordinary refinery arrival and docking in enter add neither an entered-by raise on the refinery's tag nor a destroyed-by-anything raise on the harvester's own tag; docking does not consume the harvester; C16)
+#[test]
+fn claim_10_refinery_docking_raises_no_tag() {
+    let r = ruleset();
+    let mut w = game_with_map(&r, &[], 7, |m| m.triggers = testkit::entry_triggers());
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(0, 2), 0);
+    glasnost_sim::triggers::object_tag(&mut w, refn, Some(b"ENT"));
+    glasnost_sim::triggers::object_tag(&mut w, h, Some(b"DIE"));
+    unblock(&mut w);
+    let f0 = w.triggers.fired;
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    until(&mut w, 600, |w| current(w, h) == Some(Behaviour::Unload)).expect("unload");
+    testkit::run(&mut w, 200);
+    assert_eq!(w.triggers.fired, f0, "no raise reached a firing");
+    assert!(!w.triggers.variables[0] && !w.triggers.variables[1]);
+    assert!(w.obj(h).is_some_and(|o| o.on_map), "docking does not consume the harvester");
+}
+
 // spec: S-0402 claim 3 and claim 13 (no building of a dock type: guard queued, 1 tick)
 #[test]
 fn claim_3_13_no_dock_building_gives_guard() {

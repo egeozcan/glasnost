@@ -34,6 +34,7 @@ use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 use super::anims::{self, AnimQuirks, Playback, Player};
 use super::build::{
     AnimDraw, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter,
+    ShadowAnchor,
     find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
@@ -1238,6 +1239,7 @@ impl Live {
             // spec: S-0402 claim 5a, F8 (ν: the walk-animation counter of S-0105 claim 16). The
             // simulation does not model that counter yet, so 0, as for the body's HVA frame.
             harvesting: super::harvesting::of(w, id, 0),
+            shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
         })
     }
 

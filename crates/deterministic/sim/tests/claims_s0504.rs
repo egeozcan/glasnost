@@ -282,6 +282,43 @@ fn claim_1_ship_moves_on_water_around_land() {
     );
 }
 
+// spec: S-0504 claim 1 and S-0207 claim 26 (order-level cleanup of a ship: an accepted same-cell move is removed at the first locomotion update without a track, with no search; final completion in tick t clears only the locomotor point and the unchanged cell goal goes at tick t + 1)
+#[test]
+fn claim_1_ship_goal_cleanup() {
+    let mut w = world(rules());
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    let here = w.obj(skiff).unwrap().pos.cell();
+    assert!(orders::issue(&mut w, ALPHA, common::move_to(skiff, here)));
+    orders::apply_pending(&mut w);
+    assert_eq!(w.obj(skiff).unwrap().dest, Some(Target::Cell(here)));
+    let taken = w.rng.taken();
+    glasnost_sim::drive::tick(&mut w, skiff);
+    assert_eq!(w.obj(skiff).unwrap().dest, None, "removed by the first update");
+    assert_eq!(w.rng.taken(), taken, "no search draw");
+    // A move to the next cell: the goal outlives the completion tick by one.
+    let goal = CellXY::new(here.x + 1, here.y);
+    assert!(orders::issue(&mut w, ALPHA, common::move_to(skiff, goal)));
+    let mut saw_track = false;
+    let mut done = false;
+    for _ in 0..400 {
+        tick::step(&mut w);
+        let o = w.obj(skiff).unwrap();
+        let on_track = o.drive.as_ref().unwrap().track.is_some();
+        saw_track |= on_track;
+        if saw_track && !on_track {
+            done = true;
+            break;
+        }
+    }
+    assert!(done, "the track completes");
+    assert_eq!(w.obj(skiff).unwrap().pos.cell(), goal);
+    assert_eq!(w.obj(skiff).unwrap().dest, Some(Target::Cell(goal)), "kept through the completion tick");
+    assert!(!glasnost_sim::drive::goal_present(&w, skiff));
+    tick::step(&mut w);
+    assert_eq!(w.obj(skiff).unwrap().dest, None, "removed at the next update");
+}
+
 // spec: S-0504 claim 1 (a destination on land: the ship does not leave the water)
 #[test]
 fn claim_1_ship_never_enters_land() {

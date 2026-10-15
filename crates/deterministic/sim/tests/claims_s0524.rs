@@ -1108,6 +1108,87 @@ fn claim12_retaining_entry() {
     assert!(w.obj(inf).is_some_and(|o| o.on_map));
 }
 
+/// Two repeating tags that fire on every raise (the any-event code): OLD
+/// (variable 3) and NEW (variable 4, with the carry-over flag when `carry`).
+/// Within one synchronous seam call nothing polls, so `fired` counts raises.
+fn any_raise_game(carry: bool) -> World {
+    let mut new = trigger("NEW", None, event(8, 0), vec![Action { number: 4, ..action(56) }]);
+    new.carry_over = carry;
+    let t = triggers(
+        vec![
+            trigger("OLD", None, event(8, 0), vec![Action { number: 3, ..action(56) }]),
+            new,
+        ],
+        2,
+    );
+    game(&ruleset(), t, &[], &[])
+}
+
+// spec: S-0524 claim 10 (capture's ownership change raises neither the replaced old tag nor the carried new tag, with or without carry-over; no relative order of carry-over and ownership change is required; Q-0765, C15)
+#[test]
+fn claim10_ownership_change_raises_no_tag() {
+    for carry in [true, false] {
+        let mut w = any_raise_game(carry);
+        let b = testkit::spawn(&mut w, Kind::Building, "TOWER", 1, at(0, 0), 0);
+        let eng = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(1, 0), 0);
+        tag(&mut w, b, "OLD");
+        tag(&mut w, eng, "NEW");
+        let f = w.triggers.fired;
+        let mut during_takeover = None;
+        mp_triggers::capture_seam(&mut w, b, eng, |w| {
+            let before = w.triggers.fired;
+            let old = w.obj(b).unwrap().owner;
+            w.obj_mut(b).unwrap().owner = Some(ALPHA);
+            glasnost_sim::econ::events::owner_changed(w, b, old);
+            during_takeover = Some(w.triggers.fired - before);
+        });
+        assert_eq!(during_takeover, Some(0), "carry {carry}: the ownership change raises nothing");
+        // Two entry raises on the old tag, then the engineer's own destruction raise.
+        assert_eq!(w.triggers.fired - f, 3, "carry {carry}");
+        assert_eq!(w.obj(b).unwrap().owner, Some(ALPHA));
+    }
+}
+
+// spec: S-0524 claim 11 (a vehicle-like building's entry: its entry raise precedes the takeover effects; its entering unit gets a destroyed-by-anything raise on the resulting shared tag when carry-over applies; no relative order of carry-over and the ownership change is required)
+#[test]
+fn claim11_vehicle_like_building_entry() {
+    let mut w = entry_game(true);
+    let b = testkit::spawn(&mut w, Kind::Building, "TOWER", 1, at(0, 0), 0);
+    let unit = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(1, 0), 0);
+    tag(&mut w, b, "ENT");
+    tag(&mut w, unit, "DIE");
+    let f = w.triggers.fired;
+    let mut entry_before_takeover = false;
+    mp_triggers::vehicle_like_entry_seam(&mut w, b, unit, |w| {
+        entry_before_takeover = w.triggers.variables[0];
+        w.obj_mut(b).unwrap().owner = Some(ALPHA);
+    });
+    assert!(entry_before_takeover, "the entry raise precedes the takeover effects");
+    assert_eq!(w.triggers.fired - f, 2, "one entry raise and the unit's destruction raise");
+    assert!(w.triggers.variables[1], "the unit's destruction raise acts on the shared tag");
+    assert_eq!(w.triggers.objects.get(&b), Some(&tag_index(&w, "DIE")));
+    assert!(w.obj(unit).is_none_or(|o| !o.on_map));
+}
+
+// spec: S-0524 claim 12 (a recycled or otherwise consumed entrant gets one own-tag destroyed-by-anything raise after the effect and before removal; its passengers get none merely for being removed with it; S-0603 claims 6 and 10)
+#[test]
+fn claim12_consumed_entrants_passengers_get_no_raise() {
+    let mut w = entry_game(false);
+    let building = testkit::spawn(&mut w, Kind::Building, "TOWER", 1, at(0, 0), 0);
+    let carrier = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, at(1, 0), 0);
+    let rider = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(2, 0), 0);
+    tag(&mut w, building, "ENT");
+    tag(&mut w, carrier, "DIE2");
+    tag(&mut w, rider, "DIE");
+    // The rider rides the carrier (a passenger order of one).
+    glasnost_sim::transport::board(&mut w, rider, carrier);
+    let f = w.triggers.fired;
+    mp_triggers::consuming_entry_seam(&mut w, building, carrier, |_| {});
+    assert_eq!(w.triggers.fired - f, 2, "the entry raise and the entrant's own raise");
+    assert!(w.triggers.variables[2], "the entrant's own raise");
+    assert!(!w.triggers.variables[1], "no raise for the removed passenger");
+}
+
 // --- Import mapping ------------------------------------------------------------
 
 // spec: S-0524 I1 (the codes this spec adds are recognised; 108 is a seam)

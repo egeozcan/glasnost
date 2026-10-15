@@ -115,7 +115,8 @@ pub fn action_coverage(code: i32) -> Coverage {
         11 | 17 | 19 | 21 | 23..=27 | 33 | 34 | 40 | 44 | 45 | 53..=57 | 63 | 66 | 73 | 90
         | 95 | 99 | 102 | 103 | 129 | 130 | 133 => Coverage::Implemented,
         // spec: S-0011 claim 30 (teams, computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
-        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 113 | 135 => Coverage::Seam,
+        // spec: S-0011 I4 (109 invulnerability at a waypoint: the waypoint curtain of S-0513 claim 22, owned by the superweapon topic, not built in this module)
+        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 109 | 113 | 135 => Coverage::Seam,
         _ => Coverage::Unknown,
     }
 }
@@ -639,9 +640,13 @@ pub fn entry_raise(w: &mut World, entered: ObjectId, entrant: ObjectId) {
 /// S-0509 claims 2 and 8), for S-0509's capture when it is built. In order:
 /// the general building-entry raise and the capture raise, both before the
 /// capture's own changes; then the tag carry-over, and the ownership change
-/// that `takeover` makes (S-0509; no relative order between the two is
-/// prescribed, Q-0765 interim: carry-over first); then the engineer's
-/// destroyed-by-anything raise, then the engineer is removed.
+/// that `takeover` makes (S-0524 claim 10 and S-0509 claim 8 require no
+/// relative order between the two, and no observable consequence
+/// distinguishes them; carry-over is done first here); then the engineer's
+/// destroyed-by-anything raise, then the engineer is removed. The ownership
+/// change itself makes no raise on the old or the carried tag, and the
+/// `takeover` of S-0509 must not make one (a house condition or the
+/// capture-history mark is not a building-tag raise).
 pub fn capture_seam(
     w: &mut World,
     building: ObjectId,
@@ -657,6 +662,29 @@ pub fn capture_seam(
     // spec: S-0524 claim 10 (the engineer's own tag: one destroyed-by-anything raise with the engineer as causing object before it is removed)
     crate::triggers::destroyed_by_anything(w, engineer);
     crate::objects::remove(w, engineer);
+}
+
+/// Seam: the trigger notifications of an infantry unit entering a
+/// vehicle-like building (S-0524 claim 11, S-0509 claim 17), for S-0509's
+/// entry when it is built: one entry raise on the building's tag before any
+/// takeover effect; then the tag carry-over and the ownership change that
+/// `takeover` makes (no relative order is required); then the unit's own
+/// destroyed-by-anything raise, which acts on the resulting shared tag when
+/// the carry-over applied; then the unit is removed.
+pub fn vehicle_like_entry_seam(
+    w: &mut World,
+    building: ObjectId,
+    unit: ObjectId,
+    takeover: impl FnOnce(&mut World),
+) {
+    // spec: S-0524 claim 11 (a vehicle-like building's entry raise precedes the takeover effects)
+    entry_raise(w, building, unit);
+    // spec: S-0524 claim 11 (any tag carry-over follows the ownership change or precedes it; no order is required)
+    carry_over(w, unit, building);
+    takeover(w);
+    // spec: S-0524 claim 11 (its entering unit does receive a destroyed-by-anything raise, on the resulting shared tag when carry-over applies)
+    crate::triggers::destroyed_by_anything(w, unit);
+    crate::objects::remove(w, unit);
 }
 
 /// Seam: the trigger notifications of a vehicle hijack (S-0524 claim 11;
@@ -679,11 +707,13 @@ pub fn hijack_seam(
     crate::objects::remove(w, thief);
 }
 
-/// Seam: a consuming entry (S-0524 claim 12; S-0510 claim 9 for a spy):
-/// the building's entry raise precedes the entry's effect `effect`, and the
-/// entrant's own tag receives destroyed-by-anything after the effect and
-/// before removal. For spy infiltration (S-0510) and the other consuming
-/// building entries when their specs are built.
+/// Seam: a consuming entry (S-0524 claims 12 and 14): the destination's
+/// entry raise precedes the entry's effect `effect`, and the entrant's own
+/// tag receives destroyed-by-anything after the effect and before removal.
+/// For spy infiltration (S-0510 claim 9) and for recycling in *eaten*
+/// (S-0603 claims 6 and 10: the effect is the payments), when their specs are
+/// built. The entrant's passengers get no such raise merely for being removed
+/// with it.
 pub fn consuming_entry_seam(
     w: &mut World,
     building: ObjectId,
@@ -695,14 +725,29 @@ pub fn consuming_entry_seam(
     effect(w);
     // spec: S-0524 claim 12 (the spy's own tag receives destroyed-by-anything with the spy as causing object after that effect and before removal)
     crate::triggers::destroyed_by_anything(w, entrant);
+    // spec: S-0524 claim 12 and S-0603 claim 10 (its passengers, and theirs, are removed with it, not killed: no raise on their tags)
+    remove_passengers_silently(w, entrant);
     crate::objects::remove(w, entrant);
 }
 
-/// Seam: a retaining entry (S-0524 claim 12): garrison entry (S-0508),
-/// sabotage entry and vehicle entry into an ordered target building raise
-/// the entered object's tag before the entry's own effect `effect`; being
-/// retained raises nothing on the entrant. Transport, pad, dock and
-/// refinery entries raise nothing (Q-0762 interim).
+/// Removes the passengers of `t`, theirs first, without death effects or
+/// raises (S-0603 claim 10).
+fn remove_passengers_silently(w: &mut World, t: ObjectId) {
+    for p in crate::transport::passengers(w, t) {
+        remove_passengers_silently(w, p);
+        crate::objects::remove(w, p);
+    }
+}
+
+/// Seam: a retaining entry (S-0524 claims 12 and 14): garrison occupation
+/// (S-0508), infantry entering a hospital, training service or infantry
+/// absorber in ordinary *enter* (S-0314 claim 7, S-0605), and the sabotage
+/// entry raise the entered object's tag once, on arrival at the destination
+/// and before the entry's own effect `effect`; the entrant stays an object,
+/// so nothing is raised on its own tag. Infantry boarding a transport is
+/// built (`transport::arrival`). Vehicle boarding, vehicle docking at a
+/// repair building or refinery, and aircraft pad landing raise nothing, so
+/// they never call this.
 pub fn retaining_entry_seam(
     w: &mut World,
     building: ObjectId,
