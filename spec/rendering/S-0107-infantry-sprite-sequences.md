@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -556,11 +556,11 @@ used by this spec only:
     | 1 | The unit's height above the surface (Terms) is less than 11 leptons, the land type of its cell is water (beach does not count), and a further per-object condition holds that has not been identified | Splash animations; no sequence |
     | 2 | Its type is a cyborg and it is prone, or its type is a jumpjet type (whatever its current locomotor) | A general death animation (rules data, another spec); no sequence |
     | 3 | Its type has its own list of death animations | Entry *w* of that list, where *w* is the death kind below (entry 0 when *w* is outside the list or entry *w* is empty); no sequence |
-    | 4 | Its type is marked "not human" | A forced request for *die-1*, whatever the death kind *w* (0, 3, 5 and 8 included). When *w* = 8, an extra animation from rules data (another spec) also appears |
+    | 4 | Its type is marked "not human" | A forced request for *die-1*, whatever the death kind *w* (0, 3, 5 and 8 included). When *w* = 8, the extra virus-death animation and particle delivery of S-0613 claim 3 also apply |
     | 5 | Any other case, with *w* = 1 | A forced request for *die-1* |
     | 6 | Any other case, with *w* = 2 | A forced request for *die-2* |
     | 7 | Any other case, with *w* = 9 | A forced request for *die-2*, unless that kind's own replacement effect (another spec) takes place, in which case there is no sequence |
-    | 8 | Any other case, with any other *w* | Animations that other specs describe; no sequence |
+    | 8 | Any other case, with any other *w* | For *w* = 8, the virus-death animation and particle delivery of S-0613 claim 2; for other kinds, animations that other specs describe. No sequence |
 
     In the rows that show no sequence (1, 2, 3, 8 and the replacement of row 7), the unit is
     removed at once, unless its type has the crash flag and a crash begins instead (jumpjet locomotor,
@@ -597,8 +597,10 @@ used by this spec only:
     The **death kind** *w* is 5 when the killer is a laser-fence building, otherwise 3 when the
     unit's current sequence is *parachute*, and otherwise the infantry-death kind of the killing
     warhead. When rows 1 and 2 do not apply, a unit killed while its current sequence is
-    *parachute* by a warhead of infantry-death kind 8 also shows an extra animation from rules
-    data, whatever *w* then is (so also with a laser-fence killer).
+    *parachute* by a warhead of infantry-death kind 8 also receives the extra virus-death
+    animation and particle delivery of S-0613 claim 3, whatever *w* then is (so also with a
+    laser-fence killer). S-0613 claims 2 and 3 own the clouds these cases create, including
+    their count and timing; this claim decides which death case applies.
 
     **Cyborgs and damage that ignores defences.** When the killing damage ignores defences (Terms)
     and the type is a cyborg, two things change. If the unidentified per-object condition of row 1
