@@ -630,6 +630,33 @@ pub fn lifted(w: &World, house: HouseId, t: TypeRef) -> bool {
 /// Whether a condition of claims 5 to 8 refuses a type for a house.
 pub fn conditions_refuse(w: &World, house: HouseId, t: TypeRef) -> bool {
     let Some(f) = tt(w, t) else { return true };
+    if other_conditions_refuse(w, house, t, f) {
+        return true;
+    }
+    // spec: S-0407 claim 8 (every entry of the prerequisite list must be met; an empty list is met)
+    !f.prereq.iter().all(|&p| prereq_met(w, house, p))
+}
+
+/// The entries of a type's prerequisite list (claim 8) that a house does
+/// not meet now, or `None` when a condition of claims 5 to 7 refuses the
+/// type anyway: what a player reads off the tech tree to know what to
+/// build next.
+pub fn unmet_prerequisites(w: &World, house: HouseId, t: TypeRef) -> Option<Vec<Prereq>> {
+    let f = tt(w, t)?;
+    if other_conditions_refuse(w, house, t, f) {
+        return None;
+    }
+    Some(
+        f.prereq
+            .iter()
+            .copied()
+            .filter(|&p| !prereq_met(w, house, p))
+            .collect(),
+    )
+}
+
+/// Whether a condition of claims 5 to 7 refuses a type for a house.
+fn other_conditions_refuse(w: &World, house: HouseId, t: TypeRef, f: &TypeTech) -> bool {
     let tech = house_tech_level(w, house);
     // spec: S-0407 claim 5 (a) (tech level −1 or above the house tech level)
     if f.tech_level == -1 || f.tech_level > tech {
@@ -664,8 +691,7 @@ pub fn conditions_refuse(w: &World, house: HouseId, t: TypeRef) -> bool {
     {
         return true;
     }
-    // spec: S-0407 claim 8 (every entry of the prerequisite list must be met; an empty list is met)
-    !f.prereq.iter().all(|&p| prereq_met(w, house, p))
+    false
 }
 
 fn prereq_met(w: &World, house: HouseId, p: Prereq) -> bool {

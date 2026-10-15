@@ -698,7 +698,8 @@ fn host_lost(w: &mut World, host: ObjectId, p: ObjectId) {
     let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0204 claim 2 (a position within the cell)
     let z = if layer == Layer::Deck {
         // spec: S-0614 claim 23 (on the deck: the point's terrain surface plus 416 leptons)
-        w.surface_at(x, y).wrapping_add(crate::teleport::DECK_HEIGHT)
+        w.surface_at(x, y)
+            .wrapping_add(crate::teleport::DECK_HEIGHT)
     } else {
         base.z
     };

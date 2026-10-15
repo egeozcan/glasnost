@@ -922,6 +922,8 @@ fn cancel_item(w: &mut World, li: usize) {
 pub(crate) fn delete_item_object(w: &mut World, id: ObjectId) {
     if w.obj(id).is_some_and(|o| !o.on_map) {
         tech::object_ends(w, id);
+        // spec: S-0506 claim 13 (the spawner removed: its docked slot objects are removed silently)
+        crate::spawn::removing(w, id);
         w.objects.remove(&id);
         // spec: S-0414 claim 15 (an object that ceases to exist at once, for the cancellation exception)
         super::victory::object_deleted(w, id);

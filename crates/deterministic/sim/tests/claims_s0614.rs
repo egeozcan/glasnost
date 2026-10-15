@@ -1380,7 +1380,11 @@ fn claim_18_delivery_after_the_hosts_movement() {
             break;
         }
     }
-    assert_eq!(moved_on_delivery, Some(true), "it moved in the delivery's turn");
+    assert_eq!(
+        moved_on_delivery,
+        Some(true),
+        "it moved in the delivery's turn"
+    );
     assert!(parasite::held(&w, host), "the delivery renews the hold");
     let after = w.obj(host).unwrap().pos;
     testkit::run(&mut w, 1);

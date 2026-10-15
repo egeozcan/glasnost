@@ -1783,3 +1783,42 @@ fn claim_13_way_out() {
     let tl = top_left(&w, k);
     assert!(!(tl.x..tl.x + 2).contains(&cell.x) || !(tl.y..tl.y + 2).contains(&cell.y));
 }
+
+// spec: S-0404 claim 6 and S-0506 claim 13 (a cancelled item's object is deleted; a spawner's docked slot objects, created with it, go with it)
+#[test]
+fn claim_6_cancelled_spawner_takes_its_slots() {
+    let mut r = ruleset();
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("SLOT".into());
+    r.sim.aircraft.insert(
+        "SLOT".into(),
+        glasnost_rules::sim::UnitType {
+            strength: Some(10),
+            speed: Some(10),
+            missile_spawn: Some(true),
+            spawned: Some(true),
+            ..Default::default()
+        },
+    );
+    let tank = r.sim.vehicles.get_mut("TANK").unwrap();
+    tank.combat.spawns = Some("SLOT".into());
+    tank.combat.spawns_number = Some(2);
+    let mut w = game(&r);
+    building(&mut w, "WARFACT", 0, 0, 0);
+    ready(&mut w);
+    rich(&mut w);
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    assert!(issue(&mut w, 0, Order::Build { what: tank }));
+    step(&mut w);
+    let slots = |w: &glasnost_sim::world::World| {
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Aircraft)
+            .count()
+    };
+    assert_eq!(slots(&w), 2);
+    production::cancel(&mut w, HouseId(0), tank, false);
+    assert_eq!(slots(&w), 0);
+}

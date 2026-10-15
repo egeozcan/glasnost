@@ -1411,7 +1411,9 @@ fn boundaries(p: i32, t: i32, set_c: bool) -> (i32, i32, i32, i32) {
         let t = w.tick;
         testkit::run(&mut w, 1);
         let Some(o) = w.obj(x) else { break };
-        let Some(rs) = o.rocket.as_ref() else { continue };
+        let Some(rs) = o.rocket.as_ref() else {
+            continue;
+        };
         if t0.is_none() && rs.phase.is_some() {
             t0 = Some(t);
         }
@@ -1655,9 +1657,17 @@ fn s0303_sector_arrival_order() {
     let pb = w.obj(b).unwrap().pos;
     w.obj_mut(a).unwrap().pos = pb;
     flying::moved(&mut w, a);
-    assert_eq!(w.flying.sectors[&sb], vec![b, a], "the later arrival follows");
+    assert_eq!(
+        w.flying.sectors[&sb],
+        vec![b, a],
+        "the later arrival follows"
+    );
     assert_eq!(w.flying.order, vec![a, b], "the global order is unchanged");
     flying::unregister(&mut w, a);
     flying::register(&mut w, a);
-    assert_eq!(w.flying.order, vec![b, a], "a new tracking period goes last");
+    assert_eq!(
+        w.flying.order,
+        vec![b, a],
+        "a new tracking period goes last"
+    );
 }
