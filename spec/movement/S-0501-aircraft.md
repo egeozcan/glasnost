@@ -2,11 +2,11 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654]
 supersedes: []
@@ -91,8 +91,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   ordinary slowing halves its fraction (claim 5, F4).
 - **unfinished flight**: movement accepted but not yet completed by settling at a landing
   destination (claim 40); this is distinct from a nonzero speed fraction.
-- **attack run**: one approach to a target ending in one or more firing passes and one round of
-  ammunition spent (claim 15). A **firing pass** is one processing in which the run fires.
+- **attack run**: one approach to a target ending in one or more firing passes and a pending
+  round of ammunition spent (claim 15), separate from immediate spending by passenger drops. A **firing pass** is one processing in which the run fires.
 - **run lock**: a mark an aircraft carries during the later passes of a strafing run, a fighter's
   firing pass and a spy plane's overfly. It makes the aircraft not ready to change (claim 31).
 - **service step**: one round added or one repair step made by a pad for one aircraft in contact
@@ -370,25 +370,30 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     It is not distance to the firing spot and is not the last firing-check answer: an earlier
     refusal such as *not facing* does not decide whether this separate range test passes.
     A **full burst** is *B* shots (S-0301 claim 4) made one after another in the same tick, with no
-    firing check between them; each shot still advances the burst counter and sets the rearm
-    countdown as S-0301 claims 1 to 6 say, including any in-burst draw, so after a full burst the
-    countdown holds the full delay.
+    firing check between them. Ordinary shots advance the burst counter and set the rearm
+    countdown as S-0301 claims 1 to 6 say, including any in-burst draw, so after an ordinary
+    full burst the countdown holds the full delay. While a first passenger exists, each firing
+    attempt is instead a drop under claim 20 and S-0522 claim 11, without those ordinary-shot
+    effects. If a burst releases the last passenger, its remaining attempts use the ordinary
+    shot rules: there is no new firing check between them.
     - Backing: `measurable` (scenarios AC7, AC8, AC9 and AC23)
     - Confidence: high
 
 13. **Strafing run.** A strafer that reaches its target makes five firing passes in one run: the
     first pass fires its full burst, the next four fire one shot each. The passes after the first
     are processed one bare rate-of-fire field apart, in ticks, and the aircraft flies straight on
-    toward the target during them. Each shot still sets the rearm countdown of S-0301 (claims 1
-    to 3, 5 and 6), and a pass whose firing check answers *rearming* waits and retries every tick,
-    so with no other refusal the spacing is the larger of the bare field and S-0301's delay. Later passes fire even when
+    toward the target during them. Each ordinary shot sets the rearm countdown of S-0301
+    claims 1 to 3, 5 and 6; a drop attempt instead follows claim 20. A pass whose firing check
+    answers *rearming* waits and retries every tick. For ordinary shots with no other refusal,
+    spacing is the larger of the bare field and S-0301's delay. A drop sets no ordinary rearm
+    delay, but does not remove the pass's bare rate-of-fire processing delay. Later passes fire even when
     the check answers *not facing*, *cloaked* or *out of range* (claim 19). After the fifth shot the aircraft waits
     ⌊(*R* + 1024) / *V*ₜ⌋ ticks before it starts the next run, where *R* is the weapon's range in
     leptons and *V*ₜ the converted type speed (Formula F6, including its zero-speed departure). A strafer begins its firing passes as
     soon as the target is within its weapon's range; a strafer that has not yet reached that
     range keeps flying at the target. If the first pass's check answers *not facing*, the strafer
     goes back to choosing a firing spot and waits 45 ticks.
-    - Backing: `measurable` (scenarios AC7 and AC23)
+    - Backing: `measurable` (scenarios AC7 and AC23; S-0522 claim 11, scenario P7 for drops)
     - Confidence: high
 
 14. **Fighter and ordinary runs.** A fighter fires its full burst in one pass and then starts the
@@ -398,19 +403,28 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     the flag off it fires its full burst again from where it is, then another single shot, and so
     on: the run never reaches a point that spends its round, so one round gives unlimited fire at
     S-0301's rate until the target is gone or aiming fails (`quirks.aircraft_endless_refire`).
+    This unlimited-fire consequence concerns ordinary shots. A carrying aircraft's attempts
+    instead obey claim 20: successful drops spend ammunition immediately, and drop attempts
+    do not set the ordinary rearm delay. The run transitions and processing delays still apply.
     - Backing: `measurable` for the original runs (scenario AC8, including its explicitly
       named test-map variants). The endless-refire switch-off alternative is `unmeasured`:
       it is a design rule for our engine, not an outcome of the original
     - Confidence: high
 
-15. **Ammunition spent once per run.** An aircraft spends exactly one round of ammunition per run
-    in which it fired at least once, whatever its burst and however many passes the run had.
+15. **Pending ammunition spent once per run.** The initial firing pass admitted by the firing check
+    makes one round pending for the run, whatever its burst and however many passes the run
+    has. Drop attempts count for this bookkeeping even if every attempt is refused.
     The round is taken from the count at the next point where the run either starts its next
     approach or ends, or, if the aircraft leaves *attack* first, at the end of that aircraft's
-    update, including a change that starts a queued behaviour in that update. Firing
-    itself does not change the count. A run in which nothing was fired spends nothing. This
-    replaces the per-shot spending of S-0301 claim 10 for aircraft.
-    - Backing: `measurable` (scenarios AC7 and AC8)
+    update, including a change that starts a queued behaviour in that update. At the *done*
+    boundary, the pending round is removed only when the count is positive (table T1).
+    Ordinary firing itself does not change the count. Each successful drop additionally
+    spends one round immediately; refusal has no net immediate change (S-0522 claims 9
+    and 11). Thus a refused-drop run can still spend its pending round, and successful
+    drops' immediate spending is separate from that round. A run that never reaches an
+    admitted initial firing pass makes no round pending. This replaces the ordinary per-shot
+    spending of S-0301 claim 10 for aircraft.
+    - Backing: `measurable` (scenarios AC7 and AC8; S-0522 claim 11, scenario P7)
     - Confidence: high
 
 16. **Scatter.** Every firing pass sends a scatter request (S-0215 claim 19) to the occupants of
@@ -473,8 +487,18 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Confidence: high (the 2048 tolerance and fighter exemption); medium (the passenger-carrier
       refusal and cloak interaction)
 
-20. **What a shot does.** A shot of an aircraft that carries passengers is a drop (S-0522 claim 11). For any
-    other shot, the projectile starts as in S-0306, with two aircraft changes: a projectile whose
+20. **What a shot does.** While an aircraft has a first passenger, a firing attempt is a drop
+    attempt (S-0522 claim 11), not an ordinary projectile shot or a failed projectile launch.
+    Refusal retains the rearm countdown and has no net immediate ammunition change. Success
+    expires that countdown immediately, spends one round and resets the drop pass counter to 5.
+    Neither outcome advances the burst counter, sets an ordinary full or in-burst delay,
+    takes its delay or spray draw, or produces a weapon report, muzzle animation or projectile.
+    Successful drops retain their parachute sound and applicable animation draws. Run-level
+    pending ammunition and pass processing delays remain separate (claims 13 to 15).
+    This drop path also bypasses the firing reveal and kamikaze removal described below.
+    Without a first passenger, the ordinary shot path applies, including to remaining
+    attempts of a burst that has just released its last passenger.
+    For an ordinary shot, the projectile starts as in S-0306, with two aircraft changes: a projectile whose
     type has turn rate 0 (a bomb) takes the aircraft's body heading, pitch and current ground
     speed instead of its own launch velocity, so it keeps flying forward as it falls; a projectile
     whose type has turn rate 1 is redirected toward the target in three dimensions, including
@@ -484,8 +508,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     The radius is the game-wide attacking-aircraft sight range; the area reveal follows S-0409
     claim 17. This is not an unconditional reveal for every owner's shot. The exact set of
     nearby samples remains untraced here. A kamikaze slot
-    aircraft (S-0506) is removed after its shot.
-    - Backing: `measurable` (scenario AC12)
+    aircraft (S-0506) is removed after its ordinary shot.
+    - Backing: `measurable` (scenario AC12; S-0522 claim 11, scenario P7)
     - Confidence: medium; the exact nearby-sample predicate is `unmeasured` because its full
       geometry has not been independently traced
 
@@ -537,8 +561,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     3 ticks, including the processing that recognizes arrival and advances to docking.
     The docking-position and entered-report stage returns 1 tick. The unlinked retry and
     fallback paths also return 1 tick. None of these delays takes a standard-delay draw.
-    - Backing: `measurable` (scenarios AC14 and AC23)
-    - Confidence: high
+    Ordinary aircraft pad landing, docking and departure add no entered-by raise on the pad's
+    object tag and no destroyed-by-anything raise on the aircraft's own tag merely for
+    docking (S-0524 claim 14). This does not suppress cell-tag effects during approach.
+    - Backing: `measurable` (scenarios AC14 and AC23; S-0524 claim 14, scenario C16)
+    - Confidence: high for docking; medium for absence of additional object-tag raises
 
 25. **Landing-facing choice.** Where flight calls for the landing direction, an aircraft in
     contact uses its contact's current body facing rounded to 8 directions, not the direction
@@ -1211,7 +1238,9 @@ division truncated toward zero.
 **T1. Attack run.** The delay is the number of ticks before the next processing of *attack*.
 "Ammunition left" counts the round of the run still to be spent. The run's facing requests are
 made before that update's movement tick; claim 42 gives the guidance requests that follow them,
-which decide the direction of travel.
+which decide the direction of travel. Firing attempts in this table use claim 20 while a
+first passenger exists, rather than ordinary-shot effects; the run-level pending round and
+processing delays are unchanged.
 
 | State | Event | Result |
 |---|---|---|
@@ -1592,8 +1621,14 @@ listed in Open questions are not claimed confirmed by these scenarios.
   and flight rules are S-0306's. The named launch-test override supplies these weapons where
   stock use cannot separate them. Observe explored-cell changes on firing near shroud from an
   aircraft of the viewing house, separating ordinary sight refresh from firing reveal. Record
-  the imported attack-reveal radius. A passenger shot instead releases cargo; a kamikaze shot
-  removes its aircraft. Those type variants use the named launch-test override.
+  the imported attack-reveal radius. A passenger attempt instead follows S-0522 claim 11,
+  scenario P7: compare successful and refused drops, log rearm countdown, burst counter,
+  ammunition, pending round and scenario draws. Expect no ordinary-shot effects, immediate
+  spending only on successful drops, and separate pending spending even after an all-refused
+  run. A named burst variant carries fewer passengers than its burst count: remaining attempts
+  after the last release use ordinary-shot effects without a new firing check. Contradictory
+  effects, countdowns, draws or spending falsify these rules. An ordinary kamikaze shot removes
+  its aircraft; a drop attempt does not. Those type variants use the named launch-test override.
 - **AC13 Pad choice, acceptance and reservation (claims 21 to 23).** Give a returning aircraft
   two compatible pads; fill one, then free it. Expected: only an eligible free pad is selected,
   and the contact reserves the place before arrival so a second aircraft cannot claim it.
@@ -1609,7 +1644,10 @@ listed in Open questions are not claimed confirmed by these scenarios.
   while a nearer pad becomes free: the original reservation choice is retained.
 - **AC14 Docking and facing (claims 24 and 25).** Record approach, touchdown, docking position,
   contact, *sleep* and queued *guard*. Expected: position is S-0404 claim 15's pad position.
-  Contact persists until departure. For direction, compare the contact's body facing with the
+  Contact persists until departure. Use S-0524 claim 14, scenario C16's repeating pad entered-by
+  tag, aircraft destroyed-by-anything tag and read-only raise recorder: expect neither raise
+  merely for docking, servicing or departure. Any such extra object-tag raise falsifies this
+  rule; account separately for cell tags during approach. For direction, compare the contact's body facing with the
   direction toward it; approach from different sides. Expected choice: rounded contact facing,
   not approach bearing. Named landing-facing test-map overrides vary the pose-direction integer
   and give a passenger aircraft with no contact. The choices are pose integer times 8192 modulo
