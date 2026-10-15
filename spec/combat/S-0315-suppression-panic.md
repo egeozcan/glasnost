@@ -2,11 +2,11 @@
 id: S-0315
 title: Suppression and panic (infantry fear, prone and panic in combat; parasite suppression)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0087]
 supersedes: []
@@ -57,12 +57,20 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
   flag (S-0302, Terms) is a different property.
 - **Naval type.** A vehicle type with the naval flag (S-0004, claim 11; Import mapping). A
   *naval parasite* is a parasite of a naval type.
-- **Leaving the host.** Any way a parasite stops being attached to a host while both still
-  exist. The known ways are: the host takes a sonic hit (of any delivered amount), a healing hit
-  whose warhead is not sonic, or a repair step; it unloads or undeploys; it is moved by a
-  superweapon; it has its locomotion replaced by an effect (only a naval parasite leaves this
-  way); and the parasite's own release rules (left to S-0614, parasites, planned). A hit that
-  claim 6's vehicle-factory exception covers is not one of these ways.
+- **Leaving a living host.** The release events of S-0614 claim 12, with exit placement and
+  failure rules owned by S-0614 claim 13. They include sonic and non-sonic healing hits,
+  repair, passenger unloading, consuming-building arrival, teleport jumps and parasite-specific
+  release events. Unloading and consumption set 50 ticks of suppression just before release,
+  so a non-naval parasite is removed silently. A teleporting superweapon releases a naval
+  parasite at launch, at the host's old position; a non-naval parasite is instead expected to
+  leave at the teleport jump (low confidence, S-0614 claim 12). Replacing the host's locomotor
+  by an effect releases only a naval parasite. Packing up a deployed unit is not a traced
+  release event.
+  A hit covered by claim 6's vehicle-factory exception does not release the parasite.
+- **Losing the host.** The host leaves the map or is removed while the parasite is attached,
+  including removal after destruction and entry into a transport or building. S-0614 claim 15
+  owns this release, distinct from leaving a living host. Destruction alone need not coincide
+  with removal: the timing during a ship's sinking remains open in S-0614.
 
 ## Behaviour
 
@@ -196,13 +204,13 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
    - Confidence: medium (the formula and the conditions, and that stopped hits still count); low
      (the exact boundary tick of the suppression time, and the vehicle-factory exception)
 
-7. **A suppressed parasite dies when it leaves.** A parasite that leaves its host while it is
-   suppressed is removed from the game at once instead of coming out: it is not killed by damage,
-   so it leaves no death effects, gives no kill credit, experience or score to anyone (S-0311),
-   and simply disappears. When it leaves without being suppressed (the timer has run out, or it
-   was never started), it comes out on a cell next to the host (where is left to S-0614,
-   parasites, planned); when it finds no cell where it can stand, it is removed in the same silent
-   way. A hit on a host that is a vehicle standing inside the vehicle factory it is in contact
+7. **Suppression decides removal on release.** A non-naval parasite that leaves a living host
+   while suppressed is removed from the game at once instead of coming out: it is not killed
+   by damage, so it leaves no death effects, gives no kill credit, experience or score to anyone
+   (S-0311), and simply disappears. When it leaves without being suppressed (the timer has run
+   out, or was never started), its exit cell, placement and failure outcomes follow S-0614
+   claim 13. Failure to find an exit, failure of that claim's host-cell test or failure of
+   ordinary placement removes it in the same silent way. A hit on a host that is a vehicle standing inside the vehicle factory it is in contact
    with counts for nothing in this claim either (claim 6): it makes no parasite leave. Two kinds
    of event decide the outcome differently:
    - **A sonic hit** on the host makes the parasite leave, and its outcome depends only on earlier
@@ -216,18 +224,31 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
      detonation reaches at 8 leptons or more from its point, which heals the host by nothing
      (S-0303, claim 13; S-0302, claim 6).
 
-   A *naval* parasite is not affected by suppression: it comes out alive after any earlier damage,
-   a healing hit and a repair step included, and is removed silently only when it finds no cell
-   where it can stand. The cell it tries may also differ from that of a parasite that is not
-   naval (left to S-0614).
-   - Backing: `measurable` (scenario P4: parts a and e for healing, repair and the silent removal,
-     b, c and l for the sonic hit, f for the naval case, g for no free cell, h for healing that
-     changes no health)
-   - Confidence: medium (removal on leaving while suppressed, on healing and on repairing; that
-     the removal is silent; that a sonic hit decides by earlier hits whatever its own
-     amount; that healing counts without a health change); low (the naval case, the full list of ways to
-     leave, what happens when the host itself is destroyed while it carries a parasite, and the
-     removal when no cell is found, for either kind of parasite)
+   A *naval* parasite ignores suppression when leaving a living host: earlier damage, a healing
+   hit and a repair step do not themselves remove it. Exit placement and its possible silent
+   failure follow S-0614 claim 13. Unloading a passenger from the host or arrival at a consuming
+   building sets 50 ticks of suppression before living-host release, so a non-naval parasite is
+   always removed silently there (S-0614 claim 12).
+
+   **Host loss is different** (S-0614 claim 15): suppression removes either kind of parasite,
+   naval included, unless the parasite itself is temporarily invulnerable. Otherwise that claim
+   chooses its position and forces placement, allowing overlap with other units; failure to
+   find a position removes it silently. No post-release hold follows host loss. The naval
+   exception on living-host release therefore must not be applied to removal of a destroyed
+   host. S-0614 claim 15 owns `quirks.parasite_host_loss_suppresses_naval` (default original).
+   With it off, a naval parasite ignores suppression on host loss too.
+
+   A sonic or healing hit releases the parasite **before** changing the host's health
+   (S-0614 claim 12). Consequently a lethal sonic hit resolves release by the living-host rule
+   of S-0614 claim 13, not the host-loss rule, even though the host then dies.
+   - Backing: `measurable` (scenario P4: parts a and e for healing, repair and silent removal,
+     b, c and l for sonic hits, f for the naval case, g for blocked exits, h for healing without
+     a health change, n for unloading and consumption, o for host loss, p for lethal sonic
+     ordering; S-0614 scenarios P4, P5, P7 and P9 for exit placement, host loss, teleport and hold)
+   - Confidence: high (host-loss suppression without a naval exception and no post-release hold),
+     medium (silent removal, sonic and healing rules, unloading, consumption, hit-before-health
+     ordering, forced host-loss placement and the parasite's invulnerability exception),
+     low (non-naval release at a superweapon teleport jump, as S-0614 claim 12)
 
 ## Formulas
 
@@ -249,13 +270,15 @@ Fear arithmetic is S-0107's (Formulas F5). Prone speed is S-0208's (Formulas F5)
 | Panic threshold | above 199 | fear points | S-0107 |
 | Suppression time factor | 2 | ticks per damage point | Claim 6 |
 | Suppression threshold, absent-key default | 0 | damage points | Claim 6 |
+| Suppression set by passenger unloading or consuming-building arrival | 50 | ticks | Claim 7; S-0614 claim 12 |
 
 ## State and ordering
 
-Each event on a host with a parasite, other than the host's own destruction (Open questions),
-matches exactly one of the parasite rows. A hit on a host that is a vehicle standing inside the
-vehicle factory it is in contact with matches only the first parasite row; in every other row a
-hit means a hit on a host that is not in that state.
+The parasite rows distinguish release from a living host from host loss (S-0614 claims 12–15).
+A hit on a host that is a vehicle standing inside the vehicle factory it is in contact with
+matches only the first parasite row; in every other hit row the host is not in that state.
+For living-host release, a successful exit means all tests and placement of S-0614 claim 13
+succeed, not merely that a free cell exists.
 
 | State | Event | Result |
 |---|---|---|
@@ -264,10 +287,13 @@ hit means a hit on a host that is not in that state.
 | parasite attached | host takes a hit whose warhead is not sonic, with *d* ≥ 0, *d* > *T*, not from the parasite itself | stays attached; suppressed for 2*d* − *T* ticks (Formulas), replacing any time left |
 | parasite attached | host takes a hit whose warhead is not sonic, with *d* ≥ 0, and *d* ≤ *T* or from the parasite itself | stays attached; timer unchanged |
 | parasite (not naval) attached, suppressed or not | host takes a healing hit whose warhead is not sonic, or a repair step | removed silently |
-| parasite (not naval) attached, suppressed | host takes a sonic hit, or the parasite leaves by any way other than the row above | removed silently |
-| parasite (not naval) attached, not suppressed | host takes a sonic hit (any *d*), or the parasite leaves by any way other than a healing hit whose warhead is not sonic or a repair step; a free cell exists | comes out alive (where is left to S-0614) |
-| naval parasite attached, suppressed or not | host takes a sonic hit (any *d*), a healing hit whose warhead is not sonic or a repair step, or the parasite leaves by any other way; a free cell exists | comes out alive (where is left to S-0614) |
-| either of the two rows above | the same event, no free cell | removed silently |
+| parasite (not naval) attached, suppressed or not | host unloads a passenger or reaches a consuming building while being eaten | suppression set to 50 ticks before living-host release; removed silently |
+| parasite (not naval) attached, suppressed | sonic hit or another living-host release of S-0614 claim 12, excluding the two non-naval rows above | removed silently |
+| parasite (not naval) attached, not suppressed | sonic hit (any *d*) or another living-host release of S-0614 claim 12, excluding healing, repair, unloading and consumption; exit succeeds | comes out alive by S-0614 claim 13 |
+| naval parasite attached, suppressed or not | any living-host release of S-0614 claim 12; exit succeeds | comes out alive by S-0614 claim 13 |
+| either of the two rows above | the same event, exit fails | removed silently by S-0614 claim 13 |
+| parasite attached, naval or not, suppressed and not itself temporarily invulnerable | host leaves the map or is removed | removed silently by S-0614 claim 15 |
+| parasite attached, naval or not, unsuppressed or itself temporarily invulnerable | host leaves the map or is removed | forced placement by S-0614 claim 15, possibly overlapping other units; no post-release hold; silent removal if no position is found |
 
 Ordering within one hit on a host, as observable consequences: a sonic hit, whatever its own
 delivered amount, frees alive (when a free cell exists) a parasite that earlier hits had not
@@ -275,9 +301,10 @@ suppressed and removes one that they had suppressed, unless the parasite is nava
 never suppresses the parasite and never triggers the healing rule. A healing hit whose warhead is
 not sonic, or a repair step, on a host whose parasite is not naval always removes the parasite
 silently. None of this applies to a hit on a host that is a vehicle standing inside the vehicle
-factory it is in contact with, which changes nothing for the parasite (claim 6). Whether the
-parasite leaves before or after the hit's own health change is not claimed; it matters only when the hit destroys the host, which is part of the open question on hosts
-destroyed while they carry a parasite.
+factory it is in contact with, which changes nothing for the parasite (claim 6). Release through a hit precedes the hit's
+health change (S-0614 claim 12): a lethal sonic hit uses the living-host exit of S-0614 claim 13,
+not host-loss release. Host loss while a parasite is still attached instead follows S-0614
+claim 15, including suppression of naval parasites and the parasite's own invulnerability exception.
 
 ## Edge cases and quirks
 
@@ -518,6 +545,35 @@ comes out alive beside the host, stays attached, or is gone without coming out.
   health unchanged. *Expected:* destroyed (claim 7's healing rule). Control for each: the sonic hit
   175 ticks later in (1) and (2), which frees it alive. *Falsified if:* in (1), (2) or (3) the
   parasite comes out alive or stays attached.
+- *Part n (unloading and consumption):* an infected own transport unloads one passenger.
+  Separately an infected own vehicle enters a consuming building. Begin with an unsuppressed
+  non-naval parasite and use a host whose health will not run out during the approach. Record
+  suppression duration and attachment at release, host removal, parasite survival and death
+  effects. *Expected:* 50 ticks of suppression set immediately before release, silent removal
+  of the parasite, before host removal in the consumption case. This is not an undeploy test.
+  Repeat with a naval parasite in named map variants allowing those hosts and deliveries,
+  with expected living-host exit by S-0614 claim 13 when its placement tests pass. *Falsified if:*
+  a non-naval parasite survives, stays attached, or receives a different suppression duration,
+  or a naval parasite is removed solely because of suppression.
+- *Part o (host loss):* destroy an infected tank with a non-sonic hit, first without suppression
+  (the host has low remaining health and the lethal delivered amount is no greater than the
+  suppression threshold), then with suppression still running when the host is actually removed.
+  Also have an
+  infected unit enter an ordinary transport. Record destruction and removal ticks separately,
+  attachment, release position, facing, hold and death effects. *Expected:* S-0614 claim 15,
+  not its living-host exit: suppressed parasites disappear silently; otherwise forced placement
+  facing as the host, no new hold. Named map variants repeat with a naval parasite and with a
+  parasite itself temporarily invulnerable through the host-loss tick; suppression removes the
+  naval parasite too but not the protected parasite. Arrange a second unit at the release
+  point: expected overlap, not placement refusal. Use S-0614 scenario P5 for the fallback cell
+  cases and the separately unresolved sinking timing. *Falsified if:* any stated removal,
+  protection, overlap or hold outcome differs.
+- *Part p (lethal sonic hit):* use an unsuppressed parasite and a sonic hit strong enough to kill
+  its host, first non-naval then naval. Record release and health change, exit position, facing
+  and hold. *Expected:* release before the lethal health change, by S-0614 claim 13, including
+  its exit direction and post-release hold, not forced host-loss placement without a hold.
+  Repeat with suppression running: non-naval removed silently, naval still exits by claim 13.
+  *Falsified if:* health changes before release or the host-loss result is used.
 - *Falsified if* (parts a to g): any outcome differs from the one expected; part c's probes
   measure the formula 2*d* − *T*, and part c2 the boundary.
 - *Runs:* 3 per part (5 for part c's two timings), with different random seeds; all must agree.
@@ -565,10 +621,9 @@ destination. Repeat with a prone cyborg for the type exception.
 
 ## Open questions
 
-- What happens to a parasite when its host is destroyed, suppressed or not (the original handles
-  that case differently from the other ways of leaving), including a sonic hit that destroys the
-  host.
-- The complete list of ways a parasite leaves its host; this is left to S-0614 (parasites,
-  planned), and this spec's claim 7 should then point to it.
+- Whether a non-naval parasite on a host moved by a teleporting superweapon is released at
+  the teleport jump as expected (S-0614 claim 12, low confidence; its scenario P7).
+- Whether a parasite stays attached throughout a killed ship's sinking until actual host
+  removal. S-0614 claim 15 owns host-loss release; its scenario P5 tests this timing question.
 - Whether a sonic hit that frees a parasite also makes the attacker drop its current target (the
   original appears to do so; not measured, low confidence).
