@@ -1269,6 +1269,14 @@ pub struct Quirks {
     // spec: S-0501 claim 41, F8 and Edge cases
     #[serde(default = "on")]
     pub landing_own_cell_no_result: bool,
+    /// A forward step of exactly 1 lepton at a body facing between east and south (facings 16391 to 32766) changes neither coordinate, because each coordinate is truncated and no remainder is kept, so an aircraft slowing toward its destination can hover there with a positive fraction (an ordinary attacker never fires, a move or a return to a pad stops short of landing); off: a forward step of at least 1 lepton that would change neither coordinate moves 1 lepton along the axis of its larger component, in that component's direction, x on equal magnitudes.
+    // spec: S-0501 claims 4 and 5, F3, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_unit_step_stall: bool,
+    /// An ordinary attacker reaches firing from approaching only at a current speed fraction of exactly 0, so one hovering with a positive fraction whose forward step truncates to 0 leptons never fires; off: a positive fraction with step length 0 also moves it to firing, keeping its destination, with the same 1-tick delay.
+    // spec: S-0501 claim 42, T1, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_zero_step_attack_stall: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded. Not implemented yet (wave 2).
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -1941,6 +1949,8 @@ impl Default for Quirks {
             pad_limit_counts_list_only: true,
             pad_distance_overflow: true,
             landing_own_cell_no_result: true,
+            aircraft_unit_step_stall: true,
+            aircraft_zero_step_attack_stall: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -2795,6 +2805,11 @@ impl Quirks {
             (
                 "landing_own_cell_no_result",
                 self.landing_own_cell_no_result,
+            ),
+            ("aircraft_unit_step_stall", self.aircraft_unit_step_stall),
+            (
+                "aircraft_zero_step_attack_stall",
+                self.aircraft_zero_step_attack_stall,
             ),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),

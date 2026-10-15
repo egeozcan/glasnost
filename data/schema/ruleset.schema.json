@@ -6441,6 +6441,16 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_unit_step_stall": {
+          "description": "A forward step of exactly 1 lepton at a body facing between east and south (facings 16391 to 32766) changes neither coordinate, because each coordinate is truncated and no remainder is kept, so an aircraft slowing toward its destination can hover there with a positive fraction (an ordinary attacker never fires, a move or a return to a pad stops short of landing); off: a forward step of at least 1 lepton that would change neither coordinate moves 1 lepton along the axis of its larger component, in that component's direction, x on equal magnitudes.",
+          "type": "boolean",
+          "default": true
+        },
+        "aircraft_zero_step_attack_stall": {
+          "description": "An ordinary attacker reaches firing from approaching only at a current speed fraction of exactly 0, so one hovering with a positive fraction whose forward step truncates to 0 leptons never fires; off: a positive fraction with step length 0 also moves it to firing, keeping its destination, with the same 1-tick delay.",
+          "type": "boolean",
+          "default": true
+        },
         "airstrike_empty_strike_stuck": {
           "description": "A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged. Not implemented yet (wave 2).",
           "type": "boolean",
