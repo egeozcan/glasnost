@@ -686,6 +686,14 @@ impl Audio {
             Sound::Crush => {
                 self.play_in(w, ts.crush.as_deref(), at);
             }
+            // spec: S-0207 claim 20 (e) (the departure sound at the old point; the type's sound overrides the game-wide one)
+            Sound::ChronoOut => {
+                self.play_in(w, ts.chrono_out.as_deref(), at);
+            }
+            // spec: S-0207 claim 20 (e) (the arrival sound at L; the type's sound overrides the game-wide one)
+            Sound::ChronoIn => {
+                self.play_in(w, ts.chrono_in.as_deref(), at);
+            }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
             Sound::LowFunds if house.is_some() && house == self.local => {
                 self.announce(Announcement::LowFunds);

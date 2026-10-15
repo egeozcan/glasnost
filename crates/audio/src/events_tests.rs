@@ -1552,3 +1552,31 @@ fn crush_sounds() {
     a.tick(&w, &fx, &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Squish", "Crunch"]);
 }
+
+// spec: S-0207 claim 20 (e) (a teleporting jump's departure sound at the old point and arrival sound at L; the type's sounds, which the names fall back to the game-wide ones for)
+#[test]
+fn chrono_sounds() {
+    let w = world();
+    let mut a = audio(&w, &["Away", "Back"]);
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            chrono_out: Some("Away".into()),
+            chrono_in: Some("Back".into()),
+            ..TypeSounds::default()
+        },
+    );
+    a.set_names(n);
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let jump = |sound| Effect::Sound {
+        sound,
+        of: Some(tref(&w, Kind::Vehicle, "CRUSHER")),
+        house: None,
+        pos: Some(at),
+    };
+    let fx = [jump(Sound::ChronoOut), jump(Sound::ChronoIn)];
+    a.tick(&w, &fx, &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Away", "Back"]);
+}

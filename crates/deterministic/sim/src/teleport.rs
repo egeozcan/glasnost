@@ -10,6 +10,7 @@ use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
 use serde::{Deserialize, Serialize};
 
+use crate::combat::effects::{Effect, Sound};
 use crate::occupancy;
 use crate::path::{self, NearbySettings, NearbyUse};
 use crate::rules::{Behaviour, Kind, Locomotor};
@@ -623,8 +624,10 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     }
     // spec: S-0207 claim 20 (e) and (i) (a warp animation at the old point, an ordinary animation creation with every applicable creation draw of S-0202 claim 10, before the landing-point animation's; landing choice and position change take no draw of their own; the sounds take no draw)
     if let Some(warp) = r.warp_out.clone() {
-        crate::load::anim_created_at(w, &warp, Some((o.pos.x, o.pos.y, o.pos.z)));
+        crate::combat::effects::anim(w, &warp, o.pos);
     }
+    // spec: S-0207 claim 20 (e) (then the departure sound at the old point; the type's overrides the game-wide one)
+    chrono_sound(w, &o, Sound::ChronoOut, o.pos);
     // spec: S-0207 claim 20 (e) and S-0614 claim 12 (a parasite inside exits before the host leaves its old position)
     crate::parasite::host_jumps(w, id);
     let old = o.pos.cell();
@@ -676,11 +679,16 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
             held = Some((new, layer));
         }
     }
+    // spec: S-0207 claim 20 (e) (the arrival sound plays at L)
+    chrono_sound(w, &o, Sound::ChronoIn, Pos::new(l.x, l.y, z));
     // spec: S-0207 claim 20 (e) (entering L's cell has the arrival effects of the object's own kind) and S-0211 claim 5 (both cells are recomputed, for a walker as for a vehicle)
     crate::load::recalc_cells(w, &[old, new]);
     if o.kind == Kind::Vehicle {
         // spec: S-0207 claim 20 (e) (a vehicle's: those of reaching a track target in a new cell, crushing among them, S-0210 claim 9)
         crate::crush::entered_cell(w, id, new);
+        // spec: S-0207 claim 22 (for a vehicle, arrival reporting to a contacted building, S-0402 claim 10, then cell-centre crushing, S-0210 claims 3 and 8, precede the entered-by raise)
+        crate::econ::harvest::track_arrival(w, id);
+        crate::crush::at_cell_centre(w, id);
     }
     // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
     crate::objects::arrival_raise(w, id);
@@ -689,9 +697,10 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         ob.dest = None;
         ob.path.steps.clear();
     }
-    // spec: S-0207 claim 20 (e) and (i) (a second warp animation at L, with its creation draws after the old point's in the jump tick; crates and parasites have no state in our engine)
+    // Crate collection at L (S-0207 claim 20 e, S-0520 claims 7 to 11) is a seam: crates are not built (S-0520).
+    // spec: S-0207 claim 20 (e) and (i) (a second warp animation at L, with its creation draws after the old point's in the jump tick)
     if let Some(warp) = r.warp_out.clone() {
-        crate::load::anim_created_at(w, &warp, Some((l.x, l.y, z)));
+        crate::combat::effects::anim(w, &warp, Pos::new(l.x, l.y, z));
     }
     let harvester = r.unit(o.kind, o.type_index).is_some_and(|u| u.harvester);
     // spec: S-0207 claim 20 (f) and F9 (a harvester-flag type does not phase in)
@@ -707,6 +716,20 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
             ..Default::default()
         },
     );
+}
+
+/// The departure or arrival sound of `o`'s own jump at `pos` (S-0207 claim
+/// 20 e); the view picks the type's sound or the game-wide one.
+fn chrono_sound(w: &mut World, o: &crate::world::Object, sound: Sound, pos: Pos) {
+    w.effects.push(Effect::Sound {
+        sound,
+        of: Some(crate::econ::TypeRef {
+            kind: o.kind,
+            index: o.type_index,
+        }),
+        house: None,
+        pos: Some(pos),
+    });
 }
 
 /// The phasing-in delay *D* of F9 for a jump from `from` to `l`.

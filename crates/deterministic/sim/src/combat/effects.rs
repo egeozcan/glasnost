@@ -129,6 +129,12 @@ pub enum Sound {
     /// A crushed object's crush sound (S-0210 claim 4): `of` is the crushed
     /// object's type, `pos` the crusher's position.
     Crush,
+    /// A teleporting object's own jump left its old point (S-0207 claim 20
+    /// e): `of` is its type, `pos` the old point.
+    ChronoOut,
+    /// A teleporting object's own jump arrived at its landing point (S-0207
+    /// claim 20 e): `of` is its type, `pos` the landing point.
+    ChronoIn,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

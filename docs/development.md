@@ -431,6 +431,17 @@ Provisional rules of M6b walls and gates, each tied to a request:
 | `objects::place_map_objects`, `crush::assign_wall_owners` | a wall from a wall building of the map's building list is placed owned by the building's owner, then S-0210 claim 14 (a) re-owns it with the other map walls; a wall building dropped from the map places no wall | Q-0684 |
 | `mapview::unload::gate_frame` | the gate's door position *p* is S-0108 claim 23's door-frame rule with *D* = *G*: opening trunc(*q* × *G*), closing *G* − trunc(*q* × *G*), clamped to 0 … *G* − 1 | Q-0685 |
 
+## Simulation (M6b: teleport movement)
+
+The teleporting locomotor's own move (S-0207 claims 20 to 22, F9; S-0208 claims 19 and 20) is in `glasnost_sim::teleport`, built before M6b. M6b makes it whole in play. The ledger is [docs/m6-claims/teleport.md](m6-claims/teleport.md).
+
+- **Presentation events.** The two warp animations (`WarpOut`) go through `combat::effects::anim`, so the view draws them; they keep their creation draws (claim 20 i). The departure and arrival sounds are `Sound::ChronoOut` at the old point and `Sound::ChronoIn` at *L*; audio plays the type's `ChronoOutSound` or `ChronoInSound`, else the game-wide one.
+- **Arrival effects.** A vehicle's landing has the effects of reaching a track target: the arrival report to a contacted building (S-0402 claim 10) and cell-centre crushing (S-0210 claims 3 and 8), then the entered-by raise (claim 22). A teleporting crusher crushes what it lands on.
+- **Seams.** Crate collection at *L* (S-0520), the airstrike target-retention exception (S-0519), the electromagnetic pulse (S-0511), *being erased* (S-0514) and a superweapon's hold (S-06xx) have no state in our engine; `teleport::take_destination` and `teleport::jump` mark where they go.
+- **What play needs.** A vehicle, infantry or aircraft type with `Locomotor=` the teleporting locomotor (the importer maps it). A person selects it and clicks a cell: `targeting::click` gives *move* to the clicked cell itself (S-0214 claim 11), `orders::issue` applies it, the landing point is fixed and marked at once, and the unit jumps on its next movement update, then phases in for F9's delay. `[General] WarpOut`, the `[General]` keys of F9 (`ChronoTrigger`, `ChronoDistanceFactor`, `ChronoMinimumDelay`, `ChronoRangeMinimum`) and `[AudioVisual] ChronoOutSound` and `ChronoInSound` give the animation, timing and sounds.
+
+Provisional rules of M6b teleport movement: none.
+
 ## Simulation (M6a: aircraft)
 
 S-0501 (aircraft flight, attack runs and pads) is built in `glasnost_sim::air`. Its game-wide values are `SimRules::air` (`air::AirRules`: the cruise height, the service cadence from the reload rate, the re-approach flag, the attacking-aircraft sight range, the spy-plane camera frames and F4's decimal constants); the per-type keys (flight level, ammunition, landable, airport-bound, fighter, fly-by, fly-back, docks) and the pad keys (helipad, unit reload, docking places) are on the type rules. All are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0501.md](m6-claims/S-0501.md); the tests are in `crates/deterministic/sim/tests/claims_s0501.rs`.
