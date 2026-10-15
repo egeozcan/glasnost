@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -257,8 +257,13 @@ a carrier's controller is launching ordinary aircraft.
 9. **Ship path refresh and retry timing (Q-0644).** The ship locomotor shares S-0212 claim 20's
    last-stored-step refresh with the driving locomotor. As the last stored step begins, a distance
    strictly greater than 512 leptons to its movement destination triggers a search in mode 0,
-   immediately, without waiting for the path retry timer. Distance is the three-dimensional
-   floating-point Euclidean distance, truncated toward zero to integer leptons, as S-0212 F6c.
+   immediately, without waiting for the path retry timer. Distance is the spatial table-root
+   distance of S-0212 claim 20 and S-0204 claim 5, truncated toward zero to integer leptons.
+   The squared coordinate differences and their sum are evaluated in double-precision floating
+   point under S-0205's round-toward-zero mode, exact for signed 32-bit differences whose
+   squared sum is below 2⁵³ square leptons. The shared `quirks.table_root_distance` switch
+   selects the exact-root alternative of S-0204 claim 5 when off; there is no ship-specific
+   exact-root exception. This definition applies to both refresh and chase cutting below.
    At 512 leptons there is no such refresh. The refresh does not itself start a new retry delay.
    With `quirks.path_refresh_keeps_old_step` on (the original behaviour), the ship keeps the old
    step already chosen and drops the first step of the replacement path, just as a driver does.
@@ -287,8 +292,10 @@ a carrier's controller is launching ordinary aircraft.
    This agrees with S-0207 claim 15 and differs from S-0503 claim 12, where the hovering
    locomotor also searches immediately after a first cloaked-blocker check. Other step-check
    effects remain claim 1's driving equivalence, including the ship-specific crush exception.
-   - Backing: `measurable` (N11 for search timing and blockers); `unmeasured` for isolating the
-     retained-step refresh and chase cut with stock data: no setup here separates these from
+   - Backing: `measurable` (N11 for search timing and blockers). The exact lepton-scale refresh
+     boundary and table-root versus exact-root distinction are `unmeasured`: N11 does not
+     establish a qualifying separation that distinguishes them. Also `unmeasured` for isolating
+     the retained-step refresh and chase cut with stock data: no setup here separates these from
      unchanged routes or the chased unit's own cell-entry effects.
    - Confidence: high (timer, triggers and shared branches); medium (retained-step route effect)
 
@@ -455,7 +462,9 @@ The observable consequences within a sinking vessel's update are that its height
 ## Edge cases and quirks
 
 Claim 9 extends the existing `quirks.path_refresh_keeps_old_step` switch of S-0212 to ships,
-with the same original default and corrected replacement-step choice. It introduces no new switch.
+with the same original default and corrected replacement-step choice. Its refresh and chase-cut
+distances also share `quirks.table_root_distance` of S-0204 claim 5, default original table root,
+with that claim's exact-root alternative when off. It introduces no new switch.
 The following distinctions are not optional original-versus-fixed behaviours:
 
 - **Independent type settings.** Claim 6's no-cloak combination follows the glossary's
@@ -692,6 +701,9 @@ blocker as a control: with a nonzero retry timer the former waits to search and 
 searches immediately. Opposite timing falsifies those branches. Failure to establish that
 outcome or a nonzero timer is inconclusive. A stored-path change alone is insufficient to prove
 the retained-old-step quirk when old and new first steps agree; that subclaim remains unmeasured.
+The refresh distance and chase-cut distance use claim 9's spatial table root. This setup tests
+refresh timing well beyond 512 leptons, not the exact boundary or table-root distinction.
+Those remain unmeasured without a qualifying lepton-scale separation.
 Read-only search/timer recording is a proposed harness capability, not assumed present.
 
 **N12. Absent weight and stock death (claim 11).** *Setup:* a stock naval surface vehicle whose
