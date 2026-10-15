@@ -618,6 +618,9 @@ pub fn new_game(
     // spec: S-0202 claim 14 (its tile-animation draws follow the starting units' final draw, the crate placement draws, the secret-lab choices and the end-of-loading tag draws, and precede the first tick)
     recalc_cells(&mut w, &order);
 
+    // spec: S-0524 claim 9 (before the first tick, after tag setup and the game-start terrain pass: the starting-building record)
+    crate::mp_triggers::record_starting_buildings(&mut w);
+
     // spec: S-0202 claim 14 and table *Load-time draw order* (resource-glint setup after the game-start recalculation and before tick 0)
     resource_glints(&mut w, &order);
 

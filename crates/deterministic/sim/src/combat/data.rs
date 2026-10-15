@@ -314,6 +314,10 @@ pub struct WarheadRules {
     pub makes_disguise: bool,
     /// The missile-maker flag (S-0513 claim 8).
     pub nuke_maker: bool,
+    /// The bright flag (S-0524 claim 6).
+    pub bright: bool,
+    /// The flash-size fraction, single precision widened (S-0524 claim 6).
+    pub light_size: F64,
 }
 
 impl WarheadRules {
@@ -1018,6 +1022,10 @@ pub fn tables(
                 makes_disguise: b(h.makes_disguise),
                 // spec: S-0513 Import mapping (NukeMaker absent: no)
                 nuke_maker: b(h.nuke_maker),
+                // spec: S-0524 I2 (Bright absent: false)
+                bright: b(h.bright),
+                // spec: S-0524 I2 (CombatLightSize: narrowed to single precision; absent 0)
+                light_size: single(&h.combat_light_size, mode).unwrap_or(F64::ZERO),
             }
         })
         .collect();

@@ -52,6 +52,9 @@ pub struct Action {
     pub number: i32,
     /// The second number slot (kind 11 only).
     pub number2: i32,
+    /// The fourth to seventh items, read as integers (S-0011 I2; the
+    /// local-area rectangle of code 40, S-0524 I1).
+    pub items: [i32; 4],
     /// The waypoint slot (F5 of the eighth item), −1 when it decodes to no
     /// letter; 0 (waypoint A) when the eighth item is missing.
     pub waypoint: i32,
@@ -82,6 +85,8 @@ pub struct TriggerDef {
     pub disabled: bool,
     /// Difficulty flags for positions 0, 1, 2.
     pub difficulty: [bool; 3], // spec: S-0011 I1 (fields 5, 6, 7: difficulty flags for positions 0, 1, 2)
+    /// The carry-over flag (S-0011 I1 field 8; S-0524 claims 10 and 11).
+    pub carry_over: bool,
     /// Events, in file order.
     pub events: Vec<Event>,
     /// Actions, in file order.
@@ -100,6 +105,8 @@ impl TriggerDef {
             disabled: false,
             // spec: S-0011 Edge cases (a created trigger definition: all three difficulty flags set)
             difficulty: [true; 3],
+            // spec: S-0011 I1 (field 8 absent: clear)
+            carry_over: false,
             events: Vec::new(),
             actions: Vec::new(),
         }

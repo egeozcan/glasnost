@@ -302,6 +302,8 @@ const PROJECTILE_COMBAT: &[Row] = &[
 const WARHEAD_COMBAT: &[Row] = &[
     ("makes_disguise", "MakesDisguise", Bool, "S-0516"),
     ("nuke_maker", "NukeMaker", Bool, "S-0513"),
+    ("bright", "Bright", Bool, "S-0524"),
+    ("combat_light_size", "CombatLightSize", Dec, "S-0524"),
     ("cell_spread", "CellSpread", Dec, "S-0302, S-0303"),
     ("percent_at_max", "PercentAtMax", Dec, "S-0302, S-0303"),
     ("prone_damage", "ProneDamage", Dec, "S-0302"),

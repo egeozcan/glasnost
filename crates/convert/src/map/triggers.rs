@@ -252,6 +252,8 @@ impl Decoder<'_> {
             let disabled = f.get(3).is_none_or(|d| int(d) != 0);
             // spec: S-0011 I1 (fields 5 … 7 absent: clear)
             let difficulty = [4, 5, 6].map(|i| f.get(i).is_some_and(|d| int(d) != 0));
+            // spec: S-0011 I1 (field 8, the carry-over flag: non-zero = set; absent: clear)
+            let carry_over = f.get(7).is_some_and(|d| int(d) != 0);
             let events = self.events(&id);
             let mut actions = Vec::new();
             for (ai, (a, refs)) in self.actions(&id).into_iter().enumerate() {
@@ -284,6 +286,7 @@ impl Decoder<'_> {
             t.link = link;
             t.disabled = disabled;
             t.difficulty = difficulty;
+            t.carry_over = carry_over;
             t.events = events;
             t.actions = actions;
         }
@@ -484,10 +487,13 @@ impl Decoder<'_> {
             let code = int(&f[i]);
             let kind = int(&f[i + 1]);
             let v = f[i + 2].clone();
+            // spec: S-0011 I2 (the fourth to seventh items are read as integers; S-0524 I1, code 40's rectangle)
+            let items = [3, 4, 5, 6].map(|k| f.get(i + k).map_or(0, |t| int(t)));
             i += ACTION_ITEMS;
             let mut a = Action {
                 code,
                 kind,
+                items,
                 ..Default::default()
             };
             // spec: S-0011 I2 (a missing eighth item leaves the waypoint slot at 0, waypoint A)

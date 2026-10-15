@@ -1791,6 +1791,22 @@ pub struct Quirks {
     // spec: S-0513 claim 43 and Edge cases
     #[serde(default = "on")]
     pub spy_plane_count_from_paradrop_list: bool,
+    /// A starting-building restoration whose forced placement fails removes a displaced unit that cannot be put back at its original position; off: such a unit is kept and placed at a nearby cell instead.
+    // spec: S-0524 claim 9 and Edge cases
+    #[serde(default = "on")]
+    pub restoration_failed_return_removes_unit: bool,
+    /// Off (the original): every lightning-strike action makes a cloud, repeated ones at one waypoint included; on: after one cloud made by the action at a waypoint, further actions at that waypoint make none.
+    // spec: S-0524 claim 2 and Edge cases (default: off)
+    #[serde(default)]
+    pub repeated_lightning_strike_suppressed: bool,
+    /// Off (the original): the create-crate action ignores the crate setting; on: it has no effect while crates are off. Not consulted yet (crates, S-0520, are not built).
+    // spec: S-0524 claim 4 and Edge cases (default: off)
+    #[serde(default)]
+    pub trigger_crate_respects_setting: bool,
+    /// Off (the original): an uncollected trigger crate never expires while crates are off; on: it expires after its assigned lifetime. Not consulted yet (crates, S-0520, are not built).
+    // spec: S-0524 claim 4 and Edge cases (default: off)
+    #[serde(default)]
+    pub trigger_crate_expiry_while_disabled: bool,
 }
 
 impl Default for Quirks {
@@ -2233,6 +2249,13 @@ impl Default for Quirks {
             warp_redirect_as_tracked: true,
             warp_naval_road_cell: true,
             spy_plane_count_from_paradrop_list: true,
+            restoration_failed_return_removes_unit: true,
+            // spec: S-0524 Edge cases (default: off, the original)
+            repeated_lightning_strike_suppressed: false,
+            // spec: S-0524 Edge cases (default: off, the original)
+            trigger_crate_respects_setting: false,
+            // spec: S-0524 Edge cases (default: off, the original)
+            trigger_crate_expiry_while_disabled: false,
         }
     }
 }
@@ -3380,6 +3403,22 @@ impl Quirks {
                 "spy_plane_count_from_paradrop_list",
                 self.spy_plane_count_from_paradrop_list,
             ),
+            (
+                "restoration_failed_return_removes_unit",
+                self.restoration_failed_return_removes_unit,
+            ),
+            (
+                "repeated_lightning_strike_suppressed",
+                self.repeated_lightning_strike_suppressed,
+            ),
+            (
+                "trigger_crate_respects_setting",
+                self.trigger_crate_respects_setting,
+            ),
+            (
+                "trigger_crate_expiry_while_disabled",
+                self.trigger_crate_expiry_while_disabled,
+            ),
         ]
     }
 
@@ -3559,7 +3598,7 @@ mod tests {
         // apart from two importer switches).
         for (dir, prefixes) in [
             ("formats", &["S-0009", "S-0010", "S-0012"][..]),
-            ("triggers", &["S-0011"][..]),
+            ("triggers", &["S-0011", "S-0524"][..]),
             ("rules-import", &["S-0006"][..]),
             ("rendering", &["S-0107"][..]),
             // The M7 superweapon specs (S-0612 and after) are not built yet.
@@ -3611,8 +3650,16 @@ mod tests {
             }
         }
         assert!(missing.is_empty(), "quirks without a switch: {missing:#?}");
+        // Switches whose spec gives the original as the off position.
+        const DEFAULT_OFF: &[&str] = &[
+            "repeated_lightning_strike_suppressed", // spec: S-0524 Edge cases (default: off)
+            "trigger_crate_respects_setting",       // spec: S-0524 Edge cases (default: off)
+            "trigger_crate_expiry_while_disabled",  // spec: S-0524 Edge cases (default: off)
+        ];
         assert!(
-            q.named().iter().all(|(_, v)| *v),
+            q.named()
+                .iter()
+                .all(|(n, v)| *v != DEFAULT_OFF.contains(n)),
             "every default is the original"
         );
     }

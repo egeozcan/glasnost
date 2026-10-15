@@ -2294,6 +2294,14 @@ pub struct WarheadType {
     /// `Culling`, the cull flag (S-0614 claim 11); absent: no.
     #[serde(default)]
     pub culling: Option<bool>,
+    /// `Bright`, the flash permission of the demolition warhead (S-0524
+    /// claim 6, I2); absent: false.
+    #[serde(default)]
+    pub bright: Option<bool>,
+    /// `CombatLightSize`, the flash-size fraction (S-0524 claim 6, I2), a
+    /// single; absent: 0.
+    #[serde(default)]
+    pub combat_light_size: Option<Decimal>,
     /// `Temporal`, the warhead's temporal flag (S-0301 Terms and Import
     /// mapping, S-0514 Import mapping); absent: no.
     #[serde(default)]

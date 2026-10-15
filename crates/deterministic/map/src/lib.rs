@@ -174,6 +174,13 @@ impl CellGrid {
         &self.footprint
     }
 
+    /// Replaces the local area (Lx, Ly, Lw, Lh), as the resize action of
+    /// S-0524 claim 8 does in play. The legal cells and the dense indices
+    /// depend only on W and H, so they stay.
+    pub fn set_local(&mut self, local: [i32; 4]) {
+        self.footprint.local = local;
+    }
+
     /// The dense index of a legal cell (row-major over the coordinate
     /// square), for side tables kept beside the grid.
     pub fn index(&self, c: CellXY) -> Option<usize> {

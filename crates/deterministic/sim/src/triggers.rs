@@ -174,6 +174,8 @@ pub struct TriggerState {
     pub waypoints: BTreeMap<u16, (i16, i16)>,
     /// Triggers fired so far (a statistic for reports, not behaviour).
     pub fired: u64,
+    /// The multiplayer completion's state (S-0524).
+    pub mp: crate::mp_triggers::MpState,
     /// The tags being raised (claim 12); empty between raises.
     #[serde(skip)]
     pub raising: BTreeSet<u32>,
@@ -222,7 +224,7 @@ fn owner_country(w: &World, t: u32) -> Option<u32> {
 
 /// The first house in house order that plays country `c` (S-0011 Terms,
 /// *Owner house*), among the houses that exist.
-fn house_of_country(w: &World, c: u32) -> Option<HouseId> {
+pub(crate) fn house_of_country(w: &World, c: u32) -> Option<HouseId> {
     w.houses
         .iter()
         .position(|h| !h.removed && h.country == c)
@@ -884,11 +886,16 @@ fn fire_actions(w: &mut World, tag: u32, inst: &Instance) {
     let _ = tag;
     // spec: S-0011 claim 11 (every action takes effect, in list order, even when an earlier one had no effect)
     for a in &actions {
-        action(w, a, inst.trigger);
+        action(w, a, inst.trigger, inst.triggering);
     }
 }
 
-fn action(w: &mut World, a: &glasnost_map::triggers::Action, trigger: u32) {
+fn action(
+    w: &mut World,
+    a: &glasnost_map::triggers::Action,
+    trigger: u32,
+    triggering: Option<HouseId>,
+) {
     let t = w.tick;
     // spec: S-0011 Terms (owner house: the first house in house order playing the trigger's owner country)
     let owner = |w: &World| owner_country(w, trigger).and_then(|c| house_of_country(w, c));
@@ -984,10 +991,22 @@ fn action(w: &mut World, a: &glasnost_map::triggers::Action, trigger: u32) {
                 present(w, a, Some(c));
             }
         }
-        // spec: S-0011 claim 30 (actions that hand over to other specs: recognised, their effects belong to other topics: teams (no spec yet), crates (S-0520) and computer targeting, not built yet)
-        4 | 5 | 7 | 80 | 108 | 135 => {
-            w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, crates, computer targeting); no effect");
+        // spec: S-0011 claim 30 (actions that hand over to other specs: recognised, their effects belong to other topics: teams (no spec yet) and computer targeting, not built yet)
+        4 | 5 | 7 | 80 | 135 => {
+            w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, computer targeting); no effect");
         }
+        // spec: S-0524 claim 4 (108 create a crate at a waypoint: crates, S-0520, are a seam)
+        108 => crate::mp_triggers::crate_seam(w, a),
+        // spec: S-0524 claim 5 and I1 (63 demolition blast: the number slot as waypoint number)
+        63 => crate::mp_triggers::demolition_blast(w, a.number),
+        // spec: S-0524 claim 6 and I1 (66 large light flash: the number slot as waypoint number)
+        66 => crate::mp_triggers::light_flash(w, a),
+        // spec: S-0524 claim 7 and I1 (73 set base ambient: the number slot as integer hundredths)
+        73 => crate::mp_triggers::set_ambient(w, a.number),
+        // spec: S-0524 claim 8 and I1 (40 resize local area: the fourth to seventh items)
+        40 => crate::mp_triggers::resize_local_area(w, a.items),
+        // spec: S-0524 claim 9 and I1 (130 restore starting buildings: the number slot as house value)
+        130 => crate::mp_triggers::restore_starting_buildings(w, a.number, triggering),
         // spec: S-0011 I4 (33 one-time superweapon grant: number slot as superweapon type index, trigger owner house; S-0512 claim 12)
         33 => {
             if let (Some(h), Ok(i)) = (owner(w), u32::try_from(a.number)) {
@@ -1034,7 +1053,7 @@ fn action(w: &mut World, a: &glasnost_map::triggers::Action, trigger: u32) {
         // spec: S-0524 claim 2 (90 lightning strike at a waypoint: a cloud whether or not a storm is active)
         90 => {
             if let Some(c) = waypoint_cell(w, a.waypoint) {
-                crate::superweapons::storm::cloud(w, c);
+                crate::mp_triggers::lightning_strike(w, a.waypoint, c);
             }
         }
         // spec: S-0524 claim 3 (95 nuclear strike at a waypoint: no firer and no owning house; the number slot is unused)

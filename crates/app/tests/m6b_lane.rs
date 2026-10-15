@@ -18,7 +18,9 @@
 //! force shield, the paradrop plane and the spy plane; the type is found by
 //! its kind, never by name), and paratroopers dropping under their
 //! parachutes (S-0522; sent through `planes::paradrop` when no type has the
-//! paradrop kind, Q-0730). A new scene is one more function and one more
+//! paradrop kind, Q-0730), and the trigger events and actions of every
+//! offered map counted by how this engine covers them (S-0011, S-0524;
+//! counts and codes only). A new scene is one more function and one more
 //! row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
@@ -72,6 +74,7 @@ const SCENES: &[Scene] = &[
     ("sw-paradrop-plane", sw_paradrop_plane),
     ("sw-spy-plane", sw_spy_plane),
     ("paratroopers-dropping", paratroopers_dropping),
+    ("trigger-coverage", trigger_coverage),
 ];
 
 #[test]
@@ -1017,6 +1020,51 @@ fn sw_spy_plane(lane: &mut Lane) {
         return;
     };
     plane_scene(lane, sw, "sw-spy-plane");
+}
+
+/// S-0011 and S-0524: on every offered map, the trigger events and actions
+/// counted as implemented, seamed or outside the subset
+/// (`mp_triggers::event_coverage`, `mp_triggers::action_coverage`). Prints
+/// counts and code numbers only.
+fn trigger_coverage(_lane: &mut Lane) {
+    use glasnost_sim::mp_triggers::{Coverage, action_coverage, event_coverage};
+    use std::collections::BTreeMap;
+    let n = Lane::map_count();
+    let (mut with, mut events, mut actions) = (0, [0usize; 3], [0usize; 3]);
+    let mut other: BTreeMap<(&str, i32), usize> = BTreeMap::new();
+    let slot = |c: Coverage| match c {
+        Coverage::Implemented => 0,
+        Coverage::Seam => 1,
+        Coverage::Unknown => 2,
+    };
+    for i in 0..n {
+        let Some(lane) = Lane::start_on(i) else { return };
+        let t = &lane.world().triggers.map;
+        println!("map {i}: {} triggers", t.triggers.len());
+        with += usize::from(!t.triggers.is_empty());
+        for d in &t.triggers {
+            for e in &d.events {
+                let k = slot(event_coverage(e.code));
+                events[k] += 1;
+                if k != 0 {
+                    *other.entry(("event", e.code)).or_default() += 1;
+                }
+            }
+            for a in &d.actions {
+                let k = slot(action_coverage(a.code));
+                actions[k] += 1;
+                if k != 0 {
+                    *other.entry((if k == 1 { "seam action" } else { "action" }, a.code)).or_default() += 1;
+                }
+            }
+        }
+    }
+    println!("maps: {n}, with triggers: {with}");
+    println!("events: {} implemented, {} seamed, {} outside", events[0], events[1], events[2]);
+    println!("actions: {} implemented, {} seamed, {} outside", actions[0], actions[1], actions[2]);
+    for ((what, code), k) in other {
+        println!("  {what} {code}: {k}");
+    }
 }
 
 /// S-0522 claims 6 to 13: a paradrop plane sent to a cell near home; shot

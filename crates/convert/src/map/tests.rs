@@ -530,6 +530,23 @@ fn triggers_import() {
     assert!(t.tags[0].chain.is_empty());
 }
 
+/// spec: S-0011 I1 (field 8, the carry-over flag) and I2 (the fourth to seventh action items as integers; S-0524 I1, code 40)
+#[test]
+fn carry_over_flag_and_action_items() {
+    let d = decode_text(&format!(
+        "{BASE}[Triggers]\n\
+         T1=<none>,<none>,first,0,1,1,1,1\n\
+         T2=<none>,<none>,second,0,1,1,1\n\
+         [Actions]\n\
+         T1=1,40,0,0,3,-2,7,9,A\n"
+    ));
+    let t = &d.map.triggers;
+    assert!(t.triggers[0].carry_over);
+    // spec: S-0011 I1 (field 8 absent: clear)
+    assert!(!t.triggers[1].carry_over);
+    assert_eq!(t.triggers[0].actions[0].items, [3, -2, 7, 9]);
+}
+
 /// spec: S-0011 claim 1 (our engine ends a chain that comes back before the repeated member)
 #[test]
 fn trigger_chain_cycle_is_cut() {
