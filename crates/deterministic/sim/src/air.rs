@@ -1861,6 +1861,16 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
 
 /// *Move* (claim 33).
 fn move_(w: &mut World, id: ObjectId) -> i32 {
+    let lost = w
+        .obj(id)
+        .and_then(|o| o.dest)
+        .is_some_and(|d| matches!(d, Target::Object(k) if w.obj(k).is_none()));
+    if lost {
+        // spec: S-0501 claim 32 (an approaching aircraft whose destination is lost falls back to rest, looking for another pad)
+        set_dest(w, id, None);
+        fall_back(w, id);
+        return standard(w, id);
+    }
     let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
     // spec: S-0501 claim 33 (when its locomotor has stopped there it falls back to rest)
     if !has_dest && stopped(w, id) {

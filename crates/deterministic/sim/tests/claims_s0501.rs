@@ -657,6 +657,35 @@ fn claim_34_retreat_leaves_the_map() {
     assert!(gone, "removed at the edge: {}", describe(&w, s));
 }
 
+// spec: S-0501 claim 32 (an approaching aircraft whose destination is lost falls back to rest: a plane in move toward a building that is removed drops it and leaves move)
+#[test]
+fn claim_32_lost_destination_falls_back() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let k = building(&mut w, "PADB", 0, 10, 0);
+    let a = lifted(&mut w, "JET", -4, 0);
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(k)),
+        }
+    ));
+    testkit::run(&mut w, 5);
+    assert_eq!(w.obj(a).unwrap().dest, Some(Target::Object(k)));
+    glasnost_sim::objects::remove(&mut w, k);
+    let back = run_until(&mut w, 200, |w| {
+        w.obj(a).is_none_or(|o| {
+            o.dest != Some(Target::Object(k)) && o.beh.current != Some(Behaviour::Move)
+        })
+    });
+    assert!(back, "falls back to rest: {}", describe(&w, a));
+}
+
 // ---------------------------------------------------------------------------
 // Attack runs
 
