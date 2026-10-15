@@ -692,7 +692,7 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - `combat::damage` for hits, `combat::fire` for firing, `crush` for crushing;
   - `econ::events` for entering and leaving the map and owner changes.
 
-  The delay `CloakDelay` reads in single precision, so 0.01 minutes is 8 ticks (F3). An underwater vessel is submerged while it is not uncloaked (`naval::submerged`, claim 41).
+  The delay `CloakDelay` is read in single precision (F3), so the test rules' delay of 0.01 minutes is 8 ticks, not 9. An underwater vessel is submerged while it is not uncloaked (`naval::submerged`, claim 41).
 - **Coverage (claims 19 to 23 and 40).** `cloak::field` grows and shrinks cloak fields ring by ring per house; `cloak::sensor` keeps per-house, per-cell sensor and disguise-detector counts (`World::cloak`).
 - **Hidden objects (claims 24 to 29).** `cloak::hidden_from` is the game-state test, used by `combat::check`, `combat::acquire`, `air` and `targeting::selectable_by`. `cloak::view` holds the presentation queries (`look`, `shadow`, `pickable`, `deselects`, `on_radar`). They take a viewing house and are never read by the simulation.
 - **Disguise (claims 30 to 40).** `cloak::disguise` holds the disguise state (`Object::disguise`), disguising by a hit, permanent disguise, disguise when still, loss, and `appears_disguised`. `appears_disguised` feeds targeting, threat, the walker rows of S-0209 and the radar colour (`econ::minimap`).
@@ -725,8 +725,8 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - The app does not draw the disguise image (claim 37), and the cursor, insignia and hover name of claim 36 are not wired into the status drawing.
   - Buildings drawn as static map scenery get no translucency.
   - The importer does not warn about an empty mirage disguise list.
-- **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=cloaked-as-owner,cloaked-as-enemy cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` places a cloaking vehicle near the local start, with a plain vehicle beside it. The offered rules have no driving vehicle type with the cloak flag, so the lane gives a plain vehicle its own flag through the crate seam.
-  - `cloaked-as-owner.png` is the local house's own vehicle, fully cloaked after 36 ticks. It is drawn 50 % translucent, without its shadow.
+- **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=cloaked-as-owner,cloaked-as-enemy cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` places a cloaking vehicle near the local start, with a plain vehicle beside it. It uses a driving vehicle type with the cloak flag if the ruleset has one, else it gives a plain vehicle its own flag through the crate seam.
+  - `cloaked-as-owner.png` is the local house's own vehicle, fully cloaked after 36 ticks. It is drawn 50 % translucent.
   - For an enemy house's vehicle, the lane uncloaks it and waits for the fade back. `cloaking-as-enemy.png` shows it translucent mid-fade, 21 ticks later. `cloaked-as-enemy.png` shows it fully cloaked 14 ticks after that, when it is no longer drawn.
 
   On the first run on the user's install, the scenes took 10 s in all.
