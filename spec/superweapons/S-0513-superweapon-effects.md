@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -29,8 +29,9 @@ reveal) are M7 and are not covered here.
   charge spent by a launch (claim 8), the two-stage source and restart contract (claim 10), the
   link between the stages (claim 11), one-time grants (claim 12) and the storm and domination
   refusals (claim 8). This spec only says what a carried-out order does. The end of a drain state
-  (S-0512 claim 19) ends no effect already started: protection timers, a storm, a warp in progress
-  and aircraft already sent all run their course.
+  (S-0512 claim 19), whether by expiry or by an order toggling it off, ends no effect already
+  started: protection timers, a storm, a warp in progress and aircraft already sent all run their
+  course. Toggling off starts no new effect either.
 - **Damage:** temporary invulnerability and the delayed kill, S-0302 claims 8 and 16; nullified
   small detonations near curtain protection, S-0303 claim 15; area damage, S-0303.
 - **Projectiles:** the vertical flight of the nuclear missiles, S-0306 claim 11; the nuclear
@@ -81,6 +82,10 @@ reveal) are M7 and are not covered here.
 - **Phasing in.** The state of a warped object from the moment it leaves its old position until
   its arrival hold ends (claims 39 and 40). A phasing-in object is not warped again (claim 34).
 - **Camera sight.** The spy plane's sight with its radius replaced (claim 44).
+- **Radiation level.** A dimensionless integer field intensity, in radiation-level units. One
+  unit is one unit of the imported radiation level; it is not a health point, a duration or a
+  physical radiation dose. Claim 12 passes this intensity on without conversion. Its subsequent
+  decay and conversion to damage belong to planned S-0525.
 - **R(a, b).** A scenario-stream ranged draw over the inclusive integer range a … b, as in
   S-0202 claim 4; it can consume zero, one or several raw values.
 
@@ -125,8 +130,7 @@ reveal) are M7 and are not covered here.
    - Confidence: high
 
 4. **Effect blocks and swept layers.** The invulnerability superweapon and the teleport warp act on
-   the objects listed in the nine cells of an effect block (F1), in F1's cell order and, within a
-   cell, in the listing order of S-0209 claim 13. An object that is listed in none of those cells
+   the objects listed in the nine cells of an effect block (F1). The observable recipient sequence and scenario-stream state after the effect are those produced by the F1 cell order and, within each cell, the listing order of S-0209 claim 13. An object that is listed in none of those cells
    is not reached: an aircraft in flight, a passenger inside a transport, an occupant inside a
    building, an object that is off the map. A building listed in several cells of the block is
    reached once for each of them. For a cell that carries a high bridge (S-0511), only the deck
@@ -135,7 +139,9 @@ reveal) are M7 and are not covered here.
    (`quirks.superweapon_block_one_layer`, default on = original; off: both layers of a
    high-bridge cell are swept, deck first). The trigger action that applies invulnerability at a
    waypoint always sweeps the ground layer only (claim 22).
-   - Backing: `measurable` (SW9 parts b and g, SW12 parts e and f)
+   - Backing: `measurable` for recipients and ordering (SW9 parts b and g, SW12 parts e and f).
+     Repeated application to a building listed in multiple cells is `unmeasured`: the same-tick
+     protection replacement has no distinct observable in these tests
    - Confidence: high
 
 5. **Announcements of a launch.** These are presentation. Sound selection retains S-0701
@@ -156,7 +162,8 @@ reveal) are M7 and are not covered here.
    enters warp aiming (claim 33). After the local player's house is defeated, the
    launch announcements are muted for that player (S-0701 claim 28). Radar events of the same
    kind close to an earlier one are merged (the interface specs own radar events).
-   - Backing: `measurable` (scenario SW2 part f, SW9 part f, SW11 part e, SW12 part g)
+   - Backing: `measurable` (SW2 part f, SW9 part f, SW11 part e, SW12 part g and SW18).
+     Radar-event merging inherits the interface specs' backing rather than being tested here
    - Confidence: high
 
 6. **No game-rule draw after a launch (departure).** In the original every fire order, carried
@@ -211,7 +218,9 @@ reveal) are M7 and are not covered here.
    (claim 9). Its burst height is its projectile type's detonation altitude, an absolute height
    (S-0306 claim 11). Without the flag it detonates where it bursts, as an ordinary projectile, and
    no missile falls.
-   - Backing: `measurable` (scenario SW2 part a)
+   - Backing: `measurable` for stock flight (SW2 part a) and the type-list-position weapon
+     choice (SW2 part g). A non-missile-making upward warhead is `unmeasured`: no scenario part
+     here replaces that flag to isolate its ordinary detonation
    - Confidence: high
 
 9. **The falling missile of a silo launch.** At the upward missile's burst a falling missile is
@@ -219,7 +228,7 @@ reveal) are M7 and are not covered here.
    upward missile's owner (the silo, or no object if the silo has left play), with the payload
    weapon's damage, warhead and speed (S-0306 claim 1), aimed at the target cell. It starts at the
    cell centre at the terrain surface height plus the *upward* projectile type's detonation
-   altitude (no bridge lift), moving straight down with start speed 1, and accelerates under
+   altitude (no bridge lift), moving straight down with start speed 1 lepton per tick, and accelerates under
    S-0306 claim 11 (F10). Its own projectile type must have a detonation altitude above its start
    height, or it bursts on its first turn (S-0306 claim 11).
    - Backing: `measurable` (scenario SW2 part a)
@@ -256,7 +265,10 @@ reveal) are M7 and are not covered here.
     warhead's cell spread truncated to whole cells. If that cell already holds a radiation field,
     the level is added to it and the new spread is ignored. Radiation fields are planned S-0525's.
     The same applies to the upward missile if its own weapon has a positive radiation level.
-    - Backing: `measurable` (scenario SW2 part d, SW3)
+    - Backing: `measurable` (SW2 part d, SW3) for credit, field creation and level addition.
+      Retention of the old spread is `unmeasured`: SW2 part d repeats the same spread, and no
+      fixture here supplies two different spreads to a surviving field. Upward-missile
+      radiation is `unmeasured`: SW2 tests the payload's radiation, not this separate weapon
     - Confidence: high for the credit and the hand-off condition; medium for the stacking
 
 13. **Silo lost or captured.** After the silo accepted the launch:
@@ -338,7 +350,9 @@ reveal) are M7 and are not covered here.
 
 18. **A strike.** In each weather update, before any new cloud is made, every cloud that is still
     *pending* strikes once its animation's current frame exceeds ⌊*F* / 2⌋, *F* being the frame
-    count of the cloud's image; pending clouds are taken newest first. A cloud whose image has
+    count of the cloud's image; pending clouds are taken newest first. This applies in every storm
+    state: a trigger-created cloud needs no raging storm to produce its bolt or damage.
+    A cloud whose image has
     *F* ≤ 2 frames never strikes. A strike at the cloud's cell, in that update:
     - creates a bolt animation chosen by one raw value modulo the bolt list length, at the cell
       centre at the terrain surface (visual only),
@@ -374,7 +388,11 @@ reveal) are M7 and are not covered here.
 
     Who is credited for a strike: the owner of a raging or clearing storm; while counting down, the
     house of the latest request; no house when idle. So a cloud made by a trigger action strikes
-    for whoever is storm owner when it matures (S-0524 claim 2). The defeat of the owner changes
+    for whoever is storm owner when it matures (S-0524 claim 2), even when that house differs from
+    both the cloud's trigger owner and the storm owner at cloud creation. Before any storm request
+    since game setup, such a cloud's strike credits no house. A trigger-created cloud counts as
+    present during clearing too, so adding one can postpone the return to idle.
+    The defeat of the owner changes
     nothing: the storm runs on and keeps crediting that house. Neither defeat nor a stop request
     cancels a running countdown.
     - Backing: `measurable` (scenario SW8 parts a and b)
@@ -382,7 +400,14 @@ reveal) are M7 and are not covered here.
 
 20. **Other ways to start or stop a storm.** The storm of claims 14 to 19 is the one storm the trigger
     actions also use:
-    - lightning storm at a waypoint and lightning strike at a waypoint: S-0524 claims 1 and 2,
+    - lightning storm at a waypoint (code 102): S-0524 claim 1 requests this same single storm,
+      owned by the trigger's owner house, possibly no house, with the game-wide duration and
+      countdown. It may replace a pending request as in claim 14, but not a raging or clearing storm,
+    - lightning strike at a waypoint (code 90): S-0524 claim 2 creates a cloud even while the
+      storm is idle. Repeating the action at the same waypoint creates another cloud, with a
+      separate cloud-list pick and creation draws as in claim 17. These clouds strike under
+      claim 18 in every storm state, including idle, and use claim 19's owner at strike time,
+      not the trigger's owner. They use F4's height and claim 21's empty-list departures,
     - the storm-start action (44) requests a storm whose duration is the action's number, with the
       game-wide countdown, at a random legal cell and with no owner. The random cell is found by
       drawing a row, then a column, each R(0, *W* + *H* − 1) on the scenario stream for the map's
@@ -530,14 +555,19 @@ reveal) are M7 and are not covered here.
 
 33. **Source pick.** A launch of the teleport-source kind records the target cell as the source of
     the teleport and places the source marker animation over it. Only the launching player sees and
-    hears the marker; for that player it starts the aiming of the warp. A new pick replaces the
-    source and its marker. When the player leaves warp aiming without firing, the marker ends; the
+    hears the marker; for that player it starts aiming the type at registration index 4, counting
+    from 0, under `quirks.superweapon_kind_as_list_position` (Edge cases). With stock data this
+    is the warp type. If another type occupies that position, the player aims that other type,
+    not necessarily the linked second stage. A new pick replaces the source and its marker. When the player leaves warp aiming without firing, the marker ends; the
     recorded source stays until replaced. The source cell need not hold any object. S-0512 claim 10
-    gives the charge.
-    - Backing: `measurable` (scenario SW12 part a)
+    gives source retention and the charge contract: an ordinary completed first stage keeps its
+    charge, and source selection alone does not commit the warp.
+    - Backing: `measurable` (scenario SW12 parts a and h)
     - Confidence: high
 
-34. **The warp group.** A launch of the teleport-warp kind at a destination cell plays the blast
+34. **The warp group.** The second-stage order uses the linked first stage's last picked source.
+    Its unchecked acceptance and the first stage's recharge are S-0512 claims 10 and 11, not an
+    additional readiness test here. A launch of the teleport-warp kind at a destination cell plays the blast
     animations (one at the source centre, one at the destination centre), ends the source marker,
     and goes through the listed objects of the source cell's effect block (claim 4), of any house.
     Infantry units, vehicles and aircraft are examined in the cell listing order, not grouped
@@ -734,7 +764,8 @@ reveal) are M7 and are not covered here.
   square root of 2 × 256² divided by 60 times its table sine of 60°). The original computes the
   product in double-precision floating point with S-0205 claim 5's rounding policy, then
   truncates toward zero to integer leptons. The operations defining *k* use that same policy. Examples:
-  *H* = 0 or 1 gives −3; *H* = 2 gives 3; *H* = 100 gives 344; *H* = 200 gives 693.
+  image heights *H* of 0 or 1 pixels give −3 leptons, 2 pixels give 3 leptons,
+  100 pixels give 344 leptons, and 200 pixels give 693 leptons.
 - **F5. Storm timing.** A request in tick *T* before the weather update, with countdown *L* ≥ 1 and
   none running, starts the storm in tick *T* + *L* − 1. Approach warnings come in ticks
   *T* + *L* − 225*k* − 1 for integers *k* ≥ 1 for which that tick is at least *T* and less
@@ -806,15 +837,14 @@ Absent-key defaults are in Import mapping.
 - The storm's update comes before the turn pass (S-0203 claim 1, row 3), so an object a strike
   kills takes no turn in that tick, and within one update every pending cloud strikes before any
   new cloud is made.
-- Within one launch, a curtain's or warp's effects on the objects of the block happen in F1's cell
-  order and S-0209's listing order. This order is observable through the draws of the victims'
-  deaths and, under the curtain, when an object leaves its cell during its own effect: the
-  remaining objects of that cell's list are then not reached
-  (`quirks.superweapon_list_cut_by_removal`, default on = original; off: every object listed at
-  the start is reached). The same truncation can occur in the warp's source sweep and in its
-  landing-conflict check when a victim is removed immediately. This condition is low confidence
-  as a stock-data witness; SW9 part g tests it, rather than assuming every infantry death
-  removes its victim immediately. Backing: `measurable` (SW9 part g); confidence: low.
+- For a curtain or warp, the observable recipient sequence and scenario-stream state after the effect are those produced by F1's effect-block cell order and S-0209 claim 13's listing order within each cell. Backing: `measurable` (SW9 part g); confidence: high.
+- With `quirks.superweapon_list_cut_by_removal` on (default = original), when a reached object
+  leaves its cell immediately during its own effect, later listed objects in that cell are not
+  reached. With it off, objects listed when the effect begins remain eligible to be reached.
+  This distinction also applies to a warp's source effects and landing conflicts when a victim
+  is removed immediately. Backing: `unmeasured`: no fixture here establishes immediate removal
+  during the effect, rather than a death that completes later. SW9 part g is an exploratory
+  search for such a witness, not a guaranteed test of this condition. Confidence: low.
 - A fire order's draws come after the turn pass (S-0203 claim 7); a warp member's later draws come
   in its own updates.
 
@@ -827,15 +857,16 @@ Absent-key defaults are in Import mapping.
   for the launching player the type at the warp kind's position; and the radar's superweapon
   offers (S-0410 table C1) are chosen by list position. With stock data the positions and kinds
   agree. Off: each reading uses the type of that kind (the fired type for the silo). S-0512's
-  `quirks.predependent_kind_as_list_position` is separate.
+  `quirks.predependent_kind_as_list_position` is separate. Backing: `measurable` (SW2 part g
+  for the silo, SW12 part h for source aiming, SW1 part e for radar offers); confidence: high.
 - **`quirks.nuke_silo_first_type_only`** (claim 7). Default on.
 - **`quirks.silo_target_of_current_owner`** (claim 13). Default on.
 - **`quirks.superweapon_block_one_layer`** (claim 4). Default on.
 - **`quirks.curtain_organic_vehicle_defended`** (claim 24). Default on.
 - **`quirks.protection_restart_replaces`** (claim 25). Default on.
 - **`quirks.superweapon_list_cut_by_removal`** (State and ordering). Default on. Low confidence
-  that a stock victim is immediately removed during a sweep; SW9 part g supplies a named-data
-  witness.
+  that a stock victim is immediately removed during an effect; SW9 part g proposes a search
+  for a named-data witness, not an established fixture.
 - **`quirks.warp_kill_before_protection`** (claim 35). Default on.
 - **`quirks.warp_redirect_as_tracked`** (claim 37). Default on.
 - **`quirks.warp_naval_road_cell`** (claim 38). Default on.
@@ -847,16 +878,34 @@ Absent-key defaults are in Import mapping.
   silo weapon, or a missing invoke, marker or blast animation type: no projectile or no animation
   is created and the importer warns (the original does not handle these safely). These invalid-data
   fallbacks are `unmeasured` design rules: the original provides no safe reference result.
-- **Presentation fixed outright.** When the warning marker's owner house leaves play the original
-  clears the wrong link before removing the marker; our engine simply removes it.
+- **Presentation fixed outright.** A warning marker is removed when its owner house leaves play.
+  The original clears the wrong link before removing the marker. Backing: `unmeasured`: SW4
+  tests visibility and missile expiry, not owner-house removal. Confidence: medium.
 - **A missile with no launching building** is S-0512's (`quirks.missile_without_launcher_consumes_charge`); claim
   7 defines when the house is able to launch.
 - **A nuclear-strike order on a silo already in its launch sequence** with nothing queued is lost
   (claim 7); the charge is S-0512's.
 - **A storm request's centre and owner** are stored by the original even when a storm is raging,
   although no caller reaches that case; our engine leaves a raging storm unchanged (claim 14).
+  Backing: `unmeasured`: no permitted input reaches the otherwise observable owner replacement.
+  Confidence: high.
 
 ## Import mapping
+
+Units in the Form column also apply to numeric absent-key defaults in that row. Integer
+parsing follows S-0003 claims 3 and 4 and the integer domain of S-0205 claim 1. Health points are
+S-0302's damage and strength units: storm damage is the delivered amount before target
+modifiers, not a promise of that many health points lost. Radiation-level units are defined
+in Terms and are not damage units. A selector is a dimensionless integer index, not a colour
+component or a time.
+
+The absent-key defaults have high confidence and `unmeasured` backing here: the scenarios
+below retain inherited fields or explicitly override them, rather than removing each key
+from every rules layer in a fresh session to isolate its default. Delegated field semantics
+retain the backing of their owning specs. The two cursor-circle fields and protection tint
+selectors have high confidence and `unmeasured` backing here: no scenario part varies them
+to isolate their presentation. The emergency nuclear fallback is also `unmeasured`: no scenario
+can reliably force its effect-creation failure through ordinary input.
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
@@ -865,7 +914,8 @@ Absent-key defaults are in Import mapping.
 | superweapon type sections | `WeaponType` | the silo's upward weapon (claim 8) | weapon name | none |
 | superweapon type sections | `StartSound`, `SpecialSound` | force-shield sounds (claim 32) | sound name | none |
 | superweapon type sections | `AIDefendAgainst` | computer defence check (claim 6; AI module only) | boolean | no |
-| superweapon type sections | `Range`, `LineMultiplier` | range circles drawn at the cursor (presentation only; no game rule) | real, integer | 0, 0 |
+| superweapon type sections | `Range` | cursor-circle radius (presentation only; no game rule) | decimal, held in single-precision floating point, cells | 0 cells |
+| superweapon type sections | `LineMultiplier` | cursor-circle subdivisions (presentation only; no game rule) | integer, subdivisions per cell; non-positive selects a single circle | 0 subdivisions per cell |
 | building type sections | `NukeSilo` | silo (claim 7) | boolean | no |
 | building type sections | `SuperWeapon`, `SuperWeapon2` | the type's superweapon fields (claim 7, S-0512) | type name | none |
 | building type sections | `PsychicDetectionRadius` | warning-marker visibility (claim 11) | integer, cells | 0 |
@@ -873,11 +923,11 @@ Absent-key defaults are in Import mapping.
 | warhead sections | `NukeMaker` | missile-maker flag (claim 8) | boolean | no |
 | projectile sections | `DetonationAltitude` | burst height (claims 8, 9) | integer, leptons | 0 |
 | weapon section `[NukePayload]` | fixed weapon type name | payload weapon (claims 9, 10) | name | no payload: departure |
-| weapon sections | `RadLevel` | radiation hand-off (claim 12) | integer | 0 |
+| weapon sections | `RadLevel` | radiation hand-off (claim 12) | integer, dimensionless radiation-level units | 0 radiation-level units |
 | object type sections | `Organic` | organic flag (claims 23, 24, 35) | boolean | yes for infantry, no otherwise |
 | object type sections | `Teleporter` | teleporter flag (claim 35) | boolean | no |
 | object type sections | `Naval`, `SpeedType`, `PoweredUnit`, `MovementZone` | arrival fate and redirect (claims 37, 38) | as their owning specs | as their owning specs |
-| object type sections | `Strength` | whole-strength hits (claims 23, 24, 35, 37) | integer | S-0302 |
+| object type sections | `Strength` | whole-strength hits (claims 23, 24, 35, 37) | integer, health points (S-0302 claim 12) | 0 health points (S-0302 Import mapping) |
 | `[General]` | `NukeTakeOff` | silo take-off animation (claim 8) | animation name | none |
 | `[AudioVisual]` | `DigSound` | nuclear siren (claim 5) | sound name | none |
 | animation type `PSIWARN` | fixed animation type name | warning marker (claim 11) | name | none: no marker |
@@ -889,7 +939,7 @@ Absent-key defaults are in Import mapping.
 | `[General]` | `LightningScatterDelay` | scatter period | integer, ticks | 10 |
 | `[General]` | `LightningCellSpread` | cell spread *s* | integer, cells | 10 |
 | `[General]` | `LightningSeparation` | separation | integer, cells | 3 |
-| `[General]` | `LightningDamage` | storm damage | integer | 200 |
+| `[General]` | `LightningDamage` | storm damage, delivered before target modifiers (S-0302 claim 1) | integer, health points | 200 health points |
 | `[General]` | `LightningWarhead` | storm warhead | warhead name | none: departure (claim 21) |
 | `[General]` | `LightningPrintText` | storm-message flag | boolean | yes |
 | `[General]` | `WeatherConClouds` | cloud animation list | list of animation names | empty: departure |
@@ -906,7 +956,7 @@ Absent-key defaults are in Import mapping.
 | `[General]` | `ForceShieldDuration` | force-shield duration *D* | integer, ticks | 400 |
 | `[General]` | `ForceShieldBlackoutDuration` | blackout length (claim 30) | integer, ticks | 800 |
 | `[General]` | `ForceShieldPlayFadeSoundTime` | fade-sound lead time *P* | integer, ticks | 50 |
-| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | protection tint selectors (rendering) | integer | 0 |
+| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | protection tint selectors (rendering) | integer, dimensionless selector | 0 (selector index) |
 | `[General]` | `ChronoPlacement` | source marker | animation name | none |
 | `[General]` | `ChronoBlast`, `ChronoBlastDest` | blast at the source, blast at the destination | animation names | none |
 | `[General]` | `WarpOut` | warp-out animation (claim 39) | animation name | none |
@@ -927,11 +977,16 @@ The storm-created, storm-approach and storm-active/refusal messages use their co
 ## Measurement scenarios
 
 All runs: stock data unless a named test file is stated, skirmish mode, director and mods off,
-the bench at 800 × 600, game speed index 2, superweapons on. Each part uses a tiny purpose-made
+800 × 600 resolution, game speed index 2, superweapons on. Each part uses a tiny purpose-made
 map and is run three times; draw tests use ten independently seeded runs, recording the seed
-without setting it. The tools are scripted normal mouse/keyboard input, video, the bench's tick
-counter and the permitted read-only random-state recorder. A named test file below means a map
-override named after its scenario and part (for example SW9-c.map), removed after that part.
+without setting it. Observe through scripted normal mouse/keyboard input, video, a read-only
+tick counter and the permitted read-only random-state recorder. A named test file below means a map
+override named after its scenario and part (for example SW9-c.map), removed after that part,
+except for the type-list reordering tests SW1e, SW2g and SW12h. Those require named loose
+rules-file overrides, recorded as SW1-e.rulesmd.ini, SW2-g.rulesmd.ini and SW12-h.rulesmd.ini,
+respectively, and installed under the normal rules filename only for that part. A map layer
+cannot reorder types already registered by lower layers. Restore the original file situation
+after each part.
 Record ticks, health, kills, cells, animation frames and explored footprints with tick labels.
 A mismatch with any part's expected result falsifies that part's claim, including an unexpected
 draw, changed recipient, changed credit or off-by-one tick. Computer houses' bases are kept
@@ -947,7 +1002,11 @@ is not under test.
   (c) With units selected, hover any superweapon; expected: the units' cursor. (d) Named test file
   giving two types the same aim action; select the second and click; expected: the first type's
   record fires (or is refused if not ready). The raw-order cases of claims 1 and 3 have no
-  permitted normal-input oracle fixture and are not claimed measurable here.
+  permitted normal-input oracle fixture and are not claimed measurable here. (e) Named rules file
+  swaps a radar-allowed type and a radar-disallowed type in the type list, preserving their
+  kinds and distinct aim actions. Select each through its sidebar icon and hover the radar.
+  Expected: offers follow the list positions of S-0410 claim 12 table C1, not the relocated
+  kinds; offers following kinds instead falsify the position rule.
 - **SW2 — silo launch (claims 7, 8, 9, 12, 13).** Flat map, one house with two silos built 300
   ticks apart, the second nearer the target. (a) Fire at a distant cell; record the tick of the
   order, of the take-off animation, of the upward missile's disappearance and of the nuke flash; expected:
@@ -957,8 +1016,13 @@ is not under test.
   by creation tick. (c) Named test
   file with a second silo type listed later; the house owns only that one; expected: nothing
   launches and the charge is spent. (d) Kill a target with the strike; expected: the silo's house
-  credited; with a payload radiation level, radiation appears with the expected spread, and a
-  second strike on the same cell raises the level only. (e) Sell the first-built silo on the order
+  credited. In a named map give the payload a positive radiation level and a fractional
+  warhead spread. Record the field's level and spread read-only immediately at detonation:
+  expected the imported level and spread truncated to whole cells. Repeat at the same cell
+  before the existing field ends, recording its level immediately before the second hit:
+  expected that level plus the imported level. A different sum or a non-truncated initial
+  spread falsifies the corresponding part of claim 12. This same-spread repeat does not
+  distinguish retaining the old spread from replacing it with an equal value. (e) Sell the first-built silo on the order
   tick (sale accepted first, use a named map that grants the ready record and slows sale),
   expected: no missile, launch announcement and siren still heard, charge spent. Destroy the silo
   while the upward missile climbs; expected: the strike's kills credit nobody. Capture it during
@@ -967,6 +1031,10 @@ is not under test.
   first's launch sequence; record missile count and replacement target, not only sound.
   (f) Every player hears the launch announcement and siren. Falsified by another silo launching
   or by a delay before take-off. Capture just before the next update remains unmeasured.
+  (g) Named rules file moves the fired nuclear type away from index 0 and gives the type at index 0
+  a visibly different upward weapon, retaining valid missile-producing projectiles for both.
+  Expected: the silo fires the index-0 type's weapon, not the fired type's weapon. The latter
+  projectile instead falsifies the list-position weapon rule.
 - **SW3 — one-time strike (claims 10, 12).** Grant a one-time nuclear strike by trigger; fire at a
   flat cell with a vehicle; repeat at a high bridge. Record height versus tick, impact tick and
   kill credit. Expected: F2's initial height and downward velocity followed by S-0306 claim 11's
@@ -1014,8 +1082,18 @@ is not under test.
   duration and longer countdown: expected replacement centre/owner/duration, unchanged shorter
   remainder. Repeat with a shorter countdown. A stop during countdown does not cancel it.
   Defeat the owner while raging, keeping two other contenders: strikes retain its credit.
+  Create an idle-storm cloud with code 90 before any storm request: expected a bolt and damage
+  with no house credited. In separate named maps, create that cloud under trigger owner A, then
+  request a deferred storm for B before it strikes: expected B's credit, not A's. Change the
+  pending request to C before the same cloud matures: expected C's credit. Arrange a lethal target
+  under each test cloud using named target-strength overrides so kill counts distinguish owners.
+  While clearing, add a code-90 cloud whose last frame is later than all existing clouds:
+  expected idle exactly one weather update after its removal, not after the older clouds end.
   (c) Named test file with a one-entry bolt list of known image height *H*; measure the
-  cloud's height above its cell; expected F4. (d) Storm-start action with number *N*; expected: a
+  cloud's height above its cell; expected F4. Repeat on flat ground, raised ground and a high
+  bridge; then use a two-entry bolt list with unequal image heights. Expected: all cloud heights
+  use the first bolt image even when the later bolt uses the second entry. Swapping the list
+  entries changes the height according to F4. (d) Storm-start action with number *N*; expected: a
   storm of duration *N* at a cell chosen by the recorded draws, crediting nobody.
 - **SW9 — curtain area and kinds (claims 22 to 25).** (a) A 5 × 5 square of infantry of two houses
   centred on the target, including a cyborg; expected: the central nine die, credited to the
@@ -1023,16 +1101,27 @@ is not under test.
   only the deck vehicle is protected (quirk on). Repeat using the waypoint curtain action:
   only the unit underneath is protected and infantry kills credit nobody. Put a vehicle in
   warp-pending state before applying curtain later in the same order tick: it is skipped, as
-  is a vehicle already in its leaving stage. (c) Named test file giving a vehicle the
+  is a vehicle already in its leaving stage. Add a loaded transport and a garrisoned building:
+  passengers and occupants survive while the transport and building are protected. Place a
+  terrain object and fly an aircraft over an otherwise empty block cell: neither gains
+  protection. Any affected contained unit, terrain object or flying aircraft falsifies the
+  recipient exclusions. (c) Named test file giving a vehicle the
   organic flag and an armour the demolition warhead does not fully affect; expected: it survives
   damaged, unprotected, nobody credited. (d) A tank with a drone parasite, a boat with a naval
   parasite; expected: the drone vanishes, the naval parasite is released and the boat's paralysis
   ends. (e) A building in a delayed-kill countdown; expected: no expiry hit. (f) Every player hears
-  the activation; a radar event at the target. (g) Place several infantry in one cell, and a
-  building behind them in the listing order; record which receive the curtain. A named map
-  uses an organic vehicle with immediate removal and a colocated building, repeating with a
-  teleport launch and a landing conflict. Expected: removal can leave later listed objects
-  untouched under the sweep quirk; continuation to all later objects falsifies that hypothesis.
+  the activation; a radar event at the target. (g) Put one lethal curtain or warp victim in
+  each block cell, using distinguishable death animations with known scenario-stream draws.
+  Record the stream and deaths; expected: the draws identify victims in F1 order. Repeat with
+  several infantry in one cell, recording entry order to predict S-0209 claim 13's listing
+  order; death draws must follow that order, not unit kind or creation order. Reversed cell or
+  within-cell draw order falsifies the ordering claim. As a separate exploratory run, place
+  several infantry and a building in one cell. A named map also tries an organic vehicle and
+  a colocated building, repeating with a teleport launch and a landing conflict. Record whether
+  any victim leaves the cell immediately during its effect and whether later recipients remain
+  unaffected. Only a run establishing immediate removal can test the removal quirk: later
+  recipients still being affected would then falsify it. A later death or no immediate removal
+  is inconclusive, not confirmation.
 - **SW10 — protection (claims 25 to 29).** (a) Named test file with a curtain duration of 300; hit a
   protected vehicle in tick *t*₀ + 299 and *t*₀ + 300; expected: no damage, then damage.
   (b) Force-shield a building, then curtain it with a shorter duration; expected: it becomes
@@ -1075,7 +1164,13 @@ is not under test.
   protected non-organic unit, a unit already warping, a bunkered vehicle, a controlled vehicle
   and a loaded transport: the first two stay, the bunker link ends, control and passengers persist. (f) A unit under a
   bridge whose deck is the source cell; expected: it stays. (g) Every player hears the
-  activation; two radar events.
+  activation; two radar events. (h) Named rules file with a reordered superweapon type list: keep
+  the source type selectable, put a non-warp type with a distinct aim action at index 4, and
+  leave the warp type at a different index. Pick a source through the sidebar and record the
+  next cursor action and resulting effect after a click. Expected: aiming and firing the type
+  at index 4, not the relocated warp type. A warp cursor/effect instead falsifies the fixed-index
+  rule. Restore the list after this part; do not conflate this aiming test with S-0512 claim 11's
+  link lookup.
 - **SW13 — landing conflicts (claims 35, 37, 38, 40, 41).** (a) A protected unit at a landing cell; expected:
   the arriving unit dies. A plain unit at a landing cell; expected: it dies, nobody
   credited. A protected infantry unit in the source block; expected: it dies. A named map warps
@@ -1107,16 +1202,33 @@ is not under test.
   distinct from ordinary sight, and to a value above the cap; record the exact explored cells
   of S-0409 claim 6, not an assumed circular disc. An ordinary moving-sight refresh between
   cameras can restore the ordinary radius.
-- **SW16 — battle-lab force shield (lead scope question).** Stock skirmish, superweapons on, build a
+- **SW16 — battle-lab force shield (S-0512 claim 3).** Stock skirmish, superweapons on, build a
   battle lab of each side; record whether a force-shield icon appears and charges. Expected:
   granting follows S-0512 claim 3 when the imported building data gives that superweapon.
+  This is an availability test for S-0512, not an additional effect or scope gate here.
 - **SW17 — original computer defence draw (claim 6).** A named map places two computer-player
   bases within the imported defence distance and one outside. Fire a defence-marked nuclear
   type at empty ground, recording the scenario stream and house creation numbers. Expected:
   one R(0, 99) per qualifying computer house, descending house number, after the order's
   effect draws; none for the distant house. Repeat with the defence flag off: no such draw.
   Any extra draw, omitted qualifying draw or reversed house order falsifies the original's
-  draw contract; our engine's game rules deliberately omit all these draws.
+  draw contract; our engine's game rules deliberately omit all these draws. Also fire a second
+  ready weather type while a storm is already raging: the order is refused and keeps its
+  charge, but still takes the qualifying defence draws in the original.
+- **SW18 — local launch presentation (claim 5).** Grant the launching house curtain, weather,
+  teleport-source, teleport-warp, paradrop and spy-plane records on separate named maps.
+  Use a second undefeated enemy and an ally so defeat of the viewing player need not end the
+  test. Record video and audio of the same scripted launches, repeating each run for each
+  viewing house. Expected: source marker and its sound only for the launcher, no launch
+  announcement for paradrop or spy plane, aiming ends for the launcher after a completed
+  non-source launch and source picking instead enters second-stage aiming. Fire while the
+  corresponding ready announcement is queued or playing: the launching player's instance is
+  cancelled by the non-source launch. Repeat an enemy launch after the viewing player's
+  defeat, keeping the other two houses opposed: its launch announcement is muted for that
+  viewer. A marker heard or seen by another house, an unexpected announcement, persistent
+  non-source aiming, an uncancelled ready announcement, or an unmuted post-defeat launch
+  announcement falsifies the corresponding part of claim 5. Sounds still follow S-0701's
+  ordinary priority and cooldown rules; compare only runs where those rules admit playback.
 
 ## Open questions
 
@@ -1131,8 +1243,3 @@ is not under test.
   non-negative timing formulas; their safe import policy remains unresolved.
 - Failed nearby-cell searches and invalid warp destinations lack a traced safe outcome.
 
-## Questions for the project lead
-
-The data grants a force shield through battle labs (SW16 checks availability). Should M6 expose
-it as an ordinary player superweapon whenever imported data grants it? The mechanics here do not
-assume a separate scope decision.
