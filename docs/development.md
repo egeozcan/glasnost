@@ -405,7 +405,7 @@ Provisional rules of M6a naval units: none at present. The Q-0641 row (depot cyc
 
 The depot cycle of S-0314 claims 6 and 16 to 24, S-0504 claims 7, 8, 12 and 14 and S-0215 claim 29 is built in `glasnost_sim::depot`. A repair depot (a building with `UnitRepair=yes`) and a naval yard with the repair flag accept an allied vehicle, which drives to the docking point, docks, and is repaired in three phases until the depot sends it away. The ledger is [docs/m6-claims/depot-cycle.md](m6-claims/depot-cycle.md); the tests are in `crates/deterministic/sim/tests/claims_s0314_depot.rs` and `claim_14_*` in `claims_s0504.rs`.
 
-- **State.** `Object::depot` (`depot::DepotState`): a vehicle's `link` (depot, place, tethered; valid only while its contact is that depot), `queued` (claim 23's queued entry) and `loco_off` (claims 21 and 22); a depot's `serviced` vehicle. The phase is the depot's *repair* progress count. The save format version is 18.
+- **State.** `Object::depot` (`depot::DepotState`): a vehicle's `link` (depot, place, tethered; valid only while its contact is that depot), `queued` (claim 23's queued entry) and `loco_off` (claims 21 and 22); a depot's `serviced` vehicle. The phase is the depot's *repair* progress count. This state came with save format 18.
 - **Permission and entry (claims 16 and 17; S-0214 table V value *n*).** `depot::accepts` is claim 16's permission. `targeting` gives *enter* over an accepting allied depot (row n3) and *no-enter* for a vehicle of zone *fly* (row n1); a held one-place depot keeps *select* (row n4). The enter order takes contact at once in the first free place (`depot::order_entered`). The vehicle's *enter* processing (`depot::process_enter`, from `process`) repeats the request, tethers it on the depot (Q-0680, Q-0674), turns it to 16384 and, once still, queues *repair* with the ready mark on the depot and *sleep* on the vehicle. An unarmed depot's guard processing makes the early start of claim 17 (`depot::early_start`, from `combat::behave`).
 - **Docking point (claim 18; S-0504 claim 12).** `depot::docking_point`: the foundation centre plus the place's displacement (`econ::release::pad_position_at`, S-0404 claim 15's rules), or the cell (2, 1) for a vehicle factory. `path::heading_point` heads a vehicle in depot contact for it, and `hover::destination_point` makes it a hovering vehicle's destination *D*, so a hover stops in the docking cell of a depot larger than one cell.
 - **Repair (claim 6; S-0504 claim 8).** `depot::process_repair`: waiting (the naval waiting gate, 3 ticks to settling), settling (one step; locomotor off only within 200 leptons; moving farther away, no step, the locomotor switched on and *D* ticks; not needed sends it away unannounced), working (*D* + *K*<sub>u</sub> − 1, then *K*<sub>u</sub>; done or not needed announces and sends it away; cannot pay returns to settling and announces low funds at exactly 0 credits). Release goes to the depot's rally point, else claim 25's departure cell (`depot::exit_cell`: door kinds, the naval rows, S-0404's exit list or the perimeter, the first giving free); a neutral or special house's vehicle with a guard spot goes there. With no cell the vehicle keeps contact: from working it returns to settling with a 1-tick retry, in settling it retries after *D*. The announcements are `Sound::UnitRepaired` (audio: F7 kind *unit repaired*, 2 cells, 400 ticks) and `Sound::LowFunds`, the depot owner's only.
@@ -504,7 +504,7 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - lift stops.
   - At the spin's end, a hover over water below 104 leptons gets the bomb mark (`hover::bomb_mark`) and starts to fall.
 - **Hooks elsewhere.**
-  - `infantry::destination_assigned` gives ρ = 1 and chooses the first heading point at once (`hover::take_destination`, Q-0695).
+  - `infantry::destination_assigned` gives ρ = 1 and, for a powered hover not moving now, chooses the first heading point at once (`hover::take_destination`, claim 5); a hover moving now without a heading point gets T = ρ = 1 and chooses there only when its destination is gone or in its cell.
   - `econ::release::send_out` sets ρ = ½ after a factory exit; the hover leaves by its own locomotor towards (x₀ + 4, y₀ + 1).
   - `path::failed` clears a hover's destination like a driving unit's.
   - `occupancy::in_progress`, `path::heading_cell` and the claim 19 count see a hover's heading point and φ.
@@ -516,7 +516,7 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - the cloaked reveal (`hover::reveal_cloaked`, S-0516);
   - crate collection (`hover::collect_crate`, S-0520);
   - the chase cut (`hover::chase_cut`, S-0212 claim 20);
-  - the stop order (`hover::stop_order`, Q-0696).
+  - the stop order (`hover::stop_order`, claim 16: the heading point, T, φ and ρ are kept).
   - S-0312 claim 11's low-water death of a marked vehicle is not built.
 - **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point` and `quirks.hover_stalled_start_reset` are now implemented.
 - **Rendering.** The map view draws every mobile object at its world position, z included (`mapview::live`, `build::height_lift`), so the hover height and the bob show with no new drawing code.
@@ -525,25 +525,32 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - `Script::reachable` already sends a unit to its own reach region by its movement zone; the amphibious zone's region spans sea and land, so a hover's goal across water stays as ordered.
   - The fixture adds HOVR, a gun hovercraft with the hover class and locomotor and the amphibious zone, built at FACT once the house has a naval yard (NAVY) and a LAB, so only on maps with water; `builds_a_navy_on_a_water_map` checks that one is built.
   - `a_hover_crosses_the_sea_to_a_land_goal` (in `crates/deterministic/ai/tests/ai.rs`) shows a hover on the sea of `fixture::map_naval` sent by the brain at an enemy beside its base, reaching land.
-- **Save format 18.** `Object::hover` is new state.
+- **Save format 18.** `Object::hover` is new state; format 21 adds `HoverState::between` (claim 13).
 - **What play needs.** Data and map:
   - a vehicle type whose `Locomotor` is the hovering locomotor's identifier, with the hover or amphibious locomotion class and a movement zone (amphibious for a type that crosses water);
   - land rows whose hover or amphibious multipliers are not 0 on water and on land;
-  - `[General]` `HoverHeight`, `HoverBob`, `HoverBoost`, `HoverAcceleration`, `HoverBrake` and `HoverDampen` (absent keys fall back to the engine defaults of Q-0690's interim rule).
+  - `[General]` `HoverHeight`, `HoverBob`, `HoverBoost`, `HoverAcceleration`, `HoverBrake` and `HoverDampen` (absent keys fall back to the binary64 numbers nearest the exact decimal defaults, claim Import mapping).
 
   A person builds the type at an ordinary (not naval) vehicle factory with `Order::Build`; it leaves the factory by itself. Then they move it by `targeting::click` on any cell of its reach region, water or land, and `orders::issue`. A hover whose control centre is lost (`powered_unit`) spins and settles, and over water it gets the bomb mark.
+
+S-0503 revision 3 answers Q-0690 to Q-0696 (claims 5 and 13 to 16, F6, Import mapping); their interim rules are retired:
+- absent hover keys and 2π and 1.1 are the binary64 numbers nearest the exact decimals, and ϱ wraps in signed 32 bits (F6);
+- a hover is between steps from creation and each F5 arrival until its next positive advance with a heading point; a clear choice marks the point's cell at once, the first advance clears the actual position's flag, and crossings mark and clear only while between steps (claim 13, `HoverState::between`, save format 21);
+- its current speed is ρ ≠ 0 (claim 14);
+- a clear choice is a cell-arrival update before the step is used up, and an arrival whose choice leaves no point restores the flag and gives one, except a completion away from the contacted object (claim 15);
+- a new hovering locomotor's η is 0, not the body facing (claim 15);
+- only a powered hover not moving now chooses at once when given a move (claim 5);
+- a stop order keeps the heading point, T, φ and ρ (claim 16).
 
 Provisional rules of M6b hover and amphibious movement, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `consts::TWO_PI`, `consts::EVEN_BOB_FACTOR`, `hover::bob_period`, `rules::HoverRules` defaults | 2π and 1.1 are the nearest doubles; Pᵈ = (m × q) × 900 and the argument (ϱ × 2π) / Pᵈ, left to right; an absent field is the engine default read as key text | Q-0690 |
-| `hover::claim`, `hover::release_left`, `hover::between_steps`, `hover::has_speed` | the flag of a chosen heading point's cell is set at once and cleared when the position leaves the cell, unless it is P's cell; cells swung through are not flagged; a hover is between steps while it has no heading point; its current speed is non-zero while φ > 0 | Q-0691 |
-| `hover::fresh_search`, `hover::search_and_recheck`, `hover::travel_turn` | every fresh search, the immediate ones of table T1 included, starts R; a failed search at an arrival does not suppress the already computed step | Q-0692 |
-| `hover::travel_turn` | each arrival at a heading point (F5) is a cell-arrival update (S-0417 claim 7), after the next heading point is chosen; a cell-edge crossing is not | Q-0693 |
-| `objects::place_with` | the movement heading η is set to the body facing each time the vehicle is put on the map | Q-0694 |
-| `hover::take` | a hover without a heading point chooses its first one at once when it is given a move (path search and step check), so the ρ = ½ of a factory exit reaches the exit move (claim 4); the "moving, no heading point" row applies only when that choice gave none | Q-0695 |
-| `hover::stop_order` (from `orders`, the stop order) | a person's stop order only clears what S-0213 claim 8 clears; the hover keeps its heading point, throttle, hover speed and ρ, and stops at the heading point | Q-0696 |
+| `hover::mark_layer` | the flag at the actual position takes the marked-point layer rule (deck only with a high bridge and at least 416 above the surface) | Q-0675 |
+| `hover::choose_next` (`Choice::Idle`) | an arrival with no destination attempts no choice: no flag restored, no cell-arrival update | Q-0675 |
+| `hover::travel_turn` | a failed or deferred arrival-time search that leaves no heading point counts as a successful choice without one (flag restored, update given) | Q-0675 |
+| `hover::take` | no state counts as paralysed; a hover moving now without a heading point makes no separate path update, only `choose_next` when its destination is gone or in its cell | Q-0675 |
+| `hover::stop_order` | the order clears the single destination field even when it equals the heading point, so the arrival there is the no-destination case | Q-0675 |
 
 ## Simulation (M6b: transports)
 

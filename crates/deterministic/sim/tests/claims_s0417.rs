@@ -802,7 +802,7 @@ fn edge_illegal_apron() {
     }
 }
 
-// spec: S-0417 claim 5 (a hovering vehicle gets the destination (x0 + 4, y0 + 1) and moves by its own locomotor); S-0503 claim 4 (ρ = ½ after the exit instruction, kept until a listed reset); Q-0693 (interim: an arrival at a heading point is a cell-arrival update, so the factory gets its clear report and closes)
+// spec: S-0417 claim 5 (a hovering vehicle gets the destination (x0 + 4, y0 + 1) and moves by its own locomotor); S-0503 claim 4 (ρ = ½ after the exit instruction, kept until a listed reset); S-0503 claim 15 (a clear heading-point choice is a cell-arrival update at the actual position, so the factory gets its clear report and closes; Q-0693 answered)
 #[test]
 fn hover_exit_reports_clear_and_factory_closes() {
     let mut r = ruleset_with([3, 2]);

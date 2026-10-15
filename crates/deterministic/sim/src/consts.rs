@@ -59,14 +59,13 @@ pub const WALK_C2: F64 = F64(0xbf19_222d_989f_5e57);
 // spec: S-0208 F3 (`quirks.table_direction` off: −2π / 65536)
 pub const WALK_C: F64 = F64(0xbf19_21fb_5444_2d18);
 
-/// 2π of S-0503 F6's bob term: the double nearest 2π (Q-0690 interim, as
-/// S-0306 F7 forms it).
-// spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ)); Q-0690 (interim: the double nearest 2π)
+/// 2π of S-0503 F6's bob term: the binary64 nearest exact 2π.
+// spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ); 2π the binary64 number nearest exact mathematical 2π, not a widened single; Q-0690 answered)
 pub const TWO_PI: F64 = F64(0x4019_21fb_5444_2d18);
 
-/// *m* = 1.1 of S-0503 F6 for an even object number: the double nearest 1.1
-/// (Q-0690 interim).
-// spec: S-0503 F6 (m = 1.1 for an even object number); Q-0690 (interim: the double nearest 1.1)
+/// *m* = 1.1 of S-0503 F6 for an even object number: the binary64 nearest
+/// exact decimal 1.1.
+// spec: S-0503 F6 (m = 1.1 for an even object number, the binary64 number nearest exact decimal 1.1; Q-0690 answered)
 pub const EVEN_BOB_FACTOR: F64 = F64(0x3ff1_9999_9999_999a);
 
 #[cfg(test)]

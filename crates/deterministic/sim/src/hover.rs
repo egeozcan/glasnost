@@ -12,10 +12,10 @@
 //! - **Switching off.** [`switched`] is called by the control-centre rule of
 //!   S-0405 claim 13 when a vehicle is disabled or enabled.
 //!
-//! Interim rules of open requests are marked with their IDs: Q-0690 (bob
-//! constants and default precision), Q-0691 (vehicle-present flags, between
-//! steps, current speed), Q-0692 (search delay, final step after a failed
-//! search), Q-0693 (cell-arrival updates) and Q-0694 (initial heading).
+//! Interim rules of the open request Q-0675 are marked with its ID: the
+//! layer of the actual-position flag, an arrival with no destination, a
+//! failed arrival-time search, the paralysed state and a person's stop order
+//! (S-0503 claim 16) on the single destination field.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -81,6 +81,10 @@ pub struct HoverState {
     pub heading: Turning,
     /// The heading point *P* (Terms, claim 5).
     pub point: Option<Pos>,
+    /// Between steps (S-0209 Terms; S-0503 claim 13): from creation and
+    /// each F5 arrival until the next positive-distance travel with a
+    /// heading point.
+    pub between: bool,
     /// The throttle *T*: 0, ½ or 1 (claim 2).
     pub throttle: F64,
     /// The hover speed φ (claims 3 and 4).
@@ -96,7 +100,7 @@ pub struct HoverState {
     /// The destination the locomotor last took (claim 4: ρ = 1 on a new move).
     pub for_dest: Option<Target>,
     /// Cells, with their layers, whose vehicle-present flag it set (S-0209
-    /// claim 1; Q-0691 interim).
+    /// claim 1; S-0503 claim 13), cleared on removal.
     pub claims: Vec<(CellXY, Layer)>,
     /// The scatter requests sent this tick (S-0207 Edge cases,
     /// `quirks.drive_duplicate_scatter_request` off).
@@ -109,8 +113,11 @@ impl HoverState {
     /// A new hovering vehicle's state.
     pub fn new(mode: Rounding) -> Self {
         Self {
+            // spec: S-0503 claim 15 (a newly attached hovering locomotor starts with movement heading north, 0, independently of the body facing)
             heading: Turning::at(0),
             point: None,
+            // spec: S-0503 claim 13 (a newly created hover starts between steps)
+            between: true,
             throttle: F64::ZERO,
             // spec: S-0503 Terms (hover speed starts at 0)
             phi: F64::ZERO,
@@ -177,18 +184,18 @@ pub fn moving_now(w: &World, id: ObjectId) -> bool {
     moving(w, id) && state(w, id).is_some_and(|h| !h.throttle.eq_num(F64::ZERO))
 }
 
-/// Whether a hovering vehicle is between steps (S-0209 Terms): while it has
-/// no heading point (Q-0691 interim).
+/// Whether a hovering vehicle is between steps (S-0209 Terms; S-0503
+/// claim 13).
 pub fn between_steps(w: &World, id: ObjectId) -> bool {
-    // spec: S-0209 Terms (hovering vehicles are between steps at the end of each step); Q-0691 (interim: while it has no heading point)
-    state(w, id).is_some_and(|h| h.point.is_none())
+    // spec: S-0503 claim 13 (between steps from creation and each F5 arrival until the next positive-distance travel with a heading point; Q-0691 answered)
+    state(w, id).is_some_and(|h| h.between)
 }
 
 /// Whether a hovering vehicle's current speed is not zero for S-0212 claim
-/// 8's heading cell: φ > 0 (Q-0691 interim).
+/// 8's heading cell (S-0503 claim 14): ρ ≠ 0.
 pub fn has_speed(w: &World, id: ObjectId) -> bool {
-    // spec: S-0212 claim 8 (speed not zero); Q-0691 (interim: the hover speed φ above 0)
-    state(w, id).is_some_and(|h| h.phi.gt(F64::ZERO))
+    // spec: S-0503 claim 14 (nonzero current speed means ρ ≠ 0 as a double, not φ > 0, d > 0 or s × φ > 0; Q-0691 answered)
+    state(w, id).is_some_and(|h| !h.rho.eq_num(F64::ZERO))
 }
 
 /// The heading point's cell, for the vehicle scatter centre (S-0207 Terms).
@@ -272,16 +279,30 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
         return;
     }
     let dest = o.dest;
+    let no_point = h.point.is_none();
+    let powered = powered(w, id);
+    let now = moving_now(w, id);
     // spec: S-0503 claim 4 (ρ = 1 when it is given a move while powered and not moving now)
-    let start = dest.is_some() && powered(w, id) && !moving_now(w, id);
+    let start = dest.is_some() && powered && !now;
+    // spec: S-0503 claim 5 (moving now without a heading point: throttle and ρ set to 1)
+    let restart = dest.is_some() && powered && now && no_point;
     with(w, id, |h| {
         h.for_dest = dest;
-        if start {
+        if start || restart {
             h.rho = F64::from_i64(1, Rounding::TowardZero);
         }
+        if restart {
+            h.throttle = F64::from_i64(1, Rounding::TowardZero);
+        }
     });
-    // spec: S-0503 claim 5 (it chooses a new heading point when it starts a move); Q-0695 (interim: at once, when the move is taken, so S-0417's ρ = ½ set right after it persists, claim 4)
-    if dest.is_some() && state(w, id).is_some_and(|h| h.point.is_none()) {
+    if dest.is_none() || !no_point || !powered {
+        // spec: S-0503 claim 5 (a vehicle moving now keeps an existing heading point; giving a destination while unpowered does not itself start the choice)
+        return;
+    }
+    // spec: S-0503 claim 5 (not moving now: the first search and heading-point choice at once, so S-0417's ρ = ½ set right after it persists; moving now without a heading point: a choice there only if its destination has disappeared or is in its present cell; Q-0695 answered); Q-0675 (interim: no state counts as paralysed, and the moving-now path update is the choice's own)
+    let here = w.obj(id).map(|x| x.pos.cell());
+    let choose = !now || destination_point(w, id).is_none_or(|d| Some(d.cell()) == here);
+    if choose {
         let _ = choose_next(w, id);
     }
 }
@@ -333,6 +354,11 @@ enum Choice {
     Chosen,
     /// No heading point and no refusal: an already computed step is still taken (claim 7).
     NoPoint,
+    /// As `NoPoint`, by claim 7's completion: the destination was cleared
+    /// in its cell.
+    Completed,
+    /// As `NoPoint`, with no destination: no choice was attempted.
+    Idle,
     /// A refused next cell (table T1): no travel on this tick, unless the
     /// move was given up.
     Refused { gave_up: bool },
@@ -409,15 +435,26 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
         }
         // spec: S-0503 F5 (arrived when trunc(r(Δx² + Δy²)) ≤ d, map plane only)
         if dist(w, o.pos, p, false) <= d as u64 {
-            // spec: S-0503 claim 7 (no snap: it keeps its position and chooses its next heading point)
-            with(w, id, |s| s.point = None);
+            // spec: S-0503 claim 7 (no snap: it keeps its position and chooses its next heading point); claim 13 (each F5 arrival puts it between steps again)
+            with(w, id, |s| {
+                s.point = None;
+                s.between = true;
+            });
             // spec: S-0507 claim 6 (arriving at the cell of the transport it is entering: it boards, or is turned away)
             if crate::transport::arrival(w, id) {
                 return;
             }
             choice = choose_next(w, id);
-            // spec: S-0417 claim 7; Q-0693 (interim: an arrival at the heading point is a cell-arrival update, after the next choice)
-            crate::econ::release::arrival(w, id);
+            // Q-0675 interim: a failed search that leaves no heading point counts as a successful choice without one.
+            if matches!(choice, Choice::NoPoint | Choice::Completed) {
+                // spec: S-0503 claim 13 (a successful arrival-time choice that leaves no heading point restores a mark at the actual position)
+                let at = w.obj(id).map_or(o.pos, |x| x.pos);
+                mark(w, id, at);
+                // spec: S-0503 claim 15 (such a choice gives a cell-arrival update at the actual position after the flag is restored; not a completion that clears the destination with no path left while the contacted object is not in the present cell; Q-0693 answered)
+                if !(choice == Choice::Completed && !contact_here(w, id)) {
+                    crate::econ::release::arrival(w, id);
+                }
+            }
         } else {
             choice = Choice::Chosen;
         }
@@ -427,12 +464,19 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
         d = step_length(w, id, u);
         choice = choose_next(w, id);
     }
-    // spec: S-0503 claim 7 (a refused next cell suppresses travel on that tick, except that a give-up still takes the computed step; otherwise a positive d still gives a step); Q-0692 (interim: a failed search is a give-up)
+    // spec: S-0503 claim 7 (a refused next cell suppresses travel on that tick, except that a give-up still takes the computed step; a failed fresh search does not cancel the computed positive d, also after a refusal's immediate search; Q-0692 answered)
     let travels = match choice {
-        Choice::Chosen | Choice::NoPoint => true,
+        Choice::Chosen | Choice::NoPoint | Choice::Completed | Choice::Idle => true,
         Choice::Refused { gave_up } => gave_up,
     };
     if travels && d > 0 {
+        let s = state(w, id);
+        if s.as_ref().is_some_and(|s| s.between && s.point.is_some()) {
+            // spec: S-0503 claim 13 (the positive advance with a heading point ends the between-steps state: the flag at the actual position is cleared before the position moves, even if it stays in that cell)
+            let at = w.obj(id).map_or(o.pos, |x| x.pos);
+            unmark(w, id, at);
+            with(w, id, |s| s.between = false);
+        }
         travel(w, id, d);
     }
     aim_body(w, id, u);
@@ -469,6 +513,10 @@ pub fn ramp(w: &World, phi: F64, boost: F64, throttle: F64) -> F64 {
 
 /// Refused (table T1): no heading point, throttle, hover speed and ρ 0.
 fn refuse(w: &mut World, id: ObjectId) {
+    if let Some(old) = state(w, id).and_then(|h| h.point) {
+        // spec: S-0503 claim 13 (abandoning a heading point clears its old reservation)
+        unmark(w, id, old);
+    }
     with(w, id, |s| {
         // spec: S-0503 claim 12 (every row other than clear: no heading point, throttle, hover speed and ρ at 0)
         s.point = None;
@@ -503,10 +551,11 @@ fn choose_next(w: &mut World, id: ObjectId) -> Choice {
                 // spec: S-0503 claim 7 (in the destination's cell at a height difference below 208: the destination is cleared and the move ends)
                 ob.dest = None;
             }
-            return Choice::NoPoint;
+            return Choice::Completed;
         }
         if w.obj(id).is_none_or(|o| o.dest.is_none()) {
-            return Choice::NoPoint;
+            // Q-0675 interim: with no destination no choice is attempted (no flag restored, no cell-arrival update).
+            return Choice::Idle;
         }
         // spec: S-0212 claim 21 and S-0207 claim 19 (d) (a fresh search with no stored steps waits for R)
         if t >= o.path.retry_at {
@@ -540,7 +589,7 @@ fn at_destination(w: &World, id: ObjectId) -> bool {
 }
 
 /// A fresh search (S-0212 claim 20). For the hovering locomotor every fresh
-/// search starts *R* (S-0212 claim 21; Q-0692 interim for the immediate
+/// search starts *R* (S-0212 claim 21; S-0503 claim 12 for the immediate
 /// searches of table T1); a found path gets the look at its first cell.
 fn fresh_search(w: &mut World, id: ObjectId) -> Search {
     let t = w.tick;
@@ -548,7 +597,7 @@ fn fresh_search(w: &mut World, id: ObjectId) -> Search {
     if res == Search::Found {
         let delay = w.rules().general.retry_delay;
         if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0212 claim 21 (hovering: every fresh search starts R again from its tick, also one that finds a path); Q-0692
+            // spec: S-0212 claim 21 (hovering: every fresh search starts R again from its tick, also one that finds a path); S-0503 claim 12 (also every actual fresh search of T1's immediate-search rows, whatever its result; Q-0692 answered)
             ob.path.retry_at = t.wrapping_add(delay);
         }
         first_cell_look(w, id);
@@ -613,15 +662,25 @@ fn step_check(w: &mut World, id: ObjectId, repeated: bool) -> Choice {
     match outcome {
         Outcome::Clear => {
             let p = point_for(w, id, cell);
+            // spec: S-0503 claim 15 (a clear choice gives a cell-arrival update at the actual position, before the reservation and the consumption of the stored step; Q-0693 answered)
+            crate::econ::release::arrival(w, id);
             if let Some(ob) = w.obj_mut(id) {
                 // spec: S-0503 claim 5 (on clear the step is used up and the vehicle heads for that point)
-                ob.path.steps.remove(0);
+                if !ob.path.steps.is_empty() {
+                    ob.path.steps.remove(0);
+                }
                 // spec: S-0212 claim 22 (a blockage ends once the unit has taken a step again)
                 ob.path.blocked_since = None;
             }
+            if let Some(old) = state(w, id).and_then(|h| h.point)
+                && old != p
+            {
+                // spec: S-0503 claim 13 (replacing a heading point clears its old reservation)
+                unmark(w, id, old);
+            }
             with(w, id, |s| s.point = Some(p));
-            // spec: S-0209 claim 1; Q-0691 (interim: the flag of the chosen cell is set at once, as for a driving step)
-            claim(w, id, cell);
+            // spec: S-0503 claim 13 (a clear choice reserves the point's cell at once by its vehicle-present flag, before physical entry; Q-0691 answered)
+            mark(w, id, p);
             Choice::Chosen
         }
         Outcome::CloakedBlocker => {
@@ -701,39 +760,68 @@ fn search_and_recheck(w: &mut World, id: ObjectId) -> Choice {
         return step_check(w, id, true);
     }
     let gave_up = w.obj(id).is_none_or(|o| o.dest.is_none());
-    // spec: S-0503 claim 7; Q-0692 (interim: a failed search that clears the destination is a give-up and keeps the computed step)
+    // spec: S-0503 claim 7 (search failure alone never suppresses the computed step: a failed search that clears the destination keeps it; Q-0692 answered)
     Choice::Refused { gave_up }
 }
 
-/// Sets the vehicle-present flag of `c` (S-0209 claim 1; Q-0691 interim).
-fn claim(w: &mut World, id: ObjectId, c: CellXY) {
-    let Some(o) = w.obj(id) else { return };
-    let layer = o.layer;
-    if o.hover
-        .as_ref()
-        .is_some_and(|h| h.claims.iter().any(|x| x.0 == c))
-    {
-        return;
+/// The occupancy layer of a marked point (S-0503 claim 13): the deck only
+/// when the point's cell has a high bridge and the point is at least 416
+/// leptons above the terrain surface there, otherwise the ground.
+fn mark_layer(w: &World, p: Pos) -> Layer {
+    let c = p.cell();
+    // spec: S-0503 claim 13 (deck occupancy only with a high bridge in the cell and the point at least 416 above the surface there; not automatically the listing layer)
+    if w.high_bridge(c) && p.z - w.surface_at(p.x, p.y) >= DECK {
+        Layer::Deck
+    } else {
+        Layer::Ground
     }
-    w.cells.claim_vehicle(c, layer, true);
-    with(w, id, |h| {
-        h.claims.push((c, layer));
-        h.claims.sort();
-    });
 }
 
-/// Clears the flag of the cell left, unless it is the heading point's cell
-/// (Q-0691 interim).
-fn release_left(w: &mut World, id: ObjectId, c: CellXY) {
-    let Some(h) = state(w, id) else { return };
-    if h.point.is_some_and(|p| p.cell() == c) {
-        return;
+/// Sets the vehicle-present flag at point `p` (S-0209 claim 1; S-0503
+/// claim 13).
+fn mark(w: &mut World, id: ObjectId, p: Pos) {
+    let key = (p.cell(), mark_layer(w, p));
+    let fresh = with(w, id, |h| {
+        let fresh = !h.claims.contains(&key);
+        if fresh {
+            h.claims.push(key);
+            h.claims.sort();
+        }
+        fresh
+    });
+    // Our cell record counts the vehicles' flags (S-0209 claim 1): one per vehicle and cell layer.
+    if fresh == Some(true) {
+        w.cells.claim_vehicle(key.0, key.1, true);
     }
-    let held: Vec<(CellXY, Layer)> = h.claims.iter().copied().filter(|x| x.0 == c).collect();
-    for (cell, layer) in held {
-        w.cells.claim_vehicle(cell, layer, false);
+}
+
+/// Clears the vehicle-present flag at point `p` (S-0503 claim 13) that
+/// this vehicle set.
+fn unmark(w: &mut World, id: ObjectId, p: Pos) {
+    let key = (p.cell(), mark_layer(w, p));
+    let held = with(w, id, |h| {
+        let held = h.claims.contains(&key);
+        h.claims.retain(|x| *x != key);
+        held
+    });
+    if held == Some(true) {
+        w.cells.claim_vehicle(key.0, key.1, false);
     }
-    with(w, id, |h| h.claims.retain(|x| x.0 != c));
+}
+
+/// Whether the object the vehicle is in contact with covers its present
+/// cell (S-0503 claim 15).
+fn contact_here(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(k) = o.contact.and_then(|k| w.obj(k)) else {
+        return false;
+    };
+    let here = o.pos.cell();
+    if k.kind == Kind::Building {
+        crate::econ::placement::foundation_cells(w, k.type_index, k.pos.cell()).contains(&here)
+    } else {
+        k.pos.cell() == here
+    }
 }
 
 /// Travels `d` leptons along the movement heading (claim 6, F4).
@@ -768,8 +856,13 @@ fn travel(w: &mut World, id: ObjectId, d: i32) {
         // spec: S-0503 claim 6 (its occupancy is moved from cell to cell as its position crosses a cell edge)
         w.cells.leave(old, o.layer, id);
         w.cells.enter(new, layer, id, false);
+        if state(w, id).is_some_and(|h| h.between) {
+            // spec: S-0503 claim 13 (a crossing while still between steps clears the flag at the old actual position and sets it at the new one; otherwise crossings neither set nor clear flags)
+            unmark(w, id, o.pos);
+            let now = w.obj(id).map_or(o.pos, |x| x.pos);
+            mark(w, id, now);
+        }
         crate::load::recalc_cells(w, &[old, new]);
-        release_left(w, id, old);
     }
 }
 
@@ -841,13 +934,13 @@ fn wake(w: &mut World, id: ObjectId) {
 fn bob_period(w: &World, n: u32) -> (F64, i64) {
     let r = w.rules();
     let mode = r.mode;
-    // spec: S-0503 F6 (m = 1 for odd N, 1.1 for even N); Q-0690 (interim: the double nearest 1.1)
+    // spec: S-0503 F6 (m = 1 for odd N, 1.1 for even N)
     let m = if n % 2 == 1 {
         F64::from_i64(1, mode)
     } else {
         crate::consts::EVEN_BOB_FACTOR
     };
-    // spec: S-0503 F6 (Pᵈ = m × q × 900); Q-0690 (interim: formed left to right)
+    // spec: S-0503 F6 (Pᵈ = (m × q) × 900, formed left to right)
     let pd = m
         .mul(r.general.hover.bob, mode)
         .mul(F64::from_i64(TICKS_PER_MINUTE, mode), mode);
@@ -878,9 +971,12 @@ fn height(w: &mut World, id: ObjectId) -> bool {
     // spec: S-0503 Edge cases (N: our engine's own creation counter, a documented departure)
     let n = o.id.0;
     let (pd, pi) = bob_period(w, n);
-    // spec: S-0503 F6 (ϱ = (t + 2N) mod Pᵢ, integer remainder with the sign of the dividend)
-    let varrho = (i64::from(t) + 2 * i64::from(n)) % pi;
-    // spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ), table sine); Q-0690 (interim: (ϱ × 2π) / Pᵈ, 2π the double nearest)
+    // spec: S-0503 F6 (ϱ = wrap₃₂(t + 2N) mod Pᵢ, signed 32-bit arithmetic with wraparound, remainder with the sign of the dividend)
+    let varrho = i64::from(
+        t.wrapping_add((n as i32).wrapping_mul(2))
+            .wrapping_rem(i32::try_from(pi).unwrap_or(i32::MAX)),
+    );
+    // spec: S-0503 F6 (sin(α), α = (ϱ × 2π) / Pᵈ, multiply before dividing; table sine)
     let arg = F64::from_i64(varrho, mode)
         .mul(crate::consts::TWO_PI, mode)
         .div(pd, mode);
@@ -956,13 +1052,12 @@ pub fn switched(w: &mut World, id: ObjectId, off: bool, was_powered: bool) {
     }
 }
 
-/// Seam: a person's stop order (S-0213 claim 8) for a hovering vehicle.
-/// No spec says what it does to the heading point, throttle, hover speed
-/// and ρ (Q-0696); the order's own clearing of the destination and path is
-/// all that happens, so the hover travels on to its heading point and
-/// stops there.
+/// A person's stop order (S-0213 claim 8) for a hovering vehicle (S-0503
+/// claim 16): it keeps its heading point, throttle, hover speed and ρ, so it
+/// travels on to its heading point and stops there. The order's own clearing
+/// of the destination and path is all that happens to them here.
 pub fn stop_order(w: &mut World, id: ObjectId) {
-    // Q-0696 (interim: the hover keeps its heading point, throttle, hover speed and ρ)
+    // spec: S-0503 claim 16 (it keeps its heading point, throttle, hover speed and ρ; not a forced immediate halt; Q-0696 answered); Q-0675 (interim: the locomotor's destination equal to the heading point is not kept apart from the order-level destination, which the order clears)
     let _ = (w, id);
 }
 

@@ -246,7 +246,7 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
                 if let Some(d) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
                     d.claims = vec![cell];
                 }
-                // spec: S-0503 claim 6 and S-0209 claim 1 (a hovering vehicle's flag of its cell, its own until it leaves the cell; Q-0691 interim)
+                // spec: S-0503 claim 13 (a newly created hover starts between steps, its flag at its actual position; Q-0691 answered)
                 if let Some(h) = w.obj_mut(id).and_then(|ob| ob.hover.as_mut()) {
                     h.claims = vec![(cell, o.layer)];
                 }
@@ -264,10 +264,7 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         // spec: S-0206 claim 5 (placing sets body and turret facings at once to the placement facing)
         obj.body.set(facing, tick, keeps);
         obj.turret.set(facing, tick, keeps);
-        if let Some(h) = obj.hover.as_mut() {
-            // spec: S-0503 Terms (the movement heading η); Q-0694 (interim: set to the placement facing)
-            h.heading = Turning::at(facing);
-        }
+        // spec: S-0503 claim 15 (placement, factory release and teleport replacement do not reset a hover's movement heading, and the body facing is not copied into it; a newly attached hovering locomotor starts at 0, `hover::HoverState::new`; Q-0694 answered)
     }
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
     crate::air::placed(w, id);
