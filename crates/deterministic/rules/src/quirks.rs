@@ -1315,6 +1315,10 @@ pub struct Quirks {
     // spec: S-0503 Edge cases
     #[serde(default = "on")]
     pub hover_stalled_start_reset: bool,
+    /// The repair cursor offers repair at an enabled first nearby link that has neither endpoint at the traversal cell; off: such links are skipped and the first link with that endpoint decides, none giving no cursor.
+    // spec: S-0511 claim 21, Edge cases
+    #[serde(default = "on")]
+    pub bridge_cursor_unrelated_link: bool,
     /// The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell.
     // spec: S-0511 claim 8, Edge cases
     #[serde(default = "on")]
@@ -2014,6 +2018,7 @@ impl Default for Quirks {
             hover_brake_undershoot: true,
             hover_elevated_heading_point: true,
             hover_stalled_start_reset: true,
+            bridge_cursor_unrelated_link: true,
             bridge_event_band_short: true,
             bridge_family_by_block: true,
             bridge_span_cap: true,
@@ -2902,6 +2907,10 @@ impl Quirks {
                 self.hover_elevated_heading_point,
             ),
             ("hover_stalled_start_reset", self.hover_stalled_start_reset),
+            (
+                "bridge_cursor_unrelated_link",
+                self.bridge_cursor_unrelated_link,
+            ),
             ("bridge_event_band_short", self.bridge_event_band_short),
             ("bridge_family_by_block", self.bridge_family_by_block),
             ("bridge_span_cap", self.bridge_span_cap),

@@ -12,9 +12,9 @@ use crate::rules::Kind;
 use crate::world::{Layer, ObjectId, Target, World};
 
 /// The cell of a hut that the bridge searches start from: the cell of its
-/// position, its top-left foundation cell (Q-0715).
+/// position, its top-left foundation cell (S-0511 Terms).
 pub fn hut_cell(w: &World, hut: ObjectId) -> Option<CellXY> {
-    // Q-0715 (interim: the hut's cell is the cell of its position)
+    // spec: S-0511 Terms (the hut cell: the cell containing its actual position, its top-left foundation cell, S-0406 claim 1)
     w.obj(hut).map(|o| o.pos.cell())
 }
 
@@ -565,28 +565,152 @@ fn repair_low(w: &mut World, p: CellXY, l: Low) {
 // ---------------------------------------------------------------------
 // The repair cursor (claim 21).
 
+/// What the repair cursor's candidate cell holds (claim 21).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Candidate {
+    /// A tile of either bridge role, with its zero-based position within
+    /// the role.
+    High(i32),
+    /// A low piece of either family.
+    Low(Low),
+}
+
+/// A tile's zero-based position within a bridge role for the cursor test
+/// (claim 21): when both role ranges contain the tile, the wooden-bridge
+/// role supplies it.
+fn cursor_position(w: &World, tile: i32) -> Option<i32> {
+    let roles = w.catalogue.as_ref()?.roles;
+    // spec: S-0511 claim 21 (all 16 positions of either role; the wooden-bridge role first when both contain the tile); S-0010 claim 25 (16 tiles per role)
+    [roles.wooden_bridge, roles.bridge]
+        .into_iter()
+        .find(|&s| s >= 0 && (s..s + 16).contains(&tile))
+        .map(|s| tile - s)
+}
+
+/// The candidate of claim 21 in the 5 × 5 block around hut cell `c`: the
+/// last qualifying cell in increasing y, then increasing x order.
+fn cursor_candidate(w: &World, c: CellXY) -> Option<(CellXY, Candidate)> {
+    let mut found = None;
+    // spec: S-0511 claim 21 (the hut cell's 5 × 5 block, increasing y, then increasing x; the last qualifying cell)
+    for dy in -2..=2 {
+        for dx in -2..=2 {
+            let p = CellXY::new(c.x + dx, c.y + dy);
+            let Some(cell) = w.cells.cell(p) else {
+                continue;
+            };
+            // spec: S-0511 claim 21 (the high tile test takes precedence over the cell's low overlay)
+            if let Some(q) = cursor_position(w, cell.tile) {
+                found = Some((p, Candidate::High(q)));
+            } else if let Some(l) = pieces::low_at(w, p) {
+                // spec: S-0511 claim 21 (otherwise a low piece of either family, destroyed included)
+                found = Some((p, Candidate::Low(l)));
+            }
+        }
+    }
+    found
+}
+
+/// The probe of a high candidate (claim 21's table): its displacement from
+/// the placed tile's origin and the direction of travel; `None` for
+/// positions 6 to 15.
+// spec: S-0511 claim 21 (the probe table)
+fn probe_of(position: i32) -> Option<((i32, i32), (i32, i32))> {
+    match position {
+        // spec: S-0511 claim 21 (positions 0 and 1: probe (1, 2), increasing x)
+        0 | 1 => Some(((1, 2), (1, 0))),
+        // spec: S-0511 claim 21 (position 2: probe (0, 2), decreasing x)
+        2 => Some(((0, 2), (-1, 0))),
+        // spec: S-0511 claim 21 (positions 3 and 4: probe (2, 1), increasing y)
+        3 | 4 => Some(((2, 1), (0, 1))),
+        // spec: S-0511 claim 21 (position 5: probe (2, 0), decreasing y)
+        5 => Some(((2, 0), (0, -1))),
+        // spec: S-0511 claim 21 (positions 6 to 15: no probe, no repair cursor)
+        _ => None,
+    }
+}
+
 /// Whether the engineer's cursor offers a repair over hut `hut` (S-0511
-/// claim 21; S-0214 rows I3 and IC2), by Q-0716's selection.
+/// claim 21; S-0214 rows I3 and IC2): the last qualifying candidate of the
+/// hut cell's block, then its low run or its high candidate's link
+/// traversal. Separate from claim 18's repair selection.
 pub fn repair_offered(w: &World, hut: ObjectId) -> bool {
     let Some(c) = hut_cell(w, hut) else {
         return false;
     };
-    let filter = family_filter(w, c);
-    // Q-0716 (interim: a low piece of the family in the block: its run holds a destroyed piece)
-    if let Some((p, l)) = first_low(w, c, filter) {
-        let centre = pieces::strip_centre(w, p, l.line, l.family);
-        let (a, b) = low::run(w, centre, l.line, l.family);
-        let f = l.line.step();
-        let n = pieces::along(l.line, b) - pieces::along(l.line, a);
-        // spec: S-0511 claim 21 (a low bridge: whether its run holds a destroyed piece)
-        return (0..=n).any(|k| {
-            pieces::low_at(w, at(a, f, k)).is_some_and(|x| x.role.class() == Class::Destroyed)
-        });
-    }
-    // Q-0716 (interim: claim 16's bridge cell from the hut's cell, and the first link within 3 cells of it)
-    let Some(b) = bridge_cell(w, c) else {
+    // spec: S-0511 claim 21 (no candidate: no repair cursor)
+    let Some((p, cand)) = cursor_candidate(w, c) else {
         return false;
     };
-    // spec: S-0511 claim 21 (a high bridge: whether its nearby bridge link is not enabled)
-    super::link_within(w, b, 3).is_some_and(|l| !l.enabled)
+    match cand {
+        Candidate::Low(l) => {
+            // spec: S-0511 claim 21 (a low candidate: its own row's contiguous run of the family's low pieces along its axis, both directions, candidate included, must hold a destroyed piece)
+            let (a, b) = low::run(w, p, l.line, l.family);
+            let f = l.line.step();
+            let n = pieces::along(l.line, b) - pieces::along(l.line, a);
+            (0..=n).any(|k| {
+                pieces::low_at(w, at(a, f, k)).is_some_and(|x| x.role.class() == Class::Destroyed)
+            })
+        }
+        Candidate::High(q) => high_cursor(w, p, q),
+    }
+}
+
+/// Claim 21's link traversal for the high candidate in `p` at zero-based
+/// role position `q`.
+fn high_cursor(w: &World, p: CellXY, q: i32) -> bool {
+    let Some(cell) = w.cells.cell(p) else {
+        return false;
+    };
+    let Some(((ox, oy), d)) = probe_of(q) else {
+        return false;
+    };
+    let Some((tw, _)) = w.tile_size(cell.tile) else {
+        return false;
+    };
+    let tw = i32::from(tw.max(1));
+    let s = i32::from(cell.sub_tile);
+    // spec: S-0307 claim 23 (the placed tile's origin: x₀ = x − (s mod W), y₀ = y − ⌊s / W⌋)
+    let origin = CellXY::new(p.x - s % tw, p.y - s / tw);
+    let unrelated = w.rules().quirks.bridge_cursor_unrelated_link;
+    // spec: S-0511 claim 21 (the initial traversal cell equals the initial probe)
+    let mut probe = CellXY::new(origin.x + ox, origin.y + oy);
+    let mut traversal = probe;
+    let mut seen = std::collections::BTreeSet::new();
+    loop {
+        // spec: S-0511 Edge cases (a repeated traversal cell refuses repair rather than searching without end)
+        // The warning is not written here: the cursor test is a read-only
+        // query of the world, and notes are written only by the step.
+        if !seen.insert(traversal) {
+            return false;
+        }
+        let ends = |l: &crate::cells::BridgeLink| l.first == traversal || l.second == traversal;
+        // spec: S-0511 claim 21 (the first bridge link in creation order within 3 cells of the probe, S-0212 Terms; low links included; links are not rebuilt)
+        let link = if unrelated {
+            super::link_within(w, probe, 3)
+        } else {
+            // spec: S-0511 Edge cases (quirks.bridge_cursor_unrelated_link off: links without an endpoint at the traversal cell are skipped)
+            w.cells
+                .links
+                .iter()
+                .copied()
+                .find(|l| l.within(probe, 3) && ends(l))
+        };
+        // spec: S-0511 claim 21 (no such link: no repair cursor)
+        let Some(l) = link else { return false };
+        // spec: S-0511 claim 21 (a disabled link offers repair)
+        if !l.enabled {
+            return true;
+        }
+        // spec: S-0511 claim 21 and Edge cases (quirks.bridge_cursor_unrelated_link: an enabled link with neither endpoint at the traversal cell offers repair)
+        if !ends(&l) {
+            return true;
+        }
+        // spec: S-0511 claim 21 (the traversal cell becomes the opposite endpoint; the next probe is one cell from there in the table's direction)
+        traversal = if l.first == traversal {
+            l.second
+        } else {
+            l.first
+        };
+        probe = at(traversal, d, 1);
+    }
 }

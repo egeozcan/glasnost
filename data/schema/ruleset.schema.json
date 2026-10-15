@@ -6660,6 +6660,11 @@
           "type": "boolean",
           "default": true
         },
+        "bridge_cursor_unrelated_link": {
+          "description": "The repair cursor offers repair at an enabled first nearby link that has neither endpoint at the traversal cell; off: such links are skipped and the first link with that endpoint decides, none giving no cursor.",
+          "type": "boolean",
+          "default": true
+        },
         "bridge_event_band_short": {
           "description": "The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell.",
           "type": "boolean",

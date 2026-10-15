@@ -1151,9 +1151,9 @@ fn claim_20_low_bridge_repair() {
     }
 }
 
-// spec: S-0511 claim 21 (the cursor offers repair over a hut when its low run holds a destroyed piece, or when the nearby link of a high bridge is not enabled)
+// spec: S-0511 claim 21 (a low candidate: its own row's contiguous run must hold a destroyed piece; damage alone does not offer repair)
 #[test]
-fn claim_21_repair_cursor() {
+fn claim_21_low_candidate() {
     let mut m = base();
     low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
     let mut w = game(&ruleset(), &m);
@@ -1163,14 +1163,83 @@ fn claim_21_repair_cursor() {
     assert!(!hut::repair_offered(&w, h), "damage alone");
     bridges::attempt(&mut w, at(2, 0));
     assert!(hut::repair_offered(&w, h), "destroyed");
+}
 
+/// The cursor fixture: a high bridge along x from 0 to 8 (its link runs
+/// from (−1, 0) to (8, 0)) and a lone start-ramp tile (position 0 within the
+/// role) at sub-tile 15 in (1, 1). That tile's origin is (−2, −2), so its
+/// probe (1, 2) from the origin is (−1, 0), the link's first end. With
+/// `chain`, a low span along y from (8, −5) ends at (8, 0) as well.
+fn cursor_map(chain: bool) -> Map {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    put_tile(&mut m, at(1, 1), tile(Family::Bridge, START_X), 15, 0);
+    if chain {
+        put_tile(&mut m, at(8, -5), tile(Family::Bridge, START_Y), 7, 0);
+    }
+    m
+}
+
+// spec: S-0511 claim 21 (the last candidate of the hut's 5 × 5 block; the probe table from the placed tile's origin, S-0307 claim 23; the initial traversal cell is the probe; an enabled link ending there is crossed and the next probe is one cell past its other end; no link near a probe or a disabled link decides)
+#[test]
+fn claim_21_high_link_traversal() {
+    // The block of (1, 3) holds one candidate, (1, 1).
+    let mut w = game(&ruleset(), &cursor_map(false));
+    let h = hut(&mut w, at(1, 3));
+    assert!(
+        !hut::repair_offered(&w, h),
+        "crossing the intact link to (8, 0): no link near (9, 0)"
+    );
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert!(!w.cells.links[0].enabled);
+    assert!(
+        hut::repair_offered(&w, h),
+        "the disabled link offers repair"
+    );
+
+    // The low span (8, −5)–(8, 0) is disabled; it is not near the first
+    // probe, but it is the only link near (9, 0).
+    let mut w = game(&ruleset(), &cursor_map(true));
+    let ls = &w.cells.links;
+    assert_eq!(ls.len(), 2);
+    assert!(ls.iter().any(|l| l.first == at(8, -5) && !l.enabled));
+    assert!(ls.iter().any(|l| l.first == at(-1, 0) && l.enabled));
+    let h = hut(&mut w, at(1, 3));
+    assert!(
+        hut::repair_offered(&w, h),
+        "the intact link is crossed, then the disabled one offers repair"
+    );
+}
+
+// spec: S-0511 claim 21 (the last qualifying cell in increasing y, then x; a tile at positions 6 to 15 has no probe and gives no repair cursor even when an earlier candidate would)
+#[test]
+fn claim_21_last_candidate_decides() {
+    let mut m = cursor_map(false);
+    // A pier tile (position 6) after (1, 1) in the block of (1, 3).
+    put_tile(&mut m, at(2, 4), tile(Family::Bridge, M1), 0, 0);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(1, 3));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert!(!w.cells.links[0].enabled);
+    assert!(!hut::repair_offered(&w, h));
+}
+
+// spec: S-0511 claim 21 and Edge cases (quirks.bridge_cursor_unrelated_link: on, an enabled first link with neither end at the traversal cell offers repair; off, such links are skipped and no endpoint link means no repair cursor)
+#[test]
+fn claim_21_unrelated_link_quirk() {
+    // The block of (0, 2) ends on the start ramp's sub-tile 8 cell (0, 0):
+    // origin (0, −2), probe (1, 0), which is not an end of the intact link.
     let mut m = base();
     high_x(&mut m, Family::Bridge, 0, 8, &[]);
     let mut w = game(&ruleset(), &m);
-    let h = hut(&mut w, at(3, 3));
-    assert!(!hut::repair_offered(&w, h));
-    bridges::attempts(&mut w, at(3, 0), 2);
-    assert!(hut::repair_offered(&w, h));
+    let h = hut(&mut w, at(0, 2));
+    assert!(w.cells.links[0].enabled);
+    assert!(hut::repair_offered(&w, h), "quirk on: the intact bridge");
+    let mut r = ruleset();
+    r.globals.quirks.bridge_cursor_unrelated_link = false;
+    let mut w = game(&r, &m);
+    let h = hut(&mut w, at(0, 2));
+    assert!(!hut::repair_offered(&w, h), "quirk off");
 }
 
 // spec: S-0511 State and ordering (bridge state: overlays, alternate looks, pier levels, falls and the map-generator stream survive a save and load with the same state hash)
