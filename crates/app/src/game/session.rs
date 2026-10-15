@@ -232,6 +232,7 @@ impl Session {
             loaded.map.theater,
             &loaded.tile_colours,
             loaded.house_radar_colours(&game.world),
+            loaded.neutral_radar_colour(),
         );
         let speed = game.world.game_speed;
         let start = game

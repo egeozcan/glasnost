@@ -2141,6 +2141,10 @@ impl Builder<'_> {
                 format!("{name} {k} {v} is negative (S-0314 claim 10, quirks.negative_self_heal_counts)")
             });
         }
+        // spec: S-0516 claim 20 and Import mapping (a negative effective cloak radius, kept as signed 8-bit, is invalid: the generator grows no field; the importer warns)
+        self.each_int(key(t, "CloakRadiusInCells"), |n| (n as i8) < 0, |v| {
+            format!("{name} CloakRadiusInCells {v} is negative as a signed 8-bit value: our engine grows no cloak field (S-0516 claim 20, a departure)")
+        });
         let step = self.global(GENERAL, "RepairStep");
         let step = int_of(step.as_ref()).unwrap_or(REPAIR_STEP_ABSENT);
         if let Some(s) = int_of(key(t, "Strength"))
@@ -2653,6 +2657,13 @@ impl Builder<'_> {
                 |v| format!("[General] {k} {v} is above 10^6 in magnitude: threat scores can wrap (S-0309 Edge cases)"),
             );
         }
+        let stages = self.global(GENERAL, "CloakingStages");
+        // spec: S-0516 claim 43 and Import mapping (a stage count of 0 or below is invalid: our engine uses 1; the importer warns)
+        self.each_int(
+            stages.as_ref(),
+            |n| n <= 0,
+            |v| format!("[General] CloakingStages {v} is 0 or below: our engine uses 1 (S-0516 claim 43, a departure)"),
+        );
         let disguise = self.global(GENERAL, "DisabledDisguiseDetectionPercent");
         // spec: S-0309 Import mapping (a list without a second item: our engine lets no disguised target through by the draw, a departure; the importer warns)
         self.each(

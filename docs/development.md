@@ -201,7 +201,7 @@ Q-0520 is answered by S-0102 revision 15, claim 33 and its Import mapping: for `
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
+| `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6; revision 16 marks Q-0215 answered with question 7 explicitly `unmeasured` and says our pixels there are no reference, so this choice stays a provisional rule) | Q-0215 |
 
 ## Map viewer (M2)
 
@@ -243,7 +243,7 @@ Both need animation playback inside the simulation's turn pass, which is not bui
 
 `glasnost-sim` runs the game rules on the typed ruleset and map. Everything in it is integers and the soft-float types of `glasnost-num` (S-0205: IEEE binary32/64 in integers, round toward zero under `quirks.chop_rounding`), with ordered containers only.
 
-- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 431 quirk switches of `rules::Quirks` (every one defaulting to the original; `refused_death_keeps_unit` of S-0107 claim 17 is not consulted, since M3 has no death handling), and engine defaults cited to their specs. A type without a locomotor field has the teleporting locomotor (S-0207 claim 14); vehicles with the driving locomotor drive and infantry with the walking one walk, and every other locomotor is not moved in M3. `consts` holds the spec constants given as decimals, as checked bit patterns.
+- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 437 quirk switches of `rules::Quirks` (every one defaulting to the original; `refused_death_keeps_unit` of S-0107 claim 17 is not consulted, since M3 has no death handling), and engine defaults cited to their specs. A type without a locomotor field has the teleporting locomotor (S-0207 claim 14); vehicles with the driving locomotor drive and infantry with the walking one walk, and every other locomotor is not moved in M3. `consts` holds the spec constants given as decimals, as checked bit patterns.
 - **A game.** `load::new_game(rules, map, catalogue, setup)` follows S-0009 and S-0202's table *Draws during map loading*: the early phase of start positions on blank cells (lists 1 and 2, the assignment against list 2, with the base rules' passive fields, claims 17 to 20 and 33; `starts`, with the start-cell variant of the nearby-cell search, `path::start_cell`), the initial fill, the overlay type stream placed overlay by overlay (`overlays`: the slope condition of claim 12, high-bridge cells as each overlay is placed, wall connection bits, low-bridge end markers with their pieces' draws), the overlay data stream, the first recalculation pass, the vein rebuild with its draws (claim 14), the tile animations each recalculation starts with their creation draws (S-0010 claim 19, S-0202 claim 10: the first recalculation of a cell before the second pass, then at most one per cell from the second pass on, in play too; `load::recalc_cells`), the pre-placed objects (with the visceroid draw of a vehicle's placement and its follower-car link, claim 41), the second pass, the unused-house cleanup (claim 28 and S-0202 claim 14: only in a game with no AI house, S-0412 claim 12, and fewer human slots than the base rules' maximum player count; a removed house loses its pre-placed objects, takes no position and gets no starting units, and taking its objects out of their ground cells recalculates those cells; `House::removed`), the late phase (list 3), the owners of the map's walls (S-0210 claim 14), the starting units (`starting`, claims 45 and 46: the placement search's acceptance test reads the ground occupants of the ground layer only and takes as the nearest the one whose reference point lies nearest the cell corner by the table root, ties by the ground list's order), the rest of game start (S-0412 claim 14: crates, then the secret-lab draws), the game-start pass of S-0010 claim 12 (a third recalculation of every legal cell, with its tile animations, after those draws by S-0202 claim 14) and the bridge spans of S-0010 claim 25, whose low spans give their bands the bridge-body mark (`Cells::bridge_body`, `glasnost_map::bridges`; the burrowing test of S-0010 claim 17 is to read it). Cell animations (S-0009 claim 12) take their creation draws when their overlay is placed, before the tile animation of the same placement. Terrain recalculation itself is `glasnost-map`'s (S-0010, S-0211). `GameSetup` gives each house a role (player, neutral, special), whether it is an AI house (`HouseSetup::ai`), the unit-count setting and the bases setting. `load::sandbox_setup` is our viewer's setup: one house per object owner of the map, no start positions and no starting units.
 - **Wall connection bits.** `walls` keeps a wall's overlay data value as 16 × damage stage + connection bits (S-0112 claim 7), recomputed when a wall is placed from the map's overlay list, when crushing removes one, and when a gate or wall tower is placed or destroyed (`quirks.gate_tower_fixed_cells`). The map viewer draws the cells after loading, so walls show the bits the simulation gives them.
 - **A tick.** `tick::step` runs S-0203's parts in their places: the turn pass over the update order (with S-0203's removal skips and second turns), each object's behaviour part (`process`, S-0215), its locomotor (`drive` with `tracks`, S-0207 and S-0206 claim 12: a driving vehicle in the same behaviours stops at the track target where its mobile target comes in range, S-0207 claim 19 a, with the walker's conditions and range test, `walk::arrival_stop_holds`; the hovering locomotor is not modelled, so S-0207 claim 19 b to d and S-0212 claims 20, 21 and 23's hover rows are seams; ships move by the driving code since M6a (section *Simulation (M6a: naval units)*); `walk`, S-0208: a walk ends on its arrival tick in the destination's cell, claim 16, and an approaching walker in *attack*, *area guard*, *hunt* or *rescue* stops at the standing position where its mobile target comes in range, claim 17; the walker's speed fraction of S-0310 is `WalkState::fraction`), its infantry sequence (`infantry`, S-0107), then the orders (`orders`, S-0213), then the tick number. Occupancy is `cells`/`occupancy` (S-0209), crushing `crush` (S-0210), passability and regions `passability`/`regions` (S-0211, S-0212), pathfinding `path` (S-0212) behind the `Pathfinder` trait, over (cell, search layer) pairs, with the corridor of claims 13 to 14 in `corridor` (sectors and connections are derived data, rebuilt with the regions). Regions and sectors follow the rules of claims 3 and 13b and exact ties the recording order of claim 12a (departures D4 and D7, accepted by the project lead).
@@ -316,8 +316,9 @@ Provisional rules of M5a, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
+
+S-0215 revision 42 answers Q-0241 (claim 1): set-up placement runs the building's grand opening after *guard* is queued, and the opening sets the ready mark (`econ::body::set_up`), so *guard* is current from the building's first per-tick start, armed or not, turreted or not, with or without a map-installed upgrade. The opening's free unit stays suppressed at set-up (S-0402 claim 18). Its row is retired; map-placed defences now guard and fire from their first turn.
 
 ## Simulation (M6a: missiles)
 
@@ -409,10 +410,10 @@ Provisional rules of M6a naval units: none at present. The Q-0641 row (depot cyc
 The depot cycle of S-0314 claims 6 and 16 to 24, S-0504 claims 7, 8, 12 and 14 and S-0215 claim 29 is built in `glasnost_sim::depot`. A repair depot (a building with `UnitRepair=yes`) and a naval yard with the repair flag accept an allied vehicle, which drives to the docking point, docks, and is repaired in three phases until the depot sends it away. The ledger is [docs/m6-claims/depot-cycle.md](m6-claims/depot-cycle.md); the tests are in `crates/deterministic/sim/tests/claims_s0314_depot.rs` and `claim_14_*` in `claims_s0504.rs`.
 
 - **State.** `Object::depot` (`depot::DepotState`): a vehicle's `link` (depot, place, tethered; valid only while its contact is that depot), `queued` (claim 23's queued entry) and `loco_off` (claims 21 and 22); a depot's `serviced` vehicle. The phase is the depot's *repair* progress count. This state came with save format 18.
-- **Permission and entry (claims 16 and 17; S-0214 table V value *n*).** `depot::accepts` is claim 16's permission. `targeting` gives *enter* over an accepting allied depot (row n3) and *no-enter* for a vehicle of zone *fly* (row n1); a held one-place depot keeps *select* (row n4). The enter order takes contact at once in the first free place (`depot::order_entered`). The vehicle's *enter* processing (`depot::process_enter`, from `process`) repeats the request, tethers it on the depot (Q-0680, Q-0674), turns it to 16384 and, once still, queues *repair* with the ready mark on the depot and *sleep* on the vehicle. An unarmed depot's guard processing makes the early start of claim 17 (`depot::early_start`, from `combat::behave`).
+- **Permission and entry (claims 16 and 17; S-0214 table V value *n*).** `depot::accepts` is claim 16's permission. `targeting` gives *enter* over an accepting allied depot (row n3) and *no-enter* for a vehicle of zone *fly* (row n1); a held one-place depot keeps *select* (row n4). The enter order takes contact at once in the first free place (`depot::order_entered`). The vehicle's *enter* processing (`depot::process_enter`, from `process`) repeats the request; only a depot with the pad flag tethers it there (`depot::pad_exchange`: the foundation centre's cell, and no moving destination or place 0 more than 128 leptons from the centre), and a tethered vehicle turns to 16384 and, once still, queues *repair* with the ready mark on the depot and *sleep* on the vehicle. Reaching the docking-point cell during movement (`depot::movement_arrival`, from the driving and hovering locomotors' arrivals) queues *repair* and *sleep* without a tether, so an ordinary depot repairs its vehicle untethered. An unarmed depot's guard processing makes the early start of claim 17 (`depot::early_start`, from `combat::behave`).
 - **Docking point (claim 18; S-0504 claim 12).** `depot::docking_point`: the foundation centre plus the place's displacement (`econ::release::pad_position_at`, S-0404 claim 15's rules), or the cell (2, 1) for a vehicle factory. `path::heading_point` heads a vehicle in depot contact for it, and `hover::destination_point` makes it a hovering vehicle's destination *D*, so a hover stops in the docking cell of a depot larger than one cell.
 - **Repair (claim 6; S-0504 claim 8).** `depot::process_repair`: waiting (the naval waiting gate, 3 ticks to settling), settling (one step; locomotor off only within 200 leptons; moving farther away, no step, the locomotor switched on and *D* ticks; not needed sends it away unannounced), working (*D* + *K*<sub>u</sub> − 1, then *K*<sub>u</sub>; done or not needed announces and sends it away; cannot pay returns to settling and announces low funds at exactly 0 credits). Release goes to the depot's rally point, else claim 25's departure cell (`depot::exit_cell`: door kinds, the naval rows, S-0404's exit list or the perimeter, the first giving free); a neutral or special house's vehicle with a guard spot goes there. With no cell the vehicle keeps contact: from working it returns to settling with a 1-tick retry, in settling it retries after *D*. The announcements are `Sound::UnitRepaired` (audio: F7 kind *unit repaired*, 2 cells, 400 ticks) and `Sound::LowFunds`, the depot owner's only.
-- **Orders, sale, destruction, power (claims 20 to 23).** `depot::order_applied` (from `orders::apply_behaviour`) and `depot::stop_order` give claim 20's and claim 23's order rules; a docked vehicle is tethered (`econ::tethered`) and keeps its contact. `depot::vehicle_turn` (from `tick::object_turn`, after the locomotor movement) retries a queued entry every tick; permission queues *enter* with an immediate start only when ready. A sale gives the run-away notice (`depot::sale_started`, from `econ::sell`) and releases contacts at the next selling processing; destruction releases without notice (`depot::depot_destroyed`, from `combat::death`, beyond S-0312 claim 17's kill distance). A switched-off depot refuses new acceptance only. The three quirks of S-0314 Edge cases are live.
+- **Orders, sale, destruction, power (claims 20 to 23).** `depot::order_applied` (from `orders::apply_behaviour`) and `depot::stop_order` give claim 20's and claim 23's order rules; a docked vehicle is tethered (`econ::tethered`) and keeps its contact, while an untethered one, at an ordinary depot in any repair phase, is released by another order. `depot::vehicle_turn` (from `tick::object_turn`, after the locomotor movement) retries a queued entry every tick; permission queues *enter* with an immediate start only when ready. A sale gives the run-away notice (`depot::sale_started`, from `econ::sell`) and releases contacts at the next selling processing; destruction releases without notice (`depot::depot_destroyed`, from `combat::death`, beyond S-0312 claim 17's kill distance). A switched-off depot refuses new acceptance only. The three quirks of S-0314 Edge cases are live.
 - **Hover stranding.** `depot::locomotor_off` is read by the hovering locomotor of S-0503 (`hover::tick` does not travel while it holds): a hovering vehicle is stranded after its depot is sold or destroyed (`quirks.depot_loss_strands_hover`); no other locomotor reads it.
 - **Import.** `UnitRepair`, `NumberOfDocks`, `DockingOffset`*i* and the factory kind were already imported. New: an importer warning for `NumberOfDocks` above 1 on a repair depot (S-0314 Edge cases).
 - **Our AI.** At each think, a damaged idle army vehicle (at or below half its strength, our tuning) of a house with an accepting depot is given an ordinary enter order on the nearest one (`Brain::send_for_repair`; S-0314 claim 24).
@@ -422,11 +423,13 @@ Provisional rules of M6b depot cycle, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `depot::process_enter`, `depot::accepts` | the vehicle is tethered in its *enter* processing once it stands in a foundation cell of the depot or in the docking point's cell; the standing-on-the-depot refusal applies to the click and the queued-entry retry only; a driving vehicle ends at the docking cell's centre | Q-0680 |
-| `depot::exit_cell`, `econ::release::present_exit_list` | the locomotion-specific entry test of claim 25's door and perimeter rows adds nothing to the entry test; with `quirks.foundation_exit_lists` on, a foundation size without a listed word has no list (the perimeter applies); the repair-complete announcement is made even when the working departure then fails | Q-0674 |
-| `tick::object_turn` | no state skips the queued-entry retry (the immobilized check); it runs before the passenger sync and parasite step | Q-0674 |
+| `depot::moving_destination` | a driving or ship vehicle's locomotor destination point counts as present while its order-level destination's goal cell differs from its own cell | Q-0794 |
+
+S-0314 revision 19 answers Q-0790 (claim 17): an empty place 0 fails the pad exchange's distance test; the movement arrival sets the depot's ready mark (S-0215 claim 29); a driving or ship vehicle reports movement by claim 17's table (destination point, or a heading point that differs horizontally), a hover by S-0503 claim 5's *is moving*. Its row is retired.
 
 S-0314 revision 17 answers Q-0681 (claim 21: distant settling), Q-0682 (claims 6 and 25: the departure cell and the failed departure) and Q-0683 (claim 23: the retry after movement, readiness-dependent start); their rows are retired. Q-0680 is answered too, but its tether rule (only at a depot with the pad flag) leaves the ordinary depot's tether unexplained, so its row stays with Q-0674.
+
+S-0314 revision 18 answers Q-0674. Claim 25's locomotion-specific test always gives free for driving, hovering and ship locomotion, which was our interim; every imported foundation word has a present exit list (the 0 × 0 list is present and empty), so `present_exit_list`'s `None` arises only from synthetic data; claim 6's repair-complete announcement is attempted even when the working departure fails, as coded. Its claim 17 also settles the tether (Q-0680's row is retired): only a pad depot's repeated request tethers, no foundation or docking cell does, and the standing refusal is the click's and the queued retry's only; claim 18 states the cell-centre stop. Claim 23's retry is skipped only during chrono phase-in (`teleport::phasing_in`), and the passenger sync of an open-topped transport now runs before it (`tick::object_turn`).
 
 ## Simulation (M6b: walls and gates)
 
@@ -447,15 +450,11 @@ Provisional rules of M6b walls and gates: none at present. S-0210 revision 20 an
 The teleporting locomotor's own move (S-0207 claims 20 to 22, F9; S-0208 claims 19 and 20) is in `glasnost_sim::teleport`, built before M6b. M6b makes it whole in play. The ledger is [docs/m6-claims/teleport.md](m6-claims/teleport.md).
 
 - **Presentation events.** The two warp animations (`WarpOut`) go through `combat::effects::anim`, so the view draws them; they keep their creation draws (claim 20 i). The departure and arrival sounds are `Sound::ChronoOut` at the old point and `Sound::ChronoIn` at *L*; audio plays the type's `ChronoOutSound` or `ChronoInSound`, else the game-wide one.
-- **Arrival effects.** A vehicle's landing has the effects of reaching a track target: the arrival report to a contacted building (S-0402 claim 10, and a tethered vehicle's clear report to its factory, S-0417 claims 7 and 8) and cell-centre crushing (S-0210 claims 3 and 8), then the entered-by raise (claim 22). A teleporting crusher crushes what it lands on. A tethered infantry unit's landing gives its clear report to its infantry factory (Q-0697, interim row below), so a teleporting unit that jumps away no longer holds the factory's contact place.
+- **Arrival effects.** A vehicle's landing has the effects of reaching a track target: the arrival report to a contacted building (S-0402 claim 10, and a tethered vehicle's clear report to its factory, S-0417 claims 7 and 8) and cell-centre crushing (S-0210 claims 3 and 8), then the entered-by raise (claim 22). A teleporting crusher crushes what it lands on. A tethered infantry unit's landing gives its clear report to its infantry factory (S-0417 claim 10), so a teleporting unit that jumps away no longer holds the factory's contact place.
 - **Seams.** Crate collection at *L* (S-0520), the airstrike target-retention exception (S-0519), the electromagnetic pulse (S-0511), *being erased* (S-0514) and a superweapon's hold (S-06xx) have no state in our engine; `teleport::take_destination` and `teleport::jump` mark where they go.
 - **What play needs.** A vehicle, infantry or aircraft type with `Locomotor=` the teleporting locomotor (the importer maps it). A person selects it and clicks a cell: `targeting::click` gives *move* to the clicked cell itself (S-0214 claim 11), `orders::issue` applies it, the landing point is fixed and marked at once, and the unit jumps on its next movement update, then phases in for F9's delay. `[General] WarpOut`, the `[General]` keys of F9 (`ChronoTrigger`, `ChronoDistanceFactor`, `ChronoMinimumDelay`, `ChronoRangeMinimum`) and `[AudioVisual] ChronoOutSound` and `ChronoInSound` give the animation, timing and sounds.
 
-Provisional rules of M6b teleport movement, each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `teleport::jump` (with `econ::release::arrival`) | the jump tick's arrival update (S-0207 claim 22) is a tethered teleporting infantry unit's clear report, given before the entered-by raise, with no run-away reply (as S-0208 claim 23's walker on its arrival) | Q-0697 |
+Provisional rules of M6b teleport movement: none at present. S-0417 revision 15 answers Q-0697 (claim 10: a tethered teleporting infantry unit reports clear in its jump's arrival update, before the entered-by raise; the code already did this).
 
 ## Simulation (M6a: aircraft)
 
@@ -507,28 +506,28 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - lift stops.
   - At the spin's end, a hover over water below 104 leptons gets the bomb mark (`hover::bomb_mark`) and starts to fall.
 - **Hooks elsewhere.**
-  - `infantry::destination_assigned` gives ρ = 1 and, for a powered hover not moving now, chooses the first heading point at once (`hover::take_destination`, claim 5); a hover moving now without a heading point gets T = ρ = 1 and chooses there only when its destination is gone or in its cell.
+  - `infantry::destination_assigned` gives ρ = 1 and, for a powered hover not moving now, chooses the first heading point at once (`hover::take_destination`, claim 5); a hover moving now without a heading point gets T = ρ = 1, the path update (destination-cell completion, a fresh search when R allows) and a choice there. A held hover (`parasite::held`, claim 17) only remembers the destination.
   - `econ::release::send_out` sets ρ = ½ after a factory exit; the hover leaves by its own locomotor towards (x₀ + 4, y₀ + 1).
   - `path::failed` clears a hover's destination like a driving unit's.
   - `occupancy::in_progress`, `path::heading_cell` and the claim 19 count see a hover's heading point and φ.
   - `scatter::vehicle_request` refuses a switched-off hover (claim 16 g) and centres on its heading point's cell.
   - `drive::release_claims` frees its flags at removal.
-  - There is no parasite hold for it (S-0614 claim 8 lists none).
+  - The parasite hold timer (`parasite::held`) is claim 17's hold test: a held assignment makes no choice, and a held choice refuses as *blocked* after clearing the old reservation.
 - **Seams.** These are named functions with doc comments:
   - the fall (`hover::start_fall`, S-0511 claim 10);
   - the cloaked reveal (`hover::reveal_cloaked`, S-0516);
   - crate collection (`hover::collect_crate`, S-0520);
   - the chase cut (`hover::chase_cut`, S-0212 claim 20);
-  - the stop order (`hover::stop_order`, claim 16: the heading point, T, φ and ρ are kept).
+  - the stop order (`hover::stop_order`, claim 16: the heading point, T, φ and ρ are kept; *D* and the stored path are kept apart from the cleared order-level destination when *D* = *P*, `HoverState::retained`, and the retry timer is made eligible).
   - S-0312 claim 11's low-water death of a marked vehicle is not built.
-- **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point` and `quirks.hover_stalled_start_reset` are now implemented.
+- **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point`, `quirks.hover_stalled_start_reset`, `quirks.hover_idle_arrival_reservation` and `quirks.hover_flag_clear_height_only` are implemented.
 - **Rendering.** The map view draws every mobile object at its world position, z included (`mapview::live`, `build::height_lift`), so the hover height and the bob show with no new drawing code.
 - **Own AI.**
   - Hovering vehicles are army (`scripted::plays`: any locomotor the simulation moves).
   - `Script::reachable` already sends a unit to its own reach region by its movement zone; the amphibious zone's region spans sea and land, so a hover's goal across water stays as ordered.
   - The fixture adds HOVR, a gun hovercraft with the hover class and locomotor and the amphibious zone, built at FACT once the house has a naval yard (NAVY) and a LAB, so only on maps with water; `builds_a_navy_on_a_water_map` checks that one is built.
   - `a_hover_crosses_the_sea_to_a_land_goal` (in `crates/deterministic/ai/tests/ai.rs`) shows a hover on the sea of `fixture::map_naval` sent by the brain at an enemy beside its base, reaching land.
-- **Save format 18.** `Object::hover` is new state; format 21 adds `HoverState::between` (claim 13).
+- **Save format 18.** `Object::hover` is new state; format 21 adds `HoverState::between` (claim 13), format 24 `HoverState::retained` (claim 16), format 25 `HoverState::held` (claim 18).
 - **What play needs.** Data and map:
   - a vehicle type whose `Locomotor` is the hovering locomotor's identifier, with the hover or amphibious locomotion class and a movement zone (amphibious for a type that crosses water);
   - land rows whose hover or amphibious multipliers are not 0 on water and on land;
@@ -545,15 +544,13 @@ S-0503 revision 3 answers Q-0690 to Q-0696 (claims 5 and 13 to 16, F6, Import ma
 - only a powered hover not moving now chooses at once when given a move (claim 5);
 - a stop order keeps the heading point, T, φ and ρ (claim 16).
 
-Provisional rules of M6b hover and amphibious movement, each tied to a request:
+S-0503 revision 4 answers Q-0675 (claims 5, 7, 13, 15 to 17, two new quirks); its interim rules are retired:
+- the arrival runs the initial path update (completion, or a fresh search when R allows, whose failure clears the old reservation) before the choice; a choice is attempted when *D* remains or the contacted object is in the present cell (`hover::path_update`, `hover::choose_next`);
+- every non-refusing choice that leaves no point, a deferred or failed search included, restores the actual-position flag and gives a cell-arrival update; an arrival with no choice keeps the old reservation (`quirks.hover_idle_arrival_reservation`; off: the actual position is marked instead, with no update);
+- a flag is cleared in the deck by the point's height alone (`hover::clear_layer`, `quirks.hover_flag_clear_height_only`). Our cell records count flags per vehicle, so a clear in the other layer leaves this vehicle's flag standing, as a flag model would when no deck flag is set there;
+- held is the parasite hold timer (claim 17), and a person's stop order keeps *D* equal to *P* apart from the order-level destination (claim 16); a search with only a kept *D* searches for its cell.
 
-| Where | Interim rule | Request |
-|---|---|---|
-| `hover::mark_layer` | the flag at the actual position takes the marked-point layer rule (deck only with a high bridge and at least 416 above the surface) | Q-0675 |
-| `hover::choose_next` (`Choice::Idle`) | an arrival with no destination attempts no choice: no flag restored, no cell-arrival update | Q-0675 |
-| `hover::travel_turn` | a failed or deferred arrival-time search that leaves no heading point counts as a successful choice without one (flag restored, update given) | Q-0675 |
-| `hover::take` | no state counts as paralysed; a hover moving now without a heading point makes no separate path update, only `choose_next` when its destination is gone or in its cell | Q-0675 |
-| `hover::stop_order` | the order clears the single destination field even when it equals the heading point, so the arrival there is the no-destination case | Q-0675 |
+S-0503 revision 6 answers Q-0679 (claim 18): a cell assigned while held supplies its centre at terrain surface height, with no deck lift, as *D* (`HoverState::held`, `hover::take`). Expiry, searches and point choices leave it; another assignment, a stop, completion or failure clears it. The interim rule is retired.
 
 ## Simulation (M6b: transports)
 
@@ -608,14 +605,7 @@ S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Pas
 
   An air transport lets its passengers out once it has landed, or once it has stopped in the air with no destination.
 
-Provisional rules of M6b transports, each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `transport::release_position` | a vehicle passenger of an air transport is put at the aircraft's exact horizontal position on the surface; an infantry passenger released while the aircraft is above surface height takes the surface choice in the cell below | Q-0672 |
-| `transport::selection` | with map waypoint 700 undefined, the replacement search is centred on cell (0, 0), as S-0011 claim 33's actions take an undefined waypoint | Q-0673 |
-
-The Q-0700 to Q-0707 rows are retired: S-0507 revision 4 answers Q-0700 (claim 10 placement), Q-0701 (claim 8 shore search), Q-0702 (claim 16 removal cleanup), Q-0703 (claim 9 alliance object), Q-0704 (the tunnel edge of Terms and claim 7), Q-0705 (claim 13 phases) and Q-0706 (claim 11 delay, already built), and S-0312 revision 26 answers Q-0707 (claim 12: the dying vehicle is left out of the escape entry tests, now with its vehicle-present flag as well).
+M6b transports have no provisional rules left. S-0507 revision 5 answers Q-0672 (claim 13: an air transport releases infantry above the surface and every vehicle at its exact position and height, with no standing-position choice, and the own cell must be clear for both kinds) and Q-0673 (an undefined waypoint 700 supplies cell (0, 0), the search still runs and its failure keeps that centre); their rows are retired. The Q-0700 to Q-0707 rows were retired before: S-0507 revision 4 answers Q-0700 (claim 10 placement), Q-0701 (claim 8 shore search), Q-0702 (claim 16 removal cleanup), Q-0703 (claim 9 alliance object), Q-0704 (the tunnel edge of Terms and claim 7), Q-0705 (claim 13 phases) and Q-0706 (claim 11 delay, already built), and S-0312 revision 26 answers Q-0707 (claim 12: the dying vehicle is left out of the escape entry tests, now with its vehicle-present flag as well).
 
 ## Simulation (M6b: bridges)
 
@@ -646,10 +636,12 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
   - `bridges::hut::engineer_entered_hut`, an engineer entering a hut (S-0509 is not built);
   - `bridges::cell_attempts`, trigger actions 32 and 63;
   - `bridges::hut::demolish`, also for timed bombs (S-0519).
-- **Quirks.** All nine are implemented, each on by default:
+- **Quirks.** All ten are implemented, each on by default:
+  - `quirks.bridge_cursor_unrelated_link`;
   - `quirks.bridge_event_band_short`;
   - `quirks.bridge_family_by_block`;
   - `quirks.bridge_span_cap`;
+  - `quirks.collapsed_pier_span_search`;
   - `quirks.low_bridge_wrong_axis_recheck`;
   - `quirks.low_strip_regress`;
   - `quirks.pier_loss_notice_skips_chipped`;
@@ -657,6 +649,8 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
   - `quirks.repair_consumes_engineer_always`;
   - `quirks.repair_walk_unbounded`.
 - **Save format 21.** `Object::fall`, `Cells::alternate`, `Cells::pier_levels` and `World::map_rng` are new state, and they are hashed.
+- **Save format 24.** `Cells::section_self` and `Cells::covered_by` (claim 2's responsible section) are new state, and they are hashed.
+- **Save format 25.** `Track::height` (S-0207 claim 24, the heading point's stored height) is new state, and it is hashed. A landing keeps the bomb mark (claim 10).
 - **Not built.**
   - The own AI does not repair bridges, because it needs S-0509's entry.
   - The bridge-repaired and repair sounds are effects, but audio does not play them.
@@ -672,28 +666,33 @@ Provisional rules of M6b bridges, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `bridges::pieces::tile_cells`, `piece_of_q`; `bridges::mod` (`attempt_in`); `bridges::high::span_check` | a pier's cells are those of its placed tile rectangle that still hold the same pier at their own sub-tile; a position in both pier ranges is along x; after a pier collapse the far-side span is checked first; the span check walks back to the nearest start piece with no bound | Q-0710 |
-| `load` (`map_rng`) | the map-generator stream is seeded from the first R(0, 65535) of a fresh stream seeded with the game seed | Q-0711 |
-| `bridges::blow::transfer_marks` | a dropped object's deck marks move to the ground record after the attempt's heading hits | Q-0712 |
-| `bridges::blow::drop_from_deck`, `tick` | a drop clears the destination, queued destinations and path and resets the movement; the fall step replaces the locomotor step; no firing while falling | Q-0713 |
-| `bridges::low::kill_check` | "could not enter" is the ground-layer land and passability test for the object's class and zone, occupants not counted | Q-0714 |
-| `bridges::hut::hut_cell` | the hut's cell is the cell of its position; the repair starts from the engineer's cell | Q-0715 |
-| `bridges::hut::repair_offered` | a low piece in the block decides by its run; otherwise the first link within 3 cells of claim 16's bridge cell decides | Q-0716 |
-| `bridges::pieces::section_marking` | the cell's own overlay first, then one and two steps against the marking direction, then one step along it | Q-0717 |
-| `bridges::blow::heading_cell` | drive and ship head to the track step's cell, else the destination cell; walk and hover to the destination cell; the height condition is taken as met | Q-0718 |
-| `bridges::area_attempts` | only the attack target equal to the centre cell is dropped | Q-0719 |
+| `drive::begin_exit_track` | an exit track's heading point also stores the vehicle's height when the track starts | Q-0793 |
+
+S-0511 revision 5 with S-0207 revision 26 answers Q-0676 (claim 11 and S-0207 claim 24: a track's heading point keeps the height at its start, `Track::height`), Q-0677 (claim 10: the bomb mark is kept on landing) and Q-0678 (claim 7: a collapsed pier never qualifies as a start piece and, with `quirks.collapsed_pier_span_search`, not as a far piece either); their rows are retired.
+
+S-0511 revision 4 answers Q-0710 and Q-0712 to Q-0718, and S-0511 claim 22 with S-0202 claim 13 answer Q-0719 and Q-0711; their rows are retired.
+
+- **Map-generator stream (S-0202 claim 13, Q-0711).** `map_rng` starts every game at seed 0, independently of the game seed. A game is a fresh session in our engine; the stream state an earlier game of the same session would leave is not carried over (a seam).
+- **Centre-cell target loss (claim 22, Q-0719).** `bridges::drop_cell_targets`: a mobile object whose attack target is the centre cell reverts a suspended behaviour first (restoring target and destination), then a still-equal target is cleared; an aircraft in *attack* restarts its run stage (`air::restart_run`); projectiles aimed at the cell lose their target. Destinations naming the cell stay.
+- **Drops (claim 9, Q-0712 and Q-0713).** A drop keeps target, destination, queued destinations, path and movement state. Its marks move at once (`bridges::blow::move_marks`): a stationary unit's standing-position mark or present flag goes from the deck record to the ground record; a moving one's reservation at its heading point is cleared at that point's height. The deferred transfer is gone.
+- **Falling (claim 10, Q-0713; S-0301 revision 14).** The fall step and any landing hit run before the behaviour processing in `tick::object_turn`. A unit still falling after it does not advance and cannot fire: the firing check answers *illegal* at rank 4 for a falling firer. A surviving landing lifts both in the same turn.
+- **Heading hits (claims 11 and 15, Q-0718).** `bridges::blow::heads_to` compares movement points with P, the cell's centre at floor + 416 (claim 11) or at its floor (claim 15). Walk and hover use their heading point's cell and stored height within 104 leptons; drive and ship use their current track's end cell with the track's stored start height (S-0207 claim 24) or the unit's height. An object destination is not excluded, and a destination alone is not a heading point.
+- **Kill check (claim 15, Q-0714).** "Could not enter" is the unit's own-kind entry outcome of S-0209 claims 4 and 5 being *blocked* (`bridges::low::blocked`), occupants and overlays included.
+- **Responsible section (claim 2, Q-0717; S-0211 revision 17, claim 15 (a)).** `Cells::mark_high_bridge` records history per cell: `section_self` when an overlay marks the cell as its own section cell, `covered_by` for the last overlay that marked it as a covered cell. `Cells::responsible` gives the cell itself, else the last coverer; nothing searches nearby overlays. An attempt on a high-bridge cell (`bridges::qualifying_section`) takes the bridge family first, then the wooden one, by the responsible overlay or a non-collapsed pier tile of the family at the attempted cell. With a pier supplying the family over a replaced overlay, claim 3 acts on the responsible cell's retained state (`pieces::state_in_table`), and a state outside the table changes nothing. A deck cell with no responsible section writes a note and does nothing. The claim 1 high test uses the same responsibility.
+- **Pier tiles and spans (Q-0710).** A pier's state replacement acts on the eight-neighbour-connected component of cells with the reference cell's exact pre-change tile number (`pieces::pier_component`); a collapse lowers exactly those cells. A ramp's alternate look keeps the placed tile's rectangle (`pieces::tile_cells`). A position in both pier ranges reads x states 0 to 3, then y states 0 to 3, then the collapsed states (`pieces::piece_of_q`); the span searches and repair read the pier along their own axis (`pieces::pier_along`). `high::span_check` starts from a named loss cell: the first neighbour in N to NW order with a deck or body mark, its responsible or body-rule section (`pieces::section_of`, shared with the hut), then the nearest start ramp or non-collapsed pier toward the start side up to the map edge. A direct pier collapse names its start-side neighbour, then its far-side neighbour. A collapsed pier never qualifies as a start piece, and with `quirks.collapsed_pier_span_search` the far-end search passes over it too, so both checks select the combined outer-ramp-to-outer-ramp extent (claim 7, S-0511 revision 5).
+- **Hut and cursor (Q-0715, Q-0716).** The hut cell is the cell of the hut's position, its top-left foundation cell (Terms), and the engineer's own cell is the repair's start (claim 18), as `bridges::hut` already did. The repair cursor (`repair_offered`, claim 21) takes the last qualifying cell of the hut's 5 × 5 block, in increasing y and then x: a tile of either bridge role, otherwise a low piece. A low candidate decides by its own row's run. A high candidate's role position picks a probe and a direction from the claim's table, and the test follows enabled links whose end is the traversal cell until it finds a disabled link (repair), no link (none) or, with `quirks.bridge_cursor_unrelated_link`, an enabled link with neither end there (repair). A repeated traversal cell refuses repair; the warning the Edge cases ask for is not written, because the cursor test is a read-only query.
 
 ## Simulation (M6b: cloak and stealth)
 
 S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak fields, the per-type cloak, sensor, detector and disguise keys, and the weapon and warhead keys are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0516.md](m6-claims/S-0516.md); the tests are in `crates/deterministic/sim/tests/claims_s0516_*.rs`, on the invented rules of `tests/cloak_common/mod.rs`.
 
-- **The machine (claims 1 to 18 and 41).** `cloak::machine` holds the four states and their stages. `machine::turn` runs in the object's own turn, from `econ::events::turn`. `machine::uncloak` is the one call of every uncloak cause. Hooks:
-  - movement (`drive`, `walk`, `hover`, `naval`, `air`) for the cells entered and the adjacent-sensor reveal;
+- **The machine (claims 1 to 18 and 41 to 43).** `cloak::machine` holds the four states and their stages. `machine::turn` is the ordinary cloak update (claim 42): a mobile object's runs in `tick::object_turn` after its due behaviour processing and before locomotion and the separate firing; a building's runs at the end of its turn, after its behaviour. `machine::late_turn` (aircraft target checks, disguise) follows at the end of every object's turn. `machine::uncloak` is the one call of every uncloak cause. Hooks:
+  - movement for the cells entered; the completed-cell event (`machine::cell_movement_completed`, the sensor disc move and the adjacent-sensor reveal) comes from `drive` at a track target, and for other movers at the cloak update (Q-0791);
   - `combat::damage` for hits, `combat::fire` for firing, `crush` for crushing;
   - `econ::events` for entering and leaving the map and owner changes.
 
   The delay `CloakDelay` is read in single precision (F3), so the test rules' delay of 0.01 minutes is 8 ticks, not 9. An underwater vessel is submerged while it is not uncloaked (`naval::submerged`, claim 41).
-- **Coverage (claims 19 to 23 and 40).** `cloak::field` grows and shrinks cloak fields ring by ring per house; `cloak::sensor` keeps per-house, per-cell sensor and disguise-detector counts (`World::cloak`).
+- **Coverage (claims 19 to 23 and 40).** `cloak::field` grows and shrinks cloak fields ring by ring per house, in increasing Y then X, stopping at own building centres (`quirks.cloak_field_building_interrupt`); removal and capture are immediate collapses that run the neighbour-restart test; `cloak::sensor` keeps per-house, per-cell sensor and disguise-detector counts (`World::cloak`).
 - **Hidden objects (claims 24 to 29).** `cloak::hidden_from` is the game-state test, used by `combat::check`, `combat::acquire`, `air` and `targeting::selectable_by`. `cloak::view` holds the presentation queries (`look`, `shadow`, `pickable`, `deselects`, `on_radar`). They take a viewing house and are never read by the simulation.
 - **Disguise (claims 30 to 40).** `cloak::disguise` holds the disguise state (`Object::disguise`), disguising by a hit, permanent disguise, disguise when still, loss, and `appears_disguised`. `appears_disguised` feeds targeting, threat, the walker rows of S-0209 and the radar colour (`econ::minimap`).
 - **App, audio and AI.**
@@ -709,13 +708,15 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - the neutral houses' blink draw (S-0309 claim 25 (g)) is `disguise::neutral_sees_through`;
   - automatic crush choice (S-0210 claim 11) reads `appears_disguised`;
   - seizing (S-0607), paralysis (S-0214), the chrono warp (S-0514), infiltration (S-0510), mind control (S-0515), and bunkers and occupied buildings (S-0508, S-0509).
-- **Quirks.** All ten are implemented, each on by default:
+- **Quirks.** All twelve are implemented, each on by default:
   - `quirks.building_sensor_ring_owner_only`;
+  - `quirks.cloak_field_building_interrupt`;
   - `quirks.cloak_field_overlap_loss`;
   - `quirks.cloak_flag_ground_mobile_only`;
   - `quirks.cloak_zero_speed_stall`;
   - `quirks.heal_reveals_cloaked`;
   - `quirks.mirage_adjacent_check_cadence`;
+  - `quirks.mobile_sensor_removal_centre`;
   - `quirks.sensor_array_removal_radius`;
   - `quirks.sensor_building_activation_once`;
   - `quirks.sensor_count_negative`;
@@ -725,6 +726,7 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - The app does not draw the disguise image (claim 37), and the cursor, insignia and hover name of claim 36 are not wired into the status drawing.
   - Buildings drawn as static map scenery get no translucency.
   - The importer does not warn about an empty mirage disguise list.
+  - The importer warns about a `CloakingStages` of 0 or below (imported as 1) and a negative `CloakRadiusInCells` (no field), claims 20 and 43.
 - **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=cloaked-as-owner,cloaked-as-enemy cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` places a cloaking vehicle near the local start, with a plain vehicle beside it. It uses a driving vehicle type with the cloak flag if the ruleset has one, else it gives a plain vehicle its own flag through the crate seam.
   - `cloaked-as-owner.png` is the local house's own vehicle, fully cloaked after 36 ticks. It is drawn 50 % translucent.
   - For an enemy house's vehicle, the lane uncloaks it and waits for the fade back. `cloaking-as-enemy.png` shows it translucent mid-fade, 21 ticks later. `cloaked-as-enemy.png` shows it fully cloaked 14 ticks after that, when it is no longer drawn.
@@ -735,16 +737,8 @@ Provisional rules of M6b cloak and stealth, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `econ::events::turn` | the cloak update runs at the end of the object's turn (units after movement and firing, buildings after their behaviour); the claim 8 abort test comes before the stage step | Q-0720 |
-| `cloak::machine::entered_cell`, `cloak::sensor::mobile_moved` | a mobile sensor's disc moves in its own turn, on the first turn its centre cell differs from the one it was added around; removal takes it away around the current cell | Q-0721 |
-| `cloak::machine::nearest_top_corner` | the object with the smallest squared distance from its position to the cell's top corner; on a tie, the first in the cell's list | Q-0722 |
-| `crush`, `cloak::machine::crushed` | every crush of an object or an overlay makes the crusher start uncloaking, with the sound | Q-0723 |
-| `cloak::field`, `cloak::field_circle` | a radius of 0 or below gives an empty field; growth adds the circles of radius 1, 2 and so on | Q-0724 |
-| `cloak::machine::turn` | a speed below 0 is treated as 0, so under `quirks.cloak_zero_speed_stall` it stalls uncloaking; for N ≤ 1 the stage arithmetic is used unchanged | Q-0725 |
-| `cloak::machine::uncloak` | a cloaking building that is hit starts uncloaking at once from its current level, with the sound | Q-0726 |
-| `cloak::machine::entered_map` | leaving a transport counts as entering play: a vehicle with its own cloak flag comes out fully cloaked, others in the state they had | Q-0727 |
-| `cloak::disguise::appears_disguised`, `cloak::view::radar_house`, `econ::minimap::compose`, `occupancy` (row WP25) | claim 35 applies unchanged to buildings and aircraft; a disguise without a house shows its owner's radar colour; row WP25 applies only to a disguise with a house | Q-0728 |
-| `cloak::field::turn`, `set_radius`, `remove` | rings are applied in full, whatever stands on them; the restart distance is the straight line between centre cells; a removed generator restarts its neighbours, a captured one does not | Q-0729 |
+| `cloak::machine::entered_cell`, `cell_movement_completed` | movement other than drive and ship tracks has its completed-cell event (sensor disc move, adjacency reveal) at the cloak update in the tick its centre cell first differs from the recorded one | Q-0791 |
+| `cloak::field::turn`, `restart_neighbours` | the generator's own centre does not end a growth update; an idle neighbour is one in operation, at any radius | Q-0792 |
 
 ## Simulation (M6b: superweapons)
 
@@ -757,7 +751,7 @@ S-0512 (charge and readiness) and the S-0513 effects of the Allied and Soviet ki
 - **Teleport (claims 33 to 41).** `superweapons::warp`. A source pick emits the player-local marker event. The warp walks the source block (F1, claim 4). For each examined object it first releases a naval parasite with 500 ticks of suppression (`parasite::superweapon_teleport`). It then kills organic objects (claim 35), leaves the excluded ones in place, and makes the rest members (`Object::sw.warp`). Each member's stages (T2) run at the start of its own living turn (`warp::turn`, from `tick::object_turn`): leaving, the 60-tick wait, departure, the landing check and redirect, placement, arrival fate, and the arrival hold. `teleport::phasing_in` and `being_erased` read the member's stage. The departure does not release a drone parasite (S-0614 claim 12, P7), so it does not use `objects::take_inside`. The chrono weapons of S-0514 are the seam `warp::chrono_seam`.
 - **Paradrop and spy plane (claims 42 to 45; S-0522 claims 1 to 3).** `superweapons::planes`. Planes are sent from the house's edge cell. Paratroopers board the plane. The drop itself is the seam `paradrop::drop_passengers` (S-0522), so a plane holds its paratroopers. The spy plane's camera reveals through `econ::shroud::camera` in its approach and overfly.
 - **Quirks.** Every switch of S-0512 and S-0513 is implemented and on by default.
-- **Save format 24.** The records, the storm, the protection timers, the warp members and the held delay are new state, and they are hashed. `warp_state_survives_save_and_load` saves mid-warp and checks the hash.
+- **Save format 26.** The records, the storm, the protection timers, the warp members and the held delay are new state, and they are hashed. `warp_state_survives_save_and_load` saves mid-warp and checks the hash.
 - **Own AI.** The brain (`glasnost_ai::brain`) builds the cheapest building that gives a missile or storm superweapon. It does so once its harvesters are kept, while it has none and is not selling out. This build comes before the tech climb but after a building the plan wants for power, a refinery or a factory. Each tick, it fires every granted, ready and not suspended missile or storm record. It fires through `Order::FireSuperweapon`, at the seen enemy cell with the most seen enemies within 3 cells and none of its own objects (`Brain::strike_cell`). A storm is fired only while none is under way. The other kinds are not used. Tests: `fires_a_ready_superweapon_at_seen_enemies` (debug) and `builds_and_fires_a_superweapon` (release) in `crates/deterministic/ai/tests/ai.rs`.
 - **Fixture and gate.** The synthetic skirmish (`glasnost_ai::fixture`) adds NUKE (the missile kind, charge 1 minute = 900 ticks), its silo SILO (needs LAB), the upward weapon LIFT and the falling NukePayload. Every gate duel saves and loads at the first tick with a granted record still charging. The straight and the diagonal duels must launch a superweapon (`SwEvent::Launch`). The naval duel is short of credits and never reaches LAB, so it neither charges nor launches, and it still does not fly a rocket. Its `flies` flag stays off.
 - **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=sw-nuke,sw-storm,sw-iron-curtain,sw-chronosphere,sw-force-shield,sw-paradrop-plane,sw-spy-plane cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` readies the local house's first type of each kind. It places the building that gives the type, with power plants until the house has enough power, sets a full charge and aims through the client (`Tool::Superweapon`, then a left click). It writes `local-lane/m6b/sw-*.png`. On the first run on the user's install (map 0):
@@ -874,6 +868,7 @@ Interim rules and gaps:
   Game-side choices and the mixer's per-instance draws all take raw values from the client's one unsynchronised stream (S-0202 claim 11, S-0701 claim 30). `frame` and `service` lend that stream to the mixer for the pass and take it back. `now_ms` is host time; S-0701 revision 14 claim 30 (answering Q-0671) specifies the deterministic logical schedule that replaces it, which is not built yet (row below).
 - **Not modelled yet.**
   - Claim 22's animation stop sound: the simulation reports no animation end.
+  - Revision 15's Import mapping for `Report`, `StartSound` and `StopSound` per import layer (an unknown name keeps an earlier layer's reference, and the `Report` alias is read only while no start reference is held) is not built: `SoundNames` reads the merged section, where the last layer's value wins and an unknown name resolves to no entry at play time. The 127-character cut is the common text limit.
   - Claim 25's lightning sounds: there is no weather storm.
   - Enslaved and deactivated objects do not exist yet, so the normal response lists always apply (claim 17).
   - Sounds the simulation does not report yet: crushing (S-0210), chrono departure and arrival (S-0207), entering and leaving water, idle comments and undeploying (S-0107).
@@ -908,10 +903,11 @@ Provisional rules of the audio, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `bank::SoundBank::add_idx` | when the index lists a name twice, the first copy wins | Q-0263 |
-| `Audio::tick` | a weapon report plays entry 0 of the weapon's list, with no draw | Q-0327 |
 | `mixer` | a delayed instance plays the immediate mode's partition, keeps one body sample across loops, takes no startup draw and has no waits | Q-0329 |
-| `mixer` | the crowded master level reaches its target at once | Q-0333 |
+| `mixer` | the crowded master level reaches its target at once (S-0701 F3 gives the settled target only; the transition ramp is outside its coverage) | Q-0333 |
 | `Audio::frame`, `Mixer::service` | audio passes still run on host time (`now_ms`, a pass when more than 33 ms have passed) and samples complete when the device finishes them, so the per-instance draws' place in the unsynchronised stream can vary with host timing. S-0701 revision 14 claim 30 answers Q-0671 with the engine's schedule, which is not built yet: logical audio time advancing by *P(s)* (8 ms at speed 0, 16s ms otherwise) at each cycle end with a pass when *C* − *L* > 33 ms; logical sample durations max(1, ⌈100000 × *N* / (*f* × *p*)⌉) ms completing at the first pass at or past the deadline; waits expiring at the first pass past *C₀* + *d*; game-side choices before the pass's per-instance choices, in request-number order. The scenario stream and game rules are unaffected (claim 29) | none (S-0701 claim 30, not built) |
+
+S-0701 claims 21 and 32 answer Q-0327: a weapon report plays entry *r* mod *n* of the weapon's list, *r* the firer's retained report value (`Object::report_value`), carried on `Effect::Shot::report`, with no draw. Its row is retired. Q-0329 stays partial (claim 2 and E3 defer the delayed sequence), Q-0333's ramp is outside F3, and S-0005 claim 10a does not say which copy of a name listed twice in the one index wins (Q-0263), so those rows stay.
 
 ## Game client (M5b)
 
@@ -927,7 +923,7 @@ A person plays a skirmish against our AI from the main menu to the end screen, n
   - `window` runs winit and wgpu. The battlefield is drawn on the GPU (`map_gpu::MapRenderer` into a target the batch shows through `Batch2d::set_image_view`); if that fails, it falls back to the CPU compose.
 - **Pacing.** `mapview::live::Pacer` gives one tick per drawn frame at most, measured from each cycle's start (S-0201 claims 2 to 4). Nothing ticks while the options menu is open (claim 8) or the window is out of focus (claim 9). The speed comes from the setup and the options menu.
 - **Sound.** `Audio` is created at the first game start and resumed on the first gesture. At each game start the client sets it up from the install's sound and speech databases, bank and names, under the game's quirk switches (S-0701). After each tick it calls `tick`. After input it calls `selected`, `ordered`, `key` and `cue`, with what `play` collected in `selected`, `acks`, `keys` and `cues`. Each frame it calls `set_view` and `frame`. Game-side choices use the unsynchronised stream seeded with the game's seed (S-0202 claim 8).
-- **Input.** Clicks go through `glasnost_sim::targeting` (S-0214). A left release selects or orders (claim 26), a left drag is the band box, a right release clears the selection or ends a sidebar or placement mode (claims 26 and 28), and a right drag past F8 (8 pixels on either axis, `band::RightDrag`) scrolls the view (S-0101 claims 16 and 17) and is released with no effect (claim 27). The key commands are S-0213 table T2. Box selection, scrolling and key bindings are interim (table below).
+- **Input.** Clicks go through `glasnost_sim::targeting` (S-0214). A left release selects or orders (claim 26), a left drag is the band box, a right release clears the selection or ends a sidebar or placement mode (claims 26 and 28), and a right drag past F8 (8 pixels on either axis, `band::RightDrag`) scrolls the view (S-0101 claims 16 and 17) and is released with no effect (claim 27). The key commands are S-0213 table T2. Box selection, scrolling and key bindings follow those claims; the client's remaining interim rules are in the table below.
 - **Superweapons (S-0512, S-0513, S-0410).**
   - `glasnost_ui::hud::entries` puts the house's granted superweapons first in the second tab (`hud::SW_TAB`, S-0004 claim 11). They sort by charge time, with ties per `quirks.sidebar_tie_newest_first`; display names are not read, so they compare equal.
   - A superweapon icon is the type's sidebar image cut to 24 bytes plus `.shp`, with `XXICON.SHP` when that file is missing (S-0007 claim 31). It shows the F3 charge stage as the build-clock veil, "On hold" while suspended, "Ready", and "Charging" or "Active" for drain-mode types (S-0512 claim 16). A ready superweapon in its flash window flashes its tab (claim 17).

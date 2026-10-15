@@ -197,6 +197,10 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
         _ => crate::econ::slaves::group_turn(w, id),
     }
     crate::econ::shroud::object_turn(w, id, moved);
-    // spec: S-0516 claims 5 to 9, 13, 18, 20, 22, 25 and 33 (the cloak machine in the object's own turn, S-0203; Q-0720 for its place in the turn)
-    crate::cloak::turn(w, id);
+    if w.obj(id).is_some_and(|o| o.kind == Kind::Building) {
+        // spec: S-0516 claims 18, 20, 23 and 42 (a building's ordinary cloak update follows its behaviour-fired shots, S-0203)
+        crate::cloak::turn(w, id);
+    }
+    // spec: S-0516 claims 25 and 33 (an aircraft's hidden target and disguise when still, late in the object's own turn)
+    crate::cloak::machine::late_turn(w, id);
 }

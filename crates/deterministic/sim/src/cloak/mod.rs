@@ -85,8 +85,8 @@ pub struct Generator {
     pub house: HouseId,
     /// The centre cell.
     pub centre: CellXY,
-    /// The applied radius, 0 for no field (Q-0724 interim: radius 0 covers
-    /// nothing).
+    /// The applied radius, 0 for no field (S-0516 claim 20: radius 0 is an
+    /// empty field).
     pub radius: i32,
 }
 
@@ -169,8 +169,8 @@ impl CloakRules {
         // spec: S-0516 Import mapping (CloakDelay absent: 0.0 minutes, a decimal per S-0003 claims 6 and 7)
         let d = g.cloak_delay.as_ref().map_or(F64::ZERO, |d| d.value(mode));
         Self {
-            // spec: S-0516 Import mapping (CloakingStages absent: 9)
-            stages: g.cloaking_stages.unwrap_or(9),
+            // spec: S-0516 Import mapping (CloakingStages absent: 9) and claim 43 (a value of 0 or below is taken as 1)
+            stages: g.cloaking_stages.unwrap_or(9).max(1),
             delay: delay_ticks(d, mode),
             // spec: S-0516 Import mapping (CloakSound absent: none)
             sound: g.cloak_sound.clone(),
@@ -251,7 +251,7 @@ pub fn sensor_disc(r: i32) -> Vec<(i32, i32)> {
 
 /// The cloak-field circle of radius `r` (S-0516 claim 19, F5): the union of
 /// the four spans of every midpoint step with *x* ≤ *y*. Empty for `r` ≤ 0
-/// (Q-0724 interim).
+/// (S-0516 claim 20: radius 0 is an empty field, not F5's radius-zero circle).
 pub fn field_circle(r: i32) -> BTreeSet<(i32, i32)> {
     let mut out = BTreeSet::new();
     if r <= 0 {

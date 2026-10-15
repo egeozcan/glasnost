@@ -336,7 +336,7 @@ pub fn appears_disguised(w: &World, id: ObjectId, h: Option<HouseId>) -> bool {
     let Some(d) = o.cloak.disguise else {
         return false;
     };
-    // spec: S-0516 claim 35 (a disguised building or aircraft appears disguised to every house); Q-0728 (interim: applied unchanged)
+    // spec: S-0516 claim 35 (a disguised building or aircraft appears disguised to every house) (S-0516 rev 6, with the house condition passing for a disguise without a house)
     if matches!(o.kind, Kind::Building | Kind::Aircraft) {
         return true;
     }

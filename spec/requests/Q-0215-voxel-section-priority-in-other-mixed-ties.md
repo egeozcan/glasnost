@@ -1,9 +1,9 @@
 ---
 id: Q-0215
 title: Voxel section overlap priority for mixed-depth ties outside F8's table
-status: open
+status: answered
 related: [S-0105]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need

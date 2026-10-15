@@ -189,7 +189,7 @@ pub fn uncloak(w: &mut World, id: ObjectId, with_sound: bool) -> bool {
         return false;
     }
     if ob.kind == Kind::Building {
-        // spec: S-0516 claim 18 (a cloaked building falls from level 15); Q-0726 (interim: a cloaking building hit reverses at its current level)
+        // spec: S-0516 claim 18 (a cloaked building falls from level 15; an explicit cause on a cloaking building changes it to uncloaking at its current fade level, no jump to 15)
         if from == CloakState::Cloaked {
             ob.cloak.stage = 15; // spec: S-0516 claim 18 (fade levels 0 to 15)
         }
@@ -257,18 +257,36 @@ fn drop_attackers(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The object of a cell layer nearest the cell's top corner (S-0516 claims
-/// 13 and 18). Q-0722 (interim: the smallest squared distance from the
-/// object's position to (256 x, 256 y), the earlier-listed object on a
-/// tie).
+/// The candidate distance of S-0516 claim 13 for a position (`x`, `y`) in
+/// leptons: ⌊r(u² + w²)⌋ with u = x mod 256 and w = y mod 256, measured
+/// from the top corner of the cell holding the position. Unlike S-0207
+/// claim 15, `quirks.drive_nearest_from_top_corner` does not apply.
+pub fn sensor_candidate_distance(w: &World, x: i32, y: i32) -> u64 {
+    let r = w.rules();
+    // spec: S-0516 claim 13 (u = x mod 256, w = y mod 256, residues from 0 to 255; height ignored)
+    let (u, v) = (i64::from(x.rem_euclid(256)), i64::from(y.rem_euclid(256)));
+    // spec: S-0516 claim 13 (⌊r(u² + w²)⌋ with S-0204 claim 5's table root, subject to quirks.table_root_distance)
+    glasnost_num::geom::root_floor((u * u + v * v) as u64, r.quirks.table_root_distance, r.mode)
+}
+
+/// The one candidate of a cell layer for the sensor tests of S-0516 claims
+/// 13 and 18: among infantry, vehicles, aircraft and buildings, the least
+/// [`sensor_candidate_distance`] of each one's own position, ties to the
+/// first in the cell-layer order (S-0209 claim 13).
 pub fn nearest_top_corner(w: &World, c: CellXY, layer: Layer) -> Option<ObjectId> {
-    // spec: S-0009 Terms (256 leptons per cell: the top corner of cell (x, y) is (256 x, 256 y))
-    let (cx, cy) = (i64::from(c.x) * 256, i64::from(c.y) * 256);
-    let mut best: Option<(i64, ObjectId)> = None;
+    let mut best: Option<(u64, ObjectId)> = None;
     for &x in w.cells.list(c, layer) {
         let Some(o) = w.obj(x) else { continue };
-        let (dx, dy) = (i64::from(o.pos.x) - cx, i64::from(o.pos.y) - cy);
-        let d = dx * dx + dy * dy;
+        // spec: S-0516 claim 13 (candidates are infantry, vehicles, aircraft and buildings)
+        if !matches!(
+            o.kind,
+            Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+        ) {
+            continue;
+        }
+        // spec: S-0516 claim 13 (a building uses its position within the cell containing that position)
+        let d = sensor_candidate_distance(w, o.pos.x, o.pos.y);
+        // spec: S-0516 claim 13 (the least integer distance; ties to the first in the cell-layer order)
         if best.is_none_or(|(b, _)| d < b) {
             best = Some((d, x));
         }
@@ -410,10 +428,12 @@ pub fn reevaluate_cell(w: &mut World, c: CellXY, mobile_ground_only: bool) {
     }
 }
 
-/// The object's cloak turn (S-0516), in its own turn after its movement
-/// (S-0203): cell entry, a generator's ring and a building's coverage, the
-/// state machine, an aircraft's hidden target (claim 25) and disguise when
-/// still (claim 33).
+/// The object's ordinary cloak update (S-0516 claim 42, S-0203): cell
+/// entry, a generator's ring and a building's coverage, and the state
+/// machine. A vehicle, infantry unit or aircraft takes it after its due
+/// behaviour processing and before its ordinary locomotion and separate
+/// firing (`tick::object_turn`); a building after its behaviour-fired
+/// shots (`econ::events::turn`).
 pub fn turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     if !o.on_map || o.kind == Kind::Terrain {
@@ -428,8 +448,47 @@ pub fn turn(w: &mut World, id: ObjectId) {
         super::sensor::building_turn(w, id);
     }
     step(w, id);
+}
+
+/// The cloak rules late in the object's own turn, after its movement
+/// (`econ::events::turn`): an aircraft's hidden target (claim 25) and
+/// disguise when still (claim 33).
+pub fn late_turn(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if !o.on_map || o.kind == Kind::Terrain {
+        return;
+    }
     aircraft_target(w, id);
     super::disguise::turn(w, id);
+}
+
+/// Whether the object's own movement has the completed-cell movement event
+/// of S-0516 claim 22: ordinary ground (driving) and ship tracks, whose
+/// event is the arrival at a track target's cell centre.
+fn has_track_arrival(w: &World, id: ObjectId) -> bool {
+    use crate::rules::Locomotor;
+    w.obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        // spec: S-0516 claim 22 (for ordinary ground and ship tracks the event is arrival at the cell centre, S-0207 claim 7, S-0504 claim 1)
+        .is_some_and(|u| matches!(u.locomotor, Locomotor::Drive | Locomotor::Ship))
+}
+
+/// The completed-cell movement event of a vehicle, infantry unit or
+/// aircraft (S-0516 claims 13 and 22): a mobile sensor's disc moves to its
+/// current cell, then a fully cloaked mover takes the adjacent sensor test.
+/// The driving and ship locomotors call it on reaching a track target
+/// (`drive::spend`); other movement takes it in the cloak turn
+/// ([`turn`]) when the centre cell changed (Q-0791, interim).
+pub fn cell_movement_completed(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if !o.on_map || !o.kind.is_mobile() {
+        return;
+    }
+    let c = centre_cell(w, id);
+    // spec: S-0516 claim 22 (at the completed-cell movement event: remove around the last recorded coverage cell, add around the current cell and record it)
+    super::sensor::mobile_moved(w, id);
+    // spec: S-0516 claims 13 and 22 (the same event supplies the adjacency check of a fully cloaked mover)
+    adjacent_reveal(w, id, c);
 }
 
 /// An object entered cell `c` (S-0516 claims 6, 13 and 22).
@@ -437,10 +496,10 @@ fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.cell = Some(c);
     }
-    // spec: S-0516 claim 22 (a mobile sensor that changes cell moves its disc); Q-0721 (interim: at its turn)
-    super::sensor::mobile_moved(w, id);
-    // spec: S-0516 claim 13 (a fully cloaked mover entering a cell)
-    adjacent_reveal(w, id, c);
+    if !has_track_arrival(w, id) {
+        // Q-0791 (interim: movement other than driving and ship tracks has its completed-cell event at the cloak turn after the centre cell changed)
+        cell_movement_completed(w, id);
+    }
     // spec: S-0516 claim 6 (re-evaluated when it enters a cell)
     reevaluate(w, id);
 }
@@ -468,19 +527,9 @@ fn step(w: &mut World, id: ObjectId) {
             }
         }
         CloakState::Cloaking => {
-            let k = o.cloak.stage;
-            let x = fade_fraction(k, n);
-            // spec: S-0516 claim 8 (the 50 % band 64 ≤ x < 128 at health at or below red: one draw R(0, 99), below 10 aborts, silently)
-            if (64..128).contains(&x) && !above_red(w, id) {
-                let half = w.rules().quirks.ranged_draw_half_span;
-                let r = w.rng.ranged(0, 99, half);
-                if r < 10 {
-                    uncloak(w, id, false);
-                    return;
-                }
-            }
-            // spec: S-0516 claim 7 and quirks.cloak_zero_speed_stall (one step every S ticks; S ≤ 0 cloaks one stage per tick; Q-0725 interim for S < 0)
+            // spec: S-0516 claims 7 and 43, quirks.cloak_zero_speed_stall (one step every S ticks; a speed of 0 cloaks one stage per tick; a negative speed's countdown is always expired: one step per update)
             let per = speed(w, id).max(1);
+            // spec: S-0516 claim 42 (each ordinary cloak update advances at most one stage; the step, when due, precedes the abort and completion tests)
             if since >= per {
                 let mut done = false;
                 if let Some(ob) = w.obj_mut(id) {
@@ -496,6 +545,18 @@ fn step(w: &mut World, id: ObjectId) {
                 if done {
                     // spec: S-0516 claim 14 (full cloak of a vehicle, infantry unit or aircraft: attackers drop the target again)
                     drop_attackers(w, id);
+                    // spec: S-0516 claim 42 (no abort draw on the step reaching the fully cloaked threshold)
+                    return;
+                }
+            }
+            let k = w.obj(id).map_or(0, |o| o.cloak.stage);
+            let x = fade_fraction(k, n);
+            // spec: S-0516 claims 8 and 42 (the resulting stage in the 50 % band 64 ≤ x < 128 at health at or below red: one draw R(0, 99), below 10 aborts, silently; also on an update with no step)
+            if (64..128).contains(&x) && !above_red(w, id) {
+                let half = w.rules().quirks.ranged_draw_half_span;
+                let r = w.rng.ranged(0, 99, half);
+                if r < 10 {
+                    uncloak(w, id, false);
                 }
             }
         }
@@ -513,10 +574,11 @@ fn step(w: &mut World, id: ObjectId) {
                 1 // spec: S-0516 claim 18 (an uncloaking building falls one level per tick)
             } else {
                 let s = speed(w, id);
-                if s <= 0 && w.rules().quirks.cloak_zero_speed_stall {
-                    // spec: S-0516 Edge cases (quirks.cloak_zero_speed_stall: a speed of 0 never advances uncloaking; Q-0725 interim for S < 0)
+                if s == 0 && w.rules().quirks.cloak_zero_speed_stall {
+                    // spec: S-0516 Edge cases (quirks.cloak_zero_speed_stall: a speed of 0 never advances uncloaking)
                     return;
                 }
+                // spec: S-0516 claim 43 (a negative speed's countdown is always expired: one stage per ordinary update, not a stall)
                 s.max(1)
             };
             if since < per && o.cloak.stage > 0 {
@@ -662,10 +724,11 @@ pub fn blocked_reveal(w: &mut World, c: CellXY) {
     }
 }
 
-/// A crusher crushed something (S-0516 claim 11 (c)). Q-0723 (interim:
-/// every crush).
+/// A crusher actually crushed an object (S-0516 claim 11 (c), S-0210 claim
+/// 4). Overlays, walls, empty passage and a thief's take-over do not call
+/// this.
 pub fn crushed(w: &mut World, crusher: ObjectId) {
-    // spec: S-0516 claim 11 (c) (a vehicle crushes something)
+    // spec: S-0516 claim 11 (c) (a vehicle actually crushes at least one object)
     if w.obj(crusher).is_some_and(|o| o.kind == Kind::Vehicle) {
         uncloak(w, crusher, true);
     }
@@ -696,11 +759,11 @@ pub fn entered_map(w: &mut World, id: ObjectId) {
         return;
     }
     let c = centre_cell(w, id);
-    let vehicle_own = o.kind == Kind::Vehicle && o.cloak.own;
+    // spec: S-0516 claim 16 (only a vehicle with its own cloak flag placed outside the usable area is forced fully cloaked, the usable-area result tested afresh at each placement; ordinary placement and transport exits keep the state and stage)
+    let forced = o.kind == Kind::Vehicle && o.cloak.own && !w.cells.usable(c);
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.cell = Some(c);
-        if vehicle_own {
-            // spec: S-0516 claim 16 (a vehicle with its own cloak flag enters play fully cloaked); Q-0727 (interim: also after unloading)
+        if forced {
             ob.cloak.state = CloakState::Cloaked;
             ob.cloak.stage = 0;
         }
@@ -716,8 +779,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId) {
     // spec: S-0516 claim 22 (the disc is removed around its current cell)
     super::sensor::mobile_left(w, id);
     super::sensor::building_removed(w, id);
-    // spec: S-0516 claim 20 (removal: the field vanishes at once)
-    super::field::vanish(w, id, true);
+    // spec: S-0516 claim 20 (removal, sale, destruction: an immediate collapse)
+    super::field::vanish(w, id);
 }
 
 /// The object changed owner from `old` (S-0516 claims 20, 22, 23, 34).
@@ -729,7 +792,7 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     // spec: S-0516 claim 22 (the disc moves from the old owner to the new one)
     super::sensor::mobile_owner_changed(w, id);
     super::sensor::building_owner_changed(w, id);
-    // spec: S-0516 claim 20 (capture: the field vanishes at once and grows again for the new owner)
+    // spec: S-0516 claim 20 (capture: an immediate collapse with the restart test, then growth for the new owner)
     super::field::captured(w, id);
     // spec: S-0516 claim 34 (a change of owner keeps the disguise)
 }

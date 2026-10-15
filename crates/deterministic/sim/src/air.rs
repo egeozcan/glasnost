@@ -2748,6 +2748,13 @@ fn spend_pending(w: &mut World, id: ObjectId) {
     }
 }
 
+/// Restarts the attack run's stage (table T1) without changing the
+/// behaviour: an aircraft whose target is lost in *attack* (S-0511 claim 22).
+pub fn restart_run(w: &mut World, id: ObjectId) {
+    // spec: S-0511 claim 22 (the attack-run substate restarts); S-0501 table T1 (the run's first stage)
+    set_stage(w, id, Stage::Start);
+}
+
 fn set_stage(w: &mut World, id: ObjectId, s: Stage) {
     if let Some(a) = st_mut(w, id) {
         a.stage = s;

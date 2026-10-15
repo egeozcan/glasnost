@@ -6,6 +6,7 @@ use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{BuildingType, LocomotionClass, Locomotor, MovementZone, UnitType};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::drive::Track;
 use glasnost_sim::econ::sell;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
@@ -37,6 +38,8 @@ fn wheel(strength: i32) -> UnitType {
 /// - YARD: a 3 × 3 vehicle factory with the repair flag (land, so a land
 ///   vehicle may use it: the naval match does not refuse);
 /// - WEED: DEPOT with the obsolete-unloading flag;
+/// - PAD: DEPOT with the pad flag (claim 17's tether exchange);
+/// - PAD2: PAD with DEPOT2's two places and displacements;
 /// - repair step 10, repair percentage 25 %: a step costs 3 credits.
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
@@ -49,6 +52,8 @@ fn rules() -> Ruleset {
     push("buildings", "DEPOT2");
     push("buildings", "YARD");
     push("buildings", "WEED");
+    push("buildings", "PAD");
+    push("buildings", "PAD2");
     let s = &mut r.sim;
     s.vehicles.insert("TRUCK".into(), wheel(600));
     let mut hop = wheel(600);
@@ -78,6 +83,12 @@ fn rules() -> Ruleset {
     s.buildings.insert("DEPOT2".into(), two);
     s.buildings.insert("YARD".into(), yard);
     s.buildings.insert("WEED".into(), weed);
+    let mut pad = s.buildings["DEPOT"].clone();
+    pad.helipad = Some(true);
+    let mut pad2 = s.buildings["DEPOT2"].clone();
+    pad2.helipad = Some(true);
+    s.buildings.insert("PAD".into(), pad);
+    s.buildings.insert("PAD2".into(), pad2);
     s.general.repair_step = Some(10);
     s.general.repair_percent = Some(glasnost_rules::sim::Decimal("25%".into()));
     r
@@ -187,25 +198,49 @@ fn sounds(w: &World, s: Sound) -> usize {
         .count()
 }
 
-/// Docks a damaged truck at a fresh depot by a click and runs until it is
-/// docked and the depot is in its repair behaviour.
-fn docked_scene(health_at: i32) -> (World, ObjectId, ObjectId) {
-    let r = rules();
-    let mut w = game(&r);
-    let d = depot_at(&mut w, "DEPOT");
+/// Sends a damaged truck to a fresh depot of type `name` by a click and
+/// runs until it is in contact asleep and the depot is in its repair
+/// behaviour; `tether` asks that it is tethered too.
+fn scene_at(r: &Ruleset, name: &str, health_at: i32, tether: bool) -> (World, ObjectId, ObjectId) {
+    let mut w = game(r);
+    let d = depot_at(&mut w, name);
     let v = truck(&mut w, 0, 6, 1, health_at);
     open(&mut w);
     click_enter(&mut w, v, d);
     assert!(
-        run_until(&mut w, 600, |w| docked(w, v)
+        run_until(&mut w, 600, |w| contact(w, v) == Some(d)
+            && (!tether || docked(w, v))
             && w.obj(d).unwrap().beh.current == Some(Behaviour::Repair)
             && w.obj(v).unwrap().beh.current == Some(Behaviour::Sleep)),
-        "the truck docks in sleep and the depot starts repair"
+        "the truck arrives in sleep and the depot starts repair"
     );
     (w, d, v)
 }
 
-// spec: S-0314 claims 6, 16, 17 and 18; S-0215 claim 29; S-0214 table V row n3 (end to end: the click over an allied depot is enter; the truck takes contact, drives to the docking point, docks facing east, the depot repairs it step by step at the owner's cost and sends it away)
+/// An ordinary depot (no pad flag): the truck is serviced untethered
+/// (claim 17).
+fn docked_scene(health_at: i32) -> (World, ObjectId, ObjectId) {
+    let (w, d, v) = scene_at(&rules(), "DEPOT", health_at, false);
+    assert!(!docked(&w, v), "no tether at an ordinary depot");
+    (w, d, v)
+}
+
+/// Marks the truck's contact as tethered (docked): the state claim 17's
+/// pad exchange gives, set directly, since a straight approach to a
+/// one-place pad depot never meets that exchange's conditions.
+fn tether(w: &mut World, v: ObjectId) {
+    w.obj_mut(v).unwrap().depot.link.as_mut().unwrap().tethered = true;
+    assert!(docked(w, v));
+}
+
+/// A docked truck: [`docked_scene`] with the tether set.
+fn pad_scene(health_at: i32) -> (World, ObjectId, ObjectId) {
+    let (mut w, d, v) = docked_scene(health_at);
+    tether(&mut w, v);
+    (w, d, v)
+}
+
+// spec: S-0314 claims 6, 16, 17 and 18; S-0215 claim 29; S-0214 table V row n3 (end to end: the click over an allied depot is enter; the truck takes contact, drives to the docking point, where its movement arrival queues repair and sleep with no tether, the depot repairs it untethered step by step at the owner's cost and sends it away)
 #[test]
 fn end_to_end_click_repair_and_release() {
     let r = rules();
@@ -221,17 +256,14 @@ fn end_to_end_click_repair_and_release() {
     assert_eq!(contact(&w, v), Some(d), "contact before arrival");
     assert!(!docked(&w, v));
     let credits = w.houses[0].credits;
-    assert!(run_until(&mut w, 600, |w| docked(w, v)
-        && w.obj(d).unwrap().beh.current == Some(Behaviour::Repair)));
+    assert!(run_until(&mut w, 600, |w| w.obj(d).unwrap().beh.current
+        == Some(Behaviour::Repair)));
     assert_eq!(w.obj(v).unwrap().pos.cell(), dock_cell());
     assert!(run_until(&mut w, 100, |w| w.obj(v).unwrap().beh.current
         == Some(Behaviour::Sleep)));
-    assert_eq!(
-        w.obj(v).unwrap().body.value(w.tick),
-        16384,
-        "it docked facing east"
-    );
+    assert!(!docked(&w, v), "no tether at an ordinary depot");
     assert!(run_until(&mut w, 600, |w| health(w, v) > 300));
+    assert!(!docked(&w, v), "paid repair needs no tether");
     assert!(run_until(&mut w, 3000, |w| contact(w, v).is_none()));
     assert_eq!(health(&w, v), 600, "repaired to full strength");
     // 30 steps of 10 health at 3 credits.
@@ -389,7 +421,6 @@ fn claim_25_no_departure_cell_keeps_contact() {
         tick::step(&mut w);
     }
     assert_eq!(contact(&w, v), Some(d), "contact retained");
-    assert!(docked(&w, v));
     assert_eq!(w.obj(v).unwrap().dest, None, "no departure ordered");
     assert_eq!(sounds(&w, Sound::UnitRepaired), 0);
     objects::remove(&mut w, blockers[0]);
@@ -436,7 +467,8 @@ fn claim_6_neutral_vehicle_returns_to_its_guard_spot() {
         o.dest = Some(Target::Object(d));
         o.guard_spot = Some(spot);
     }
-    assert!(run_until(&mut w, 1500, |w| docked(w, v)));
+    assert!(run_until(&mut w, 1500, |w| w.obj(d).unwrap().beh.current
+        == Some(Behaviour::Repair)));
     assert!(run_until(&mut w, 1500, |w| contact(w, v).is_none()));
     assert_eq!(w.obj(v).unwrap().dest, Some(spot));
     assert_eq!(w.obj(v).unwrap().guard_spot, None);
@@ -611,7 +643,7 @@ fn claim_20_approaching_vehicle() {
 // spec: S-0314 claim 20 (a docked vehicle keeps contact and tether under a move order)
 #[test]
 fn claim_20_docked_vehicle_keeps_contact() {
-    let (mut w, d, v) = docked_scene(300);
+    let (mut w, d, v) = pad_scene(300);
     assert!(orders::issue(&mut w, ALPHA, mv(v, 9, 9)));
     tick::step(&mut w);
     assert!(docked(&w, v), "a move order keeps the tether");
@@ -621,7 +653,7 @@ fn claim_20_docked_vehicle_keeps_contact() {
 // spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a damaged vehicle queues and the standing-on-depot refusal clears contact and queue next tick; at full health contact is lost at once)
 #[test]
 fn claim_20_same_depot_enter_while_docked() {
-    let (mut w, d, v) = docked_scene(300);
+    let (mut w, d, v) = pad_scene(300);
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
     tick::step(&mut w);
     tick::step(&mut w);
@@ -631,7 +663,7 @@ fn claim_20_same_depot_enter_while_docked() {
         "queued, then refused while standing on it"
     );
     assert_eq!(w.obj(v).unwrap().depot.queued, None);
-    let (mut w, d, v) = docked_scene(300);
+    let (mut w, d, v) = pad_scene(300);
     w.obj_mut(v).unwrap().health = 600;
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
     tick::step(&mut w);
@@ -641,7 +673,7 @@ fn claim_20_same_depot_enter_while_docked() {
 // spec: S-0314 claim 21 and Edge cases (quirks.depot_remote_repair on: a docked vehicle ordered away keeps receiving paid steps when it stands still far from the depot)
 #[test]
 fn claim_21_remote_repair() {
-    let (mut w, _d, v) = docked_scene(300);
+    let (mut w, _d, v) = pad_scene(300);
     next_step(&mut w, v, 600).expect("settling step");
     assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
     assert!(run_until(&mut w, 900, |w| w.obj(v).unwrap().pos.cell()
@@ -656,7 +688,7 @@ fn claim_21_remote_repair() {
 // spec: S-0314 claim 21 (settling at 200 leptons or more from the docking point: a moving vehicle takes no step and has its locomotor switched on, checked again after D ticks; once it stands still there it takes the settling step without the near-point locomotor-off; Q-0681 answered)
 #[test]
 fn claim_21_distant_settling() {
-    let (mut w, d, v) = docked_scene(300);
+    let (mut w, d, v) = pad_scene(300);
     // The settling step and one working step, then cannot pay: back to settling.
     w.houses[0].credits = 6;
     next_step(&mut w, v, 600).unwrap();
@@ -693,12 +725,8 @@ fn claim_21_distant_settling() {
 fn quirk_depot_remote_repair_off() {
     let mut r = rules();
     r.globals.quirks.depot_remote_repair = false;
-    let mut w = game(&r);
-    let d = depot_at(&mut w, "DEPOT");
-    let v = truck(&mut w, 0, 6, 1, 300);
-    open(&mut w);
-    click_enter(&mut w, v, d);
-    assert!(run_until(&mut w, 600, |w| docked(w, v)));
+    let (mut w, _d, v) = scene_at(&r, "DEPOT", 300, false);
+    tether(&mut w, v);
     assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
     tick::step(&mut w);
     assert_eq!(contact(&w, v), None);
@@ -733,13 +761,8 @@ fn claim_22_destruction_approaching() {
 /// A docked vehicle carried off its depot (beyond S-0312 claim 17's kill
 /// distance) while asleep, then the depot destroyed.
 fn destroyed_while_docked(r: &Ruleset) -> (World, ObjectId) {
-    let mut w = game(r);
-    let d = depot_at(&mut w, "DEPOT");
-    let v = truck(&mut w, 0, 6, 1, 300);
-    open(&mut w);
-    click_enter(&mut w, v, d);
-    assert!(run_until(&mut w, 600, |w| w.obj(v).unwrap().beh.current
-        == Some(Behaviour::Sleep)));
+    let (mut w, d, v) = scene_at(r, "DEPOT", 300, false);
+    tether(&mut w, v);
     let p = w.obj(v).unwrap().pos;
     objects::place(&mut w, v, Pos::new(p.x + 1024, p.y, p.z), 16384);
     // Placing a unit makes it fall back to rest; the test's carrying is not
@@ -1053,9 +1076,9 @@ fn hover_docks_at_a_three_by_three_depot_and_is_repaired() {
     open(&mut w);
     click_enter(&mut w, v, d);
     assert!(
-        run_until(&mut w, 900, |w| docked(w, v)
+        run_until(&mut w, 900, |w| contact(w, v) == Some(d)
             && w.obj(d).unwrap().beh.current == Some(Behaviour::Repair)),
-        "the hover docks and the depot starts repair"
+        "the hover arrives and the depot starts repair"
     );
     assert_eq!(
         w.obj(v).unwrap().pos.cell(),
@@ -1066,4 +1089,198 @@ fn hover_docks_at_a_three_by_three_depot_and_is_repaired() {
         run_until(&mut w, 900, |w| health(w, v) > 300),
         "the depot repairs the hover"
     );
+}
+
+// spec: S-0314 claims 17 and 20 (an untethered vehicle at a depot without the pad flag, in sleep while the depot waits, settles or works, is released at once by a move order; no remote repair under the lost contact)
+#[test]
+fn claim_20_untethered_vehicle_released_in_every_phase() {
+    for phase in 0..3 {
+        let (mut w, d, v) = docked_scene(300);
+        let dd = d_rep(&w);
+        if phase >= 1 {
+            next_step(&mut w, v, 600).expect("settling step");
+        }
+        if phase == 2 {
+            assert!(run_until(&mut w, dd, |w| w.obj(d).unwrap().beh.progress == 2));
+        }
+        assert!(!docked(&w, v));
+        assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
+        tick::step(&mut w);
+        assert_eq!(contact(&w, v), None, "phase {phase}: released");
+        let h = health(&w, v);
+        assert!(run_until(&mut w, 900, |w| w.obj(v).unwrap().pos.cell()
+            == testkit::mid(SIZE, 10, 10)
+            && !glasnost_sim::occupancy::in_progress(w, v)));
+        common_wait(&mut w, 200);
+        assert_eq!(health(&w, v), h, "phase {phase}: no remote repair");
+    }
+}
+
+fn common_wait(w: &mut World, n: i32) {
+    for _ in 0..n {
+        tick::step(w);
+    }
+}
+
+// spec: S-0314 claim 17 (a pad depot's repeated request tethers a vehicle in the foundation centre's cell with no moving destination; the completed-entry exchange then turns it toward 16384 facing units; an ordinary depot's request sets no tether)
+#[test]
+fn claim_17_pad_depot_tethers_in_the_enter_processing() {
+    for (name, want) in [("PAD", true), ("DEPOT", false)] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, name);
+        let v = truck(&mut w, 0, 1, 1, 300);
+        open(&mut w);
+        assert!(depot::request(&mut w, v, d, false));
+        w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
+        w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+        depot::process_enter(&mut w, v);
+        assert_eq!(docked(&w, v), want, "{name}");
+        if want {
+            assert!(run_until(&mut w, 200, |w| w
+                .obj(v)
+                .unwrap()
+                .body
+                .value(w.tick)
+                == 16384));
+        }
+    }
+}
+
+// spec: S-0314 claim 17 and Terms (the pad exchange: in the centre cell with no moving destination; with one, only when the vehicle in place 0 is more than 128 leptons from the centre by the truncated spatial distance, so 128 does not pass and 129 does)
+#[test]
+fn claim_17_pad_exchange_place_zero_distance() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD2");
+    let first = truck(&mut w, 0, 8, 8, 300);
+    let v = truck(&mut w, 0, 1, 1, 300);
+    open(&mut w);
+    assert!(depot::request(&mut w, first, d, false));
+    assert!(depot::request(&mut w, v, d, false));
+    assert_eq!(depot::link(&w, first).unwrap().place, 0);
+    let c = w.reference_point(d);
+    assert_eq!(w.obj(v).unwrap().pos.cell(), c.cell());
+    w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+    assert!(
+        depot::pad_exchange(&w, d, v),
+        "a destination on a stationary vehicle is not a moving destination"
+    );
+    // A destination away from its cell: the locomotor destination point is
+    // present and the locomotor reports movement.
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
+    for (off, want) in [(128, false), (129, true)] {
+        w.obj_mut(first).unwrap().pos = Pos::new(c.x + off, c.y, c.z);
+        assert_eq!(depot::pad_exchange(&w, d, v), want, "place 0 at {off}");
+    }
+    // An ordinary depot has no such exchange.
+    let mut w2 = game(&r);
+    let d2 = depot_at(&mut w2, "DEPOT");
+    let v2 = truck(&mut w2, 0, 1, 1, 300);
+    open(&mut w2);
+    assert!(depot::request(&mut w2, v2, d2, false));
+    assert!(!depot::pad_exchange(&w2, d2, v2));
+}
+
+// spec: S-0314 claim 17 and Terms (the movement report of a driving vehicle: its locomotor destination point present, or its heading point present and differing from its horizontal position, x and y only; a turn in place, a track in progress or stored steps are not sufficient by themselves; the order-level destination is needed in every row); Q-0794 (interim: the destination point is present while the destination's goal cell differs from the vehicle's)
+#[test]
+fn claim_17_driving_movement_report() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD");
+    let v = truck(&mut w, 0, 1, 1, 300);
+    open(&mut w);
+    assert!(depot::request(&mut w, v, d, false));
+    let c = w.reference_point(d);
+    // Place 0 holds the requester itself, at the centre: the distance never
+    // passes, so the exchange tethers exactly when no moving destination.
+    let still = |w: &World| depot::pad_exchange(w, d, v);
+    w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+    assert!(still(&w), "a destination at its own cell: no report");
+    let pos = w.obj(v).unwrap().pos;
+    let track = |target: (i32, i32), z: i32| Track {
+        d: 2,
+        e: None,
+        target,
+        target_cell: Pos::new(target.0, target.1, z).cell(),
+        height: z,
+        next: 0,
+        last: (pos.x, pos.y),
+        cells: vec![pos.cell()],
+        crush: false,
+        exit: false,
+    };
+    // Stored steps, a turn in place and a track whose heading point is at
+    // the current horizontal position (only its height differs) do not
+    // report movement.
+    w.obj_mut(v).unwrap().path.steps.push(0);
+    w.obj_mut(v)
+        .unwrap()
+        .drive
+        .as_mut()
+        .unwrap()
+        .turning_in_place = true;
+    w.obj_mut(v).unwrap().drive.as_mut().unwrap().track = Some(track((pos.x, pos.y), pos.z + 100));
+    assert!(still(&w), "steps, a turn and a same-position heading point");
+    // A heading point differing in x only reports movement.
+    w.obj_mut(v).unwrap().drive.as_mut().unwrap().track = Some(track((pos.x + 1, pos.y), pos.z));
+    assert!(!still(&w), "heading point one lepton away");
+    // Without the order-level destination there is no moving destination.
+    w.obj_mut(v).unwrap().dest = None;
+    assert!(still(&w), "no order-level destination");
+    // A destination point away from its cell reports movement without a
+    // heading point.
+    w.obj_mut(v).unwrap().drive.as_mut().unwrap().track = None;
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
+    assert!(!still(&w), "destination point present");
+    assert_eq!(w.obj(v).unwrap().pos.cell(), c.cell());
+}
+
+// spec: S-0314 claim 17 (with place 0 empty, a requester with a moving destination cannot tether through the exchange; one without a moving destination still can)
+#[test]
+fn claim_17_pad_exchange_empty_place_zero() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD2");
+    let first = truck(&mut w, 0, 8, 8, 300);
+    let v = truck(&mut w, 0, 1, 1, 300);
+    open(&mut w);
+    assert!(depot::request(&mut w, first, d, false));
+    assert!(depot::request(&mut w, v, d, false));
+    assert_eq!(depot::link(&w, v).unwrap().place, 1);
+    depot::stop_order(&mut w, first);
+    assert!(depot::link(&w, first).is_none(), "place 0 empty");
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
+    assert!(
+        !depot::pad_exchange(&w, d, v),
+        "moving destination: no substitute position"
+    );
+    w.obj_mut(v).unwrap().dest = None;
+    assert!(depot::pad_exchange(&w, d, v), "no moving destination");
+}
+
+// spec: S-0314 claim 17 and S-0215 claim 29 (reaching the docking-point cell during movement sets the depot's ready mark and queues repair at the depot and sleep at the vehicle, neither started at once, and creates no tether)
+#[test]
+fn claim_17_movement_arrival_sets_the_ready_mark() {
+    for name in ["DEPOT", "PAD"] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, name);
+        let v = truck(&mut w, 0, 1, 1, 300);
+        open(&mut w);
+        assert!(depot::request(&mut w, v, d, false));
+        w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
+        w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+        w.obj_mut(d).unwrap().beh.ready_mark = false;
+        let before = w.obj(d).unwrap().beh.current;
+        depot::movement_arrival(&mut w, v);
+        let b = &w.obj(d).unwrap().beh;
+        assert!(b.ready_mark, "{name}: ready mark set");
+        assert_eq!(b.queued, Some(Behaviour::Repair), "{name}: repair queued");
+        assert_eq!(b.current, before, "{name}: not started at once");
+        let o = w.obj(v).unwrap();
+        assert_eq!(o.beh.queued, Some(Behaviour::Sleep), "{name}: sleep queued");
+        assert_eq!(o.beh.current, Some(Behaviour::Enter));
+        assert!(!docked(&w, v), "{name}: no tether");
+    }
 }

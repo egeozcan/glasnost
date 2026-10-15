@@ -562,16 +562,19 @@ impl Audio {
                 let s = self.names.anim_report(name).map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
-            Effect::Shot { weapon, from, .. } => {
+            Effect::Shot {
+                weapon,
+                from,
+                report,
+                ..
+            } => {
                 let name = w.rules().combat.weapon(*weapon).name.clone();
-                // spec: S-0701 claim 21 (the report at the firing position, positional, any owner; no draw)
-                // interim: Q-0327 (entry 0 of the list instead of the creation draw's variant)
-                let first = self
-                    .names
-                    .report(&name)
-                    .iter()
-                    .find_map(|n| self.catalog.resolve(n));
-                if let Some(id) = first {
+                // spec: S-0701 claim 21 (the report at the firing position, positional, any owner; no draw: entry r mod n of the list, r the firer's creation-derived report value)
+                let list = self.names.report(&name);
+                let entry = (!list.is_empty())
+                    .then(|| &list[usize::from(*report) % list.len()])
+                    .and_then(|n| self.catalog.resolve(n));
+                if let Some(id) = entry {
                     self.request(Some(w), id, Where::Fixed(*from), FULL);
                 }
             }

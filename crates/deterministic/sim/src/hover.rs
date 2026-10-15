@@ -12,10 +12,9 @@
 //! - **Switching off.** [`switched`] is called by the control-centre rule of
 //!   S-0405 claim 13 when a vehicle is disabled or enabled.
 //!
-//! Interim rules of the open request Q-0675 are marked with its ID: the
-//! layer of the actual-position flag, an arrival with no destination, a
-//! failed arrival-time search, the paralysed state and a person's stop order
-//! (S-0503 claim 16) on the single destination field.
+//! - **Destinations (Terms, claim 16).** The locomotor's destination *D* is
+//!   the order-level destination's point, or after a person's stop order
+//!   with *D* = *P* the point it kept ([`HoverState::retained`]).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -107,6 +106,14 @@ pub struct HoverState {
     pub requests: Option<(i32, Vec<(CellXY, Layer)>)>,
     /// The bomb mark (S-0312 Terms), given by claim 11.
     pub bomb_mark: bool,
+    /// The locomotor's destination *D* kept after a person's stop order
+    /// cleared the order-level destination while *D* and *P* were equal
+    /// (claim 16).
+    pub retained: Option<Pos>,
+    /// The point a held assignment supplied as *D* for a cell destination,
+    /// kept until another assignment, stopping, completion or failure
+    /// (claim 18).
+    pub held: Option<Pos>,
 }
 
 impl HoverState {
@@ -132,6 +139,8 @@ impl HoverState {
             claims: Vec::new(),
             requests: None,
             bomb_mark: false,
+            retained: None,
+            held: None,
         }
     }
 }
@@ -173,10 +182,16 @@ pub fn powered(w: &World, id: ObjectId) -> bool {
     !switched_off(w, id) || hover_height(w, id) > 0
 }
 
-/// Whether the vehicle is moving (Terms): a destination or a heading point.
+/// Whether the vehicle is moving (Terms): a destination *D* or a heading
+/// point.
 pub fn moving(w: &World, id: ObjectId) -> bool {
-    w.obj(id)
-        .is_some_and(|o| o.dest.is_some() || o.hover.as_ref().is_some_and(|h| h.point.is_some()))
+    // spec: S-0503 Terms and claim 16 (moving: D or P; moving-state tests use D, also a D kept after the order-level destination was cleared)
+    w.obj(id).is_some_and(|o| {
+        o.dest.is_some()
+            || o.hover
+                .as_ref()
+                .is_some_and(|h| h.point.is_some() || h.retained.is_some())
+    })
 }
 
 /// Whether the vehicle is moving now (Terms): moving and *T* ≠ 0.
@@ -204,10 +219,22 @@ pub fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 }
 
 /// The destination point *D* (Terms): a cell's centre at its surface height,
-/// plus 416 on a high-bridge cell; an object's position.
+/// plus 416 on a high-bridge cell; an object's position; with no order-level
+/// destination, the point kept by a stop order (claim 16).
 fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
     let o = w.obj(id)?;
-    match o.dest? {
+    let Some(dest) = o.dest else {
+        // spec: S-0503 claim 16 (the locomotor's D, distinct from the order-level destination)
+        return o.hover.as_ref().and_then(|h| h.retained);
+    };
+    if let Some(h) = o.hover.as_ref()
+        && h.for_dest == Some(dest)
+        && let Some(p) = h.held
+    {
+        // spec: S-0503 claim 18 (the held assignment's remembered D: expiry, searches and point choices do not adjust it)
+        return Some(p);
+    }
+    match dest {
         Target::Cell(c) => {
             // spec: S-0204 claim 3 (the cell centre)
             let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
@@ -282,12 +309,37 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     let no_point = h.point.is_none();
     let powered = powered(w, id);
     let now = moving_now(w, id);
+    if crate::parasite::held(w, id) {
+        // spec: S-0503 claim 18 (a cell supplies (256x + 128, 256y + 128, its terrain surface height at the centre): no 416-lepton deck lift, not the unit's height)
+        let supplied = match dest {
+            Some(Target::Cell(c)) => {
+                let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+                Some(Pos::new(x, y, w.surface_at(x, y)))
+            }
+            _ => None,
+        };
+        // spec: S-0503 claims 5, 17 and 18 (a held vehicle, its parasite hold timer running, merely remembers the supplied point as D: no immediate choice and no destination-height adjustment; the order-level destination changes as usual)
+        with(w, id, |h| {
+            h.for_dest = dest;
+            h.held = supplied;
+            if dest.is_some() {
+                h.retained = None;
+            }
+        });
+        return;
+    }
     // spec: S-0503 claim 4 (ρ = 1 when it is given a move while powered and not moving now)
     let start = dest.is_some() && powered && !now;
     // spec: S-0503 claim 5 (moving now without a heading point: throttle and ρ set to 1)
     let restart = dest.is_some() && powered && now && no_point;
     with(w, id, |h| {
         h.for_dest = dest;
+        // spec: S-0503 claim 18 (an assignment after hold expiry applies the ordinary height adjustment anew, even for the same cell)
+        h.held = None;
+        if dest.is_some() {
+            // A new order-level destination replaces a kept one (claim 16).
+            h.retained = None;
+        }
         if start || restart {
             h.rho = F64::from_i64(1, Rounding::TowardZero);
         }
@@ -299,12 +351,9 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
         // spec: S-0503 claim 5 (a vehicle moving now keeps an existing heading point; giving a destination while unpowered does not itself start the choice)
         return;
     }
-    // spec: S-0503 claim 5 (not moving now: the first search and heading-point choice at once, so S-0417's ρ = ½ set right after it persists; moving now without a heading point: a choice there only if its destination has disappeared or is in its present cell; Q-0695 answered); Q-0675 (interim: no state counts as paralysed, and the moving-now path update is the choice's own)
-    let here = w.obj(id).map(|x| x.pos.cell());
-    let choose = !now || destination_point(w, id).is_none_or(|d| Some(d.cell()) == here);
-    if choose {
-        let _ = choose_next(w, id);
-    }
+    // spec: S-0503 claim 5 (not moving now: the first search and heading-point choice at once, so S-0417's ρ = ½ set right after it persists; moving now without a heading point: the path-update rules at once, with destination-cell completion and the retry-delay gate, and a heading-point choice there too)
+    let old = path_update(w, id, None);
+    let _ = choose_next(w, id, old);
 }
 
 /// The fraction set after a factory exit instruction (S-0417 claim 5): it
@@ -357,7 +406,8 @@ enum Choice {
     /// As `NoPoint`, by claim 7's completion: the destination was cleared
     /// in its cell.
     Completed,
-    /// As `NoPoint`, with no destination: no choice was attempted.
+    /// No destination *D* and no contacted object in the present cell: no
+    /// choice was attempted (claim 15).
     Idle,
     /// A refused next cell (table T1): no travel on this tick, unless the
     /// move was given up.
@@ -435,7 +485,7 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
         }
         // spec: S-0503 F5 (arrived when trunc(r(Δx² + Δy²)) ≤ d, map plane only)
         if dist(w, o.pos, p, false) <= d as u64 {
-            // spec: S-0503 claim 7 (no snap: it keeps its position and chooses its next heading point); claim 13 (each F5 arrival puts it between steps again)
+            // spec: S-0503 claim 7 (no snap: it keeps its position and chooses its next heading point); claim 13 (each F5 arrival puts it between steps again); claim 15 (clearing P alone does not clear its reservation)
             with(w, id, |s| {
                 s.point = None;
                 s.between = true;
@@ -444,16 +494,27 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
             if crate::transport::arrival(w, id) {
                 return;
             }
-            choice = choose_next(w, id);
-            // Q-0675 interim: a failed search that leaves no heading point counts as a successful choice without one.
-            if matches!(choice, Choice::NoPoint | Choice::Completed) {
-                // spec: S-0503 claim 13 (a successful arrival-time choice that leaves no heading point restores a mark at the actual position)
-                let at = w.obj(id).map_or(o.pos, |x| x.pos);
-                mark(w, id, at);
-                // spec: S-0503 claim 15 (such a choice gives a cell-arrival update at the actual position after the flag is restored; not a completion that clears the destination with no path left while the contacted object is not in the present cell; Q-0693 answered)
-                if !(choice == Choice::Completed && !contact_here(w, id)) {
+            // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
+            crate::depot::movement_arrival(w, id);
+            // spec: S-0503 claims 7 and 15 (the initial path update can finish or fail the move before the choice)
+            let old = path_update(w, id, Some(p));
+            choice = choose_next(w, id, old);
+            let at = w.obj(id).map_or(o.pos, |x| x.pos);
+            match choice {
+                Choice::NoPoint | Choice::Completed => {
+                    // spec: S-0503 claim 15 (a non-refusing choice that leaves no point, a deferred or failed search included: the actual-position flag, then a cell-arrival update there)
+                    mark(w, id, at);
                     crate::econ::release::arrival(w, id);
                 }
+                Choice::Idle if !q.hover_idle_arrival_reservation => {
+                    // spec: S-0503 Edge cases (quirks.hover_idle_arrival_reservation off: the old reservation is released and the actual position marked, with no cell-arrival update)
+                    if let Some(old) = old {
+                        unmark(w, id, old);
+                    }
+                    mark(w, id, at);
+                }
+                // spec: S-0503 claim 15 (no D and no contacted object in the present cell: no choice, no restoration, no update; the old reservation stays, quirks.hover_idle_arrival_reservation)
+                _ => {}
             }
         } else {
             choice = Choice::Chosen;
@@ -462,7 +523,8 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
         // spec: S-0503 claim 4 and State and ordering (moving with no heading point: ρ = 1; travel uses the retained hover speed, without that tick's ramp)
         with(w, id, |s| s.rho = one);
         d = step_length(w, id, u);
-        choice = choose_next(w, id);
+        let old = path_update(w, id, None);
+        choice = choose_next(w, id, old);
     }
     // spec: S-0503 claim 7 (a refused next cell suppresses travel on that tick, except that a give-up still takes the computed step; a failed fresh search does not cancel the computed positive d, also after a refusal's immediate search; Q-0692 answered)
     let travels = match choice {
@@ -526,13 +588,76 @@ fn refuse(w: &mut World, id: ObjectId) {
     });
 }
 
+/// The path update that precedes a heading-point choice (claims 5, 7 and
+/// 15): with no stored step and an order-level destination, the completion
+/// in its cell, else a fresh search when the retry delay allows it. A failed
+/// search clears *D* and *P* and with them `old`, the former heading
+/// point's reservation; returns the reservation still standing.
+fn path_update(w: &mut World, id: ObjectId, old: Option<Pos>) -> Option<Pos> {
+    let Some(o) = w.obj(id).cloned() else {
+        return old;
+    };
+    if !o.path.steps.is_empty() || o.dest.is_none() {
+        return old;
+    }
+    if at_destination(w, id) {
+        // spec: S-0503 claim 7 (in the destination's cell at a height difference below 208: the destination is cleared and the move ends)
+        drop_dest(w, id);
+        return old;
+    }
+    // spec: S-0212 claim 21 and S-0207 claim 19 (d) (a fresh search with no stored steps waits for R)
+    if w.tick >= o.path.retry_at
+        && fresh_search(w, id) != Search::Found
+        && w.obj(id).is_none_or(|o| o.dest.is_none())
+    {
+        // spec: S-0503 claim 15 (a search failing in the initial update clears D and P, and the old heading reservation, with no replacement flag)
+        if let Some(p) = old {
+            unmark(w, id, p);
+        }
+        return None;
+    }
+    old
+}
+
+/// Clears the destination: the order-level one and a kept *D*.
+fn drop_dest(w: &mut World, id: ObjectId) {
+    if let Some(ob) = w.obj_mut(id) {
+        ob.dest = None;
+    }
+    with(w, id, |h| {
+        h.retained = None;
+        // spec: S-0503 claim 18 (stopping, completion or failure clears the remembered D)
+        h.held = None;
+    });
+}
+
 /// Chooses the next heading point (claim 5), with S-0207 claim 19 c and d
-/// and S-0212 claims 20 to 23 when no stored step is left.
-fn choose_next(w: &mut World, id: ObjectId) -> Choice {
+/// and S-0212 claims 20 to 23 when no stored step is left. `old` is the
+/// reservation of the heading point just given up at an arrival: any
+/// attempted choice clears it (claims 13 and 15).
+fn choose_next(w: &mut World, id: ObjectId, old: Option<Pos>) -> Choice {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return Choice::NoPoint;
     };
+    let has_d = destination_point(w, id).is_some();
+    if !has_d && !contact_here(w, id) {
+        // spec: S-0503 claim 15 (choice is attempted when D still exists or the contacted object is in the present cell; an absent order-level destination does not forbid it)
+        return Choice::Idle;
+    }
+    if let Some(p) = old {
+        // spec: S-0503 claim 15 (the choice clears the old heading reservation if still present)
+        unmark(w, id, p);
+    }
+    if crate::parasite::held(w, id) {
+        // spec: S-0503 claim 17 (a held heading-point choice clears its old reservation and point but refuses as blocked); claim 12 (no heading point, throttle, hover speed and ρ at 0)
+        refuse(w, id);
+        return Choice::Refused { gave_up: false };
+    }
+    if !has_d {
+        // spec: S-0503 claim 15 (no D but the contacted object in the present cell: the choice ends without a point, with no fresh search)
+        return Choice::NoPoint;
+    }
     if !o.path.steps.is_empty()
         && o.dest.is_some()
         && let Some(target) = o.target
@@ -547,35 +672,36 @@ fn choose_next(w: &mut World, id: ObjectId) -> Choice {
     let empty = w.obj(id).is_none_or(|o| o.path.steps.is_empty());
     if empty {
         if at_destination(w, id) {
-            if let Some(ob) = w.obj_mut(id) {
-                // spec: S-0503 claim 7 (in the destination's cell at a height difference below 208: the destination is cleared and the move ends)
-                ob.dest = None;
-            }
+            // spec: S-0503 claims 7 and 16 (a D kept with P equal to it: the choice removes P, then the completion removes D)
+            drop_dest(w, id);
             return Choice::Completed;
         }
-        if w.obj(id).is_none_or(|o| o.dest.is_none()) {
-            // Q-0675 interim: with no destination no choice is attempted (no flag restored, no cell-arrival update).
-            return Choice::Idle;
-        }
-        // spec: S-0212 claim 21 and S-0207 claim 19 (d) (a fresh search with no stored steps waits for R)
+        // spec: S-0212 claim 21 and S-0207 claim 19 (d) (a fresh search with no stored steps waits for R; a kept D's cell is searched for even with no order-level destination, claim 16)
         if t >= o.path.retry_at {
             fresh_search(w, id);
         }
-        let none = w
-            .obj(id)
-            .is_none_or(|o| o.path.steps.is_empty() || o.dest.is_none());
+        let none =
+            w.obj(id).is_none_or(|o| o.path.steps.is_empty()) || destination_point(w, id).is_none();
         if none {
             // spec: S-0207 claim 19 (d) (no next step chosen: the arrival-time stop of part a; destination cleared, target kept)
-            if crate::walk::arrival_stop_holds(w, id)
-                && let Some(ob) = w.obj_mut(id)
-            {
-                ob.dest = None;
-                ob.path.steps.clear();
+            if crate::walk::arrival_stop_holds(w, id) {
+                drop_dest(w, id);
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.path.steps.clear();
+                }
             }
             return Choice::NoPoint;
         }
     }
-    step_check(w, id, false)
+    let c = step_check(w, id, false);
+    if c == (Choice::Refused { gave_up: true }) {
+        // A give-up ends the move: a kept D goes with the order-level one.
+        with(w, id, |h| {
+            h.retained = None;
+            h.held = None;
+        });
+    }
+    c
 }
 
 /// Whether the vehicle is in its destination's cell at a height difference
@@ -593,6 +719,32 @@ fn at_destination(w: &World, id: ObjectId) -> bool {
 /// searches of table T1); a found path gets the look at its first cell.
 fn fresh_search(w: &mut World, id: ObjectId) -> Search {
     let t = w.tick;
+    // spec: S-0503 claim 16 (a search targets D's cell even with no order-level destination)
+    let kept = w
+        .obj(id)
+        .filter(|o| o.dest.is_none())
+        .and_then(|o| o.hover.as_ref())
+        .and_then(|h| h.retained);
+    if let Some(k) = kept
+        && let Some(ob) = w.obj_mut(id)
+    {
+        ob.dest = Some(Target::Cell(k.cell()));
+    }
+    let res = search_dest(w, id, t);
+    if kept.is_some() {
+        let cleared = w.obj(id).is_none_or(|o| o.dest.is_none());
+        if let Some(ob) = w.obj_mut(id) {
+            ob.dest = None;
+        }
+        if cleared {
+            with(w, id, |h| h.retained = None);
+        }
+    }
+    res
+}
+
+/// [`fresh_search`] for the order-level destination in place.
+fn search_dest(w: &mut World, id: ObjectId, t: i32) -> Search {
     let res = path::compute(w, id, Mode::Fresh);
     if res == Search::Found {
         let delay = w.rules().general.retry_delay;
@@ -795,10 +947,28 @@ fn mark(w: &mut World, id: ObjectId, p: Pos) {
     }
 }
 
-/// Clears the vehicle-present flag at point `p` (S-0503 claim 13) that
-/// this vehicle set.
+/// The occupancy layer a flag is cleared in (S-0503 claim 13): by the
+/// point's height alone, the deck at 416 or more above the terrain surface
+/// (`quirks.hover_flag_clear_height_only`; off: [`mark_layer`]).
+fn clear_layer(w: &World, p: Pos) -> Layer {
+    if !w.rules().quirks.hover_flag_clear_height_only {
+        // spec: S-0503 Edge cases (quirks.hover_flag_clear_height_only off: clearing requires the same high-bridge condition as setting)
+        return mark_layer(w, p);
+    }
+    // spec: S-0503 claim 13 (clearing uses the point's height alone: at least 416 above terrain clears deck occupancy even without a high bridge, below that ground occupancy)
+    if p.z - w.surface_at(p.x, p.y) >= DECK {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    }
+}
+
+/// Clears the vehicle-present flag at point `p` (S-0503 claim 13). Our
+/// cell records count the flags per vehicle, so only a flag this vehicle
+/// set in that layer is cleared: a clearing layer that differs from the
+/// setting one leaves the set flag standing.
 fn unmark(w: &mut World, id: ObjectId, p: Pos) {
-    let key = (p.cell(), mark_layer(w, p));
+    let key = (p.cell(), clear_layer(w, p));
     let held = with(w, id, |h| {
         let held = h.claims.contains(&key);
         h.claims.retain(|x| *x != key);
@@ -1057,8 +1227,29 @@ pub fn switched(w: &mut World, id: ObjectId, off: bool, was_powered: bool) {
 /// travels on to its heading point and stops there. The order's own clearing
 /// of the destination and path is all that happens to them here.
 pub fn stop_order(w: &mut World, id: ObjectId) {
-    // spec: S-0503 claim 16 (it keeps its heading point, throttle, hover speed and ρ; not a forced immediate halt; Q-0696 answered); Q-0675 (interim: the locomotor's destination equal to the heading point is not kept apart from the order-level destination, which the order clears)
-    let _ = (w, id);
+    if !is_hover(w, id) {
+        return;
+    }
+    let d = destination_point(w, id);
+    let p = state(w, id).and_then(|h| h.point);
+    // spec: S-0503 claim 16 (it keeps its heading point, throttle, hover speed and ρ; the order-level destination is cleared, but the locomotor's D is kept when D and P are equal as full three-dimensional points, else cleared with the stored path)
+    let keep = d.is_some() && d == p;
+    with(w, id, |h| {
+        h.retained = if keep { d } else { None };
+        // spec: S-0503 claim 18 (a stop clears the held assignment's remembered D; a kept D is the retained one)
+        h.held = None;
+    });
+    let t = w.tick;
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0503 claim 16 (clearing the order-level destination makes the ordinary retry timer immediately eligible)
+        ob.path.retry_at = t;
+    }
+}
+
+/// Whether a person's stop order leaves the hover's stored path (claim 16):
+/// it kept its destination *D*, equal to its heading point.
+pub fn keeps_path(w: &World, id: ObjectId) -> bool {
+    state(w, id).is_some_and(|h| h.retained.is_some())
 }
 
 /// The stop request of claim 10: the destination and stored path are

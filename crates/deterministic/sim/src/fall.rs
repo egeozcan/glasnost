@@ -61,8 +61,9 @@ pub fn next_rate(w: &World, v: i32) -> i32 {
     t.max(v_min)
 }
 
-/// One falling update of `id` (S-0511 claim 10, F3), in place of its
-/// locomotor's step. Returns whether it moved.
+/// One falling update of `id` (S-0511 claim 10, F3), before its behaviour
+/// processing; while it still falls its locomotor does not advance.
+/// Returns whether it moved.
 ///
 /// No animation is ever attached to an object in our simulation, so the
 /// parachute recurrence of F3 (S-0522 claim 12,
@@ -78,7 +79,7 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
     let landed = z - ground <= 0;
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.z = z;
-        // Q-0713 (interim: the rate is updated on the landing update too)
+        // spec: S-0511 F3 (v_{n+1} follows every update, the landing update included; the landing test follows the move)
         ob.fall.rate = next;
         if landed {
             // spec: S-0511 claim 10 (height above the terrain 0 or less after the move: height 0, the fall ends)
@@ -100,12 +101,9 @@ fn land(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let marked = o.fall.bomb_mark;
     let health = o.health;
+    // spec: S-0511 claim 10 (one hit per landing, not one on every later grounded update; landing does not spend or clear the bomb mark, even when the object survives, so a later fall without a new mark still ends with this hit)
     if marked && health > 0 {
         landing_hit(w, id, health);
-    }
-    // Q-0713 (interim: the bomb mark is spent on landing, after the landing hit, whose death effects read it, S-0312 claims 11 and 12)
-    if let Some(ob) = w.obj_mut(id) {
-        ob.fall.bomb_mark = false;
     }
 }
 

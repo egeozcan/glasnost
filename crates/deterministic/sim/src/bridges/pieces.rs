@@ -113,7 +113,9 @@ pub enum Piece {
 }
 
 /// The piece of tile position `q` (S-0511 Terms; Import mapping). A
-/// position in both pier ranges is a pier along x (Q-0710).
+/// position in both non-collapsed pier ranges is a pier along x; an x
+/// match only at collapsed state 4 does not override a non-collapsed y
+/// match.
 pub fn piece_of_q(w: &World, q: i32) -> Option<Piece> {
     let b = w.catalogue.as_ref()?.bridge_positions;
     // spec: S-0511 Terms (a position the theater leaves unset matches no tile)
@@ -135,14 +137,32 @@ pub fn piece_of_q(w: &World, q: i32) -> Option<Piece> {
     if is(b.bottom_left) {
         return Some(Piece::FarRamp(Line::Y));
     }
-    // Q-0710 (interim: a position in both pier ranges is a pier along x)
-    for (line, m) in [(Line::X, b.middle[0]), (Line::Y, b.middle[1])] {
-        // spec: S-0511 Terms (a pier: q = m + k, k = 0 to 4)
-        if m != glasnost_map::terrain::UNSET_POSITION && (m..=m + 4).contains(&q) {
-            return Some(Piece::Pier(line, q - m));
+    let piers = [(Line::X, b.middle[0]), (Line::Y, b.middle[1])];
+    // spec: S-0511 Terms (a pier: q = m + k, k = 0 to 4; test x states 0 to 3 before y states 0 to 3, and an x match only at collapsed state 4 does not override a non-collapsed y match)
+    for states in [0..=3, 4..=4] {
+        for (line, m) in piers {
+            if m != glasnost_map::terrain::UNSET_POSITION && states.contains(&(q - m)) {
+                return Some(Piece::Pier(line, q - m));
+            }
         }
     }
     None
+}
+
+/// The family and state *k* of a pier tile in `c` read along `line` alone
+/// (S-0511 Terms): repair's start-piece selection and the span searches use
+/// the axis they are working on, not the direct-attempt interpretation of
+/// a position in both pier ranges.
+pub fn pier_along(w: &World, c: CellXY, line: Line) -> Option<(Family, i32)> {
+    let cell = w.cells.cell(c)?;
+    let (f, q) = tile_q(w, cell.tile)?;
+    let b = w.catalogue.as_ref()?.bridge_positions;
+    let m = match line {
+        Line::X => b.middle[0],
+        Line::Y => b.middle[1],
+    };
+    // spec: S-0511 Terms (a pier: q = m + k, k = 0 to 4, m = m1 along x and m2 along y; repair and span repair use the selected axis)
+    (m != glasnost_map::terrain::UNSET_POSITION && (m..=m + 4).contains(&q)).then_some((f, q - m))
 }
 
 /// The family and piece of the tile in `c`.
@@ -195,39 +215,58 @@ pub fn pier_body_sub(line: Line, s: u8) -> bool {
 }
 
 /// The cells of the placed tile that holds `c` (S-0307 claim 23's
-/// rectangle from the sub-tile and the tile's width), keeping those that
-/// still hold a tile of the same family's piece kind at their own place in
-/// the rectangle (Q-0710). Row-major order.
+/// rectangle from the sub-tile and the tile's width) that still hold that
+/// tile at their own place in the rectangle. Row-major order. Used for a
+/// ramp's whole-tile look (S-0511 claim 4); a pier's state replacement uses
+/// [`pier_component`].
 pub fn tile_cells(w: &World, c: CellXY) -> Vec<CellXY> {
     let Some(cell) = w.cells.cell(c) else {
         return Vec::new();
     };
-    let Some((tw, th)) = w.tile_size(cell.tile) else {
+    let tile = cell.tile;
+    let Some((tw, th)) = w.tile_size(tile) else {
         return vec![c];
     };
     let (tw, th) = (i32::from(tw.max(1)), i32::from(th.max(1)));
     let s = i32::from(cell.sub_tile);
     // spec: S-0307 claim 23 (x₀ = x − (s mod W), y₀ = y − ⌊s / W⌋)
     let (x0, y0) = (c.x - s % tw, c.y - s / tw);
-    let me = piece_at(w, c);
-    let same = |p: Option<(Family, Piece)>| match (me, p) {
-        (Some((f, Piece::Pier(l, _))), Some((g, Piece::Pier(m, _)))) => f == g && l == m,
-        (a, b) => a == b,
-    };
     let mut out = Vec::new();
     for j in 0..th {
         for i in 0..tw {
             let p = CellXY::new(x0 + i, y0 + j);
-            // Q-0710 (interim: the cells of the rectangle that still hold the same piece at their own sub-tile)
+            // spec: S-0307 claim 23 (the placed tile's cells: the rectangle cells holding it at their own sub-tile); S-0511 claim 4 (the ramp's whole tile)
             if let Some(pc) = w.cells.cell(p)
+                && pc.tile == tile
                 && i32::from(pc.sub_tile) == j * tw + i
-                && same(piece_at(w, p))
             {
                 out.push(p);
             }
         }
     }
     out
+}
+
+/// A pier's affected tile cells for a state replacement (S-0511 Terms):
+/// the eight-neighbour-connected component containing reference cell `r`
+/// whose cells have exactly `r`'s tile number. Row-major order.
+pub fn pier_component(w: &World, r: CellXY) -> Vec<CellXY> {
+    let Some(tile) = w.cells.cell(r).map(|x| x.tile) else {
+        return Vec::new();
+    };
+    let mut seen = std::collections::BTreeSet::from([(r.y, r.x)]);
+    let mut todo = vec![r];
+    while let Some(c) = todo.pop() {
+        // spec: S-0511 Terms (eight-neighbour-connected; sub-tile numbers and placed-tile origins do not restrict the set)
+        for d in crate::regions::STEPS {
+            let n = at(c, d, 1);
+            // spec: S-0511 Terms (cells with exactly the reference cell's pre-change tile number)
+            if w.cells.cell(n).is_some_and(|x| x.tile == tile) && seen.insert((n.y, n.x)) {
+                todo.push(n);
+            }
+        }
+    }
+    seen.into_iter().map(|(y, x)| CellXY::new(x, y)).collect()
 }
 
 /// The reference cell of the pier whose tile holds `c` (S-0511 Terms).
@@ -310,23 +349,44 @@ pub fn section_in(w: &World, c: CellXY) -> Option<Section> {
     })
 }
 
-/// The section whose overlay marks `c` (S-0511 claim 2; S-0211 claim 15):
-/// the cell's own overlay first, then the overlay one step against the
-/// marking direction, two steps against it, and one step along it
-/// (Q-0717).
-pub fn section_marking(w: &World, c: CellXY) -> Option<Section> {
-    // spec: S-0511 claim 2; Q-0717 (interim: own cell, then one and two steps against the marking direction, then one step along it)
-    for k in [0, 1, 2, -1] {
-        for d in [(0, -1), (-1, 0)] {
-            let o = at(c, d, -k);
-            if let Some(s) = section_in(w, o)
-                && s.d == d
-            {
-                return Some(s);
-            }
-        }
+/// The responsible section of high-bridge cell `c` when its overlay is a
+/// section (S-0511 claim 2; S-0211 claim 15 (a)): no search for another
+/// overlay when it is missing or replaced.
+pub fn responsible_section(w: &World, c: CellXY) -> Option<Section> {
+    // spec: S-0511 claim 2 (historical responsibility; no nearest-overlay or directional tie-break, no search for another section)
+    section_in(w, w.cells.responsible(c)?)
+}
+
+/// The section cell and line of a cell carrying a deck or bridge-body mark
+/// (S-0511 claims 7 and 16): a high-bridge cell gives its responsible
+/// section; a body-marked cell gives the section cell of claim 16's body
+/// rule, with no family.
+pub fn section_of(w: &World, b: CellXY) -> Option<(CellXY, Line, Option<Family>)> {
+    if w.cells.is_bridge(b) {
+        // spec: S-0511 claim 16 (a high-bridge cell gives its section cell); claim 7 (its responsible section)
+        let s = responsible_section(w, b)?;
+        return Some((s.cell, s.line, Some(s.family)));
     }
-    None
+    let line = match w.cells.axis(b) {
+        crate::cells::Axis::X => Line::X,
+        crate::cells::Axis::Y => Line::Y,
+        crate::cells::Axis::None => return None,
+    };
+    let d = line.across();
+    // spec: S-0511 claim 16 and Constants (t: the distance to the nearest cell without the body mark across, toward increasing y on an x bridge, increasing x on a y bridge; 1 ≤ t ≤ 4)
+    let t = (1..=4).find(|&t| !w.cells.body(at(b, d, t)))?;
+    // spec: S-0511 claim 16 (the section cell displaced by (t − 2) d)
+    Some((at(b, d, t - 2), line, None))
+}
+
+/// The marking direction of a section of `line` (S-0211 claim 15): map
+/// north along x, map west along y.
+pub fn marking_direction(line: Line) -> (i32, i32) {
+    // spec: S-0211 claim 15 (indices 24 and 237 mark along step direction 0, map north; 25 and 238 along step direction 6, map west)
+    match line {
+        Line::X => (0, -1),
+        Line::Y => (-1, 0),
+    }
 }
 
 /// A section's state (S-0511 Terms).
@@ -344,6 +404,18 @@ pub enum State {
     OpenStart,
     /// Its far-side neighbour is gone.
     OpenFar,
+}
+
+/// The state of a section of `line` with overlay data `v`, or `None` for a
+/// value outside the section-state table (S-0511 Terms and claim 2).
+pub fn state_in_table(line: Line, v: u8) -> Option<State> {
+    // spec: S-0511 Terms (intact 0 to 3 along x, 9 to 12 along y; the other states as in state_of)
+    let intact = match line {
+        Line::X => (0..=3).contains(&v),
+        Line::Y => (9..=12).contains(&v),
+    };
+    let st = state_of(line, v);
+    (intact || st != State::Intact).then_some(st)
 }
 
 /// The state of a section of `line` with overlay data `v` (S-0511 Terms).

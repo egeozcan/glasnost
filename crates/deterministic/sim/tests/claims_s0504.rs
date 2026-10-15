@@ -677,6 +677,30 @@ fn claim_7_naval_match() {
     assert!(!naval::naval_match_refuses(&w, depot, amphi), "amphibious");
 }
 
+// spec: S-0504 claim 7 (only the plain amphibious zone bypasses the naval-flag comparison; amphibious-crusher and amphibious-destroyer must match the building's naval flag)
+#[test]
+fn claim_7_other_amphibious_zones_match_the_flag() {
+    for z in [
+        MovementZone::AmphibiousCrusher,
+        MovementZone::AmphibiousDestroyer,
+    ] {
+        let mut r = rules();
+        r.sim.vehicles.get_mut("AMPHI").unwrap().movement_zone = Some(z);
+        let mut w = world(r);
+        let yard = at(&mut w, "NAVYARD", 0, -8, -6);
+        let depot = at(&mut w, "DEPOT", 0, 13, 0);
+        let amphi = at(&mut w, "AMPHI", 0, 0, 2);
+        assert!(
+            naval::naval_match_refuses(&w, yard, amphi),
+            "{z:?} at a naval yard"
+        );
+        assert!(
+            !naval::naval_match_refuses(&w, depot, amphi),
+            "{z:?} at a land depot"
+        );
+    }
+}
+
 // spec: S-0504 claim 8 and F3 (the starting distance, 200 for ship and hovering locomotors and 100 for others, strictly; the spatial distance with height, truncated)
 #[test]
 fn claim_8_waiting_gate() {
@@ -1174,14 +1198,16 @@ fn ship_docked_at_yard() -> (World, ObjectId, ObjectId) {
     let mut docked = false;
     for _ in 0..1500 {
         tick::step(&mut w);
-        if glasnost_sim::depot::tethered(&w, skiff)
+        // spec: S-0314 claim 17 (a yard without the pad flag services the vessel untethered)
+        if w.obj(skiff).unwrap().contact == Some(yard)
             && w.obj(skiff).unwrap().beh.current == Some(Behaviour::Sleep)
         {
             docked = true;
             break;
         }
     }
-    assert!(docked, "the ship docks at its yard");
+    assert!(docked, "the ship arrives at its yard");
+    assert!(!glasnost_sim::depot::tethered(&w, skiff));
     (w, yard, skiff)
 }
 
@@ -1209,10 +1235,22 @@ fn claim_14_ship_repaired_at_yard() {
     assert!(w.houses[0].credits < credits, "its owner paid");
 }
 
-// spec: S-0504 claim 14 and S-0314 claim 20 (a docked vessel keeps its contact and tether under a move order)
+// spec: S-0504 claim 14 and S-0314 claim 20 (a docked vessel keeps its contact and tether under a move order; an untethered one, as at a yard without the pad flag, S-0314 claim 17, loses it)
 #[test]
 fn claim_14_docked_ship_keeps_contact_under_a_move() {
+    let (mut w, _yard, skiff) = ship_docked_at_yard();
+    click_move(&mut w, skiff, cell(-4, 4));
+    tick::step(&mut w);
+    assert_eq!(w.obj(skiff).unwrap().contact, None, "untethered: released");
     let (mut w, yard, skiff) = ship_docked_at_yard();
+    // The tether a pad exchange would give, set directly.
+    w.obj_mut(skiff)
+        .unwrap()
+        .depot
+        .link
+        .as_mut()
+        .unwrap()
+        .tethered = true;
     click_move(&mut w, skiff, cell(-4, 4));
     tick::step(&mut w);
     assert_eq!(w.obj(skiff).unwrap().contact, Some(yard));

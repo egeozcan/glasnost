@@ -895,3 +895,192 @@ fn quirk_elevated_heading_point() {
     assert_eq!(run(true), 416);
     assert_eq!(run(false), 0);
 }
+
+/// Starts the parasite hold timer of `id` for `n` ticks (S-0614 claims 7–8).
+fn hold(w: &mut World, id: ObjectId, n: i32) {
+    let t = w.tick;
+    w.obj_mut(id)
+        .unwrap()
+        .parasite
+        .get_or_insert_with(Default::default)
+        .hold_until = Some(t + n);
+}
+
+/// The vehicle flags of the ground layer over cells (dx, 0) for dx in `xs`.
+fn row_flags(w: &World, xs: std::ops::RangeInclusive<i32>) -> u32 {
+    xs.map(|dx| vehicle_flags(w, cell(dx, 0))).sum()
+}
+
+// spec: S-0503 claims 5 and 17 (a held vehicle, its parasite hold timer running, merely remembers the supplied destination: no immediate choice; it stays powered; once the timer ends it moves)
+#[test]
+fn claim_17_held_assignment_remembers_only() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
+    settle(&mut w);
+    let rho = hs(&w, id).rho;
+    hold(&mut w, id, 40);
+    order(&mut w, id, cell(3, 0));
+    let s = hs(&w, id);
+    assert!(s.point.is_none(), "no immediate choice");
+    assert!(s.rho.eq_num(rho), "no ρ change");
+    assert!(hover::powered(&w, id), "held is not switched off");
+    common::run(&mut w, 30);
+    assert_eq!(w.obj(id).unwrap().pos.cell(), cell(0, 0));
+    common::run(&mut w, 20);
+    until_stopped(&mut w, id, 2000);
+    assert_eq!(
+        w.obj(id).unwrap().pos.cell(),
+        cell(3, 0),
+        "it moves after the hold"
+    );
+}
+
+// spec: S-0503 claim 18 (a cell assigned while held supplies its centre at terrain surface height as D, not 0 and not the unit's height; the order-level destination changes at once; D survives the hold's expiry unadjusted; a later assignment clears it)
+#[test]
+fn claim_18_held_destination_point() {
+    use glasnost_sim::world::{Pos, Target};
+    let mut w = world();
+    // Raised flat ground everywhere.
+    let all: Vec<_> = w.cells.grid.iter().map(|(c, _)| c).collect();
+    for c in all {
+        w.cells.grid.get_mut(c).unwrap().level = 2;
+    }
+    let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
+    settle(&mut w);
+    let c = cell(6, 0);
+    let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+    let z = w.surface_at(x, y);
+    assert!(z > 0, "raised ground");
+    hold(&mut w, id, 10);
+    order(&mut w, id, c);
+    assert_eq!(w.obj(id).unwrap().dest, Some(Target::Cell(c)));
+    assert_eq!(hs(&w, id).held, Some(Pos::new(x, y, z)));
+    common::run(&mut w, 12);
+    assert_eq!(w.obj(id).unwrap().dest, Some(Target::Cell(c)));
+    assert_eq!(
+        hs(&w, id).held,
+        Some(Pos::new(x, y, z)),
+        "unchanged through expiry"
+    );
+    common::order_move(&mut w, id, cell(0, 2));
+    common::run_until(&mut w, 20, |w| {
+        w.obj(id).unwrap().dest == Some(Target::Cell(cell(0, 2)))
+    });
+    assert_eq!(hs(&w, id).held, None, "a later assignment");
+}
+
+// spec: S-0503 claim 17 (a held heading-point choice clears its old reservation and point but refuses as blocked); claim 12 (no point, throttle, hover speed and ρ at 0); claim 15 (no actual-position restoration from a refusal)
+#[test]
+fn claim_17_held_choice_refuses() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, -6, 0, 16384);
+    settle(&mut w);
+    order(&mut w, id, cell(0, 0));
+    let first = hs(&w, id).point.expect("a first heading point").cell();
+    hold(&mut w, id, 1000);
+    common::run_until(&mut w, 500, |w| hs(w, id).point.is_none());
+    let s = hs(&w, id);
+    assert!(s.point.is_none());
+    assert!(s.throttle.eq_num(F64::ZERO) && s.phi.eq_num(F64::ZERO) && s.rho.eq_num(F64::ZERO));
+    assert!(w.obj(id).unwrap().dest.is_some(), "the destination is kept");
+    assert_eq!(vehicle_flags(&w, first), 0, "the old reservation cleared");
+    assert_eq!(row_flags(&w, -8..=2), 0, "no actual-position flag");
+}
+
+// spec: S-0503 claim 16 (a stop order with D and P equal as points keeps D and the stored path; the order-level destination is cleared; it travels on, and at the arrival the choice removes P and the completion removes D, with the actual-position flag restored)
+#[test]
+fn claim_16_stop_with_equal_points_keeps_d() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
+    settle(&mut w);
+    order(&mut w, id, cell(1, 0));
+    let p = hs(&w, id).point.expect("a heading point");
+    assert_eq!(p.cell(), cell(1, 0), "P is D's point");
+    let owner = w.obj(id).unwrap().owner.unwrap();
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        owner,
+        glasnost_sim::orders::Order::Stop { actor: id }
+    ));
+    tick::step(&mut w);
+    assert!(
+        w.obj(id).unwrap().dest.is_none(),
+        "the order-level destination is cleared"
+    );
+    assert_eq!(hs(&w, id).retained, Some(p), "the locomotor keeps D");
+    assert!(hover::moving(&w, id));
+    let t = until_stopped(&mut w, id, 2000);
+    assert!(t < 2000);
+    assert_eq!(hs(&w, id).retained, None, "the completion removes D");
+    let here = w.obj(id).unwrap().pos.cell();
+    assert_eq!(here, cell(1, 0));
+    assert_eq!(vehicle_flags(&w, here), 1, "the actual-position flag");
+    assert_eq!(row_flags(&w, -2..=3), 1);
+}
+
+// spec: S-0503 claim 16 (unequal D and P: D and the stored path are cleared, the heading point kept); claim 15 (an arrival with no D and no contact: no choice, and the old reservation stays, quirks.hover_idle_arrival_reservation)
+#[test]
+fn claim_16_stop_with_unequal_points_clears_d() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, -8, 0, 16384);
+    settle(&mut w);
+    order(&mut w, id, cell(-2, 0));
+    common::run(&mut w, 60);
+    let p = hs(&w, id).point.expect("a heading point");
+    let owner = w.obj(id).unwrap().owner.unwrap();
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        owner,
+        glasnost_sim::orders::Order::Stop { actor: id }
+    ));
+    tick::step(&mut w);
+    assert_eq!(hs(&w, id).retained, None);
+    assert!(
+        w.obj(id).unwrap().path.steps.is_empty(),
+        "the stored path cleared"
+    );
+    until_stopped(&mut w, id, 2000);
+    assert_eq!(w.obj(id).unwrap().pos.cell(), p.cell());
+    assert_eq!(
+        row_flags(&w, -8..=0),
+        1,
+        "one flag, at the old heading cell"
+    );
+    assert_eq!(vehicle_flags(&w, p.cell()), 1);
+}
+
+// spec: S-0503 claim 13 and Edge cases (quirks.hover_flag_clear_height_only: clearing picks the deck by the point's height alone, so an elevated point's ground reservation off a bridge is left when the point is given up; off: clearing needs the high bridge too); claim 17 (the held choice at the arrival gives the point up)
+#[test]
+fn quirk_flag_clear_height_only() {
+    let run = |on: bool| {
+        let mut r = rules();
+        r.globals.quirks.hover_flag_clear_height_only = on;
+        let mut w = world_with(r);
+        let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
+        settle(&mut w);
+        common::order_move(&mut w, id, cell(3, 0));
+        for _ in 0..20 {
+            let o = w.obj(id).unwrap();
+            let s = w.surface_at(o.pos.x, o.pos.y);
+            w.obj_mut(id).unwrap().pos.z = s + 400;
+            tick::step(&mut w);
+            if hs(&w, id).point.is_some() {
+                break;
+            }
+        }
+        let p = hs(&w, id).point.expect("a heading point");
+        assert_eq!(p.z - w.surface_at(p.x, p.y), 416, "an elevated point");
+        assert_eq!(vehicle_flags(&w, p.cell()), 1, "set in the ground layer");
+        // Held: the arrival's choice gives the point up and refuses.
+        hold(&mut w, id, 3000);
+        common::run_until(&mut w, 1000, |w| hs(w, id).point.is_none());
+        assert!(hs(&w, id).point.is_none());
+        vehicle_flags(&w, p.cell())
+    };
+    assert_eq!(
+        run(true),
+        1,
+        "the elevated point's ground reservation is not cleared"
+    );
+    assert_eq!(run(false), 0);
+}

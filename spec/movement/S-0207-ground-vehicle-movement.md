@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 25
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794]
 supersedes: []
 ---
 
@@ -26,7 +26,9 @@ left to other specs. Claim 20 states how an object with the teleporting locomoto
 own: where it lands, what the jump does and how long it then phases in. Claim 21 covers
 its retained state after temporary driving. Claim 22 fixes cell-tag arrival timing for driving vehicles and own-locomotor teleports. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
-that approaches a target stops once the target is in range, and what happens to its destination. This spec covers skirmish. Network games and campaigns are out of scope.
+that approaches a target stops once the target is in range, and what happens to its destination. Claims 24 and 25 distinguish
+stored heading height and the separate locomotor destination point, including factory exits.
+This spec covers skirmish. Network games and campaigns are out of scope.
 
 ## Terms
 
@@ -74,7 +76,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     locomotor (S-0208 claims 19–20 own infantry landing-point choice and placement clearing),
   - claim 21 and scenario D23 cover teleporting vehicles whose own movement is temporarily
     replaced by driving,
-  - claim 22 and D24 cover driving vehicles and own-locomotor teleports of any kind.
+  - claim 22 and D24 cover driving vehicles and own-locomotor teleports of any kind,
+  - claim 24 and D27 cover heading-point heights for driving and ship vehicles,
+  - claim 25 and D29 cover the separate locomotor destination point for driving and ship vehicles.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -113,11 +117,20 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   which this spec always names with the words "locomotion class".
 - **Move destination.** The point the vehicle's current move order leads to, in leptons. It is used
   for braking (claim 10) and for giving up a move (claim 15). When the destination cell is a
-  high-bridge cell, its height is the deck's height.
+  high-bridge cell, its height is the deck's height. This is not a test for the
+  presence of the separate locomotor destination point.
+- **Locomotor destination point.** A world point in integer leptons accepted by locomotion
+  as its movement goal, distinct from both the order-level destination and the active
+  track's heading point. It can be present without a path or track, including while
+  standing in its own cell. Claim 25 defines its lifetime for driving and ship vehicles.
+  S-0314 claim 17 uses its presence in the depot movement report.
 - **Heading point.** The point a vehicle's locomotor is moving the vehicle towards at this moment,
   if any. For the driving locomotor it is the track target of the track the vehicle is on, from
   the tick its track begins until the tick that track ends; it moves one cell on with the track
-  target when a curve is chained (claim 8). A drive vehicle that stands still, turns in place
+  target when a curve is chained (claim 8). Its stored world height is the vehicle's world
+  height when an ordinary track begins, retained through chaining as claim 24 specifies,
+  not the terrain or deck height at the target. The factory exit track instead stores
+  height 0 leptons (claim 24). A drive vehicle that stands still, turns in place
   before a step, waits (claim 15) or is between two tracks has no heading point. A vehicle with the
   teleporting locomotor has none either (claim 20). The ship locomotor has the same heading
   point as the driving locomotor (S-0504 claim 1). For the hovering locomotor it is the next
@@ -1402,6 +1415,77 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       boundaries, position and draw ordering; Q-0600)
     - Confidence: high
 
+24. **Stored height of a driving or ship heading point (Q-0676).** On ordinary travel
+    tracks, the heading point receives the vehicle's current world height when the track
+    begins, before any progress along that track. This is an exact copy of an integer
+    height in leptons, with no rounding, terrain sampling or additional deck lift. It is
+    the same for one-cell tracks and two-cell curves. A high-bridge target cell does not
+    by itself give the heading point deck height, whether the vehicle approaches on the
+    deck or on the ground below it.
+
+    The stored height stays unchanged while that track runs, even when claim 5 changes
+    the vehicle's own height. Chaining a curve moves the heading point horizontally
+    one cell on (claim 8) but keeps its previous stored height: it neither copies the
+    vehicle's then-current height nor samples the new target's surface. Only beginning
+    a new ordinary track after completion assigns the vehicle's height anew.
+
+    **Factory exit exception (Q-0793).** The factory exit track of S-0417 claim 5
+    has a heading point at the exit apron cell's horizontal centre with stored world
+    height **0 leptons**, irrespective of the vehicle's starting height, target terrain
+    height or a bridge deck. It receives no extra deck lift. That height stays 0 while
+    the exit track runs. This is the stored heading height, not the vehicle's world
+    height while travelling or its height at the end; claim 5's surface-height rule
+    still governs those. Other building-supplied special tracks are not generalized
+    from this factory case.
+
+    Thus the stored heading height and the vehicle's current height can differ. The
+    bridge-loss heading test and reservation clearing use the stored point as specified
+    by S-0511 claims 9 and 11; that spec owns the separate current-height track test and
+    the resulting hits, including Q-0676 question 3.
+    - Backing: `measurable` (D27 for ordinary tracks; D28 for factory exits)
+    - Confidence: high
+
+25. **Separate driving and ship movement goal (Q-0794 questions 1 and 2).**
+    A newly created driving or ship locomotor has no locomotor destination point.
+    An accepted movement instruction installs its supplied point immediately, without
+    requiring a successful path search, an enterable next cell, a nonzero speed or a
+    different destination cell. Assigning a nonempty order-level destination normally
+    supplies that destination's movement point to locomotion at that assignment, not
+    only when travel starts. A direct approach instruction likewise supplies its point.
+    This is not an unconditional assignment on every received move order.
+    Order permission and special movement holds still apply: this does not make an
+    ignored or refused order an accepted instruction. S-0314 claim 18 owns a depot's
+    supplied docking point and that spec owns the same-cell enter-order consequence.
+
+    The locomotor destination is independent of the heading point. Beginning, finishing
+    or chaining an intermediate track does not by itself remove the locomotor destination.
+    In particular a wait, a turn, a retry delay or an unsuccessful search which retains
+    the movement goal keeps it present. Merely crossing into its cell does not clear it.
+    These lifetime rules apply equally to ship and driving locomotion:
+
+    | Event | Locomotor destination point afterwards |
+    |---|---|
+    | Accepted instruction with a point | supplied point, replacing the old one; a high-bridge target adds 416 leptons to the supplied height |
+    | Accepted instruction with no point | absent |
+    | Stop or cancellation that stops locomotion, including removal of the order destination through the normal destination-setting rule | absent immediately, even while an already begun track finishes under claim 11 |
+    | Completion of a track with an order destination still present, vehicle in that destination's supplied movement-point cell, and absolute difference between vehicle world height and locomotor destination height strictly below 208 leptons | absent before the cell-arrival report of claim 12 |
+    | Other track completion, or merely standing in the goal cell without completing a track | unchanged by arrival alone |
+    | Give-up with no approach destinations (claim 15) | absent through the normal removal of the order destination |
+    | Give-up with approach destinations | fall back to rest under S-0215 claim 13; any resulting stop clears the point and any newly supplied movement goal replaces it, rather than treating give-up as successful track arrival |
+    | Successful driving factory exit-track instruction of S-0417 claim 5 | exit apron centre with height 0 leptons, as for that track's heading point; ships retaining ship locomotion instead use that claim's ordinary destination instruction |
+
+    Point coordinates and the height comparisons are integer leptons, with no rounding.
+    The high-bridge lift is applied when the point is accepted, not added again each tick.
+    A point in the vehicle's own cell therefore remains present unless an actual stop,
+    replacement or qualifying track completion removes it. Cell equality must not be
+    used as a substitute for this presence test. An order-level destination can remain
+    present after the track-completion row has cleared the locomotor destination, or can
+    be removed by a later behaviour effect. S-0212 claims 20 to 22 own whether a search
+    failure waits, retries or gives up; this claim adds no new give-up condition.
+    - Backing: `measurable` (D29; D28 for the factory instruction)
+    - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
+      medium for the resulting lifetime across approach-destination fallback
+
 ## Formulas
 
 Every floating-point operation in this spec, in the claims (the speed-fraction updates of claim 10
@@ -2036,6 +2120,12 @@ its new destination from that tick.
 
 ## Import mapping
 
+| Input | Concept | Form and absent-key rule |
+|---|---|---|
+| No additional key | Factory exit heading height, claim 24 | Engine constant 0 leptons; not imported from terrain or rules |
+| No additional key | Driving/ship locomotor destination lifetime, claim 25 | Runtime movement state, initially absent; assignment and clearing are not imported settings |
+| No additional key | Destination acceptance lift and arrival height tolerance, claim 25 | Engine constants: 416-lepton high-bridge lift and strict 208-lepton arrival tolerance |
+
 **T3 Locomotor input-value mapping** (claim 14). Each row maps a value of `Locomotor` in the
 user's rules file to a movement method. The five numbers are dimensionless nonnegative integers,
 written here in decimal. To interpret a data-file value, read its five hexadecimal groups as
@@ -2076,6 +2166,7 @@ settings. Claim 14 supplies confidence and backing; D16's identifier controls te
 | country section, key `SpeedUnitsMult`; the country's matching keys for infantry and aircraft do not feed this spec | *κ*, for progress and the lead estimate (claims 2 and 18) | decimal (S-0003, claim 6), stored in single precision | keeps value; engine default 1.0 |
 | land-type sections | *M* | S-0211 | S-0211 |
 | `[General]`, key `Wake` | game-wide wake animation (claim 23) | animation type name | keeps value; engine default none |
+| No data key | driving and ship heading-point height at track start and retention through chained curves (claim 24; Q-0676) | integer world-height leptons copied from runtime vehicle height; no independent imported height | fixed behaviour; target terrain and bridge data do not replace the copied height |
 | No data key | wake's integer-rate test, active-track heading eligibility and post-movement creation timing (claim 23) | engine behaviour; rate reuses the speed, country and veterancy fields above and runtime speed fraction and bonus | fixed rules of claim 23; no separate wake-speed field |
 | vehicle section, key `Underwater` | underwater-type flag; does not suppress driving wakes (claim 23) | boolean | keeps value; engine default no |
 | infantry, vehicle and aircraft type sections, key `Locomotor` (building type sections read it too, without effect) | locomotor (claim 14, table T3) | class identifier: hexadecimal digits in groups of 8, 4, 4, 4 and 12, joined by hyphens, in braces, letters in either case; the value is read whole after trimming. A value of another form is ignored; an identifier not in T3 is treated as not given (departure, claim 14); both warn | keeps value in force; engine default the teleporting locomotor |
@@ -3169,7 +3260,96 @@ is otherwise legal. Mid-track arrest, starting a track during launch, lost desti
 resume falsifies the hold. Use the read-only recorder and scripted orders; concurrent special waits
 are not covered by this scenario.
 
+**D27. Stored heading height (claim 24; Q-0676 questions 1 and 2).**
+*Setup:* a tiny skirmish map with level ground, a drivable slope and a high bridge
+with a traversable ground lane below it, game speed index 2, stock units and rules,
+director and mods off. Use the read-only recorder with scripted move orders; record
+world position, heading point including its stored height, current track and path.
+Keep one human house and a bystander house outside the lanes. Run each case once
+for a driving vehicle and once for a ship on a legal water route; if a ship cannot
+use the slope or deck route with its stock movement zone, use the water control
+for it rather than assuming it traverses land.
+
+*Procedure and observable:* record the height immediately before each ordinary
+track begins and compare it to the heading height throughout that track. Include
+a one-cell straight track, a two-cell curve and a track across changing terrain
+height. Separately move under the bridge and along its deck towards a high-bridge
+target cell. For the chaining control use D9 control 1's explicitly named test-map
+override, with acceleration off and the passive flag on, and a winding corridor
+crossing a slope. Repeat it with ship locomotion on a legal test route; this control
+is not a claim that stock passive units are available. Qualify the control only
+when a chain actually occurs and the vehicle's height or the new target's surface
+height differs from the height at the original track start.
+
+*Expected:* every initial heading height equals the pre-progress vehicle height,
+not the target's terrain or deck height. It stays equal to that original value
+through all qualified chains, even while the vehicle height changes. A completed
+track followed by a new track copies the vehicle height anew. A ground approach
+under a bridge starts with ground height, not deck height. *Falsified by:* a
+heading height set from target terrain or deck instead of the starting vehicle,
+a mid-track change, or a height refresh at a qualified chain. S-0511 B6 tests the
+bridge-loss consequences separately; record stored and current heights there too.
+No oracle run is claimed here.
+
+**D28. Factory exit heading height (claim 24; Q-0793).**
+Use a tiny skirmish map at speed index 2 with a stock ground-vehicle factory on
+nonzero-height terrain, a produced stock driving vehicle and a remote bystander
+house. Director and mods are off. Script three productions and record each exit
+instruction, vehicle world height, apron terrain height, heading point and locomotor
+destination point each tick using the read-only recorder. Expected: the exit heading
+height is 0 leptons from installation to completion, and a successful exit instruction
+also sets the locomotor destination height to 0, despite nonzero vehicle and terrain
+heights. A copied starting height, sampled target height or deck lift falsifies the
+claim. Vehicle height still follows the surface along the track. If a legal exit can
+be arranged beside a high bridge, repeat with destruction during exit and use S-0511
+claim 11's two separate tests; do not infer stored height from a hit alone, since the
+current-height track test can independently hit. The direct height trace is the
+primary discriminator and does not require that optional bridge setup.
+
+**D29. Separate locomotor goal lifetime (claim 25; Q-0794 questions 1 and 2).**
+Use tiny land and water skirmish lanes, a stock driving vehicle and stock ship,
+speed index 2, a remote bystander house, director and mods off. Record order-level
+destination, locomotor destination, heading point, world position, track completion,
+path-search outcome and movement report with the read-only recorder and scripted
+orders. Run each control three times for each locomotor. Assign an ordinary reachable
+move, then a move into a temporarily blocked lane. Record assignment before search,
+a waiting/retry interval, crossing into the goal cell, and final track completion.
+Stop a separate run mid-track and issue a replacement goal in another run. Expected:
+assignment supplies the locomotor point before any successful search, waits keep it,
+crossing the cell boundary does not clear it; qualifying completion clears it before
+arrival reporting while an intermediate completion does not. Stop clears it at once
+without preventing completion of the existing track. Replacement supplies the new point.
+A point appearing only after search success, disappearing during an ordinary retained-goal
+wait, or disappearing on the goal cell's boundary falsifies the corresponding rule.
+
+Also assign a point in the vehicle's own cell and record the assignment before subsequent
+behaviour processing. Expected: assignment itself leaves a present locomotor point,
+not an automatically absent one. Extend S-0314 H19 d and e to record this point
+separately for same-cell depot entry and blocked approaches; S-0314 owns the resulting
+entry exchanges. Exercise claim 15 give-up once without approach destinations and once
+with them, recording any stop and replacement separately: no-approach give-up clears
+through destination removal, while fallback follows the actual stop/new-goal effects.
+A retained point after normal no-approach give-up falsifies that row. For the exact
+height boundary use named test-map docking displacements giving differences of 207
+and 208 leptons at completion, provided both legal approaches can be established.
+expected clearing only below 208. If those routes cannot be made, the numerical
+boundary remains unmeasured in practice; no oracle run or boundary observation is claimed.
+
 ## Cross-spec changes to confirm
+
+- Q-0793: S-0417 claim 5 and S-0511 claims 9 and 11 must distinguish claim 24's
+  factory exit heading height of 0 leptons from ordinary tracks' copied starting height.
+- Q-0794: S-0314 claim 17 must use claim 25's independent point lifetime, not cell
+  inequality, and answer question 3 from its depot entry rules. S-0504 claim 1 should
+  explicitly include claim 25. S-0212's search/retry rules must not make successful
+  search a prerequisite for this point's presence.
+
+- Q-0676: S-0511 claims 9 and 11 should cite claim 24 here for the driving/ship
+  heading point's copied starting height and retention through chaining. S-0511
+  owns question 3's distinction between that stored height and current height.
+- S-0504 claim 1 should explicitly include claim 24 here in its shared rules,
+  with D27 as the proposed height-specific measurement; N1 and N2 alone do not
+  distinguish the possible height assignments.
 
 - Q-0356: S-0209 claim 1 must extend its vehicle and aircraft lifecycle pointers to
   claim 20 k here: removal clears actual occupancy, not a separate remembered or

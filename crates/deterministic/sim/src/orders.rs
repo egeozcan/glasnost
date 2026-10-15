@@ -265,8 +265,11 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 .is_some_and(|u| u.harvester);
             let kind = w.obj(actor).map(|ob| ob.kind);
             if kind == Some(Kind::Vehicle) {
-                crate::drive::stop(w, actor);
                 crate::hover::stop_order(w, actor);
+                // spec: S-0503 claim 16 (a hover whose D equals its heading point keeps its stored path)
+                if !crate::hover::keeps_path(w, actor) {
+                    crate::drive::stop(w, actor);
+                }
                 if crate::econ::slaves::is_master(w, actor)
                     && !w.obj(actor).is_some_and(|ob| {
                         matches!(
@@ -298,7 +301,10 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 if ob.kind.is_mobile() {
                     // spec: S-0213 claim 8 (a mobile actor has no queued destinations left)
                     ob.queued_dests.clear();
-                    ob.path.steps.clear();
+                    // spec: S-0503 claim 16 (a hover's stored path is left when its D equals its heading point)
+                    if !ob.hover.as_ref().is_some_and(|h| h.retained.is_some()) {
+                        ob.path.steps.clear();
+                    }
                 }
                 if harvester
                     && matches!(ob.beh.seen(), Some(Behaviour::Harvest | Behaviour::Return))

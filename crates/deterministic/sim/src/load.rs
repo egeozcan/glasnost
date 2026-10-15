@@ -426,12 +426,8 @@ pub fn new_game(
         tick: 0,
         // spec: S-0202 claim 8 (the scenario stream is seeded with the game's seed before the map is read)
         rng: Rng::new(setup.seed),
-        // spec: S-0202 claim 13 (on a map that is not a random map the stream is seeded from R(0, 65535) of the unsynchronised stream); Q-0711 (interim: the first ranged draw of a fresh stream seeded with the game seed)
-        map_rng: Some(Rng::new(Rng::new(setup.seed).ranged(
-            0,
-            65535,
-            rules.quirks.ranged_draw_half_span,
-        ) as u32)),
+        // spec: S-0202 claim 13 (seeded with 0 at session start, independently of the game seed; an ordinary-map game neither reseeds it nor draws R(0, 65535) for it). Seam: our engine starts each game as a fresh session, so the state an earlier game of the same session left is not carried over.
+        map_rng: Some(Rng::new(0)),
         game_speed: setup.game_speed,
         houses,
         objects: Default::default(),

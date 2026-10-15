@@ -1,9 +1,9 @@
 ---
 id: Q-0721
 title: When a moving sensor's disc moves, and drift when it leaves play
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

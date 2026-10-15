@@ -349,6 +349,36 @@ pub fn owner_definition(import: &Import, options: &Options, owner: &[u8]) -> ([u
     }
 }
 
+/// The neutral radar fallback colour (S-0410 claim 8, S-0516 claim 38 and
+/// Import mapping): the radar display RGB of the `LightGrey` colour
+/// definition, as for an ownerless radar object; a disguise whose disguise
+/// house is none uses it too. Without the definition, the grey our owner
+/// colours fall back on.
+pub fn neutral_radar_colour(import: &Import, bits: [u8; 3]) -> [u8; 3] {
+    // spec: S-0516 Import mapping (LightGrey: the fixed lookup name of the fallback radar colour; its values come from user data)
+    let hsv = import
+        .outcome
+        .colours
+        .iter()
+        .find(|c| c.name.eq_ignore_ascii_case(LIGHT_GREY))
+        .map_or([0, 0, 200], |c| c.hsv); // nocite: the same placeholder grey as owner_definition
+    display_rgb(hsv, bits)
+}
+
+/// The radar display RGB of colour definition `hsv` (S-0103 claim 15 and
+/// Formulas).
+fn display_rgb(hsv: [u8; 3], bits: [u8; 3]) -> [u8; 3] {
+    // spec: S-0103 claim 15 (ramp index 16, the brightest entry, is ramp entry 0 of claim 6)
+    let c = glasnost_render::palette::ramp(hsv)[0];
+    let mut out = [c.r, c.g, c.b];
+    for (u, k) in out.iter_mut().zip(bits) {
+        // spec: S-0103 Formulas (house display RGB: subtract 1, keep k bits, widen with zeros)
+        let shift = 8 - k;
+        *u = (u.saturating_sub(1) >> shift) << shift;
+    }
+    out
+}
+
 /// An owner's display RGB for the radar (S-0103 claim 15, S-0410 claim 8):
 /// palette index 16, the brightest ramp entry of its colour definition,
 /// at shade row 26 under ordinary white tint, each component *u* reduced
@@ -361,15 +391,7 @@ pub fn owner_radar_colour(
     bits: [u8; 3],
 ) -> [u8; 3] {
     let (hsv, _) = owner_definition(import, options, owner);
-    // spec: S-0103 claim 15 (ramp index 16, the brightest entry, is ramp entry 0 of claim 6)
-    let c = glasnost_render::palette::ramp(hsv)[0];
-    let mut out = [c.r, c.g, c.b];
-    for (u, k) in out.iter_mut().zip(bits) {
-        // spec: S-0103 Formulas (house display RGB: subtract 1, keep k bits, widen with zeros)
-        let shift = 8 - k;
-        *u = (u.saturating_sub(1) >> shift) << shift;
-    }
-    out
+    display_rgb(hsv, bits)
 }
 
 /// The colour definition a colour selector names (S-0103 claim 14): only

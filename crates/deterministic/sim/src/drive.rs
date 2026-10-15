@@ -29,6 +29,9 @@ pub struct Track {
     pub target: (i32, i32),
     /// The cell the track ends in.
     pub target_cell: CellXY,
+    /// The heading point's stored world height: the vehicle's height when
+    /// the track began (S-0207 claim 24).
+    pub height: i32,
     /// Index of the next point to pass.
     pub next: usize,
     /// The last point passed (for `quirks.drive_subpoint_compounding` off).
@@ -718,6 +721,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 e: use_e,
                 target,
                 target_cell,
+                // spec: S-0207 claim 24 (the heading point receives the vehicle's current world height when the track begins, before any progress: an exact copy, no terrain sampling or deck lift)
+                height: ob.pos.z,
                 next: 0,
                 last: (ob.pos.x, ob.pos.y),
                 cells: cells.clone(),
@@ -1142,6 +1147,10 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
     if ended && crate::transport::arrival(w, id) {
         return true;
     }
+    if ended {
+        // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
+        crate::depot::movement_arrival(w, id);
+    }
     // spec: S-0207 claim 19 (a) (at a track target, not between track targets; it does not wait for a behaviour processing)
     if ended
         && crate::walk::arrival_stop_holds(w, id)
@@ -1175,6 +1184,8 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
                 e: None,
                 target,
                 target_cell: e,
+                // Q-0793 (interim: the exit track's heading point also copies the vehicle's height at its start; S-0207 claim 24 covers ordinary tracks only)
+                height: ob.pos.z,
                 next: 0,
                 last: (x, y),
                 cells: vec![e],
@@ -1246,6 +1257,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
+            // spec: S-0516 claims 13 and 22 (arrival at the track target's cell centre is the completed-cell movement event: the sensor disc moves and a cloaked mover takes the adjacency check)
+            crate::cloak::machine::cell_movement_completed(w, id);
             // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
             crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);

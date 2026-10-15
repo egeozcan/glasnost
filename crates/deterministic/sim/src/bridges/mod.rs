@@ -145,14 +145,13 @@ pub fn first_off_bridge(w: &World, x: CellXY, along_x: bool) -> Option<CellXY> {
 /// not destroyed, else the section whose overlay marks a high-bridge cell,
 /// else a pier in state 0 to 3 at one of its cells without a deck. Then,
 /// for a success on a high bridge, the span check (claim 7) and the named
-/// cell (claim 12); then the heading hits (claim 11) and the dropped
-/// objects' marks (Q-0712). Returns whether it succeeded.
+/// cell (claim 12); then the heading hits (claim 11). Returns whether it
+/// succeeded.
 pub fn attempt(w: &mut World, c: CellXY) -> bool {
     let mut ctx = Ctx::default();
     let ok = attempt_in(w, c, &mut ctx);
     // spec: S-0511 claim 11 (after an attempt has made its blow-ups, and after the connectivity change)
     blow::heading_hits(w, &ctx);
-    blow::transfer_marks(w, &ctx);
     ok
 }
 
@@ -163,15 +162,16 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
     {
         return low::attempt(w, c, l);
     }
-    // spec: S-0511 claim 2 (a high-bridge cell: the section whose overlay marks it)
+    // spec: S-0511 claim 2 (a high-bridge cell and a family qualifies: its responsible section)
     if w.cells.is_bridge(c) {
-        let Some(s) = pieces::section_marking(w, c) else {
+        // spec: S-0511 claim 2 (a retained state outside the table, or no qualifying family on a deck cell: no change, not a no-deck pier attempt)
+        let Some(s) = qualifying_section(w, c) else {
             return false;
         };
         let ok = high::attempt_section(w, s, ctx);
         if ok {
-            // spec: S-0511 claim 7 (the span check of the span that held the lost section)
-            high::span_check(w, s.cell, s.line, ctx);
+            // spec: S-0511 claim 7 (the span check from the named loss cell, the lost section's cell)
+            high::span_check(w, s.cell, ctx);
             // spec: S-0511 claim 12 (the lost section's section cell is named)
             high::name_cell(w, s.cell, false);
         }
@@ -186,9 +186,9 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
         let ok = high::attempt_pier(w, r, family, line, k, ctx);
         if ok {
             let f = line.step();
-            // Q-0710 (interim: the far-side span is checked before the start-side span)
-            high::span_check_from(w, pieces::at(r, f, 1), line, ctx);
-            high::span_check(w, pieces::at(r, f, -1), line, ctx);
+            // spec: S-0511 claims 6 and 7 (after the tile replacement and both notices, searches from the reference cell's start-side neighbour, then its far-side neighbour; the first check completes before the second, and both can select the same combined extent)
+            high::span_check(w, pieces::at(r, f, -1), ctx);
+            high::span_check(w, pieces::at(r, f, 1), ctx);
             // spec: S-0511 claim 12 (a collapsed pier's reference cell is named)
             high::name_cell(w, r, false);
         }
@@ -196,6 +196,47 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
     }
     // spec: S-0511 claim 2 (none of the above: nothing happens and the attempt fails)
     false
+}
+
+/// The section that an attempt at high-bridge cell `c` acts on (S-0511
+/// claim 2), when a family qualifies: the bridge-role family first, then
+/// the wooden one, each by its responsible overlay or by a non-collapsed
+/// pier tile of the family at `c`. With a pier supplying the family over a
+/// replaced responsible overlay, the section is the responsible cell's
+/// retained state, and a state outside the section-state table gives no
+/// section.
+fn qualifying_section(w: &mut World, c: CellXY) -> Option<pieces::Section> {
+    let Some(r) = w.cells.responsible(c) else {
+        // spec: S-0511 claim 2 and Edge cases (a missing responsible section is malformed input: nothing happens, with a warning)
+        w.note("S-0511 claim 2: a high-bridge cell has no responsible section; the attempt does nothing (a departure)");
+        return None;
+    };
+    let own = pieces::section_in(w, r);
+    let pier = match pieces::piece_at(w, c) {
+        // spec: S-0511 claim 2 (a non-collapsed pier tile: states 0 to 3)
+        Some((f, Piece::Pier(line, k))) if k <= 3 => Some((f, line)),
+        _ => None,
+    };
+    // spec: S-0511 claim 2 (family selection: the bridge-role family's responsible overlay or matching non-collapsed pier tile at the attempted cell, then the wooden family's)
+    for family in [Family::Bridge, Family::Wooden] {
+        if let Some(s) = own.filter(|s| s.family == family) {
+            return Some(s);
+        }
+        if let Some((_, line)) = pier.filter(|p| p.0 == family) {
+            // spec: S-0511 claim 2 (a pier supplying the family over a replaced responsible overlay: claim 3 on the responsible cell's retained section state; a state outside the table gives no change)
+            let data = w.cells.cell(r).map_or(0, |x| x.overlay_data);
+            let line = own.map_or(line, |s| s.line);
+            pieces::state_in_table(line, data)?;
+            return Some(pieces::Section {
+                cell: r,
+                family,
+                line,
+                d: pieces::marking_direction(line),
+            });
+        }
+    }
+    // spec: S-0511 claim 2 (without a recognised responsible overlay or such a pier tile, the attempt fails)
+    None
 }
 
 /// Up to `n` attempts at `c`, stopping at the first success (S-0511 claims
@@ -218,17 +259,14 @@ pub fn cell_attempts(w: &mut World, c: CellXY) -> bool {
 /// 1): `Some(true)` for a high-bridge cell (which imposes the height
 /// window), `Some(false)` for a pier cell.
 fn high_test(w: &World, c: CellXY, family: Family) -> Option<bool> {
-    if w.cells.is_bridge(c) {
-        // spec: S-0511 claim 1 (a high-bridge cell whose section overlay belongs to the family)
-        return pieces::section_marking(w, c)
-            .filter(|s| s.family == family)
-            .map(|_| true);
-    }
+    let deck = w.cells.is_bridge(c);
+    // spec: S-0511 claim 1 (a high-bridge cell whose section overlay belongs to the family); S-0511 claim 2 (its responsible section)
+    let section = deck && pieces::responsible_section(w, c).is_some_and(|s| s.family == family);
     // spec: S-0511 claim 1 (or the centre cell's tile is one of the family's piers in state 0 to 3)
-    match pieces::piece_at(w, c) {
-        Some((f, Piece::Pier(_, k))) if f == family && k <= 3 => Some(false),
-        _ => None,
-    }
+    let pier =
+        matches!(pieces::piece_at(w, c), Some((f, Piece::Pier(_, k))) if f == family && k <= 3);
+    // spec: S-0511 claim 1 (the height window applies only when the centre cell is a high-bridge cell)
+    (section || pier).then_some(deck)
 }
 
 /// The bridge attempts of an area-damage detonation at centre cell `c`
@@ -286,20 +324,50 @@ pub fn area_attempts(
     }
 }
 
-/// After a successful attempt from area damage, every object whose target
-/// is the centre cell itself drops that target (S-0511 claim 1; Q-0719:
-/// the attack target only).
+/// After a successful attempt from area damage, references to the centre
+/// cell itself are lost (S-0511 claims 1 and 22): a mobile object whose
+/// attack target is that cell first reverts a suspended behaviour (S-0215
+/// claim 10), a still-equal attack target is cleared, an aircraft in
+/// *attack* restarts its run, and projectiles aimed at the cell lose it.
 fn drop_cell_targets(w: &mut World, c: CellXY) {
+    let cell = Some(Target::Cell(c));
+    for p in w.projectiles.values_mut() {
+        if p.target == cell {
+            // spec: S-0511 claim 22 (a projectile's target equal to the centre cell is cleared; its recorded firer is an object in our engine, never a cell)
+            p.target = None;
+        }
+    }
     let ids: Vec<ObjectId> = w
         .objects
         .values()
-        .filter(|o| o.target == Some(Target::Cell(c)))
+        .filter(|o| o.target == cell)
         .map(|o| o.id)
         .collect();
     for id in ids {
-        if let Some(o) = w.obj_mut(id) {
-            // Q-0719 (interim: only the attack target is cleared)
-            o.target = None;
+        let aircraft = crate::air::is_aircraft(w, id);
+        let Some(ob) = w.obj_mut(id) else { continue };
+        let mut restored = None;
+        // spec: S-0511 claim 22 (a mobile object first reverts a suspended behaviour, restoring the target and destination its override put aside; S-0215 claim 10)
+        if ob.kind.is_mobile()
+            && let Some((t, d)) = ob.beh.revert()
+        {
+            crate::spawn::set_own_target(ob, t);
+            restored = Some(ob.dest);
+            ob.dest = d;
+        }
+        let lost = ob.target == cell;
+        if lost {
+            // spec: S-0511 claim 22 (an attack target still equal to the centre cell is cleared; no new behaviour, no attack-move memory)
+            crate::spawn::clear_own_target(ob);
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
+        if lost && aircraft && ob.beh.current == Some(crate::rules::Behaviour::Attack) {
+            // spec: S-0511 claim 22 (an aircraft in attack restarts the attack-run substate when its target is lost, keeping the behaviour)
+            crate::air::restart_run(w, id);
+        }
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, id, before);
         }
     }
 }

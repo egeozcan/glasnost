@@ -225,6 +225,7 @@ impl MapPane {
                 map_theater(&loaded),
                 &loaded.tile_colours,
                 loaded.house_radar_colours(&l.world),
+                loaded.neutral_radar_colour(),
             )
         });
         // In a skirmish the view starts on the controlled house's base unit.

@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -28,8 +28,13 @@ vehicle or ship shot cannot supply that turn's due pass, whereas an aircraft att
 can. S-0614 claim 18 owns within-host-turn parasite ordering: self-healing, due behaviour
 processing and ordinary movement precede the parasite event; ordinary separate infantry and
 vehicle firing follows it, while behaviour-issued shots, including aircraft attack-run shots,
-precede it. These are local ordering constraints, not a global firing phase. Their backing,
-confidence and proposed measurements remain those of the owning claims.
+precede it. S-0516 claim 42 owns within-turn cloak ordering: due behaviour processing,
+including its shots, precedes the ordinary cloak update; ordinary mobile locomotion and
+separate infantry/vehicle firing follow it. An uncloak completing in that update can allow
+ordinary firing later in the same turn, but cannot give an aircraft attack-run shot an extra
+chance after its behaviour processing. Building behaviour-fired shots likewise precede the
+building's fade update. These are local ordering constraints, not global firing or cloak
+phases. Their backing, confidence and proposed measurements remain those of the owning claims.
 
 ## Terms
 
@@ -121,9 +126,10 @@ confidence and proposed measurements remain those of the owning claims.
      (S-0202, claim 10). This can change their outcomes and, when their draw counts depend on those
      outcomes, later outcomes too. It need not change the final stream state of the tick: swapping
      two fixed-length groups consumes the same total number of raw values. The consequence to
-     test is the assignment of values to outcomes, not merely the tick's total draw count. The parts
-     that draw or can draw are rows 1, 3, 5 to 12 and 14 to 16. Each of them holds its place in the
-     original's sequence, so that whatever draws they take come in this order: the polling of map
+     test is the assignment of values to outcomes, not merely the tick's total draw count. The
+     sequence retains rows 1, 3, 5 to 12 and 14 to 16, including the non-drawing,
+     conditional and original-only qualifications below. Whatever draws these parts take
+     come in this order: the polling of map
      triggers (row 1), resource growth and spread (row 9),
      diving aircraft (row 10), teams (row 11), disc lasers (row 12), psychic domination then
      the weather storm (row 3),
@@ -404,7 +410,7 @@ confidence and proposed measurements remain those of the owning claims.
      S-0312:
      - ordinary killing-hit sinking can retain 1 health point (S-0312 claim 10), but
        sinking does not always mean 1 health point: a non-crashable vehicle already
-       sinking can remain in play at 0 health after another killing hit when the ordinary
+       sinking can remain in play at 0 hit points after another killing hit when the ordinary
        sinking conditions fail (S-0312 claims 15 and 32). The naval specs own descent
        and completion. Death-image-frame types retain S-0312's unresolved separate path,
      - a vehicle whose type can crash and which is above the terrain when it is destroyed starts
@@ -419,12 +425,12 @@ confidence and proposed measurements remain those of the owning claims.
    - **(b) Buildings.** As a rule, a building whose damage destroys it leaves play like a vehicle,
      at the moment that damage is applied, at the end of its death effects, and that removal is a
      removal for claim 10. The exception is owned by S-0312 claim 21: a building whose type has
-     the explodes flag, or one destroyed while it is being sold, stays in play with 0 health after
+     the explodes flag, or one destroyed while it is being sold, stays in play with 0 hit points after
      its death effects. It normally leaves in its own next turn, later in the same tick if that
      turn has not yet come, otherwise in a later tick. S-0312 claim 21 owns the erasure and
      electromagnetic-pulse exceptions and the second survivor and smudge round in the removal
      turn, with `quirks.building_removal_second_round`. This switch is on by default, preserving the original behaviour; when off, the building takes no second survivor and smudge round when it leaves play. A sale does not advance or complete once
-     the building has 0 health; its removal follows S-0312 claim 21, not sale completion. A veterancy
+     the building has 0 hit points; its removal follows S-0312 claim 21, not sale completion. A veterancy
      ability or a weapon's suicide property alone does not cause this deferred removal. Its
      leaving then is a removal for claim 10 like any other.
      - Backing: `measurable` (scenario O1, variant B, for the rule); for the exception, S-0312's
@@ -716,7 +722,8 @@ Two parts with no such link may run in either order. Row numbers are labels. Row
 labels of revision 2, and rows 1 to 8 those of revision 5, so that other specs can keep citing them.
 Every two parts that take draws from the scenario random stream are linked, so their order is
 total (claim 1, draw order). Following the "Comes after" links, the drawing parts stand in the
-order 1, 9, 10, 11, 12, 3, 14, 5, 15, 16, 6, 7, 8, which is the order of their draws.
+order 1, 9, 10, 11, 12, 3, 14, 5, 15, 16, 6, 7, 8. Any draws occur in that order,
+subject to claim 1's non-drawing, conditional and original-only qualifications.
 Row 2 takes no scenario draws; timed bomb damage and its effects belong to the carrier's
 turn in row 5 (S-0519 claim 4). Row 13 takes no draws; its links preserve radiation maintenance before the turn pass's hits
 and same-tick maintenance of fields made by storm deaths (S-0525 claims 6, 11 and 12).
@@ -741,7 +748,7 @@ row 7 are deferred original-only context, not requirements on our AI's order int
 | 5 | Turn pass | 4, 13, 14 | Objects act one after another in update order; their effects are immediate. Timed bombs detonate in carriers' turns, with counting-removal skips under claim 10 (S-0519 claim 4). Radiation hits and their effect draws occur in affected objects' own turns (S-0525 claims 9, 11 and 12); draw order | Claims 1 to 6, 10, 11; O10 part A; S-0525 scenario RF8 |
 | 15 | Blast rings; the psychic domination's ring takes no draws (S-0612 claim 8) | 5 | A domination ring first updates in its creation tick; other blast-ring paths keep their draw place | Claim 1; S-0612 claim 8, scenarios PD3 part b and PD9 |
 | 16 | Crate respawns, in skirmish games with crates on (S-0520 claim 4) | 15 | Draw order | Claim 1 |
-| 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
+| 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick and precedes this tick's hold orders. Its own update takes no draws | Claim 8, scenario O7 parts A and C |
 | 7 | Houses, one after another in house order; final-tick results committed at this part's start (S-0414 claim 16) | 6 | A house's tag raise and defeat test see the turn pass; later houses' defeats are not yet known to an earlier end test. Assigned-tag raises see own surrender and defeat effects; due tech-tree/sidebar work sees tag actions, but completed ordinary power/radar work does not (S-0414 claims 16 and 18). Defeated houses keep raises; cleanup-removed houses have no update. Draw order | Claim 8, scenario O7 part B; S-0414 scenarios V7, V11, V12, V13 and V15 |
 | 8 | Orders given in this tick's cycle | 7 | Objects act on the orders from the next tick; a hold order does not stop a progress step of this tick; draw order | Claims 7 and 8, scenarios O2 and O7 part C |
 
@@ -821,7 +828,16 @@ scenarios' timing expectations use the stated index.
   house's credits; the list of objects in play; and which armed objects in play fire in the tick.
   "Fires in tick *t*" means that the recorder sees the firer's delay between shots start in tick
   *t*.
-- *Test data.* Named test data is a test map's override sections only. Test weapons used to time
+- *Test quantities.* Numeric rules overrides below are invented fixture values, not stock
+  values. Health and weapon damage are integer hit-point quantities; damage denotes the
+  weapon's base damage before the owning combat spec's modifiers. Tick numbers and tick
+  durations are integers. Fixture arithmetic is exact integer arithmetic unless an owning
+  spec states a conversion; it introduces no additional rounding. Percentages are
+  dimensionless ratios. Game-speed indices, infantry-death kinds, row and stage labels,
+  counter and variable identifiers are dimensionless selectors, not durations or amounts.
+  Run and attempt counts count complete trials.
+- *Test data.* Named test data is a test map's override sections only, unless a scenario
+  explicitly names additional temporary test files. Test weapons used to time
   turns have a projectile with no visible flight, unless a scenario says otherwise, no firing
   animation, and a warhead that spawns no animation, particle or other object. Test types create no
   objects when damaged or destroyed (no smoke, explosions, debris or survivors), apart from the
@@ -845,7 +861,7 @@ scenarios' timing expectations use the stated index.
 
 **Scenario O1: mutual kill and the projectile stagger (claims 4, 5, 6, 10).**
 - *Setup:* a flat test map. Its override sections define a test vehicle type with a health field
-  of 10, armed with a test weapon with damage 20 at 100 % against the vehicle's armour class, a
+  of 10 hit points, armed with a test weapon with damage 20 hit points at 100 % against the vehicle's armour class, a
   range of 5 cells and a long delay between shots. Two vehicles of that type are pre-placed 3 cells
   apart, facing each other, one owned by the human player and one by the computer player
   (enemies), the human's vehicle first in the map's vehicle entries. The vehicle type is not naval
@@ -888,7 +904,7 @@ scenarios' timing expectations use the stated index.
 **Scenario O3: the update order by kind and entry, seen through the stagger (claims 3, 4, 5,
 10).**
 - *Setup:* a flat test map. Two objects E and L, enemies, stand in range of each other and fire at
-  each other for the whole run. Each is armed with a test weapon with damage 1, far below the other's
+  each other for the whole run. Each is armed with a test weapon with damage 1 hit point, far below the other's
   health, so that nobody dies. E's delay between shots is 10 ticks and L's is 11 ticks, so their
   shots fall in the same tick about once every 110 ticks. No other armed object is on the map.
   Variants, with E expected earlier in the update order than L:
@@ -903,6 +919,8 @@ scenarios' timing expectations use the stated index.
 - *Procedure:* start, and give no orders. Run each variant for 1000 ticks.
 - *Observable:* the ticks on which E and L fire, and the ticks on which each one's health drops.
 - *Runs:* 2 per variant. Counted ticks: every tick in which E or L fires, and the tick after it.
+  In variant e also count every flight tick through each projectile's detonation and the
+  following tick, including shots still in flight when the 1000-tick firing interval ends.
 - *Expected, variants a to d′:* in a tick in which only one of them fires, its shot lands in the same
   tick. In a tick *n* in which both fire, L is hit in tick *n* and E in tick *n* + 1.
 - *Expected, variant e:* E's shot fired in tick *t* hits L in tick *t* + *f*. L's shot fired in a
@@ -945,10 +963,10 @@ scenarios' timing expectations use the stated index.
 **Scenario O6: parts before the turn pass (claim 1).**
 - *Part A, row 1 before the turn pass.*
   - *Setup:* a flat test map. A human test vehicle S, of a type that is not naval and has no crash
-    flag (claim 6), is armed with a test weapon with damage 1 and a
+    flag (claim 6), is armed with a test weapon with damage 1 hit point and a
     delay between shots of *R* ticks. It faces a computer test target Z (an unarmed vehicle with high
     health) in range. In the test run S carries a tag whose one-time trigger has the single event
-    elapsed time *v* and the action that destroys the objects carrying the tag (S-0011, claims 13
+    elapsed time *v* (an integer count of trigger time units, each 15 ticks) and the action that destroys the objects carrying the tag (S-0011, claims 13
     and 27), so the action runs in tick 15 × *v*.
   - *Procedure:* a first control run without the trigger records the tick *t*₀ of S's first shot.
     Then *v* is chosen with 15 × *v* > *t*₀, and *R* = 15 × *v* − *t*₀. A second control run, with
@@ -964,8 +982,10 @@ scenarios' timing expectations use the stated index.
     action destroyed it. A test run is void, and the setup is checked, if S's first shot is not in
     tick *t*₀ or S disappears in another tick than 15 × *v*.
 - *Part B, row 4 between row 1 and the turn pass.*
-  - *Setup:* as S-0201, scenario T6, part B: the chrono-flash action with parameter *D* = 30. Run 1
-    sets it off with a one-time trigger whose only event is elapsed time 20, so its action runs in
+  - *Setup:* as S-0201, scenario T6, part B: the chrono-flash action with parameter *D* = 30
+    (a dimensionless integer count, converted to steps by S-0201 claim 11). Run 1
+    sets it off with a one-time trigger whose only event is elapsed time 20 trigger time units
+    (15 ticks per unit), so its action runs in
     tick 300. Run 2 sets it off with a one-time trigger whose only event is entered-by, on a cell tag
     (S-0011, claim 18). That trigger's actions are, in this order, a count action on its own counter
     (the S-0011 common setup's counter) and the chrono-flash action (S-0011, claim 11, for the order
@@ -1004,7 +1024,8 @@ scenarios' timing expectations use the stated index.
     any-event and variable 1 set, and a count action on counter 2.
   - *Procedure:* order the vehicle into cell *e*. Orders given by hand cannot be timed to one tick,
     so runs are repeated until at least two runs have *a*, the tick of counter 1's drop, a multiple
-    of 8, and at least two runs have *a* not a multiple of 8.
+    of 8, and at least two runs have *a* not a multiple of 8, up to 100 attempts. If either
+    count is below two, that comparison is inconclusive.
   - *Observable:* the ticks of the drops of counter 1 (*a*) and counter 2.
   - *Expected:* when *a* is a multiple of 8, counter 2 drops in tick *a*, because the human house's
     raise comes after the turn pass. Otherwise it drops in tick *a* + 1, when the polling of the
@@ -1029,7 +1050,7 @@ scenarios' timing expectations use the stated index.
 5, 6, 10).**
 - *Setup:* a flat test map.
   - *Firers.* Computer test vehicles F1, F2, … stand in this order in the map's vehicle entries.
-    Each is armed with the same test weapon: its damage is 1, and its delay between shots is 30
+    Each is armed with the same test weapon: its damage is 1 hit point, and its delay between shots is 30
     ticks. Its warhead does 0 % against the armour class of the test infantry type below, so no
     firer ever chooses an infantry unit as its target. In variants d and e, F1 carries only a second
     test weapon, described below, in place of the common one; F2 and F3 keep the common weapon.
@@ -1037,7 +1058,7 @@ scenarios' timing expectations use the stated index.
     range. The targets are unarmed test vehicles with high health, except W1 as the variants say.
     All firers fire on their first chance after the start, so they fire together every 30 ticks
     after that, in volleys.
-  - *Variants a to c and f.* In all four, W1's health is 10, so the tenth volley destroys it. No
+  - *Variants a to c and f.* In all four, W1's health is 10 hit points, so the tenth volley destroys it. No
     test vehicle type here is naval, so none sinks (S-0312 claim 10). (a) Three firers; W1 a test
     vehicle with no crash flag. (b) Five firers; W1 a test transport that is not open-topped, whose
     type has the crash flag (S-0107 Terms). It stands on the ground, so it cannot crash, and by
@@ -1068,7 +1089,7 @@ scenarios' timing expectations use the stated index.
   following ticks. A non-lethal volley is any volley before the tenth. The lethal volley is the one
   that destroys W1: the tenth in variants a to c and f, which in variants b and c also kills W1's
   two passengers and in variant f lets them get out, and the first in variants d and e. In variant
-  e, W1's health reaches 0 in tick *n*. In variant f the recorder checks that both passengers are
+  e, W1's health reaches 0 hit points in tick *n*. In variant f the recorder checks that both passengers are
   present on the map at the end of tick *n*; a run in which either is not does not count.
 
   | Variant and volley | W1 | W2 | W3 | W4 | W5 |
@@ -1096,7 +1117,7 @@ scenarios' timing expectations use the stated index.
 - *Setup:* a flat test map. W is a human test infantry unit as in scenario O8, variant d, and the
   only infantry unit on the map. B is a human test defensive building, the first building in the
   map's building entries, so by claim 3 it comes directly after W in the update order. B is armed
-  with a test weapon with damage 1 and a delay between shots of 2 ticks, and faces a computer
+  with a test weapon with damage 1 hit point and a delay between shots of 2 ticks, and faces a computer
   target T (an unarmed test vehicle with high health) in range. K is a computer test vehicle armed
   with a test weapon of infantry-death kind 1, damage above W's health and a long delay between
   shots. W is in K's range. B and T are not. K is not in B's range.
@@ -1125,12 +1146,12 @@ scenarios' timing expectations use the stated index.
 3).**
 - *Common part:* a flat test map with no aircraft and no terrain entries.
   - *V,* the destroyed object: a computer test vehicle, the last entry in the map's vehicle
-    entries, of a type that is not naval and has no crash flag (claim 6), armed with a test weapon with damage 1 and a delay between shots of 2 ticks, which
+    entries, of a type that is not naval and has no crash flag (claim 6), armed with a test weapon with damage 1 hit point and a delay between shots of 2 ticks, which
     does 0 % against the armour class of the test infantry type below. V faces a human target T (an
     unarmed test vehicle with high health) in range, and has no other target.
   - *Y,* the observer: a human test infantry unit, the first entry in the map's infantry entries.
     Since V is the last vehicle and there are no aircraft, claim 3 puts Y directly after V in the
-    update order. Y is armed with a test weapon with damage 1 and a delay between shots of 2 ticks,
+    update order. Y is armed with a test weapon with damage 1 hit point and a delay between shots of 2 ticks,
     which does 100 % against the armour class of its target T2 and 0 % against that of V, which
     differs from T2's. T2 is a computer unarmed test vehicle with high health in Y's range. Y has
     no other target, and V is not in Y's range.
@@ -1167,7 +1188,7 @@ scenarios' timing expectations use the stated index.
     An ordinary attack shot by V before detonation falsifies that local firing expectation,
     but an opportunity shot does not falsify carrier-turn detonation.
 - *Part B, storm bolt.*
-  - *Setup:* the common part, with V's health field set to 1. Superweapons are allowed in the game
+  - *Setup:* the common part, with V's health field set to 1 hit point. Superweapons are allowed in the game
     settings. The human player owns a ready, powered weather superweapon building, with test data
     that keeps the storm's area small enough that no bolt can reach T, T2, Y or the building. The
     storm's bolt animations and any cloud animations are named objects.
@@ -1185,18 +1206,18 @@ scenarios' timing expectations use the stated index.
 - *Setup:* a flat test map, with its override sections. T is a computer test vehicle, unarmed, with
   health high enough to survive the whole run, and the only computer object near the test objects.
   The human player has these map-placed objects:
-  - P, a test infantry unit, the first infantry entry, armed with a test weapon with damage 1 and a
+  - P, a test infantry unit, the first infantry entry, armed with a test weapon with damage 1 hit point and a
     delay between shots of 10 ticks.
-  - Q, a test infantry unit, the second infantry entry, armed with a test weapon with damage 4 and a
+  - Q, a test infantry unit, the second infantry entry, armed with a test weapon with damage 4 hit points and a
     delay between shots of 13 ticks.
-  - R, a test defensive building, the only building entry, armed with a test weapon with damage 2
+  - R, a test defensive building, the only building entry, armed with a test weapon with damage 2 hit points
     and a delay between shots of 11 ticks.
   - O, an unarmed test transport whose type is open-topped, and C, an unarmed test transport whose
     type is not open-topped, both standing next to P and Q.
 
   T stands in range of P, Q and R, of P inside O and of the cells where P and Q get out, and no
   other armed object has it in range. All three weapons are 100 % against T's armour class. Since
-  every shot hits T and the three damages are 1, 2 and 4, each drop of T's health in a tick splits
+  every shot hits T and the three damages are 1, 2 and 4 hit points, each drop of T's health in a tick splits
   in only one way into the shots that landed in that tick.
 - *Procedure:* right after the start, order Q into C. Then three stages, each at least 1500 ticks
   long:
@@ -1232,16 +1253,16 @@ scenarios' timing expectations use the stated index.
 - *Setup:* a flat test map with no aircraft entries.
   - *Infantry.* W and U are human test infantry units of the type of scenario O8, variant d, and
     the map's only infantry entries: W the first and U the second, so by claim 3 U comes directly
-    after W in the update order. U's health is *h*. W and U stand apart.
+    after W in the update order. U's health is *h* hit points. W and U stand apart.
   - *K,* a computer test vehicle, is armed as in scenario O9: a test weapon of infantry-death kind
     1, damage above W's health and a long delay between shots. W is in K's range, and nothing else
     that K's weapon can damage is.
   - *Firers.* Computer test vehicles F1, F2 and F3 stand in this order in the map's vehicle entries.
-    F1's test weapon does 100 % against the infantry type's armour class, has damage *d* with
+    F1's test weapon does 100 % against the infantry type's armour class, has damage *d* hit points with
     *d* < *h* ≤ 2 × *d*, so that its second hit destroys U, and has an infantry-death kind for which
     S-0107, claim 17, removes the unit at once (row 8 of that claim's table), as in scenario O8,
     variant d. U is in F1's range and W is not. F2 and F3 carry the common test weapon of scenario
-    O8 (damage 1, 0 % against the infantry type's armour class) and face their own human targets W2
+    O8 (damage 1 hit point, 0 % against the infantry type's armour class) and face their own human targets W2
     and W3, unarmed test vehicles with high health. Each firer has no other target in range. All
     three weapons have the same delay between shots, *R* ticks.
   - *Choosing R.* A pilot run with a long *R* records the tick *t*₁ of the firers' first shots and
@@ -1273,7 +1294,7 @@ scenarios' timing expectations use the stated index.
   of tick *n*. Animation B is started by an earlier trigger and switches to follow-up type C in
   its own turn in tick *n*, under S-0109 claim 15. Choose fixed playback settings for B in a pilot
   run so that its switch falls on a positive multiple of 15 ticks; set A's elapsed-time parameter
-  to that tick divided by 15. A and C each have a descending random-rate pair that converts to a
+  to the integer count of 15-tick trigger time units at that tick (an exact division). A and C each have a descending random-rate pair that converts to a
   stage-delay range of 1 to 900 ticks (S-0109 claim 3). Neither has any further random delay or
   follow-up switch during the observation. A human house owns the powered factory building and
   prerequisites for a test infantry type, with ample credits and no active production. The test
@@ -1317,7 +1338,7 @@ scenarios' timing expectations use the stated index.
 
 **Scenario O14: slave groups against repair, movement and power effects (claim 12).**
 - *Common setup and tool:* a flat purpose-made skirmish map, one human player with a
-  slave miner and one distant bystander computer player, game speed 6, crates off,
+  slave miner and one distant bystander computer player, game speed index 6, crates off,
   director and mods off. Stock data except explicitly named map overrides and, in
   part C, a temporary test art file. Extend the read-only recorder to record group
   state, due-update tick, slave places, creation samples, inside/on-map state,
@@ -1402,7 +1423,7 @@ scenarios' timing expectations use the stated index.
   the observer, so a different cause cannot explain its silence.
 
 **Scenario O15: vehicle behaviour before the slave group (claim 12; Q-0430).**
-- *Setup:* O14's quiet skirmish setup at game speed 6, with a human vehicle slave
+- *Setup:* O14's quiet skirmish setup at game speed index 6, with a human vehicle slave
   master, a distant bystander computer player, director and mods off. Use stock data
   except named map overrides for the slave replacement delay and the harvest behaviour
   rate. Lose one emerged slave through ordinary combat, then remove the attacker from
@@ -1438,7 +1459,7 @@ scenarios' timing expectations use the stated index.
   area during the counted tick. This proposes a recorder extension, not a harness change.
 
 **Scenario O16: cross-part labelled draw allocation (claim 1).**
-- *Setup and tool:* O13's flat skirmish, game speed 6, director and mods off, with
+- *Setup and tool:* O13's flat skirmish, game speed index 6, director and mods off, with
   a distant bystander. Use named map overrides and a temporary test art file for the
   probes below; a temporary rules file may select the blast-ring animations and crate
   settings. Remove these files afterward. Use O13's read-only random-state recorder
@@ -1522,7 +1543,7 @@ scenarios' timing expectations use the stated index.
   accounting and requires investigation, not silent reassignment. A total draw
   count alone never confirms order. Fewer than ten discriminating runs is
   inconclusive. Apply the common void rule, exempting only the named probe effects.
-  any unrelated draw or bystander activity voids the counted tick. These pairwise
+  Any unrelated draw or bystander activity voids the counted tick. These pairwise
   links establish the listed nonempty draw chain transitively, not the empty
   allocations of rows 6, 10 and 14 or original-only team/strategy decisions.
 - *Part F, bomb maintenance without scenario draws:* separately use S-0519 T11's
@@ -1533,12 +1554,12 @@ scenarios' timing expectations use the stated index.
   Compare with no planted bomb and with sound omitted in named test data. Obtain
   five refresh intervals with sound enabled and five with it omitted. Expected:
   maintenance adds no scenario draws on sound-start, ongoing-sound or refresh ticks.
-  a reproducible extra draw attributable solely to one of these events falsifies
+  A reproducible extra draw attributable solely to one of these events falsifies
   that no-draw claim. Detonation and carrier-destruction draws are excluded, not
   treated as maintenance. An unexplained unrelated draw makes the interval void.
 
 **Production-start assignment (claim 8).** S-0404 P11 B and C own the shared measurement
-scenarios: game speed 6, quiet test maps with named test data, scripted normal input and a
+scenarios: game speed index 6, quiet test maps with named test data, scripted normal input and a
 read-only random-state and item-creation recorder. P11 B reverses line creation order while
 keeping tab/icon cancellation order fixed; replacement samples must still follow cancellation
 application order. P11 C aligns a factory-removal start during the turn pass with a build-order
@@ -1558,11 +1579,11 @@ V15 part a and V13. Reversed timing or a missing eligible raise falsifies the co
 rule; V15 specifies controls separating the ordinary poll from the owner-house raise.
 
 - **O17 (claims 2 and 10; ending animation).** Use S-0109 scenario AN26's tiny
-  skirmish, speed 4, director and unrelated mods off, with one non-damaging sprite
+  skirmish, game speed index 4, director and unrelated mods off, with one non-damaging sprite
   animation having an explicit finite end, no follow-up and no creation effects.
   Create it by pre-pass trigger polling. While it plays, have one existing firer launch
   exactly one long-flight projectile with no shot animation or trailer, then stop firing.
-  Confirm that the projectile directly follows the animation in update order and that it
+  Confirm that the projectile directly follows the animation in update order and that the
   projectile will neither detonate nor create effects during the observation window.
   Exclude all other creations and removals around the animation's final turn. Use the
   read-only recorder for update order, animation stage, removal tick and projectile
@@ -1602,9 +1623,12 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   design rule. Confirm this resolution together with S-0202 claim 10 at hand-off. It does not
   imply a row-6 draw comparison: that work takes none, and queued creation belongs
   to its causing action. O16 tests house tag-action draws against neighbouring drawing parts.
-- Rows 6, 10 and 14 keep the original's places only because they might take draws (claim 1).
-  If their owning specs show that they take none, their places can be released to the freedom of
-  claim 1's last point. Likewise, if work listed there turns out to take draws, it needs a row.
+- Rows 10 and 14 retain precautionary places although no reachable draw-producing path
+  is identified (claim 1). If their owning specs establish that they take none, those places
+  can be released to claim 1's last point's freedom, absent another observable consequence.
+  Row 6 is already known to take no own-update draws; its credit and hold boundaries remain
+  required, while its internal position relative to house draws remains unmeasured.
+  Work listed in claim 1's last point that turns out to draw needs a row.
 - The open-topped rule of claim 3 is traced for boarding and getting out. That nothing else takes
   such a passenger out of the update order while it is inside is not traced in full.
 
@@ -1631,11 +1655,11 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   freedom to place other once-per-tick work to work that takes no draws. Rows 9 to 16 are new. Some
   of them (teams, the decisions of computer houses inside row 7) belong to the original's computer
   player, which our engine replaces; those portions describe original scheduling only. Our AI
-  still acts through normal orders, not through those rows. Three rows (6, 10 and 14) are
-  placed although no draw was found in their own updates, because their work was not traced
-  through every path. The alternative is to release them until a draw is shown. Please confirm
-  retaining the precautionary constraints for rows 10 and 14 and the non-drawing
-  row-6 position. O13 tests rows 1, 5 and 8; O16 tests the other identified in-scope
+  still acts through normal orders, not through those rows. Rows 10 and 14 retain precautionary
+  places without an identified reachable draw-producing path. Row 6 is known to take no
+  own-update draws: its observable credit and hold boundaries remain required, but its
+  position relative to house draws has no random-allocation test. Please confirm retaining
+  the precautionary constraints for rows 10 and 14 and the non-drawing row-6 position. O13 tests rows 1, 5 and 8; O16 tests the other identified in-scope
   draw allocations. Team and computer-strategy scheduling remains deferred context.
 - **Removal condition (revision 5).** The scrub of revision 4 found that claim 10 stated its
   condition two ways. Revision 5 keeps one: a removal counts when the removed object is the object
@@ -1653,7 +1677,7 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
     corrections: out-of-turn deaths share the effect's place in the tick, and claim 6(e) refers
     there for passenger death or escape while claim 3 here owns open-topped passengers' in-play
     status. Revision 11 removes the obsolete sale-completion alternative for a building with
-    0 health: S-0312 claim 21 owns its removal, including a building destroyed during a sale.
+    0 hit points: S-0312 claim 21 owns its removal, including a building destroyed during a sale.
     Claim 6 rates the general rules of points (a) and (b) high, as does current S-0312 claim 21.
     Revision 10 replaces the earlier deferral to the structures specs with S-0312 claim 21's
     removal-turn rule, exceptions and second round. Only the type's explodes flag or the sale's

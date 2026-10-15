@@ -1,9 +1,9 @@
 ---
 id: Q-0720
 title: Where in an object's turn the cloak update runs
-status: open
+status: answered
 related: [S-0516, S-0203]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

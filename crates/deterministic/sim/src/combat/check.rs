@@ -335,6 +335,10 @@ pub fn check(
     if crate::naval::sinking(w, firer) {
         return Answer::Illegal;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0511 claim 10 (a falling firer: illegal)
+    if crate::fall::falling(w, firer) {
+        return Answer::Illegal;
+    }
     let t = w.tick;
     let c = &o.combat;
     // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)

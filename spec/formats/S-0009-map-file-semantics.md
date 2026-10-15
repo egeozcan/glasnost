@@ -2,7 +2,7 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -68,10 +68,10 @@ treats creation-time particle or smudge effects as taking zero draws. Production
 draw assignment belongs to S-0404 claim 11, not this loading-order table.
 Claim 40 already follows S-0405 claim 18's conditional initial power-switch rule; the map
 flag's encoding remains here, and S-0108 claim 13 owns the slot-animation consequences.
-Claim 40 also agrees with S-0215 claim 1 and B36: set-up queues *guard*, without
-promising it is current. Retain that distinction at joint hand-off. Q-0241's first
-automatic start and armed, unarmed and upgraded comparisons remain open; no
-first-tick bootstrap or permanently pending queue is inferred.
+Claim 40 follows S-0215 claim 1: set-up queues *guard*, the grand opening during
+placement sets readiness, and *guard* becomes current at the building's first per-tick
+start. Confirm its placement-time slot effects with S-0108 claim 11 and the set-up
+exclusion of the free unit with S-0402 claim 18 at joint hand-off.
 
 ## Terms
 
@@ -1326,16 +1326,22 @@ read, in the placement order of claim 43, while the game's set-up at game start 
     it never enters the *construction* state and shows no build-up. Its placement sets its body
     state to *idle* at once, at stage *a* of the idle range, with the delay that S-0108 claim 6
     gives an immediate change (it is made during the set-up), and the set-up queues *guard*
-    (S-0215 claim 1). This does not guarantee that *guard* is already current. The first
-    automatic start for a turreted building placed at set-up remains open in S-0215
-    (Q-0241); no first-tick start is assumed here. Its grand opening (S-0108 claim 11) does not happen. Instead, at
-    placement, the set-up starts the *idle* and *active-1* … *active-4* slot animations, as S-0108
-    claim 11 says for buildings placed during the set-up. The slots that only a grand opening
-    starts are therefore not started at placement: the refinery fill slot, the superweapon slot
-    and a sprite turret's *turret* slot. Whether such a slot starts later is decided by the rules
-    of S-0108 that start it in play (for example claim 15 for the refinery fill). Because the
-    health of claim 37 is already in force at placement, slot animations started then use their
-    damaged variant when the building is damaged (S-0108 claim 12).
+    (S-0215 claim 1). Its grand opening runs during placement, after *guard* is queued,
+    and sets the ready mark. At the end of set-up its current behaviour is still *none*.
+    At its first per-tick start *guard* becomes current and is processed in that same turn,
+    whether the building is armed or unarmed, turreted or not, or upgraded (S-0215 claim 1).
+
+    Placement starts the set-up *idle* and *active-1* … *active-4* slot animations of
+    S-0108 claim 11. It also has that claim's grand-opening slot starts: the ordinary
+    non-refinery starts, the refinery's fill-level slot, the superweapon slot when applicable,
+    and a sprite turret's *turret* slot. A refinery retains the set-up idle animation even
+    though its grand opening does not itself start idle. These starts use the health already
+    established by claim 37, subject to S-0108 claim 12's slot-condition swaps and claim 11's
+    sprite-turret exception. Thus a damaged building with a sprite turret can show normal
+    slot animations without regaining health. Subsequent slot changes follow S-0108,
+    including claim 13 for power effects and claim 15 for the refinery fill. A pre-placed
+    building receives no free unit: the grand opening occurs, but its free-unit grant is
+    suppressed during set-up (S-0402 claim 18).
 
     The building fields that change the start:
     - **Switched-on flag** (default set): when it is 0, the building starts switched off only
@@ -1384,15 +1390,16 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       and the damaged variant, variant B for the sprite turret slot, variant C for an eligible
       switched-off start, variant D for upgrades and the carried-over field; S-0405 W13 for
       the startup power-state conditions and firestorm-wall cases; S-0215 B36 for the
-      queued/current distinction; S-0314 H13 and H15 for the repair flag's effect and
+      queued/current distinction, ready mark and first per-tick start; M21 F for the
+      refinery and superweapon slots and the absence of a free unit; S-0314 H13 and H15 for the repair flag's effect and
       automatic-start pacing; S-0314 H14 for automatic sales ignoring the sell flag).
       The sell and rebuild flags' effects through the original's computer players' base
-      logic are `unmeasured`: no scenario of this spec observes that out-of-scope logic. The first automatic
-      start of queued *guard* remains unresolved (Q-0241). S-0215 B36 is the proposed
-      investigation, not evidence for a bootstrap tick or perpetual inactivity. Firing alone
-      does not separate *guard* from other firing behaviours; the recorder must distinguish
+      logic are `unmeasured`: no scenario of this spec observes that out-of-scope logic.
+      S-0215 B36 remains proposed, not a recorded measurement. Firing alone does not
+      separate *guard* from other firing behaviours; the recorder must distinguish
       current from queued behaviour.
-    - Confidence: high for the complete start in the idle state; medium for the slots not started,
+    - Confidence: high for the complete start in the idle state and first per-tick start of
+      *guard*; medium for the placement-time slots and absence of a free unit,
       the switched-on flag and the upgrades; low for the carried-over upgrade field.
       High for the repair-flag condition and automatic sales ignoring the sell flag
       (S-0314 claims 13 to 15); medium for the other computer-flag effects.
@@ -3278,12 +3285,15 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   - (A) A stock building with a build-up sprite and distinct idle and active slot animations, at
     health 256, and a second copy at a health value below the damaged threshold. *Expected:* no
     build-up on either; both in the idle body state from the first tick, the idle and active
-    animations already running, the second copy damaged in body and animations. *Falsified if* a
-    build-up plays, or the damaged copy shows undamaged slot animations.
-  - (B) A stock building with a sprite turret, at facing values 0 and 128, with no enemy in range.
-    *Expected:* no turret animation is drawn at placement (claim 40). *Falsified if* the turret is
-    drawn from the first tick. A third copy built in play by the human player is the control: its
-    turret appears when it completes.
+    animations already running. For a type without a sprite turret the second copy is damaged
+    in body and animations. *Falsified if* a build-up plays, or that damaged copy shows
+    undamaged slot animations.
+  - (B) A stock building with a sprite turret, at facing values 0 and 128, with no enemy in range,
+    plus a damaged copy. *Expected:* the turret animation is present from placement, facing
+    as claim 39 specifies. Under S-0108 claim 11's original sprite-turret exception the
+    damaged copy's running slot animations show normal variants, but its body and health
+    remain damaged. *Falsified if* the turret is absent at placement or starting it restores
+    health. A copy built in play is the completion-time control.
   - (C) A stock building with powered slot animations and either a positive base drain or the
     needs-power flag, once with the switched-on flag 0 and once with it absent. *Expected:*
     the first starts switched off (its powered animations frozen as for a building switched
@@ -3300,6 +3310,17 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     of those cells), and its turret is centred on the projection of cell (12, 12)'s top corner and
     points east. *Falsified if* the foundation is shifted, or the turret is centred elsewhere or
     faces another way.
+  - (F) Pre-place a stock refinery whose type grants a free unit, and a stock superweapon
+    building with visible charge-slot artwork. Disable starting units and keep a distant
+    bystander computer house alive. Use speed index 2, 800 × 600, stock data, director and
+    mods off. With a read-only recorder, capture slot names, health and nearby unit counts
+    at the end of loading and before and after each building's first turn. *Expected:* the
+    refinery has both its set-up idle slot and its fill-level slot, but grants no free unit.
+    The superweapon building has the charge slot selected by S-0108 claim 11, subject to
+    its power-state rules. *Falsified if* the fill slot is missing at the end of loading,
+    the refinery grants a free unit, or the charge slot disagrees with that selection when
+    power rules do not suppress it. S-0215 claim 1's scenario B36 separately distinguishes
+    current and queued *guard* at these boundaries for armed, unarmed and upgraded hosts.
 - **M22, terrain objects and smudges (claim 42).** A 20 × 20 flat clear map revealed to the
   human player. 1 run per variant.
   - (A) Terrain-object entries with keys 12012 and 10014 naming a stock tree type in lower case,

@@ -139,3 +139,75 @@ which the quirk inventory test does not scan; they are not added (S-0612 is M7).
 - Filed: Q-0670 (garrison index reset ordering), Q-0671 (deterministic audio schedule).
 - Q-0654 stays open: S-0501, S-0208, S-0105 and S-0205 were not revised in the range.
 - Q-0660 question 2 stays open (S-0311 Open questions, S-0508 claim 18).
+
+## Spec revisions since 2878894
+
+Buckets as above. Request answers retired from `docs/development.md` in this round: Q-0672 to
+Q-0675, Q-0680, Q-0697, Q-0710 to Q-0719. The cloak requests Q-0720 to Q-0729 (S-0516, and
+their pointers in S-0203 revision 28, S-0209 revision 34 row WP25, S-0210 revision 21,
+S-0410 revision 20 and S-0507 revision 6) belong to the cloak work and are not touched here.
+
+- **S-0202 (rev 27 to 28), (a).** Claim 13: the map-generator stream starts at seed 0,
+  independently of the game seed (Q-0711). Continuing a session across games is a seam.
+- **S-0207 (rev 24 to 25), S-0208 (rev 29 to 31), S-0417 (rev 13 to 15), (a, already done).**
+  A tethered teleporting infantry unit reports clear in its jump's arrival update, before the
+  entered-by raise (Q-0697). S-0208's air-release height rule is S-0507 claim 13's (Q-0672).
+  S-0417's hover destination split and arrival outcome table follow S-0503 claims 15 and 16;
+  `econ::release::arrival` reads the order-level destination.
+- **S-0209 (rev 30 to 34), (a, already done) and (b).** Hover flag rules point to S-0503
+  claims 13 and 15; bridge drops to S-0511 claim 9. The dying-vehicle escape gate accepts only
+  *clear* and *moving blocker* (`transport::escape`), so a stationary friendly outcome kills.
+- **S-0211 (rev 16 to 17), (a, already done) and seam.** Moves already recompute their cells
+  in full (`drive`, `walk`, `hover`, `teleport`). The local-area resize action (S-0524 claim 8)
+  is not built; when it is, it recomputes every legal cell, not only cells gained or lost.
+  Claim 15 (a)'s historical responsibility is S-0511's (Q-0717).
+- **S-0212 (rev 39 to 40), S-0213 (rev 31 to 32), (a).** A hover's searches and completion
+  use its movement destination, kept by a stop with equal points (S-0503 claim 16).
+- **S-0214 (rev 35 to 36), (a, already done).** The repair cursor is S-0511 claim 21's.
+- **S-0215 (rev 39 to 41), (a).** Falling and due processing (S-0511 claim 10); the
+  centre-cell revert (S-0511 claim 22, Q-0719); the depot tether and untethered release rows
+  (S-0314 claims 17 and 20); passenger sync before the queued-entry retry, the parasite
+  delivery after it (S-0314 claim 23).
+- **S-0301 (rev 13 to 14), (a).** A falling firer is *illegal* at rank 4 (S-0511 claim 10).
+- **S-0314 (rev 17 to 18), (a).** See `depot-cycle.md`; Q-0674 and Q-0680 retired, Q-0790 filed.
+- **S-0404 (rev 16 to 17), (a, already done).** Every imported foundation word has a present
+  exit list, empty for 0 × 0; exhausting it starts no perimeter search.
+- **S-0501 (rev 12 to 13), S-0507 (rev 4 to 6), (a, already done).** The air-unload
+  placeholder centre (Q-0673) and air release (Q-0672) are in `transport.rs`.
+- **S-0503 (rev 3 to 5), (a).** See `S-0503.md`; Q-0675 retired, Q-0679 filed.
+- **S-0511 (rev 3 to 4), (a).** See `S-0511.md`; Q-0676 to Q-0678 filed.
+
+## Spec revisions since 17:50 (cloak round)
+
+Buckets as above. Request answers retired from `docs/development.md` in this round: Q-0676 to
+Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q-0791, Q-0792
+(S-0516), Q-0793 (S-0207 exit tracks), Q-0794 (S-0314 driving destination point).
+
+- **S-0516 (rev 5 to 6), S-0203 (rev 28), S-0209 (rev 34), S-0210 (rev 21), S-0410 (rev 20),
+  S-0507 (rev 6), (a).** See `S-0516.md`; the two new quirks
+  `cloak_field_building_interrupt` and `mobile_sensor_removal_centre` are built. WP25 needs no
+  disguise house; a no-house disguise shows the neutral radar colour.
+- **S-0503 (rev 5 to 6), (a).** See `S-0503.md`; claim 18's held destination point is
+  `HoverState::held` (Q-0679).
+- **S-0207 (rev 25 to 26), S-0511 (rev 4 to 5), (a).** See `S-0511.md`; `Track::height`
+  (claim 24, Q-0676), the retained bomb mark (Q-0677), the combined span extent and
+  `quirks.collapsed_pier_span_search` (Q-0678).
+- **S-0314 (rev 18 to 19), (a).** See `depot-cycle.md`; claim 17's movement-report table, the
+  empty place 0 and the arrival's ready mark (Q-0790).
+- **S-0504 (rev 14), (a).** Claim 7's two other amphibious zones are tested
+  (`claim_7_other_amphibious_zones_match_the_flag`); Q-0643's marker is retired.
+- **S-0215 (rev 41 to 42), S-0009 (rev 25 to 26), S-0108 (rev 12 to 13), S-0402 (rev 22 to 23),
+  S-0409 (rev 13 to 14), (a).** Q-0241 answered: set-up placement's grand opening sets the
+  ready mark (`econ::body::set_up`), so *guard* is current from the first per-tick start; no
+  free unit at set-up (already so: set-up never calls `harvest::grand_opening`). The app's
+  set-up slots already include a refinery's empty fill slot (*active-1*); the superweapon and
+  sprite-turret slot starts are still not built (`turret_start_clears_damaged` row). S-0409's
+  shared owner reveal is original-only bookkeeping; nothing to build.
+- **S-0312 (rev 26 to 27), S-0504 (rev 14 to 15), (a, already done).** The retained bomb
+  mark (S-0511 claim 10) is built; S-0312 claim 11's low-water death effects are not built.
+  Ships run the drive track, so `Track::height` covers S-0504 claim 1's heading height.
+- **S-0105 (rev 15 to 16), (a).** Q-0215's question 7 stays `unmeasured`; its row stays as
+  our drawing choice.
+- **S-0701 (rev 14 to 15), S-0109 (rev 24 to 25), (a) and not built.** Claim 40 indexes
+  Q-0260, Q-0264 and Q-0265 (already listed as answered). The per-layer sound-reference
+  import rules are not built (`docs/development.md`, audio).

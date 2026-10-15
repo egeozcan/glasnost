@@ -41,8 +41,8 @@ fn claim_24_firing_at_hidden() {
     let mut w = game(&r);
     let cart = spawn(&mut w, "CART", ALPHA, 0, 0);
     let tick = spawn(&mut w, "TICKLER", ALPHA, 0, 2);
-    let foe = spawn(&mut w, "GHOST", BETA, 3, 0);
-    let own = spawn(&mut w, "GHOST", ALPHA, -3, 0);
+    let foe = spawn_cloaked(&mut w, "GHOST", BETA, 3, 0);
+    let own = spawn_cloaked(&mut w, "GHOST", ALPHA, -3, 0);
     let ans = |w: &glasnost_sim::world::World, f, t| {
         check::check(w, f, Some(Target::Object(t)), 0, false)
     };
@@ -67,14 +67,14 @@ fn claim_25_aircraft_drop_hidden_targets() {
     let r = ruleset();
     let mut w = game(&r);
     let a = spawn(&mut w, "WRAITH", ALPHA, 0, 0);
-    let foe = spawn(&mut w, "GHOST", BETA, 4, 0);
+    let foe = spawn_cloaked(&mut w, "GHOST", BETA, 4, 0);
     w.obj_mut(a).unwrap().target = Some(Target::Object(foe));
     run(&mut w, 1);
     assert_eq!(w.obj(a).unwrap().target, None);
     // Sensed by its house: kept by this rule.
     let mut w = game(&r);
     let a = spawn(&mut w, "WRAITH", ALPHA, 0, 0);
-    let foe = spawn(&mut w, "GHOST", BETA, 4, 0);
+    let foe = spawn_cloaked(&mut w, "GHOST", BETA, 4, 0);
     spawn(&mut w, "SEEKER", ALPHA, 4, 2);
     w.obj_mut(a).unwrap().target = Some(Target::Object(foe));
     run(&mut w, 1);
@@ -89,7 +89,7 @@ fn claim_26_clicks_and_selection() {
     let mut w = game(&r);
     ally(&mut w, ALPHA, BETA);
     ally(&mut w, BETA, ALPHA);
-    let g = spawn(&mut w, "GHOST", BETA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", BETA, 0, 0);
     assert!(!targeting::selectable_by(&w, g, Some(ALPHA)), "an ally's");
     assert!(view::pickable(&w, g, Some(BETA)), "the owner's");
     let veil = spawn(&mut w, "VEIL", ALPHA, 6, 6);
@@ -123,7 +123,7 @@ fn claim_26_clicks_and_selection() {
         "sensed"
     );
     let mut w2 = game(&r);
-    let s2 = spawn(&mut w2, "GHOST", ALPHA, 0, 0);
+    let s2 = spawn_cloaked(&mut w2, "GHOST", ALPHA, 0, 0);
     assert!(view::deselects(
         &w2,
         s2,
@@ -145,7 +145,7 @@ fn claim_27_radar() {
     let mut w = game(&r);
     ally(&mut w, ALPHA, BETA);
     ally(&mut w, BETA, ALPHA);
-    let g = spawn(&mut w, "GHOST", BETA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", BETA, 0, 0);
     let p = spawn(&mut w, "PLAIN", BETA, 0, 5);
     assert!(!view::on_radar(&w, g, Some(ALPHA)));
     assert!(view::on_radar(&w, g, Some(BETA)));
@@ -159,7 +159,7 @@ fn claim_27_radar() {
 fn claim_28_how_v_sees_it() {
     let r = ruleset();
     let mut w = game(&r);
-    let g = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
     let set = |w: &mut glasnost_sim::world::World, s: CloakState, k: i32| {
         let o = w.obj_mut(g).unwrap();
         o.cloak.state = s;
@@ -194,7 +194,7 @@ fn claim_28_how_v_sees_it() {
     let mut r2 = ruleset();
     r2.sim.general.cloaking_stages = Some(300);
     let mut w = game(&r2);
-    let g = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
     let o = w.obj_mut(g).unwrap();
     o.cloak.state = CloakState::Uncloaking;
     o.cloak.stage = 299; // x = ⌊256 · 299 / 300⌋ = 255
@@ -224,7 +224,7 @@ fn claim_28_how_v_sees_it() {
 fn claim_29_shadows() {
     let r = ruleset();
     let mut w = game(&r);
-    let g = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
     let p = spawn(&mut w, "PLAIN", ALPHA, 3, 0);
     assert!(!view::shadow(&w, g));
     assert!(view::shadow(&w, p));

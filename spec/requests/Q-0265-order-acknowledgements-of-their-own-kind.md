@@ -1,9 +1,9 @@
 ---
 id: Q-0265
 title: Which spoken acknowledgement does each order kind with an acknowledgement of its own play, and what plays when an object is selected?
-status: open
+status: answered
 related: [S-0214, S-0202]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

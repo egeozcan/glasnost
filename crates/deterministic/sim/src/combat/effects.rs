@@ -37,6 +37,9 @@ pub enum Effect {
         weapon: crate::combat::data::WeaponId,
         /// The fire point.
         from: Pos,
+        /// The firer's creation-derived report value *r* (S-0701 claim 21,
+        /// S-0202 claim 10), read when it fires.
+        report: u16,
     },
     /// A hit's damage-state result (S-0302 claim 12), for the sound
     /// reactions of S-0701 claims 20 and 28. Not reported for a hit that

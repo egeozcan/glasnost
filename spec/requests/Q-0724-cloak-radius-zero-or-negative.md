@@ -1,9 +1,9 @@
 ---
 id: Q-0724
 title: What a cloak radius of zero or below does
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need
