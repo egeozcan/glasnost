@@ -2,7 +2,7 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -83,12 +83,14 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 2. **Virus death with the animation.** When an infantry unit dies a virus death that plays the
    rules' virus-death animation (S-0107 claim 17, the human row), the animation is created at the
    unit's position. If the damage had an attacker object, the animation's owner house is the
-   attacker's house. This ownership changes nothing in this spec: the clouds go into the shared gas
+   attacker's house. With no attacker object, it instead takes the hit's supplied attacking house
+   (S-0302 claim 1), or no house when neither is supplied. This ownership changes nothing in this
+   spec: the clouds go into the shared gas
    system, which has no house. The particles requested by the animation's middle event (S-0109
    claim 14: its particle type, its particle count times) are all created in the shared gas system
    at the animation's position, *whatever their type's behaviour kind*.
    - Backing: `measurable` (G2 part a for animation position, ownership, shared-system
-     membership and particle count)
+     membership and particle count; G2 part d for ownership without an attacker object)
    - Confidence: high
 
 3. **Virus death without the animation's middle event.** In the two extra-animation cases of
@@ -396,9 +398,11 @@ Ordering consequences:
   importer rejection or a warning. Without a behaviour kind, the resulting system cannot run
   gas updates even when a virus death delivers gas particles into it.
 - **Virus-death animation without a particle type.** The original reads outside its type list in
-  claim 3 (and claim 2 creates nothing). Our importer warns, and claim 3 creates no particle.
+  claim 3 (and claim 2 creates nothing), so its result is undefined. This is a departure: our
+  importer warns, and claim 3 creates no particle. There is no quirk switch.
 - **Wind direction outside 0–7,** including the absent default −1. The original reads outside its
-  table. When a type with a wind effect exists, our importer warns, and no wind push is applied.
+  table, so its result is undefined. When a type with a wind effect exists, this is a departure:
+  our importer warns, and no wind push is applied. There is no quirk switch.
 - **Non-gas particle types in the shared gas system** (claim 2). Such a particle updates and moves
   by the rules of its own behaviour kind, which other specs own. Only the turn order of claim 6
   comes from its system. This spec makes no claim about whether the data supplies such a particle.
@@ -482,7 +486,14 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   G2-zero-middle: give the virus-death animation a one-frame sprite, no loop delay and a positive
   particle count other than one, so μ = 0. Repeat (b): expect the middle-event count plus one,
   in that creation order. Repeat with a smoke-behaviour particle: it still enters the shared
-  system and subsequently follows smoke motion, not gas motion.
+  system and subsequently follows smoke motion, not gas motion. (d) Named test rules file
+  G2-house uses G10-owned's warhead-created gas system, with its particle warhead selecting a
+  virus death, to kill ordinary human infantry. Record the killing hit's attacker and attacking
+  house, the death animation's owner and the spawned clouds' system owner. Expected: no attacker
+  object, the source system's house as attacking house and animation owner, but no owner for the
+  shared system receiving the new clouds. Contrast a virus chain death from the ownerless shared
+  system: neither the hit nor its death animation has a house. Any different ownership falsifies
+  claim 2's fallback; later shared-system cloud kills must still credit no house (claim 14).
 - **G3. Warhead first particle.** Test rules file: give a test weapon's warhead the shared gas
   system's type as its particle system. Fire once at empty ground. Expected: one cloud at the
   impact point in the detonation tick (raised to terrain if needed), and none appearing later
