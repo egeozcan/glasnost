@@ -1,9 +1,9 @@
 ---
 id: Q-0850
 title: The landing point of a warp member whose destination cell is off the map or whose nearby search fails
-status: open
+status: answered
 related: [S-0513, S-0212, S-0507]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

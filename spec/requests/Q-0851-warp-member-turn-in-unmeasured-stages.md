@@ -1,9 +1,9 @@
 ---
 id: Q-0851
 title: What a warp member does with the rest of its turn in the stages that S-0513 claim 48 marks unmeasured
-status: open
+status: answered
 related: [S-0513, S-0203, S-0215, S-0314]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
