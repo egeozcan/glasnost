@@ -292,10 +292,7 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     if o.kind == Kind::Terrain {
         return terrain_hit(w, target, hit);
     }
-    if crate::naval::sinking(w, target) {
-        // A sinking vessel takes no further hit: Q-0642 (interim; S-0504 claims 4 and 5 give it no health loss or second death)
-        return HitResult::Unaffected;
-    }
+    // spec: S-0504 claim 10 (sinking is no immunity: damage delivered to a sinking vessel takes the ordinary rules)
     // spec: S-0315 claims 6 and 7 and S-0614 claim 12 (a hit on a host counts before it changes the host's health, stopped hits included; not inside the vehicle factory)
     if !inside_factory(w, target) {
         crate::parasite::host_hit(w, target, &hit);
@@ -705,6 +702,10 @@ fn killing_hit(
             credit(w, id, hit);
         }
         return HitResult::PostMortem;
+    }
+    if crate::naval::sinking(w, id) {
+        // Q-0646 (interim): a killing hit on an already sinking vessel gives no second credit and no second death
+        return HitResult::NowDead;
     }
     if o.combat.delay_kill_until.is_some() && !rules.quirks.delay_kill_credited_again {
         // spec: S-0302 Edge cases (delay_kill_credited_again off: no further credit)

@@ -438,7 +438,7 @@ fn claim_4_sinking_draws() {
     assert!(!b.effects.iter().any(|e| matches!(e, Effect::Anim { .. })));
 }
 
-// spec: S-0312 claim 10 and S-0504 claim 6 (what does not sink: an underwater type, a type lighter than the sinking weight, a naval type off water; Q-0640 interim: a type without a weight)
+// spec: S-0312 claim 10 and S-0504 claim 6 (what does not sink: an underwater type, a type lighter than the sinking weight, a naval type off water); S-0504 claim 11 (a type without a weight weighs exactly 1.0)
 #[test]
 fn claim_10_sinking_condition() {
     let sinks = |name: &str, dx: i32, dy: i32| {
@@ -450,7 +450,10 @@ fn claim_10_sinking_condition() {
     assert!(sinks("SKIFF", 0, 0));
     assert!(!sinks("DIVER", 0, 0), "underwater");
     assert!(!sinks("LIGHT", 0, 0), "weight 2 < 3");
-    assert!(!sinks("SCOW", 0, 0), "no weight (Q-0640, interim)");
+    assert!(
+        !sinks("SCOW", 0, 0),
+        "no weight: 1.0 below the sinking weight 3"
+    );
     assert!(!sinks("SKIFF", 3, 0), "on land");
     assert!(!sinks("CART", 0, 0), "not naval");
     // A weight exactly the sinking weight sinks.
@@ -516,8 +519,66 @@ fn claim_5_sinking_in_play() {
         "no track transition"
     );
     // A body turn already under way is not claimed to stop (claim 5: not every facing change stops).
-    // Q-0642 (interim): no further hit.
-    assert_eq!(kill(&mut w, skiff), HitResult::Unaffected);
+    // S-0504 claim 10: no immunity, the hit is taken; Q-0646 (interim): no second death.
+    assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
+    assert!(naval::sinking(&w, skiff), "still sinking");
+}
+
+// spec: S-0504 claim 11 (an absent weight is exactly 1.0: it sinks when the sinking weight is at most 1.0 and not above)
+#[test]
+fn claim_11_absent_weight_is_one() {
+    for (threshold, sinks) in [("1", true), ("1.0001", false), ("0.5", true)] {
+        let mut r = rules();
+        r.sim.general.ship_sinking_weight = dec(threshold);
+        let mut w = world(r);
+        let id = at(&mut w, "SCOW", 0, 0, 0);
+        kill(&mut w, id);
+        assert_eq!(naval::sinking(&w, id), sinks, "threshold {threshold}");
+    }
+}
+
+// spec: S-0504 claim 10 and S-0314 claims 9 and 19 (a sinking vessel still self-heals on the ordinary schedule; healing does not end sinking or its descent)
+#[test]
+fn claim_10_sinking_vessel_self_heals() {
+    let mut r = rules();
+    r.sim.vehicles.get_mut("SKIFF").unwrap().combat.self_healing = Some(true);
+    let mut w = world(r);
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
+    assert_eq!(w.obj(skiff).unwrap().health, 1);
+    for _ in 0..30 {
+        tick::step(&mut w);
+    }
+    let o = w.obj(skiff).unwrap();
+    assert!(o.health > 1, "healed: {}", o.health);
+    assert!(naval::sinking(&w, skiff), "still sinking");
+    assert!(w.height_above_surface(skiff) < 0, "still descending");
+    let gone = (0..200).any(|_| {
+        tick::step(&mut w);
+        w.obj(skiff).is_none()
+    });
+    assert!(gone, "leaves play as usual");
+}
+
+// spec: S-0504 claim 10 (a sinking vessel takes ordinary damage: a nonlethal hit after healing lowers its health)
+#[test]
+fn claim_10_sinking_vessel_takes_damage() {
+    let mut r = rules();
+    r.sim.vehicles.get_mut("SKIFF").unwrap().combat.self_healing = Some(true);
+    let mut w = world(r);
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    kill(&mut w, skiff);
+    for _ in 0..30 {
+        tick::step(&mut w);
+    }
+    let h = w.obj(skiff).unwrap().health;
+    assert!(h > 1);
+    let mut hit = lethal();
+    hit.amount = 1;
+    let _ = damage::apply(&mut w, skiff, hit);
+    assert!(w.obj(skiff).unwrap().health < h, "damaged while sinking");
 }
 
 // spec: S-0614 claim 11 and S-0504 claims 4 and 5 (a vessel set sinking without a hit keeps its health and descends the same way)
@@ -1041,4 +1102,17 @@ fn carrier_and_missile_ship_fight() {
         w.obj(launcher).is_none_or(|o| o.health < l0),
         "the carrier's aircraft hit the missile ship"
     );
+}
+
+// spec: S-0504 claim 12 (a naval vehicle-factory yard docks at the centre of the cell (2, 1) cells from its top-left foundation cell, at its own height; a land building supplies no such point)
+#[test]
+fn claim_12_yard_docking_point() {
+    let mut w = world(rules());
+    let yard = at(&mut w, "NAVYARD", 0, -4, -4);
+    let depot = at(&mut w, "DEPOT", 0, 5, 7);
+    let o = w.obj(yard).unwrap();
+    let c = o.pos.cell();
+    let want = Pos::centre(CellXY::new(c.x + 2, c.y + 1), o.pos.z);
+    assert_eq!(naval::yard_docking_point(&w, yard), Some(want));
+    assert_eq!(naval::yard_docking_point(&w, depot), None);
 }

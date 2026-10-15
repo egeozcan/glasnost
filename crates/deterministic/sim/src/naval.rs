@@ -20,6 +20,7 @@
 //!   repair depots and docking at them are not built (Q-0641).
 
 use glasnost_map::terrain::land;
+use glasnost_num::F64;
 use glasnost_num::geom::root_floor;
 use glasnost_rules::sim::{Locomotor as RsLocomotor, MovementZone};
 use serde::{Deserialize, Serialize};
@@ -81,7 +82,7 @@ pub fn sinking(w: &World, id: ObjectId) -> bool {
 /// Whether a killed vehicle sinks instead of exploding (S-0312 claim 10):
 /// a naval type that is not underwater and not organic, whose weight is at
 /// least the game-wide sinking weight, on a water cell. A type without a
-/// weight does not sink (Q-0640, interim).
+/// weight has weight 1.0 (S-0504 claim 11).
 pub fn sinks_at_kill(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.kind != Kind::Vehicle {
@@ -94,11 +95,12 @@ pub fn sinks_at_kill(w: &World, id: ObjectId) -> bool {
     if !tc.naval || tc.underwater || tc.organic {
         return false;
     }
-    // spec: S-0312 claim 10 (the type's weight at least the game-wide sinking weight); Q-0640 (absent weight: interim, no sinking)
+    let mode = w.rules().mode;
+    // spec: S-0312 claim 10 (the type's weight at least the game-wide sinking weight); S-0504 claim 11 (an absent weight is exactly 1.0)
     let heavy = w
         .rules()
         .unit(o.kind, o.type_index)
-        .and_then(|u| u.vehicle.weight)
+        .map(|u| u.vehicle.weight.unwrap_or_else(|| F64::from_i64(1, mode)))
         .is_some_and(|wt| wt.ge(w.rules().combat.general.sinking_weight));
     // spec: S-0312 claim 10 (on a water cell)
     let water = w
@@ -259,6 +261,27 @@ pub fn depot_distance(p: Pos, dock: Pos) -> i32 {
     // spec: S-0504 F3 (squared differences, their sum and the square root, truncated toward zero; height counts)
     let n = (dx * dx + dy * dy + dz * dz) as u64;
     i32::try_from(root_floor(n, false, glasnost_num::Rounding::TowardZero)).unwrap_or(i32::MAX)
+}
+
+/// The docking point of a naval yard marked as a vehicle factory (S-0504
+/// claim 12): the centre of the cell (2, 1) cells from its top-left
+/// foundation cell, at the yard's own height; `None` for any other
+/// building. It takes precedence over imported pad docking displacements.
+pub fn yard_docking_point(w: &World, yard: ObjectId) -> Option<Pos> {
+    let o = w.obj(yard)?;
+    if o.kind != Kind::Building {
+        return None;
+    }
+    let b = w.rules().buildings.get(o.type_index as usize)?;
+    if !(b.naval && b.factory == Some(crate::rules::FactoryKind::Vehicle)) {
+        return None;
+    }
+    let c = o.pos.cell();
+    // spec: S-0504 claim 12 (the cell displaced by (2, 1) cells along x and y from the top-left foundation cell, wrapping signed 32-bit arithmetic)
+    let cell = glasnost_map::CellXY::new(c.x.wrapping_add(2), c.y.wrapping_add(1));
+    // spec: S-0504 claim 12 (its centre, at the yard's own world height)
+    let p = Pos::centre(cell, o.pos.z);
+    Some(p)
 }
 
 /// The depot's waiting gate (S-0504 claim 8): the docked vehicle stands

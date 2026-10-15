@@ -110,11 +110,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if crate::naval::sinking_turn(w, id) {
         return;
     }
+    // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
+    crate::combat::heal::turn(w, id);
     let sinking = crate::naval::sinking(w, id);
-    if !sinking {
-        // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn); a sinking vessel does not heal (Q-0642, interim)
-        crate::combat::heal::turn(w, id);
-    }
     process::turn(w, id);
     if w.obj(id).is_none() {
         return;
