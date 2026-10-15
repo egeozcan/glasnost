@@ -2,7 +2,7 @@
 id: S-0609
 title: Gattling spin-up
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -137,7 +137,8 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
 
 6. **Vehicles: ticks without a firing step freeze the spin.** In a tick in which a vehicle takes no
    firing step, its spin value and stage do not change (no spin-down either). This includes a
-   vehicle that is being erased by a temporal weapon after its one spin-down of S-0514 claim 4, a
+   vehicle that is being erased by a temporal weapon between the lock-triggered spin-down updates
+   of S-0514 claim 4, a
    vehicle in a chrono move while its warp restriction is active (S-0207 claim 20,
    S-0513 claim 39), and a vehicle travelling through a tunnel. A vehicle not receiving on-map
    updates, such as an ordinary passenger, likewise has no ordinary firing-step update here.
@@ -206,8 +207,10 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
     building that absorbs vehicles or infantry (S-0605 for the infantry case), its spin value, its stage and its
     elapsed-tick count become 0. The numeric reset itself has no sound effect; leaving the map
     separately ends the sound's looping and clears the playing mark (claim 13). When
-    a temporal weapon starts to erase an object of a gattling-flagged type (S-0514 claim 4), the
-    object receives exactly one spin-down update with multiplier 1 (claims 3 and 13), not a reset.
+    a temporal weapon successfully locks onto an object of a gattling-flagged type (S-0514
+    claim 4), the object receives exactly one spin-down update with multiplier 1 (claims 3 and 13),
+    not a reset. Each successful lock applies this update, including a joining attacker's lock
+    during an existing erasure interval; there is no continuous temporal spin-down between locks.
     Owner changes, rank changes and new orders do not themselves reset the same object's value
     or stage. Deployment into a building or packing into a vehicle can create a replacement:
     claim 1's initial state applies to that new object, not a persistence guarantee across the
@@ -527,12 +530,19 @@ attacker's turret at the start. Record per run the tick and damage of every hit 
   and break the beam (kill the attacker) after a few ticks, then re-attack.
 - *Additional variants:* record ordinary passenger, chrono warp-restricted and tunnel intervals.
   Separate the boarding reset from later on-map updates. Repeat temporal attachment just above a
-  stage threshold and with zero spin-down amount, to distinguish one update from repeated decay.
+  stage threshold and with zero spin-down amount, to distinguish lock-triggered updates from
+  continuous decay. In a separate run with positive spin-down amount and enough remaining spin
+  to distinguish decrements, let a second temporal attacker join the first beam at a recorded
+  tick, then break both beams before erasure completes. Record spin and the playing mark at each lock.
 - *Expected:* (a) value, stage and elapsed count reset to 0 on boarding; value and stage remain
-  0 while an ordinary passenger. (b) attachment applies F2 once; spin freezes during erasure.
-  Chrono-restricted and tunnel intervals preserve recorded entry value and stage.
-- *Falsified if:* a reset is missed, erasure applies more than one F2 update, or an interval
-  without firing steps changes spin. Compare numeric values, not merely top-stage damage,
+  0 while an ordinary passenger. (b) each successful lock applies F2 once, including the joining
+  attacker's lock. Each also ends spin-sound looping and clears the playing mark (claim 13).
+  Between locks, temporal erasure supplies no further spin update. Chrono-restricted and tunnel
+  intervals preserve recorded entry value and stage.
+- *Falsified if:* a reset is missed, a successful lock omits or duplicates its F2 update,
+  the joining lock makes no update, or spin changes between locks during erasure without
+  another specified spin-changing event. Likewise, an interval without firing steps or another
+  specified event must not change spin. Compare numeric values, not merely top-stage damage,
   which could hide many decrements.
 
 **G9. Infantry and aircraft with the gattling flag (claim 10).**
