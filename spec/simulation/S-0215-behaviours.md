@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2203,7 +2203,12 @@ apply in our engine to the actors of every player house.
       depots); *open* for buildings is claim 35,
     - *unload* for vehicles: S-0507 claims 7–12 for transports, and S-0517 claims 3 to 8
       for in-place deploying; aircraft passenger unloading: S-0507 claim 13; for factory buildings:
-      S-0417 (structures, factory unloading); other building unloading: structures,
+      S-0417 (structures, factory unloading); other building unloading: structures.
+      A vehicle transport's *finished* processing queues *guard* with the allowance to
+      interrupt movement, but still chooses the standard delay of claim 6, including its
+      scenario draw (S-0507 claim 11). Aircraft passenger unloading also uses that standard
+      delay except for the *stopped check* and *reselect* phases of S-0507 claim 13:
+      each chooses exactly 1 tick with no delay draw,
     - *missile*: buildings only (superweapons and structures); infantry, vehicles and aircraft
       process it by the default rule of claim 4 (table T1),
     - *paradrop approach*, *paradrop overfly*, *spy-plane approach*, *spy-plane overfly*: aircraft
@@ -2221,7 +2226,10 @@ apply in our engine to the actors of every player house.
       immediate start; it becomes current at a permitted opportunity of S-0501 claim 31,
       not by bypassing readiness. Aircraft fall-back and queued starts are S-0501 claims 18
       and 31 (claims 11 and 13 here); aircraft passenger *unload*: S-0507 claim 13.
-    - Backing: pointers inherit the cited claims' backing; the aircraft *hunt* queue/start
+    - Backing: pointers inherit the cited claims' backing; the transport completion delay
+      and aircraft phase exceptions are `measurable` (S-0507 scenarios T10 and T11,
+      recording processing ticks and scenario random state).
+      The aircraft *hunt* queue/start
       distinction is `measurable` (S-0501 AC10, recording queued and current behaviours against
       the readiness and start opportunities of S-0501 claim 31).
       The default processing it names for the other kinds is the rule of claim 4 (table T1). The

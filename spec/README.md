@@ -118,7 +118,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 17 | approved | — |
 | [S-0112](rendering/S-0112-overlay-terrain-object-drawing.md) | Overlay and terrain object drawing | rendering | 12 | approved | — |
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 12 | approved | — |
-| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 38 | approved | — |
 | [S-0404](production/S-0404-production-queue-payment.md) | Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion) | production | 16 | approved | — |
 | [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 13 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 24 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 39 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 29 | approved | — |
 | [S-0209](movement/S-0209-occupancy-crowding.md) | Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests) | movement | 30 | approved | — |
+| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 39 | approved | — |
