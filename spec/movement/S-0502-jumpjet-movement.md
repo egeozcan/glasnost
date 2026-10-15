@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -44,8 +44,8 @@ Pointers, not repeated here:
   impact: S-0312 claims 15 and 16. This spec supplies only the crash motion (claim 18).
 - **Sinking.** Once claim 19 sets a vehicle sinking, its sinking descent and removal are
   S-0504 claims 4 and 5.
-- **Magnetic lift.** A unit lifted or dropped by another object's locomotor: planned S-0607. Claims 18
-  and 19 name only the parts of the jumpjet's own movement that change while that holds.
+- **Magnetic lift.** A unit seized by magnetic lift: S-0607 claims 5, 15 to 20. Claims 18
+  and 19 name only the parts of the jumpjet's own movement that change while it is seized.
   Those exceptions are not a specification of magnetic lift itself.
 - **Other movement specs.**
   - Aircraft flight: S-0501.
@@ -78,6 +78,9 @@ From the glossary and other specs:
 - *demolition warhead*; *damage that ignores defences* and the *no-escape* marker (S-0312 Terms)
 - *behaviour*, current and queued (S-0215); *sight*; *sinking*; *sinking descent*
 - *legal cell*.
+- *seized*, *grip*, *dropped*, *set down* (S-0607 Terms). Here “held by magnetic lift”
+  means *seized*, including after the grip ends and during a drop, until restoration of the
+  unit's own locomotor (S-0607 claim 20). It does not mean only actively gripped.
 
 New terms:
 - **The jumpjet fields.** These are copied from a jumpjet type to each unit when it gets the jumpjet
@@ -290,9 +293,9 @@ New terms:
     - **Exception.** A hovering infantry jumpjet whose type has the jumpjet-turn flag and that
       has a target sets its movement heading at once to the direction of the target (S-0204
       claim 8). Its body facing is not set from the heading in that step.
-    - **Magnetic lift.** A unit held by magnetic lift (planned S-0607) keeps its body facing.
-    - Backing: `measurable` (scenario J6) for ordinary facing and steps. The magnetic-lift
-      exception is `unmeasured`: J6 supplies no held jumpjet; planned S-0607 must establish it.
+    - **Magnetic lift.** A seized unit keeps its body facing (S-0607 claim 7).
+    - Backing: `measurable` (scenario J6 for ordinary facing and steps; S-0607 scenario L2
+      for retained facing while seized).
     - Confidence: high
 
 ### Cruise and arrival
@@ -330,12 +333,12 @@ New terms:
 
     | Arrival condition | Result |
     |---|---|
-    | Held by magnetic lift | Target height becomes 0 and the unit enters *descending* (planned S-0607 owns the rest). |
+    | Held by magnetic lift | Target height becomes 0 and the unit enters *descending* (S-0607 claim 8 owns the arrival drop). |
     | Not held by magnetic lift; no target; not a balloon-hover type; deploy-to-land vehicle | It claims its cell's hover slot and enters *hovering*, or takes a neighbour step if the slot is held. |
     | Not held by magnetic lift; no target; not a balloon-hover type; not a deploy-to-land vehicle | Target height becomes 0 and the unit enters *descending*. |
     | Not held by magnetic lift; has a target or is a balloon-hover type | It claims its cell's hover slot and enters *hovering*, or takes a neighbour step if the slot is held by another jumpjet. |
-    - Backing: `measurable` (scenario J7) for ordinary arrival. Magnetic-lift arrival is
-      `unmeasured`: J7 does not establish that held state; planned S-0607 must supply it.
+    - Backing: `measurable` (scenario J7 for ordinary arrival; S-0607 scenario L2 for
+      seized arrival).
     - Confidence: high
 
 13. **Hovering.** In each tick of *hovering* in which the jumpjet is moving, it checks these rows
@@ -353,8 +356,10 @@ New terms:
     So an ordinary jumpjet that loses its target over its destination comes down and lands.
     The balloon-hover rule prevents spontaneous landing except when an earlier
     simple-deployer row requires descent.
-    - Backing: `measurable` (scenario J8) for ordinary and deploying cases. The magnetic-lift
-      row exclusions are `unmeasured`: J8 has no held-unit setup; planned S-0607 must supply it.
+    - Backing: `measurable` (scenario J8 for ordinary and deploying cases; S-0607 scenarios
+      L2 and L3 for the seized pull and release). The seized simple-deployer row exclusions
+      remain `unmeasured`: those scenarios do not establish a seized simple deployer hovering
+      with the relevant landing request and flags.
     - Confidence: high (rows); medium (the deploy-to-land row, whose landing request S-0517
       owns)
 
@@ -362,15 +367,14 @@ New terms:
 
 14. **No landing on water or beach.** A *descending* jumpjet whose destination cell's land type
     is water or beach does not land there, unless its current or queued behaviour is *enter*
-    (S-0215 claim 1), or it is held by magnetic lift (planned S-0607).
+    (S-0215 claim 1), or it is seized (S-0607 claim 7).
     - It claims the hover slot of that cell, sets its target height to *H* and enters
       *hovering*.
     - If the slot is held by another jumpjet, it takes a neighbour step and enters *cruising*.
 
     It keeps doing this until it reaches a cell where it may land, or receives an order.
-    - Backing: `measurable` (scenario J9) for ordinary water/beach and entering cases.
-      The magnetic-lift bypass is `unmeasured`: J9 has no held jumpjet setup; planned S-0607
-      must establish it.
+    - Backing: `measurable` (scenario J9 for ordinary water/beach and entering cases,
+      S-0607 scenarios L3 and L6 for seized descent and water/beach outcomes).
     - Confidence: high
 
 15. **Landing check and touchdown.**
@@ -406,9 +410,11 @@ New terms:
       - it attempts crate pickup in its landing cell under S-0520 claim 6; pickup rejection
         does not reverse the completed landing
       - a deploy-to-land vehicle's landing request ends (S-0517).
-    - Backing: `measurable` (scenario J9) for ordinary landing checks, entering and living
-      touchdown. Magnetic-lift bypass and deploy-turn suppression are `unmeasured` here,
-      as J9 has no held unit. The dead/out-of-play touchdown exception is `unmeasured`:
+    - Backing: `measurable` (scenario J9 for ordinary landing checks, entering and living
+      touchdown, and S-0607 scenarios L3 and L6 for seized landing without the ordinary
+      obstruction or water/beach refusal). Seized deploy-turn suppression remains `unmeasured`:
+      these scenarios do not establish a seized simple deployer during descent.
+      The dead/out-of-play touchdown exception is `unmeasured`:
       J9 has only living landings, and a normal kill changes the unit to crashing instead.
     - Confidence: high (water and beach, the outcomes, touchdown); medium (the crate pickup and
       the deploy direction)
@@ -472,7 +478,8 @@ New terms:
       ordinary height control in the following update (claim 3). A jumpjet that is neither
       moving nor moving now takes no update, so it does not start this fall until it next
       updates (Open questions). An infantry jumpjet switches to its *air-death-start* sequence
-      (S-0107). Held-unit crash entry is not specified here (planned S-0607).
+      (S-0107). A seized dropped unit instead follows S-0607 claim 15's cell-centre detour
+      before crash entry.
     - **Fall.** In each tick of *crashing*:
       - after that tick's ordinary physics height step (F4), its world height drops by an
         additional *k*, with the resulting world height truncated toward zero. Away from the
@@ -484,46 +491,49 @@ New terms:
     - **Crossing a deck.** Over a high-bridge cell, the extra crash drop ends the ordinary
       jumpjet's fall when its height before that drop is at or above the deck and its height
       after it is below the deck. It does not snap its world height back to the deck.
-    - **End.** When its height above the surface falls below 1 lepton, or that drop crosses a deck:
+    - **Ordinary crash end.** When its height above the surface falls below 1 lepton, or
+      that drop crosses a deck:
       - it releases its hover slot
       - its maximum speed and target height become 0
       - it enters *crashed*.
 
-      The impact then follows S-0312 claim 16.
-    - **Magnetic lift.** A unit held by magnetic lift does not spin. Its speeds are 0 and its
+      An ordinary jumpjet's impact then follows S-0312 claim 16. A dropped seized unit
+      instead follows S-0607 claims 16 and 17: a clear cell leads to *descending*, not
+      *crashed*, and blocked water can lead to sinking (claim 19).
+    - **Magnetic lift.** A seized unit does not spin. Its speeds are 0 and its
       crash rate grows by 1 lepton per tick, each tick, with each new rate narrowed to single
-      precision under S-0205 claim 5 (planned S-0607).
-    - Backing: `measurable` (scenario J12) for ordinary crash motion. The magnetic-lift
-      exception is `unmeasured` here: J12 does not establish a live unit held by magnetic lift
-      and then hand it to this motion; planned S-0607 must supply that setup. Crash requests
-      on idle units share claim 3's `unmeasured` limitation.
+      precision under S-0205 claim 5 (S-0607 claim 15).
+    - Backing: `measurable` (scenario J12 for ordinary crash motion; S-0607 scenarios L3
+      and L4 for the cell-centre detour, zero-speed fall, no spin and growing crash rate).
+      Crash requests on idle units share claim 3's `unmeasured` limitation.
     - Confidence: high (fall and spin); medium (the hand-over to S-0312's impact)
 
-19. **What sets a jumpjet sinking.** Only a unit that magnetic lift has just released (planned S-0607) is
-    checked on impact. A jumpjet that ends its fall on a water cell where it cannot stand, not on
-    a deck and not on beach, is set sinking, and S-0504 claims 4 and 5 then apply.
+19. **What sets a jumpjet sinking.** Only a dropped unit (S-0607 claim 13) is
+    checked on impact. S-0607 claims 16 and 17 decide the outcome: a blocked water cell,
+    not on a deck and not on beach, sets it sinking unless a vehicle or building underneath
+    forces the blocked-land crash outcome. S-0504 claims 4 and 5 then govern sinking.
     - An ordinary jumpjet that was shot down is never set sinking by its movement, whatever cell
       it falls on.
-    - The rest of the released unit's impact (damage to what is under it, and the switch to
-      *descending* when the cell is clear) belongs to planned S-0607.
-    - Backing: `unmeasured`. J13 can record whether an ordinary shot-down unit sinks, but a
-      per-tick record cannot attribute an impact-tick change to movement rather than the
-      impact/death rules. No magnetic-lift release-and-drop scenario is established here.
-      Planned S-0607 must supply that setup.
+    - The rest of the dropped unit's impact, including effects on what is underneath and
+      *descending* when the cell is clear, belongs to S-0607 claims 16 and 17.
+    - Backing: `measurable` (S-0607 scenarios L5 and L6 for the dropped-unit outcomes,
+      including a vessel underneath and legal water/deck landings). Ordinary shot-down
+      attribution remains `unmeasured`: J13 can record sinking but cannot attribute an
+      impact-tick change to movement rather than impact/death rules.
     - Confidence: medium (the release condition was traced to the single place that sets it)
 
 ### Firing
 
 20. **Flight states and firing.**
     - The jumpjet locomotor adds no refusal of its own to the firing check (S-0301 claim 9,
-      rank 16, never comes from it). Cross-spec correction needed: remove the jumpjet
-      flight-phase example from S-0301 claim 9's rank-16 row; those refusals belong to
-      S-0310 claims 7 and 8 instead.
+      rank 16, never comes from it). S-0301 claim 9's generic locomotor-refusal row does not
+      assign any jumpjet flight-phase refusal; those belong to S-0310 claims 7 and 8.
     - The flight-phase refusals come from the firer's own checks, which use *moving now*
       (Terms): S-0310 claim 7 for a balloon-hover vehicle, and claim 8 for an infantry jumpjet
       with the jumpjet-turn flag.
-    - So such a firer may fire while *grounded* or *hovering*, and gets the moving refusal while
-      *ascending*, *cruising*, *descending*, *crashing* or *crashed*.
+    - This flight-state test permits firing while *grounded* or *hovering*, subject to all
+      other firing restrictions. It gives the moving refusal while *ascending*, *cruising*,
+      *descending*, *crashing* or *crashed*, unless a higher-ranked refusal applies.
     - An infantry jumpjet is also refused while its speed fraction (claim 6) is above S-0310
       claim 8's threshold.
     - Backing: `measurable` (scenario J14) for living flight phases. The speed-fraction
@@ -695,7 +705,8 @@ round-toward-zero arithmetic.
 | descending | move order | ascending | *h*<sub>t</sub> = *H* |
 | descending | bridge-adjusted height *h* = 0 | grounded | touchdown effects (claim 15) |
 | any but crashing, crashed | crash started, above the surface, not held by magnetic lift | crashing | *h*<sub>t</sub> = −5 leptons; extra drop this tick, new ordinary height target next tick |
-| crashing | height < 1 lepton or extra drop crosses a deck | crashed | slot released; S-0312 impact |
+| crashing, ordinary unit | height < 1 lepton or extra drop crosses a deck | crashed | slot released; S-0312 claim 16 impact |
+| crashing, dropped seized unit | height < 1 lepton or extra drop crosses a deck | descending, sinking or crashed | S-0607 claims 16 and 17 |
 
 Ordinary state outcomes for a tick use that tick's physics results. A transition to a new state,
 speed maximum or target height affects physics beginning with the next tick. Arrival is the
@@ -799,7 +810,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   supplies explicitly identified variants when stock data cannot establish a subcase. It changes
   only the fields that subcase names and is removed after the run. Every subcase using it is
   recorded as named test data, not a stock-data run.
-- Use the bench's per-tick recorder where supported. Record position, world height, height above
+- Use the measurement setup's read-only recorder where supported. Record position, world height, height above
   the surface, body facing, movement heading if exposed, speed fraction, current behaviour, target and
   destination. Propose any missing recorder support to the user rather than changing the setup.
 - Also record the flight state, current and maximum speed, target height, landing reservation,
@@ -808,6 +819,13 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   explored cells and score changes from video as appropriate.
 - The observed area is the entire purpose-made map except the bystander's isolated start area.
   One run per subcase unless stated. No measurement is claimed yet.
+
+**Magnetic-lift coverage.** Use S-0607's common setup and scenarios, not J1's ordinary
+jumpjet setup: L2 tests retained facing and seized arrival (claims 10 and 12), L3 and L4
+record the cell-centre detour and accelerating fall (claim 18), and L5 and L6 test blocked,
+clear, water, beach and deck impact outcomes (claim 19). L3 and L6 also exercise seized
+descent without the ordinary landing refusals (claims 14 and 15). The special seized
+simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there.
 
 **Scenarios.**
 - **J1 Field copy and controls.**
@@ -1018,7 +1036,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
     air-death-start presentation at crash entry; a different sequence falsifies that part.
 - **J13 Sinking only after a magnetic-lift drop.** Shoot down a jumpjet vehicle over water.
   Expected: it is not set sinking by its movement (claim 19). A magnetic-lift drop over water is
-  deferred to planned S-0607. Record sinking state through impact as a diagnostic observation.
+  tested by S-0607 scenarios L5 and L6. Record sinking state through impact as a diagnostic observation.
   A sinking state before impact would falsify the fall's absence of a sinking trigger.
   An impact-tick sinking state alone cannot distinguish movement from impact/death effects,
   so this run does not back claim 19's attribution.
@@ -1049,8 +1067,6 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 - **A failed move order.** When the nearby-cell search of claim 16 finds nothing, the ordered
   point is kept as the stored destination while the moving state is unchanged. How a later tick
   uses that point is not traced.
-- **The released-unit impact.** One numeric comparison inside the released-unit impact (claim
-  19) is unresolved. Planned S-0607 should settle it.
 - **The crashed state.** What a *crashed* jumpjet does until S-0312's impact removes it, and what
   an ordinary dead jumpjet does on water after impact (S-0312's open question), are not settled
   here.
