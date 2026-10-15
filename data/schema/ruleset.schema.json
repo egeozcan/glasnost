@@ -6421,6 +6421,11 @@
           "type": "boolean",
           "default": true
         },
+        "airborne_deploy_order_dropped": {
+          "description": "A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped; off: the order is kept until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "airborne_mutation_hit_raised": {
           "description": "An airborne infantry unit hit by a warhead of infantry-death kind 9 takes 0, which the defences raise to 1.",
           "type": "boolean",
@@ -6901,6 +6906,11 @@
           "type": "boolean",
           "default": true
         },
+        "disc_laser_no_house": {
+          "description": "A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "dock_bound_aircraft_ignores_limit": {
           "description": "A dock-bound aircraft type is tested at queue time by the dock test only.",
           "type": "boolean",
@@ -6913,6 +6923,16 @@
         },
         "double_start_resolution": {
           "description": "Start positions are resolved twice, from three start lists, the assignment against the early phase's list 2; off: one list after the terrain is loaded.",
+          "type": "boolean",
+          "default": true
+        },
+        "drain_position_check_vehicles_only": {
+          "description": "Only a drainer that is a vehicle performs the position check, so an infantry or aircraft drainer keeps its link after it moves away until claim 11 or 13 ends it; off: every drainer performs it. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "drain_relink_strands_previous": {
+          "description": "A drain attempt that forms a link while the drainer is still linked to another building does not end the first link, which stays drained (blackout, refused firing, sale refusal, payouts) until the drainer is removed; off: forming a new link first ends the old one with all of claim 14's effects. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -7241,6 +7261,11 @@
           "type": "boolean",
           "default": true
         },
+        "infantry_animation_occupancy": {
+          "description": "An infantry-making animation marks its position taken and sets the cell's infantry house in every update, and frees the position at its end whatever holds it; off: it holds the position only while no other unit does, leaves the infantry house alone while other infantry stands there and frees only its own mark. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "infantry_facing_sector_skew": {
           "description": "Infantry facing groups are skewed 1024 facing units counter-clockwise.",
           "type": "boolean",
@@ -7358,6 +7383,11 @@
         },
         "multiple_factory_counts_all": {
           "description": "Every factory building of the kind counts for the several-factories factor, also those that cannot make the item.",
+          "type": "boolean",
+          "default": true
+        },
+        "mutation_test_ground_record": {
+          "description": "The conversion test's position choice reads the cell's ground record even for a victim on a high-bridge deck; off: a victim on a deck is tested against the deck record. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -7781,6 +7811,11 @@
           "type": "boolean",
           "default": true
         },
+        "refused_mutation_frees_position": {
+          "description": "A refused mutation victim's standing position is free from its death tick while it plays die-2, and its removal frees that position again even if a walker took it; off: the position stays taken until removal, which frees only the victim's own mark. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "refused_override_retargets": {
           "description": "A refused override still replaces the target and destination.",
           "type": "boolean",
@@ -8096,8 +8131,18 @@
           "type": "boolean",
           "default": true
         },
+        "superweapon_block_one_layer": {
+          "description": "In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "superweapon_kind_as_list_position": {
           "description": "The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "superweapon_list_cut_by_removal": {
+          "description": "When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
