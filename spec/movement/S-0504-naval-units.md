@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -308,8 +308,8 @@ a carrier's controller is launching ordinary aircraft.
     misses. Claim 5's targeting and firing refusals therefore do not cancel airborne projectiles.
     Health-changing effects use the ordinary integer-health arithmetic of their owning specs.
     Sinking adds no health multiplier or rounding. Claim 13 specifies the descent consequence
-    of a later killing hit. Its destruction credit, raises and death effects remain S-0312's
-    ownership (claims 2, 4 to 7, 10, 12 to 15 and 29), not a new naval death rule here.
+    of a later killing hit. Its repeated destruction credit, raises and death effects belong
+    to S-0312 claim 32, not a new naval death rule here.
     - Backing: `measurable` (N10).
     - Confidence: high (continuing updates and no damage/healing exemption); medium (isolating
       each stock effect within the short descent interval)
@@ -340,21 +340,24 @@ a carrier's controller is launching ordinary aircraft.
     - Backing: `measurable` (N13).
     - Confidence: high (point selection and precedence); medium (stock approach observations)
 
-13. **Further killing hits during descent (Q-0646, naval part).** For a sinking vessel that
-    still meets S-0312 claim 10's ordinary killing-hit sinking conditions, another killing hit
-    leaves it at 1 health point again, still sinking and in play. It does not put the vessel
+13. **Further killing hits during descent (Q-0646, naval part).** For a sinking vessel without
+    death image frames that still meets S-0312 claim 10's ordinary killing-hit sinking
+    conditions, another killing hit leaves it at 1 health point again. Unless S-0312 claim 15's
+    crashable removal applies, it remains sinking and in play. The hit does not put the vessel
     back at the surface or restart its descent: claim 4 continues from its current height.
     Thus, absent another effect that changes height or removes it, a further killing hit does
     not extend its removal tick. Healing between hits can allow a later hit to be nonlethal.
-    ordinary health arithmetic then applies (S-0302 claim 11).
+    Ordinary health arithmetic then applies (S-0302 claim 11).
 
     The same descent rule applies when sinking began through a cull: the cull itself changes no
     health, whereas a later killing hit is tested against the ordinary killing-hit conditions.
     A cull does not make an underwater or insufficient-weight type satisfy those conditions.
     The death outcome when they fail belongs to S-0312 claims 9 to 15, not an unconditional
-    naval restoration to 1 health. No exception to credit or death effects is implied by the
-    vessel already descending. Their repetition is the remaining S-0312 audit, including claim
-    29's destruction raises.
+    naval restoration to 1 health. S-0312 claim 32 owns repeated destruction credit, raises,
+    applicable death effects and their draws, and the health/removal outcomes when ordinary
+    sinking eligibility fails. Its scenario D23 tests those consequences. Types with death
+    image frames retain that claim's unresolved separate path; neither health outcome is
+    asserted for them here.
 
     If a sinking vessel has 0 health, sinking does not waive the no-health exclusion on
     ordinary damage or healing hits (S-0302 claim 8), individual self-healing (S-0314 claim 9),
@@ -730,9 +733,11 @@ S-0302 claim 11's health result. Neither resets height or extends the descent. A
 killing hit uses the same ordinary sinking eligibility rather than bypassing weight or type.
 *Falsified if:* an eligible ordinary later killing hit leaves another health value, resets
 height, or extends removal without a separately recorded height-changing effect. A miss or
-filtered area candidate is inconclusive. Credit, raises and death-effect observations are
-for S-0312's audit, not predictions that they are suppressed. Record an ineligible cull host
-separately without assuming restoration to 1 or a terminal fate not yet specified by S-0312.
+filtered area candidate is inconclusive. Use types without death image frames and with
+crashability off for these descent comparisons. Credit, raises, death effects and ineligible
+cull-host outcomes follow S-0312 claim 32 and its scenario D23, not suppression merely because
+sinking is already active. Death-image-frame variants remain exploratory, without a predicted
+health or removal outcome.
 If any run leaves a zero-health vessel in play, record through the next due healing ticks:
 no individual or house-wide self-heal should raise it, and an ordinary delivered healing hit
 must not revive it. Absence of such a state does not test that conditional exclusion.
@@ -763,10 +768,10 @@ event recording; this proposes recording capability, not an oracle modification.
   point. Full approach handshake, contact reservation timing and failure/retry routing are not
   established here. Do not infer them from aircraft pads, land depots or production release.
   Q-0641 is therefore not included in the answered-request list.
-- Q-0646's destruction credit, raises and repeated death effects remain S-0312's audit
-  (claims 2, 4 to 7, 10, 12 to 15 and 29). Claim 13 answers continued descent for the ordinary
-  sinking-eligible case, not the terminal fate of every cull-started type that fails those
-  conditions. S-0302 claim 8 owns hit filtering at 0 health.
+- Q-0646: the death-image-frame path remains unresolved in S-0312 claim 32. That claim
+  and scenario D23 now cover repeated destruction credit, raises, applicable death effects
+  and ordinary health/removal outcomes; claim 13 here owns continued descent, not that
+  unresolved path. S-0302 claim 8 owns hit filtering at 0 health.
 - Whether a ship whose propulsion was switched off during settling becomes permanently
   immobile after its naval yard is sold or destroyed. S-0314 claim 22 establishes this for
   hovering vehicles, not ships. Claim 14 does not extend `quirks.depot_loss_strands_hover`
