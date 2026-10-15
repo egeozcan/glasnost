@@ -1,9 +1,9 @@
 ---
 id: Q-0661
 title: Default of the two psychic immunities for building types (S-0610 against S-0302)
-status: open
+status: answered
 related: [S-0610, S-0302]
-answered-by: []
+answered-by: [S-0610]
 ---
 
 ## Need

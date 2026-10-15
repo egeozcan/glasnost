@@ -2,13 +2,13 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0661]
 supersedes: []
 ---
 
@@ -41,8 +41,8 @@ skirmish only; network games and campaigns are out of scope.
 - **Gas clouds** that carry a berserk warhead: S-0613 claims 4 and 13 cover their creation and
   hits when the data supplies them; each hit then follows this spec and S-0302 claim 10.
   The stock chaos drone creates no gas particles (claim 8).
-- **Permanent and temporary mind control** and psychic domination use the psionics immunity of
-  claim 1; their detailed rules belong to planned S-0601 and planned S-0612.
+- **Permanent and temporary mind control** use the psionics immunity of claim 1.
+  their eligibility rules are S-0601 claims 3 and 13. Psychic domination belongs to planned S-0612.
 
 ## Terms
 
@@ -70,17 +70,23 @@ skirmish only; network games and campaigns are out of scope.
 
 1. **Two immunities.** Every infantry, vehicle, aircraft and building type has a psionics immunity
    and a psychic-weapon immunity (Import mapping). Both are on by default for building types and
-   off by default for infantry, vehicle and aircraft types.
+   off by default for infantry, vehicle and aircraft types. These are initial defaults when
+   no rules layer supplies the field, not resets when a later layer omits it (S-0006 claim 2).
+   An otherwise damageable building with the default psychic-weapon immunity ignores a
+   psychic-damage hit. A building with the default psionics immunity fails the temporary-control
+   eligibility test (S-0601 claim 3) and the berserk-weapon firing check (claim 3).
+   Buildings are independently excluded from berserk hits (S-0302 claim 10) and permanent
+   control (S-0601 claim 13), even when their psionics immunity is explicitly off.
    - Psionics immunity is consulted by: berserk hits (S-0302 claim 10), the firing check of a
-     weapon whose warhead is berserk-causing (claim 3), and the control effects assigned to planned S-0601
-     and planned S-0612 (temporary mind control, permanent control, psychic domination).
+     weapon whose warhead is berserk-causing (claim 3), temporary and permanent control
+     (S-0601 claims 3 and 13), and psychic domination (planned S-0612).
    - Psychic-weapon immunity is consulted only by damage resolution (S-0302 claim 8). It adds no
      firing refusal and no search exclusion: a unit may fire a psychic-damage weapon at a
      psychic-weapon-immune target, and the hit does nothing.
-   - Backing: `measurable` (P1 for psychic damage and P4 for berserk immunity).
-     Absent-key defaults and control-immunity consumers are `unmeasured` here: the stock-only
-     scenarios do not isolate absent fields or control effects. The lack of an immunity-specific
-     firing refusal is `unmeasured`: P1 observes area hits, not the single-target firing check.
+   - Backing: `measurable` (P1 for psychic damage, P4 for berserk immunity, P8 for
+     absent-key defaults, temporary-control immunity and immunity-specific firing checks).
+     Permanent-control eligibility is backed by S-0601 claim 13's scenarios. Psychic-domination
+     consumption is `unmeasured` here: no dedicated domination setup is supplied.
    - Confidence: high (defaults and consumers); medium (that nothing else reads the
      psychic-weapon immunity)
 
@@ -102,9 +108,8 @@ skirmish only; network games and campaigns are out of scope.
    So a berserk weapon is never fired at a building whose type keeps the default immunity, nor at
    a bunkered vehicle. Its area may still reach such objects when it is fired at something else,
    and S-0302 claim 10 then decides.
-   - Backing: `unmeasured`, because the only stock weapons with a berserk-causing warhead are fired
-     at an area by deploying or are gas clouds, so these stock-only scenarios do not isolate
-     the single-target firing check
+   - Backing: `measurable` for the immunity refusal (P8 c, using named test data).
+     The bunker case is `unmeasured` here: no named single-target bunker fixture is supplied.
    - Confidence: high (psionics immunity); medium (the bunker case)
 
 4. **Going berserk.** When a berserk hit takes effect (S-0302 claim 10) on a unit that is not
@@ -134,8 +139,8 @@ skirmish only; network games and campaigns are out of scope.
    A hit with *T* ≤ 0 still has all the effects of claim 4, and the state ends at the next
    countdown update (Edge cases, `quirks.berserk_zero_duration`). Countdown behaviour while out
    of play has not been established and is not specified here.
-   - Backing: `measurable` (P2). The *T* ≤ 0 case is `unmeasured`: P3 is a conditional
-     proposal and no stock susceptible zero-duration setup has yet been demonstrated.
+   - Backing: `measurable` (P2; for *T* ≤ 0, P3 and S-0302 scenario D17 part i's
+     named zero- and negative-versus test setup).
    - Confidence: high (countdown and expiry effects); medium (the *T* ≤ 0 case)
 
 6. **While berserk.** A berserk unit takes no orders (S-0214 claim 15), fires with the halved rearm
@@ -146,7 +151,8 @@ skirmish only; network games and campaigns are out of scope.
    - The original's rule that a unit of a computer-controlled owner drops a target allied with its
      owner in each update does not apply to a berserk unit, so a berserk unit of such an owner
      keeps attacking its allies. In our engine that rule holds only for units of the neutral and
-     special houses (glossary, *AI house*). No approved spec owns the rule yet (Open questions).
+     special houses (glossary, *AI house*). S-0215 claim 33a owns the clearing rule and
+     its other exceptions.
    - Backing: `measurable` (scenario P4)
    - Confidence: high (berserk-friendly refusal); medium (the exception to the computer-owner rule)
 
@@ -352,12 +358,14 @@ skirmish only; network games and campaigns are out of scope.
 
 ## Measurement scenarios
 
-All scenarios: stock data, director off, mods off, a small purpose-made skirmish map, normal game
+All scenarios: stock data except the explicitly named test data below, director off, mods off
+apart from that named test data, a small purpose-made skirmish map, normal game
 speed, 800 × 600 presentation. Use scripted input and a read-only recorder when needed to deliver and observe the stated setup on the stock executable. Record the seed rather
 than assuming it can be set. Repeat each deterministic part three times. Include one bystander
 computer player, kept outside the test area under the glossary's void rule. Record tick counts, health and orders using read-only observation, and capture frames for presentation.
 Unless a part gives a narrower falsifier, any observed departure from its expected outcome
-falsifies that part. A setup not achievable with stock data is not a successful measurement.
+falsifies that part. A setup not achievable with stock data or the scenario's explicitly named
+test data is not a successful measurement.
 
 - **P1. Immunities.** A deployed psychic infantry fires its pulse with an enemy building, an
   enemy vehicle, an enemy infantry and an enemy infantry of a psychic-weapon-immune type inside
@@ -386,7 +394,10 @@ falsifies that part. A setup not achievable with stock data is not a successful 
   not just tint: entry and expiry can both precede a drawn frame. Expected: target cleared and
   *hunt* queued at entry, then expiry and *guard* queued at the first countdown update.
   Falsified by no entry effects, no expiry at that update, or a different queued behaviour.
-  If neither stock zero-versus nor inert-game setup is achievable, this part remains unmeasured.
+  For a guaranteed susceptible zero-duration fixture, use S-0302 scenario D17 part i's
+  named test map D17-zero-duration, including its negative-versus repeat and hit timing on
+  either side of the target's update. This is an explicit named-test-data exception to the
+  common stock-data setup.
 - **P4. While berserk.** (a) A berserk tank of house A beside a chaos drone and an infantry, both
   of house A. Expected: it attacks the infantry, never the drone. (b) A tank of the neutral house
   made berserk next to another neutral-house unit: it attacks that unit and keeps attacking it.
@@ -451,15 +462,39 @@ falsifies that part. A setup not achievable with stock data is not a successful 
   cells missing from the shape, persistent sight without a covering object, detection of the
   cloaked unit, loss of disguise, or a launch announcement or radar event.
 
-## Open questions
+- **P8. Per-kind defaults and building consumers (Q-0661).** Named test map
+  P8-psychic-defaults registers new infantry, vehicle, aircraft and building types so no lower
+  rules layer has supplied either immunity. For each kind provide three otherwise identical
+  variants: both immunities omitted, both explicitly on, both explicitly off. Give them no
+  other protection, and keep aircraft landed. Use separate undamaged targets for each part.
+  (a) Deliver a positive psychic-damage hit with a named test weapon that can hit each kind,
+  with positive versus for each target's armour. Record health before and after. Expected:
+  omitted buildings match the on variant (no health loss), while omitted infantry, vehicles
+  and aircraft match the off variant (health loss). All explicit-on variants ignore the hit
+  and all explicit-off variants lose health.
+  (b) Try temporary control with a controller that has free capacity and whose test weapon
+  permits every target kind. Use enemy targets satisfying all other conditions of S-0601
+  claim 3, and record ownership and control state. Expected: omitted buildings resist like
+  the on variant; omitted nonbuildings are taken like the off variant. Explicit-on targets
+  resist and explicit-off targets are taken, including buildings.
+  (c) Give a ready, armed firer two otherwise identical, single-target test weapons, one
+  psychic-damage and one berserk-causing, each with positive versus and sufficient range.
+  Against enemy building variants, record whether an attack order produces a shot and whether
+  the hit changes health or berserk state. Expected: the psychic-damage weapon can fire at
+  all variants, but damages only the explicit-off building. The berserk weapon does not fire
+  at omitted or explicit-on buildings; it can fire at the explicit-off building, which still
+  cannot become berserk. Keep other firing and order conditions legal (S-0301 claim 9).
+  Void a run in which another eligibility condition prevents the explicit-off control case.
+  Any omitted variant matching the wrong explicit variant, refusal of the psychic shot solely
+  for its immunity, or a berserk shot at an immune building falsifies the corresponding part.
+  Remove the named test data after the runs.
 
-- Which spec owns the original's rule that a unit of a computer-controlled owner drops a target
-  allied with its owner in each update (claim 6). S-0215 seems the right place.
+## Open questions
 - Whether a berserk unit's countdown is paused while it is out of play (claim 5). This is
   untraced and unmeasured: no stock boarding setup that preserves the state is established.
 - (Low) Whether a psychic sensor that leaves the map but is not destroyed stays a sensor of its
   owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
 - Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
   claim (claim 11).
-- The absent-field defaults, control consumers and aircraft-tint subcases marked unmeasured
-  need dedicated setups before they can acquire measurement backing.
+- The psychic-domination consumer and aircraft-tint subcases marked unmeasured need
+  dedicated setups before they can acquire measurement backing.
