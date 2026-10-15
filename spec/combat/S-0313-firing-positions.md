@@ -2,7 +2,7 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -158,11 +158,25 @@ S-0202: R(*a*, *b*). In addition:
    starts at 0, and after every shot it makes (a launch that succeeds, S-0301 claim 15) it becomes
    (*k* + 1) mod *n*, *n* being the occupant count then. Exception: a shot of a disc laser weapon
    (S-0301 claim 10) does not advance the index, so a garrison whose occupant weapon is a disc
-   laser keeps the same muzzle point and the same occupant from shot to shot. It is set to 0 when
-   the building is emptied by occupants leaving or being killed. The same index picks which occupant's weapon fires (S-0308). A muzzle point that the art data does not give, or gives as (65535, 65535), is
-   (0, 0).
-   - Backing: `measurable` (scenario P5)
-   - Confidence: high (the cycle and the reset when emptied); medium (the shift arithmetic, F3)
+   laser keeps the same muzzle point and the same occupant from shot to shot. After a completed
+   whole-building eviction or clearing action, the index is 0. Reoccupation therefore starts at 0.
+   An additional entry does not change the index (S-0508 claim 18, in the same-round draft).
+   No ordering of the reset relative to individual releases or removals within the action is
+   required here: no observable consequence distinguishes those intermediate states.
+   S-0311 claim 15 describes the limited individual set-up removal case that retains the
+   numeric index without reducing it modulo the remaining count. Neither that case nor
+   releases within a whole-building action establish an independent selective skirmish departure
+   or death, whose index effect remains unresolved (S-0508 claim 18). The related drafts must
+   be aligned as listed in Cross-spec changes required below before joint sign-off.
+   The same index picks which occupant's weapon fires (S-0308 claim 13). A muzzle point that
+   the art data does not give, or gives as (65535, 65535), is (0, 0).
+   - Backing: `measurable` (scenario P5) for the cycle, completed-action reset, reoccupation,
+     additional entry and muzzle shifts. The limited set-up removal remains `unmeasured`
+     for the fixture limitation in S-0311 claim 15: no validated data-only selective-removal
+     scenario is supplied. No index rule is predicted for an unestablished independent
+     selective gameplay loss.
+   - Confidence: high (the cycle, action reset and additional entry); medium (the shift
+     arithmetic, F3, and the limited set-up removal)
 
 7. **Buildings with a primary fire pixel shift.** A building that is not garrisoned and whose type
    gives a primary fire pixel shift fires, with any weapon, from its base point shifted by that
@@ -290,7 +304,8 @@ by *B* with truncation toward zero; the direction sum wraps modulo 8 with no fur
 |---|---|---|
 | garrisoned building, muzzle index *k* | a shot is launched, other than a disc laser shot | *k* ← (*k* + 1) mod occupant count |
 | garrisoned building, muzzle index *k* | a disc laser shot is launched | *k* unchanged |
-| garrisoned building | the building is emptied by occupants leaving or being killed | *k* ← 0 |
+| garrisoned building | a whole-building eviction or clearing action completes | *k* = 0; reoccupation starts at muzzle 0 |
+| garrisoned building | an additional occupant enters (S-0508 claim 18) | *k* unchanged |
 | spray-attack firer, burst counter 0 | a shot | *s* ← R(0, 7), one draw before the projectile's draws (S-0301 claim 18) |
 | spray-attack firer, burst counter above 0 | a shot | *s* ← (*s* + trunc(8 / *B*)) mod 8, no draw |
 
@@ -443,10 +458,36 @@ the user, not a request to alter the game.
 - Expected: the muzzle points cycle 0, 1, …, *n* − 1, 0, …; positions follow F3 from the
   foundation's top corner.
 - Falsified if: the cycle skips or any integer start position differs from F3.
-- Reset variant: after firing from a non-zero muzzle index, empty the building by evacuation,
-  reoccupy it and attack again. Repeat after all occupants are killed without destroying the
-  building, using a named test occupant-killing weapon if needed. Expected: each first shot
-  after reoccupation uses muzzle 0. Falsified if it resumes the old index.
+- Evacuation and reoccupation variant: use a civilian garrisonable building with free exits
+  and three distinguishable occupants entered one at a time. Fire exactly one ordinary shot,
+  then stop the attack through normal input. Verify a non-zero index and give the building a
+  deploy order to evacuate it (S-0508 claim 13). Record index 0 after completion, reoccupy in
+  the original order, and attack again. Expected: the first shot after reoccupation uses the
+  first occupant and muzzle 0. A non-zero completed-action index, a different first shooter
+  or a different muzzle falsifies the corresponding rule. Void and repeat a run if another
+  shot intervenes before evacuation.
+- Additional-entry variant: begin with two distinguishable occupants, fire once, stop and admit
+  a third without another intervening shot. Expected: the index stays 1 and the next shot uses
+  the second occupant at muzzle 1. A different index, shooter or muzzle falsifies retention.
+  Void and repeat a run if another shot intervenes before entry.
+- Clearing variant: named test map `firing-index-assault.map` gives a stock infantry type the
+  assaulter and engineer capabilities but not the occupier capability (S-0508 claim 14).
+  Enter three distinguishable ordinary occupants owned by the human house into a civilian
+  building. A timed building-only ownership-change trigger transfers that building to a
+  hostile house, leaving the occupants inside under their original owner (S-0508 claim 17).
+  Give their garrison weapon harmless test damage so it cannot kill the entrant. Bring a
+  human-owned durable vehicle into range for the hostile building to acquire normally. Let
+  the building fire one shot at it, then move that target out of range through ordinary input.
+  Verify a non-zero index and no further shot before clearing. Order the human-owned test
+  assaulter to capture the hostile building through ordinary input. Verify that arrival clears
+  the occupants without consuming the assaulter. Record the completed-action index, then
+  reoccupy with three distinguishable replacements in the original entry order after the
+  building returns to civilian ownership. Expected: completed-action index 0, first shooter
+  the first replacement and first muzzle 0. A different index, shooter or muzzle falsifies
+  the clearing-reset rule. A run with an intervening shot or no completed assault is
+  inconclusive for reset; no weapon that kills occupants through the building is assumed.
+- Repeat evacuation, additional entry and clearing in three fresh games each. These observations
+  test completed actions, not the index between individual releases or removals within an action.
 - Data variant: named test art supplies distinct muzzle pixel pairs, including a missing entry,
   the not-given pair from Constants, and positive and negative unequal components. Expected:
   missing and not-given entries use (0, 0); others give exactly F3 at unchanged world height.
@@ -535,6 +576,21 @@ the user, not a request to alter the game.
   starts even though the primary weapon muzzle is unchanged.
 - Falsified if: link starts ignore the alternate triples or instead follow the primary muzzle.
 - Runs: one six-victim acquisition per art variant, at unchanged settled facings.
+
+## Cross-spec changes required
+
+These changes are required in the same hand-off; references to S-0508 claim 18 identify its
+same-round draft, not a claim present in the currently approved copy.
+
+- S-0508 claim 18 must state the observable completed-action reset and additional-entry
+  retention, without requiring reset before individual releases or removals. Its claim 11's
+  completed evacuation result already agrees with claim 6 here.
+- S-0308 claim 13 and its occupant-index table must state the completed-action reset without
+  requiring intermediate release/removal ordering. The approved claim's empty-building result
+  already agrees; the current draft's stronger ordering must be removed.
+- S-0311 claim 15 and its firing-occupant term must likewise use the completed-action reset
+  without an intermediate ordering requirement. Retain the limited set-up removal and the
+  unresolved independent selective-loss and out-of-range experience cases.
 
 ## Open questions
 
