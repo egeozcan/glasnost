@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -25,7 +25,10 @@ S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The sp
 delivery of paratroopers and cargo is S-0522 claims 1 to 16; only their flight is covered here.
 Ordinary air-transport eligibility is S-0507 claim 2: capacity counts passengers, without a
 passenger-size or size-limit test. Boarding releases mind control (S-0507 claim 6).
-Landed passenger release is S-0507 claim 13; its airborne unloading transitions remain incomplete.
+Passenger release and airborne unloading transitions are S-0507 claim 13, including dock
+search, stopped polling and replacement around map waypoint 700. That claim uses this spec's
+claim 21 for dock selection, claim 41 for its landing-spot fallback and claim 40 for the
+replacement-cell search; entering an unload phase is not itself a descent command.
 Aircraft cloaking and hidden-target loss are S-0516 claims 17 and 25.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
@@ -169,7 +172,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    resulting cell coordinate is outside 0 … 511, this random candidate is the shifted point
    itself instead. If neither candidate lies in a legal cell, no forward relocation occurs
    that tick; altitude adjustment and any descent nudge can still occur.
-   - Backing: `measurable` (scenarios AC3, AC23 and AC26)
+   - Backing: `measurable` for original motion (scenarios AC3, AC23 and AC26).
+     The unit-step-stall switch-off alternative is `unmeasured`: it is a design rule for
+     our engine, not an outcome of the original. The rounding alternative is owned by
+     S-0205 claim 5
    - Confidence: high
 
 5. **Speed fraction.** While a living aircraft that is not landing has a destination, its target
@@ -392,7 +398,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     the flag off it fires its full burst again from where it is, then another single shot, and so
     on: the run never reaches a point that spends its round, so one round gives unlimited fire at
     S-0301's rate until the target is gone or aiming fails (`quirks.aircraft_endless_refire`).
-    - Backing: `measurable` (scenario AC8, including its explicitly named test-map variants)
+    - Backing: `measurable` for the original runs (scenario AC8, including its explicitly
+      named test-map variants). The endless-refire switch-off alternative is `unmeasured`:
+      it is a design rule for our engine, not an outcome of the original
     - Confidence: high
 
 15. **Ammunition spent once per run.** An aircraft spends exactly one round of ammunition per run
@@ -497,6 +505,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Backing: `measurable` for candidate choice and draw absence (AC13 and AC22). The
       saved-distance −1 condition is `unmeasured`: no legal-coordinate example yielding that
       sentinel has been established; AC13's overflow comparison does not establish it.
+      The overflow switch-off exact-distance comparison is `unmeasured`: it is a design
+      alternative for our engine, not an outcome of the original.
     - Confidence: high (nearest, full pads skipped); medium (primary override and ties)
 
 22. **When a pad accepts an aircraft.** A pad accepts an aircraft only when all of these hold:
@@ -591,7 +601,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     the pad, an aircraft with a target stays while its ammunition is below ⌊*A* / 2⌋ and takes off
     into *attack* as soon as it reaches that. An aircraft of a human-controlled house gets a
     target on the pad only from an order.
-    - Backing: `measurable` (scenario AC17)
+    - Backing: `measurable` for the original half-reload rule (scenario AC17).
+      The switch-off full-reload alternative is `unmeasured`: it is a design rule for our
+      engine, not an outcome of the original
     - Confidence: high
 
 29. **Guard below cruise height.** An armed aircraft in *guard* below its cruise height that has
@@ -617,7 +629,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     `quirks.pad_limit_counts_list_only`. This is separate from the factory free-dock requirement
     of S-0404 claim 3 and the tech-tree build-limit test of S-0407 claim 9; it does not replace
     either. Sidebar icon presence and enabled state follow S-0411 claim 2.
-    - Backing: `measurable` (scenario AC18)
+    - Backing: `measurable` for the original capacity rule (scenario AC18).
+      The list-only switch-off alternative is `unmeasured`: it is a design rule for our
+      engine, not an outcome of the original. The build-limit switch is owned by
+      S-0407 claim 16
     - Confidence: high (count rule and comparison); medium (owner change)
 
 31. **Readiness and starting queued behaviours.** An aircraft is ready to change unless its
@@ -770,8 +785,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
 38. **Boundaries.** This spec does not cover the paradrop and cargo delivery behaviours
     (*paradrop approach* and *paradrop overfly*: S-0522 claims 6 to 8). Ordinary air-transport
-    eligibility and landed *unload* are S-0507 claims 2 and 13, not a future cargo-delivery
-    rule; airborne unloading transitions remain incomplete there. This spec also excludes the spy
+    eligibility and *unload*, including airborne phase transitions, dock search and waypoint-700
+    replacement, are S-0507 claims 2 and 13, not a future cargo-delivery rule. This spec also excludes the spy
     plane's dispatch and reveal (S-0513 claims 43 to 45), missile flight (S-0506 claim 14), aircraft that lift vehicles
     (out of scope), or the original AI's choice of targets for computer aircraft (out of scope).
     An aircraft's cell-entry outcome is always *clear* in a skirmish (S-0209 claim 14); the landing
@@ -1049,8 +1064,14 @@ division truncated toward zero.
 > These are the fractions before subsequent guidance or landing rules, not a promise of
 > eventual arrival. For *τ*₀ < 0.1 and *d* < 86, *τ* = 0 and
 > *f*ₕ = *f*₀ × 0.5. Otherwise *f*ₕ = *f*₀ and *τ* = max(0.1, *τ*₀).
-> The distance-clamped fraction is *f*꜀ = min(*f*ₕ, *d*). The pre-adjustment fraction *f*ₚ
-> is 0.05 when *τ* = 0, *f*꜀ = 0 and *d* > 0, and *f*꜀ otherwise.
+> Let *d*ₙ = *d* / (1 lepton): the dimensionless numerical magnitude of the distance in
+> leptons, converted exactly from its integer value to double precision. The distance-clamped
+> fraction is *f*꜀ = min(*f*ₕ, *d*ₙ), a dimensionless fraction. This compares numerical
+> magnitudes, not a physical distance with a speed: it introduces no conversion to cells or
+> distance travelled per tick. Since *d* is a non-negative integer distance and
+> 0 ≤ *f*ₕ ≤ 1, equivalently *f*꜀ = 0 at *d* = 0 leptons and *f*꜀ = *f*ₕ at every
+> *d* ≥ 1 lepton. The pre-adjustment fraction *f*ₚ is 0.05 when *τ* = 0, *f*꜀ = 0 and
+> *d* > 0, and *f*꜀ otherwise.
 > The adjusted fraction is min(*τ*, *f*ₚ + 0.1) when *f*ₚ < *τ*, max(*τ*, *f*ₚ − 0.1)
 > when *f*ₚ > *τ*, and *f*ₚ when equal. The adjusted fraction is the value defined by
 > the preceding equations. Only that resulting fraction is specified as observable; the
@@ -1059,7 +1080,7 @@ division truncated toward zero.
 > adjusted fraction is the one the next tick's step uses. When the creep restart applies,
 > *τ* = 0 and the adjusted fraction is max(0, 0.05 − 0.1) = 0, so the restart never changes
 > the outcome. Claim 5's subsequent approach replacement does not recalculate this adjusted
-> fraction, and the next tick's calculation of *τ* replaces it before that tick's adjustment.
+> fraction, and the next tick's calculation of *τ* replaces that target before its adjustment.
 > All fractions and their arithmetic use double precision with S-0205 claim 5's rounding
 > mode; there is no integer conversion of a fraction. An adjusted fraction calculated with
 > *τ* ≥ 0.1 is itself at least 0.1, so a step taken after it is at least ⌊*V* / 10⌋ leptons.
@@ -1406,7 +1427,7 @@ is a coverage gap, not confirmation. Record actual seeds and tick boundaries. Un
 listed in Open questions are not claimed confirmed by these scenarios.
 
 - **AC1 Placement (claim 1).** Produce a pad aircraft; dispatch a paradrop plane and spy plane.
-  observe a carrier launch. Record the position immediately at placement, before movement.
+  Observe a carrier launch. Record the position immediately at placement, before movement.
   Expected: the existing visiting mark and usable-area test select ground versus cruise height
   by claim 1, not the requested launch height; speed fraction is 1 only at cruise height.
   Also place a fresh type on the test map without a dispatch mark: the type's later visiting
@@ -1419,7 +1440,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   Repeat with passengers; if stock dispatch cannot produce a low starting height, the named
   loaded-flight test-map variant supplies a landable, selectable transport placed loaded.
   Its climb step is 10 instead of 20 leptons. Observe killed aircraft separately in AC5.
-  no reachable non-crashing dead-aircraft descent setup is established here.
+  No reachable non-crashing dead-aircraft descent setup is established here.
 - **AC3 Forward motion and slowing (claims 4 and 5).** Fly straight routes in all four map-axis
   directions, then diagonal routes, logging type speed, fraction and coordinates. Repeat with
   named speed-bonus test-map overrides for country, veterancy and per-object speed bonuses:
@@ -1431,7 +1452,10 @@ listed in Open questions are not claimed confirmed by these scenarios.
   replacement without a retroactive change to that fraction. The next movement tick's own
   calculation replaces that target (AC24 isolates this). With positive slowdown distance, at *d* = 0
   in ordinary slowing with positive incoming fraction, the adjusted fraction must be 0.
-  Record the pre-slowing and adjusted fractions separately; a result differing from F4
+  At post-step distances of 1 lepton or more, F4's numerical distance clamp leaves the
+  possibly halved fraction unchanged; do not divide the distance by the type speed or by
+  256 leptons per cell. Compare the adjusted fraction with F4 at these distances as well as
+  at zero. Record the pre-slowing and adjusted fractions separately; a result differing from F4
   falsifies the resulting-fraction rule, not every observationally equivalent intermediate
   order. Distinguish current from target fractions; a target replacement must
   not retroactively alter the already adjusted fraction. Compare take-off below and above
@@ -1461,7 +1485,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   when ordering departure from a pad. A loaded version distinguishes passenger climb speed.
   Give a planned route with a further waypoint: no intermediate landing outside *enter*.
   Log target-present/ammunition-present and elevated-destination cases: they hold height.
-  take-off steering follows claim 8, not the deleted descent-stage hypothesis. Log the held
+  Take-off steering follows claim 8, not the deleted descent-stage hypothesis. Log the held
   height on crossing the 768-lepton boundary with an elevated destination; it adopts the
   destination's terrain-relative height while marked as holding height. Below 128 leptons,
   an unmarked slow approach can request landing before the ordinary exact-cell trigger.
@@ -1487,7 +1511,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
 - **AC6 Exit eligibility (claim 10).** Follow dispatched visiting aircraft from outside the usable
   area through entry and departure. Record visiting mark, entered-area state, target, behaviour,
   the two flight flags and removal. Expected: no eligibility-based removal before first entry.
-  after entry, target-free visitors without either flag leave at the usable edge, other eligible
+  After entry, target-free visitors without either flag leave at the usable edge, other eligible
   visitors at the legal-map edge. A non-visiting controllable aircraft must not disappear solely
   for this reason. Use the named exit-flags test-map override to vary the flags independently.
   Separately place an aircraft outside the usable area in *retreat*: expect immediate removal
@@ -1516,7 +1540,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   without a corresponding request falsifies the claim; lack of movement alone does not.
 - **AC10 Rest, guard, hunt and queue timing (claims 18, 29, 31 and 33).** Exhaust ammunition with
   a free pad, then full pads, then no pads. Expected: reservation and *enter* when available.
-  pad-bound crash otherwise; a non-pad-bound aircraft seeks a landing spot by F8. Named rest-test
+  Pad-bound crash otherwise; a non-pad-bound aircraft seeks a landing spot by F8. Named rest-test
   overrides supply non-pad-bound landable aircraft with dock lists, without dock lists, with and
   without a weapon, with and without passengers. Record fallback's target, destination, current
   and queued behaviours and compare every applicable row of T2. Test already-overridden and
@@ -1578,7 +1602,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   while a nearer pad becomes free: the original reservation choice is retained.
 - **AC14 Docking and facing (claims 24 and 25).** Record approach, touchdown, docking position,
   contact, *sleep* and queued *guard*. Expected: position is S-0404 claim 15's pad position.
-  contact persists until departure. For direction, compare the contact's body facing with the
+  Contact persists until departure. For direction, compare the contact's body facing with the
   direction toward it; approach from different sides. Expected choice: rounded contact facing,
   not approach bearing. Named landing-facing test-map overrides vary the pose-direction integer
   and give a passenger aircraft with no contact. The choices are pose integer times 8192 modulo
