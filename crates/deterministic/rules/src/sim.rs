@@ -1295,6 +1295,23 @@ pub struct UnitType {
     /// `Passengers`.
     #[serde(default)]
     pub passengers: Option<i32>,
+    /// `Size`, the size a passenger counts (S-0507 Import mapping).
+    #[serde(default)]
+    pub size: Option<Decimal>,
+    /// `SizeLimit`, the largest size of one passenger a transport takes
+    /// (S-0507 Import mapping).
+    #[serde(default)]
+    pub size_limit: Option<Decimal>,
+    /// `IsDropship`, the dropship flag of an air transport (S-0507 Import
+    /// mapping).
+    #[serde(default)]
+    pub is_dropship: Option<bool>,
+    /// `EnterTransportSound`, a sound name (S-0507 Import mapping).
+    #[serde(default)]
+    pub enter_transport_sound: Option<String>,
+    /// `LeaveTransportSound`, a sound name (S-0507 Import mapping).
+    #[serde(default)]
+    pub leave_transport_sound: Option<String>,
     /// `Storage`.
     #[serde(default)]
     pub storage: Option<i32>,

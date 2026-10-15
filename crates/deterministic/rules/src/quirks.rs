@@ -1277,19 +1277,19 @@ pub struct Quirks {
     // spec: S-0501 claim 42, T1, Edge cases
     #[serde(default = "on")]
     pub aircraft_zero_step_attack_stall: bool,
-    /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded. Not implemented yet (wave 2).
+    /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
     pub transport_load_truncated: bool,
-    /// The gap between a neighbour's direction and the rear facing is not taken the short way round; off: the short way. Not implemented yet (wave 2).
+    /// The gap between a neighbour's direction and the rear facing is not taken the short way round; off: the short way.
     // spec: S-0507 F2, Edge cases
     #[serde(default = "on")]
     pub unload_facing_gap_no_wrap: bool,
-    /// The second unloading round starts one step clockwise of the rear; off: it tries the rear direction first. Not implemented yet (wave 2).
+    /// The second unloading round starts one step clockwise of the rear; off: it tries the rear direction first.
     // spec: S-0507 Edge cases
     #[serde(default = "on")]
     pub unload_second_round_skips_rear: bool,
-    /// A failed exit changes the gunner's weapon number to position 1's mode index; off: unchanged. Not implemented yet (wave 2).
+    /// A failed exit changes the gunner's weapon number to position 1's mode index; off: unchanged.
     // spec: S-0507 Edge cases
     #[serde(default = "on")]
     pub unload_failed_exit_gunner_handover: bool,
