@@ -2,7 +2,7 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -415,16 +415,20 @@ The halving belongs to the tile colour only: the other colours are used as given
     drawn over the radar map; camera-centering input on the radar
     map moves the battlefield view (S-0102, *view jump*). Command cursor offers are claims
     12 and 13, not a rule that every radar click must move the view. Other details belong to
-    the interface specs. S-0701 Formulas F7 owns radar-event repeat suppression: the per-kind radii,
+    the interface specs. S-0701 claim 28 owns radar-event repeat suppression: the per-kind radii,
     which kinds suppress nearby repeats, and the lifetime after the zoom-in phase. Its
-    scenario G3 covers unit production, base attacks and harvester attacks; the remaining
-    kinds and cross-creator suppression remain `unmeasured` there. Claims 14 and 15 and F9
+    scenario G3 covers unit production, base attacks and harvester attacks. Its proposed G7
+    covers every suppression-table row through radar-event trigger requests, including
+    *unit repaired*, and the named trigger/production, trigger/base-attack,
+    trigger/harvester-attack, trigger/depot-repair and trigger/garrison-abandonment pairs
+    in both directions. These are `measurable` proposals, not completed measurements or
+    exhaustive creator coverage. Claims 14 and 15 and F9
     own the zoom-in duration and cadence, including without radar. The post-zoom lifetime
     is not the total suppression duration. S-0508 claim 8 owns the request for a
     *garrison abandoned* event at the building's top-left cell; its scenarios G4 and G6
     cover the creator and its announcement gate, not an isolated suppression-radius test.
-    - Backing: `unmeasured` here (pointer only; S-0701 F7 carries the suppression backings
-      and scenario G3, including its unmeasured cases)
+    - Backing: `unmeasured` here (pointer only; S-0701 claim 28 carries the suppression
+      backings and proposed scenarios G3 and G7, without exhaustive creator coverage)
     - Confidence: high that they exist
 
 12. **Radar cursor selection (Q-0277, radar).** These rules apply while the panel is fully
@@ -1318,7 +1322,8 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   without radar: suppressed announcements resume only after the observed zoom-completion
   tick plus that kind's tail and the next expiry-processing drawn frame. An accepted
   repeat during zoom, expiry measured from creation, or radar-dependent delay falsifies
-  claims 14 or 15. Other suppression kinds retain S-0701's existing unmeasured backing.
+  claims 14 or 15. S-0701 claim 28's proposed G7 covers the other suppression-table
+  rows and its named cross-creator pairs, not every possible creator.
 
 - **R14 (claim 8; Q-0417).** Common skirmish setup, test lighting as S-0103 defines it,
   functioning radar and a 5-6-5 display path captured losslessly without scaling or filtering.
@@ -1355,8 +1360,10 @@ its radar consumption and equality between buildings and other radar-object kind
 part was explicit in the earlier approved colour and radar claims. No part remains open
 within skirmish scope.
 
-- Radar-event repeat suppression is owned by S-0701 F7. Its unmeasured kinds and
-  cross-creator cases retain that backing. Q-0331's zoom timing and advancement with or
+- Radar-event repeat suppression is owned by S-0701 claim 28. Its proposed G7 covers
+  every table row through trigger requests and the named cross-creator pairs, including
+  trigger/depot repair in both directions, not every possible creator. These remain
+  proposals, not completed measurements. Q-0331's zoom timing and advancement with or
   without radar are specified by claims 14 and 15 and F9 here; scenario R13 remains proposed,
   not an oracle measurement.
 - Which pixels the mean of F6 rounds either way when it lies within about 10⁻⁶ of an exact half
