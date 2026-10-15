@@ -66,7 +66,16 @@ fn turret_game(
     spins: bool,
     rot: i32,
 ) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId) {
+    turret_game_q(spins, rot, true)
+}
+
+fn turret_game_q(
+    spins: bool,
+    rot: i32,
+    quantised: bool,
+) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId) {
     let mut r = testkit::ruleset();
+    r.globals.quirks.turret_spin_quantised = quantised;
     let cart = r.sim.vehicles.get_mut("CART").unwrap();
     cart.turret = Some(true);
     cart.rot = Some(rot);
@@ -133,4 +142,26 @@ fn rotation_sample_follows_the_rows() {
         seen |= o.rotation_sample;
     }
     assert!(seen, "the turn was sampled");
+}
+
+/// The facing step a spinning turret makes per tick once it spins.
+fn spin_step(quantised: bool, rot: i32) -> i32 {
+    let (mut w, id) = turret_game_q(true, rot, quantised);
+    for _ in 0..20 {
+        tick::step(&mut w);
+    }
+    let a = w.obj(id).unwrap().turret.value(w.tick);
+    tick::step(&mut w);
+    let b = w.obj(id).unwrap().turret.value(w.tick);
+    (i32::from(b) - i32::from(a)).rem_euclid(65536)
+}
+
+// spec: S-0206 claim 11 and Edge cases (quirks.turret_spin_quantised on: ω = 3 spins by 1024 per tick; off: by 256 × min(ω, 8) unrounded, capped at 2048, and not at all at ω = 0)
+#[test]
+fn turret_spin_quantised_both_settings() {
+    assert_eq!(spin_step(true, 3), 1024);
+    assert_eq!(spin_step(false, 3), 768);
+    assert_eq!(spin_step(false, 7), 1792);
+    assert_eq!(spin_step(false, 12), 2048);
+    assert_eq!(spin_step(false, 0), 0);
 }

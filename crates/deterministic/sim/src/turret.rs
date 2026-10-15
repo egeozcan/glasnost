@@ -59,9 +59,14 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
         // spec: S-0206 claim 3 and F5 (the same target again changes nothing; any other starts a turn from the facing the preceding row left)
         ob.turret.turn_to(f, t, omega);
     }
-    if u.turret_spins {
+    if u.turret_spins && r.quirks.turret_spin_quantised {
         // spec: S-0206 claim 9 and F2 (a spinning turret: the facing the preceding rows left, rounded to a 256th of a turn, plus 2048; always the last row)
         let f = spin_target(ob.turret.value(t));
+        ob.turret.turn_to(f, t, omega);
+    } else if u.turret_spins && omega != 0 {
+        // spec: S-0206 Edge cases (quirks.turret_spin_quantised off: the facing F2 reads plus 256 × min(ω, 8), unrounded; at ω = 0 no spin)
+        let step = 256 * omega.min(8);
+        let f = (i32::from(ob.turret.value(t)) + step).rem_euclid(65536) as u16;
         ob.turret.turn_to(f, t, omega);
     }
     if u.turret {
