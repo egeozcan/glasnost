@@ -2,11 +2,11 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0676, Q-0677, Q-0678, Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719]
 supersedes: []
@@ -379,6 +379,12 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - Its height changes by its fall rate *v* before *v* is updated (Formulas F3). Any attached
       animation enables the parachute rate recurrence, not only a parachute (S-0522 claim 12).
       The alternative is owned by `quirks.paratrooper_any_animation_slow_fall` in S-0522.
+      S-0522 claim 13 owns the absent-parachute release timing: under the default quirk,
+      a fresh paratrooper released during its plane's turn uses the parachute recurrence
+      once in the release tick, then the no-parachute recurrence from the next tick,
+      provided no other animation is attached. With that quirk off it uses the
+      no-parachute recurrence from its first update. An unlisted ordinary animation
+      name is not an absent type (S-0522 claim 13).
     - Its fall rate starts from the value it already holds. That is 0 for an object that has never
       fallen. An object that has fallen before (by parachute, for example) starts from the rate it
       ended its last fall with (low).
@@ -400,11 +406,17 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - Backing: `measurable` (B3, including its prior-fall, turn-order and retained-mark variants) for ordinary and prior
       parachute drops and retention after survival; `unmeasured` for a later fall without
       a new mark and a later low-water death after survival: B3 specifies the conditional
-      comparisons, but no stock-play fixture yet guarantees those transitions without
-      another mark writer. Also `unmeasured` here for a non-parachute attachment selecting the slow
-      recurrence, because B3 establishes no fixture that keeps such an attachment during a
-      deck drop (S-0522 claim 12 owns that shared condition)
-    - Confidence: high (fall arithmetic, landing hit and retained bomb mark); medium (start from a stored rate)
+      comparisons, but the established repeat-drop mechanisms write the mark again and
+      therefore cannot distinguish retention from a fresh mark. Named test files cannot
+      initialise this runtime history; a read-only recorder can verify it but cannot create
+      a separating later transition. The later-water-death comparison likewise lacks a
+      legal route from the protected land landing to the required low-water death without
+      another mark writer. Also `unmeasured` here for a non-parachute attachment selecting
+      the slow recurrence: no established data-only attachment effect is known here to
+      remain attached through this deck drop. Renaming a parachute animation would not
+      distinguish that condition (S-0522 claim 12 owns the shared rule).
+      The absent-parachute release timing is `measurable` through S-0522 scenario P8.
+    - Confidence: high (fall arithmetic, landing hit and retained bomb mark); medium (start from a stored rate and absent-parachute release timing)
 
 11. **Units heading onto a lost deck.** After an attempt has made its blow-ups, each blown-up cell
     *c* whose deck-layer occupancy record (S-0209) is not empty is checked once more.
@@ -439,10 +451,9 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
         when the final object or cell destination is elsewhere.
       - Drop-pod, fly, jumpjet, rocket, teleport and tunnel locomotion do not count.
         The mech kind is not established here.
-    - Backing: `measurable` (scenario B6) for drive, walk, hover and ship locomotion and the
-      occupancy condition; `unmeasured` for the negative tests of the other kinds, because no
-      scenario yet brings each to the tested destination, and for the untraced mech kind
-    - Confidence: medium (low for the occupancy condition and untested kinds)
+    - Backing: `measurable` (scenario B6, including its negative-kind variants) for the stated
+      locomotion tests and occupancy condition. Mech is an open question, not a negative claim.
+    - Confidence: medium (low for the occupancy condition and negative-kind tests)
 
 12. **Connectivity.** After a successful direct attempt on a high bridge, the cell named for
     S-0212 claim 3 is the lost section's section cell, or a collapsed pier's reference cell. One
@@ -623,8 +634,11 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     geometry and piece selection take no scenario-stream draw, but scatter and deaths caused by
     repair use their own rules and may draw.
     - Backing: `measurable` (scenario B12) for entry into a broken bridge's hut; `unmeasured` for
-      consuming an engineer at an intact bridge, because the repair cursor can refuse the order
-      and no fixture yet establishes how to complete that entry. Observable entry ordering is
+      consuming an engineer at an intact bridge: ordinary input is refused by the cursor,
+      and named map/rules files provide no demonstrated way to bypass entry legality or
+      initialise an already-committed entry. A read-only recorder cannot force one.
+      This is a conditional entry effect, not a claim that such an order can be issued.
+      Observable entry ordering is
       `measurable` through B14
     - Confidence: medium
 
@@ -743,8 +757,12 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       other references. Subsequent firing and targetless behaviour follow their ordinary
       rules, not a special immediate guard order.
     - Backing: `measurable` (B10 target-loss variant) for combat target loss and revert.
-      The recorded-firer equality is `unmeasured`: ordinary play cannot make a cell the
-      firer. B10's aircraft and projectile variants cover the other consequences.
+      The recorded-firer equality is `unmeasured`: projectile creation supplies a firing
+      combat object or no firer, not a cell. Named rules and map data can change projectile
+      types and targets but cannot assign a cell as their recorded firer; a read-only
+      recorder cannot create that state either. Testing the equality itself would require
+      a runtime-state write, outside the measurement setup. B10's aircraft and projectile
+      variants cover the other consequences.
     - Confidence: high for exact-cell matching and the revert attempt; medium for the
       aircraft substate consequence
 
@@ -773,7 +791,7 @@ The animation's own creation draws follow. This form has no 0.95 or 0.5 tests an
 
 > *hₙ₊₁* = *hₙ* + *vₙ*; *vₙ₊₁* = max(trunc(*vₙ* − 1.4), *v*_min).
 
-Here trunc is truncation toward zero of a double-precision value, and *v*_min is the imported no-parachute maximum fall rate, a negative number. For *vₙ* ≤ 0 the rate update is *vₙ₊₁* = *vₙ* − 1, so from *v₀* = 0 the drop after *n* updates is 0 + 1 + … + (*n* − 1) = *n*(*n* − 1)/2 leptons, until *v*_min is reached. The landing test (*hₙ₊₁* ≤ 0) follows the move. While any animation is attached to the falling object, the rate recurrence instead is *vₙ₊₁* = max(*vₙ* − 1, the imported parachute maximum fall rate), using exact integer subtraction and comparison. A parachute is one such animation, not a type restriction. S-0522 claim 12 and `quirks.paratrooper_any_animation_slow_fall` own this attachment condition and its alternative.
+Here trunc is truncation toward zero of a double-precision value, and *v*_min is the imported no-parachute maximum fall rate, a negative number. For *vₙ* ≤ 0 the rate update is *vₙ₊₁* = *vₙ* − 1, so from *v₀* = 0 the drop after *n* updates is 0 + 1 + … + (*n* − 1) = *n*(*n* − 1)/2 leptons, until *v*_min is reached. The landing test (*hₙ₊₁* ≤ 0) follows the move. While any animation is attached to the falling object, the rate recurrence instead is *vₙ₊₁* = max(*vₙ* − 1, the imported parachute maximum fall rate), using exact integer subtraction and comparison. A parachute is one such animation, not a type restriction. S-0522 claim 12 and `quirks.paratrooper_any_animation_slow_fall` own this attachment condition and its alternative. S-0522 claim 13 owns the absent-parachute release-tick transition described in claim 10 here; absence of a durable parachute does not imply the no-parachute recurrence on that first update.
 
 **F4. Low repair piece.** One raw value *g* of the map-generator stream, read as an unsigned 32-bit
 integer:
@@ -844,14 +862,13 @@ centre cell uses one accepted value, with any rejected values before it, in walk
 - A ground-layer object dies in its cell's blow-up. A deck object dies only when it lands, some
   updates later (claim 10).
 
-**Cross-spec changes required at joint sign-off.** S-0209 claim 1 should point to claim 9
-for immediate drop marks and no later blanket reset. S-0203 claim 4 should point to claim 10
-for the within-turn fall boundary. S-0215 claim 10 must include claim 22's cell-target-loss
-revert cause, and claim 5 should cite claim 10's due behaviour during falling. S-0214 rows
-I3 and IC2 should use claim 21's last-candidate scan and link traversal, not claim 18's repair
-search. S-0211 claim 15 should preserve claim 2's section-cell priority and historical
-responsibility. S-0301 should include claim 10's falling firing refusal and same-turn landing
-boundary. The existing bridge-hit, retry, trigger, draw and connectivity owners remain as
+**Cross-spec boundaries.** S-0209 claim 1 cites claim 9 for immediate drop marks and no
+later blanket reset. S-0203 claim 4 and S-0215 claim 5 cite claim 10 for the within-turn fall
+boundary and due behaviour during falling. S-0215 claim 10 includes claim 22's cell-target-loss
+revert cause. S-0214 claim 7 uses claim 21's cursor selection, not claim 18's
+repair search. S-0211 claim 15 preserves claim 2's section-cell priority and historical
+responsibility. S-0301 claim 9 includes claim 10's falling firing refusal and same-turn
+landing boundary. The bridge-hit, retry, trigger, draw and connectivity owners remain as
 cited above. Passenger escape from a destroyed transport remains unresolved here.
 
 ## Edge cases and quirks
@@ -937,10 +954,13 @@ to the bridge-role family. These bindings identify imported types, not newly con
 
 For each low-bridge family and axis, let *t*₀ be its bridge-piece base type in S-0202 claim 10.
 Of the two base types for a given axis, the lower input registration index identifies the
-wooden-bridge-role palette and the higher identifies the bridge-role palette. The following exact integer displacements from *t*₀ bind the symbolic
-roles. They describe the fixed bridge palette's transition relationships, not stock rule values.
-A displacement counts overlay registry positions in the input (S-0004 claim 4); our engine may
-store the resolved identities in any order.
+wooden-bridge-role palette and the higher identifies the bridge-role palette. The following
+exact integer displacements from *t*₀ bind the symbolic roles. These are engine constants:
+recognition and state transitions use fixed input-list positions, not numeric properties read
+from a rules file, an art file or a map. The table expresses those fixed relationships relative
+to the base types; it does not copy values assigned by stock data. A displacement has units of
+overlay registry positions in the input (S-0004 claim 4). Our engine may store the resolved
+identities in any order.
 
 | Role | Displacement along x | Displacement along y |
 |---|---|---|
@@ -957,8 +977,9 @@ warns when a required bound type is missing or is not a bridge piece. Backing: `
 
 ## Measurement scenarios
 
-All scenarios use stock data, with the director and mods off, the bridge-destruction
-option on unless stated, and any fixed game speed. Except for the ion-cannon warhead, attempts
+All scenarios use stock data except for the explicitly named test-data variants below,
+with the director and unrelated mods off. Named overrides are removed after their sub-test.
+The bridge-destruction option is on unless stated, at any fixed, recorded game speed. Except for the ion-cannon warhead, attempts
 from area damage need a chance draw (S-0303 claim 18), so scenarios never count ordinary shots. They fire until the bridge's
 look changes and record each change, with its tick, in order. The harness should record per tick:
 the overlay position and data value of every watched cell, the tile and height level of watched
@@ -1133,7 +1154,24 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     off; the read-only recorder supplies the points and marks, not altered game state.
   - *Falsified by:* a heading vehicle surviving with the nonempty-record condition satisfied,
     a heading hit despite the empty-record condition, the third vehicle dying, or reversed
-    death ordering. The other locomotion kinds remain outside this scenario's backing.
+    death ordering.
+  - *Negative-kind variants:* use separate named test maps for drop-pod, fly, jumpjet,
+    rocket, teleport and tunnel locomotion. Where ordinary types cannot realize the approach,
+    each map's named rules override assigns the tested locomotion to a test unit, retaining
+    the other settings of that unit; remove the override after the run. Order or release it
+    toward the watched cell and time collapse while it is in one of the surrounding 24
+    cells. Independently retain and record a deck reservation in the watched cell, as in
+    the positive control. Record the tested unit's current locomotion kind, cell, health,
+    height and movement points, the reservation at the sweep, and all received hits.
+    Include an ordinary drive positive control in the same surrounding block. Expected:
+    the drive control receives the heading hit, but the tested negative kind receives
+    none, regardless of its final destination or movement-point height. A heading hit
+    on that negative kind falsifies claim 11; later crash, landing, emergence or ordinary
+    weapon damage does not. Void runs with no verified sweep, an earlier hit, a different
+    active locomotion kind or the tested unit outside the surrounding block. Repeat three
+    times per kind with both axes. A type unable to make ordinary movement points is
+    still a valid negative test: those points are not prerequisites for the blanket
+    exclusion. Mech remains outside this scenario and outside the asserted table.
 - **B7 (claims 2, 13, 14 and 15).** A low bridge along x, 7 strips long.
   - *Procedure:* fire at strip 4 until it is destroyed, then at strip 6 until it is destroyed.
   - *Observable:* overlay positions of strips 3 to 7 after each change, units standing on strips 4
@@ -1401,8 +1439,8 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   tile-cell set is settled in Terms; no stock-pier height measurement has yet been run.
 - Where a passenger leaves a vehicle destroyed on a deck (S-0312 claim 12 points here). This spec has
   not established it.
-- Whether mech locomotion counts as heading to a cell (claim 11), and a discriminating fixture
-  for each of its other untested locomotion kinds.
+- Whether mech locomotion counts as heading to a cell (claim 11). B6 proposes negative-kind
+  fixtures for the other excluded kinds; none has yet been run.
 - A completed intact-bridge hut entry with which to test unconditional engineer consumption
   (claim 17).
 - No safe oracle fixture has yet been established for a cyclic malformed cursor-link chain.
