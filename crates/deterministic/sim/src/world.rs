@@ -246,6 +246,10 @@ pub struct Object {
     /// (S-0507).
     #[serde(default)]
     pub transport: crate::transport::TransportState,
+    /// Falling: the fall rate, whether the object is falling and the bomb
+    /// mark (S-0511 claim 10, S-0312 Terms).
+    #[serde(default)]
+    pub fall: crate::fall::FallState,
     /// The crush-slowdown state (S-0210 claim 9).
     pub crush_slowdown: bool,
     /// Tick at which the targeting timer has run out (S-0215 claim 33).
@@ -318,6 +322,10 @@ pub struct World {
     pub tick: i32,
     /// The scenario random stream (S-0202).
     pub rng: Rng,
+    /// The map-generator stream (S-0202 claim 13), drawn by low-bridge
+    /// repair (S-0511 claim 20, F4). Seeded once at game start (Q-0711).
+    #[serde(default)]
+    pub map_rng: Option<Rng>,
     /// Game-speed index.
     pub game_speed: u8,
     /// Houses in house order.

@@ -362,6 +362,10 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     if crate::spawn::partly_launched(w, id) {
         return false;
     }
+    // spec: S-0214 Terms (a movable mobile object is not falling)
+    if crate::fall::falling(w, id) {
+        return false;
+    }
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
@@ -436,9 +440,10 @@ pub fn first_may_move_into_shroud(w: &World, selection: &[ObjectId]) -> bool {
 }
 
 /// Able to fire (S-0214 Terms): own, armed, not disabled, not falling
-/// (nothing falls before the aircraft topic).
+/// (S-0511 claim 10).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
-    own(w, house, id) && armed(w, id) && !disabled(w, id)
+    // spec: S-0214 Terms (able to fire: armed, not disabled, not falling)
+    own(w, house, id) && armed(w, id) && !disabled(w, id) && !crate::fall::falling(w, id)
 }
 
 /// A healing actor (S-0214 Terms): an armed object whose default weapon
@@ -922,12 +927,16 @@ fn infantry_on(
     if eng && planted_bomb(w, t) {
         return Action::DisarmBomb;
     }
-    // spec: S-0214 table I row I3 (a bridge repair hut: no bridge is destroyed in our engine yet)
+    // spec: S-0214 table I row I3 (a bridge repair hut: repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair)
     if eng
         && target_building_repairable
         && tb.is_some_and(|b| b.raw.bridge_repair_hut.unwrap_or(false))
     {
-        return Action::NoRepair;
+        return if crate::bridges::hut::repair_offered(w, t) {
+            Action::RepairBuilding
+        } else {
+            Action::NoRepair
+        };
     }
     let friendly = eng && engineer_friendly(w, actor, t);
     // spec: S-0214 table I row I4 (an engineer below full health; an engineer-friendly hospital)

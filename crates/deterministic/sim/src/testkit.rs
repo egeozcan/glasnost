@@ -108,6 +108,7 @@ pub fn catalogue() -> Arc<TileCatalogue> {
         roles: Roles::default(),
         // Every tile's tileset allows new resource (S-0010 claim 16).
         allow_tiberium: vec![true; 5],
+        bridge_positions: Default::default(),
     })
 }
 

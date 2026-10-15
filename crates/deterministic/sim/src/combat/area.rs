@@ -433,7 +433,10 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         // spec: S-0303 claim 11 (each hit is resolved completely before the next)
         damage::apply(w, cand.id, hit);
     }
-    // Bridges (claim 18) need the setup screen's bridge-destruction option and the bridge spec (S-0511): a seam.
+    // spec: S-0303 claim 18 and S-0511 claim 1 (with the game's bridge-destruction setting on, a warhead that damages walls makes destroy attempts on the bridge in the centre cell)
+    if crate::econ::setup::bridge_destruction(w) && h.wall {
+        crate::bridges::area_attempts(w, centre, p.z, det.damage, warhead);
+    }
     // spec: S-0303 claim 19 (an exploding overlay in the centre cell)
     exploding_overlay(w, centre, &det);
     // The warhead's particle system and rocking (claim 20) are presentation.

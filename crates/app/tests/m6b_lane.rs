@@ -9,7 +9,9 @@
 //! gate (S-0215 claim 35, S-0108 claim 4), a teleporting unit's jump
 //! (S-0207 claims 20 to 22, S-0208 claims 19 and 20), a damaged ship
 //! repaired at its naval yard (S-0314 claims 16 to 24, S-0504 claim 14) and
-//! a vehicle repaired at a repair depot (S-0314). A new scene is one more
+//! a vehicle repaired at a repair depot (S-0314), and a bridge demolished
+//! from its hut and repaired by an engineer (S-0511; the map is the first
+//! offered map with a high bridge and its hut). A new scene is one more
 //! function and one more row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
@@ -48,6 +50,8 @@ const SCENES: &[Scene] = &[
     ("teleport", unit_teleporting),
     ("yard", ship_repaired_at_yard),
     ("depot", vehicle_repaired_at_depot),
+    ("bridge-destroyed", bridge_destroyed),
+    ("bridge-repaired", bridge_repaired),
 ];
 
 #[test]
@@ -430,6 +434,94 @@ fn repair_scene(lane: &mut Lane, depot: ObjectId, unit: ObjectId, at: CellXY, sh
     }
 }
 
+/// A bridge repair hut on the map with a high-bridge cell within 3 cells
+/// of its cell, if any.
+fn bridge_hut(w: &World) -> Option<ObjectId> {
+    let r = w.rules();
+    w.objects.values().find_map(|o| {
+        let hut = o.on_map
+            && o.kind == Kind::Building
+            && r.buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.building.bridge_repair_hut);
+        let c = o.pos.cell();
+        let near = (-3..=3)
+            .any(|dx| (-3..=3).any(|dy| w.cells.is_bridge(CellXY::new(c.x + dx, c.y + dy))));
+        (hut && near).then_some(o.id)
+    })
+}
+
+/// The number of high-bridge sections and of enabled bridge links.
+fn bridge_counts(w: &World) -> (usize, usize) {
+    let sections = w
+        .cells
+        .grid
+        .iter()
+        .filter(|(_, c)| glasnost_sim::bridges::pieces::high_of(c.overlay).is_some())
+        .count();
+    let enabled = w.cells.links.iter().filter(|l| l.enabled).count();
+    (sections, enabled)
+}
+
+/// Starts on the first map with a high bridge and its hut, and demolishes
+/// that bridge from the hut (S-0511 claim 16). Returns the hut.
+fn demolish_a_bridge(lane: &mut Lane) -> Option<ObjectId> {
+    let Some(l) = Lane::start_where(|w| bridge_hut(w).is_some()) else {
+        println!("no offered map has a high bridge with its hut");
+        return None;
+    };
+    *lane = l;
+    let hut = bridge_hut(lane.world())?;
+    let at = lane.world().obj(hut)?.pos.cell();
+    let (s0, e0) = bridge_counts(lane.world());
+    let t0 = lane.world().tick;
+    glasnost_sim::bridges::hut::demolish(lane.world_mut(), hut);
+    let (s1, e1) = bridge_counts(lane.world());
+    let offered = glasnost_sim::bridges::hut::repair_offered(lane.world(), hut);
+    println!(
+        "demolition at tick {t0}: sections {s0} -> {s1}, enabled links {e0} -> {e1}, repair offered {offered}"
+    );
+    lane.look_at(at);
+    Some(hut)
+}
+
+/// S-0511 claims 5, 9 and 16: a high bridge demolished from its hut; shot
+/// once the debris has fallen.
+fn bridge_destroyed(lane: &mut Lane) {
+    if demolish_a_bridge(lane).is_none() {
+        return;
+    }
+    lane.ticks(30);
+    lane.save("bridge-destroyed");
+}
+
+/// S-0511 claims 17 to 19: the demolished bridge repaired by an engineer
+/// entering its hut (the entry itself is S-0509's, not built: the seam is
+/// called at the hut's cell); shot after the repair.
+fn bridge_repaired(lane: &mut Lane) {
+    let Some(hut) = demolish_a_bridge(lane) else {
+        return;
+    };
+    lane.ticks(30);
+    let w = lane.world();
+    let Some(name) = find_type(w, Kind::Infantry, |_, u| u.engineer) else {
+        println!("no engineer type");
+        return;
+    };
+    let at = w.obj(hut).map(|o| o.pos.cell()).unwrap();
+    let local = lane.local();
+    let e = lane.spawn(Kind::Infantry, &name, local, at);
+    let t0 = lane.world().tick;
+    let accepted = glasnost_sim::bridges::hut::engineer_entered_hut(lane.world_mut(), e, hut);
+    let (s, en) = bridge_counts(lane.world());
+    let offered = glasnost_sim::bridges::hut::repair_offered(lane.world(), hut);
+    println!(
+        "engineer entry at tick {t0} accepted {accepted}: sections {s}, enabled links {en}, repair offered {offered}"
+    );
+    lane.ticks(10);
+    lane.save("bridge-repaired");
+}
+
 // ---------------------------------------------------------------------------
 // The lane
 
@@ -492,6 +584,35 @@ struct Lane {
 impl Lane {
     /// Starts a skirmish from the menu, the map revealed to the local house.
     fn start() -> Option<Lane> {
+        Lane::start_on(env_num("GLASNOST_UI_MAP", 0))
+    }
+
+    /// The number of maps the install offers.
+    fn map_count() -> usize {
+        let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
+            return 0;
+        };
+        let mut c = Client::new();
+        c.mount(files(std::path::Path::new(&dir)));
+        run_jobs(&mut c);
+        c.install.as_ref().map_or(0, |i| i.maps.len())
+    }
+
+    /// Starts a skirmish on the first offered map whose world satisfies
+    /// `fits`, chosen by content, never by name. Prints the map's index.
+    fn start_where(fits: impl Fn(&World) -> bool) -> Option<Lane> {
+        for i in 0..Lane::map_count() {
+            let lane = Lane::start_on(i)?;
+            if fits(lane.world()) {
+                println!("map index {i} fits");
+                return Some(lane);
+            }
+        }
+        None
+    }
+
+    /// Starts a skirmish on the `map`-th offered map.
+    fn start_on(map: usize) -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
         let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m6b");
         std::fs::create_dir_all(&out).unwrap();
@@ -500,7 +621,7 @@ impl Lane {
         c.mount(files(std::path::Path::new(&dir)));
         run_jobs(&mut c);
         let maps = c.install.as_ref().expect("the install reads").maps.len();
-        let map = env_num("GLASNOST_UI_MAP", 0).min(maps - 1);
+        let map = map.min(maps - 1);
         let _ = c.frame();
         let r = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
         click(&mut c, r);

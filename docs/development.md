@@ -617,6 +617,72 @@ Provisional rules of M6b transports, each tied to a request:
 | `transport::process_unload` | the finished phase ends with the standard delay | Q-0706 |
 | `transport::escape` | the destroyed vehicle is not counted in its passengers' entry test; it is out of its cell's list while they get out | Q-0707 |
 
+## Simulation (M6b: bridges)
+
+S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. The theater's ten bridge positions and the general bridge fields (`BridgeExplosions`, `MetallicDebris`, the fall rates, `RepairBridgeSound`) are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0511.md](m6-claims/S-0511.md); the tests are in `crates/deterministic/sim/tests/claims_s0511.rs`.
+
+- **Attempts (claims 1 and 2).** Every destroy attempt goes through `bridges::attempt`, which picks a low strip, a section or a pier. Its sources are:
+  - area damage (`bridges::area_attempts`, from `combat::area::detonate`), gated by the bridge-destruction setting and the warhead's wall flag;
+  - the trigger-action seam `bridges::cell_attempts` (actions 32 and 63 are not built);
+  - hut demolition.
+- **High bridges (claims 3 to 8 and 12).** `bridges::high` holds:
+  - section states (the overlay data), notices, losses and pier states (the tile);
+  - the span check, with its band raises of event 31 (`triggers::bridge_destroyed`);
+  - the link change of the named cell (`high::name_cell`).
+
+  A collapsed pier's earlier levels are kept in `Cells::pier_levels`. The ramps' alternate look is `Cells::alternate`.
+- **Blow-ups and falls (claims 9 to 11).** `bridges::blow` does three things:
+  - it kills the ground layer with the demolition warhead;
+  - it drops the deck layer into a fall with the bomb mark (`fall::start`);
+  - it takes F2's explosion draws.
+
+  After an attempt, units heading onto a lost deck are hit. `tick` runs `fall::turn` in place of the locomotor step while an object falls.
+- **Low bridges (claims 13 to 15).** `bridges::low` holds the strip attempts, the neighbour re-evaluation and the kill check.
+- **The hut (claims 16 to 21).** `bridges::hut` holds:
+  - `demolish`, called at the delayed-kill expiry in `combat::damage`;
+  - `repair`, with F4 on the map-generator stream `World::map_rng`;
+  - `repair_offered`, the cursor test of S-0214 row I3 in `targeting`.
+- **Seams.** These are named functions with doc comments:
+  - `bridges::hut::engineer_entered_hut`, an engineer entering a hut (S-0509 is not built);
+  - `bridges::cell_attempts`, trigger actions 32 and 63;
+  - `bridges::hut::demolish`, also for timed bombs (S-0519).
+- **Quirks.** All nine are implemented, each on by default:
+  - `quirks.bridge_event_band_short`;
+  - `quirks.bridge_family_by_block`;
+  - `quirks.bridge_span_cap`;
+  - `quirks.low_bridge_wrong_axis_recheck`;
+  - `quirks.low_strip_regress`;
+  - `quirks.pier_loss_notice_skips_chipped`;
+  - `quirks.pier_repair_partial_height`;
+  - `quirks.repair_consumes_engineer_always`;
+  - `quirks.repair_walk_unbounded`.
+- **Save format 21.** `Object::fall`, `Cells::alternate`, `Cells::pier_levels` and `World::map_rng` are new state, and they are hashed.
+- **Not built.**
+  - The own AI does not repair bridges, because it needs S-0509's entry.
+  - The bridge-repaired and repair sounds are effects, but audio does not play them.
+  - Row IC2 (fog of war) is not built.
+- **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=bridge-destroyed,bridge-repaired cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` picks the first offered map, by content, that has a hut within 3 cells of a high bridge. It demolishes that bridge through `hut::demolish` and writes `local-lane/m6b/bridge-destroyed.png` 30 ticks later. Then an engineer enters the hut through the seam, and it writes `bridge-repaired.png` 10 ticks later. On the first run on the user's install:
+  - the demolition left 22 of 30 high-bridge sections and 3 of 4 links enabled, with repair offered;
+  - the repair brought back 30 sections and 4 enabled links, with no repair offered;
+  - the first shot shows 40 animations created and 39 drawn.
+
+  The screenshots show the deck gone over the water with its explosions, then the deck whole again.
+
+Provisional rules of M6b bridges, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `bridges::pieces::tile_cells`, `piece_of_q`; `bridges::mod` (`attempt_in`); `bridges::high::span_check` | a pier's cells are those of its placed tile rectangle that still hold the same pier at their own sub-tile; a position in both pier ranges is along x; after a pier collapse the far-side span is checked first; the span check walks back to the nearest start piece with no bound | Q-0710 |
+| `load` (`map_rng`) | the map-generator stream is seeded from the first R(0, 65535) of a fresh stream seeded with the game seed | Q-0711 |
+| `bridges::blow::transfer_marks` | a dropped object's deck marks move to the ground record after the attempt's heading hits | Q-0712 |
+| `bridges::blow::drop_from_deck`, `tick` | a drop clears the destination, queued destinations and path and resets the movement; the fall step replaces the locomotor step; no firing while falling | Q-0713 |
+| `bridges::low::kill_check` | "could not enter" is the ground-layer land and passability test for the object's class and zone, occupants not counted | Q-0714 |
+| `bridges::hut::hut_cell` | the hut's cell is the cell of its position; the repair starts from the engineer's cell | Q-0715 |
+| `bridges::hut::repair_offered` | a low piece in the block decides by its run; otherwise the first link within 3 cells of claim 16's bridge cell decides | Q-0716 |
+| `bridges::pieces::section_marking` | the cell's own overlay first, then one and two steps against the marking direction, then one step along it | Q-0717 |
+| `bridges::blow::heading_cell` | drive and ship head to the track step's cell, else the destination cell; walk and hover to the destination cell; the height condition is taken as met | Q-0718 |
+| `bridges::area_attempts` | only the attack target equal to the centre cell is dropped | Q-0719 |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.

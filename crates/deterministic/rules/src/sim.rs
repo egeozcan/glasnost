@@ -653,6 +653,18 @@ pub struct General {
     /// `[General] MetallicDebris`, animation names (S-0303 F6, S-0312 F1).
     #[serde(default)]
     pub metallic_debris: Option<Vec<String>>,
+    /// `[General] BridgeExplosions`, animation names (S-0511 claim 9, F2).
+    #[serde(default)]
+    pub bridge_explosions: Option<Vec<String>>,
+    /// `[General] NoParachuteMaxFallRate`, leptons per update (S-0511 F3).
+    #[serde(default)]
+    pub no_parachute_max_fall_rate: Option<i32>,
+    /// `[General] ParachuteMaxFallRate`, leptons per update (S-0511 F3).
+    #[serde(default)]
+    pub parachute_max_fall_rate: Option<i32>,
+    /// `[AudioVisual] RepairBridgeSound`, a sound name (S-0511 claim 17).
+    #[serde(default)]
+    pub repair_bridge_sound: Option<String>,
     /// `[CombatDamage] DefaultSparkSystem`, a particle-system name: the drone
     /// delivery's spark effect (S-0614 claim 9); absent-key default not
     /// established.

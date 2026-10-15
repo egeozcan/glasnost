@@ -739,6 +739,15 @@ pub struct CombatGeneral {
     pub barrel_particle: Option<String>,
     /// Metallic debris list.
     pub metallic_debris: Vec<String>,
+    /// The bridge-explosion list (S-0511 claim 9, F2).
+    pub bridge_explosions: Vec<String>,
+    /// *v*_min of S-0511 F3, the no-parachute maximum fall rate, leptons
+    /// per update.
+    pub no_parachute_max_fall_rate: i32,
+    /// The parachute maximum fall rate of S-0511 F3, leptons per update.
+    pub parachute_max_fall_rate: i32,
+    /// The repair sound (S-0511 claim 17).
+    pub repair_bridge_sound: Option<String>,
     /// Wake animation (S-0614 claim 10; S-0312).
     pub wake: Option<String>,
     /// Default spark system (S-0614 claim 9).
@@ -1404,6 +1413,12 @@ pub fn combat_rules(
         barrel_debris: g.barrel_debris.clone().unwrap_or_default(),
         barrel_particle: g.barrel_particle.clone(),
         metallic_debris: g.metallic_debris.clone().unwrap_or_default(),
+        // spec: S-0511 Import mapping (BridgeExplosions absent: empty)
+        bridge_explosions: g.bridge_explosions.clone().unwrap_or_default(),
+        no_parachute_max_fall_rate: g.no_parachute_max_fall_rate.unwrap_or(-100), // spec: S-0511 Import mapping (NoParachuteMaxFallRate absent: −100)
+        parachute_max_fall_rate: g.parachute_max_fall_rate.unwrap_or(-3), // spec: S-0511 Import mapping (ParachuteMaxFallRate absent: −3)
+        // spec: S-0511 Import mapping (RepairBridgeSound absent: no sound)
+        repair_bridge_sound: g.repair_bridge_sound.clone(),
         // spec: S-0614 Import mapping (Wake as S-0312; DefaultSparkSystem default not established: none)
         wake: g.wake.clone(),
         default_spark_system: g.default_spark_system.clone(),

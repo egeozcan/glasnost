@@ -597,6 +597,62 @@ pub fn cell_entered(w: &mut World, unit: ObjectId, cell: (i16, i16)) {
     );
 }
 
+/// The bridge-destroyed raise of a tagged cell (S-0011 claim 20; S-0511
+/// claim 8): the cell's tag is raised with code 31, with no object and no
+/// cell.
+pub fn bridge_destroyed(w: &mut World, cell: CellXY) {
+    let Some(&tag) = w.triggers.cells.get(&(cell.x as i16, cell.y as i16)) else {
+        return;
+    };
+    // spec: S-0511 claim 8 (the cell's tag is raised with the bridge-destroyed code, with no object and no cell)
+    raise(
+        w,
+        tag,
+        Raise {
+            code: Some(BRIDGE_DESTROYED),
+            causer: None,
+            carrier: None,
+        },
+    );
+}
+
+/// The entered-by raise of a building that an infantry unit enters
+/// (S-0011 claim 18; S-0511 claim 17): the building's tag, with the
+/// entering unit as causing object.
+pub fn building_entered(w: &mut World, building: ObjectId, by: ObjectId) {
+    let Some(&tag) = w.triggers.objects.get(&building) else {
+        return;
+    };
+    // spec: S-0011 claim 18 (entered-by code, the entering object as causing object)
+    raise(
+        w,
+        tag,
+        Raise {
+            code: Some(ENTERED_BY),
+            causer: Some(by),
+            carrier: Some(Carrier::Object(building)),
+        },
+    );
+}
+
+/// The destroyed-by-anything raise of an object that leaves play (S-0011
+/// claim 19; S-0511 claim 17), with the object as causing object.
+pub fn destroyed_by_anything(w: &mut World, id: ObjectId) {
+    let Some(&tag) = w.triggers.objects.get(&id) else {
+        return;
+    };
+    // spec: S-0011 claim 19 (the destroyed-by-anything code, the object as causing object)
+    raise(
+        w,
+        tag,
+        Raise {
+            code: Some(DESTROYED_BY),
+            causer: Some(id),
+            carrier: Some(Carrier::Object(id)),
+        },
+    );
+}
+
 /// The destruction raises of a killing hit on a tagged object (S-0011
 /// claim 19, S-0312 claim 29). The caller makes them after health reaches
 /// 0 and before the death debris, and says whether the hit has a known

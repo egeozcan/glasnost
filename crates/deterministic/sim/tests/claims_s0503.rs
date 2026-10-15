@@ -613,9 +613,27 @@ fn claim_11_sinking_over_water() {
     let id = at(&mut w, "HOVER", 0, 0, 0, 0);
     settle(&mut w);
     glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
-    common::run(&mut w, 60);
-    assert!(height_of(&w, id) < hover::SINK_LIMIT);
-    assert!(hover::bomb_mark(&w, id), "the bomb mark over water");
+    let mut marked = false;
+    for _ in 0..60 {
+        tick::step(&mut w);
+        if w.obj(id)
+            .is_some_and(|o| o.pos.z - w.surface_at(o.pos.x, o.pos.y) < hover::SINK_LIMIT)
+            && hover::bomb_mark(&w, id)
+        {
+            marked = true;
+            break;
+        }
+    }
+    assert!(marked, "the bomb mark over water");
+    // spec: S-0511 claim 10 (the marked object falls; the mark is spent when it lands)
+    common::run(&mut w, 200);
+    assert!(glasnost_sim::fall::falling(&w, id) || w.obj(id).is_none_or(|o| o.health <= 0));
+    common::run(&mut w, 200);
+    // It reached the surface through the fall and took the landing hit.
+    assert!(
+        w.obj(id).is_none_or(|o| o.health <= 0 && !o.fall.falling),
+        "the landing kill"
+    );
 }
 
 // spec: S-0503 claim 11 (a spin ending at 104 leptons or more above the water: no mark)

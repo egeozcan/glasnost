@@ -732,6 +732,10 @@ pub struct EconGeneral {
     /// `[MultiplayerDialogSettings] ShortGame`, a default offered (S-0412 Import mapping); absent: no.
     #[serde(default)]
     pub short_game: Option<bool>,
+    /// `[MultiplayerDialogSettings] BridgeDestruction`, the default of the
+    /// bridge-destruction game option (S-0511 Import mapping); absent: yes.
+    #[serde(default)]
+    pub bridge_destruction: Option<bool>,
     /// `[MultiplayerDialogSettings] Crates`, a default offered (S-0412 Import mapping); absent: yes.
     #[serde(default)]
     pub crates: Option<bool>,

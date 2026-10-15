@@ -1,0 +1,1199 @@
+//! Bridges (S-0511) on synthetic maps: destroy attempts, sections, piers,
+//! notices, span checks and band raises, blow-ups and falls, low strips,
+//! hut demolition, engineer repair and the repair cursor.
+//!
+//! The theater is invented: a bridge role of 16 tiles 4 × 4 at tile 5 and a
+//! wooden-bridge role at tile 21, with the positions start ramps 1 and 2
+//! (along x), 4 and 5 (along y), far ramps 3 (x) and 6 (y), and the pier
+//! bases 7 (x) and 12 (y). Overlays 0 to 238 are registered so that the
+//! piece-role binding's indices exist; the low pieces are road and the
+//! destroyed piece is water, which no ground unit may enter.
+
+use std::sync::Arc;
+
+use glasnost_map::terrain::{BridgePositions, Roles, TileCatalogue, TileCell, TileInfo};
+use glasnost_map::{CellXY, Map, NO_OVERLAY};
+use glasnost_rules::schema::Ruleset;
+use glasnost_rules::sim::{
+    BuildingType, Decimal, LandRow, LandType, Locomotor, OverlayType, UnitType, WarheadType,
+};
+use glasnost_sim::bridges::blow::Ctx;
+use glasnost_sim::bridges::pieces::{self, Family, Line, Role};
+use glasnost_sim::bridges::{self, high, hut};
+use glasnost_sim::combat::area::{self, Detonation};
+use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::rules::{Kind, SimRules};
+use glasnost_sim::testkit;
+use glasnost_sim::world::{Layer, ObjectId, Pos, Target, World};
+
+const SIZE: i32 = 50;
+/// First tile of the bridge role.
+const B0: i32 = 5;
+/// First tile of the wooden-bridge role.
+const W0: i32 = 21;
+/// Positions *q* of the invented theater.
+const START_X: i32 = 1;
+const FAR_X: i32 = 3;
+const START_Y: i32 = 4;
+const FAR_Y: i32 = 6;
+const M1: i32 = 7;
+const M2: i32 = 12;
+
+fn at(dx: i32, dy: i32) -> CellXY {
+    testkit::mid(SIZE, dx, dy)
+}
+
+fn dec(s: &str) -> Decimal {
+    Decimal(s.into())
+}
+
+fn tile(f: Family, q: i32) -> i32 {
+    match f {
+        Family::Bridge => B0 + q - 1,
+        Family::Wooden => W0 + q - 1,
+    }
+}
+
+fn catalogue() -> Arc<TileCatalogue> {
+    let mut c = (*testkit::catalogue()).clone();
+    let big = TileInfo {
+        width: 4,
+        height: 4,
+        has_image: true,
+        cells: vec![
+            Some(TileCell {
+                terrain_code: 0,
+                slope: 0,
+            });
+            16
+        ],
+        variants: 0,
+        anim: None,
+        no_burrowing: false,
+    };
+    // A ramp tile whose cells have slope shape 5 (claim 19's ineligible slope).
+    let steep = TileInfo {
+        width: 1,
+        height: 1,
+        has_image: true,
+        cells: vec![Some(TileCell {
+            terrain_code: 0,
+            slope: 5,
+        })],
+        variants: 0,
+        anim: None,
+        no_burrowing: false,
+    };
+    assert_eq!(c.tiles.len() as i32, B0);
+    for _ in 0..32 {
+        c.tiles.push(big.clone());
+    }
+    c.tiles.push(steep);
+    c.allow_tiberium = vec![true; c.tiles.len()];
+    c.roles = Roles {
+        bridge: B0,
+        wooden_bridge: W0,
+        ..Roles::default()
+    };
+    c.bridge_positions = BridgePositions {
+        top_left: [START_X, 2],
+        top_right: [START_Y, 5],
+        bottom_right: [FAR_X, -1],
+        bottom_left: [FAR_Y, -1],
+        middle: [M1, M2],
+    };
+    Arc::new(c)
+}
+
+/// The steep 1 × 1 tile.
+const STEEP: i32 = W0 + 16;
+
+fn ruleset() -> Ruleset {
+    let mut r = testkit::combat_ruleset();
+    let names: Vec<String> = (0..=238).map(|i| format!("OV{i}")).collect();
+    for (i, n) in names.iter().enumerate() {
+        let mut o = OverlayType {
+            has_art: Some(true),
+            ..Default::default()
+        };
+        if let Some(l) = pieces::low_of(i as u8) {
+            o.land = Some(if l.role == Role::X {
+                LandType::Water
+            } else {
+                LandType::Road
+            });
+            o.no_use_tile_land_type = Some(true);
+        }
+        r.sim.overlays.insert(n.clone(), o);
+    }
+    r.registries.insert("overlays".into(), names);
+    let zero = Some(dec("0"));
+    r.sim.land_types.insert(
+        LandType::Water,
+        LandRow {
+            foot: zero.clone(),
+            track: zero.clone(),
+            wheel: zero.clone(),
+            hover: zero,
+            ..Default::default()
+        },
+    );
+    let verses = Some(vec![dec("1"); 11]);
+    r.sim.warheads.insert(
+        "DEMO".into(),
+        WarheadType {
+            verses: verses.clone(),
+            ..Default::default()
+        },
+    );
+    r.sim.warheads.insert(
+        "BLAST".into(),
+        WarheadType {
+            verses,
+            wall: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.general.c4_warhead = Some("DEMO".into());
+    // A bridge strength of 1: every chance draw R(1, 1) = 1 is below any damage above 1.
+    r.sim.general.bridge_strength = Some(1);
+    let reg = |r: &mut Ruleset, k: &str, n: &str| {
+        let l = r.registries.entry(k.into()).or_default();
+        if !l.iter().any(|x| x == n) {
+            l.push(n.into());
+        }
+    };
+    let mut eng = r.sim.infantry["WALKER"].clone();
+    eng.engineer = Some(true);
+    eng.primary = None;
+    r.sim.infantry.insert("ENGI".into(), eng);
+    reg(&mut r, "infantry", "ENGI");
+    let jet = UnitType {
+        strength: Some(100),
+        speed: Some(5),
+        locomotion_class: Some(glasnost_rules::sim::LocomotionClass::Wheel),
+        locomotor: Some(Locomotor::Jumpjet),
+        ..Default::default()
+    };
+    r.sim.vehicles.insert("JET".into(), jet);
+    reg(&mut r, "vehicles", "JET");
+    r.sim.buildings.insert(
+        "HUT".into(),
+        BuildingType {
+            strength: Some(500),
+            foundation: Some([1, 1]),
+            bridge_repair_hut: Some(true),
+            ..Default::default()
+        },
+    );
+    reg(&mut r, "buildings", "HUT");
+    r
+}
+
+fn game(r: &Ruleset, map: &Map) -> World {
+    let rules = Arc::new(SimRules::new(r, "synthetic-bridges"));
+    glasnost_sim::load::new_game(rules, map, catalogue(), &testkit::setup(5))
+        .expect("synthetic bridge map loads")
+}
+
+fn put_tile(m: &mut Map, c: CellXY, t: i32, sub: u8, level: i8) {
+    let cell = m.cells.get_mut(c).expect("cell on the map");
+    cell.tile = t;
+    cell.sub_tile = sub;
+    cell.level = level;
+}
+
+fn put_section(m: &mut Map, c: CellXY, f: Family, line: Line) {
+    let cell = m.cells.get_mut(c).expect("cell on the map");
+    cell.overlay = pieces::high_overlay(f, line);
+    cell.overlay_data = pieces::data_of(line, pieces::State::Intact);
+}
+
+/// A high bridge of `f` along x on row 0: a start ramp at x = `x0` (sub-tile
+/// 8, with a sub-tile 7 cell before it for S-0010's span), sections on
+/// x0 … x1 − 1 (pier reference cells excepted) and a far ramp at `x1`
+/// (sub-tile 4). Each x in `piers` holds a pier whose reference cell (sub-
+/// tile 4) is at x, with its column at sub-tiles 0 and 8 and its span start
+/// at x + 1 (sub-tile 5).
+fn high_x(m: &mut Map, f: Family, x0: i32, x1: i32, piers: &[i32]) {
+    put_tile(m, at(x0 - 1, 0), tile(f, START_X), 7, 0);
+    put_tile(m, at(x0, 0), tile(f, START_X), 8, 0);
+    put_tile(m, at(x1, 0), tile(f, FAR_X), 4, 0);
+    for &p in piers {
+        let t = tile(f, M1);
+        put_tile(m, at(p, -1), t, 0, 4);
+        put_tile(m, at(p, 0), t, 4, 4);
+        put_tile(m, at(p, 1), t, 8, 4);
+        put_tile(m, at(p + 1, 0), t, 5, 4);
+    }
+    for x in x0..x1 {
+        if !piers.contains(&x) {
+            put_section(m, at(x, 0), f, Line::X);
+        }
+    }
+}
+
+/// A low bridge of `f` along x: strips centred on row 0 at x0 … x1, each
+/// holding `role(x)`.
+fn low_x(m: &mut Map, f: Family, x0: i32, x1: i32, role: impl Fn(i32) -> Role) {
+    for x in x0..=x1 {
+        let o = pieces::low_overlay(f, Line::X, role(x));
+        for (k, dy) in [-1, 0, 1].into_iter().enumerate() {
+            let cell = m.cells.get_mut(at(x, dy)).expect("cell on the map");
+            cell.overlay = o;
+            cell.overlay_data = k as u8;
+        }
+    }
+}
+
+fn data(w: &World, c: CellXY) -> Option<u8> {
+    let cell = w.cells.cell(c)?;
+    (cell.overlay != NO_OVERLAY).then_some(cell.overlay_data)
+}
+
+fn role(w: &World, c: CellXY) -> Option<Role> {
+    pieces::low_at(w, c).map(|l| l.role)
+}
+
+fn pier_k(w: &World, c: CellXY) -> Option<i32> {
+    match pieces::piece_at(w, c) {
+        Some((_, pieces::Piece::Pier(_, k))) => Some(k),
+        _ => None,
+    }
+}
+
+fn alive(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.health > 0)
+}
+
+fn spawn(w: &mut World, kind: Kind, name: &str, c: CellXY) -> ObjectId {
+    testkit::spawn(w, kind, name, 0, c, 0)
+}
+
+/// Moves a vehicle from the ground of its cell onto the deck there, with
+/// its occupancy claim.
+fn onto_deck(w: &mut World, id: ObjectId) {
+    let c = w.obj(id).unwrap().pos.cell();
+    w.cells.leave(c, Layer::Ground, id);
+    w.cells.claim_vehicle(c, Layer::Ground, false);
+    w.cells.enter(c, Layer::Deck, id, false);
+    w.cells.claim_vehicle(c, Layer::Deck, true);
+    let o = w.obj_mut(id).unwrap();
+    o.layer = Layer::Deck;
+    o.pos.z += 416;
+}
+
+/// A repeating tag over one trigger whose only event is the bridge-
+/// destroyed code (31), with no action, carried by `cells`.
+fn tagged(m: &mut Map, cells: &[CellXY]) {
+    use glasnost_map::triggers::{Event, TagDef, TriggerDef, Triggers};
+    let trig = TriggerDef {
+        events: vec![Event {
+            code: 31, // spec: S-0511 claim 8 (S-0011 claim 20's bridge-destroyed event)
+            kind: 0,
+            value: 0,
+            type_name: None,
+        }],
+        actions: vec![],
+        ..TriggerDef::created(b"T".to_vec())
+    };
+    m.triggers = Triggers {
+        triggers: vec![trig],
+        tags: vec![TagDef {
+            id: b"TAG".to_vec(),
+            repeat: 2,
+            name: Vec::new(),
+            first: Some(0),
+            chain: vec![0],
+        }],
+        cell_tags: cells
+            .iter()
+            .map(|c| ((c.x as i16, c.y as i16), 0))
+            .collect(),
+        ..Default::default()
+    };
+}
+
+fn base() -> Map {
+    testkit::empty_map(SIZE)
+}
+
+fn wh(w: &World, name: &str) -> u32 {
+    w.rules()
+        .combat
+        .warheads
+        .iter()
+        .position(|h| h.name == name)
+        .unwrap() as u32
+}
+
+fn blast(w: &mut World, c: CellXY, z: i32, warhead: &str) {
+    let h = wh(w, warhead);
+    let p = Pos::centre(c, z);
+    area::detonate(
+        w,
+        Detonation {
+            point: p,
+            damage: 100,
+            warhead: Some(h),
+            source: None,
+            house: None,
+            resources: false,
+        },
+    );
+}
+
+// ---------------------------------------------------------------------
+// Claims 1 and 2: where attempts come from and what they act on.
+
+// spec: S-0511 claim 1 (area damage with the bridge-destruction setting on and a wall warhead makes attempts on the centre cell; the setting gates area damage only; the height window applies to a high-bridge cell)
+#[test]
+fn claim_1_area_damage_is_gated() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 6, &[]);
+    let r = ruleset();
+    let c = at(3, 0);
+    // The setting off: no change.
+    let mut w = game(&r, &m);
+    w.econ.settings.bridge_destruction = Some(false);
+    blast(&mut w, c, 416, "BLAST");
+    assert_eq!(data(&w, c), Some(0));
+    // A warhead that does not damage walls: no change.
+    let mut w = game(&r, &m);
+    w.econ.settings.bridge_destruction = Some(true);
+    blast(&mut w, c, 416, "SA");
+    assert_eq!(data(&w, c), Some(0));
+    // Below the height window: no change.
+    blast(&mut w, c, 0, "BLAST");
+    assert_eq!(data(&w, c), Some(0));
+    // In the window: one attempt, damaged.
+    blast(&mut w, c, 416, "BLAST");
+    assert_eq!(data(&w, c), Some(6));
+    // The trigger seam's direct attempts ignore the setting: up to 4, stopping at the first success.
+    let mut w = game(&r, &m);
+    w.econ.settings.bridge_destruction = Some(false);
+    assert!(bridges::cell_attempts(&mut w, c));
+    assert_eq!(data(&w, c), None, "lost after its second attempt");
+    assert_eq!(
+        data(&w, at(2, 0)),
+        Some(8),
+        "the start-side neighbour is open on its far side"
+    );
+}
+
+// spec: S-0511 claim 1 (the ion-cannon warhead bypasses the chance draws: up to four attempts on a high test, one on a low test)
+#[test]
+fn claim_1_ion_cannon_attempts() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 6, &[]);
+    low_x(&mut m, Family::Wooden, 0, 4, |_| Role::I(0));
+    // Move the low bridge away from the high one.
+    let mut m2 = base();
+    high_x(&mut m2, Family::Bridge, 0, 6, &[]);
+    for x in 0..=4 {
+        for dy in [-1, 0, 1] {
+            let src = *m.cells.get(at(x, dy)).unwrap();
+            let cell = m2.cells.get_mut(at(x, dy + 6)).unwrap();
+            cell.overlay = src.overlay;
+            cell.overlay_data = src.overlay_data;
+        }
+    }
+    let mut r = ruleset();
+    r.sim.general.ion_cannon_warhead = Some("BLAST".into());
+    let mut w = game(&r, &m2);
+    w.econ.settings.bridge_destruction = Some(true);
+    blast(&mut w, at(3, 0), 416, "BLAST");
+    assert_eq!(
+        data(&w, at(3, 0)),
+        None,
+        "the high section is lost in up to four attempts"
+    );
+    blast(&mut w, at(2, 6), 0, "BLAST");
+    assert_eq!(
+        role(&w, at(2, 6)),
+        Some(Role::D(0)),
+        "a low test makes one attempt"
+    );
+}
+
+// spec: S-0511 claim 1 (a successful attempt from area damage makes every object whose target is the centre cell drop it; Q-0719)
+#[test]
+fn claim_1_success_drops_cell_targets() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 6, &[]);
+    let mut w = game(&ruleset(), &m);
+    w.econ.settings.bridge_destruction = Some(true);
+    let c = at(3, 0);
+    let v = spawn(&mut w, Kind::Vehicle, "CART", at(3, 8));
+    let u = spawn(&mut w, Kind::Vehicle, "CART", at(4, 8));
+    w.obj_mut(v).unwrap().target = Some(Target::Cell(c));
+    w.obj_mut(u).unwrap().target = Some(Target::Cell(at(4, 0)));
+    blast(&mut w, c, 416, "BLAST");
+    assert_eq!(
+        w.obj(v).unwrap().target,
+        Some(Target::Cell(c)),
+        "a failed attempt keeps it"
+    );
+    blast(&mut w, c, 416, "BLAST");
+    assert_eq!(data(&w, c), None);
+    assert_eq!(w.obj(v).unwrap().target, None);
+    assert_eq!(w.obj(u).unwrap().target, Some(Target::Cell(at(4, 0))));
+}
+
+// spec: S-0511 claim 2 (a high-bridge cell: the section whose overlay marks it; a pier at a sub-tile without a deck; other pier cells and other cells: nothing, the attempt fails)
+#[test]
+fn claim_2_what_an_attempt_acts_on() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[4]);
+    let mut w = game(&ruleset(), &m);
+    // A marked cell one step north of the section cell acts on that section.
+    assert!(w.cells.is_bridge(at(2, -1)));
+    assert!(!bridges::attempt(&mut w, at(2, -1)));
+    assert_eq!(data(&w, at(2, 0)), Some(6));
+    // The pier's reference cell (sub-tile 4, even) is attempted.
+    assert!(!bridges::attempt(&mut w, at(4, 0)));
+    assert_eq!(pier_k(&w, at(4, 0)), Some(3));
+    // A plain cell: nothing.
+    assert!(!bridges::attempt(&mut w, at(0, 9)));
+}
+
+// ---------------------------------------------------------------------
+// Claims 3 to 5: sections, notices, losses.
+
+// spec: S-0511 claim 3 (intact or chipped → damaged with damage notices both ways, fails; damaged → lost with loss notices far then start, succeeds; open on one side → lost with a notice to the other side only)
+#[test]
+fn claim_3_direct_attempts_on_a_section() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    assert!(!bridges::attempt(&mut w, at(3, 0)));
+    assert_eq!(data(&w, at(3, 0)), Some(6), "damaged");
+    assert_eq!(data(&w, at(2, 0)), Some(5), "chipped on its far side");
+    assert_eq!(data(&w, at(4, 0)), Some(4), "chipped on its start side");
+    assert!(bridges::attempt(&mut w, at(3, 0)));
+    assert_eq!(data(&w, at(3, 0)), None, "lost");
+    assert_eq!(data(&w, at(2, 0)), Some(8), "open on its far side");
+    assert_eq!(data(&w, at(4, 0)), Some(7), "open on its start side");
+    // An open section needs one attempt; its notice goes to the other side only.
+    assert!(bridges::attempt(&mut w, at(4, 0)));
+    assert_eq!(data(&w, at(4, 0)), None);
+    assert_eq!(data(&w, at(5, 0)), Some(7));
+}
+
+// spec: S-0511 claim 4 (damage notice on a section chipped on the other side: damaged; a loss notice to a section open on the other side loses it at once and passes on; a ramp takes its alternate look)
+#[test]
+fn claim_4_notices() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    // x = 3 chipped on its far side by x = 4's damage, then on its start side by x = 2's: damaged.
+    bridges::attempt(&mut w, at(4, 0));
+    assert_eq!(data(&w, at(3, 0)), Some(5));
+    bridges::attempt(&mut w, at(2, 0));
+    assert_eq!(
+        data(&w, at(3, 0)),
+        Some(6),
+        "chipped on the other side → damaged"
+    );
+    // Lose x = 2: x = 3 becomes open on its start side.
+    bridges::attempt(&mut w, at(2, 0));
+    assert_eq!(data(&w, at(3, 0)), Some(7));
+    // Lose x = 4 (damaged): its start-side notice reaches x = 3, open on the other side: lost at once.
+    bridges::attempt(&mut w, at(4, 0));
+    assert_eq!(data(&w, at(3, 0)), None, "lost at once");
+    // A ramp receiving a notice takes the alternate look.
+    assert!(w.cells.alternate.is_empty());
+    bridges::attempts(&mut w, at(7, 0), 2);
+    assert!(w.cells.alternate.contains(&at(8, 0)));
+}
+
+// spec: S-0511 claim 5 (a lost section's overlay is removed; its four cells lose the high-bridge marking and gain the bridge-body mark; blow-ups in the order section cell, one and two steps along the marking direction, one step against it, after the notices' losses)
+#[test]
+fn claim_5_losing_a_section() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let c = at(3, 0);
+    let cells = [c, at(3, -1), at(3, -2), at(3, 1)];
+    assert!(cells.iter().all(|&x| w.cells.is_bridge(x)));
+    bridges::attempt(&mut w, c);
+    let s = pieces::section_in(&w, c).unwrap();
+    let mut ctx = Ctx::default();
+    assert!(high::attempt_section(&mut w, s, &mut ctx));
+    assert_eq!(ctx.blown, cells.to_vec());
+    for x in cells {
+        assert!(!w.cells.is_bridge(x));
+        assert!(w.cells.body(x));
+    }
+    // A chain loss: its notices' losses blow up before the attempted section.
+    bridges::attempt(&mut w, at(5, 0));
+    bridges::attempt(&mut w, at(5, 0));
+    // x = 4 is now open on both sides and was lost by the notice.
+    assert_eq!(data(&w, at(4, 0)), None);
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    bridges::attempts(&mut w, at(3, 0), 2);
+    bridges::attempt(&mut w, at(5, 0));
+    let s = pieces::section_in(&w, at(5, 0)).unwrap();
+    let mut ctx = Ctx::default();
+    high::attempt_section(&mut w, s, &mut ctx);
+    assert_eq!(ctx.blown[0], at(4, 0), "the notice's loss blows up first");
+    assert_eq!(ctx.blown[4], at(5, 0));
+}
+
+// ---------------------------------------------------------------------
+// Claim 6: piers.
+
+// spec: S-0511 claim 6 (direct attempt on states 0 to 2: state 3 with damage notices both ways; on state 3: collapse to state 4, every cell of the tile at the reference level − 4, column blow-ups in decreasing-cross, reference, increasing-cross order before the loss notices)
+#[test]
+fn claim_6_direct_pier_attempts() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let mut w = game(&ruleset(), &m);
+    let r = at(4, 0);
+    assert!(!bridges::attempt(&mut w, r));
+    assert_eq!(pier_k(&w, r), Some(3));
+    for c in [at(4, -1), at(4, 1), at(5, 0)] {
+        assert_eq!(pier_k(&w, c), Some(3), "every cell of the tile");
+    }
+    assert_eq!(
+        data(&w, at(3, 0)),
+        Some(5),
+        "damage notice to the start side"
+    );
+    assert_eq!(
+        data(&w, at(5, 0)),
+        Some(4),
+        "damage notice to the section of the pier's span start"
+    );
+    let mut ctx = Ctx::default();
+    assert!(high::attempt_pier(
+        &mut w,
+        r,
+        Family::Bridge,
+        Line::X,
+        3,
+        &mut ctx
+    ));
+    assert_eq!(pier_k(&w, r), Some(4));
+    assert_eq!(&ctx.blown[..3], &[at(4, -1), r, at(4, 1)]);
+    for c in [at(4, -1), r, at(4, 1), at(5, 0)] {
+        assert_eq!(w.cells.cell(c).unwrap().level, 0, "4 − 4");
+    }
+    assert_eq!(
+        data(&w, at(3, 0)),
+        Some(8),
+        "loss notice: open on its far side"
+    );
+}
+
+// spec: S-0511 claim 6 (notice table: loss notice on the start side of a pier in state 0 → 3; a pier chipped on the arriving side ignores it with quirks.pier_loss_notice_skips_chipped, becomes 3 without)
+#[test]
+fn claim_6_pier_notice_table() {
+    for skips in [true, false] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+        let mut r = ruleset();
+        r.globals.quirks.pier_loss_notice_skips_chipped = skips;
+        let mut w = game(&r, &m);
+        let p = at(4, 0);
+        // A damage notice from the start side: state 1.
+        bridges::attempt(&mut w, at(3, 0));
+        assert_eq!(pier_k(&w, p), Some(1));
+        // A loss notice from the start side.
+        bridges::attempt(&mut w, at(3, 0));
+        assert_eq!(pier_k(&w, p), Some(if skips { 1 } else { 3 }));
+    }
+    // State 3 collapses on a loss notice; the collapse's tile and height change follow.
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let mut w = game(&ruleset(), &m);
+    bridges::attempt(&mut w, at(4, 0));
+    assert_eq!(pier_k(&w, at(4, 0)), Some(3));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert_eq!(pier_k(&w, at(4, 0)), Some(4));
+    assert_eq!(w.cells.cell(at(4, 0)).unwrap().level, 0);
+}
+
+// ---------------------------------------------------------------------
+// Claims 7 and 8: span checks and the bridge-destroyed raises.
+
+// spec: S-0511 claim 7 (runs of section cells touching neither the span's first nor its last cell are lost; runs touching either stay)
+#[test]
+fn claim_7_isolated_runs_fall() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[]);
+    let mut w = game(&ruleset(), &m);
+    bridges::attempts(&mut w, at(3, 0), 2);
+    for x in [0, 1, 2, 4, 5, 6, 7, 8, 9] {
+        assert!(data(&w, at(x, 0)).is_some(), "x = {x} stays");
+    }
+    bridges::attempts(&mut w, at(7, 0), 2);
+    for x in [4, 5, 6] {
+        assert_eq!(data(&w, at(x, 0)), None, "x = {x} isolated");
+    }
+    for x in [0, 1, 2, 8, 9] {
+        assert!(data(&w, at(x, 0)).is_some(), "x = {x} touches an end");
+    }
+}
+
+// spec: S-0511 claim 7 (quirks.bridge_span_cap: with no far piece within 29 cells the check does nothing; off: the far piece is found at any distance)
+#[test]
+fn claim_7_span_cap() {
+    for cap in [true, false] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, -16, 15, &[]);
+        let mut r = ruleset();
+        r.globals.quirks.bridge_span_cap = cap;
+        let mut w = game(&r, &m);
+        bridges::attempts(&mut w, at(-10, 0), 2);
+        bridges::attempts(&mut w, at(-6, 0), 2);
+        let isolated = data(&w, at(-8, 0)).is_none();
+        assert_eq!(isolated, !cap, "cap {cap}");
+    }
+}
+
+/// Firings of the bridge-destroyed tag.
+fn fired(w: &World) -> u64 {
+    w.triggers.fired
+}
+
+// spec: S-0511 claim 8 (one raise per destroyed low strip over the run's band: each band cell, one across toward increasing y, one and two toward decreasing y; the last band cell is never processed with quirks.bridge_event_band_short; one tag over several cells is raised once per cell)
+#[test]
+fn claim_8_low_band_raises() {
+    for short in [true, false] {
+        let mut m = base();
+        low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
+        // Cells of the band: x = 1 at +1 and −2 across; the last band cell x = 4.
+        tagged(&mut m, &[at(1, 1), at(1, -2), at(4, 0)]);
+        let mut r = ruleset();
+        r.globals.quirks.bridge_event_band_short = short;
+        let mut w = game(&r, &m);
+        let f0 = fired(&w);
+        assert!(!bridges::attempt(&mut w, at(2, 0)));
+        assert_eq!(fired(&w), f0, "damage raises nothing");
+        assert!(bridges::attempt(&mut w, at(2, 0)));
+        assert_eq!(fired(&w) - f0, if short { 2 } else { 3 }, "short {short}");
+    }
+}
+
+// spec: S-0511 claim 7 (a span with a missing section has n + 1 band raises for n isolated losses; one when n = 0)
+#[test]
+fn claim_8_high_band_passes() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[]);
+    tagged(&mut m, &[at(2, 0)]);
+    let mut w = game(&ruleset(), &m);
+    let f0 = fired(&w);
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert_eq!(fired(&w) - f0, 1, "n = 0: one pass");
+    let f1 = fired(&w);
+    bridges::attempts(&mut w, at(7, 0), 2);
+    assert_eq!(fired(&w) - f1, 4, "three isolated losses: four passes");
+}
+
+// ---------------------------------------------------------------------
+// Claims 9 to 11: blow-ups, falling, heading hits.
+
+// spec: S-0511 claim 9 (ground-layer objects die by the demolition hit; deck objects drop to the ground layer and fall with the bomb mark; explosion draws only with a non-empty bridge-explosion list)
+#[test]
+fn claim_9_blow_up() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let under = spawn(&mut w, Kind::Vehicle, "CART", at(3, 1));
+    let top = spawn(&mut w, Kind::Vehicle, "CART", at(3, 0));
+    onto_deck(&mut w, top);
+    bridges::attempt(&mut w, at(3, 0));
+    let s0 = w.rng.clone();
+    let mut ctx = Ctx::default();
+    glasnost_sim::bridges::blow::blow_up(&mut w, at(5, 9), 0, &mut ctx);
+    assert_eq!(
+        w.rng.raw(),
+        s0.clone().raw(),
+        "an empty explosion list takes no draw"
+    );
+    bridges::attempt(&mut w, at(3, 0));
+    assert!(!alive(&w, under), "the unit under the bridge dies");
+    let t = w.obj(top).unwrap();
+    assert_eq!(t.layer, Layer::Ground);
+    assert!(t.fall.falling && t.fall.bomb_mark);
+    assert!(w.cells.list(at(3, 0), Layer::Ground).contains(&top));
+    // A non-empty list: explosions appear.
+    let mut r = ruleset();
+    r.sim.general.bridge_explosions = Some(vec!["BOOM".into()]);
+    let mut w = game(&r, &m);
+    w.effects.clear();
+    bridges::attempts(&mut w, at(3, 0), 2);
+    let booms = w
+        .effects
+        .iter()
+        .filter(|e| matches!(e, Effect::Anim { name, .. } if name == "BOOM"))
+        .count();
+    assert!(booms > 0);
+}
+
+// spec: S-0511 claim 10 (a dropped object falls 416 leptons and lands on its 30th update; with the bomb mark it dies on landing)
+#[test]
+fn claim_10_falling_and_landing() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let top = spawn(&mut w, Kind::Vehicle, "CART", at(3, 0));
+    onto_deck(&mut w, top);
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert!(w.obj(top).unwrap().fall.falling);
+    let mut landed = None;
+    for k in 1..=40 {
+        glasnost_sim::tick::step(&mut w);
+        if !w.obj(top).is_some_and(|o| o.fall.falling && o.health > 0) {
+            landed = Some(k);
+            break;
+        }
+    }
+    assert_eq!(landed, Some(30));
+    assert!(!alive(&w, top));
+}
+
+// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to it)
+#[test]
+fn claim_11_units_heading_onto_a_lost_deck() {
+    for occupied in [true, false] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 8, &[]);
+        let mut w = game(&ruleset(), &m);
+        let c = at(3, 0);
+        if occupied {
+            let top = spawn(&mut w, Kind::Vehicle, "CART", c);
+            onto_deck(&mut w, top);
+        }
+        let car = spawn(&mut w, Kind::Vehicle, "CART", at(3, 2));
+        w.obj_mut(car).unwrap().dest = Some(Target::Cell(c));
+        let away = spawn(&mut w, Kind::Vehicle, "CART", at(4, 2));
+        w.obj_mut(away).unwrap().dest = Some(Target::Cell(at(4, 5)));
+        bridges::attempts(&mut w, c, 2);
+        assert_eq!(alive(&w, car), !occupied, "occupied {occupied}");
+        assert!(alive(&w, away));
+    }
+}
+
+// spec: S-0511 claim 12 (a successful attempt names the lost section's cell: the nearby link stops being enabled; connectivity is updated)
+#[test]
+fn claim_12_connectivity() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    assert_eq!(w.cells.links.len(), 1);
+    assert!(w.cells.links[0].enabled);
+    bridges::attempt(&mut w, at(3, 0));
+    assert!(w.cells.links[0].enabled, "a failed attempt names no cell");
+    w.regions.dirty = false;
+    bridges::attempt(&mut w, at(3, 0));
+    assert!(!w.cells.links[0].enabled);
+    assert!(w.regions.dirty);
+}
+
+// ---------------------------------------------------------------------
+// Claims 13 to 15: low strips.
+
+// spec: S-0511 claim 13 (an attempt at any cross-cell affects the strip's centre; intact → D₀, fails; damaged → destroyed, succeeds; a whole end piece → its damaged position)
+#[test]
+fn claim_13_low_strip_attempts() {
+    let mut m = base();
+    low_x(&mut m, Family::Bridge, 0, 4, |x| match x {
+        0 => Role::S,
+        4 => Role::E,
+        _ => Role::I(0),
+    });
+    let mut w = game(&ruleset(), &m);
+    assert!(!bridges::attempt(&mut w, at(2, -1)));
+    for dy in [-1, 0, 1] {
+        assert_eq!(role(&w, at(2, dy)), Some(Role::D(0)));
+    }
+    assert!(bridges::attempt(&mut w, at(2, 1)));
+    for dy in [-1, 0, 1] {
+        assert_eq!(role(&w, at(2, dy)), Some(Role::X));
+    }
+    assert!(!bridges::attempt(&mut w, at(4, 0)));
+    assert_eq!(role(&w, at(4, 0)), Some(Role::E2));
+    assert!(
+        !bridges::attempt(&mut w, at(4, 0)),
+        "a damaged end piece: no change"
+    );
+    assert_eq!(role(&w, at(4, 0)), Some(Role::E2));
+    assert!(!bridges::attempt(&mut w, at(0, 0)));
+    assert_eq!(role(&w, at(0, 0)), Some(Role::S2));
+}
+
+// spec: S-0511 claim 14 (neighbour re-evaluation: s = a + b; along x, a from increasing x and b from decreasing x; the new piece by s)
+#[test]
+fn claim_14_neighbour_re_evaluation() {
+    let mut m = base();
+    low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
+    let mut w = game(&ruleset(), &m);
+    bridges::attempt(&mut w, at(2, 0));
+    assert_eq!(
+        role(&w, at(1, 0)),
+        Some(Role::I(5)),
+        "s = 1 (D₀ on the increasing side)"
+    );
+    assert_eq!(
+        role(&w, at(3, 0)),
+        Some(Role::I(4)),
+        "s = 4 (D₀ on the decreasing side)"
+    );
+    bridges::attempt(&mut w, at(2, 0));
+    assert_eq!(role(&w, at(1, 0)), Some(Role::D(2)), "s = 2 (X)");
+    assert_eq!(role(&w, at(3, 0)), Some(Role::D(1)), "s = 8 (X)");
+    assert_eq!(role(&w, at(0, 0)), Some(Role::I(0)), "no further spread");
+}
+
+// spec: S-0511 Edge cases (quirks.low_strip_regress off: a damaged strip never moves to the intact class; on: it may)
+#[test]
+fn claim_14_low_strip_regress() {
+    for regress in [true, false] {
+        let mut m = base();
+        // x = 2 damaged D₁, its increasing neighbour x = 3 I₄ gives a = 1, nothing on the decreasing side: s = 1 → I₅.
+        low_x(&mut m, Family::Bridge, 1, 4, |x| match x {
+            2 => Role::D(1),
+            3 => Role::I(0),
+            _ => Role::I(0),
+        });
+        let mut r = ruleset();
+        r.globals.quirks.low_strip_regress = regress;
+        let mut w = game(&r, &m);
+        // Damage x = 3 to D₀: x = 2 is re-evaluated with a = 1 (D₀), b = 0 (I₀ at x = 1): s = 1, I₅.
+        bridges::attempt(&mut w, at(3, 0));
+        let want = if regress { Role::I(5) } else { Role::D(1) };
+        assert_eq!(role(&w, at(2, 0)), Some(want), "regress {regress}");
+    }
+}
+
+// spec: S-0511 Edge cases (quirks.low_bridge_wrong_axis_recheck: a strip of the other axis next to a changed strip is re-evaluated with on, left alone with off)
+#[test]
+fn claim_14_wrong_axis_recheck() {
+    for recheck in [true, false] {
+        let mut m = base();
+        low_x(&mut m, Family::Bridge, 0, 2, |_| Role::I(0));
+        // A piece along y in the cell one step east of the x strip at x = 2.
+        let cell = m.cells.get_mut(at(3, 0)).unwrap();
+        cell.overlay = pieces::low_overlay(Family::Bridge, Line::Y, Role::I(0));
+        cell.overlay_data = 1;
+        let mut r = ruleset();
+        r.globals.quirks.low_bridge_wrong_axis_recheck = recheck;
+        let mut w = game(&r, &m);
+        bridges::attempt(&mut w, at(2, 0));
+        let changed = role(&w, at(3, 0)) != Some(Role::I(0));
+        assert_eq!(changed, recheck, "recheck {recheck}");
+    }
+}
+
+// spec: S-0511 claim 15 (kill check: a ground unit that could not enter the changed cell dies; a jumpjet type dies when the cell became destroyed; damage alone harms no ground unit that may enter)
+#[test]
+fn claim_15_kill_check() {
+    let mut m = base();
+    low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
+    let mut w = game(&ruleset(), &m);
+    let car = spawn(&mut w, Kind::Vehicle, "CART", at(2, 1));
+    let jet = spawn(&mut w, Kind::Vehicle, "JET", at(2, -1));
+    bridges::attempt(&mut w, at(2, 0));
+    assert!(
+        alive(&w, car) && alive(&w, jet),
+        "damaged road is enterable"
+    );
+    bridges::attempt(&mut w, at(2, 0));
+    assert!(!alive(&w, car), "destroyed: the car cannot enter water");
+    assert!(!alive(&w, jet), "a jumpjet type dies in a destroyed cell");
+    // A strip's state changes take no draw and create no animation.
+    let mut w = game(&ruleset(), &m);
+    let s0 = w.rng.clone();
+    w.effects.clear();
+    bridges::attempts(&mut w, at(2, 0), 2);
+    assert_eq!(w.rng.raw(), s0.clone().raw());
+    assert!(!w.effects.iter().any(|e| matches!(e, Effect::Anim { .. })));
+}
+
+// ---------------------------------------------------------------------
+// Claims 16 to 21: the hut.
+
+fn hut(w: &mut World, c: CellXY) -> ObjectId {
+    spawn(w, Kind::Building, "HUT", c)
+}
+
+// spec: S-0511 claim 16 (a high bridge: up to three attempts at the start piece and three at the cell before the far endpoint; the isolated runs follow, so the whole span falls)
+#[test]
+fn claim_16_hut_demolishes_a_high_bridge() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(3, 3));
+    hut::demolish(&mut w, h);
+    for x in 0..8 {
+        assert_eq!(data(&w, at(x, 0)), None, "x = {x}");
+    }
+    assert!(!w.cells.links[0].enabled);
+}
+
+// spec: S-0511 claim 16 (a low bridge: up to four strips from the centre displaced by −trunc((w − e) / 2), toward increasing coordinate when e ≥ w, each with three low-form animations and up to three attempts)
+#[test]
+fn claim_16_hut_demolishes_a_low_bridge() {
+    let mut m = base();
+    low_x(&mut m, Family::Bridge, 0, 9, |_| Role::I(0));
+    let mut r = ruleset();
+    r.sim.general.bridge_explosions = Some(vec!["BOOM".into()]);
+    let mut w = game(&r, &m);
+    // The hut's block reaches x = 0 … 2 at most; the first piece is x = 0 (w = 1, e = 10): first strip x = 0 + 4 = 4.
+    let h = hut(&mut w, at(2, 3));
+    w.effects.clear();
+    hut::demolish(&mut w, h);
+    let destroyed: Vec<i32> = (0..=9)
+        .filter(|&x| role(&w, at(x, 0)) == Some(Role::X))
+        .collect();
+    assert_eq!(destroyed, vec![4, 5, 6, 7]);
+    let booms = w
+        .effects
+        .iter()
+        .filter(|e| matches!(e, Effect::Anim { name, .. } if name == "BOOM"))
+        .count();
+    assert_eq!(booms, 12, "three low-form animations per strip");
+}
+
+// spec: S-0511 claim 16 (quirks.bridge_family_by_block: a wooden piece in the block chooses the wooden family; off: the family of the bridge the search finds)
+#[test]
+fn claim_16_family_by_block() {
+    for by_block in [true, false] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 8, &[]);
+        // A wooden-role tile in the hut's block.
+        put_tile(&mut m, at(4, 4), tile(Family::Wooden, 16), 0, 0);
+        let mut r = ruleset();
+        r.globals.quirks.bridge_family_by_block = by_block;
+        let mut w = game(&r, &m);
+        let h = hut(&mut w, at(3, 3));
+        hut::demolish(&mut w, h);
+        assert_eq!(
+            data(&w, at(4, 0)).is_none(),
+            !by_block,
+            "by block {by_block}: the bridge-role sections fall only without the block family"
+        );
+    }
+}
+
+fn engineer(w: &mut World, c: CellXY) -> ObjectId {
+    spawn(w, Kind::Infantry, "ENGI", c)
+}
+
+// spec: S-0511 claim 17 (the engineer's entry: the hut's entered-by raise, the bridge-repaired announcement and the repair sound, the repair, and the engineer leaves play; quirks.repair_consumes_engineer_always)
+#[test]
+fn claim_17_engineer_enters_the_hut() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut r = ruleset();
+    r.sim.general.repair_bridge_sound = Some("FIXED".into());
+    let mut w = game(&r, &m);
+    let h = hut(&mut w, at(3, 3));
+    let e = engineer(&mut w, at(3, 2));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert_eq!(data(&w, at(3, 0)), None);
+    w.effects.clear();
+    assert!(hut::engineer_entered_hut(&mut w, e, h));
+    assert!(w.obj(e).is_none(), "the engineer leaves play");
+    assert_eq!(data(&w, at(3, 0)), Some(0), "repaired");
+    let sounds: Vec<Sound> = w
+        .effects
+        .iter()
+        .filter_map(|x| match x {
+            Effect::Sound { sound, .. } => Some(*sound),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sounds, vec![Sound::BridgeRepaired, Sound::RepairBridge]);
+    // An intact bridge: used up with the quirk on, refused with it off.
+    for always in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.repair_consumes_engineer_always = always;
+        let mut w = game(&r, &m);
+        let h = hut(&mut w, at(3, 3));
+        let e = engineer(&mut w, at(3, 2));
+        assert_eq!(hut::engineer_entered_hut(&mut w, e, h), always);
+        assert_eq!(w.obj(e).is_none(), always);
+    }
+}
+
+// spec: S-0511 claim 18 (the start piece: the nearest start ramp or pier on the start-side ray; a pier is restored with the bridge two steps toward its start side; quirks.repair_walk_unbounded)
+#[test]
+fn claim_18_which_bridge_is_repaired() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[4]);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(7, 3));
+    let e = engineer(&mut w, at(7, 2));
+    // Collapse the pier and lose sections on both sides of it.
+    bridges::attempts(&mut w, at(4, 0), 2);
+    bridges::attempts(&mut w, at(2, 0), 2);
+    bridges::attempts(&mut w, at(7, 0), 2);
+    assert_eq!(pier_k(&w, at(4, 0)), Some(4));
+    assert!(hut::engineer_entered_hut(&mut w, e, h));
+    assert_eq!(pier_k(&w, at(4, 0)), Some(0), "the pier is restored");
+    for x in [0, 1, 2, 3, 5, 6, 7, 8, 9] {
+        assert_eq!(data(&w, at(x, 0)), Some(0), "x = {x} has an intact section");
+    }
+    assert!(w.cells.links.iter().all(|l| l.enabled));
+}
+
+// spec: S-0511 Edge cases (quirks.repair_walk_unbounded off: the walk toward the start side stops at the first cell that is neither a high-bridge cell nor bridge-body marked)
+#[test]
+fn claim_18_repair_walk_bound() {
+    for unbounded in [true, false] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 8, &[]);
+        let mut r = ruleset();
+        r.globals.quirks.repair_walk_unbounded = unbounded;
+        let mut w = game(&r, &m);
+        bridges::attempts(&mut w, at(3, 0), 2);
+        // Clear the deck marks and the body of x = 1 … 2, as a gap on the start side.
+        for x in [1, 2] {
+            let i = w.cells.idx(at(x, 0)).unwrap();
+            w.cells.deck[i] = false;
+            w.cells.bridge_body[i] = false;
+        }
+        hut::repair(&mut w, at(5, 0));
+        assert_eq!(
+            data(&w, at(3, 0)).is_some(),
+            unbounded,
+            "unbounded {unbounded}"
+        );
+    }
+}
+
+// spec: S-0511 claim 19 (sections of the family with data 0 along x on every eligible cell, marking four cells and clearing the body mark; no section on a cell of slope above 4; a collapsed pier's column rises by 4 with quirks.pier_repair_partial_height, the whole tile goes back to its levels without)
+#[test]
+fn claim_19_high_bridge_repair() {
+    for partial in [true, false] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 10, &[4]);
+        // A cell of the far span whose tile has slope shape 5 (it keeps its section until lost).
+        put_tile(&mut m, at(8, 0), STEEP, 0, 0);
+        // A pier cell off the column (sub-tile 1, row 0) at its own level.
+        put_tile(&mut m, at(5, -1), tile(Family::Bridge, M1), 1, 6);
+        let mut r = ruleset();
+        r.globals.quirks.pier_repair_partial_height = partial;
+        let mut w = game(&r, &m);
+        bridges::attempts(&mut w, at(4, 0), 2);
+        bridges::attempts(&mut w, at(7, 0), 2);
+        assert!(
+            bridges::attempt(&mut w, at(8, 0)),
+            "open on its start side: one attempt"
+        );
+        assert_eq!(w.cells.cell(at(5, -1)).unwrap().level, 0);
+        hut::repair(&mut w, at(7, 0));
+        for x in [5, 6, 7, 9] {
+            assert_eq!(data(&w, at(x, 0)), Some(0), "x = {x}");
+            assert!(w.cells.is_bridge(at(x, -1)));
+            assert!(!w.cells.body(at(x, 0)));
+        }
+        assert_eq!(data(&w, at(8, 0)), None, "slope 5: no section");
+        assert_eq!(pier_k(&w, at(4, 0)), Some(0));
+        assert_eq!(w.cells.cell(at(4, 0)).unwrap().level, 4);
+        assert_eq!(
+            w.cells.cell(at(5, -1)).unwrap().level,
+            if partial { 0 } else { 6 },
+            "partial {partial}"
+        );
+    }
+}
+
+// spec: S-0511 claim 20 (the whole run: damaged, destroyed, I₄ and I₅ become Iᵣ with r from the map-generator stream, F4; a damaged end piece becomes whole; the scenario stream takes no draw)
+#[test]
+fn claim_20_low_bridge_repair() {
+    let mut m = base();
+    low_x(&mut m, Family::Bridge, 0, 6, |x| match x {
+        0 => Role::S2,
+        1 => Role::I(4),
+        2 => Role::D(1),
+        3 => Role::X,
+        4 => Role::I(2),
+        5 => Role::I(5),
+        _ => Role::E,
+    });
+    let mut w = game(&ruleset(), &m);
+    let s0 = w.rng.clone();
+    let mut g = w.map_rng.clone().unwrap();
+    hut::repair(&mut w, at(1, 2));
+    assert_eq!(w.rng.raw(), s0.clone().raw(), "no scenario-stream draw");
+    let mut want = Vec::new();
+    for _ in 0..4 {
+        // F4 with the invented stream: the accepted value of each draw.
+        let r = loop {
+            let v = i128::from(g.raw()) * 4 / i128::from(u32::MAX);
+            if v <= 3 {
+                break v as u8;
+            }
+        };
+        want.push(r);
+    }
+    let got: Vec<Option<Role>> = (0..=6).map(|x| role(&w, at(x, 0))).collect();
+    assert_eq!(
+        got,
+        vec![
+            Some(Role::S),
+            Some(Role::I(want[0])),
+            Some(Role::I(want[1])),
+            Some(Role::I(want[2])),
+            Some(Role::I(2)),
+            Some(Role::I(want[3])),
+            Some(Role::E),
+        ]
+    );
+    for dy in [-1, 1] {
+        assert_eq!(role(&w, at(3, dy)), role(&w, at(3, 0)), "the whole strip");
+    }
+}
+
+// spec: S-0511 claim 21 (the cursor offers repair over a hut when its low run holds a destroyed piece, or when the nearby link of a high bridge is not enabled)
+#[test]
+fn claim_21_repair_cursor() {
+    let mut m = base();
+    low_x(&mut m, Family::Bridge, 0, 4, |_| Role::I(0));
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(2, 3));
+    assert!(!hut::repair_offered(&w, h));
+    bridges::attempt(&mut w, at(2, 0));
+    assert!(!hut::repair_offered(&w, h), "damage alone");
+    bridges::attempt(&mut w, at(2, 0));
+    assert!(hut::repair_offered(&w, h), "destroyed");
+
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(3, 3));
+    assert!(!hut::repair_offered(&w, h));
+    bridges::attempts(&mut w, at(3, 0), 2);
+    assert!(hut::repair_offered(&w, h));
+}
+
+// spec: S-0511 State and ordering (bridge state: overlays, alternate looks, pier levels, falls and the map-generator stream survive a save and load with the same state hash)
+#[test]
+fn bridge_state_save_round_trip() {
+    use glasnost_sim::save;
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[4]);
+    let mut w = game(&ruleset(), &m);
+    let top = spawn(&mut w, Kind::Vehicle, "CART", at(7, 0));
+    onto_deck(&mut w, top);
+    bridges::attempts(&mut w, at(4, 0), 2);
+    bridges::attempts(&mut w, at(7, 0), 2);
+    bridges::attempts(&mut w, at(9, 0), 2);
+    glasnost_sim::tick::step(&mut w);
+    assert!(w.obj(top).unwrap().fall.falling);
+    assert!(!w.cells.alternate.is_empty() && !w.cells.pier_levels.is_empty());
+    let bytes = save::save(&w);
+    let mut l = save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
+    for _ in 0..40 {
+        glasnost_sim::tick::step(&mut w);
+        glasnost_sim::tick::step(&mut l);
+    }
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
+}
