@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -142,8 +142,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   is not processed, so claim 10's sinking case is never reached.
 - **Locomotor field, class identifier.** The type field that names a type's locomotor (Import
   mapping). Its value is a *class identifier*: 32 hexadecimal digits in five groups of 8, 4, 4, 4
-  and 12 digits, joined by hyphens and enclosed in braces, with no spaces. Table T3 lists the eleven
-  class identifiers the original knows.
+  and 12 digits, joined by hyphens and enclosed in braces, with no spaces. Import mapping table T3
+  defines the eleven recognised input values by their numerical groups, not by program names.
 - **Step check, first check, repeated check.** On each tick on which a vehicle is not on a track,
   has a current step and its body faces that step's 8-direction (claim 6), the entry outcome
   (S-0209 claim 5) of the cell its current step enters decides whether it begins a track on that
@@ -875,6 +875,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
         can yet be defined.
       - case i: no setup is known that times a threat-point request to a vehicle unloading
         passengers while it passes the earlier refusals.
+      - deploying and undeploying in case f: D18 part g isolates the fully deployed state,
+        not the transition ticks; no fixture here establishes a request during either
+        transition while every earlier refusal gate passes.
       - the draw over 1 to 4: both identified threat-point senders, the bunker rule of S-0215
         claim 17 and factory apron-neighbour clearing of S-0417 claims 4 and 13, send forced requests.
         Neither reaches this non-forced acceptance draw
@@ -1017,7 +1020,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Backing: `measurable` (scenario D21: runs 1 and 2 and their controls for part a, runs 3,
       3c and 4 for parts c and d, and every run for part e). Part b is `unmeasured`: under our
       rules the state in which the original's drop would act does not arise, so there is nothing
-      to observe. Part c's chase exception is `unmeasured` (D21 says why).
+      to observe. Part c's chase exception is `unmeasured` (D21 says why). The *area guard*
+      and *hunt* eligibility cases of part a are `unmeasured`: D21 establishes the retained
+      target/destination fixture only under *attack*, not those behaviours. The out-of-scope
+      *rescue* case and original computer-only deployment aside are also `unmeasured`:
+      no qualifying skirmish fixture for those cases is supplied here. The deploy-to-fire
+      rule is a pointer to S-0310 claim 9 and uses that claim's backing and confidence.
     - Confidence: medium for the arrival-time stop, its conditions and the hover distinction
       between choosing a next step and having none; medium for parts b, c and e (read, not
       observed); low for the exact tick of the search after a retained-destination wait in part d
@@ -1110,8 +1118,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       erased* because of its own move. When *L* equals its own position, it does not jump, and the
       destination is removed.
     - (e) **What the jump does.** All of this happens in the tick of the jump. Every object that
-      has it as its target drops it, except an attacker whose airstrike is aimed at the living
-      target. This is not an erasing-weapon exception: an object being erased drops destinations
+      has it as its target drops it, except an attacker whose strike target is the living
+      jumping object (S-0519 Terms). The exception also applies after a strike ends normally:
+      its strike target is kept (S-0519 claims 18 and 20), so no strike need be in progress.
+      This is not an erasing-weapon exception: an object being erased drops destinations
       under part a and cannot make this jump (S-0514 claim 16).
       When an override is in effect and that exception does
       not hold, the attacker reverts on the jump tick: it drops the jumping object if that object
@@ -1157,8 +1167,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       After the cell-arrival effects, the object attempts to collect any crate in the landing
       cell under S-0520 claims 7–11. The pickup happens after placement and does not undo the
       landing when its result would refuse an ordinary ground step. Speed bonuses and feedback
-      belong to S-0520 claims 20 and 26 and claim 13 here. This requires a paired correction
-      to S-0520 claim 6: its teleport exclusion does not apply to an own-locomotor jump.
+      belong to S-0520 claims 20 and 26 and claim 13 here. S-0520 claim 6 includes this
+      own-locomotor pickup; its superweapon-transport exclusion is a separate rule.
       It stops moving and its
       destination is removed, so its behaviour falls back to rest (S-0215 claim 13). A second
       warp animation plays at *L*.
@@ -1250,7 +1260,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       body-turn and exhaustive unchanged-visibility assertions: D22 isolates none of these,
       and no qualifying setup for their interaction with an own-locomotor jump is specified.
       The animation/sound ordering and type-specific sound overrides of part e are
-      `measurable` through D22 run 1's presentation controls
+      `measurable` through D22 run 1's presentation controls. Part f's continued behaviour
+      processing is `unmeasured`: no scenario here isolates a behaviour-processing effect
+      during phasing in from the locomotor's own completion effects. Its firing-check
+      reply is owned and backed by S-0301 claim 9, not independently tested here. The retained-target
+      phasing-in-end branch is `unmeasured`: run 7 supplies only a conditional protocol,
+      and no reachable setup preserving a target through this interval is established.
     - Confidence: part a's vehicle destination restriction inherits S-0517 claim 9's
       confidence (high for refusal, low for the carried exception); jumpjet landing cancellation
       inherits S-0502 claim 16's confidence. High for parts d, e and f and F9 (the whole move was read); medium for part b
@@ -1828,26 +1843,6 @@ diagonal tracks. In every "—" case the straight or diagonal track for the curr
 diagonal entry of that row. Each listed transform makes the track start one step (or two) behind
 its target in the direction of travel, and end with facing equal to the last step's 8-direction.
 
-**T3 Class identifiers of the locomotors** (claim 14). Engine constants: the eleven locomotors the
-original knows. Each identifier is shown as its five groups, the digits of a group in blocks of
-four for reading. In the data file the value is written as an opening brace, the five groups
-joined by hyphens, and a closing brace, with no spaces. Seven of them differ only in the last digit
-of the first group.
-
-| Locomotor (ours) | Group 1 (8 digits) | Group 2 | Group 3 | Group 4 | Group 5 (12 digits) |
-|---|---|---|---|---|---|
-| driving (this spec) | 4A58 2741 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| hovering | 4A58 2742 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| tunnelling (underground travel, S-0209 part 5b) | 4A58 2743 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| walking (infantry walking, S-0208) | 4A58 2744 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| drop pod | 4A58 2745 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| flying | 4A58 2746 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| teleporting (the absent-key default) | 4A58 2747 | 9839 | 11D1 | B709 | 00A0 24DD AFD1 |
-| walking vehicle (mechanical walking; S-0210's walking-vehicle locomotor) | 55D1 41B8 | DB94 | 11D1 | AC98 | 0060 0805 5BB5 |
-| ship | 2BEA 74E1 | 7CCA | 11D3 | BE14 | 0010 4B62 A16C |
-| jumpjet | 9261 2C46 | F71F | 11D1 | AC9F | 0060 0805 5BB5 |
-| rocket | B7B4 9766 | E576 | 11D3 | 9BD9 | 0010 4B97 2FE8 |
-
 ## State and ordering
 
 | State | Event | Result |
@@ -2009,6 +2004,30 @@ its new destination from that tick.
 
 ## Import mapping
 
+**T3 Locomotor input-value mapping** (claim 14). Each row maps a value of `Locomotor` in the
+user's rules file to a movement method. The five numbers are dimensionless nonnegative integers,
+written here in decimal. To interpret a data-file value, read its five hexadecimal groups as
+integers and compare the resulting five numbers with a row. Equivalently, to write a test value,
+express the row's numbers in hexadecimal, with leading zeroes to widths 8, 4, 4, 4 and 12 digits,
+join them with hyphens, and enclose the result in braces. There are no spaces inside the value.
+This is solely the text-input mapping: it specifies no program class name, internal identity,
+representation or storage order. The recognised values are engine constants, not stock rule
+settings. Claim 14 supplies confidence and backing; D16's identifier controls test every row.
+
+| Movement method (ours) | First group | Second group | Third group | Fourth group | Fifth group |
+|---|---:|---:|---:|---:|---:|
+| driving (this spec) | 1247291201 | 38969 | 4561 | 46857 | 687813275601 |
+| hovering | 1247291202 | 38969 | 4561 | 46857 | 687813275601 |
+| tunnelling (underground travel, S-0209 claim 5b) | 1247291203 | 38969 | 4561 | 46857 | 687813275601 |
+| walking (infantry walking, S-0208) | 1247291204 | 38969 | 4561 | 46857 | 687813275601 |
+| drop pod | 1247291205 | 38969 | 4561 | 46857 | 687813275601 |
+| flying | 1247291206 | 38969 | 4561 | 46857 | 687813275601 |
+| teleporting (the absent-key default) | 1247291207 | 38969 | 4561 | 46857 | 687813275601 |
+| walking vehicle (mechanical walking; S-0210) | 1439777208 | 56212 | 4561 | 44184 | 412451429301 |
+| ship | 736785633 | 31946 | 4563 | 48660 | 69984231788 |
+| jumpjet | 2455841862 | 63263 | 4561 | 44191 | 412451429301 |
+| rocket | 3082065766 | 58742 | 4563 | 39897 | 69987676136 |
+
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | vehicle section, key `Speed` | speed field *v* (claim 1), also the lead estimate (claim 18) | integer (S-0003, claim 3) | keeps value; engine default type speed 0; −1 also keeps |
@@ -2069,8 +2088,13 @@ of the give-up test is imported as S-0209 says.
 ## Measurement scenarios
 
 All scenarios run under the glossary's *measurement setup* on a purpose-made flat map of clear
-ground, unless the scenario says otherwise, at any game speed (claim G3 of the glossary). A
-*recorder* reads, each tick, the vehicle's position in leptons and its facing, and, where a
+ground, unless the scenario says otherwise, at game speed index 2 unless a scenario chooses another index (claim G3 of the glossary
+makes these tick-based results speed-independent), with director and external mods off.
+Use one human house and one bystander computer player kept outside the test lanes and cells.
+Those lanes and cells are the observed area. Void a run if an unnamed bystander object enters
+that area, acts on a test object, or the bystander is defeated before recording ends. Named
+computer-player test objects in a scenario are exceptions to the exclusion, not to its other
+qualification conditions. A *recorder* reads, each tick, the vehicle's position in leptons and its facing, and, where a
 scenario says so, other state of the units: a vehicle's height, speed fraction *ρ* or speed bonus
 factor *b*, or its stored path. Test values are
 set by override sections in the test map (a named test file, removed after the run). All values
