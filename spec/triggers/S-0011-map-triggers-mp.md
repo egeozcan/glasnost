@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -405,11 +405,12 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     the jump tick after landing placement, not at reservation or phasing-in completion.
     The cited claims own intermediate-cell exceptions and ordering against other arrival
     effects. In a cell that carries a high bridge, only units on the bridge
-    deck raise it. The tag of a building is raised with this code, with the infantry unit as causing
-    object, when an infantry unit enters the building to take it over (capture rules: no spec yet, a
-    pointer only). A few other ways of entering an object also raise the entered object's tag with
-    this code, with the entering unit as causing object; which ones belongs to the specs of those
-    abilities (pointers only). The event is satisfied when the raise has this code, there is a causing object,
+    deck raise it. S-0524 claims 10 to 12 own object-entry raises: engineer capture,
+    vehicle hijacking and the other classified entry paths raise the entered object's tag
+    with the entrant as causing object. Capture and hijack entry actions see the old owner
+    and tag, before carry-over and takeover. These are distinct from notifications on the
+    entrant's own tag when it is consumed (claim 19); merely receiving an enter order
+    does not raise the entered object's tag. The event is satisfied when the raise has this code, there is a causing object,
     and either the event's value is −1 (any house) or the value is a country's registration index,
     a house plays that country, and the causing object's owner is the first such house in house
     order. A value in the player-position range of claim 23 names no country, so the event is never
@@ -422,9 +423,11 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     ordering).
     - Backing: `measurable` (scenario T3, including variants B and C for the bridge and capture)
      for cell arrival, capture, country matching and the triggering house. Movement timing
-     inherits S-0207 claim 22/D24 and S-0208 claim 22/W14's backing and confidence. Other entry methods
-     are pointers only, to the specs of those abilities
-    - Confidence: medium (low for the bridge rule, the capture case and the other entries)
+     inherits S-0207 claim 22/D24 and S-0208 claim 22/W14's backing and confidence.
+     Object-entry eligibility, timing, tag transfer and consumption distinctions inherit
+     S-0524 claims 10 to 12's backing and confidence (C9 and C10, including their
+     unmeasured entry-classification boundaries)
+    - Confidence: medium (low for the bridge rule); object-entry rules inherit the cited claims
 
 19. **Destroyed-by-anything.** A killing hit on an object carrying a tag raises that tag with
     this code, with the dying object as causing object. The no-hit destruction cases below
@@ -484,6 +487,14 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     attacker can also fire it. A raise suppressed by claim 12 fires nothing and sets no
     latch. Removal after these notifications produces no second group.
 
+    **Entrants consumed by entry.** S-0524 claim 10 owns the engineer's single
+    destroyed-by-anything raise on its own tag before removal, including damage-only
+    capture attempts. With carry-over, that tag can already be shared with the captured
+    building. S-0524 claim 12 owns the other traced consuming-entry notifications and
+    their incomplete classification. These are not the killing-hit groups above: do not
+    add their preliminary or following raises. Hijacking removes the thief without this
+    notification (S-0524 claim 11); garrisoning does not itself consume the entrant.
+
     **Other no-hit destructions.** Hidden slaves are not the only such case: destruction of
     an exploding object's passengers under S-0312 claim 5 also gives tagged passengers
     destruction notifications without a hit on each passenger. Their object kind decides
@@ -494,7 +505,9 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     universal destruction raise, nor must every no-hit notification be suppressed.
     - Backing: `measurable` (scenario T7 for killing-hit counts and latches; S-0312 D20 for
       timing, deferred deaths and retained infantry tags; T25 A for tagged exploding-transport
-      passengers). Hidden-slave notifications and their firing counts are `unmeasured`:
+      passengers). Entry-consumption notifications inherit S-0524 claims 10 to 12's
+      backing and confidence (C9; claim 12's other consumed-entrant paths remain
+      `unmeasured`). Hidden-slave notifications and their firing counts are `unmeasured`:
       no established data-only setup attaches a tag to a generated slave; T25 B is a
       conditional proposal, not an established fixture. Separately supplied attacking-house
       attribution and actions that remove the dying object during the raises inherit
@@ -680,15 +693,23 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       kinds are `unmeasured`: T18 observes infantry only and their responses remain open
     - Confidence: medium
 
-30. **Actions that hand over to other specs.** These actions are recognised, and their parameters are
-    read as Import mapping says. What they do belongs to specs that are not written yet (pointers
-    only): create team, destroy team, reinforce and reinforce at a waypoint (the team system), create
-    crate at a waypoint (the crate rules), lightning storm at a waypoint (the superweapon specs, with
-    the trigger's owner house as the storm's owner) and preferred target at a waypoint (computer-
-    controlled behaviour, which is out of scope, with the owner house as the house concerned).
-    - Backing: `unmeasured`: the claim only assigns these effects to their owning specs, which will
-      carry the measurements. The parameter reading is part of Import mapping
-    - Confidence: medium
+30. **Actions that hand over to other specs.** Parameters use Import mapping; the
+    following are pointers to the claims that own the effects.
+    - Create crate at a waypoint: S-0524 claim 4. Lightning storm at a waypoint:
+      S-0524 claim 1, with the trigger's owner house as storm owner.
+    - Resize local area, demolition blast, large light flash, base ambient light,
+      lightning strike, nuclear strike and restore starting buildings: S-0524
+      claims 8, 5, 6, 7, 2, 3 and 9 respectively.
+    - One-time superweapon grant, permanent grant, set charge and reset charge:
+      S-0512 claims 12 to 15 respectively. Setting a charge percentage preserves
+      existing readiness under S-0512 claim 14's default quirk; resetting charge
+      clears readiness under S-0512 claim 15.
+    - Create team, destroy team, reinforce and reinforce at a waypoint belong to the
+      out-of-scope team system. Preferred target at a waypoint belongs to out-of-scope
+      computer-controlled targeting policy, with the owner house as the house concerned.
+    - Backing: `unmeasured`: this is a pointer inventory, not an independent effect
+      claim. The companion claims carry their own backing and measurement scenarios
+    - Confidence: medium for the inventory; effect-specific confidence is inherited
 
 31. **Mission timer actions.** In this claim *v* is the action's number slot (timer-set, timer-extend,
     timer-shorten). Timer-set starts the mission timer with a length of 15*v* ticks from the
@@ -1090,8 +1111,10 @@ Value fields, in order:
 | 5, 6, 7 | difficulty flags for positions 0, 1, 2 | integer, non-zero = set | clear |
 | 8 | carry-over flag | integer, non-zero = set | clear |
 
-The carry-over flag makes a tag pass from an infantry unit to the building it takes over
-(capture use remains open). Its vehicle-destruction effect is owned by S-0312 claim 29 and
+When any trigger in the entrant's tag chain has the carry-over flag, the tag passes to the
+captured building (S-0524 claim 10) or hijacked vehicle (S-0524 claim 11), replacing the
+target's previous tag. The capture and hijack cases have different entrant-consumption
+notifications (claim 19). Its vehicle-destruction effect is owned by S-0312 claim 29 and
 its Import mapping: together with a remembered hijacker type, it suppresses the extra vehicle
 raise group, not the common group (claim 19).
 
@@ -1115,7 +1138,7 @@ item. Only the eighth item may be missing, and only in the last action.
 
 **I2. Action parameter kinds.** The kind decides how the value (the third item) and the eighth item
 are read. The code then uses the slot it needs (table I4). The fourth to seventh items are read as
-integers and no covered code uses them.
+integers; code 40 uses them for the local-area rectangle (S-0524 claim 8).
 
 | Kind | The value is read as | The eighth item is read as |
 |---|---|---|
@@ -1179,7 +1202,8 @@ but not specified in this revision.
 | 60 | type exists | count, with kind 2 type name | yes | no | 21 |
 | 61 | type does not exist | kind 2 type name | yes | no | 21 |
 
-**I4. Action codes.** Slots are those of I2.
+**I4. Action codes.** Slots are those of I2. Rows citing S-0524 are companion pointers:
+its Import mapping I1 owns those action items, and its cited claims own the effects.
 
 | Code | Our name | Uses | Claim |
 |---|---|---|---|
@@ -1198,6 +1222,7 @@ but not specified in this revision.
 | 26 | timer shorten | number slot *v* | 31 |
 | 27 | timer set | number slot *v* | 31 |
 | 32 | destroy attached objects | — | 27 |
+| 40 | resize local area | fourth to seventh items: left, top, width, height | S-0524 claim 8 |
 | 41 | play an animation at a waypoint | number slot as animation type index, waypoint slot | 36 |
 | 42 | explosion at a waypoint | number slot as weapon index, waypoint slot | 28 |
 | 53 | enable trigger | trigger reference; an effective self-enable replaces the satisfaction-caused timer length (claim 15) | 25, 15 |
@@ -1205,12 +1230,18 @@ but not specified in this revision.
 | 55 | radar event at a waypoint | number slot (event kind), waypoint slot | 32 |
 | 56 | set variable | number slot as variable number | 22 |
 | 57 | clear variable | number slot as variable number | 22 |
+| 63 | demolition blast at a waypoint | number slot as waypoint number | S-0524 claim 5 |
+| 66 | large light flash at a waypoint | number slot as waypoint number | S-0524 claim 6 |
+| 73 | set base ambient light | number slot as integer hundredths | S-0524 claim 7 |
 | 80 | reinforce at a waypoint | team reference, waypoint slot | 30 |
+| 90 | lightning strike at a waypoint | waypoint slot | S-0524 claim 2 |
+| 95 | nuclear strike at a waypoint | waypoint slot; number slot unused | S-0524 claim 3 |
 | 99 | sound at a waypoint | number slot (sound), waypoint slot | 32 |
-| 102 | lightning storm at a waypoint | waypoint slot | 30 |
+| 102 | lightning storm at a waypoint | waypoint slot | S-0524 claim 1 |
 | 103 | timer text | text label | 31 |
-| 108 | create crate at a waypoint | number slot (crate kind), waypoint slot | 30 |
+| 108 | create crate at a waypoint | number slot (crate kind), waypoint slot | S-0524 claim 4 |
 | 113 | make a house cheer | number slot as house value | 29 |
+| 130 | restore starting buildings | number slot as house value | S-0524 claim 9 |
 | 135 | preferred target at a waypoint | waypoint slot | 30 |
 
 **Companion-spec pointers outside this subset.** The following codes still use I2's parameter
@@ -1220,9 +1251,13 @@ are not part of I4's supported subset.
 | Code | Our name | Parameter and owning spec |
 |---|---|---|
 | 1 | win action | number slot; S-0201 scenario T1 part C's fixture assumption only, not a general victory rule specified here |
+| 33 | one-time superweapon grant | number slot as superweapon type index, trigger owner house; S-0512 claim 12 |
+| 34 | permanent superweapon grant | number slot as superweapon type index, trigger owner house; S-0512 claim 13 |
 | 100, 117 | plain and freezing radar-movie actions | number slot, ignored in skirmish; S-0201 claim 11 and its Import mapping. Campaign behaviour is out of scope |
 | 110 | pause action | number slot; S-0201 claim 10, including its departures, warnings and Import mapping |
 | 127 | chrono flash | number slot; S-0201 claim 11, including its quirk rules, warnings and Import mapping |
+| 129 | set superweapon charge | number slot as superweapon type index, kind 11 second number slot as percentage, trigger owner house; S-0512 claim 14 |
+| 133 | reset superweapon charge | number slot as superweapon type index, trigger owner house; S-0512 claim 15 |
 
 **No-hit destruction mapping (claim 19).** These are not new sale or pack-up event codes.
 
@@ -1241,9 +1276,10 @@ syntax are `measurable` through T24 (confidence: high, except ID-only contexts: 
 The waypoint-letter decoding and its missing-item default are `measurable` through T17 D (confidence:
 high). The 24-byte event/type-name cut and 31-byte action-text cut are `unmeasured`: no scenario
 here contrasts long names/labels with their prefixes (confidence: medium). Parameter kinds unused
-by the covered effects and the carry-over flag's capture effect are `unmeasured`: no
-scenario here supplies an observable for them (confidence: medium); their deferred effects
-remain open. The flag's vehicle-destruction effect inherits S-0312 claim 29/D20's backing.
+by the covered effects or companion claims are `unmeasured`: no scenario here supplies an
+observable for them (confidence: medium); their deferred effects remain open. The carry-over
+flag's capture and hijack effects inherit S-0524 claims 10 and 11/C9's backing and confidence.
+Its vehicle-destruction effect inherits S-0312 claim 29/D20's backing.
 The set membership of event codes outside this subset is `unmeasured`: these scenarios do not
 exercise the deferred codes (confidence: medium).
 Absent rules defaults are `unmeasured`: T16/T21 use the stock imported fields, not absent keys
@@ -1865,10 +1901,9 @@ using named test maps removed afterwards.
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.
-- **Carry-over flag in captures.** Its capture use (Import mapping, I1) is not specified here.
-  S-0312 claim 29 owns its vehicle-destruction use.
 - **Codes outside this subset.** Every event and action code not in tables I3 and I4 is parsed by
-  Import mapping, and its meaning belongs to a later revision. That includes the extra latch rule
+  Import mapping. Except for the companion-spec pointers, its meaning remains deferred.
+  That includes the extra latch rule
   (a few codes of the latchable set, the build-type events for example, latch on any repeat type)
   and how polling (claim 6) treats a code that is both polled and code-matched (code 50).
 - **Carrier count of a lost carrier.** Whether an object that is destroyed, or leaves the map
