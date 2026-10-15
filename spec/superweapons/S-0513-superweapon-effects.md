@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -114,8 +114,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
      fogged, empty or occupied, own or enemy.
 
    A non-empty unit selection takes precedence: while units are selected, the cursor offers their
-   actions, not the superweapon's. Which superweapons can be aimed through the radar is S-0410
-   claim 12, table C1. These offers are presentation and input only. A fire order that reaches
+   actions, not the superweapon's. Cursor images are specified by S-0214 claim 31, table CS.
+   Which superweapons can be aimed through the radar is S-0410 claim 12, table C1.
+   These offers are presentation and input only. A fire order that reaches
    the simulation (S-0213, orders table) is not checked against them again: a force-shield order
    at a cell with no allied building is carried out (claim 31).
    - Backing: `measurable` for cursor offers (scenario SW1). Applied orders bypassing those
@@ -1509,8 +1510,8 @@ for these two kinds.
   same-pixel captures, repeated for these drawing variants with named art overrides where
   necessary, are the proposed discriminating observation. Do not infer identical colour
   treatment merely from identical brightness timing.
-- Q-0742 questions 1 to 3 belong to S-0214 claims 21 and 22; question 5 belongs to S-0512
-  claim 16. They are not answered by the protection changes here.
+- Q-0742 questions 1 to 3 are answered by S-0214 claim 31, table CS; question 5 belongs to
+  S-0512 claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
