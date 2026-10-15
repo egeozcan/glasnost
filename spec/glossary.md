@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -62,8 +62,8 @@ not rules for implementing them.
   in this batch are plain spec pointers, not planned specs. S-0417 is also approved; its revised
   draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
   S-0507, S-0511, S-0512, S-0513, S-0516, S-0522 and S-0524 are approved.
-  S-0508, S-0509, S-0510 and S-0515 are approved. S-0502, S-0514, S-0517 and S-0525
-  are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  S-0508, S-0509, S-0510, S-0515, S-0502, S-0514, S-0517 and S-0525 are approved.
+  S-0518, S-0519 and S-0520 are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -1364,12 +1364,34 @@ S-0109 (Terms) and S-0214 (Terms).
 control. S-0301 (claim 8) and S-0302 (claim 10) give what it changes in firing and in damage, and
 S-0309 uses it. How it starts and ends is left to a later warhead spec.
 
+**bomb detector.** An object on the map whose type has a positive bomb-sight range in whole
+cells. It lets its owner see planted bombs within that range (S-0519 claim 10).
+
+**bomb-planting warhead, disarm warhead.** Warheads whose projectile detonations respectively
+plant a bomb on the target instead of doing area damage, or remove its planted bomb without
+damage. S-0519 claims 2, 3 and 7 own planting, firing legality and disarming.
+
+**bomb visible.** The presentation and input state of a planted bomb that the local player
+planted, or can see through an own-house bomb detector in range. S-0519 claim 10 owns the
+visibility updates and range test; visibility does not change bomb timing or damage.
+
 **burst counter.** A per-firer count of the shots made in the current burst, shared by all weapons
 of the firer. S-0301 owns it (Terms, claim 4); S-0313 (claim 2) uses it.
 
 **cell radiation.** The radiation held by a cell: a double-precision floating-point running sum
 of field contributions, less the amounts taken away by decay and topping up, never below 0.
 It can include contributions from fields that have ended (S-0525 claims 3 and 6).
+
+**charge countdown.** A building's delayed-kill countdown when an explosive charge started it,
+with the charge planter recorded. S-0519 claim 14 owns its start; S-0302 claim 16 owns expiry.
+
+**charger list, charger.** A building's list of infantry whose electric-charge shots have
+reached it, each listed at most once. Its length is S-0405's charger count
+*n*<sub>c</sub>. S-0518 claims 11 and 12 own registration and removal.
+
+**charging mark.** A per-unit flag set when a unit starts charging a building by itself. It
+clears whenever the unit is given a target again, including the same target
+(S-0518 claims 14 and 15).
 
 **close-range property.** An imported boolean type flag, not a description of a weapon's range.
 S-0307 owns the term and its effects on approach-position searches (Terms, claim 22).
@@ -1522,11 +1544,24 @@ count is above 0. S-0506 claim 10 owns the resulting lockouts; its Terms define 
 that carries the erasure amount. When it lets go, the most recent remaining joiner takes over
 without losing progress (S-0514 claim 9).
 
+**overpowered.** The state of an overpowerable building with at least three registered
+chargers, or at least one while switched on with its owner at full power. It is decided in
+the building's turn, not whenever the charger count changes (S-0518 claim 13).
+
 **parasite, victim, host.** A *parasite* is a unit that attaches itself to another unit,
 its *victim*, and damages it while attached. The victim is its *host* while it is attached.
 S-0614 claims 1 to 5 own latching, claims 6 to 11 deliveries and hold, claims 12 to 14
 leaving a living host, and claim 15 losing the host. S-0315 claims 6 and 7 own suppression
 by damage and healing. S-0209 and S-0214 use these terms for entry and order targeting.
+
+**planted bomb, planter's house.** A bomb attached to a carrier object by a bomb-planting
+infantry unit. The planter's house is that infantry unit's owner when it planted the bomb.
+The bomb keeps that house even after the planter changes owner or is removed
+(S-0519 claims 2 and 8). S-0213 claim 11 owns the detonate order.
+
+**prism master, supporter.** The prism-type building making an attack is the master; a
+prism-type building of the same house that it recruits to beam to it is a supporter
+(S-0518 claims 1 to 3).
 
 **projectile.** The object that carries a shot from where it is launched (normally its fire point,
 S-0306 claim 5) to where it detonates. S-0203
@@ -1594,6 +1629,17 @@ objects. S-0303 owns both (Terms, claim 3, Formulas F1); S-0302 and S-0312 use t
 **strafing weapon.** A weapon whose projectile has a signed turn rate at most 1 and is not
 invisible. S-0501 claim 11 uses this test to identify a strafer; claims 13 and 15 own its
 run and ammunition spending.
+
+**suicide weapon.** A weapon whose shot creates no projectile but instead hits its own firer
+for the firer type's full strength, not its current health (S-0519 claim 11).
+
+**support beam.** A drawing-only beam from a supporter to its master's fire point as recorded
+at recruitment. It has no projectile and does no damage; the supporter then rearms
+(S-0518 claim 6).
+
+**support count.** A per-building whole number counting recruitments for the master's next
+shot, not necessarily distinct supporters. It scales that shot's area-damage input
+(S-0518 claims 4, 8, 9 and 10).
 
 **versus value.** The factor, a double-precision number, that a warhead gives one armour class,
 read from the warhead's versus list (S-0003, claim 13, which with Import mapping row C5 gives the
@@ -1780,9 +1826,30 @@ harvester's *load* in bales.
 attached. S-0405 owns the term (Terms) and what it changes in power (claim 5); S-0408 (claim 3)
 uses it. How the attaching starts and ends belongs to the special-abilities specs.
 
+**collector.** The object that picks up a crate by committing to a ground step into its cell,
+or by landing in it as a jumpjet (S-0520 claim 6).
+
 **counted building.** Ambiguous on its own. S-0405 (Terms, claim 3) counts the buildings whose power
 a house sums, and S-0414 (Terms, claim 4) the buildings that keep a house alive in its defeat
 tests; the two sets differ. A spec that uses the term says whose sense it means.
+
+**crate.** A cell holding an overlay with the crate flag. Its overlay data value is its
+contents: 0 … 18 name a fixed power-up; any other value means random contents
+(S-0520 claim 8).
+
+**crate area.** The objects whose table-root distance from the crate point (the cell centre at
+terrain surface height, without a bridge-deck lift) is strictly less than the crate radius. A building is measured to its reference point. S-0520 claims 15 and 19
+own the affected sets and distance rule; the relevant effect decides whether off-map objects
+qualify.
+
+**crate ownership counts.** Counts of objects in existence, including objects off the map and
+in production, with the exclusions and kind assignments of S-0520 claims 9, 10 and 13.
+They are not the on-map vehicle, infantry and aircraft counts used for defeat by
+S-0414 claims 3 and 4; in particular, buildings that count as vehicles enter the crate vehicle
+count, not defeat's on-map vehicle count.
+
+**crate places.** The scenario's 256 crate places, each holding at most one crate cell and its
+lifetime timer (S-0520 claim 1).
 
 **credit balance.** A house's own stock of credits, not counting resources held in storage (see
 *available credits*). S-0412 (claim 2) gives its starting value in a skirmish, S-0402 (claim 12)
@@ -1809,6 +1876,9 @@ switched off*. S-0405 owns it
 and its *power fraction*, a number from 0 to 1, which compare its *power output* with its *power
 drain*. S-0405 owns both (Terms, claim 4, Formulas F3); S-0403 (claim 5) uses the fraction, and
 S-0409 and S-0410 use low power.
+
+**power-up.** One of the nineteen crate effects, numbered 0 … 18, each with an imported
+weight, animation, water flag and argument (S-0520 claim 8).
 
 **power output, power drain.** What a building makes and what it needs, in power units (integers),
 and a house's sums of them. S-0405 owns both (Terms, claims 1 to 7); S-0403, S-0404, S-0408 and
