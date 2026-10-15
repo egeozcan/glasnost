@@ -3988,6 +3988,14 @@
           ],
           "default": null
         },
+        "default_spark_system": {
+          "description": "`[CombatDamage] DefaultSparkSystem`, a particle-system name: the drone\ndelivery's spark effect (S-0614 claim 9); absent-key default not\nestablished.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "disguise_detection_percent": {
           "description": "`[General] DisabledDisguiseDetectionPercent` (S-0309 claim 25 part g).",
           "type": [
@@ -4689,6 +4697,14 @@
               "type": "null"
             }
           ]
+        },
+        "wake": {
+          "description": "`[General] Wake`, an animation name: the grappling wakes (S-0614\nclaim 10; S-0312).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "wall_tower": {
           "description": "`WallTower`: the wall tower type (S-0112).",
@@ -8409,6 +8425,14 @@
             "type": "string"
           }
         },
+        "parasiteable": {
+          "description": "`Parasiteable`, the can-carry-a-parasite flag (S-0614 claim 2); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "passengers": {
           "description": "`Passengers`.",
           "type": [
@@ -8452,6 +8476,14 @@
         },
         "pushy": {
           "description": "`Pushy`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "reselect_if_limboed": {
+          "description": "`ReselectIfLimboed`, the re-select flag (S-0614 claim 19); absent: no.",
           "type": [
             "boolean",
             "null"
@@ -8786,6 +8818,14 @@
           ],
           "default": null
         },
+        "culling": {
+          "description": "`Culling`, the cull flag (S-0614 claim 11); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "debris_maximums": {
           "description": "`DebrisMaximums` (S-0303 F6).",
           "type": [
@@ -8894,6 +8934,23 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "paralyzes": {
+          "description": "`Paralyzes`, the paralysis length P in ticks (S-0614 claims 6, 7); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "parasite": {
+          "description": "`Parasite`, the parasite flag (S-0614 Terms); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "particle": {
@@ -9089,6 +9146,17 @@
           "format": "int32",
           "default": null
         },
+        "anim": {
+          "description": "`Anim`, animation names: the per-direction delivery animation\n(S-0614 claim 9); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "area_fire": {
           "description": "`AreaFire`.",
           "type": [
@@ -9181,6 +9249,14 @@
         },
         "is_sonic": {
           "description": "`IsSonic` (S-0301 claim 5, S-0302 claim 2).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "limbo_launch": {
+          "description": "`LimboLaunch`, the launch-inside flag (S-0614 Terms); absent: no.",
           "type": [
             "boolean",
             "null"

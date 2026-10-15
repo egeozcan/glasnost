@@ -2160,3 +2160,7 @@ mod combat_tests;
 #[cfg(test)]
 #[path = "sim_econ_tests.rs"]
 mod econ_tests;
+
+#[cfg(test)]
+#[path = "sim_parasite_tests.rs"]
+mod parasite_tests;

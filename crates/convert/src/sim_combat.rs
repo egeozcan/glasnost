@@ -130,6 +130,8 @@ pub(super) const UNIT_COMBAT: &[Row] = &[
         "S-0315",
     ),
     ("missile_spawn", "MissileSpawn", Bool, "S-0311"),
+    ("parasiteable", "Parasiteable", Bool, "S-0614"),
+    ("reselect_if_limboed", "ReselectIfLimboed", Bool, "S-0614"),
 ];
 
 /// Combat fields the Import mappings give for vehicle types only.
@@ -226,6 +228,8 @@ const WEAPON_COMBAT: &[Row] = &[
     ("supress", "Supress", Bool, "S-0309"),
     ("fire_once", "FireOnce", Bool, "S-0309"),
     ("reveal_on_fire", "RevealOnFire", Bool, "S-0409"),
+    ("limbo_launch", "LimboLaunch", Bool, "S-0614"),
+    ("anim", "Anim", Refs(Kind::Animations), "S-0614"),
 ];
 
 /// Combat fields of projectiles.
@@ -298,6 +302,9 @@ const WARHEAD_COMBAT: &[Row] = &[
     ("debris_maximums", "DebrisMaximums", Maxima, "S-0303"),
     ("airstrike", "Airstrike", Bool, "S-0308"),
     ("is_locomotor", "IsLocomotor", Bool, "S-0308"),
+    ("parasite", "Parasite", Bool, "S-0614"),
+    ("paralyzes", "Paralyzes", Int, "S-0614"),
+    ("culling", "Culling", Bool, "S-0614"),
 ];
 
 /// Combat fields of countries.
@@ -395,6 +402,20 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "AmmoCrateDamage",
         Int,
         "S-0303",
+    ),
+    (
+        "default_spark_system",
+        COMBAT_DAMAGE,
+        "DefaultSparkSystem",
+        Ref(Kind::ParticleSystems),
+        "S-0614",
+    ),
+    (
+        "wake",
+        GENERAL,
+        "Wake",
+        Ref(Kind::Animations),
+        "S-0614, S-0312",
     ),
     (
         "splash_list",
