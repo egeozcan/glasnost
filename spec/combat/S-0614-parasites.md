@@ -2,13 +2,13 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0621, Q-0622, Q-0623]
 supersedes: []
 ---
 
@@ -18,7 +18,8 @@ supersedes: []
 
 Skirmish parasite attachment, drone and grappling deliveries, hold effects, release and experience.
 S-0315 claims 6 and 7 own suppression by damage and healing; network games and campaigns are
-out of scope.
+out of scope. Claims 20 to 22 answer Q-0621 and Q-0623 and most of Q-0620; claim 18 answers
+Q-0622. The vehicle fallback after a failed position choice remains open.
 
 ## Terms
 
@@ -115,8 +116,8 @@ addition:
 
 4. **Failing to latch.** When the target is not latchable at detonation (a mobile target has died, been entered
    by another parasite, entered a tank bunker or left the map, or the shot was at a cell), the parasite does not latch. It comes back on the map at the centre of the cell it
-   last stood in before firing, facing map north (facing 0, S-0204), under the ordinary placement
-   rules for that cell. When it cannot be placed there, it is removed silently. Once placed, its
+   last stood in before firing, facing map north (facing 0, S-0204), under claim 20's placement
+   rules. The centre is the requested point; infantry may take a side position. When it cannot be placed there, it is removed silently. Once placed, its
    target and destination are cleared unless it has attack-move memory (S-0213, Terms), and it falls
    back to rest (S-0215, claim 13). It is not held.
    - Backing: `measurable` (scenario P3)
@@ -300,13 +301,13 @@ addition:
       parasite's (`quirks.parasite_exit_search_host_mobility`).
     - **The host-cell test.** The parasite comes out only when the **host's** cell, not the chosen
       cell, passes all of these (`quirks.parasite_exit_tests_host_cell`):
-      - the host is not in the air,
+      - the host is not in the air as defined by claim 22,
       - no building stands in the host's cell,
       - for a parasite that is not naval: the host's cell either has a bridge or has a land type
         other than water, rock or beach; and, when the parasite is a vehicle, the cell holds no
         terrain object such as a tree. A bridge bypasses only the land-type restriction.
-    - **Placement.** The parasite is placed at the centre of the chosen cell, facing the exit
-      direction, under the ordinary placement rules.
+    - **Placement.** The requested point is the centre of the chosen cell, facing the exit
+      direction, under claim 20's placement rules. Infantry may take a side position.
 
     When the search gives no cell, the host-cell test fails or the placement fails, the parasite is
     removed silently. Once out, the parasite's target and destination are cleared unless it has
@@ -336,18 +337,26 @@ addition:
       height when the host stood on a bridge. When the test fails, it is placed in the neighbour cell in
       the host's own 8-direction (in front of the host), unless the neighbour has land type water, rock or beach, the parasite is not naval,
       and the **host's cell** has no bridge. This fallback tests the host's bridge,
-      not the neighbour's (`quirks.parasite_host_loss_bridge_test`). A point within that cell is chosen
-      as for any placement.
-    - The placement skips the ordinary placement rules: the parasite may share a cell with any
-      other unit.
+      not the neighbour's (`quirks.parasite_host_loss_bridge_test`). The fallback makes the
+      occupant-aware centre-class position choice of S-0208 claim 3, reading the neighbour's
+      ground record, even for a vehicle parasite. It consumes one ranged scenario choice over
+      0 … 3 unless the vehicle-present or object-present refusal prevents it. An infantry
+      parasite takes the resulting side position; no position means silent removal. A vehicle
+      uses the resulting point's cell centre when the choice succeeds. Its result when that
+      choice fails is not established (Open questions).
+    - Final placement skips claim 20's entry-legality check, so the parasite may share a cell
+      with another unit. This does not bypass the fallback's earlier position choice. When the
+      host-cell test passes, an infantry parasite instead uses the host's position class
+      (S-0208 claim 2) without regard to occupants or a position-choice draw. Forced placement
+      makes no second occupant-aware choice after a successful fallback choice.
     - It faces the host's facing. Its target and destination are cleared unless it has attack-move
       memory, and it falls back to rest. Unlike claim 13, it is **not** held afterwards.
     - When no position is found, it is removed silently.
 
     This answers S-0315's open question on a host destroyed while it carries a parasite.
-    - Backing: `measurable` (scenario P5)
-    - Confidence: high (release on destruction, the suppression rule, no hold); medium (the
-      in-front cell, the skipped placement rules, the invulnerability exception)
+    - Backing: `measurable` (P5; P10 for fallback position choice and draws)
+    - Confidence: high (release on destruction, suppression, no hold, position choice and draws),
+      medium (the in-front cell, forced placement, the invulnerability exception)
 
 ### Experience
 
@@ -371,19 +380,96 @@ addition:
 
 ### Order within a tick
 
-18. **The parasite acts in its host's turn.** An attached parasite has no turn of its own: it acts
-    during its host's turn, at the host's place in the update order (S-0203, claim 3).
-    Its exact ordering relative to the host's movement is not established here. Two parasites therefore act in the order of their hosts, not
-    in their own order.
-    - Backing: `unmeasured` (the place within the host's turn shows only when two deliveries in one
-      tick interact, which no practical scenario isolates)
-    - Confidence: medium (the place within the host's turn)
+18. **The parasite acts late in its host's turn.** An attached parasite has no turn of its own:
+    deliveries and grappling events occur at the host's place in the update order (S-0203 claim 3).
+    Both kinds of self-healing (S-0314 claims 9 and 10), due behaviour processing (S-0215 claim 2)
+    and the host's ordinary locomotion update precede the parasite event. Two parasites therefore
+    act in host order, not their own order.
+
+    A hold first renewed by that event cannot prevent movement already taken in that turn.
+    Movement in the next turn sees the timer then remaining, subject to claim 8's exceptions.
+    A one-tick renewal can therefore expire before preventing any movement step.
+    A grapple's off-water check sees the cell reached by that turn's movement. Healing already
+    received can prevent a delivery from being lethal; no self-healing step remains after that
+    delivery in the same turn. A hit mark made by the delivery cannot change behaviour processing
+    that already happened.
+
+    There is not one common firing step for every kind of host. The ordinary separate firing
+    update of infantry and vehicles follows the parasite event, so a newly renewed hold already
+    refuses an organic host's otherwise legal shot. Shots made by behaviour processing instead
+    precede it, including aircraft attack-run shots (S-0501 claims 13 and 14); those shots are not undone.
+    This claim does not reorder a shot or release caused immediately by another event.
+    - Backing: `measurable` (P12; P6 for movement before the off-water check)
+    - Confidence: high
 
 19. **Re-selection after release.** A locally owned parasite with the imported re-select flag
     that was selected when it fired is selected again after a successful release by claim 13 or 15.
     The original remembers selection only for an infantry-targeted shot, a display-only selection
     glitch; our engine remembers it for every target, without a quirk switch.
     - Backing: `measurable` (P9)
+    - Confidence: high
+
+20. **Ordinary placement of a returning parasite.** Claims 4 and 13 attempt placement in
+    exactly the specified cell. Refusal does not search another cell, wait for occupants, push
+    them away or attack an obstruction: the parasite is removed silently. Claim 13's nearby-cell
+    search occurs before this attempt, not as a retry after it.
+
+    For infantry and vehicle parasites, acceptance requires the entry outcome to be *clear*:
+    S-0209 claims 4 and 5 own overlay, occupant and occupancy outcomes, with the terrain rules
+    of S-0211 claim 10. The placement asks without an approach direction or source elevation.
+    Its entry test reads ground occupants and ground occupancy, not a deck record inferred from
+    the parasite's former bridge state. Every non-clear outcome refuses immediately. Thus an
+    ordinary stationary allied vehicle and an ordinary enemy vehicle both refuse a non-crushing
+    vehicle parasite's return, despite different entry outcomes. A normal building, tree or
+    intact wall also refuses such a vehicle. There is no extra blanket ban on all buildings or
+    units: entry-table exceptions still apply. An enemy infantry unit crushable by the returning
+    vehicle can give *clear*, unlike allied stationary infantry.
+
+    A vehicle uses the requested centre. For infantry requested at terrain height inside the
+    usable area, the occupant-aware position choice of S-0208 claim 3 is also required, with
+    the requested centre as desired point and the ground occupancy record. One ranged scenario
+    choice over 0 … 3 selects a row of that claim's table O; it does not try positions 0 through
+    4 numerically. Only right, left and bottom can be selected. Vehicle and object-present
+    refusals precede the draw; otherwise a failed choice still consumes it. No free side position
+    means failure even if centre or top is free. A tree can prevent the choice through its
+    position marks rather than its mere presence. Position choice precedes entry acceptance:
+    its draw is retained even if entry then refuses. The cited tables already exist; this claim
+    supplies their placement use, not new occupant precedence.
+    - Backing: `measurable` (P10)
+    - Confidence: high (single attempt, clear-only acceptance, position choice); medium
+      (entry-table application to uncommon building and crushing exceptions)
+
+21. **A carrying projectile removed without detonation.** When the projectile of claim 1 is
+    removed without detonating, including leaving the legal map under S-0306 claim 19,
+    its parasite does not attempt a latch or return to its firing cell. It remains off the map,
+    unattached and unable to act; no recovery timer starts. Projectile removal does not itself
+    kill the parasite, give kill experience, play its death effects or place a replacement unit.
+    The same result applies to another removal that ends the carrying projectile without a
+    detonation, provided no separate effect removes the parasite itself. A detonation that fails
+    to latch remains claim 4, a different outcome.
+    This is `quirks.parasite_carrier_loss_strands_unit` (default original); with it off, carrier
+    removal without detonation instead attempts claim 4's failed-latch return.
+    - Backing: `measurable` (P11 for map-border removal); `unmeasured` for other removal causes:
+      no distinct normal-action setup is established here that removes such a projectile without
+      detonation or separately removing its firer
+    - Confidence: high
+
+22. **The host-cell air test.** In claims 13 and 15, an ordinary infantry or vehicle host is
+    in the air exactly when it is on the map and its integer height above the surface is at
+    least 208 leptons. There is no fractional rounding. Height subtracts terrain height at its
+    position, and also subtracts 416 leptons when marked as standing on a high bridge. A host
+    standing on that deck therefore has height 0 above the surface and does not fail merely
+    because its world height is high.
+
+    This is S-0307's airborne test, not a locomotor's moving or flying state. A jumping, falling
+    or lifted host passes or fails by current height and bridge mark: rising at 207 leptons
+    does not reject it, and 208 does. Being carried is not another rejection: an off-map host
+    gives no in-the-air answer, though its map loss has already triggered claim 15. For aircraft,
+    use S-0501 claim 18's in-the-air answer, including its two exceptional missile types, as
+    S-0307 claim 26 already specifies. Do not add S-0501's separate in-flight test. Passing the
+    air test does not waive other host-cell restrictions or placement.
+    - Backing: `measurable` (P13); `unmeasured` for an attached exceptional missile host:
+      no normal-action fixture that latches onto one and releases it is established
     - Confidence: high
 
 ## Formulas
@@ -468,7 +554,8 @@ Same precision and rounding as S-0311 F3.
 |---|---|---|
 | on the map, armed with a latching weapon | fires at a target (claim 5 allows it) | off the map, inside the projectile; mobile target's latch block set to now + 20 |
 | inside the projectile | the projectile detonates; its target is latchable | attached to the target (claim 3) |
-| inside the projectile | the projectile detonates; its target is not latchable, or is a cell | placed back at its last cell, facing north, not held (claim 4); removed silently when that fails |
+| inside the projectile | the projectile detonates; its target is not latchable, or is a cell | placement attempted in its last cell, facing north, not held (claims 4 and 20); removed silently when that fails |
+| inside the projectile | projectile removed without detonation | stranded off the map, unattached (claim 21) |
 | attached (drone) | the host's turn, delivery due | delivery (claim 6); host held for *P* |
 | attached (grappling) | the host's turn | host held for *P*; the cycle advances (table G), or leaves when the host's cell is not water |
 | attached | a way of claim 12 | removed silently, or exits by claim 13 and is held for 3 × *R* (not held after a cull or leaving because the host's cell is not water) |
@@ -485,8 +572,9 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 | strike (one tick) | host tilt 0; three splash effects; cull test (F6) | cull: the parasite leaves, not held afterwards (claim 11); otherwise the hit, then, when the host still has the parasite, a push phase starts in the same tick | 3 × (range 0 … 1, range 0 … *n* − 1) before the test; 1 (range 0 … 1) and six wake-displacement choices after a hit that leaves the attachment intact |
 
 **Ordering consequences.**
-- A parasite acts in its host's turn (claim 18). When two drone parasites' deliveries fall in the
-  same tick, the host that comes earlier in the update order is damaged first.
+- A parasite acts late in its host's turn (claim 18), after due healing, behaviour processing
+  and movement. When two drone parasites' deliveries fall in the same tick, the host that comes
+  earlier in the update order is damaged first.
 - A sonic or healing hit releases a parasite before the hit's own health change (claim 12, supplementing S-0315 claim 7), so a sonic
   hit that also kills the host frees the parasite by claim 13, not claim 15, when it was not
   suppressed.
@@ -495,6 +583,10 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
   refused from the next firing check onward.
 
 ## Edge cases and quirks
+
+- **`quirks.parasite_carrier_loss_strands_unit`** (default original): claim 21 strands a parasite
+  off the map when its carrying projectile is removed without detonating. Off: attempt claim 4's
+  failed-latch return, including silent removal when placement fails.
 
 - **`quirks.parasite_exit_search_host_mobility`** (default on): the search for an exit cell uses
   the host's locomotion class and movement zone, not the parasite's. A drone parasite leaving a
@@ -541,6 +633,8 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 | rules, any mobile section | `Trainable` | boolean | trainable (claim 16) | yes |
 | rules, any mobile section | `SuppressionThreshold` | integer | S-0315 | 0 |
 | rules, any mobile section | `ReselectIfLimboed` | boolean | the re-select flag: re-selection on exit (presentation) | no |
+| rules, mobile type section | `SpeedType`, `MovementZone`, `Locomotor` | class name, zone name, locomotor identifier | placement mobility (claim 20); interpretation owned by S-0211 claim 10 and S-0207 claim 14 | as S-0211 and S-0207 |
+| none | none | not imported | within-host-turn order (claim 18), carrier loss (claim 21), air threshold (claim 22), placement options (claims 15 and 20) | fixed engine behaviour; no separate INI setting |
 | rules `[AudioVisual]` | `ConditionRed`, `ConditionYellow` | ratio (S-0003) | red and yellow ratios (F6) | as S-0111 |
 | rules `[General]` | `VeteranRatio`, `VeteranCap` | as S-0311 | F5 | as S-0311 |
 | rules `[CombatDamage]` | `SplashList` | list of animation names | the splash effects and the size *n* of claim 10 | as S-0303 |
@@ -678,7 +772,64 @@ For every part, a result different from its stated expectation falsifies that pa
   selection remembered only for infantry targets; our corrected presentation remembers every
   target. The correction itself is a design rule, not an oracle expectation.
 
+- **P10, returning placement (claims 4, 13, 15 and 20; Q-0620).** Use P3's failed latch,
+  first with a vehicle parasite and then a named infantry-parasite map variant. During flight
+  occupy the original cell with an allied vehicle, enemy vehicle, allied infantry, enemy
+  infantry, tree, wall and ordinary building, separately. Keep an adjacent cell clear. Record
+  position, removal and scenario-stream state. Expected: claim 20's clear-only acceptance,
+  never a retry in the adjacent cell, waiting or obstruction attack. A named crusher variant
+  separates enemy crushable infantry from allied infantry. Record occupant health before any
+  later parasite turn to distinguish placement from later crushing.
+  For infantry, vary ground side-position marks from none to all three, leaving centre and top
+  free; expected table O's selected free side position or removal, not numeric position order.
+  Record the draw even on a later entry refusal. Repeat on a high bridge with ground and deck
+  blockers separately: expected the ground-record entry test. Repeat sonic release to exercise
+  claim 13's final placement separately from its earlier search. For host loss arrange a rejected
+  host cell and a valid front neighbour, with zero, one and two occupied side positions, then
+  all three for infantry. Expected: ground-record centre-class choice before forced placement,
+  one draw when not flag-refused, vehicle centre after a successful choice, infantry side
+  position or removal when no position is available. The all-three-taken vehicle case is
+  exploratory, not an established expectation; record it to resolve the remaining question.
+- **P11, loss of the carrier (claim 21; Q-0621).** A named map variant gives a drone parasite
+  an inaccurate non-steering projectile and a distant moving enemy at a legal map border.
+  Keep its firing cell and neighbours clear. Record projectile position, detonation, parasite
+  map presence, health and kill experience for 300 ticks after removal. Collect three shots
+  that cross the legal border without detonating. Expected: no return or attachment, unchanged
+  parasite health, no death effects or experience award, no recovery. Distinguish an extant
+  off-map parasite from silent removal with the recorder. Return or deletion falsifies the
+  claim. A control detonation on a non-latchable target instead returns under claim 4.
+- **P12, within-host-turn order (claim 18; Q-0622).** Named P1 map variants give the host
+  self-healing, survivable drone damage, and paralysis length shorter than delivery interval.
+  Arrange a delivery on a healing tick at full strength: expected final health is strength
+  minus the resolved hit, not that amount plus a later heal. Repeat with only house-wide healing.
+  Record health, hold and position on a pre-ordered straight drive. On a delivery after a
+  hold-free gap, expected movement that turn followed by hold; discard turns already held at
+  their start. Give an organic vehicle an otherwise-ready shot due that turn: expected refusal
+  after renewal. Repeat with an aircraft executing a due attack-run shot during behaviour
+  processing: expected the earlier shot is not cancelled. For behaviour order arrange a due
+  processing that chooses a random delay and the drone rocking choice in one turn. Isolated
+  controls account for all other effect draws; expected behaviour choice before parasite choice.
+  The recorder logs per-turn health, movement, shots and stream state. Opposite ordering falsifies
+  the corresponding part. P6's zero-hold off-water run expects release on the turn movement first
+  reaches dry terrain, not one turn later.
+- **P13, air threshold (claims 13, 15 and 22; Q-0623).** Named P4 map variants provide
+  latchable jumpjet-infantry, hover-vehicle and ordinary aircraft hosts. Release with nonlethal
+  sonic hits on ground, on a high-bridge deck and during ascent or descent. Record map presence,
+  world and terrain heights, bridge mark and parasite fate. Obtain three releases below 208
+  leptons and three at or above it; include exact 207 and 208 where normal movement reaches them.
+  Keep other host-cell tests passing and exit cells clear. Expected: release below 208, silent
+  removal at or above 208; a deck-standing host does not fail this test. An ordinary aircraft
+  in flight but below 208 still passes. Repeat host removal at matched heights: claim 15 chooses
+  direct versus fallback placement with this air answer, rather than forbidding both. Include
+  falling or lifted hosts where reachable; motion labels alone do not change the answer. Record
+  transport entry separately, expecting host-loss handling rather than another carried-state air
+  rejection. Any different classification falsifies claim 22.
+
 ## Open questions
+
+- Q-0620: a vehicle parasite's host-loss fallback when occupant-aware position choice supplies
+  no point. Successful choice gives the cell centre, but the failed-choice conversion is not
+  safely specified. P10 includes an exploratory run.
 
 - Whether creating the spark effect, the delivery animation, the wakes or the splash animations draws
   from the scenario random stream besides the draws listed in claims 9 and 10.

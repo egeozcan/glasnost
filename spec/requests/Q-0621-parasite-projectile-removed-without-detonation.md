@@ -1,9 +1,9 @@
 ---
 id: Q-0621
 title: What happens to a parasite whose projectile is removed without detonating?
-status: open
+status: answered
 related: [S-0614, S-0306]
-answered-by: []
+answered-by: [S-0614]
 ---
 
 ## Need

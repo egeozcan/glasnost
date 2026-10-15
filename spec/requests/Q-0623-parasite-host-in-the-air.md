@@ -1,9 +1,9 @@
 ---
 id: Q-0623
 title: What counts as a host "in the air" in the parasite host-cell test?
-status: open
+status: answered
 related: [S-0614, S-0307, S-0501]
-answered-by: []
+answered-by: [S-0614]
 ---
 
 ## Need

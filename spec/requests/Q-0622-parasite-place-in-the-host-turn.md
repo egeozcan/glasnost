@@ -1,9 +1,9 @@
 ---
 id: Q-0622
 title: Where within its host's turn does an attached parasite act?
-status: open
+status: answered
 related: [S-0614, S-0203, S-0314, S-0215]
-answered-by: []
+answered-by: [S-0614]
 ---
 
 ## Need
