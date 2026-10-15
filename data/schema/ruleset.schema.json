@@ -6944,6 +6944,11 @@
           "type": "boolean",
           "default": true
         },
+        "cloak_field_building_interrupt": {
+          "description": "A growing or shrinking cloak field stops its update after an own building's newly changed centre cell; off: each circle is applied in full.",
+          "type": "boolean",
+          "default": true
+        },
         "cloak_field_overlap_loss": {
           "description": "Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it.",
           "type": "boolean",
@@ -7686,6 +7691,11 @@
         },
         "missing_sample_silences_entry": {
           "description": "One sample missing from the audio archive silences the whole sound entry; off: the missing sample is left out of the list and the rest play.",
+          "type": "boolean",
+          "default": true
+        },
+        "mobile_sensor_removal_centre": {
+          "description": "A mobile sensor leaving play removes its disc around its current cell; off: around the cell where it was last added.",
           "type": "boolean",
           "default": true
         },

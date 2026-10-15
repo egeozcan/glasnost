@@ -1387,6 +1387,14 @@ pub struct Quirks {
     // spec: S-0516 claim 20, Edge cases
     #[serde(default = "on")]
     pub cloak_field_overlap_loss: bool,
+    /// A growing or shrinking cloak field stops its update after an own building's newly changed centre cell; off: each circle is applied in full.
+    // spec: S-0516 claim 20, Edge cases
+    #[serde(default = "on")]
+    pub cloak_field_building_interrupt: bool,
+    /// A mobile sensor leaving play removes its disc around its current cell; off: around the cell where it was last added.
+    // spec: S-0516 claim 22, Edge cases
+    #[serde(default = "on")]
+    pub mobile_sensor_removal_centre: bool,
     /// The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
@@ -2044,6 +2052,8 @@ impl Default for Quirks {
             uncloak_from_cloaking_full_duration: true,
             building_sensor_ring_owner_only: true,
             cloak_field_overlap_loss: true,
+            cloak_field_building_interrupt: true,
+            mobile_sensor_removal_centre: true,
             mirage_adjacent_check_cadence: true,
             sensor_array_removal_radius: true,
             sensor_building_activation_once: true,
@@ -2965,6 +2975,14 @@ impl Quirks {
                 self.building_sensor_ring_owner_only,
             ),
             ("cloak_field_overlap_loss", self.cloak_field_overlap_loss),
+            (
+                "cloak_field_building_interrupt",
+                self.cloak_field_building_interrupt,
+            ),
+            (
+                "mobile_sensor_removal_centre",
+                self.mobile_sensor_removal_centre,
+            ),
             (
                 "mirage_adjacent_check_cadence",
                 self.mirage_adjacent_check_cadence,
