@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -260,10 +260,15 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     from its *current occupant*: the occupant at the building's occupant index. The occupant index starts at
     0 and moves to the next occupant, in the order the building holds them, after each successful
     non-disc-laser shot (wrapping to 0 after the last). A disc-laser shot does not advance it,
-    so successive such shots use the same occupant. It returns to 0 when the building is emptied
-    by occupants leaving or being killed (S-0313 claim 6); this is not a rule for an individual
-    departure or death while other occupants remain. A refused firing attempt or void shot does
-    not advance it (S-0301 claim 15).
+    so successive such shots use the same occupant. An eviction or clearing action resets the
+    index to 0 before any occupant is released or removed (S-0508 claim 18), not only when the
+    last occupant goes. An additional entry appends an occupant without changing the index.
+    S-0311 claim 15 describes a distinct individual removal during scenario set-up: remaining
+    occupants keep their relative order and the numeric index is unchanged, without reduction
+    modulo the new count. This does not establish an independent selective departure or death
+    during normal skirmish play; releases or removals within an eviction or clearing action
+    already have the action-start reset. A refused firing attempt or void shot does not
+    advance it (S-0301 claim 15).
     The weapon is:
     - for an elite occupant: its type's elite occupying weapon if the type has one, and otherwise
       the weapon in the occupant's own slot 0 (with claim 2),
@@ -274,13 +279,17 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     fires its own primary, not the occupying weapon (`quirks.elite_occupant_skips_occupy_weapon`).
     S-0313 (claim 6) owns this shared index, called the muzzle index there.
     - Backing: `measurable` for slot 0 (scenario W9, parts a, b and e; S-0313 P5 part b for the disc-laser
-      exception; W9 part f for the reset after evacuation). Reset after occupants are killed and
-      unchanged index on a refused or void attempt are `unmeasured` here: these parts do not
-      isolate killing occupants from other building changes, or an unsuccessful launch between
-      distinguishable occupants. Index effects of an individual departure or death while others
-      remain are not established here. Occupant substitution in
-      other slots is `unmeasured`: these garrison parts choose only slot 0 for their shots.
-    - Confidence: high for the rotation and the weapon rule; medium for the order of occupants
+      exception; W9 part f for the reset after evacuation; S-0508 scenario G14 for completed
+      clearing, reoccupation and index retention on an additional entry). Reset before the first
+      release or removal is `unmeasured`: these actions finish within one tick and no validated
+      fixture observes a shot between their individual releases or removals. Individual set-up
+      removal is `unmeasured`, as S-0311 claim 15 explains. Unchanged index on a refused or void
+      attempt is `unmeasured` here: these parts do not isolate an unsuccessful launch between
+      distinguishable occupants. No prediction is made for an unestablished independent
+      selective gameplay removal. Occupant substitution in other slots is `unmeasured`: these
+      garrison parts choose only slot 0 for their shots.
+    - Confidence: high for the rotation, weapon rule, whole-building action reset and additional
+      entry; medium for the order of occupants and individual set-up removal
 
 ### Other uses of the weapons
 
@@ -461,7 +470,9 @@ number unchanged.
 | a successful shot leaves the building, other than a disc-laser shot | index = (index + 1) mod occupant count |
 | a disc-laser shot leaves the building | index unchanged |
 | a firing attempt is refused or its shot is void | index unchanged |
-| the building is emptied by occupants leaving or being killed | index = 0 |
+| an eviction or clearing action starts (S-0508 claim 18) | index = 0 before any release or removal |
+| an additional occupant enters (S-0508 claim 18) | index unchanged; entrant appended |
+| an individual occupant is removed during scenario set-up (S-0311 claim 15) | index unchanged; remaining occupants keep relative order |
 
 Ordering: none of its own. The choice is made each time a rule asks for it, with the state at that
 moment (for example the gattling stage and the deployed state of the same tick). S-0609 claims
@@ -827,11 +838,11 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 
 - Which states make an aircraft a kamikaze aircraft (row 12): owned by the aircraft specs.
 - S-0508 claim 5 gives entry order for the occupant list; W9 tests the resulting firing order.
-  The index effect of an individual departure or death while other occupants remain is not
-  established here. Claim 13's reset applies when the building is emptied, as S-0313 claim 6
-  states. S-0311's Terms must narrow their reset wording to the same empty-building condition.
-- What a new occupant's entry does to the occupant index of a garrisoned building (claim 13 and its
-  state table give only shots and departures): whether the index keeps its value or returns to 0.
+  An independent selective departure or death while other occupants remain during normal
+  skirmish play, outside S-0508 claim 18's whole-building actions, is not established here.
+  S-0311 claim 15's limited set-up removal is not evidence of such a gameplay event. No index
+  repair or safe experience-recipient rule for an out-of-range retained index is inferred.
+  An additional entry retains the index (S-0508 claim 18); that former question is resolved.
 - The rearm-countdown transfer of claim 6, restarted from slot 7, remains low confidence
   pending W4 part g. Temporal beam transfer and exit release agree with S-0514 claims 9,
   10 and 14.
