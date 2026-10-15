@@ -89,10 +89,11 @@ pub struct Session {
     sized: bool,
     centre: (i32, i32),
     filter: Filter,
-    /// Decoded icon frames by type (S-0007 claims 22 and 25).
-    icons: BTreeMap<TypeRef, IndexedImage>,
+    /// Decoded icon frames by type and superweapon (S-0007 claims 22, 25
+    /// and 31).
+    icons: BTreeMap<hud::Entry, IndexedImage>,
     /// Sprite ids of the registered icons.
-    icon_ids: BTreeMap<TypeRef, u32>,
+    icon_ids: BTreeMap<hud::Entry, u32>,
     /// The icon palette's RGBA (S-0103 claim 13).
     icon_palette: Option<[u8; 1024]>,
     pointer: Option<Point>,
@@ -508,7 +509,12 @@ impl Session {
 
     /// The icon frame read for type `t` (palette indices), for checks.
     pub fn icon(&self, t: TypeRef) -> Option<&IndexedImage> {
-        self.icons.get(&t)
+        self.icons.get(&hud::Entry::Type(t))
+    }
+
+    /// The icon frame read for superweapon type `sw`, for checks.
+    pub fn sw_icon(&self, sw: u32) -> Option<&IndexedImage> {
+        self.icons.get(&hud::Entry::Superweapon(sw))
     }
 
     /// Registers the icon frames with the painter (once per game).
@@ -667,7 +673,8 @@ impl Session {
                 let l = Layout::new(self.screen);
                 if let Some(cell) = self.radar.as_ref().and_then(|r| {
                     r.cell_at(&self.play.game.world, p.x - l.radar.x, p.y - l.radar.y)
-                }) {
+                }) && !self.play.click_radar(cell)
+                {
                     let (x, y) = glasnost_render::projection::cell_centre(cell.x, cell.y);
                     self.set_centre(project_lifted(x, y, 0));
                 }
@@ -770,10 +777,18 @@ impl Session {
         };
         // spec: S-0214 claim 21 (table C's shrouded column, for a shrouded target) and S-0409 Terms (shrouded: not explored by the house)
         let shrouded = !glasnost_sim::econ::shroud::explored(w, local, tc);
-        let offer = match self.play.tool {
+        let tool = match self.play.tool {
+            // spec: S-0513 claim 1 (while units are selected, the cursor offers their actions, not the superweapon's)
+            Tool::Superweapon { .. } if !self.play.selection.is_empty() => Tool::Select,
+            t => t,
+        };
+        let offer = match tool {
             // Placement hover images belong to S-0406's placement display
             // (S-0214 Open questions): the system pointer stays.
             Tool::Place(_) => return None,
+            // The superweapon aim images are not specified (Q-0742): the
+            // system pointer stays.
+            Tool::Superweapon { .. } => return None,
             Tool::Mode(m) => {
                 // spec: S-0214 claims 13 and 21 (the sidebar modes' offers and their images in table C)
                 let ok = modes::order(w, local, m, on).is_some();
@@ -987,7 +1002,7 @@ impl Session {
         let name = |t: TypeRef| live::type_name(&rules, t.kind, t.index);
         let ids = &self.icon_ids;
         let icons = &self.icons;
-        let art = |t: TypeRef| {
+        let art = |t: hud::Entry| {
             let id = *ids.get(&t)?;
             let img = icons.get(&t)?;
             Some((id, 0, img.width() as i32, img.height() as i32))
@@ -1095,7 +1110,19 @@ fn icon_rgba(p: &[u16; 256]) -> [u8; 1024] {
     out
 }
 
-async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<TypeRef, IndexedImage> {
+/// The first frame of an icon file on its canvas, when it decodes to a
+/// non-empty image.
+async fn icon_frame(vfs: &Vfs, file: &str) -> Option<IndexedImage> {
+    let r = vfs.resolve(file)?;
+    let bytes = vfs.read_resolved(&r).await.ok()?;
+    // frame 0 on its canvas (interim, Q-0275)
+    Shp::parse(&bytes)
+        .ok()
+        .and_then(|s| s.decode_on_canvas(0).ok())
+        .filter(|i| i.width() > 0 && i.height() > 0)
+}
+
+async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<hud::Entry, IndexedImage> {
     let mut out = BTreeMap::new();
     let Some(rules) = loaded.rules.as_deref() else {
         return out;
@@ -1141,8 +1168,23 @@ async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<TypeRef, IndexedImag
                 .and_then(|s| s.decode_on_canvas(0).ok())
                 .filter(|i| i.width() > 0 && i.height() > 0)
             {
-                out.insert(TypeRef { kind, index }, img);
+                out.insert(hud::Entry::Type(TypeRef { kind, index }), img);
             }
+        }
+    }
+    for (i, t) in rules.superweapons.types.iter().enumerate() {
+        // spec: S-0007 claim 31 (the sidebar icon name, the type name by default, ‖ .shp; no theater handling or generic fallback)
+        let name = t.sidebar_image.as_deref().unwrap_or(&t.name);
+        // spec: S-0007 claim 31 (cut to 24 bytes)
+        let cut = &name.as_bytes()[..name.len().min(24)];
+        let file = format!("{}.shp", String::from_utf8_lossy(cut));
+        // spec: S-0007 claim 31 (an unresolved file uses the placeholder XXICON.SHP, as for the main icon)
+        let img = match icon_frame(vfs, &file).await {
+            Some(img) => Some(img),
+            None => icon_frame(vfs, "XXICON.SHP").await,
+        };
+        if let Some(img) = img {
+            out.insert(hud::Entry::Superweapon(i as u32), img);
         }
     }
     out

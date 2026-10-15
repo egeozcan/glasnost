@@ -23,11 +23,74 @@ pub const CAMEO: (i32, i32) = (68, 52);
 /// The number of sidebar tabs (S-0411 claim 1).
 pub const TABS: usize = 4; // spec: S-0411 claim 1 (four tabs)
 
+/// What a sidebar icon stands for: a build type, or a superweapon record
+/// of the house (S-0004 claim 11: a superweapon icon is an entry of a tab).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Entry {
+    /// A build type.
+    Type(TypeRef),
+    /// A superweapon type, by its position in the type list.
+    Superweapon(u32),
+}
+
+/// The tab of the superweapon icons (S-0004 claim 11: the second tab).
+pub const SW_TAB: usize = 1; // spec: S-0004 claim 11 (superweapons go to the 2nd tab)
+
+/// The house's granted superweapon records in icon order (S-0512 claim 16:
+/// the sidebar shows each granted record; S-0004 claim 11 rule 1:
+/// superweapons sort by recharge time in ticks, shortest first). Display
+/// names compare equal, as in the simulation's own icon sort (a seam of
+/// rule 6), so equal times keep the newest grant first.
+pub fn superweapons(w: &World, house: HouseId) -> Vec<u32> {
+    let Some(hs) = w.sw.houses.get(usize::from(house.0)) else {
+        return Vec::new();
+    };
+    let types = &w.rules().superweapons.types;
+    let newest_first = w.rules().quirks.sidebar_tie_newest_first;
+    let mut v: Vec<(i32, i64, u32)> = hs
+        .records
+        .iter()
+        .enumerate()
+        .filter(|(i, r)| r.granted && *i < types.len())
+        .map(|(i, r)| {
+            let seq = r.seq as i64;
+            // spec: S-0004 claim 11 rule 6 (equal names: the newly added item first; quirks.sidebar_tie_newest_first)
+            let seq = if newest_first { -seq } else { seq };
+            // spec: S-0004 claim 11 rule 1 (two superweapons sort by recharge time in ticks, shortest first)
+            (types[i].charge, seq, i as u32)
+        })
+        .collect();
+    v.sort();
+    v.into_iter().map(|(_, _, i)| i).collect()
+}
+
+/// The icons of tab `tab` of `house`: on the superweapon tab its
+/// superweapons first (S-0004 claim 11 rule 1: a superweapon sorts before
+/// anything that is not one), then the build icons in the house's order.
+pub fn entries(w: &World, house: HouseId, tab: usize) -> Vec<Entry> {
+    let mut v: Vec<Entry> = if tab == SW_TAB {
+        superweapons(w, house)
+            .into_iter()
+            .map(Entry::Superweapon)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    if let Some(icons) = w
+        .houses
+        .get(usize::from(house.0))
+        .and_then(|h| h.econ.tech.icons.get(tab))
+    {
+        v.extend(icons.iter().map(|c| Entry::Type(c.t)));
+    }
+    v
+}
+
 /// One build icon as the sidebar draws it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CameoView {
-    /// The type.
-    pub t: TypeRef,
+    /// What the icon stands for.
+    pub entry: Entry,
     /// The type's name.
     pub name: String,
     /// Its price to the house (S-0404).
@@ -46,6 +109,12 @@ pub struct CameoView {
     /// The icon's art: sprite id, frame and size, when the player's files
     /// have it (S-0007 claims 22 and 25).
     pub art: Option<(u32, u32, i32, i32)>,
+    /// A superweapon's charging progress, its clock stage 0 … 53 of 54,
+    /// shown while it is not ready (S-0512 claim 16, F3).
+    pub charge: Option<i32>,
+    /// A drain-mode superweapon's *charging* or *active* label (S-0512
+    /// claim 16).
+    pub state: Option<&'static str>,
 }
 
 /// One tab button.
@@ -59,6 +128,17 @@ pub struct TabView {
     /// The tick whose sidebar update started the tab's current flash
     /// (S-0411 claim 11); kept by the client.
     pub flash_start: Option<i32>,
+    /// The tab holds a ready superweapon in its flash window (S-0411
+    /// claim 11, S-0512 claim 17).
+    pub sw_ready: bool,
+}
+
+impl TabView {
+    /// Whether the tab has a ready subject that makes it flash (S-0411
+    /// claim 11).
+    pub fn flashes(&self) -> bool {
+        self.waiting || self.sw_ready
+    }
 }
 
 /// Whether a tab whose flash started at tick `t` shows lit at tick `u`
@@ -128,15 +208,13 @@ pub struct HudModel {
 /// The tab to show (S-0411 claim 2): the current one while it has icons,
 /// otherwise the first tab with icons.
 pub fn shown_tab(w: &World, house: HouseId, current: usize) -> usize {
-    let Some(h) = w.houses.get(usize::from(house.0)) else {
-        return current;
-    };
-    let icons = &h.econ.tech.icons;
-    if icons.get(current).is_some_and(|v| !v.is_empty()) {
+    if !entries(w, house, current).is_empty() {
         return current;
     }
     // spec: S-0411 claim 2 (the shown tab without icons: switch to the first tab with icons)
-    icons.iter().position(|v| !v.is_empty()).unwrap_or(current)
+    (0..TABS)
+        .find(|&i| !entries(w, house, i).is_empty())
+        .unwrap_or(current)
 }
 
 /// Reads the sidebar of `house` from the world. `credits` is the counter's
@@ -147,7 +225,7 @@ pub fn model(
     shown: usize,
     credits: i32,
     name: &dyn Fn(TypeRef) -> String,
-    art: &dyn Fn(TypeRef) -> Option<(u32, u32, i32, i32)>,
+    art: &dyn Fn(Entry) -> Option<(u32, u32, i32, i32)>,
 ) -> HudModel {
     let mut m = HudModel {
         credits,
@@ -162,33 +240,66 @@ pub fn model(
     m.power = (h.econ.power.output, h.econ.power.drain);
     m.meter = power_meter(w, house);
     m.radar = glasnost_sim::econ::radar::available(w, house);
-    for (i, icons) in h.econ.tech.icons.iter().enumerate().take(TABS) {
-        m.tabs[i].count = icons.len();
+    use glasnost_sim::superweapons::charge::{self, Label};
+    for i in 0..TABS {
+        let es = entries(w, house, i);
+        m.tabs[i].count = es.len();
         // spec: S-0411 claim 11 (a done building or defence waiting for placement flashes its tab; tabs 1 and 2 feed those lines, claim 1)
         m.tabs[i].waiting = i < 2
-            && icons
-                .iter()
-                .any(|c| sidebar::icon_state(w, house, c.t).is_some_and(|s| s.ready));
-    }
-    if let Some(icons) = h.econ.tech.icons.get(m.shown) {
-        m.cameos = icons
+            && es.iter().any(|e| {
+                matches!(e, Entry::Type(t) if sidebar::icon_state(w, house, *t).is_some_and(|s| s.ready))
+            });
+        // spec: S-0411 claim 11 and S-0512 claim 17 (a ready superweapon inside its flash window flashes its tab)
+        m.tabs[i].sw_ready = es
             .iter()
-            .map(|c| {
-                let state = sidebar::icon_state(w, house, c.t);
+            .any(|e| matches!(e, Entry::Superweapon(k) if charge::flashing(w, house, *k)));
+    }
+    let types = &w.rules().superweapons.types;
+    m.cameos = entries(w, house, m.shown)
+        .into_iter()
+        .map(|e| match e {
+            Entry::Type(t) => {
+                let state = sidebar::icon_state(w, house, t);
                 CameoView {
-                    t: c.t,
-                    name: name(c.t),
-                    price: production::price(w, house, c.t),
-                    darkened: sidebar::darkened(w, house, c.t),
+                    entry: e,
+                    name: name(t),
+                    price: production::price(w, house, t),
+                    darkened: sidebar::darkened(w, house, t),
                     stage: state.map(|s| s.stage),
                     ready: state.is_some_and(|s| s.ready),
                     on_hold: state.is_some_and(|s| s.on_hold),
-                    queued: sidebar::queue_count(w, house, c.t),
-                    art: art(c.t),
+                    queued: sidebar::queue_count(w, house, t),
+                    art: art(e),
+                    charge: None,
+                    state: None,
                 }
-            })
-            .collect();
-    }
+            }
+            Entry::Superweapon(k) => {
+                let label = charge::label(w, house, k);
+                let ty = types.get(k as usize);
+                let ready = charge::get(w, house, k).is_some_and(|r| r.ready);
+                let drain = ty.is_some_and(|t| t.drain);
+                CameoView {
+                    entry: e,
+                    name: ty.map_or_else(String::new, |t| t.name.clone()),
+                    price: 0,
+                    darkened: false,
+                    stage: None,
+                    ready: label == Label::Ready,
+                    on_hold: label == Label::OnHold,
+                    queued: None,
+                    art: art(e),
+                    // spec: S-0512 claim 16 (while not ready, and always for drain-mode types, the icon shows the charging progress)
+                    charge: (!ready || drain).then(|| charge::stage(w, house, k)),
+                    state: match label {
+                        Label::Charging => Some("Charging"),
+                        Label::Active => Some("Active"),
+                        _ => None,
+                    },
+                }
+            }
+        })
+        .collect();
     m
 }
 
@@ -372,7 +483,7 @@ pub fn view(
     for (i, r) in l.tabs.iter().enumerate() {
         let tv = m.tabs[i];
         // spec: S-0411 claim 11 (the flash state from the tick that started it; the lit look is implementer design)
-        let lit = tv.waiting
+        let lit = tv.flashes()
             && tv
                 .flash_start
                 .is_some_and(|t| tab_lit(t, m.tick, m.flash_extra));
@@ -425,11 +536,13 @@ fn cameo(d: &mut DrawList, r: Rect, c: &CameoView, hot: bool) {
                 );
             }
             d.text_centred(Rect::new(r.x, r.y + 4, r.w, 12), &c.name, colour::TEXT);
-            d.text_centred(
-                Rect::new(r.x, r.y + 18, r.w, 12),
-                &format!("${}", c.price),
-                colour::DIM,
-            );
+            if matches!(c.entry, Entry::Type(_)) {
+                d.text_centred(
+                    Rect::new(r.x, r.y + 18, r.w, 12),
+                    &format!("${}", c.price),
+                    colour::DIM,
+                );
+            }
         }
     }
     if c.darkened {
@@ -442,12 +555,20 @@ fn cameo(d: &mut DrawList, r: Rect, c: &CameoView, hot: bool) {
         let veil = r.h - r.h * stage.clamp(1, 55) / 55;
         d.fill(Rect::new(r.x, r.y, r.w, veil), [0, 0, 0, 120]);
     }
-    let label = if c.ready {
-        Some(("Ready", colour::GOOD))
-    } else if c.on_hold {
+    if let Some(stage) = c.charge {
+        // A superweapon's charge (S-0512 claim 16, our look): the same
+        // veil over the part still to charge, in 54 stages.
+        // spec: S-0512 F3 (clock stages 0 … 53 while charging, 54 when ready)
+        let veil = r.h - r.h * stage.clamp(0, 54) / 54;
+        d.fill(Rect::new(r.x, r.y, r.w, veil), [0, 0, 0, 120]);
+    }
+    // spec: S-0512 claim 16 (on hold while suspended; otherwise ready; drain-mode types show their state)
+    let label = if c.on_hold {
         Some(("On hold", colour::ACCENT))
+    } else if c.ready {
+        Some(("Ready", colour::GOOD))
     } else {
-        None
+        c.state.map(|s| (s, colour::TEXT))
     };
     if let Some((s, ink)) = label {
         let band = Rect::new(r.x, r.bottom() - 13, r.w, 13);
@@ -531,10 +652,10 @@ mod tests {
 
     fn cameo_view(i: u32) -> CameoView {
         CameoView {
-            t: TypeRef {
+            entry: Entry::Type(TypeRef {
                 kind: Kind::Building,
                 index: i,
-            },
+            }),
             name: format!("T{i}"),
             price: 100,
             darkened: false,
@@ -543,6 +664,8 @@ mod tests {
             on_hold: false,
             queued: None,
             art: None,
+            charge: None,
+            state: None,
         }
     }
 
@@ -613,6 +736,7 @@ mod tests {
             count: 1,
             waiting: true,
             flash_start: Some(23),
+            sw_ready: false,
         };
         m.shown = 1;
         let look = |m: &HudModel| view(m, (800, 600), None, None).0;

@@ -16,6 +16,7 @@ use glasnost_sim::econ::sidebar::Click;
 use glasnost_sim::econ::victory::Outcome;
 use glasnost_sim::econ::{TypeRef, production, radar};
 use glasnost_sim::orders::Order;
+use glasnost_sim::superweapons::{SwEvent, SwKind, charge};
 use glasnost_sim::targeting::{self, CheerMemory, ClickOn, ClickResult, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, HouseRole, ObjectId, World};
 use glasnost_ui::end::End;
@@ -49,6 +50,15 @@ pub enum Tool {
     Place(TypeRef),
     /// Sell, repair or power mode (S-0214 claim 13).
     Mode(Mode),
+    /// Superweapon targeting (S-0512 claim 16, S-0513 claim 1): the armed
+    /// type by its position in the type list; `from_source` when a source
+    /// pick armed it (S-0513 claim 33) rather than its icon.
+    Superweapon {
+        /// The armed type.
+        sw: u32,
+        /// Armed by a source pick.
+        from_source: bool,
+    },
 }
 
 /// A status message.
@@ -325,7 +335,7 @@ impl Play {
         self.waiting = waiting;
         let tick = w.tick;
         for (f, tv) in self.flash.iter_mut().zip(model.tabs.iter()) {
-            *f = match (*f, tv.waiting) {
+            *f = match (*f, tv.flashes()) {
                 // spec: S-0411 claim 11 (with no ready subject on the tab the flash stops and clears)
                 (_, false) => None,
                 // spec: S-0411 claim 11 (a ready item found again does not restart an existing flash)
@@ -338,6 +348,21 @@ impl Play {
             && !icon_ready(w, house, t)
         {
             self.tool = Tool::Select;
+        }
+        // spec: S-0512 claim 16 (the icon offers targeting only while granted, not suspended and ready, or for a drain-mode type ready or active)
+        if let Tool::Superweapon {
+            sw,
+            from_source: false,
+        } = self.tool
+            && !charge::offers_targeting(w, house, sw)
+        {
+            self.tool = Tool::Select;
+        }
+        if let Some(sw) = self.source_aim() {
+            self.tool = Tool::Superweapon {
+                sw,
+                from_source: true,
+            };
         }
         let local = Some(self.local);
         for e in &self.effects {
@@ -356,6 +381,36 @@ impl Play {
             // spec: S-0414 claims 19 and 23, S-0202 claim 16 (the displayed scores, once, after the simulation has stopped)
             glasnost_sim::econ::stats::finish(&mut self.game.world, &listed);
         }
+    }
+
+    /// The type a source pick of the local player in the last tick arms
+    /// (S-0513 claim 33): the type at the warp kind's position in the type
+    /// list under `quirks.superweapon_kind_as_list_position`, else the
+    /// first type of the warp kind; `None` when no pick happened or no
+    /// such type exists.
+    fn source_aim(&self) -> Option<u32> {
+        let picked = self.effects.iter().any(|e| {
+            matches!(e, Effect::Superweapon { event: SwEvent::SourceMarker, house, .. }
+                if *house == Some(self.local))
+        });
+        if !picked {
+            return None;
+        }
+        let sw = &self.game.world.rules().superweapons;
+        let i = if self
+            .game
+            .world
+            .rules()
+            .quirks
+            .superweapon_kind_as_list_position
+        {
+            // spec: S-0513 claim 33 (the launching player aims the type at registration index 4, the warp kind's number)
+            SwKind::ChronoWarp.number()
+        } else {
+            // spec: S-0513 Edge cases (quirks.superweapon_kind_as_list_position off: the type of the warp kind)
+            sw.first_of_kind(SwKind::ChronoWarp)?
+        };
+        ((i as usize) < sw.types.len()).then_some(i)
     }
 
     /// Issues orders in the local house's name; returns how many the
@@ -407,7 +462,15 @@ impl Play {
                 }
             }
             // spec: S-0214 claim 28 (a right click cancels placement, repair, sell and power-switch mode with no order and no ordinary deselection; the placement item stays ready)
-            (Tool::Place(_) | Tool::Mode(_), Button::Right) => self.tool = Tool::Select,
+            (Tool::Place(_) | Tool::Mode(_) | Tool::Superweapon { .. }, Button::Right) => {
+                self.tool = Tool::Select;
+            }
+            // spec: S-0513 claim 1 (a non-empty unit selection takes precedence: the click acts for the units)
+            (Tool::Superweapon { .. }, Button::Left) if !self.selection.is_empty() => {
+                let sel = std::mem::take(&mut self.selection);
+                self.apply_click(sel, on, mods);
+            }
+            (Tool::Superweapon { sw, .. }, Button::Left) => self.aim(sw, on, cell),
             (Tool::Mode(m), Button::Left) => {
                 match modes::order(&self.game.world, self.local, m, on) {
                     Some(o) => {
@@ -425,6 +488,95 @@ impl Play {
             }
             // spec: S-0214 claim 26 (a right-button release without a scroll drag clears the selection in ordinary mode, over an object or the ground; it never gives an order)
             (Tool::Select, Button::Right) => self.selection.clear(),
+        }
+    }
+
+    /// Whether superweapon `sw` is offered at a click on `on` (S-0513
+    /// claim 1): a force shield only over a building of the local house or
+    /// of a house allied with it, every other kind anywhere.
+    pub fn sw_offered(&self, sw: u32, on: ClickOn) -> bool {
+        let w = &self.game.world;
+        let shield = w
+            .rules()
+            .superweapons
+            .types
+            .get(sw as usize)
+            .is_some_and(|t| t.kind == Some(SwKind::ForceShield));
+        if !shield {
+            // spec: S-0513 claim 1 (every other kind is offered at every cell the cursor can point at)
+            return true;
+        }
+        // spec: S-0513 claim 1 (a force shield is offered only over a building owned by the player's own house or a house allied with it)
+        let ClickOn::Object(id) = on else {
+            return false;
+        };
+        w.obj(id).is_some_and(|o| {
+            o.kind == glasnost_sim::rules::Kind::Building
+                && o.owner
+                    .is_some_and(|h| h == self.local || w.allied(Some(self.local), Some(h)))
+        })
+    }
+
+    /// Whether the armed superweapon has an explicit radar offer (S-0410
+    /// claim 12, table C1): its row is chosen by its list position under
+    /// `quirks.superweapon_kind_as_list_position`, else by its kind.
+    pub fn radar_aims(&self) -> Option<u32> {
+        let Tool::Superweapon { sw, .. } = self.tool else {
+            return None;
+        };
+        let w = &self.game.world;
+        let row = if w.rules().quirks.superweapon_kind_as_list_position {
+            // spec: S-0410 claim 12 (the selected type's zero-based list position chooses the row; C1's positions are the kind numbers)
+            SwKind::from_number(sw)
+        } else {
+            // spec: S-0410 claim 12 (switch off: its actual kind chooses the row)
+            w.rules()
+                .superweapons
+                .types
+                .get(sw as usize)
+                .and_then(|t| t.kind)
+        };
+        // spec: S-0410 claim 12 (nuclear strike, weather storm, either paradrop kind, psychic domination, spy plane and psychic reveal have explicit offers independent of selection)
+        matches!(
+            row,
+            Some(
+                SwKind::Missile
+                    | SwKind::Storm
+                    | SwKind::Paradrop
+                    | SwKind::AmerParadrop
+                    | SwKind::Dominator
+                    | SwKind::SpyPlane
+                    | SwKind::PsychicReveal
+            )
+        )
+        .then_some(sw)
+    }
+
+    /// A left click on the radar at `cell`: fires the armed superweapon
+    /// when it has an explicit radar offer (S-0410 claim 12); returns
+    /// whether it did, else the radar moves the view.
+    pub fn click_radar(&mut self, cell: CellXY) -> bool {
+        let Some(sw) = self.radar_aims() else {
+            return false;
+        };
+        // spec: S-0513 claim 2 (the order names the selected type; the simulation applies quirks.superweapon_order_first_type_of_action)
+        if self.issue(vec![Order::FireSuperweapon { sw, cell }]) > 0 {
+            self.tool = Tool::Select;
+        }
+        true
+    }
+
+    /// An aimed click of superweapon `sw` (S-0513 claims 1 and 2): the
+    /// fire order at the clicked cell when offered there, and back to
+    /// selecting; otherwise no order, and the aim stays.
+    fn aim(&mut self, sw: u32, on: ClickOn, cell: CellXY) {
+        if !self.sw_offered(sw, on) {
+            // spec: S-0513 claim 1 (the no-force-shield action: a click sends no order and keeps the charge)
+            return;
+        }
+        // spec: S-0513 claim 2 (the order names the selected type; the simulation applies quirks.superweapon_order_first_type_of_action)
+        if self.issue(vec![Order::FireSuperweapon { sw, cell }]) > 0 {
+            self.tool = Tool::Select;
         }
     }
 
@@ -541,7 +693,7 @@ impl Play {
     pub fn hud_model(
         &self,
         name: &dyn Fn(TypeRef) -> String,
-        art: &dyn Fn(TypeRef) -> Option<(u32, u32, i32, i32)>,
+        art: &dyn Fn(hud::Entry) -> Option<(u32, u32, i32, i32)>,
     ) -> HudModel {
         let mut m = hud::model(
             &self.game.world,
@@ -602,12 +754,7 @@ impl Play {
     }
 
     fn shown_icon_count(&self) -> usize {
-        self.game
-            .world
-            .houses
-            .get(usize::from(self.local.0))
-            .and_then(|h| h.econ.tech.icons.get(self.shown_tab()))
-            .map_or(0, Vec::len)
+        hud::entries(&self.game.world, self.local, self.shown_tab()).len()
     }
 
     /// A click on a mode button: the mode, or back to selecting when it is
@@ -620,18 +767,24 @@ impl Play {
         };
     }
 
-    /// A click on the `n`-th icon of the shown tab (S-0411 claims 4 and 5).
+    /// A click on the `n`-th icon of the shown tab (S-0411 claims 4 and 5;
+    /// a superweapon icon, S-0512 claim 16).
     pub fn cameo_click(&mut self, n: usize, button: Button, shift: bool) {
         let w = &self.game.world;
-        let Some(c) = w
-            .houses
-            .get(usize::from(self.local.0))
-            .and_then(|h| h.econ.tech.icons.get(self.shown_tab()))
-            .and_then(|v| v.get(n))
-        else {
-            return;
+        let t = match hud::entries(w, self.local, self.shown_tab()).get(n) {
+            Some(hud::Entry::Type(t)) => *t,
+            Some(hud::Entry::Superweapon(sw)) => {
+                // spec: S-0512 claim 16 (selecting an icon that offers targeting arms that type, by its registration index)
+                if button == Button::Left && charge::offers_targeting(w, self.local, *sw) {
+                    self.tool = Tool::Superweapon {
+                        sw: *sw,
+                        from_source: false,
+                    };
+                }
+                return;
+            }
+            None => return,
         };
-        let t = c.t;
         let click = match button {
             Button::Left => Click::Left,
             Button::Right => Click::Right,
