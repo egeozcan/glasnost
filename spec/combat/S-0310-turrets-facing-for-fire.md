@@ -2,11 +2,11 @@
 id: S-0310
 title: Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -19,7 +19,8 @@ supersedes: []
 When a firer counts as pointing its weapon at its target, how far off it may be, which firers need no
 aiming, and when moving stops a firer from firing: the *not facing*, *still turning* and *moving*
 answers of the firing check (S-0301, claim 9), plus the vehicle-only answers that rank next to them
-and what a vehicle does in reply. How turrets and bodies turn is S-0206.
+and what a vehicle does in reply. How turrets and bodies turn is S-0206. This spec covers
+skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -28,7 +29,8 @@ Glossary terms are used as defined there (*facing*, *signed facing difference*, 
 *locomotor*, *jumpjet*, *being erased*). From S-0301: *firer*, *firing check* and its answers,
 *shot*, *rearm countdown*. From S-0206: *turning facing*, *body facing*, *turret facing*,
 *turning*, *turn rate*, *homing projectile*, *omni-fire weapon*, *locomotor moving the vehicle*.
-From S-0214: *healer*, *counts as a vehicle*, *health ratio* and *full health*. From S-0215:
+From S-0214: *healing actor* (called *healer* here), *counts as a vehicle*, *health ratio*
+and *full health*. From S-0215:
 *turreted building*, *voxel turret*, *turn-rate field*, the turret snap and its bound (claim 32,
 F8). From S-0107: *interruptible* (Terms and table T1), which decides which infantry sequences
 may be broken off. From S-0313: a building's *primary fire pixel shift* and *turret anchor's pixel
@@ -59,15 +61,16 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
   locomotor of the jumpjet kind).
 - **Deploy-to-fire flag.** An imported vehicle-type flag: the vehicle must deploy before it fires
   (claim 9).
-- **Healing weapon.** A weapon whose damage is negative, so that it heals (S-0214, *healer*).
+- **Healing weapon.** A weapon whose damage is negative, so that it heals (S-0214, *healing actor*).
 - **Installed upgrade.** A building type that has been added to another building as an upgrade
   (the structures specs); it counts for the turret flag of the building (claim 4).
 - **Aiming point of a building.** The point from which a turreted building measures the
   direction of its target (claim 4).
 - **Building with a voxel turret, building with a sprite turret.** A building with the turret flag
   whose turret is drawn from a voxel model (an imported art flag), or from sprites.
-- **Flight control of an aircraft.** The state of the aircraft's own flight logic (the aircraft
-  specs); in some states it lets the aircraft fire in any direction (claim 5).
+- **Fighter.** An aircraft type with the imported fighter flag (S-0501 claim 11).
+- **Passenger carrier.** An aircraft marked at placement because it carries passengers; the mark
+  remains after they leave (S-0501 claim 1).
 - **Infantry speed fraction.** A floating-point number from 0 to 1 per infantry unit, part of the
   state of its infantry locomotor (the quantity S-0107 Terms call *speed fraction*). It is 1 from
   any walking step of S-0208 (claim 6) until the unit next stops walking, and 0 from that stop
@@ -88,7 +91,7 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    and with its body facing otherwise. The direction of the target is the direction from the
    vehicle's reference point to the target's reference point (S-0204, claim 8). Both facings are
    the current (interpolated) values of S-0206 in the tick of the check.
-   - Backing: `measurable` (scenario T1)
+   - Backing: `measurable` (scenario T1 parts a and b)
    - Confidence: high
 
 2. **Vehicle aiming tolerance.** A vehicle's weapon points at the target when *ε* ≤ *τ*, with
@@ -124,8 +127,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    fires in any direction.
 
    The turret snap belongs to S-0215 (claim 32 and F8 own the snap, its conditions and its bound,
-   and give it no switch). It acts only on a building to which this check has answered *not
-   facing*, and a snapped building can fire in the tick of the snap unless another answer applies
+   and give no switch disabling the snap itself). It acts only on a building to which this
+   check has answered *not facing*, and a snapped building can fire in the tick of the snap unless another answer applies
    (S-0215, claim 32). Because *τ* = 0, every aim error above 0 of a building with a voxel
    turret gives *not facing*, so every such aim error within the snap bound is snapped, and every
    one if the turn-rate field is 0. With the sprite tolerance (switch off), only aim errors above
@@ -135,29 +138,40 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
      installed upgrades)
 
 5. **Infantry and aircraft.** Infantry never get *not facing*: an infantry unit fires in whatever
-   direction it faces (its sequences turn it, S-0107 and S-0208). An aircraft compares its turret
-   facing with the direction of the target with *τ* = 2048 whatever the projectile, unless its
-   flight control currently allows firing in any direction. An aircraft check also has one
-   further refusal of its own that this spec does not describe (Open questions).
-   - Backing: `measurable` (scenario T5, parts a and b)
-   - Confidence: high (infantry); medium (the aircraft tolerance and its comparison); low (which
-     flight-control states exempt an aircraft)
+   direction it faces (its sequences turn it, S-0107 and S-0208). A non-fighter aircraft compares
+   its current turret facing with the direction of the target with *τ* = 2048 facing units,
+   whatever the projectile. A fighter never gets *not facing*; the exemption is its type flag,
+   not a flight state. After the general firing check passes, an aircraft marked as a passenger
+   carrier that now carries none gets *out of ammunition*, regardless of its ammunition count
+   and ahead of the aim test. This is a cargo-availability rule, not a defect or a quirk:
+   passenger shots release cargo (S-0501 claim 20), and an emptied carrier remains in its
+   placement-time category rather than becoming an ordinary armed aircraft. It has no switch.
+   S-0501 claim 19 owns both aircraft additions.
+   - Backing: `measurable` (scenario T5, parts a and b; S-0501 scenario AC11)
+   - Confidence: high (infantry, aircraft tolerance and fighter exemption); medium (the
+     passenger-carrier refusal)
 
 6. **Precedence.** The aiming answers rank lowest. Every answer of the vehicle-specific reasons and
    of the general part of the firing check (S-0301, claim 9, ranks 1 to 10, such as *rearming*,
    *out of ammunition* or *out of range*) outranks every answer of this spec except the infantry
-   healer's *illegal*, which outranks the general part (claim 11). Below them, a
-   vehicle's answers rank, from highest to lowest, *must deploy* (claim 9), the healer's *illegal*
+   healer's *illegal*, which outranks the general part (claim 11). The empty passenger carrier's
+   *out of ammunition* follows the general part and outranks the aircraft aim test (claim 5).
+   Below the general part, a vehicle's original answers rank, from highest to lowest,
+   *must deploy* (claim 9), the healer's *illegal*
    (claim 11), *moving* (claim 7), *still turning* (claim 3) and *not facing* (claim 2); when
    several apply, the vehicle gets the highest-ranked one. So while its rearm countdown runs, a
    vehicle never reports *not facing*. The full rank table, with the order of *moving*, *still
    turning* and *not facing* among themselves, is S-0301's (claim 9), which also says that only the
-   difference between *must deploy* and *not facing* shows in game state among *must deploy*,
-   *moving*, *still turning* and *not facing*; the healer's *illegal* shows through its reply
+   differences between each of *must deploy*, *moving* and *still turning* and *not facing*
+   show in game state, because *not facing* can re-aim the vehicle and the other three do not.
+   The order among those three has no different reply, so an implementation may choose any
+   applicable one of them (S-0301 claim 9). The healer's *illegal* shows through its reply
    (claim 11).
    - Backing: `measurable` (S-0301 scenarios F7 and F8 for the countdown and the order; scenario
      T8 part b for *must deploy* before *not facing*; scenario T10 part e for the healer's
-     *illegal* before *moving*)
+     *illegal* before *moving*). The exact order among *must deploy*, *moving* and
+     *still turning* is `unmeasured`: their replies are identical, so these scenarios cannot
+     distinguish it.
    - Confidence: high
 
 ### Firing while moving
@@ -176,20 +190,23 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 
    Having a destination is what counts, not motion, in the first, third and fourth conditions: a
    vehicle that has stopped on the way but still has a destination gets *moving*, and one that is
-   still rolling after its destination was cleared does not. Its locomotor can add a refusal of
-   its own (the jumpjet locomotor, for example, in some flight phases; the locomotor specs).
+   still rolling after its destination was cleared does not. Only after these conditions and
+   the aiming tests pass can its locomotor add a refusal of its own (S-0301 claim 9).
+   Which locomotor states produce such a refusal is not specified here (Open questions).
    - Backing: `measurable` (scenario T6, parts a to i) for the four conditions, the balloon-hover
-     reading and the cleared destination
+     reading and the cleared destination. The locomotor's additional refusal is `unmeasured`:
+     no scenario here isolates a flight phase producing it independently of the other refusals.
    - Confidence: high (the first three conditions); medium (the temporal condition, and that only
-     the primary weapon gives it, which T6 h and i test); low (the locomotor's own
-     refusals)
+     the primary weapon gives it, which T6 h and i test); low (the locomotor's own refusal)
 
 8. **Infantry.** An infantry unit gets *moving* when its infantry speed fraction (Terms) is above
    0.1, or when it has a destination and its current sequence is not interruptible (S-0107, T1).
    A jumpjet infantry type whose type also has the jumpjet-turn flag (Terms)
    gets it while its jumpjet locomotor moves it; one without that flag does not. A fire-particle
    weapon gets *moving* while the unit has a destination.
-   - Backing: `measurable` (scenario T7, parts a to d)
+   - Backing: `measurable` (scenario T7, parts a to d) for walking, sequence, jumpjet and
+     particle restrictions. The exact 0.1 boundary is `unmeasured`: the walking fraction takes
+     only 0 or 1, so ordinary orders cannot supply intermediate values around the boundary.
    - Confidence: medium (the fraction's 0 and 1 settings follow the walking step of S-0208; the
      exact set of stopping cases that return it to 0 is medium)
 
@@ -224,7 +241,10 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    ordering), so on such a cell the vehicle does not re-aim, whatever its aim error. So a
    deploy-to-fire vehicle never fires from this step: where it would otherwise fire, it deploys
    if its cell allows it, and gets *must deploy* if not.
-   - Backing: `measurable` (scenarios T1 and T8)
+   - Backing: `measurable` (T1 for facing replies, T8 for deployment, and S-0301 claim 12
+     and scenario F7 for uncloaking). The combined visceroid/deploy-to-fire case and the
+     building-occupied and land-type deployment refusals are `unmeasured`: T8 isolates only
+     ordinary deployment on open ground and a slope, not those combinations.
    - Confidence: high (the facing replies); medium (deploy-to-fire)
 
 10. **A visceroid's attack animation.** In each tick in which a vehicle of a visceroid type
@@ -264,7 +284,12 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
     instead (S-0301, rank 12). So an infantry healer with a full-health target does not wait for its
     rearm countdown to end before the answer shows. What the infantry unit does with the answer
     belongs to its attack behaviour (S-0215), not to this spec.
-    - Backing: `measurable` (scenario T10: parts a to e for vehicles, f to h for infantry)
+    - Backing: `measurable` (scenario T10: parts a to e for vehicles, f to h for infantry).
+      Absent targets, aircraft and building targets, and a damaged vehicle made illegal only
+      by a zero versus value are `unmeasured`: T10 provides no accepted-order case isolating
+      those checks or replies. Parts c, d and g are evidence only if their orders are accepted.
+      Otherwise their wrong-kind or non-vehicle-marked cases remain `unmeasured`, because no
+      ordinary order reaching the firing check in those states has been established.
     - Confidence: medium (the vehicle rule and the infantry rule, including its rank above the
       general part); low (that the infantry answer shows through its reply as S-0215 gives it)
 
@@ -290,7 +315,8 @@ claim 4):
 | building with a voxel turret | 0 |
 | building that is not turreted | no test |
 | infantry | no test |
-| aircraft | 2048 (unless its flight control exempts it) |
+| non-fighter aircraft | 2048 |
+| fighter aircraft | no test |
 
 **F3. Visceroid animation index** (claim 10). Integer arithmetic, no rounding beyond the integer
 division, which truncates toward zero on non-negative values:
@@ -304,7 +330,7 @@ division, which truncates toward zero on non-negative values:
 | Vehicle aiming tolerance, homing projectile | 4096 | facing units | Claim 2 |
 | Sprite turret building tolerance | 2048 | facing units | Claim 4 |
 | Tolerance of a building with a voxel turret | 0 | facing units | Claim 4 |
-| Aircraft tolerance | 2048 | facing units | Claim 5 |
+| Non-fighter aircraft tolerance | 2048 | facing units | Claim 5 |
 | Infantry speed-fraction limit | 0.1 | fraction | Claim 8; compared in double precision, a value above it gives *moving* |
 | Visceroid attack stages *S*<sub>0</sub> … *S*<sub>7</sub> | 100, 105, 110, 115, 120, 125, 90, 95 | animation stage | Claim 10, F3 |
 | Visceroid attack stage period | 5 | ticks | Claim 10 |
@@ -316,7 +342,7 @@ division, which truncates toward zero on non-negative values:
 |---|---|
 | vehicle: a vehicle-specific reason for *impossible* (S-0301, claim 9, rank 1) | *impossible* |
 | vehicle: launching spawned aircraft | *busy* (S-0301, claim 9, rank 2) |
-| vehicle: a vehicle-specific reason for *illegal* (S-0301, claim 9, rank 3; no spec owns it) | *illegal* |
+| vehicle: a vehicle-specific reason for *illegal* (S-0301 claim 9, rank 3) | *illegal* |
 | infantry: healing weapon and the target absent, not infantry or at full health (claim 11) | *illegal*, above every row below, even the general part |
 | general part of the check gives an answer (S-0301, claim 9) | that answer |
 | vehicle: deploy-to-fire and its cell does not allow deploying (claim 9) | *must deploy* |
@@ -325,7 +351,8 @@ division, which truncates toward zero on non-negative values:
 | vehicle: turret was turning at the end of the previous tick and projectile not homing (a vehicle without the turret flag or with a spinning turret never has that state, claim 3) | *still turning* |
 | vehicle: aim error above tolerance (and not omni-fire, not visceroid) | *not facing* |
 | building with turret: aim error above tolerance | *not facing* |
-| aircraft: aim error above 2048 and flight control does not exempt it | *not facing* |
+| aircraft: marked as a passenger carrier, now carrying none (claim 5; ahead of aircraft aiming below) | *out of ammunition* |
+| non-fighter aircraft: aim error above 2048 | *not facing* |
 | infantry: a condition of claim 8 holds | *moving* |
 | otherwise | *can fire* (subject to the locomotor's own refusal, claim 7) |
 
@@ -335,22 +362,26 @@ healer row is the only infantry row above the general part that this spec states
 *impossible* of dying sequences is an open question).
 
 Ordering consequences: the check of a tick sees the facing that earlier ticks' turns give at that
-tick (S-0206, claim 10 (d)); a facing target set in reply to *not facing* is seen first by the
-next tick's check, so a vehicle that must turn fires at the earliest one tick after its turret
-reaches the tolerance (S-0206, State and ordering).
+tick (S-0206 claim 10). A facing target set in reply to *not facing* is seen first by the
+next tick's check. A non-homing weapon on a non-spinning turret must also wait until the tick
+after its turret finishes turning (claim 3), not merely until it enters the aiming tolerance.
+A homing weapon or a turret-less vehicle can pass the aiming test in the tick its current
+facing enters its tolerance, subject to the other refusals (T1 and T3).
 
 ## Edge cases and quirks
 
 - **Buildings with a voxel turret need an exact aim** (`quirks.voxel_turret_exact_aim`, default
   on, the original behaviour). With the switch on, *τ* = 0 for a building with a voxel turret
   (claim 4). With it off, it uses the sprite tolerance 2048. The switch does not touch the turret
-  snap, which is S-0215's (claim 32, F8) and has no switch there: it stays as S-0215 gives it, so
+  snap itself, which is S-0215 claim 32's rule: it stays as that claim gives it, so
   with the switch off the snap still happens when the aim error exceeds 2048 and is within the
-  bound. The turn-rate field's wrap and the importer warning for it are S-0215's.
+  bound. The bound's wrap and its separate switch are S-0215 claim 32's, not this tolerance switch.
 - **A destination, not motion, makes a vehicle "moving"** (claim 7). This is the rule itself
   rather than a defect of the original, so it has no switch and is not a quirk.
-- **Aircraft** (claim 5). Low confidence for the exemption by flight control; the aircraft specs
-  will own it.
+- **Empty former passenger carriers** (claim 5). This is the cargo-availability rule itself,
+  not a defect, so it has no switch. The retained placement category prevents an empty
+  cargo-dropping aircraft from becoming an ordinary armed aircraft merely because ammunition
+  remains. S-0501 claims 19 and 20 own the refusal and passenger-shot outcome respectively.
 
 ## Import mapping
 
@@ -359,6 +390,7 @@ reaches the tolerance (S-0206, State and ordering).
 | `Turret` (rules, vehicle or building type) | turret flag | boolean | no |
 | `TurretSpins` (rules, vehicle type) | spinning turret (S-0206) | boolean | no |
 | `OmniFire` (rules, weapon) | omni-fire weapon | boolean | no |
+| `Fighter` (rules, aircraft type) | fighter; exempt from the aircraft aim test (S-0501 claim 19) | boolean | no |
 | `FireWhileMoving` (rules, weapon) | fire-while-moving flag | boolean | yes |
 | `MobileFire` (rules, vehicle type) | mobile-fire flag | boolean | yes |
 | `SmallVisceroid`, `LargeVisceroid` (rules, vehicle type) | visceroid types | boolean | no |
@@ -373,21 +405,40 @@ reaches the tolerance (S-0206, State and ordering).
 ## Measurement scenarios
 
 All scenarios use an unmodified game with no add-ons and no scripted opponents, stock data unless
-a named test file is given, a small purpose-made test map, and any game speed. Facings and the
-visceroid animation stage are read with the measurement setup's recorder of object state, or from
+a named test file is given, a small purpose-made test map, and game speed index 2. The observed
+house is human-controlled; one bystander computer player is isolated outside the observed test
+area under the glossary's void rule. Test targets belong to the neutral house unless a scenario
+names an own unit. Scripted input may issue the stated orders; a read-only recorder and video
+record ticks, orders, facings, destinations, sequences, shots and the stated object state.
+No recorder changes game state. Facings and the visceroid animation stage are read with the measurement setup's recorder of object state, or from
 the drawn 32-step facing where stated. Unless a scenario says otherwise, each case is run twice.
-The original is deterministic, so the two runs should agree tick for tick, and a difference
-between them makes the run invalid. Every scenario is invalid in a run where a vehicle is moved by
-something other than the scenario's orders.
+Each run records its input ticks. Random rearm delays can differ between games; each run
+must satisfy the expected relation using its own recorded countdown and other state, rather than
+requiring identical shot ticks across games. Unless otherwise stated, the procedure is to give an attack
+order on the stated target and then the stated movement, stop or unloading orders, recording until
+the expected event or refusal has been observed. All refusals other than those under test must
+be absent. Every scenario is invalid in a run where a vehicle is moved by something other than
+the scenario's orders.
 
-**T1. Body aims a turret-less vehicle.**
-- Setup: a stock vehicle without a turret, weapon neither omni-fire nor homing; target placed at
-  a known direction; a test rules file sets its turn rate to 1.
-- Observable: body facing each tick and the tick of the first shot.
-- Expected: the shot comes in the first tick whose check sees a body facing within 2048 of the
-  direction.
-- Falsified if: the shot depends on a turret facing that differs from the body facing (for
-  example, it fires while the body is still more than 2048 away).
+**T1. Which facing aims and the facing replies.**
+- Setup: (a) a stock vehicle without a turret, weapon neither omni-fire nor homing; target placed
+  at a known direction; a named facing-test rules file sets its turn rate to 1. (b) A turreted
+  vehicle with the same weapon properties, initially with different body and turret facings.
+  Each is stationary with no destination and all other firing refusals absent.
+- Procedure: give each an attack order on the stationary target off its aiming facing. Repeat
+  (a) while it moves past the target, using a named test map override enabling mobile fire and
+  fire while moving and a non-track movement class, so S-0206 claim 16's independent body-aiming
+  rule does not apply; keep the target outside the body's tolerance throughout this interval.
+- Observable: body and turret current and target facings each tick, destination, motion and the
+  tick of the first shot.
+- Expected: (a) the stationary vehicle re-aims its body, its turret follows, and the shot comes
+  in the first tick whose check sees a body facing within 2048 of the target direction. (b) The
+  turret re-aims, not the body; shots depend on turret aim and the still-turning rule of claim 3.
+  The moving turret-less vehicle gets no body target facing from the firing reply; its movement
+  facing follows S-0207 instead.
+- Falsified if: (a) it fires with its body more than 2048 away; (b) it aims by the differently
+  directed body, or re-aims that body by this reply; or the moving turret-less vehicle's body
+  target facing changes to the attack target rather than following its movement.
 
 **T2. Vehicle tolerances, omni-fire and visceroids.**
 - Setup: runs a and b: S-0206 scenario R11 (turret placed at aim errors 2048, 2304, 4096, 4352),
@@ -412,33 +463,44 @@ something other than the scenario's orders.
 **T4. Buildings.**
 - Setup: (a) a stock sprite turret defence, a stock voxel turret defence and a stock defence without
   a turret, each given a target at a direction off its facing; for the voxel one, test turn-rate
-  fields 1, 5 and 0 (the snap's own cases are S-0215's scenario). (b) A test art file gives the
-  sprite turret defence a large primary fire pixel shift, and a target stands close to the building
-  in a direction such that the direction from the shifted aiming point differs from the direction
+  fields 1, 5 and 0, and both homing and non-homing projectiles (the snap's own cases are
+  S-0215's scenario). (b) A named aiming-point test art file gives the
+  sprite turret defence a large primary fire pixel shift and a different nonzero turret-anchor
+  shift, with their aiming directions separated by more than 2048 facing units. A target stands
+  close to the building in a direction such that the direction from the shifted aiming point differs from the direction
   from the reference point by more than 2048. (c) A test rules file gives a stock building without a
   turret flag an installed upgrade whose type has the turret flag, and a target off the turret's
-  facing.
+  facing. (d) Repeat (b) with no primary fire pixel shift and a large nonzero turret-anchor
+  pixel shift. (e) Repeat with neither shift, and a target off the turret facing.
+- Procedure: order an attack in each case with every non-aiming refusal absent. Use close
+  target positions that separate the candidate aiming directions by more than 2048 facing units.
 - Observable: turret facing per tick and the shot tick.
 - Expected: (a) the sprite turret fires once within 2048; the voxel turret fires only when exactly
   on the direction, which it reaches by S-0215's snap or by turning; the turret-less defence fires
   at once. (b) At its first shot the turret facing is within 2048 of the direction from the aiming
   point and more than 2048 from the direction from the reference point. (c) The building turns its
-  turret and fires only within 2048 of the target direction.
-- Falsified if: the voxel turret fires with an aim error above 0; in (b) the shot comes with the
-  facing within 2048 of the direction from the reference point only; in (c) the building fires
-  without aiming.
+  turret and fires only within 2048 of the target direction. (d) Aim follows the turret-anchor
+  shift. (e) Aim follows the unshifted reference point. Homing changes neither building tolerance.
+- Falsified if: the voxel turret fires with an aim error above 0; in (b) or (d) the shot comes
+  within 2048 of only the unshifted direction; in (c) the building fires without aiming; in (e)
+  it uses a shifted direction; or homing changes a building's tolerance.
 
 **T5. Infantry and aircraft.**
 - Setup: (a) an infantry unit given an attack order at a target behind it. (b) A stock aircraft that
   attacks ground targets, given an attack order at a target at a known aim error of its turret
-  facing (the recorder reads the turret facing), once at an error below 2048 and once above, and the
-  runs repeated with a homing and a non-homing projectile by a test rules file.
-- Observable: the shot tick and the facing shown; and, in part b, the turret facing at the shot.
-- Expected: (a) no wait for an aiming tolerance beyond its sequence turning (S-0107). (b) No shot at
-  an aim error above 2048 with either projectile, and shots at an aim error of 2048 or less, unless
-  the aircraft's flight state exempts it (then the run says nothing about the tolerance).
-- Falsified if: (a) shots wait for a facing tolerance; (b) a shot comes at an aim error above 2048
-  outside an exempting flight state, or a homing projectile gives 4096.
+  facing. A named facing-test map override repeats S-0501 scenario AC11 with the fighter flag
+  off and on, and with homing and non-homing projectiles. Test errors below, at and above 2048
+  in both senses, with all other refusals absent and no passenger-carrier mark.
+- Observable: the shot tick and facing shown; in part b, the current turret facing and firing-check
+  answer before the attack behaviour reacts. Later strafing passes that bypass *not facing* are
+  not evidence that the check passes (S-0501 claim 13).
+- Expected: (a) no wait for an aiming tolerance beyond its sequence turning (S-0107). (b) A
+  non-fighter gets *not facing* only above 2048 with either projectile; a fighter never gets it.
+  S-0501 scenario AC11 also tests placement loaded, unloading every passenger, and the retained
+  mark's *out of ammunition* with ammunition remaining.
+- Falsified if: (a) shots wait for a facing tolerance; (b) a non-fighter's check passes above 2048
+  or refuses at 2048, a homing projectile gives 4096, a fighter gets *not facing*, or the emptied
+  marked carrier passes the check with all general refusals absent.
 
 **T6. Vehicles while moving.**
 - Setup: (a) a stock vehicle with a weapon lacking the fire-while-moving flag ordered to move past
@@ -463,22 +525,26 @@ something other than the scenario's orders.
   while the vehicle is still rolling. (h) no shot while a destination exists, though no beam is
   attached; shots once the destination is cleared. (i) the primary weapon fires while the
   destination exists.
-- Falsified if: (b) fires while blocked with a destination; (d) fires only when the destination is
-  cleared, or fires while its locomotor moves it; (e) or (f) fires while a destination exists; (g)
+- Falsified if: (a) or (c) fires with a destination, or (b) fires while blocked with a destination,
+  (d) fires only when the destination is cleared, or fires while its locomotor moves it; (e) or (f) fires while a destination exists; (g)
   waits for the vehicle to stop; (h) fires while a destination exists; (i) does not fire while a
   destination exists.
 
 **T7. Infantry while moving.**
-- Setup: (a) an infantry unit attacking while ordered to walk. (b) One ordered to go prone while it
+- Setup: (a) an infantry unit attacking while ordered to walk, with separate runs ending by
+  arrival, stop order, loss of walking target and blockage. (b) One ordered to go prone while it
   has a destination. (c) A jumpjet infantry type, once with the jumpjet-turn flag and once without
   (test rules files), attacking while its jumpjet locomotor moves it. (d) A test rules file gives an
   infantry weapon the fire-particle flag; the unit attacks with a destination and again without.
-- Observable: shot ticks against speed and sequence.
-- Expected: (a) no shot while its speed fraction is above 0.1. (b) no shot while it is in a
+- Observable: shot ticks against the recorded speed fraction, destination and sequence.
+- Expected: (a) the fraction is 1 from a walking step until each stopping case and 0 thereafter,
+  no shot while its speed fraction is above 0.1. (b) no shot while it is in a
   sequence that is not interruptible and has a destination. (c) the type with the flag does not
   fire while its locomotor moves it; the type without it does. (d) no shot while it has a
   destination, a shot without one.
-- Falsified if: a shot comes in such a tick, or (c) the type without the flag waits.
+- Falsified if: (a) the fraction differs from those 0/1 settings, or (a) or (b) fires during
+  the stated restriction; (c) the flagged type fires while moving or the unflagged type waits despite all other refusals being absent; (d) it fires with
+  a destination or fails to fire without one despite all other refusals being absent.
 
 **T8. Deploy-to-fire.**
 - Setup: a vehicle type with the deploy-to-fire flag (a stock one if there is one, else a test rules
@@ -491,12 +557,17 @@ something other than the scenario's orders.
 
 **T9. Visceroid attack animation.**
 - Setup: a stock vehicle of a visceroid type given an attack order on a target in each of the
-  eight directions *k* = 0 … 7, plus targets at directions on both sides of each rounding boundary
-  (*d* = 4095 and 4096).
+  eight directions *k* = 0 … 7, plus targets just below and at each rounding boundary
+  (*d* = 4095 + 8192*j* and 4096 + 8192*j*, modulo 65536, for integer *j* from 0 to 7).
+  A named animation-test map override lengthens the weapon's rate of fire to keep successive
+  attacks at least 30 ticks apart.
+- Procedure: attack each stationary target, record the first shot and the following 20 ticks,
+  then stop attacking before changing target. No movement orders occur during the observation.
 - Observable: the animation stage every tick (recorder) and the drawn frames, the body facing, and
   the shot tick.
 - Expected: at the shot the stage equals *S*<sub>*k*</sub> (the table in Constants), and then rises
-  by 5 every 5 ticks; the body facing does not change; *d* = 4095 gives *S*<sub>0</sub> and 4096
+  by 5 at intervals of 5 ticks between rises (the first rise's phase is still open); the body
+  facing does not change; *d* = 4095 gives *S*<sub>0</sub> and 4096
   gives *S*<sub>1</sub>.
 - Falsified if: the stage at the shot differs, rises with another period or step, or the body
   facing is set to the target at once.
@@ -507,26 +578,31 @@ something other than the scenario's orders.
   attack target, (d) a damaged own vehicle whose type is marked non-vehicle in a test rules file, (e) the
   vehicle of (b), with a destination set (it was ordered to move) while its target is at full
   health. A stock infantry healer (S-0214) with (f) a damaged own infantry unit, (g) an own
-  vehicle given as an attack target (if the order is refused, the part is skipped and recorded),
+  vehicle given as an attack target,
   (h) a damaged own infantry unit whose last healing shot brings it to full health while the
   healer's rearm countdown still runs.
+- Procedure: give the stated healing or force-fire orders. In c, d and g, first record whether
+  the order is accepted and actually leaves the intended target held by the healer. If not,
+  record the part as unmeasured rather than treating cursor refusal as a firing-check result.
+  For b and e, keep recording until the general check's refusals have ended.
 - Observable: whether the healer still holds the target after a few ticks, and any shot; in part
   h, the tick at which the healer stops attacking, against the tick its target reaches full health
   and the tick its countdown ends.
-- Expected: (a) it heals; (b) it drops the target the tick after full health; (c) it drops the
-  target; (d) it holds the target and does nothing; (e) it drops the target, though it has a
-  destination. (f) it heals; (g) it does not heal the vehicle and does not keep attacking it
+- Expected: (a) it heals; (b) it drops the target at its first firing step after full health in
+  which the general check no longer refuses firing; (c) it drops the target; (d) it holds the
+  target and does nothing; (e) it drops the full-health target despite its destination once
+  the general check passes. (f) it heals; (g) it does not heal the vehicle and does not keep attacking it
   (S-0215 gives the reply to *illegal*); (h) it stops attacking within a tick or two of full
   health, before its countdown ends.
-- Falsified if: (c) keeps the target, or (d) drops it; (e) keeps the target; (g) heals the
-  vehicle; (h) waits until the countdown ends.
+- Falsified if: (a) or (f) fails to heal with all other refusals absent; (b) keeps the target
+  once the general check allows firing after full health, or (c) keeps the target, or (d) drops it,
+  (e) keeps the target once the general check passes; an accepted order in (g) heals the vehicle
+  or keeps attacking it; (h) waits until the countdown ends.
 
 ## Open questions
 
-- The locomotor's own refusals (claim 7) and the aircraft rule (claim 5) need the locomotor and
-  aircraft specs. In which aircraft states an aircraft's check answers *out of ammunition*,
-  outranking the answer of its aim test, and whether that is the only refusal beyond claim 5, is
-  not stated here; the aircraft specs should answer it.
+- The locomotor's own refusals (claim 7) need the locomotor specs. The aircraft additions formerly
+  left open here are answered by S-0501 claim 19.
 - Which weapon a vehicle tests each tick is S-0308's.
 - What a visceroid's drawing does with the animation stage, which image frame each stage value
   shows, when the first 5-tick rise comes after the stage is set, and what ends the attack animation
