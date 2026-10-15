@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -61,8 +61,9 @@ not rules for implementing them.
   them in its current correction batch. S-0401 to S-0416 are now approved; their revised drafts
   in this batch are plain spec pointers, not planned specs. S-0417 is also approved; its revised
   draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
-  S-0507, S-0511 and S-0516 are approved. S-0512, S-0513, S-0522 and S-0524 are drafts in this
-  batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  S-0507, S-0511, S-0512, S-0513, S-0516, S-0522 and S-0524 are approved.
+  S-0508, S-0509, S-0510 and S-0515 are drafts in this batch and own the terms attributed
+  to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -1235,6 +1236,17 @@ hovering-vehicle wakes.
 **infantry.** A type kind and its objects: soldiers and other units drawn as sprites and moving on
 foot. See S-0107.
 
+**infiltrated-vehicle-factory flag, infiltrated-infantry-factory flag.** Two yes/no states of a
+house, initially clear. Each is set when that house's spy infiltrates another house's factory
+of the corresponding kind and the factory effect is selected; once set, it stays set for the
+rest of the game. They are read from the house owning the object being created or shown,
+not the victim house (S-0510 claim 5).
+
+**infiltration.** A spy's building entry on arrival, using up the spy even when no effect results,
+including entry into its own house's building. Entry into another house's building applies at
+most one effect chosen by the building type under the default single-effect rule
+(S-0510 claims 1 to 3).
+
 **prone state.** The lying-down state of an infantry unit. S-0107 (Terms) owns its sequences and
 the fear level that leads to it; S-0315 owns its effects in combat (claim 3), and S-0302, S-0310
 and S-0312 use it.
@@ -1259,6 +1271,13 @@ chance for a request with a threat point; move-anywhere bypasses the ordinary de
 The other refusals remain (S-0207, claim 16). In particular, forced alone does
 not bypass an existing destination, as S-0402 (claim 10) illustrates. S-0208 (Terms) lists the
 specs that send each kind of request.
+
+**steal fraction.** The game-wide share of the victim's available credits that a spy's money
+theft takes (S-0510 claim 6).
+
+**used-up engineer.** An engineer removed from play, not killed, at the end of a repair,
+damaging hit, capture or futile entry into a non-arrival-friendly building of a type that
+cannot be captured (S-0509 claim 10).
 
 ### combat
 
@@ -1401,7 +1420,8 @@ S-0309 and S-0310 give the answers of their own topics, and S-0206 and S-0215 us
 
 **garrisoned building.** A building whose type lets infantry occupy it and fire from it, while at
 least one occupant is inside. S-0301 (Terms) defines it, and S-0302 (Terms) gives the same
-definition; S-0302, S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics. Occupation itself is left to the structures specs.
+definition; S-0302, S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics.
+S-0508 claims 1 to 17 own occupation, eviction and loss of occupants.
 
 **healer, healer for acquisition.** An object whose *mean weapon damage* is below 0. S-0308 owns
 the mean weapon damage and the test (claim 15, where the object is called a *healer for
@@ -1553,6 +1573,10 @@ that do not come out on their own (S-0312, Terms, *absorbed passengers*). S-0405
 **adjacency.** A building type's adjacency field, in cells, and the placement condition that
 S-0406 builds on it. S-0406 owns both (Terms, claim 4); S-0415 uses the term.
 
+**arrival-friendly building.** For an entering engineer, a building of its own house, of a house
+its house counts as allied, or a garrisonable building of a passive neutral house. This arrival
+test is distinct from the cursor's engineer-friendly test (S-0509 claim 3).
+
 **blow-up of a cell.** The effects on occupants and animations when a high-bridge section or
 pier is lost: ground-layer demolition hits, deck drops and falling, and explosion animations.
 Protection from the hits is still tested (S-0511 claim 9).
@@ -1563,6 +1587,13 @@ enters it (S-0511 claims 17 to 20). S-0511 claim 16 owns hut demolition.
 **building.** A type kind and its objects: a stationary object that occupies a foundation of cells.
 Also called a structure.
 
+**building entry.** An infantry unit in *capture*, *area guard* or *patrol* finishing a walking
+step in a cell holding the building that is its destination or target. Vehicle-like destinations
+and garrison attempts have the separate outcomes specified by S-0509 claim 1.
+
+**building ownership change.** A change of a building's owning house, whatever its cause.
+Giving it to the same house has no ownership-change effect (S-0509 claims 12 to 16).
+
 **bunkered, tank bunker.** A *tank bunker* is a building that a vehicle can drive into for
 protection, and a vehicle inside one is *bunkered* (S-0206, Terms). S-0301, S-0302, S-0307 and
 S-0309 give what being bunkered changes in their topics; entering and leaving are left to the
@@ -1570,6 +1601,12 @@ structures specs.
 
 **cell test.** The test that a single cell passes or fails for a building type that is being
 placed. S-0406 owns it (Terms, claim 3); S-0415 (claim 3) uses it for deploying.
+
+**civilian garrison building.** A garrisonable building whose type's tech level is exactly −1.
+S-0508 claims 7 to 9 own its occupant-dependent ownership and forced evacuation.
+
+**civilian house.** The first house, in house order, whose country belongs to the civilian side
+(S-0508 claim 8).
 
 **construction yard.** Ambiguous on its own. S-0213, S-0214 and S-0415 (Terms) mean a building
 whose type has the construction-yard flag; S-0215 (Terms) means a building whose type is in a list
@@ -1582,9 +1619,16 @@ says in its Terms which sense it means.
 when it removes a high-bridge section, collapses a pier or destroys a low strip. A failed
 attempt can still change the bridge (S-0511 claims 1 and 2).
 
+**eviction.** Putting all occupants of a building out at once, with hunting and inside-fallback
+options. Exit failure can instead remove them or leave them inside under the chosen quirk
+settings (S-0508 claims 10 to 13).
+
 **exit apron cell.** The cell where a ground vehicle factory's exit track ends. It need not
 belong to the factory's foundation. S-0417 owns the term and its position (Terms, claim 3).
 It is distinct from S-0404's *exit cell*, used for production release.
+
+**exit ring.** The cells bordering a building's foundation rectangle, outside it, including
+corners. Which cells an eviction tries and their priority belong to S-0508 claim 10.
 
 **fall rate.** A falling object's vertical speed in leptons per update, decreased each update
 down to an imported floor (S-0511 claim 10).
@@ -1601,6 +1645,8 @@ axes: on the screen that cell is the topmost cell of the footprint, not the left
 foundation's *top corner* is the top corner of its top-left cell, the topmost point of the footprint
 on the screen.
 
+**garrisonable type.** A building type whose occupiable flag is set (S-0508 claim 1).
+
 **high-bridge section.** One high-bridge overlay and the four cells it marks. Its overlay data
 value distinguishes intact, chipped on one side, damaged and open on one side states. A lost
 section has no overlay (S-0511 claims 3 to 5).
@@ -1608,8 +1654,30 @@ section has no overlay (S-0511 claims 3 to 5).
 **hut demolition.** Destruction of a whole bridge started at its repair hut by a detonating
 timed bomb or an expiring delayed-kill countdown (S-0511 claim 16).
 
+**inside fallback cell.** The foundation rectangle's cell with the largest x and y, used when
+an eviction allows inside fallback and no exit-ring cell qualifies (S-0508 claim 12).
+
+**lost-to-capture mark.** A house mark set when an engineer captures one of its buildings,
+never cleared during the game, and read by trigger event code 3 (S-0509 claim 11).
+
 **low strip.** The three cells across a low bridge at one step along its line. Changes to the
 strip's class affect all three cells together (S-0511 claims 13 to 15).
+
+**manned.** A building's permanent state from its first building ownership change onward.
+A newly placed building is unmanned. This is the state read by the engineer row of S-0405
+claim 8, not an infantry unit remaining inside (S-0515 claim 2).
+
+**multi-engineer rule.** A setting under which an engineer damages a healthy enemy building
+instead of capturing it; always off in a skirmish (S-0509 claim 6).
+
+**occupant.** An infantry unit inside a garrisonable building, off the map and out of play,
+keeping its own owner (S-0508 claim 5).
+
+**occupant capacity.** A garrisonable type's maximum number of occupants (S-0508 claim 1).
+
+**occupier type, assaulter type.** Infantry types marked as able to garrison and as able to
+clear an enemy garrison, respectively. A type with both marks is an occupier only
+(S-0508 claims 1 and 14).
 
 **pier.** A bridge tile standing between two spans, in state 0 (intact) to 4 (collapsed), with
 a reference cell and a three-cell column across the bridge (S-0511 claim 6).
@@ -1622,6 +1690,10 @@ fit test (Terms, claim 26).
 **span check.** After a successful direct high-bridge destroy attempt, the check that removes
 runs of sections touching neither end of the affected span, subject to the span bounds in
 S-0511 claim 7.
+
+**tech building.** A building whose type has the needs-engineer flag. The stock examples are
+neutral service buildings: oil derrick, hospitals, machine shop, airport, outpost, secret lab
+and civilian power plant. Their services are owned by the specs indexed in S-0515 claim 1.
 
 **upgrade.** A building type that is added to an existing building instead of standing on its own
 cells, and a building of such a type. S-0405 names it (Terms), and S-0406 owns how it is placed
