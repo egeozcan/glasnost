@@ -482,6 +482,20 @@ impl Script {
             .map(|o| o.pos.cell())
     }
 
+    /// Where the next wave would go, without choosing it: the seen enemy
+    /// nearest home, else the next enemy start cell.
+    pub(crate) fn attack_goal(&self, w: &World) -> Option<CellXY> {
+        let home = self.home(w)?;
+        self.seen_enemies(w)
+            .into_iter()
+            .min_by_key(|&(e, c)| (dist2(c, home), e))
+            .map(|(_, c)| c)
+            .or_else(|| {
+                (!self.targets.is_empty())
+                    .then(|| self.targets[self.next_target % self.targets.len()])
+            })
+    }
+
     /// Whether the line of `t` holds an item or a queue.
     pub(crate) fn busy(&self, w: &World, t: TypeRef) -> bool {
         production::line_of(w, self.house, t)
@@ -669,7 +683,7 @@ impl Script {
 
     /// Whether the house keeps the plan's harvester count (deployed slave
     /// miners count).
-    fn harvesters_kept(&self, w: &World) -> bool {
+    pub(crate) fn harvesters_kept(&self, w: &World) -> bool {
         self.of_role(w, Role::Harvester).len() + self.slave_buildings(w).len()
             >= self.plan.harvesters
     }
