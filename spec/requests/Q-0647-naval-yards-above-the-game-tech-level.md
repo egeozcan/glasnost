@@ -1,9 +1,9 @@
 ---
 id: Q-0647
 title: Whether a skirmish house can build a naval yard whose tech level is above the game's tech level
-status: open
+status: answered
 related: [S-0009, S-0407, S-0412, S-0504]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need
@@ -37,3 +37,21 @@ other prerequisites of the side's naval yard, and note whether the yard's icon a
 None needed: the code follows S-0009 and S-0407 as approved. Our AI builds a navy only for a side
 whose naval yard is not refused. The local lane's per-side games (`glasnost-headless ai-sides`)
 show which sides do.
+
+## Answer (spec side, 2026-10-15)
+
+No spec change. The spec owner re-traced the source of a house's tech level for this request:
+
+1. Yes. With its prerequisites standing, every side's naval yard is offered in a stock skirmish
+   game. With the stock rules data, all three yard types' tech levels are at or below the game's
+   tech level, so S-0407 claim 5 (a) refuses none of them.
+2. The game's tech level of S-0009 (Terms; claim 45; its Import mapping row for the multiplayer
+   default). No other value is compared. A setup tool can override the game's tech level before
+   the game starts; the stock setup screen has no such control (S-0412 claim 1).
+3. No. Human and computer lobby houses get the same value; the neutral and special houses do not
+   take it.
+
+So the refusal comes from the imported values, not the rule. Check that the importer reads the
+multiplayer default from the section and key that S-0009's Import mapping names, in the Yuri's
+Revenge rules file (not the original Red Alert 2 rules file), and each type's tech level as
+S-0407 maps it. A three-side naval yard scenario is being added to S-0407.
