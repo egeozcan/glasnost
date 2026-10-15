@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -621,8 +621,9 @@ and *subject to walls*. In addition:
 26. **Aircraft classification exceptions.** For an aircraft, *airborne* in this spec means
     the in-the-air answer of S-0501 claim 18. Ordinary aircraft use the 208-lepton height
     threshold in Terms. The two exceptions are the game-wide V3-rocket and dreadnought-missile
-    types: their locomotor's own in-the-air answer replaces that height test. For those two
-    types, *floor-bound* is the opposite of that answer, not a separate height comparison.
+    types: their locomotor's own in-the-air answer replaces that height test. S-0506 claim 22
+    defines their phase-based answer (parameter sets A and B). For those two types,
+    *floor-bound* is the opposite of that answer, not a separate height comparison.
     This qualification applies to the air bonus (claim 3), elevation eligibility (claim 6),
     target-height replacement (claim 7) and source-height replacement (claim 8 b). It is not
     S-0501's on-the-ground or in-flight test.
