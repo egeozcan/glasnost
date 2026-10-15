@@ -473,6 +473,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             if let Some(ob) = w.obj_mut(id) {
                 ob.pos = next;
             }
+            if next.cell() != pos.cell() {
+                // spec: S-0516 claim 22 and Edge cases (rocket flight supplies no cell-arrival update; quirks.flying_sensor_disc_stationary off: a cell-boundary crossing moves the sensor disc, with no adjacency test)
+                crate::cloak::machine::flight_cell_crossed(w, id);
+            }
             moved = next != pos;
             crate::combat::flying::moved(w, id);
         } else if !q.rocket_stalls_at_map_edge {

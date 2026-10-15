@@ -2062,6 +2062,42 @@ fn s0309_claim_23_attack_move_search_keeps_pending() {
     }
 }
 
+// spec: S-0516 claim 22 and Edge cases (Q-0795: rocket flight supplies no cell-arrival update, so the sensor disc added when the missile entered play stays at its launch cell; quirks.flying_sensor_disc_stationary off: each cell-boundary crossing in flight moves it to the new cell)
+#[test]
+fn s0516_claim_22_rocket_flight_moves_no_sensor_disc() {
+    for stationary in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.flying_sensor_disc_stationary = stationary;
+        r.sim.aircraft.get_mut("RKA").unwrap().combat.sensors_sight = Some(2);
+        let mut w = game(&r);
+        let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+        let victim = spawn_at(&mut w, "VICTIM", 1, 12, 0, 0);
+        let x = controller(&w, lna).slots[0].object.unwrap();
+        let mut launch = None;
+        spawn::shot(&mut w, lna, Target::Object(victim));
+        let mut crossed = 0;
+        for _ in 0..300 {
+            testkit::run(&mut w, 1);
+            let Some(o) = w.obj(x) else { break };
+            if o.rocket.is_none() {
+                continue;
+            }
+            let start = *launch.get_or_insert(o.pos.cell());
+            if o.pos.cell() == start {
+                continue;
+            }
+            crossed += 1;
+            let disc = o.cloak.disc.map(|(_, c)| c);
+            if stationary {
+                assert_eq!(disc, Some(start), "the disc stays at the launch cell");
+            } else {
+                assert_eq!(disc, Some(o.pos.cell()), "the disc follows the crossing");
+            }
+        }
+        assert!(crossed > 0, "the missile left its launch cell");
+    }
+}
+
 // spec: S-0309 claim 24 and S-0506 claim 25 (a nonempty target redirected to none requests the conditional clear even when the old own target was empty; an explicit clear of an empty target does not, quirk on)
 #[test]
 fn s0309_claim_24_redirect_to_none_requests_clear() {
