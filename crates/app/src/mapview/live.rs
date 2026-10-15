@@ -1183,13 +1183,14 @@ impl Live {
                     facing: o.turret.value(self.world.tick),
                     object: sim_code(o.id),
                     unloading: self.unloading_of(o),
-                    // spec: S-0108 claim 4 (a gate's door: S-0215 claim 35)
-                    gate_door: self
+                    // spec: S-0108 claim 4 (a gate's door, S-0215 claim 35: its special image only while the current behaviour is open; otherwise the stationary rows)
+                    gate_door: (self
                         .rules
                         .buildings
                         .get(o.type_index as usize)
                         .is_some_and(|b| b.gate)
-                        .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
+                        && o.beh.current == Some(Behaviour::Open))
+                    .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
                 })
             })
             .collect();

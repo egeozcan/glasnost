@@ -697,7 +697,7 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     && let Some(ov) = pt.wall_overlay
                 {
                     // spec: S-0112 claim 7 (a wall building of the map's building list is placed as a wall built in play: stage 0, owned by the building's owner; c and its four edge neighbours recomputed); S-0406 claim 10 (no building remains)
-                    // Its final owner is S-0210 claim 14 (a)'s, which runs later (Q-0684 interim).
+                    // spec: S-0210 claim 14 (a) (the building's owner is only the initial owner: the nearest-building rule replaces it before play starts, even with no owner as the result; the converted wall building cannot itself qualify; Q-0684 answered)
                     w.objects.remove(&id);
                     // As for a wall placed in play, an overlay already in the cell stays (S-0406 claim 10's interim rule).
                     if w.cells

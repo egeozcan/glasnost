@@ -163,7 +163,7 @@ fn claim_7_tower_removed_alive_deals_no_hits() {
 }
 
 /// spec: S-0112 claim 7 (a wall building of the map's building list is placed as a wall built in play: its overlay at stage 0, joined to its neighbours; no building remains)
-/// spec: S-0210 claim 14 (a) (the wall's owner at the start is the nearest qualifying building's: Q-0684 interim)
+/// spec: S-0210 claim 14 (a) (the initial owner from the wall building is replaced before play by the nearest qualifying building's; Q-0684 answered)
 #[test]
 fn claim_7_map_wall_building_becomes_its_overlay() {
     let mut s = wall_scene();
