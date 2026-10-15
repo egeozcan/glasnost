@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -50,7 +50,8 @@ S-0301's term (Terms and claim 10).
   charge-turret types included (their weapon number never changes, claim 5).
 - **Weapon number.** An integer per object, the slot a switching type currently uses (claim 5).
 - **Gattling stage.** An integer per object of a gattling type, the stage its weapon has spun up to.
-  The rules that raise and lower it belong to a later combat spec; this spec only reads it.
+  S-0609 claims 1–4 define how it rises and falls; claims 1–9 own its ordinary updates and their
+  timing. This spec only reads it.
 - **Gunner type.** A vehicle type with the imported gunner flag: its weapon number is set by its
   passenger (claim 6).
 - **Mode index.** A type's imported passenger mode index: the weapon number a gunner type takes when
@@ -463,7 +464,8 @@ number unchanged.
 | the building is emptied by occupants leaving or being killed | index = 0 |
 
 Ordering: none of its own. The choice is made each time a rule asks for it, with the state at that
-moment (for example the gattling stage and the deployed state of the same tick).
+moment (for example the gattling stage and the deployed state of the same tick). S-0609 claims
+1–9 own the ordinary gattling stage updates and their timing.
 
 ## Edge cases and quirks
 
@@ -833,6 +835,7 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 - The rearm-countdown transfer of claim 6, restarted from slot 7, remains low confidence
   pending W4 part g. Temporal beam transfer and exit release agree with S-0514 claims 9,
   10 and 14.
-- The rules that raise and lower a gattling stage are not specified anywhere yet.
+- Gattling spin is now specified by S-0609 claims 1–4, with ordinary stage-update timing in
+  S-0609 claims 5–9; it is no longer an open question here.
 - Whether any rule refuses a shot where table N's "no weapon" answers arise (modes 0, 2 and 6):
   the weapon choice gives slot 0 and nothing here forbids the shot.
