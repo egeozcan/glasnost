@@ -2,11 +2,11 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339]
 supersedes: []
@@ -90,9 +90,11 @@ last recheck). In addition:
 - **Unit item.** An item of an infantry, vehicle or aircraft type; the other items are building and
   defence items. "Unit" alone, as the kind of an item, icon, type or line ("a done unit", "a unit
   line"), refers to unit items; "the unit" that a done unit item releases is the object it becomes.
-- **Ready superweapon.** A superweapon whose charge is complete and that the player may fire. The
-  superweapons are outside this spec (S-0004, claim 11 only places their icons); the term is used
-  only for the tab flash of claim 11.
+- **Ready superweapon.** For the tab flash of claim 11 only, a superweapon eligible under
+  S-0512 claim 17: not suspended, inside its flash window, and ready (for a drain-mode
+  type, in its ready or active state). Charge completion alone does not establish
+  flash eligibility. S-0512 claim 17 owns the window and its reference tick.
+  S-0004 claim 11 places the icon.
 - **New-build click.** A left click on an icon whose line has no item, that gives a build order which
   starts an item (claim 4, last row). *Pending* means: its build order has not yet been applied.
   A left click while the line has an item follows claim 4: it may resume, queue, cancel, request
@@ -354,7 +356,9 @@ last recheck). In addition:
     - Confidence: medium
 
 11. **Tab flashing (Q-0283).** While the local player has a done building or defence
-    waiting for placement, or a ready superweapon, its tab flashes. Let *t* be the tick
+    waiting for placement, or a ready superweapon eligible under S-0512 claim 17,
+    its tab flashes. A suspended superweapon or one outside its flash window does
+    not sustain flashing, even if its charge is complete. Let *t* be the tick
     whose sidebar update starts a new flash, and *r* = *t* mod 10. The initial state is
     lit exactly when ⌊*t*/10⌋ + 1 is even. It lasts for 20 − *r* sidebar updates,
     including the starting update; the first toggle is visible in tick *t* + 19 − *r*.
@@ -368,7 +372,8 @@ last recheck). In addition:
     do not run during frozen cycles or while the game stands still, so pausing does
     not consume the flash period. Lit means the flash state, independent of selection
     or mouse-over styling; its artwork is the implementer's design. Presentation only.
-    - Backing: `measurable` (scenario S8, including restart and pause controls)
+    - Backing: `measurable` (scenario S8, including restart and pause controls,
+      S-0512 scenario X9 for superweapon flash eligibility)
     - Confidence: high (initial parity and update counts); medium (visible tick boundary
       and ready-superweapon trigger)
 
@@ -701,7 +706,8 @@ The sidebar reads no rules keys of its own. Its fixed asset and text inputs are:
 | `TXT_READY` (string table) | ready label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | `TXT_HOLD` (string table) | on-hold label | fixed entry identifier, not literal game text; missing entry displays a diagnostic containing the requested identifier; string-table file resolution follows S-0005 |
 | No data key | queue count format and label lifetime | decimal integer count; labels are state-bound, not timed messages; claims 7, 8 and 17 |
-| No data key | tab flash | initial parity/countdown and later 10-tick periods are engine constants, claim 11 |
+| No data key | tab flash cadence | initial parity/countdown and later 10-tick periods are engine constants, claim 11 |
+| `FlashSidebarTabFrames` (rules, superweapon) | superweapon flash-window eligibility | integer ticks; initially −1, unlimited; 0 disables the window; positive values limit it from the reference tick; S-0512 claim 17 owns the full rule |
 | No data key | scroll dispatch and end tests | claim 18: page button on release, no held repeat, wheel one row per event; disabled buttons emit no request; no imported repeat timer |
 | `GUITabSound`, `ScoldSound` (rules, audio-visual section) | accepted page-scroll and refused page-scroll sound respectively | single sound-entry names; initially no sound, later omission or unknown name retains earlier value, including session retention; S-0701 Import mapping |
 | `EVA_Training`, `EVA_Building` (announcement data, entry names) | infantry start/resume versus other-kind start/resume | fixed entry identifiers, resolved by S-0701's announcement rules; missing entry supplies no announcement; an active-line queue click requests neither |
@@ -985,12 +991,24 @@ the time the script sent a button event, dates a click.
   invalid click requests the cannot-deploy-here announcement, without the game-wide refusal
   sound, and placement mode continues; record the requested entry separately from playback.
   The valid click places the
-  building and ends the mode. Second run: the superweapon's tab button flashes the same way. Third
+  building and ends the mode. Second run: while the superweapon is eligible under
+  S-0512 claim 17, its tab button flashes the same way. Third
   run: placement mode ends, the item is cancelled and refunded. Fourth run: the battlefield
   right click removes the outline but leaves the item ready and the tab flashing, with no
   production order or credits change. Re-entry restores the outline; the scroll drag and
   release retain placement mode and the ready item, with no cancellation or refund. The
   final valid left click places the building normally.
+- Superweapon eligibility controls: use S-0512 scenario X9's named flash-window
+  overrides, with no done defence or other eligible superweapon on the tab. In
+  separate runs, switch the sole giving building of a ready power-dependent type
+  off and on, once before a positive window expires and once after its expiry.
+  Record suspension, resumption and flash-state ticks. Expected: an unlimited window sustains flashing,
+  a zero window never starts it, and a positive window ceases to sustain it at
+  the expiry tick fixed by S-0512 claim 17. Suspension stops the flash; resumption
+  restores eligibility only if the window still permits it. A flash sustained by
+  an ineligible record, or failure to flash when it alone qualifies, falsifies
+  this control. Drain-mode tests use S-0512 scenario X11's named test data and
+  the reference-tick expectations of S-0512 claim 17.
 - Pause/restart controls: open the options menu during the initial state, then resume.
   Expected: neither countdown nor lit state advances while the game stands still.
   Keep a ready subject on the tab for at least 50 ticks: repeated readiness must not
@@ -1004,7 +1022,7 @@ the time the script sent a button event, dates a click.
   the flash stays after its last subject is removed, the announcement is missing, placement mode ends after the
   invalid click, that click requests a different announcement or the game-wide refusal sound,
   valid placement fails to place or end the mode, the superweapon tab does not
-  flash, or the third-run icon right click leaves placement mode on or fails to cancel and
+  flash while eligible, or the third-run icon right click leaves placement mode on or fails to cancel and
   refund the item. The fourth run is falsified by battlefield exit cancelling/refunding the
   item, failure to re-enter and place it, or a classified right drag ending placement mode.
 
