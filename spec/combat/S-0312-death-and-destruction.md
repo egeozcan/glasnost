@@ -2,13 +2,13 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413]
+requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652]
 supersedes: []
 ---
 
@@ -235,12 +235,20 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    - Backing: `measurable` (scenario D7)
    - Confidence: high for the picks; medium for the harvester statement
 
-10. **Sinking.** A killed vehicle of a naval type that is not an underwater type and not organic,
+10. **Sinking.** For types without death image frames (Open questions), a killed vehicle
+    of a naval type that is not an underwater type and not organic,
     whose type's weight is at least the game-wide sinking weight, is on a water cell and
     does not carry the bomb mark, sinks
-    instead of exploding: it keeps 1 health point, stays in play and shows no explosion or
-    destruction animation (claim 9). Its passengers are handled as in claim 12. S-0504 claims 4
-    and 5 own its descent, duration, removal and behaviour while sinking.
+    instead of showing claim 9's explosion and destruction animations: neither animation
+    appears and neither list-pick draw is taken. Its health is restored to 1 health point,
+    but staying in play is subject to claim 15's crashable rule, even on its first killing
+    hit. A crashable vessel at the water surface cannot start a crash and is removed at the
+    end of that hit's effects; it does not survive for a sinking descent. This removal adds
+    neither claim 9's animations or picks nor claim 16's crash-start tumbling draws.
+    Applicable shared effects and their draws (claims 4 to 7), passenger handling (claim 12),
+    crew (claim 13) and crates (claim 14) still apply. A non-crashable vessel stays in play
+    at 1 health point. S-0504 claims 4 and 5 own descent, duration, removal and behaviour
+    only for a vessel that remains in play.
     Separately, a grappling parasite's cull starts its host sinking without a killing hit,
     regardless of the host type's weight: health is unchanged and no damage is delivered
     (S-0614 claim 11). This is not a killing hit that takes this spec's death effects.
@@ -248,7 +256,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     host fails the ordinary sinking conditions.
     - Backing: `measurable` (scenario D8, S-0504 scenarios N5 and N6 for sinking after it starts,
       S-0614 scenario P6 for culling)
-    - Confidence: high for the killing-hit condition and the cull distinction; sinking after
+    - Confidence: high for the killing-hit condition, first-hit crashable removal, omitted
+      vehicle animations and picks, absent crash-start draws, and the cull distinction; sinking after
       it starts inherits S-0504 claims 4 and 5's confidence
 
 11. **Vehicles with the bomb mark that die low over water.** A vehicle that carries the bomb mark
@@ -335,10 +344,13 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     the terrain, starts to crash (claim 16) and stays in play until it hits the ground. A vehicle
     already sinking and whose type cannot crash stays in play, including the zero-health
     aftermath of claim 32. For a crashable type, failure to start a crash instead removes it
-    immediately, even when it was sinking. Every other destroyed vehicle leaves play at the
-    end of its death effects, in the same moment (S-0203 claim 6a). Types with death image
+    immediately, whether sinking started at this killing hit (claim 10) or before it
+    (claim 32). This includes a first killing hit on a crashable surface vessel at height
+    0 above water: the restored health does not prevent removal. Only a vessel retained
+    after these effects proceeds to S-0504 claim 4's descent. Every other destroyed vehicle
+    leaves play at the end of its death effects, in the same moment (S-0203 claim 6a). Types with death image
     frames retain the separate unresolved death path in Open questions.
-    - Backing: `measurable` (scenario D11)
+    - Backing: `measurable` (scenarios D11 and D8's first-hit crashable variant)
     - Confidence: high
 
 ### Aircraft and crashing
@@ -374,12 +386,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` (scenario D11, variant f for an empty explosion list,
-      S-0501 scenario AC5 for dead flying-aircraft crash motion; S-0502 scenario J12 for
-      jumpjet crash motion; S-0506 scenario R13 for
-      rocket interception, unchanged phase timers and absence of additional crash fall).
-      Living flying-aircraft crashes and aircraft sinking retain the backing limitations
-      of S-0501 claim 9.
+    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0502 scenario J12 for jumpjet crash motion, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, and their independence from height; rocket interception inherits S-0506
       claim 20's confidence; jumpjet motion inherits S-0502 claim 18's confidence,
@@ -871,7 +878,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
     For types without death image frames, the health and animation outcomes are:
 
-    | Condition at this killing hit | Health after the hit's effects | Vehicle animations and removal |
+    | Condition at this killing hit | Health, unless claim 15 removes it | Vehicle animations and removal |
     |---|---|---|
     | Ordinary sinking conditions of claim 10 hold | 1 health point | No claim 9 explosion or destruction animation; absent claim 15's crashable removal, descent continues from the existing height, without restarting its removal interval (S-0504 claim 13) |
     | Those conditions fail, including an underwater or insufficient-weight cull host | 0 health points | Claim 9's explosion and destruction animations and their draws apply, except for claim 11's marked-water replacement; a non-crashable vehicle remains in play because it is already sinking |
@@ -1055,7 +1062,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 
 | State | Event | Result |
 |---|---|---|
-| alive vehicle | killing hit, sinking conditions hold | sinking, 1 health point, in play |
+| alive vehicle | killing hit, sinking conditions hold | 1 health point restored, no claim 9 animations or picks; crashable failure to start a crash removes it in this hit, otherwise it remains in play sinking (claims 10 and 15) |
 | living grappling host | cull under S-0614 claim 11 | sinking without a hit or health change, regardless of weight |
 | positive-health sinking vehicle | another killing hit | credit, raises and applicable death effects again; 1 health only under the ordinary reprieve, otherwise claim 32's zero-health/removal outcome |
 | alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
@@ -1168,7 +1175,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | rules, warhead section, `CausesDelayKill`, `DelayKillFrames`, `DelayKillAtMax` | delay-kill flag, *F*, *A* (F6) | boolean, integer, decimal (held as a single) | no; 5 ticks; 1.0 (as S-0302 Import mapping, which owns them) |
 | rules, building type section, `EligibleForDelayKill` | eligible for delayed death (claim 3) | boolean | no |
 | rules, type section, `Naval`, `Underwater`, `Organic`, `Weight` | sinking conditions (claim 10) | boolean, boolean, boolean, decimal | type specs |
-| rules, type section, `Crashable` | can crash (claims 12, 15) | boolean | no |
+| rules, type section, `Crashable` | can crash (claims 12, 15); failure to start a crash removes the vehicle even on a first killing hit that meets the sinking conditions (claim 10) | boolean | no at type creation; later absence preserves the value in force |
 | rules, type section, `Crewed` | crewed flag (claim 13, F4, F5) | boolean | type specs |
 | rules, type section, `Passengers` | passenger capacity (claim 13) | integer | 0 |
 | rules, unit type section, `CarriesCrate` | crate carrier (claim 14) | boolean | no |
@@ -1338,7 +1345,7 @@ destruction list pick. Missing animations, wrong override cases or a replay mism
 these parts.
 
 **D8. Sinking (claim 10).** *Setup:* a stock naval vessel whose weight meets the sinking weight,
-killed on water; variant b a test naval type with weight below it. *Observable:* whether the vessel
+killed on water, with crashability off; variant b a test naval type with weight below it. *Observable:* whether the vessel
 sinks (stays in play at 1 health) or shows an explosion. *Expected:* the first sinks with no
 explosion animation; the second explodes. *Falsified if:* the first explodes, or the below-threshold
 vessel sinks instead of showing an explosion. Use named map overrides to repeat the above-threshold vessel
@@ -1349,6 +1356,27 @@ animations; either on a sinking instance falsifies their omission.
 S-0504 scenarios N5 and N6 test the subsequent duration, removal and sinking behaviour.
 S-0614 scenario P6 separately tests culling-induced sinking without a killing hit, including
 unchanged health; the killing-hit expectations above do not apply to that cull.
+
+*First-hit crashable variant (claims 10 and 15; Q-0652).* Use named map override
+"sinking-first-crashable" on the tiny water map, speed 6, 800×600, director and mods off
+apart from this test data. Compare two otherwise identical surface vessels at height 0,
+meeting every sinking condition, with death image frames absent and crashability on for
+one and off for the other. Give both distinguishable nonempty explosion and destruction
+animation lists. Initially exclude passengers, crew, crates, debris, exploding abilities
+and attached bombs to isolate the animation and crash-start draws. Deliver each vessel's
+first killing hit, in 30 trials per variant. Record in-play membership immediately after
+the hit, health while present, height through the following own updates, animations and
+the scenario stream state, separating the attacker's and projectile's effects.
+Expected: the crashable vessel leaves play in the killing hit, without either list pick,
+either vehicle animation or any crash-start tumbling draw. It has no subsequent descent
+or sinking wakes. The non-crashable control remains at 1 health and descends under S-0504
+claim 4, also without either list pick. Remaining in play after the hit, beginning a
+later descent, either vehicle animation or an associated pick or tumbling draw falsifies
+the crashable prediction. Then repeat with D4's identifiable debris and D6's exploding
+death weapon: their applicable effects and draws still occur before removal, not claim 9's
+picks. Omitting an applicable shared effect or adding either pick falsifies that extension.
+A recorder that cannot separate the hit from later own updates is inconclusive for timing.
+Remove the named override after the test.
 
 *Marked-water variant (claim 11).* Use S-0503 claim 11's scenario H7 for a stock hover switched
 off over flat water, and S-0511 claims 9 and 10's scenario B3 for a stock vehicle dropped from

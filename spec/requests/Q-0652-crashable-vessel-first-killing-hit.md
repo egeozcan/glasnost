@@ -1,9 +1,9 @@
 ---
 id: Q-0652
 title: Whether a crashable naval type that meets the sinking conditions at its first killing hit sinks or is removed
-status: open
+status: answered
 related: [S-0312, S-0504]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
