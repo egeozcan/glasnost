@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -32,8 +32,8 @@ S-0214 defines it), *behaviour*, *cell*, *land type*, *bridge*, *departure*, *im
 *quirk switch*. *Versus value* and *weapon it would use* are S-0304's terms; this spec owns how the
 weapon it would use is chosen. *Health ratio* and *counts as a vehicle* are
 S-0214's, and *veterancy rank* is S-0311's (S-0214 only uses the words). *Deploy kinds* and *current sequence* are S-0107's. *Unload* and the other behaviour names
-are S-0215's. *Garrisoned building* is S-0301's and *open-topped transport* is S-0203's, as the glossary
-gives them; *elite weapon* is S-0311's (claim 6), with the slots here. *Disc laser weapon* is
+are S-0215's. *Garrisoned building* is S-0301's and *open-topped transport* is S-0507's, as the glossary
+gives them; S-0203 claim 3 owns open-topped passengers' place in the update order. *Elite weapon* is S-0311's (claim 6), with the slots here. *Disc laser weapon* is
 S-0301's term (Terms and claim 10).
 
 - **Weapon slot.** A type holds up to 18 weapon slots, numbered 0 to 17. Each slot holds a weapon or
@@ -173,20 +173,24 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    above. A charge-turret gunner ignores the
    weapon-number change request and remains at weapon number 0. Other gunner vehicles still follow
    table P for slot choice.
-   One refinement (low confidence): a
-   first passenger whose temporal weapon (an erasing weapon, glossary *being erased*) is still
-   erasing a target when it enters hands that erasure over to the vehicle, which carries it on. If
-   the passenger's rearm countdown (S-0301) was still running, the vehicle's rearm countdown
-   restarts with the delay of the weapon in the vehicle's slot 7. In this case too, the vehicle's
-   weapon number after the entry is the mode index of the passenger's type, as above.
+   **Temporal hand-over.** A first passenger with a temporal beam (S-0514, Terms) hands
+   that beam to the vehicle whether or not it is currently erasing a target. The vehicle
+   carries on any attached erasure without releasing the target or resetting its progress.
+   When the last passenger leaves, the vehicle hands its temporal beam back to that passenger
+   and the beam lets go. If it was the sole attacker, the target stops being erased and loses
+   its progress; otherwise S-0514 claims 9 and 10 govern continuation and release.
+   If the entering passenger's rearm countdown (S-0301) was still running, the vehicle's rearm
+   countdown restarts with the delay of the weapon in the vehicle's slot 7 (low confidence).
+   The vehicle's weapon number after entry is still the passenger type's mode index, as above.
    - Backing: `measurable` (scenario W4, parts a to f for the first-passenger rule; part g for the
-     temporal hand-over; part i and S-0507 scenario T10 part e for the failed-exit weapon-number
+     temporal hand-over, idle-beam transfer and last-passenger release; part i and S-0507 scenario T10 part e for the failed-exit weapon-number
      exception). Retention after the first passenger alone leaves is `unmeasured`
      if W4 part d cannot remove that passenger alone: evacuating and refilling does not test it.
      Other hand-over effects after a failed exit are `unmeasured`: these scenarios isolate the
      weapon number, not temporal erasure or rearm-countdown transfer.
    - Confidence: high for the first-passenger rule and failed-exit weapon-number exception,
-     low for the temporal hand-over, including after a failed exit
+     high for temporal beam transfer and release on last-passenger exit, low for the
+     rearm-countdown transfer and temporal effects after a failed exit
 
 7. **Gattling types.** A gattling type at gattling stage *s* uses slot 2*s* + 1 against an airborne
    target object when the weapon in its slot 1 has an anti-air projectile, and slot 2*s* otherwise.
@@ -334,8 +338,7 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 trunc is truncation toward zero (S-0205, claim 2), so a sum of −3 gives *M* = −1. Integer
 arithmetic, no rounding mode involved.
 
-**F2. Gattling slots.** slot = 2*s* + *a*, with *s* the gattling stage and *a* = 1 when the target is
-an airborne object and the weapon in slot 1 has an anti-air projectile, else 0. Integer arithmetic.
+**F2. Gattling slots.** *slot* = 2 × *s* + *a*, where *s* is the integer gattling stage and *a* is an integer equal to 0 or 1: *a* = 1 when the target is an airborne object and the weapon in slot 1 has an anti-air projectile, and *a* = 0 otherwise. The result is an integer slot; evaluation uses integer arithmetic and no rounding. The supported integer width and overflow behaviour of this expression are not established here and must not be inferred from this formula.
 
 **F3. Versus test.** "Zero versus value" means *v* = 0 exactly (+0 or −0), the double-precision
 versus value of the weapon's warhead for the target's armour class (S-0304, Formulas). No other
@@ -613,7 +616,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
 - *Expected:* hits of 3, 7, 7, 7 (the first passenger's choice stays), 3, 3. If part d cannot
   remove *P* alone, leave that part unmeasured; unloading both and re-entering *Q* then *P*
   instead gives 11, but confirms only the empty-vehicle entry rule, not retention after *P* leaves.
-- *Part g (temporal hand-over, low confidence):* the gunner vehicle's type is given weapon count 8,
+- *Part g (temporal hand-over; countdown transfer low confidence):* the gunner vehicle's type is given weapon count 8,
   so that its slot 7 exists (claim 1; slots 4 to 6 may stay empty), and slot 7 holds a weapon with a
   rearm delay of about 300 ticks, and the weapon of mode index 2 has a delay of about 30 ticks.
   Infantry type *T* has an erasing (temporal) primary and mode index 2; it is erasing a stationary
@@ -626,7 +629,16 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   the observed countdown restart with the slot-7 delay from S-0301, including its ordinary delay
   factors, rather than treating the illustrative 300 ticks as an exact result. Repeat with *T*
   not erasing anything as a control; record its timing without assuming entry itself imposes a
-  slot-2 delay.
+  slot-2 delay. In that idle control, a read-only recorder logs which object holds the
+  temporal beam before and after boarding: the vehicle must receive it even without a target.
+  In a separate run, after boarding, let the vehicle lock a high-strength stationary target,
+  then unload its sole passenger before completion. Record beam ownership and the target's
+  being-erased state on exit: the passenger receives the beam but it is detached, and the
+  target recovers with no saved progress. Repeat with another attacker attached: that
+  attacker continues the erasure under S-0514 claims 9 and 10. A beam left on the vehicle,
+  an idle beam not transferred, or a sole-attacker target remaining erased after exit
+  falsifies the corresponding hand-over rule. Discard runs where another release cause
+  ends the vehicle's lock before exit.
 - *Part h (charge-turret rule):* the gunner vehicle of parts a to f with its charge-turret flag set.
   *Expected:* hits of 3 after *P* enters and after *Q* enters (the weapon number stays 0 whatever
   the passengers' mode indices); the same vehicle without the flag gives the results of parts a to f.
@@ -801,9 +813,9 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
   S-0313 and the structures specs should agree on it.
 - What a new occupant's entry does to the occupant index of a garrisoned building (claim 13 and its
   state table give only shots and departures): whether the index keeps its value or returns to 0.
-- The temporal hand-over of claim 6 (the erasure carried on by the vehicle, and its rearm countdown
-  restarted from slot 7) was read from one rule and not followed through the erasing-weapon rules,
-  the combat spec that owns erasing weapons should confirm it.
+- The rearm-countdown transfer of claim 6, restarted from slot 7, remains low confidence
+  pending W4 part g. Temporal beam transfer and exit release agree with S-0514 claims 9,
+  10 and 14.
 - The rules that raise and lower a gattling stage are not specified anywhere yet.
 - Whether any rule refuses a shot where table N's "no weapon" answers arise (modes 0, 2 and 6):
   the weapon choice gives slot 0 and nothing here forbids the shot.
