@@ -1,9 +1,9 @@
 ---
 id: Q-0662
 title: A rules set without the fixed gas-cloud particle system (S-0613 against S-0004)
-status: open
+status: answered
 related: [S-0613, S-0004]
-answered-by: []
+answered-by: [S-0613]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0662]
 supersedes: []
 ---
 
@@ -46,8 +46,9 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
   (integer leptons), an integer velocity (*v*ₓ, *v*ᵧ, *v*_z) in leptons per tick, a stored
   horizontal *deflection* (*d*ₓ, *d*ᵧ) in single-precision leptons, a remaining lifetime *E* in
   ticks, a damage countdown *C* in ticks, a particle stage *s* and a dead mark.
-- **Shared gas system.** The one gas particle system that every game has from its start, with no
-  owner house (claim 1). Virus deaths put their clouds into it.
+- **Shared gas system.** The one particle system that every game has from its start, with no
+  owner house (claim 1). Normally its type has gas behaviour; a missing type is created without
+  any behaviour kind. Virus deaths put their clouds into it.
 - **Particle stage.** A small signed counter of a particle that advances at a fixed cadence
   (claim 15). It selects the drawn frame and can end the particle. Not the resource stage of
   S-0401.
@@ -67,9 +68,15 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    house, no target and the system lifetime of its type. Its own position has no observable effect.
    With an unlimited system lifetime it lasts until the game is cleared and is never removed merely
    for being empty. A positive system lifetime instead marks it to end after that many turns (claim 6).
-   A rules set without that type cannot be played: the importer rejects it (Edge cases).
+   When no type of that name exists after all rules layers, the original creates it at game
+   start and reads no rules section, as S-0004 claim 3 states. The game is not rejected. This
+   newly created type has unlimited system lifetime (−1 ticks), no behaviour kind and no held
+   particle type. A section alone does not supply its properties if nothing registered the type
+   during the rules layers. The shared system starts empty; with no behaviour kind it neither
+   updates nor moves particles later delivered into it, so those particles do not deal gas damage
+   or expire through claims 5 to 15. Those claims' gas-system turns require gas behaviour.
    - Backing: `measurable` (G1 for creation, ownership, target and empty persistence,
-     G3 for finite system lifetime). The statement that its own position has no effect is
+     G1-missing for the missing-type case and its defaults, G3 for finite system lifetime). The statement that its own position has no effect is
      `unmeasured`: these scenarios do not independently vary that position.
    - Confidence: high
 
@@ -384,8 +391,10 @@ Ordering consequences:
   Our object number (Terms) has a different sequence, so which clouds advance with period *A* and which with
   *A* + 1 can differ from the original. This is a known departure of the same kind as S-0306's
   missile phase. It decides how long a particle with the delete-at-stage-limit flag lives.
-- **Missing shared gas type.** The original then reads outside its type list. Our importer rejects
-  the rules set (claim 1).
+- **Missing shared gas type.** Creation without a rules-section read is original behaviour,
+  not a departure: S-0004 claim 3 and claim 1 here apply. Missing the type is not a reason for
+  importer rejection or a warning. Without a behaviour kind, the resulting system cannot run
+  gas updates even when a virus death delivers gas particles into it.
 - **Virus-death animation without a particle type.** The original reads outside its type list in
   claim 3 (and claim 2 creates nothing). Our importer warns, and claim 3 creates no particle.
 - **Wind direction outside 0–7,** including the absent default −1. The original reads outside its
@@ -401,7 +410,7 @@ Ordering consequences:
 
 | Concept | Source | Parse form | Default when absent |
 |---|---|---|---|
-| Shared gas system type | Rules section named `GasCloudSys`, a particle-system type; the name is fixed by the engine | section | none: rejected (claim 1) |
+| Shared gas system type | Particle-system type named `GasCloudSys`; registered through `[ParticleSystems]` or a creating reference (S-0004 claims 2, 3 and 13); its rules section supplies properties only on a section read | type name, fixed by the engine | created at game start with no section read: lifetime −1 ticks, no behaviour kind, no held particle type (claim 1) |
 | System held type | particle-system type `HoldsWhat` | particle type name | none |
 | System behaviour kind | particle-system type `BehavesLike` | name: Smoke, Gas, Fire, Spark, Railgun | none (no update) |
 | System lifetime | particle-system type `Lifetime` | integer, ticks | −1 |
@@ -447,6 +456,20 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   before the first death, has neither owner nor target, and persists empty between deaths.
   *Falsified if* either kill produces no clouds, the system first appears at a death, acquires
   an owner or target, or disappears merely for being empty.
+- **G1-missing. Missing shared type.** Named test rules file G1-missing removes the fixed
+  shared-system type from every type list and creating reference in every applied rules layer.
+  Keep the stock virus-death animation and its particle types. Run once with its section absent,
+  and once with an otherwise unreferenced section naming gas behaviour, a held particle type
+  and a short positive system lifetime. Use G1's houses and kill procedure. Record the type's
+  existence, behaviour kind, held type and lifetime at game start, shared-system existence,
+  particle creation, positions, remaining lifetime and nearby infantry health for 200 ticks.
+  Expected in both variants: a created type with no behaviour kind, no held type and lifetime
+  −1 ticks; an initially empty ownerless shared system that persists; virus-death particles
+  arrive but receive no system updates or movement, no lifetime decrement and no gas damage.
+  Registration during the rules layers must be absent in both variants, not merely the type-list
+  entry: any surviving creating reference invalidates the test. Startup failure, properties
+  from the unreferenced section, particle updates or gas damage falsify claim 1. Repeat each
+  variant three times under the common setup. A listed-type control must recover G1/G4 behaviour.
 - **G2. Cloud count.** (a) Kill a human infantry with the virus sniper: count the clouds at the
   animation's middle frame. Also record the animation's initial position and owner and each
   particle's creation position and system membership. Expected: the animation begins at the
