@@ -248,7 +248,11 @@ pub fn check(
     let kind = o.kind;
     let weapon = slot_weapon(w, firer, slot);
     let target = target.filter(|t| target_exists(w, *t));
-    // Ranks 1 to 3 (a vehicle playing death frames, launching spawned aircraft, melee-linked) need states that no topic of our engine sets yet.
+    // Ranks 1 and 3 (a vehicle playing death frames, melee-linked) need states that no topic of our engine sets yet.
+    // spec: S-0301 claim 9 rank 2 and S-0506 claim 10 (a vehicle whose launching count is above 0: busy)
+    if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
+        return Answer::Busy;
+    }
     // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
     if kind == Kind::Infantry
         && let Some(wp) = weapon
@@ -281,8 +285,8 @@ pub fn check(
     if crate::teleport::phasing_in(w, firer) {
         return Answer::Rearming;
     }
-    // spec: S-0301 claim 9 rank 4 (a spawner weapon none of whose spawned aircraft is alive: rearming; no spawned aircraft exist in our engine)
-    if wr.spawner {
+    // spec: S-0301 claim 9 rank 4 and S-0506 claim 10 (a spawner weapon none of whose slot objects is alive: rearming)
+    if wr.spawner && !crate::spawn::any_alive(w, firer) {
         return Answer::Rearming;
     }
     let t = w.tick;

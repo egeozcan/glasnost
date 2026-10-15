@@ -91,6 +91,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
             crate::combat::death::removal_turn(w, id);
             return;
         }
+        if w.obj(id).is_some_and(|o| o.rocket.is_some()) {
+            // spec: S-0506 claim 20 (a destroyed rocket missile above the terrain keeps the rocket-flight movement mode)
+            crate::rocket::tick(w, id);
+            return;
+        }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
         crate::combat::death::infantry_death_turn(w, id);
         return;
@@ -98,6 +103,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn)
     crate::combat::heal::turn(w, id);
     process::turn(w, id);
+    if w.obj(id).is_none() {
+        return;
+    }
+    // spec: S-0506 claim 2 (a spawner's launch pass, when one is due, in its own turn; Q-0615)
+    crate::spawn::turn(w, id);
     if w.obj(id).is_none() {
         return;
     }
@@ -120,7 +130,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         .obj(id)
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
         .map(|u| u.locomotor);
+    let rocket = w.obj(id).is_some_and(|o| o.rocket.is_some());
     let moved = match loco {
+        // spec: S-0506 Terms (a rocket missile moves in the rocket-flight movement mode, claims 14 to 19)
+        _ if rocket => crate::rocket::tick(w, id),
         Some(Locomotor::Drive) => drive::tick(w, id),
         Some(Locomotor::Walk) => walk::tick(w, id),
         // spec: S-0417 claim 5 (a tunnelling or teleporting vehicle drives temporarily for its factory exit)
@@ -129,8 +142,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Teleport) => crate::teleport::tick(w, id),
         // spec: S-0501 claims 1 to 10 (aircraft flight)
         Some(Locomotor::Fly) => crate::air::tick(w, id),
-        // spec: S-0506 claims 14 to 19 (rocket flight)
-        Some(Locomotor::Rocket) => crate::rocket::tick(w, id),
+        // A rocket-locomotor type outside the rocket-flight mode has no movement of its own (S-0506 Terms).
         // spec: S-0504 claim 1 (the ship locomotor)
         Some(Locomotor::Ship) => crate::naval::tick(w, id),
         _ => false,

@@ -434,6 +434,8 @@ pub fn new_game(
         orders_blocked_through: 3,
         projectiles: Default::default(),
         scaled_spawn_delay: Default::default(),
+        flying: Default::default(),
+        spawned: Default::default(),
         triggers: Default::default(),
         econ: crate::econ::WorldEcon {
             settings: setup.skirmish.clone(),

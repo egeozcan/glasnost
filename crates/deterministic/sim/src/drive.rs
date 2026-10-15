@@ -449,6 +449,11 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     let Some(&d) = o.path.steps.first() else {
         return false;
     };
+    if crate::spawn::track_held(w, id) {
+        // spec: S-0207 claim 6 and S-0506 claim 10 (a launching vehicle begins no track: it waits, destination kept; precedence against other waits not established, checked first here)
+        wait(w, id);
+        return false;
+    }
     let first = neighbour(o.pos.cell(), d);
     if let Some(gate) = process::closed_friendly_gate(w, id, first) {
         // spec: S-0207 claim 15 (an allied closed gate: told to open; the vehicle waits without a track and without turning)

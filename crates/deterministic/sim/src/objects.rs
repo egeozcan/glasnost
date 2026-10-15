@@ -56,6 +56,8 @@ pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>
     let id = create_converted(w, kind, type_index, owner);
     // spec: S-0402 claim 19 (the group is created as part of the object's own creation, after the object's own creation draw)
     crate::econ::slaves::created(w, id);
+    // spec: S-0506 claim 1 (a spawner gets its spawn controller and its full slots when it is created)
+    crate::spawn::created(w, id);
     id
 }
 
@@ -328,6 +330,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
+    // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)
+    crate::spawn::removing(w, id);
     crate::econ::events::leaving_map(w, id, true);
     // spec: S-0011 claim 2 (detaching a carrier removes one from its tag's count)
     crate::triggers::detach_object(w, id);
@@ -374,6 +378,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
             w.cells.leave(cell, o.layer, id);
             crate::drive::release_claims(w, id);
         }
+        // Q-0612 (interim): a rocket missile is in no cell list and marks no occupancy.
+        Kind::Aircraft if o.rocket.is_some() => {}
         Kind::Aircraft => {
             w.cells.leave(cell, o.layer, id);
             // spec: S-0207 claim 20 (a) and (e) (a teleporting aircraft's object-present mark is on its landing point's cell until the jump; on the deck its removal clears the deck flag only)

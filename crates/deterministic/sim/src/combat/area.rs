@@ -168,6 +168,18 @@ fn root(w: &World, n: i64) -> i32 {
     root_floor(n as u64, r.quirks.table_root_distance, r.mode) as i32
 }
 
+/// The epicentre distance after claim 10 (S-0303): an aircraft in the air
+/// (S-0308's test) counts at half its distance, truncated.
+fn half_in_air(w: &World, id: ObjectId, d: i32) -> i32 {
+    let aircraft = w.obj(id).is_some_and(|o| o.kind == Kind::Aircraft);
+    if aircraft && crate::combat::weapon::in_air(w, id) {
+        // spec: S-0303 claim 10 (the distance halved, truncated toward zero)
+        d / 2
+    } else {
+        d
+    }
+}
+
 /// The spatial distance of S-0303 claim 7 from P to a point.
 fn dist(w: &World, p: Pos, q: Pos) -> i32 {
     let (dx, dy, dz) = (
@@ -320,8 +332,30 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             }
         }
     }
-    // Flying objects (claim 6) need tracked flying objects: no object flies in our engine.
     let mut cands: Vec<Candidate> = Vec::new();
+    // spec: S-0303 claim 6 (a detonation above the terrain at the centre of the centre cell also considers the tracked flying objects of the F7 search, before the scanned cells; quirks.ground_detonation_misses_aircraft off: every detonation)
+    let cc = Pos::centre(centre, 0);
+    if p.z > w.surface_at(cc.x, cc.y) || !q.ground_detonation_misses_aircraft {
+        let spread = h.spread.to_i32_common();
+        for id in crate::combat::flying::candidates(w, centre, spread) {
+            if w.obj(id).is_none() {
+                continue;
+            }
+            if !q.flying_candidates_unfiltered && Some(id) == det.source {
+                // spec: S-0303 Edge cases (quirks.flying_candidates_unfiltered off: the source-object exclusion applies)
+                let self_damage =
+                    crate::combat::veterancy::type_combat(w, id).is_some_and(|tc| tc.damage_self);
+                if !self_damage && rules.combat.general.crush_warhead != Some(warhead) {
+                    continue;
+                }
+            }
+            let d = half_in_air(w, id, dist(w, p, w.reference_point(id)));
+            if d > big_r {
+                continue;
+            }
+            cands.push(Candidate { id, d });
+        }
+    }
     let mut building_first: std::collections::BTreeMap<ObjectId, usize> = Default::default();
     for &c in &cells {
         if w.cells.cell(c).is_none() {
@@ -361,7 +395,7 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
                 // spec: S-0303 claim 7 (any other object: from P to its position)
                 dist(w, p, w.reference_point(id))
             };
-            // Aircraft in the air count at half distance (claim 10): no aircraft is in the air.
+            let d = half_in_air(w, id, d);
             if d > big_r {
                 continue;
             }

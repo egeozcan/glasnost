@@ -24,6 +24,7 @@ pub mod death;
 pub mod effects;
 pub mod fear;
 pub mod fire;
+pub mod flying;
 pub mod heal;
 pub mod lof;
 pub mod position;
