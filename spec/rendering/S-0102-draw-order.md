@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742]
 supersedes: []
 ---
 
@@ -1005,6 +1005,59 @@ screen rows.
       positive-canvas zero pixel-data position failure, empty coverage and the defined departure; medium for degenerate-canvas loading
       and the unspecified malformed-input outcomes
 
+### Protection colours
+
+34. **Protection brightness and colour (Q-0742 question 4).** Protection does not load
+    another palette or replace house-colour remapping. S-0513 claim 29 supplies the
+    protection phases and random draw; its F9 changes ordinary brightness before the
+    shade-row selection of S-0104 claim 15. The colour adjustment below is separate:
+    after palette conversion and shade selection, an opaque qualifying pixel becomes
+    the bitwise union of its packed hi-colour value and the protection colour mask of
+    F9 here. This is neither RGB addition with saturation nor multiplication by a tint.
+    Even a black shade-row pixel can acquire the mask's colour. Transparent image
+    pixels and pixels rejected by depth remain untouched. Protection does not change
+    the depth rules, layer, palette choice or house-colour ramp.
+
+    | Drawing | Protection brightness | Additional protection colour mask |
+    |---|---|---|
+    | Curtain-protected vehicle drawn as voxels, body and voxel turret/barrel | S-0513 F9 | curtain selector |
+    | Curtain-protected vehicle drawn as a sprite | S-0513 F9 | none |
+    | Curtain-protected aircraft body drawn as voxels | S-0513 F9 | none |
+    | Curtain-protected building body drawn as a sprite | S-0513 F9 | none |
+    | Force-shielded building body drawn as a sprite | S-0513 F9 | force-shield selector |
+    | Building voxel turret/barrel, either protection kind | S-0513 F9 | force-shield selector for force shield, none for curtain |
+    | Building slot animation drawn with its building's palette and stored brightness | protected building brightness sampled at creation and refreshed on each building turn | see the animation rule below |
+    | Other animations, including an animation merely attached to a protected unit | no automatic inheritance of the host's envelope | see the animation rule below |
+
+    Aircraft without a voxel body remain bodyless under claim 21. Ordinary infantry
+    reached by the curtain are killed as S-0513 claim 23 specifies, not given a new
+    protection-colour appearance. Shadows retain their ordinary darkening, not the
+    body colour mask.
+
+    **Animation rule.** A building slot animation is marked as a building animation.
+    For such a marked animation, the building occupying the animation's cell supplies
+    a force-shield colour mask while that building is force-shielded. Curtain protection
+    supplies no mask. An arbitrary attached animation is not marked merely because it
+    is attached, and attachment alone grants neither recolouring nor the host's
+    brightness envelope. This colour test uses the building at the animation's cell,
+    not a blanket inheritance from an attachment or slot owner. The normal-light
+    setting still forces animation brightness to 1000 per-mille. Palette and ordinary
+    brightness selection otherwise remain S-0103 claim 8 and S-0104 claim 13.
+
+    **Pixel-layout correction.** F9 packs the selected triple once in the surface's
+    layout. The original sometimes combines several layouts' masks into one, adding
+    stray colour bits; this drawing-only defect is corrected without a quirk switch.
+    The mask is not scaled by the protection brightness factor: brightness changes
+    which shaded source is combined with it, not the mask itself. Expiry removes both
+    the protection brightness adjustment and its mask.
+    - Backing: `measurable` (D44, including engine fixtures for the layout correction).
+      The table covers ordinary opaque drawings. Translucent and special accessory
+      drawings remain explicitly outside this claim (Open questions).
+    - Confidence: high for the three colour-source cases in S-0513 claim 29,
+      the opaque sprite union after shading, the layout correction and the animation
+      cell test; medium for the remaining unit/voxel-part variants and slot-brightness
+      refresh, pending the discriminating captures in D44
+
 ## Formulas
 
 
@@ -1187,6 +1240,25 @@ floating-point calculation, cross-channel carry, or final rounding of a weighted
 For *s* = 31, *d* = 15, codes 1, 2 and 3 give 24, 22 and 16, respectively, not 27,
 23 and 19. Pack first: blending 8-bit colours and packing only afterwards need not agree.
 
+**F9. Protection colour mask** (claim 34). Let *R*, *G*, *B* be the selected
+imported triple's byte values, integers from 0 to 255. These are already mask
+contributions, not ordinary 8-bit palette colours: do not divide red or blue by 8,
+and do not multiply a component by 4. Let ∨ mean bitwise union of non-negative
+integers. On a 5-6-5 surface the mask is
+
+> *K* = (2048·*R* ∨ 32·*G* ∨ *B*) modulo 65536.
+
+On a 5-5-5 surface it is
+
+> *K* = (1024·*R* ∨ 32·⌊*G*/2⌋ ∨ *B*) modulo 65536.
+
+All operations are integer. The green division rounds down. There is no channel
+saturation or additional normalisation: oversized contributions can set bits in
+another channel, and only the low 16 bits are retained. For a shaded packed source
+pixel *S*, the opaque result is *S* ∨ *K*. No post-union brightness adjustment or
+clamp applies. With no selected adjustment, *K* = 0. This formula defines the
+single-layout correction, not the original's stray bits from combining layouts.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1367,6 +1439,10 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
 
 | Source | Key | Feeds | Parse | Default when absent |
 |---|---|---|---|---|
+| rules, `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield mask selectors in claim 34 | zero-based integer positions, not colour-definition names | 0 each; later omission retains the selector, S-0513 Import mapping |
+| rules, `[ColorAdd]` | entries in section order | claim 34's RGB byte triples, packed by F9 | three bytes, S-0003 colour triples; entry names do not select positions | initially 16 black triples; layer retention/clearing is S-0006 claim 2 |
+| art, animation | `ShouldUseCellDrawer`, `UseNormalLight` | building-palette/stored-brightness choice and fixed neutral brightness override in claim 34 | booleans; full palette precedence is S-0103 claim 8 | no each |
+| none | none | building-animation mark in claim 34 | runtime property assigned to building slot animations, not an attachment or a new imported colour flag | ordinary animations do not inherit it merely by attachment |
 | rules, `[JumpjetControls]` | `CruiseHeight` | global cruise height: air/top threshold for objects without own movement rules | integer, leptons | 400, until a rules layer first gives the key in the session; after that a game-wide key keeps the value an earlier game of the session gave it (S-0006, claim 10) |
 | rules, unit type | `JumpjetHeight` | jumpjet cruise height of that type (air/top threshold); raised to 208 if smaller | integer, leptons | 500 |
 | rules, building type | `Gate` | gate sort penalty applies | boolean | no |
@@ -2348,7 +2424,52 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   solely by harvesting pixels, or a changed depth buffer, falsifies no-write.
   S-0402 claim 5a's shadow-order scenario separately checks shadow darkening.
 
+- **D44 — protection pixels (claim 34, Q-0742 question 4).** Use SW10 part g of
+  S-0513: tiny flat skirmish map, speed index 2, director and mods off, stationary
+  objects, no damage flash or air-strike marking, and lossless captures at 800 × 600.
+  Keep facing, palette index, light-alpha and background fixed. Record each tick's
+  ordinary brightness and phase factor with the read-only recorder, and compare the
+  captured opaque source pixels with S-0513 F9, S-0104 claim 15 and F9 here.
+  Repeat with a stock sprite vehicle, voxel vehicle, landed aircraft, ordinary building
+  and building with a voxel turret/barrel. Compare the curtain and force shield on
+  buildings; repeat on several house colours and under another ambient level.
+  Expected: brightness follows the table, but only its named drawings take a mask.
+  Any blanket curtain colouring of sprite vehicles, aircraft or building voxel turrets,
+  or an unlisted replacement palette, falsifies that table.
+
+  In named test settings, separately replace the selected colour triple with invented
+  (1, 0, 0), (0, 3, 0), (0, 0, 1), then (255, 255, 255), keeping all other data stock.
+  Include pixels whose shaded channels already contain and do not contain the mask's
+  set bits. This distinguishes union from saturating addition, an 8-bit-to-hi-colour
+  conversion, mask scaling by phase brightness, and channel clamping. Test shade-row
+  zero as well as ordinary and bright phases: the mask survives a black opaque source.
+  In engine fixtures, expect exactly F9 on both supported layouts; original 5-6-5
+  captures may show the documented extra-layout bits and are not acceptance values
+  for that correction. Any different fixed-engine packed value falsifies F9.
+
+  Capture a building's slot animations, including a sprite turret, throughout both
+  protections. In named art fixtures compare ordinary animation light with the
+  normal-light override, and displace the slot into a cell outside the foundation.
+  Also attach an otherwise unmarked animation to a protected vehicle. Expected:
+  stored building-palette brightness follows protection on building turns, the
+  normal-light override remains neutral, only marked animations over a force-shielded
+  building gain its colour, and attachment alone does not convey either effect.
+  Colour following the slot owner outside its cells, or ordinary attachment alone
+  conveying protection, falsifies the animation rule. A read-only recorder plus
+  lossless per-tick captures is the proposed tool; these are not completed measurements.
+  If stock art cannot expose a distinct source pixel for a row, use a named art fixture
+  and an engine scene fixture rather than claiming stock coverage.
+
 ## Open questions
+
+Q-0742 question 4's ordinary opaque protection drawings are covered by claim 34
+and F9 here together with S-0513 claim 29 and F9. Exact mask handling for translucent
+animations and cloaked/translucent units, building bibs/door accessories, remembered
+images and unusual sprite-turret accessory combinations remains unconfirmed.
+Do not infer their mask treatment from the opaque table. In particular, some
+translucent drawings may ignore a colour mask rather than blending a recoloured
+source. This remaining scope is not claimed as a complete answer to every drawing
+variant of question 4.
 
 Q-0580 is fully answered between S-0402 claim 5a (questions 1, 2 and 4,
 with its anchor formula) and this spec's claim 13 and D43 (question 3).

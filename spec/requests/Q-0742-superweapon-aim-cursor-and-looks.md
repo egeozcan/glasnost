@@ -3,7 +3,7 @@ id: Q-0742
 title: Superweapon aim cursor images, the protection tint look and other superweapon looks
 status: answered
 related: [S-0512, S-0513, S-0214, S-0410, S-0104, S-0007]
-answered-by: [S-0512, S-0214, S-0513]
+answered-by: [S-0512, S-0214, S-0513, S-0102]
 ---
 
 ## Need

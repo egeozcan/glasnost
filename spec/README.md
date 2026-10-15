@@ -44,7 +44,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 8 | approved | — |
 | [S-0014](formats/S-0014-game-font-layout.md) | Game bitmap font file layout | formats | 3 | approved | — |
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 11 | approved | — |
-| [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 16 | approved | — |
 | [S-0204](simulation/S-0204-coordinates-distance-facing.md) | Coordinates, distance and facing | simulation | 8 | approved | — |
 | [S-0101](rendering/S-0101-isometric-projection.md) | Isometric projection, height lift, view position and scroll limits | rendering | 12 | approved | — |
 | [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 17 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 15 | approved | — |
 | [S-0308](combat/S-0308-weapon-choice.md) | Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons) | combat | 11 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 8 | approved | — |
+| [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 17 | approved | — |
