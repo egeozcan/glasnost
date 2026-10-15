@@ -2,11 +2,11 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0700, Q-0701, Q-0702, Q-0703, Q-0704, Q-0705, Q-0706, Q-0672, Q-0673]
 supersedes: []
@@ -173,6 +173,16 @@ This spec does not repeat what other specs own:
    is *enter* and its contact is a transport. At that moment the transport answers again by claims
    1, 2 and 4.
 
+   An infantry unit's qualifying arrival with the transport as destination gives one
+   entered-by raise on the transport's current tag, with the infantry unit as causing object,
+   before that final acceptance test (S-0524 claim 14). A refused boarding can therefore
+   already have caused entry-trigger effects. Receiving the order alone gives no such raise.
+   Vehicle boarding gives no entered-by raise on the transport's tag. Neither kind receives
+   an own-tag destroyed-by-anything raise merely for becoming a passenger: it remains an
+   object. Ordinary unloading from either vehicle or air transports adds no entered-by raise
+   merely for leaving. These are object-tag rules, not the cell-tag rules encountered during
+   approach; trigger matching and latches remain S-0011 claims 8 to 12.
+
    **If it accepts**, in the same tick the passenger:
    - forgets the target it had stored for later use,
    - leaves the bridge-deck layer if it was on it,
@@ -195,7 +205,8 @@ This spec does not repeat what other specs own:
    queues *guard*, and scatters (glossary *scatter*) even if it would otherwise not.
    A refused vehicle likewise clears its destination, queues *guard*, and receives a forced
    scatter request.
-   - Backing: `measurable` (T2, T3, T4, T6 and T12). T3 tests boarding resets.
+   - Backing: `measurable` (T2, T3, T4, T6 and T12). T3 tests boarding resets and
+     notifications; notification rules also use S-0524 claim 14's scenario C16.
      S-0516 claim 16's scenarios test cloak persistence and timing.
    - Confidence: high for acceptance; medium for the refused infantry's reaction
 
@@ -361,7 +372,7 @@ This spec does not repeat what other specs own:
     | selection | destination fails the landing test of S-0501 claim 40 | approach when current height equals the type's cruise height, otherwise reselect |
     | selection | destination passes that landing test | replace destination as below; remain in selection |
     | approach | locomotor reports stopped | stopped check, unless the next condition applies |
-    | approach | destination fails F7 | selection, overriding the preceding transition |
+    | approach | destination fails the landing test of S-0501 claim 40 | selection, overriding the preceding transition |
     | stopped check | locomotor reports stopped | release; next processing in 1 tick |
     | stopped check | locomotor still moving | stay here; next processing in 1 tick |
     | reselect | any | selection; next processing in 1 tick |
@@ -375,8 +386,8 @@ This spec does not repeat what other specs own:
     descending. A destination starts ordinary flight guidance and landing under S-0501 claims
     5 and 6; merely entering *approach* does not mean touchdown has occurred.
 
-    Here F7 means that landing test, with the destination object used for the competing-aircraft
-    comparison. The height comparison uses integer leptons above terrain.
+    The landing test uses the destination object for the competing-aircraft comparison. Its height
+    comparison uses integer leptons above terrain.
 
     **Replacement destination.** With no original-team membership, use map waypoint 700 as the
     centre of S-0501 claim 40's replacement-cell search, including that claim's circle samples,
@@ -683,6 +694,19 @@ that order, then order an unload.
   state, gattling spin value and stage on the boarding tick. Expected: no archived target,
   ground layer, spin value 0, stage 0, off-map and riding the transport. Any retained reset state or different order
   falsifies the corresponding part.
+- *Notification variants (claim 6):* give the transport a repeating entered-by tag with a
+  calibrated visible counter action, and each entrant a separate destroyed-by-anything tag
+  with a distinguishable counter. Record raises read-only as well as counter firings, ticks,
+  passenger state and final acceptance: matching and latches can suppress firings without
+  suppressing a raise. Compare infantry and a vehicle passenger with legal capacity and size,
+  once in a vehicle transport and once in a landed air transport. Expected: no raise on order
+  receipt, one transport-tag entry raise on qualifying infantry arrival before final acceptance,
+  none for vehicle boarding, and no own destruction raise for either retained passenger.
+  Unload and board again: unloading adds no entered-by raise, while the fresh infantry arrival
+  can notify again. For refusal, use T4's established legal infantry entry followed by exclusion
+  before arrival, without cancelling *enter*: the arrival raise still precedes refusal. An
+  unavailable arrival witness is inconclusive. Any different raise count or precedence
+  falsifies the corresponding notification rule. S-0524 claim 14's C16 supplies companion tests.
 
 **T4. Exclusions and arrival refusals (claims 4 and 6).** With T3's transport empty, compare
 cursor verdicts for an enemy infantry unit, an allied mind-controlled infantry unit, an own
