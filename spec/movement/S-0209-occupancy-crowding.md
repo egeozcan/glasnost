@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 35
+revision: 36
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1231,12 +1231,20 @@ rank* and *elite weapon*), *n*
     cell has not entered it yet: it enters on the tick on which its position moves into the cell,
     although its reservation there counts from the asking tick (claim 1).
 
-    An aircraft in flight is not listed in either cell layer: for an aircraft using ordinary
-    flight, a positive integer height above the terrain surface keeps it out of the cell's
-    lists. At height 0 above that surface it is listed in the ground layer. The surface is the
-    terrain height at its horizontal position (S-0106 claim 2), not the projected cell beneath its
-    drawn image.
-    Taking off removes its listing and landing adds it again. A rocket missile using
+    For an aircraft using ordinary flight, listing uses its signed integer height in leptons:
+
+    > listing height = world height − terrain surface height − deck allowance.
+
+    The terrain surface is at its horizontal position (S-0106 claim 2), not the projected cell
+    beneath its drawn image. The deck allowance is 416 leptons when the aircraft's own deck
+    mark is set, and 0 otherwise. The subtraction is exact integer arithmetic, with no rounding.
+    S-0501 claim 43 owns that mark's landing, climbing and retention rules; neither a render
+    layer nor an occupancy flag substitutes for it.
+    A positive listing height excludes the aircraft from both cell-layer lists. At listing
+    height 0 or below it is listed on deck when deck-marked, and on ground otherwise. Thus an
+    ordinary aircraft landed on a high bridge can be listed on deck at height 0 above that
+    deck, rather than on ground. Taking off removes its listing when the listing height
+    becomes positive, and landing adds it again. A rocket missile using
     rocket-flight movement is instead absent from both cell-layer lists in every phase,
     including pause, tilt and raise at its launch point; crossing cells never adds it to
     those lists (S-0506 claim 23). This exception has high confidence and `measurable`
@@ -1251,7 +1259,7 @@ rank* and *elite weapon*), *n*
     - Backing: `measurable` (scenario C9 for the front and end rule and the map's order; scenario C18
       for the override case; scenario C26, parts b and c2, for the moment a walker enters,
       S-0207 scenario D17 (d), runs 3a and 3b, for the nearest-object tie; scenario C29 for aircraft
-      listing; S-0513 scenario SW7(f) for per-foundation-cell building listing and its strike-witness
+      listing, with S-0501 scenario AC27 for deck-marked listing; S-0513 scenario SW7(f) for per-foundation-cell building listing and its strike-witness
       consequence). `unmeasured` for order among multiple buildings in one cell layer: no valid setup
       establishing overlapping buildings and distinguishing their order is known here.
     - Confidence: high for the front and end rule and for the moment a walking unit counts as
@@ -3076,6 +3084,13 @@ That moment is called the *window*. Common setup:
   is landed. All other placement conditions must pass in each run.
 - *Falsified if:* the flying aircraft alone refuses placement, a landed aircraft allows it, or
   the takeoff leaves a listing that still refuses placement after height becomes positive.
+- *Bridge contrast:* use S-0501 scenario AC27's high-bridge landing and departure setup and
+  five repetitions, recording world height, terrain surface height, the aircraft's own deck
+  mark and both occupant lists separately from occupancy flags. Expect no listing during a
+  positive-listing-height flyover, deck-only listing at marked deck rest, and no listing once
+  takeoff gives positive listing height. Ground listing at marked deck rest, or either listing
+  at positive listing height, falsifies claim 13. Failure to reach a positive-height marked
+  retention state in AC27 is inconclusive, not a listing-rule counterexample.
 
 **Scenario C30: retained aircraft ground mark versus entry and standing-position choice
 (claims 1, 3, 5 and 6; Q-0310).**
