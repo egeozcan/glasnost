@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 31
+revision: 32
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -490,6 +490,18 @@ rank* and *elite weapon*), *n*
      Confidence: medium. Backing: `unmeasured` for this previous-deck state, because no
      established stock factory exit starts in it; S-0207 scenario D23 gives a conditional
      observation protocol, not permission to manufacture the state.
+   - *Bridge-collapse drops.* S-0511 claim 9 owns the immediate occupancy changes when
+     an object drops from a lost deck. A stationary infantry unit's standing-position mark
+     or stationary vehicle's present flag clears on deck and is marked on ground at once,
+     before S-0511 claim 11's check for units heading onto the lost deck. The transfer is
+     not deferred until that check or landing. Movement reservations clear at the locomotor's
+     heading point, when present, using that point's stored height, in addition to ordinary
+     listing-change marks. Clearing uses the ordinary position and flag rules above, not
+     ownership counts. No blanket occupancy-record reset follows the attempt, landing or
+     repair; unrelated marks keep their ordinary clearing events. With no other mark writer,
+     a stationary dropped unit therefore leaves no phantom deck mark after repair.
+     This pointer inherits S-0511 claim 9's medium confidence and `measurable` backing
+     (its scenarios B3, turn-order and marks variant, and B6).
    - *Buildings.* A building sets the building-present flag of its foundation cells.
    - *Terrain objects.* A terrain object marks the side positions that its type's side-position
      pattern (Terms) gives, in the ground layer of its cell. It never sets the infantry house, and it
@@ -1520,7 +1532,7 @@ the scenario is built.
 - *Runs:* 3.
 - *Expected:* exactly three, at the right, left and bottom positions. The other two stop in
   neighbouring cells: the walkers give up within the close-enough distance (claim 8).
-- *Falsified if:* more than three enter, or one stands at the centre or top position.
+- *Falsified if:* other than exactly three enter, or any entrant stands at the centre or top position.
 
 **Scenario C2: vehicles and infantry (claims 1, 3, 4, 10).**
 - *Setup and procedure:*
