@@ -2,7 +2,7 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -18,8 +18,10 @@ supersedes: []
 
 The special attacks of infantry and vehicles that do not work like an ordinary shot. These are
 attack animals, planted bombs (planting, legality, countdown, detonation, disarming, the detonate
-order and credit to the planter), suicide weapons, and demolition charges planted on buildings.
-Drone and grappling parasites belong to S-0614. Garrisons are S-0508, building capture is S-0509
+order and credit to the planter), suicide weapons, demolition charges planted on buildings, and
+the air-strike designation: a shot that calls a group of aircraft onto a building (claims 16 to 21).
+S-0214 row I18 owns the air-strike cursor and its attack order, S-0308 row 6 the choice of the
+designating weapon, and S-0501 the aircraft's flight and attack runs. Drone and grappling parasites belong to S-0614. Garrisons are S-0508, building capture is S-0509
 and deployable units are S-0517.
 
 ## Terms
@@ -45,6 +47,21 @@ ignores defences*, *quirk switch*. Also used:
 - **Charge planter.** As S-0312 (Terms): the infantry unit that planted an explosive charge on a
   building. An infantry type *has explosive charges* when its type carries the explosive-charges
   flag (Import mapping).
+- **Designator, strike.** A *designator* is an object whose type has a positive air-strike team
+  size (Import mapping). Every designator has exactly one *strike* for as long as it exists, created
+  with it; objects of other types have none. A strike holds a set of linked aircraft, a *strike
+  target* (an object, or none) and an *end tick* *e*.
+- **Strike aircraft.** An aircraft linked to a strike. These are the "airstrike aircraft" of
+  S-0501 claim 17. A strike aircraft is a visiting aircraft (glossary).
+- **Strike in progress.** A strike is *in progress* from its start (claim 17) until its last
+  strike aircraft stops being linked (claim 20), or forever in the case of `quirks.airstrike_empty_strike_stuck`
+  (Edge cases). Otherwise it is *idle*.
+- **Designation shot.** A projectile whose warhead has the air-strike flag (Import mapping).
+- **Strike size, strike aircraft type, recharge.** The designator type's team size *n*, aircraft
+  type and recharge delay *R* (integer ticks). Each has a normal and an elite value. The elite
+  values apply while the designator's veterancy rank (glossary) is elite.
+- **Marked building.** A building that is the strike target of some strike, which has *marked* it.
+  The mark is presentation only (claim 17).
 - **Charge countdown.** The building countdown that S-0302 claim 16 calls the delayed-kill
   countdown when a charge starts it. A building has at most one, whichever started it.
 
@@ -273,9 +290,155 @@ ignores defences*, *quirk switch*. Also used:
     (S-0508 claim 16). Building-level evacuation can still follow damage or destruction
     (S-0508 claims 9 and 13, S-0312 claim 17). A charge can likewise destroy the building and
     cause building-level evacuation. A bomb on an infantry unit that then enters a garrison
-    waits there (claim 6). Stock data has no assaulter type (S-0508 claim 14).
+    waits there (claim 6). No assaulter-type case is covered by the measurement scenario (S-0508 claim 14).
     - Backing: `measurable` (scenario T15)
     - Confidence: medium
+
+### Air-strike designation
+
+16. **The designation shot.** A designation shot is fired like any other shot (S-0301; S-0308
+    row 6 chooses the weapon). When it detonates, it makes no area hits, as S-0303 claim 2 says of
+    parasite projectiles. The detonation's other effects are not suppressed: radiation creation,
+    the explosion animation, warhead debris and the light flash still occur where configured
+    (S-0303 claims 2, 21 and 22). Instead of area damage, the strike is called (claim 17) or
+    redirected (claim 19) when all of these hold:
+    - the shot's firer still exists and is a designator,
+    - the shot's target is an object: a unit, an infantry unit, an aircraft or a building,
+    - the designator's strike is ready for that target (claim 18, Formulas F5).
+
+    When the strike is idle it starts. When it is in progress it is redirected. Otherwise nothing
+    happens. A shot at a cell, a shot whose firer has been destroyed, and a shot by a firer that
+    is not a designator therefore call no strike. Neither the distance between projectile and
+    target nor the target's owner is tested. The weapon's air-strike-cursor flag only affects the
+    cursor (S-0214 row I18); it does not make a shot a designation shot.
+
+    Designating therefore takes no time of its own: the strike starts or is redirected in the tick
+    the designation shot detonates, after the firing cadence of S-0301 and the projectile's flight
+    (S-0306). The designator need not keep firing once a strike has started, but any change of its
+    target cancels the strike (claim 19).
+    - Backing: `measurable` (scenario T16)
+    - Confidence: high
+
+17. **Starting a strike.** At the start the designator's rank decides the strike size *n* and the
+    strike aircraft type (normal or elite values, Terms). A successful start has these results:
+    - **Aircraft.** *n* aircraft of the strike aircraft type are created one after another for the
+      designator's house at that tick. Each is a visiting aircraft linked to the strike. No credits
+      are charged, and no factory, prerequisite, build limit or production queue is involved.
+    - **Arrival.** One arrival cell serves the whole strike. It is chosen once, before the first
+      aircraft is created, exactly as S-0522 claims 4 and 5 choose a paradrop plane's arrival cell,
+      with the same edge, the same candidates and the same draws. Each aircraft is then placed at
+      the result of the nearby-cell search (S-0212 claim 25) centred on that arrival cell, with
+      locomotion class *winged*, movement zone *normal*, no reach region, never in deck mode, no
+      height condition, no further test, no no-overlay condition, bridge cells allowed and no
+      reference cell. The search's tick number is the start tick. Placement is at that cell's
+      centre, facing 0, under S-0501 claim 1. For class *winged* the search tests neither
+      occupancy nor terrain, so every aircraft of one strike is placed at the same cell, which lies
+      inside the usable area. A paradrop plane, by contrast, appears at its arrival cell outside it.
+    - **Orders.** Each aircraft starts *attack*, with no destination. Its target is the cell that
+      contains the designated object's reference point (S-0204 claim 4), each coordinate divided
+      by 256 and rounded toward zero. So the aircraft attack that cell, not the object itself
+      (S-0501 claims 11 to 17). Only a redirect (claim 19) aims them at an object.
+    - **When at least one aircraft was placed:** the designated object becomes the strike
+      target. The game-wide air-strike attack sound plays for every player at the position of the
+      last aircraft placed. A designated building is marked; while marked it is tinted with the
+      game-wide laser-target colour (presentation; S-0104 owns the brightness).
+
+    When no aircraft is placed, `quirks.airstrike_empty_strike_stuck` applies (Edge cases).
+    - Backing: `measurable` (scenario T17), including a zero-size elite strike,
+      `unmeasured` for creation/placement failures and the original's missing-type failure:
+      no validated normal-input fixture safely isolates these paths. Our safe results in
+      Edge cases are design departures, not oracle measurements
+    - Confidence: high; medium for the shared placement cell, which follows from S-0212 claim 25
+
+18. **When a strike is ready.** A designation shot at target *T* in tick *t* finds the strike
+    ready (Formulas F5) when either:
+    - *T* is not the strike target, which includes every case in which the strike holds no target,
+      or
+    - the strike is idle and *t* ≥ *e* + *R*, where *e* is the end tick of its last strike
+      (claim 20) and *R* is the recharge delay for the designator's rank in tick *t*.
+
+    Consequences:
+    - a designator's first designation is always ready, because its strike holds no target yet.
+    - While a strike is in progress, further shots at its strike target do nothing. The designator
+      may go on firing at it.
+    - A strike that ends normally keeps its strike target (claim 20), so designating the same
+      object again waits until *e* + *R*.
+    - A cancel (claim 19) forgets the strike target. After a cancel, an idle strike is therefore
+      ready at once for any object, including the one it held before. The recharge delay only
+      ever holds back a repeat designation of the same object with no change of target in between.
+      Quirk `quirks.airstrike_recharge_same_target_only` (default on, the original). Off: an idle
+      strike that has ended before is ready only when *t* ≥ *e* + *R*, whatever its target; while
+      it is in progress, readiness is unchanged.
+    - Backing: `measurable` (scenario T18)
+    - Confidence: high
+
+19. **Cancel and redirect.** A strike is *cancelled* when any of these happens:
+    - the designator's target changes to anything else, including to none. So a move order, an
+      attack order on another object or the loss of its target (for example because the target is
+      destroyed or removed from play) cancels. Setting the same target again does not. This
+      applies whether or not the strike is in progress.
+    - its marked building is destroyed,
+    - the designator is destroyed or removed from play (claim 20).
+
+    A cancel has these results in the tick of the cancelling event:
+    - if any linked aircraft had no ammunition at cancellation, every linked aircraft now has
+      0 rounds; otherwise each keeps its ammunition,
+    - the most recently placed linked aircraft, up to 101 of them, have no target or destination
+      and have queued *retreat*. What follows is S-0501's (claims 18 and 34). A strike aircraft is not exempt from
+      falling back to rest while in *retreat* (S-0501 table T2). The aircraft stay linked, so the
+      strike stays in progress until none is linked any more (claim 20).
+    - the strike forgets its strike target. Its building mark passes to another strike whose
+      strike target is the same building, if there is one. Otherwise the mark is removed.
+
+    A ready designation shot at *T* while the strike is in progress *redirects* it. Because a
+    change of target cancels first, this happens after a cancel. When the strike aircraft do not
+    all hold the same amount of ammunition, the strike is cancelled again instead, and nothing is
+    redirected. Otherwise:
+    - *T* becomes the strike target, and a building *T* is marked with the laser-target colour,
+      as at a start,
+    - every strike aircraft that still has ammunition takes *T* itself, the object rather than a
+      cell, as its target and queues *attack*,
+    - aircraft without ammunition keep retreating.
+
+    So once any strike aircraft has spent its last round, changing target leaves all linked
+    aircraft without ammunition: a later redirect cannot give any of them an attack order.
+    The original marks a redirected building without setting its tint colour, so
+    the tint shows whatever colour the building last had. That is a display bug; our engine uses
+    the laser-target colour, as stated.
+    - Backing: `measurable` (scenario T19), except removal of a live designator without
+      death, which is `unmeasured` for the fixture limitation in claim 20
+    - Confidence: high for the cancel triggers and effects; medium for the redirect
+
+20. **End of a strike, loss of the designator, ownership and credit.**
+    - A strike aircraft stops being linked when it is destroyed or removed from play, for example
+      when it leaves the map (S-0501 claims 10 and 34). When the last one stops being linked, the
+      strike becomes idle and its end tick *e* is that tick. It keeps its strike target (claim 18).
+    - When the designator is destroyed (from its killing hit) or removed from play, the strike
+      ends with it. If at that moment the strike is *active* and has aircraft, and the designator's
+      house is the local player, the game-wide air-strike abort sound plays at the position of the
+      most recently placed aircraft that is still linked. A strike is active from a start that
+      placed aircraft, or a redirect that re-aimed at least one aircraft, until its next cancel or end. Then the strike is cancelled
+      (claim 19), and all its aircraft stop being linked. From then on they are ordinary visiting
+      aircraft.
+    - The strike aircraft belong to the designator's house at the start tick. A later change of
+      the designator's owner moves neither the strike nor its aircraft to another house, and the
+      strike stays the designator's.
+    - Hits by strike aircraft are credited to the aircraft and their house (S-0302 claim 1).
+      The designator gets no kill credit and no experience from those aircraft hits.
+      The designation shot itself makes no area hits; separately configured effects remain
+      subject to claim 16 and their owning specs.
+    - Backing: `measurable` (scenario T20) for death, normal end, ownership and credit,
+      `unmeasured` for a designator removed without a killing hit: no validated normal-input
+      fixture removes a live stock designator permanently without first killing it
+    - Confidence: high; medium for credit after the designator's owner changes
+
+21. **Random draws of a strike start.** On the scenario stream (S-0202 claim 10), in order: the
+    arrival cell's draws (S-0522 claim 4), once per strike; then, for each aircraft in creation
+    order, its creation draws and any draws of its placement (S-0501). The readiness test, the
+    nearby-cell search, a cancel and a redirect take no draw. The draws of the designation shot's
+    own detonation are S-0303's.
+    - Backing: `measurable` (scenarios T17 and T21 with the random-state recorder)
+    - Confidence: high
 
 ## Formulas
 
@@ -299,7 +462,9 @@ its exact-root alternative. Conversion to integer leptons truncates toward zero.
 building-size subtraction in this detector test.
 
 **F3. Bomb icon frame** (claim 10). *n*: current tick; *t*: plant tick; *D*: timed delay; *F*: the
-flicker rate (integer ticks). Let *q* = ⌊*D* / 6⌋. Let *b* = 1 when (*n* mod 2*F*) ≥ *F*, else 0.
+flicker rate (integer ticks). Let *q* = ⌊*D* / 6⌋. Define *b* by the following cases:
+
+> *b* = 1 when (*n* mod 2*F*) ≥ *F*; otherwise *b* = 0.
 
 > frame = min(11, 2 ⌊(*n* − *t*) / *q*⌋ + *b*). Integer arithmetic, divisions truncated toward
 > zero. Frames are counted from 0.
@@ -322,6 +487,15 @@ RZ₅₃ is the binary64 product rounded toward zero, which depends on `quirks.c
 absent, *K* = 26 under RZ₅₃ and 27 under RN₅₃, and *L* = 13 in both modes. A key written as 0.03
 gives the single 0.02999999932944774627685546875, so *K* = 26 and *L* = 13 in both modes.
 
+**F5. Strike readiness** (claim 18). *t*: the tick of the designation shot's detonation; *T*: its
+target; *S*: the strike target, or none; *P*: whether the strike is in progress; *e*: its end
+tick; *R*: the recharge delay for the designator's rank at *t* (integer ticks).
+
+> ready = (*T* ≠ *S*) or (not *P* and *t* ≥ *e* + *R*). Exact integer comparison.
+
+With `quirks.airstrike_recharge_same_target_only` off, and when the strike has ended at least
+once: ready = (not *P* and *t* ≥ *e* + *R*) or (*P* and *T* ≠ *S*).
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -336,6 +510,10 @@ gives the single 0.02999999932944774627685546875, so *K* = 26 and *L* = 13 in bo
 | Bomb damage, absent-key default | 100 | health points | Engine default |
 | Flicker rate, absent-key default | 8 | ticks | Engine default |
 | Charge delay, absent-key default | 0.03 | minutes | Engine default, kept in binary64 (F4) |
+| Strike aircraft ordered to retreat at a cancel, at most | 101 | aircraft | Claim 19 |
+| Strike target cell divisor | 256 | leptons per cell | Claim 17 |
+| Air-strike team size, absent-key default | 0 | aircraft | Engine default: not a designator |
+| Recharge delay, absent-key default | 0 | ticks | Engine default |
 
 ## State and ordering
 
@@ -366,15 +544,29 @@ gives the single 0.02999999932944774627685546875, so *K* = 26 and *L* = 13 in bo
 | running | curtain protection starts | cancelled (S-0513 claim 25) |
 | running | expiry | S-0302 claim 16 |
 
+**Strike.**
+
+| State | Event | Result |
+|---|---|---|
+| idle, no strike target | designation shot at an object | start (claim 17); in progress, target held |
+| idle, strike target *S* | designation shot at *S*, before *e* + *R* | nothing |
+| idle, strike target *S* | designation shot at *S* from *e* + *R*, or at another object | start |
+| in progress, strike target *S* | designation shot at *S* | nothing |
+| in progress, any | designator's target changes; marked building destroyed | cancel: aircraft retreat, target forgotten, still in progress |
+| in progress, no strike target | designation shot at an object, all aircraft with equal ammunition | redirect: aircraft with ammunition attack the object |
+| in progress, no strike target | designation shot, aircraft ammunition unequal | cancelled again; nothing redirected |
+| in progress | last strike aircraft destroyed or removed | idle, *e* = this tick, strike target kept |
+| idle, any | designator's target changes | target forgotten |
+| any | designator destroyed or removed from play | abort sound if active (claim 20); cancel; aircraft unlinked; strike gone |
+
 **Ordering.** A suicide firer's hit and its death-weapon detonation both occur in the tick of the shot.
 When a planted bomb's detonation kills its carrier, the bomb does not detonate a second time.
 The ticking sound stops in the same tick as the bomb ends.
 
-**Cross-spec correction required.** S-0203 claim 1 and its ordering-table row 2 currently put
-planted-bomb detonation before the turn pass. They must instead use claim 4 here: detonation
-during the carrier's turn, with the turn-removal consequences of S-0203 claim 10. The separate
-bomb update only maintains sounds and visibility. S-0506 claim 26 must drop its corresponding
-pre-turn planted-bomb reference. These corrections must accompany this spec at hand-off.
+**Cross-spec status.** S-0203 claim 1 and its ordering-table rows 2 and 5 distinguish
+planted-bomb maintenance from timed detonation during the carrier's turn, with the removal
+consequences of S-0203 claim 10. S-0506 claim 26 likewise places its shared cycle before object
+turns, rather than after timed bomb detonations. No corresponding correction is needed.
 
 ## Edge cases and quirks
 
@@ -394,6 +586,29 @@ pre-turn planted-bomb reference. These corrections must accompany this spec at h
   detonation or a suicide hit does without one is an open question.
 - **Overdue bombs after transport.** A bomb that waited off the map goes off at the carrier's
   first turn after it comes back, however long ago its time ran out (claim 6).
+- **A strike that places no aircraft.** When a start places no aircraft, because the elite strike
+  size is 0 or negative for an elite designator, or because the first aircraft cannot be created, the
+  original still leaves the strike in progress, and no aircraft can ever end it. (A normal strike
+  size of 0 or less makes no designator at all, Terms, so only the elite size matters here.)
+  Later designation
+  shots at another object only set and mark a strike target (a redirect with no aircraft), and
+  the designator never calls aircraft again. Quirk `quirks.airstrike_empty_strike_stuck` (default
+  on, the original). Off: a start that places no aircraft leaves the strike idle, with its strike
+  target and end tick unchanged. Stock data has no designator whose elite strike size is 0.
+- **Failed aircraft placement.** When an aircraft is created but cannot be placed, it is
+  discarded and no further aircraft of that strike are created; the same holds when an aircraft
+  cannot be created at all. After a failed placement the original counts one aircraft fewer than
+  it placed, so the strike can become idle while one of its aircraft still flies. Our engine
+  counts the aircraft actually placed (documented departure, design). No normal-input fixture for
+  a failed placement is established.
+- **No strike aircraft type.** A type with a positive strike size and no normal strike aircraft
+  type stops the original at the first start. Our engine treats such a type as no designator, and
+  the importer warns (bad-data departure, no switch). A missing elite type takes the normal type
+  (Import mapping).
+- **Large strikes.** A cancel orders at most 101 strike aircraft to retreat, taking the most
+  recently placed first. Any further ones keep their orders. No stock strike comes near this.
+- **Several strikes on one building.** Each strike marks its own strike target. When one is
+  cancelled, the mark passes to another strike holding the same building, as claim 19 says.
 - **Icon frames with a short delay.** A timed delay below 6 ticks or a flicker rate of 0 makes the
   original divide by zero while drawing. F3 gives our fixed form.
 
@@ -420,6 +635,17 @@ pre-turn planted-bomb reference. These corrections must accompany this spec at h
 | Rules, combat-damage section, `C4Delay` | charge delay *c*, minutes (F4) | decimal or percent, single (S-0003) | 0.03, kept in binary64 (F4) |
 | Rules, audio-visual section, `BombTickingSound` | ticking sound (claim 10) | sound name | none |
 | Rules, audio-visual section, `BombAttachSound` | bomb-attach sound (claim 2) | sound name | none |
+| Warhead `Airstrike` | air-strike flag: a projectile with this warhead is a designation shot (claim 16) | boolean (S-0003) | no |
+| Weapon `MigAttackCursor` | air-strike cursor only (S-0214 row I18, which owns the row); no effect on the shot (claim 16) | boolean (S-0003) | no |
+| Object types `AirstrikeTeam` | strike size *n*, normal; a positive value makes the type a designator (Terms) | integer, aircraft | 0 |
+| Object types `EliteAirstrikeTeam` | strike size *n*, elite | integer, aircraft | the normal value |
+| Object types `AirstrikeTeamType` | strike aircraft type, normal (claim 17) | aircraft type name | none (Edge cases) |
+| Object types `EliteAirstrikeTeamType` | strike aircraft type, elite | aircraft type name | the normal type |
+| Object types `AirstrikeRechargeTime` | recharge delay *R*, normal (claim 18) | integer, ticks | 0 |
+| Object types `EliteAirstrikeRechargeTime` | recharge delay *R*, elite | integer, ticks | the normal value |
+| Rules, audio-visual section, `AirstrikeAttackVoice` | air-strike attack sound (claim 17) | sound name | none |
+| Rules, audio-visual section, `AirstrikeAbortSound` | air-strike abort sound (claim 20) | sound name | none |
+| Rules, audio-visual section, `LaserTargetColor` | laser-target colour of a marked building (claim 17, presentation): a position in the colour-adjustment table (S-0006) | integer, dimensionless selector | 0 |
 
 ## Measurement scenarios
 
@@ -498,7 +724,7 @@ result falsifies that part of its claim.
   slow disarm shot: the cursor changes but that shot still disarms. Record the ticking loop
   before loading, during transport, after unloading and after disarm. Named test data separately
   sets a short positive delay and zero flicker rate to test our engine's safe F3 departure.
-  the original is not required to complete those bad-data runs.
+  The original is not required to complete those bad-data runs.
 - **T12, suicide (claim 11).** (a) A suicide firer at full health and at reduced health attacks a
   target. Expected: it dies at the shot in both cases, and the target takes only the death weapon's
   damage. (b) Test data: a firer type with a suicide weapon whose damage differs clearly from
@@ -530,6 +756,86 @@ result falsifies that part of its claim.
   infantry unit, garrison it, wait past expiry, and evacuate it: no explosion while inside,
   detonation at its first on-map turn.
 
+- **T16, designation shot (claim 16).** Use the stock designator against an enemy building that
+  accepts charges. Record the building's health at the shot's detonation, the strike's start
+  tick and the aircraft that appear. Expected: no health loss from the shot itself; the explosion
+  animation of the shot still appears where its warhead supplies one; aircraft are created in the
+  detonation tick. Named test data: (a) give a non-designator type the designator's weapon:
+  its shots must call no strike and cause no area damage (configured presentation effects may
+  remain); (b) give a designator type the same weapon minus the cursor flag
+  and order a forced attack: the strike must still be called; (c) kill the designator while its
+  shot is in flight: no strike. (d) Give the designation warhead separately configured radiation,
+  explosion animation, debris and flash: record each configured effect at impact, but no immediate
+  area hit. (e) Use a slow designation projectile and move its object target away before impact:
+  the strike still starts for that object. (f) Force-fire at a cell: no strike. (g) With named
+  test data giving the primary weapon the designation warhead and permitting air/ground
+  targets, attack allied and enemy units, infantry and aircraft as well as buildings: each legal
+  object-target impact may call a strike.
+  These variants test detonation eligibility, not cursor legality. Falsified by area damage,
+  a missing configured effect, a strike in (a), (c) or (f), or a distance/owner rejection.
+- **T17, start (claims 17 and 21).** Record, with the random-state recorder, the strike's
+  aircraft count, type, house, placement cells and the tick, on two maps whose computed arrival
+  edges differ. Repeat with an elite designator, under named test data in which the elite size
+  and type differ from the normal ones. Expected: one arrival-cell choice per strike as for a
+  paradrop plane; every aircraft placed at the same cell inside the usable area; aircraft attack
+  the cell of the building's reference point, so a 2 × 2 building is attacked at its foundation
+  cell one cell further along both map axes than its top-corner cell; the attack sound plays at the last aircraft. Draw order as in claim 21.
+  Record credits and production queues, with no aircraft factory and no prerequisites satisfied:
+  neither credits nor queues change and the aircraft still appear. Repeat with the aircraft type's
+  build limit already reached: the call-in still succeeds. Observe the building's mark and tint.
+  With named test data giving a positive normal size but zero elite size, an elite designator
+  creates no aircraft, and subsequent designations at another building mark it but never create
+  aircraft (default empty-strike quirk). On our engine with that quirk off, subsequent starts
+  remain possible; this alternative is a design test, not an oracle expectation.
+  Falsified by aircraft placed at different cells, outside the usable area, aimed at the object,
+  any credit charge or production gate, or a later aircraft call from the empty original strike.
+- **T18, recharge (claim 18).** Named test data gives the designator a recharge delay long enough
+  to time. (a) Let a strike end without destroying its building, keep the designator attacking:
+  the next strike starts at the first designation detonation at or after *e* + *R*. (b) After
+  the end, order the designator to move one cell and attack the same building again: a strike
+  starts at the first detonation, before *e* + *R*. (c) Designate a second building after the
+  end: immediate start. During an in-progress strike, repeated designations of the unchanged
+  target must create no extra aircraft. Repeat (a) with different named normal/elite recharge
+  delays and promote the designator before the next designation: use its rank at that designation.
+  Falsified by a recharge wait in (b) or (c), none in (a), extra in-progress aircraft, or use of
+  the earlier rank's delay.
+- **T19, cancel and redirect (claim 19).** (a) While aircraft approach, order the designator to
+  move: every strike aircraft queues *retreat* in that tick (later behaviour per S-0501); a new designation while
+  they are still linked redirects only if all hold equal ammunition. (b) While aircraft approach,
+  order an attack on a second building: aircraft with ammunition turn to attack that building.
+  (c) After one aircraft has spent its last round, change target: all linked aircraft have
+  0 rounds and the newest 101 at most have no target/destination and queued retreat; later
+  designation impacts give none an attack order. (d) Destroy the marked building with other
+  units: aircraft receive the same cancellation results. (e) Give a strike aircraft enough
+  ammunition for unequal positive remaining counts; time the new designation while those counts
+  differ: no redirect, counts preserved, retreat queued again. (f) Reissue the same object target
+  while approaching: no cancellation. (g) Use two designators on one building; cancelling one
+  preserves the mark until the other also cancels. Redirect to a second building: it receives the
+  configured target tint in our engine; the original may retain its prior tint (display bug).
+  (h) Named test data makes a 103-aircraft strike; cancel before firing: only the 101 newest
+  linked aircraft lose their targets/destinations and queue retreat, the two oldest keep their
+  orders. Repeat with an empty aircraft before cancellation: all 103 lose their ammunition.
+  Record behaviour, target, destination, ammunition and marks per tick. Falsified by any contrary
+  cancellation result, an attack order in (c)/(e), cancellation in (f), or lost shared mark in (g).
+- **T20, end, loss and credit (claim 20).** (a) Record the tick when the last strike aircraft
+  leaves the map as *e*. (b) Kill the designator while aircraft approach: the abort sound plays for
+  the local owner only, the aircraft retreat and later designations by other designators do not
+  affect them. (c) Let the strike destroy an enemy unit: the kill counts for the aircraft's house
+  and no experience goes to the designator. (d) Mind-control the designator after the start: the
+  aircraft keep their house; their later kills still count for that house, not the designator's
+  new house. (e) Repeat death after a move order has cancelled the strike: no abort sound.
+  Repeat with a nonlocal designator: no local abort sound. Remove
+  the most recently placed aircraft before killing an active designator: the sound originates
+  at the most recently placed survivor. Falsified by credit to the designator, aircraft changing
+  house, continued linkage after death, or an abort sound in an inactive/nonlocal case.
+- **T21, draw isolation (claim 21).** Use T17's random-state recorder with timed input from T18
+  and T19. Attribute other draws to their owning specs; record stream states immediately around
+  a repeated designation that is not ready, an ordinary cancel, and an equal-ammunition redirect.
+  Expected: no draws attributable to readiness, cancel or redirect. At a start, arrival draws
+  precede each aircraft's creation/placement draws in creation order, as claim 21 states.
+  Falsified by any extra draw or different order attributable to these operations. Runs with
+  unrelated unassignable draws across an observation boundary are void, not evidence.
+
 ## Open questions
 
 - No separate effect of the imported animal marker has been traced beyond parsing it. Claim 1
@@ -539,4 +845,9 @@ result falsifies that part of its claim.
 - Can a unit in *sabotage* reach a destination cell that contains no building, for example a
   bridge cell? No reachable fixture is established, so its arrival effects are not specified.
 - The effect of a missing bomb warhead or demolition warhead (Edge cases).
-- The air-strike designation by a weapon with the air-strike flag is owned by no spec.
+- A strike whose target is not a building (reachable only with data in which the primary weapon's
+  warhead has the air-strike flag, S-0308 row 6). Whether its strike target is forgotten when
+  that object dies, other than through the designator's own loss of target (claim 19), is not
+  traced.
+- Whether a designator that goes off the map without being removed from play (into a transport
+  or a garrison) ends its strike, as claim 20 says of removal from play. Not traced.
