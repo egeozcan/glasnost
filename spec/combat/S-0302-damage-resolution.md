@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081, Q-0170]
 supersedes: []
@@ -145,6 +145,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | The detonation of an object's death weapon (S-0312, claim 6) | no | no | the dying object | the dying object's house |
    | The detonation that follows the impact of an object that crashes while alive (S-0312, claim 16) | no | no | none | none |
    | The damage of a sonic wave (wave specs) | no | no | the wave's firing object | none |
+   | A parasite's delivery (S-0614 claims 6 and 10) | no (yes for a drone's delivery to an infantry host) | yes | the parasite | none |
    | The detonation of the demolition warhead when a destroyed ore-spawning terrain object bursts (claim 20) | no | no | none | none |
    | A detonation set off by the lightning-storm bolt of the weather superweapon (superweapon specs) | no | no | none | the superweapon's owner |
    | The trigger action that destroys attached objects (S-0011, claim 27) | yes | no | none | none |
@@ -188,7 +189,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      trigger kill through S-0011's scenario T9 (claim 9) and D24 part c; countdown expiry through
      claim 16 and D13 parts e to h; the contact destruction
      and the crash impact through S-0312's scenarios D11 and D12; house elimination through
-     S-0414 claim 5 and its scenario V11); `unmeasured` (a damaging animation's row:
+     S-0414 claim 5 and its scenario V11; parasite deliveries through S-0614 claims 6 and 10,
+     scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house),
+     `unmeasured` (a damaging animation's row:
      its hit metadata is not established, so no expected outcome can yet be supplied for a
      discriminating test; a firer removed
      from the game in flight by some means other than a killing hit or a cloak: no such means is
@@ -207,7 +210,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
-     no-escape marker, like other detonations; the elimination row, owned by S-0414 claim 5),
+     no-escape marker, like other detonations; the elimination row, owned by S-0414 claim 5,
+     and the parasite-delivery row),
      low (the storm bolt,
      which the superweapon specs own; the ore burst's attacker and house, which follow from
      claim 20 having no source object and house; the damaging-animation row, which is
@@ -1910,6 +1914,29 @@ parts use their stated replay checks and rejection thresholds instead.
   before impact; the no-crate control of (a) does pick it. *Falsified if* the second firer picks
   it in both runs or neither. Record the pickup, shot and second firer's target with the
   read-only recorder; void a run with any other hit before that target choice.
+
+- **D31 (claim 1: parasite-delivery metadata).** Use S-0614 P1's drone setup and P6's
+  grappling setup, with named test-map overrides as follows. Record attachment, delivery ticks,
+  host health, crew creation, parasite experience, house kill counts and berserk state through
+  video and the read-only recorder. Run each part three times under the common setup above.
+  (a) Give a drone a latchable infantry host with temporary invulnerability and a zero versus
+  value for the delivery warhead. Expected: its first delivery kills the host despite both
+  protections. With an otherwise identical non-infantry host, invulnerability stops the hit.
+  Without invulnerability, a zero versus value stops it. This discriminates the ignore-defences
+  exception from the ordinary delivery. (b) For both parasite kinds, use an enemy crewed vehicle
+  host with no passengers, hijacker or death weapon, set crew escape chance to 1.0, give a valid
+  crew type and leave placement room. Disable culling for the grappling run and let a delivery
+  kill the host. Expected: no crew, and ordinary kill credit and experience for the parasite
+  under claim 14 and S-0311 claims 7 to 10. In a separate control, ordinary direct fire killing
+  an identical host at the same position must produce a crew. Void a run if that control fails
+  or another source hits the host. (c) Give each parasite kind a berserk delivery warhead that
+  affects allies, with positive damage and a positive versus value. Use a latchable host mutually
+  allied with the parasite's owner and force an attack to attach it. Disable grappling culling.
+  Expected: the delivery makes the host berserk under claim 10 despite their alliance, because
+  no attacking house accompanies it; health is unchanged. A direct-fire control from the same
+  house with that warhead does not make the allied host berserk, because its detonation carries
+  an attacking house. Void the run if no attachment occurs. Any contrary result in a valid run
+  falsifies the corresponding metadata claim.
 
 ## Open questions
 
