@@ -736,3 +736,31 @@ fn save_round_trip_over_water() {
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
     let _ = (ALPHA, Pos::new(0, 0, 0));
 }
+
+// spec: S-0503 Terms and Edge cases (quirks.hover_elevated_heading_point: a heading point gains 416 when the vehicle is 312 or more above the cell's surface, bridge or not; off: a high-bridge cell is needed too)
+#[test]
+fn quirk_elevated_heading_point() {
+    let run = |on: bool| {
+        let mut r = rules();
+        r.globals.quirks.hover_elevated_heading_point = on;
+        let mut w = world_with(r);
+        let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
+        settle(&mut w);
+        common::order_move(&mut w, id, cell(4, 0));
+        let mut z = None;
+        for _ in 0..20 {
+            let o = w.obj(id).unwrap();
+            let s = w.surface_at(o.pos.x, o.pos.y);
+            let o = w.obj_mut(id).unwrap();
+            o.pos.z = s + 400;
+            tick::step(&mut w);
+            if let Some(p) = hs(&w, id).point {
+                z = Some(p.z - w.surface_at(p.x, p.y));
+                break;
+            }
+        }
+        z.expect("a heading point")
+    };
+    assert_eq!(run(true), 416);
+    assert_eq!(run(false), 0);
+}
