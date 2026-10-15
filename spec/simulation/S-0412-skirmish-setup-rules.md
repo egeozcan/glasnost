@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -122,7 +122,7 @@ S-0413 claim 6). In addition:
    | fog of war | always off in a skirmish | S-0409 claim 19; S-0110 |
    | bridge destruction | always on in a skirmish: bridges can be destroyed | bridge rules (planned S-0511) |
    | harvester truce | always off in a skirmish | economy rules |
-   | multi-engineer rule | always off in a skirmish | capture rules (planned S-0509) |
+   | multi-engineer rule | always off in a skirmish | S-0509 claims 6 and 7 |
    | per player: country, colour | lobby; "random" resolved by claims 6 and 7 | S-0009, S-0103 claim 10, S-0413 |
    | per player: start position | lobby; "random" resolved by S-0009 claims 19 and 22 | S-0009 |
    | per player: lobby team | lobby | claim 8 |
