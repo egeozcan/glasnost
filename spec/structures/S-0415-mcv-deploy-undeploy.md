@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -309,8 +309,7 @@ vehicle's movement is heading to (S-0207). In addition:
    type has a pack-up sound and its house is the local player's, that sound also plays at the start
    of its build-down (`quirks.packup_sound_on_sale`).
    S-0213's conditions are judged again when the build-down finishes: a construction yard that no
-   longer meets them then (for example one that has become mind-controlled during the build-down)
-   is sold as an ordinary building, with the sale's refund.
+   longer meets them then is sold as an ordinary building, with the sale's refund.
    No survivors, passengers or garrison occupants come out of a *packing* building that has a guard
    spot. A packing building without a guard spot (a type that is not a construction yard, sold
    through the sell mode of S-0214) releases them as in an ordinary sale before it packs up
@@ -332,10 +331,9 @@ vehicle's movement is heading to (S-0207). In addition:
        these runs cannot establish positional deploy sound for another owner or suppression of
        its pack-up sound.
      - The second judging: no scripted input is known that makes one of S-0213's conditions fail
-       between the order and the end of the build-down. The one candidate is mind control, and it is
-       not usable: no spec shows that a mind-control weapon can take over a building, so even a
-       named bystander controller (which the void rule allows) is not known to produce that state.
-       A measurement would first need a test weapon shown to capture a building (S-0215).
+       between the order and the end of the build-down. Mind control cannot supply that change:
+       a building whose current behaviour is *selling* fails the takeover test, including its
+       recheck when a shot lands (S-0601 claims 3 and 5).
    - Confidence: high (the sequence, no refund); medium (the sounds); low (the release rule; the
      second judging)
 
