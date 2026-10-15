@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -320,8 +320,9 @@ Terms used by this spec:
 - **Opportunity target:** a target that an automatic search chose by itself and marked as such, as
   opposed to one given by an order. S-0309 (claim 24) owns which searches mark the targets they set
   (claim 33).
-- **Charge target:** a friendly building that an actor with an electric-charge secondary weapon aims
-  at to power it up (claim 24). The weapon kind and the building flag are in the Import mapping.
+- **Charge target:** an own-house building selected by the automatic charging scan of S-0518
+  claim 14. That claim owns eligibility, scan order and the charging mark. An actor aims at this
+  building to power it up (claims 24 and 26).
 - **Difficulty index:** the number 0, 1 or 2 that every house of the original has (S-0412, Terms),
   and the neutral and special houses have index 1 (S-0412, claim 5).
   The game-wide auto-deploy delay list gives one entry per index: its first entry for index 0,
@@ -970,7 +971,30 @@ Terms used by this spec:
     destination survives this fall-back. A route point issues an order through the ordinary order
     timing of S-0213 claim 1, so its destination and behaviour do not replace the actor's state
     within this fall-back. Its later application is governed by the order specs. This corrects
-    the earlier claim that the next route point immediately supplied a destination. The common effects never send a
+    the earlier claim that the next route point immediately supplied a destination.
+
+    **Repair/reload route points.** For a route point resolving to an object, the action is
+    classified as an ordinary object click (S-0214 claims 4, 7 and 8). When the house played on the
+    machine counts the object's owner as allied, an object-directed action is used only for a
+    building that meets at least one of these service conditions:
+    - it is a unit repair building, the actor's integer health is below its type's maximum health,
+      and the actor is not infantry,
+    - it is a unit reload building, the actor's integer ammunition count is below its type's
+      maximum ammunition and that count is not −1 (unlimited ammunition).
+
+    In addition, the building's owner must count the house played on the machine as allied,
+    and the classified action must be neither *select* nor *toggle select*. Thus this service
+    branch requires mutual alliance with the local player's house, not merely a one-way alliance
+    or alliance with an owner-changed actor's house. When these guards hold, the point issues
+    the classified object action as an order, rather than replacing it with a nearby-cell move.
+    Failure of any guard uses the cell-action fallback instead. For an object that the local
+    player's house does not count as allied, *select*, *toggle select*, *move* and *no-move*
+    actions likewise use the cell fallback; other classified actions remain object-directed.
+    A point with no object also uses the cell action. These are route-order selection rules,
+    not permission to pass through an occupied repair building or a guarantee of docking or
+    paid service (claim 29). The issued order still takes effect at the ordinary order boundary.
+
+    The common effects never send a
     scatter request. The scatter that can follow a fall-back to rest in *capture*, *sabotage* and
     *eaten* is sent by that processing (claim 28), not by the fall-back.
 
@@ -1017,7 +1041,7 @@ Terms used by this spec:
     the route is not established (Open questions).
     - Backing: `measurable` (scenario B15: cases a and d for the guard-spot row, case b for the
       route row's eventual movement; B15 e and S-0417 U6 for temporary driving restoration,
-      B33 for route-order timing; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
+      B33 for route-order timing; B40 for repair/reload route-point selection; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
       rest table and its resumption or removal outcomes). The original's choice of the local player's routes over the owner's is
       `unmeasured`: it differs from the owner's routes only for an actor that follows a route while
       its owner is not the house played on the machine. Network games, where that is common, are
@@ -1030,7 +1054,10 @@ Terms used by this spec:
       The guard-spot/memory and route/memory collisions are `unmeasured`: ordinary attack-move
       input clears the guard spot and ends the route, and no stock input sequence reliably keeps
       both states. B33 gives conditional recorder checks, not a way to manufacture them. Also `unmeasured`: the route row's condition on a *patrol* that has
-      begun, because the *patrol* processing belongs to other topics (claim 34), and the rule of at
+      begun, because the *patrol* processing belongs to other topics (claim 34). Route-action
+      guards involving asymmetric alliances or owner-changed route holders are also
+      `unmeasured`: no established skirmish input preserves such a route and isolates those
+      classifications. B40 does not establish those guards. Also unmeasured is the rule of at
       most once per tick, which needs two fall-backs of one actor in one tick, which no setup is
       known to time. Scenario B15, case d, backs the guard-spot row for a unit whose current
       behaviour is not *area guard*.
@@ -1442,11 +1469,13 @@ apply in our engine to the actors of every player house.
 
     | Target when the processing began | Effect |
     |---|---|
-    | none | if its secondary weapon charges friendly buildings and one of the 8 cells around it holds a building of its own owner that can be charged, it makes that building a charge target and queues *attack*; otherwise it attempts its idle action (S-0107, claim 14 for infantry) |
+    | none | an infantry unit or vehicle with an electric-charge secondary weapon runs S-0518 claim 14's automatic charging scan; a found building becomes its target, its charging mark is set and *attack* is queued without an immediate start; otherwise ordinary guard processing runs, including the infantry idle action of S-0107 claim 14 |
     | present | a hover-attack type whose height above the surface is 0 takes a nearby cell as its destination; firing at a target in range is done by the firing rules, not by the processing |
 
-    So an actor that makes a charge target in a processing does not take such a cell in that
-    processing. **Original only (note for AI designers):** in addition, an infantry unit of a
+    A successful charge scan replaces ordinary guard processing in that processing, not the
+    delay selection below. S-0518 claim 14 owns the eight-neighbour scan in step-direction order
+    and the own-house-only building eligibility. An actor that makes a charge target does not
+    attempt its ordinary idle action or take the hover-attack cell in that processing. **Original only (note for AI designers):** in addition, an infantry unit of a
     computer-controlled owner with explosive charges whose target, as this table leaves it, is a
     building queues *sabotage* (unless that is already current). Our engine applies this to no
     house; our AI can give such a unit a sabotage order instead.
@@ -1459,8 +1488,8 @@ apply in our engine to the actors of every player house.
     | the type has the distributed-fire flag and the actor's distributed-fire candidates (Terms) are not empty | 0 | 0 |
     | any other case | the standard delay | 1 |
 
-    *Guard* takes no target by itself in its processing. The automatic search for an actor in
-    *guard* runs on its targeting timer (claim 33).
+    Apart from automatic charging, *guard* takes no target by itself in its processing. Its
+    ordinary automatic enemy search runs on the targeting timer (claim 33).
     - **Infantry** of a type that deploys: the deployer rules of claim 31 take precedence. When one
       of them applies, it decides the outcome and the delay, and nothing else of this claim happens.
     - **Vehicles:** the rules of this table, which belong to other topics, take precedence over the
@@ -1489,7 +1518,8 @@ apply in our engine to the actors of every player house.
       uses it to deploy its base-building vehicles by themselves, which our AI does with a deploy
       order.
     - Backing: `measurable` (scenario B10, scenario B21 for the enter-nearest instructions,
-      scenario B24, case a for the distributed-fire row and case b for the charge target; scenario
+      scenario B24, case a for the distributed-fire row and case b for the charge target,
+      supplemented by S-0518 claim 14's scenarios TC2 and TC4; scenario
       B26, case a for the original-only sabotage rule). The vehicle table's row 1 is `measurable`
       by S-0402 scenario H7 (the slave miner in *guard* after a stop order; its variants b to e for
       the parts of the wake-up rule), and row 2 by S-0402 scenario H5, parts C and D (the
@@ -1510,12 +1540,13 @@ apply in our engine to the actors of every player house.
       change (claim 11), so queued behaviours, including orders, never start while it lasts and
       only a force or an override replaces it,
     - *sticky* is not among the behaviours that run the per-tick opportunity search (claim 33), and
-      the processing of *guard* takes no target by itself (claim 24),
+      the processing of *guard* takes no hostile target by itself (claim 24),
     - a mobile actor of a human-controlled owner in *sticky* does not retaliate unless the
       player-return-fire setting is on (claim 18).
 
     Observable consequence: a mobile actor of a human-controlled owner in *sticky* never takes a
-    target by itself (unless that setting is on); in our engine that holds for the actors of every
+    hostile target by itself (unless that setting is on); automatic charging under claim 24 is
+    still possible. In our engine that hostile-target rule holds for the actors of every
     house. In the original, one of a computer-controlled owner takes a target only by retaliating
     (claim 18, original only). Further differences come only from the imported properties of
     *sticky*: if they mark it zombie or paralysed, a fall-back to rest that reaches the row for
@@ -1602,8 +1633,11 @@ apply in our engine to the actors of every player house.
     results do not bypass the earlier rows or the infantry deployer rules.
     In a processing that none of rows 1 to 5 ends,
     any actor, with or without a guard spot, that has no target once the leash and the search have
-    taken effect and whose secondary weapon charges friendly buildings looks for a charge target as
-    in *guard*.
+    taken effect runs S-0518 claim 14's automatic charging scan when it is infantry or a vehicle
+    with an electric-charge secondary weapon. A found own-house building becomes its target,
+    its charging mark is set and *attack* is queued without an immediate start. The scan does
+    not undo an idle action already attempted earlier in this processing. It leaves the
+    area-guard delay below in effect, including its close-range test on the resulting target.
 
     The delay is *D* = *k* × *D*<sub>r</sub> + *U*(1, 5), where *k* = 2 for aircraft and 1 for
     every other kind; it becomes trunc(*D* / 6) under the same close-range condition as in *attack*
@@ -1616,7 +1650,8 @@ apply in our engine to the actors of every player house.
     - Backing: `measurable` (scenario B10, with case h for the close-range shortening, case i for
       the aircraft factor, case j for the bunker row and case k for the 1-tick delay after a search
       that finds a target; row 3 is the rule of claim 24, scenario
-      B21; scenario B24, case b for the charge target; scenario B26, cases b and c for the
+      B21; scenario B24, case b and S-0518 claim 14's TC2 and TC4 for automatic charging,
+      and scenario B26, cases b and c for the
       original-only row 5 and the guard spot moved off an allied building; scenario B31 for row 1
       and the "wakes its slaves anyway" effect, with the wake-up rule of S-0402 claim 14 and its
       scenario H7). The computer-owner
@@ -3069,7 +3104,9 @@ absent key keeps the value the earlier layers left).
 | `CanBeOccupied`, `TechLevel` | building type section | owned occupiable buildings (Terms; claim 24): the flag set and the tech level 0 or more; the flag also in claim 32 | boolean; integer, engine default 255 (so a type that gives no tech level counts) |
 | `WeaponsFactory`, `Bunker` | building type section | claims 11, 15 | boolean |
 | `ElectricAssault` | warhead section | the secondary weapon's warhead that marks a charging weapon (claims 24, 26) | boolean |
-| `HasStupidGuardMode`, `UnitRepair`, `SAM`, `Powered`, `EMPulseCannon` | building type section | claim 32 | boolean |
+| `HasStupidGuardMode`, `UnitRepair`, `SAM`, `Powered`, `EMPulseCannon` | building type section | claim 32; `UnitRepair` also feeds claim 13's route service test, default no (S-0314) | boolean |
+| `UnitReload` | building type section | claim 13's route reload test | boolean, default no (S-0501) |
+| `Strength`, `Ammo` | actor type section | maximum health and maximum ammunition for claim 13's route tests | integer, defaults owned by S-0302 and S-0301 |
 | `Power` | building type section | claim 32: the building drains power when the value is negative (the power rules belong to the structures topic) | integer |
 | `ImmuneToRadiation` | type section | claim 31 | boolean |
 | `RadLevel` | weapon section | *W* of claim 31 (of the secondary weapon) | integer |
@@ -4424,6 +4461,26 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   held back solely by either timer, or a harvest processing after guard has started
   without a new harvest start falsifies the claim. Reuse S-0212 P26 and B37 for
   neutral/special failure-tick destination assignment and its separate draw audit.
+
+- **B40 (claim 13, repair/reload route actions).** Use the common skirmish setup and recorder
+  with route-mode scripted input on a tiny open map. Place an own-house repair building and an
+  allied bystander's repair building, and commit a vehicle's route with either building as its
+  next point after an ordinary move point. Run damaged and full-health vehicle variants.
+  Separately use a reload building and an actor with finite ammunition, below and at its
+  imported capacity. A named test map supplies a reload building and finite ammunition for a
+  ground vehicle if stock types cannot express that comparison; no service outcome beyond
+  order selection is assumed. Record the classified click action, route-generated order,
+  destination and behaviour at the subsequent order boundary. Expected: when the ordinary
+  classification permits an object action other than *select* or *toggle select*, the damaged
+  non-infantry repair case and the below-capacity reload case issue that object action.
+  Full-health repair-only and full-ammunition reload-only controls use the cell fallback.
+  Add infantry at a repair-only building and an unlimited-ammunition actor at a reload-only
+  building: neither service condition qualifies. At a building with both service flags,
+  either qualifying condition suffices. Falsified by an object order in a nonqualifying
+  control or a cell fallback when all service and action guards hold, or by destination
+  assignment inside the fall-back instead of later order application. Three runs per case.
+  The original's local-player alliance dependence and asymmetric-alliance guards remain
+  unmeasured under claim 13's qualifications; these mutually allied fixtures do not test them.
 
 ## Open questions
 
