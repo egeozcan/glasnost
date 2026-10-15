@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 34
+revision: 35
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
@@ -1220,6 +1220,12 @@ rank* and *elite weapon*), *n*
 
     The order changes only when an object enters or leaves.
 
+    An on-map ground-layer building is listed in every actual foundation cell defined by
+    S-0406 claim 2, not just the cell containing its position or reference point. A missing
+    cell of an irregular foundation does not list the building. Thus a strike on any listed
+    foundation cell can select that building as its strike witness under S-0513 claim 18.
+    This does not change the listing order above.
+
     An object counts as entering when it is placed there (including by the map at game start) or
     when its position moves into the cell layer. A walker that has chosen its walking target in a
     cell has not entered it yet: it enters on the tick on which its position moves into the cell,
@@ -1245,10 +1251,12 @@ rank* and *elite weapon*), *n*
     - Backing: `measurable` (scenario C9 for the front and end rule and the map's order; scenario C18
       for the override case; scenario C26, parts b and c2, for the moment a walker enters,
       S-0207 scenario D17 (d), runs 3a and 3b, for the nearest-object tie; scenario C29 for aircraft
-      listing). `unmeasured` for order among multiple buildings in one cell layer: no valid setup
+      listing; S-0513 scenario SW7(f) for per-foundation-cell building listing and its strike-witness
+      consequence). `unmeasured` for order among multiple buildings in one cell layer: no valid setup
       establishing overlapping buildings and distinguishing their order is known here.
     - Confidence: high for the front and end rule and for the moment a walking unit counts as
-      entering and for the nearest-object tie. Medium for the order among objects placed by the
+      entering, for the nearest-object tie and for per-foundation-cell building listing.
+      Medium for the order among objects placed by the
       map and for aircraft listing.
 
 ### Entry outcomes for an aircraft
