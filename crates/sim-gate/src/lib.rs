@@ -14,6 +14,12 @@
 //! whose hash covers the world and the AI's state; halfway through each run
 //! the game is saved and loaded, the loaded game must hash alike, and the
 //! run goes on from the loaded game (`golden/duel.txt`, `golden/duel-diagonal.txt`).
+//!
+//! M6a: the fixture's AI builds aircraft, pads and V3-style launchers, so the
+//! duels play them; a third duel on the synthetic water map adds ships
+//! (`golden/duel-naval.txt`). Each duel is also saved and loaded at the
+//! first tick with a rocket in flight and the first tick with an aircraft in
+//! the air.
 
 use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
@@ -47,16 +53,19 @@ pub enum Scenario {
     Duel,
     /// Our own AI against itself on the diagonal synthetic map (M5b).
     DuelDiagonal,
+    /// Our own AI against itself on the synthetic water map (M6a).
+    DuelNaval,
 }
 
 impl Scenario {
     /// Every scenario, in gate order.
-    pub const ALL: [Scenario; 5] = [
+    pub const ALL: [Scenario; 6] = [
         Scenario::Scripted,
         Scenario::Combat,
         Scenario::Skirmish,
         Scenario::Duel,
         Scenario::DuelDiagonal,
+        Scenario::DuelNaval,
     ];
 
     /// The scenario's name, also its golden file's stem.
@@ -67,6 +76,7 @@ impl Scenario {
             Scenario::Skirmish => "skirmish",
             Scenario::Duel => "duel",
             Scenario::DuelDiagonal => "duel-diagonal",
+            Scenario::DuelNaval => "duel-naval",
         }
     }
 
@@ -78,7 +88,9 @@ impl Scenario {
     /// The ticks of a full run of the scenario.
     pub fn ticks(self) -> i32 {
         match self {
-            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal => SKIRMISH_TICKS,
+            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => {
+                SKIRMISH_TICKS
+            }
             _ => TICKS,
         }
     }
@@ -86,16 +98,37 @@ impl Scenario {
     /// Every how many ticks the golden file keeps a hash.
     pub fn stride(self) -> usize {
         match self {
-            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal => SKIRMISH_STRIDE,
+            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => {
+                SKIRMISH_STRIDE
+            }
             _ => 1,
         }
     }
 }
 
+/// Whether a rocket is in flight, and whether an aircraft that is no rocket
+/// is in the air.
+fn in_flight(w: &glasnost_sim::world::World) -> (bool, bool) {
+    use glasnost_sim::rules::Kind;
+    let rocket = w
+        .objects
+        .values()
+        .any(|o| o.rocket.as_ref().is_some_and(|x| x.phase.is_some()));
+    let plane = w.objects.iter().any(|(&id, o)| {
+        o.kind == Kind::Aircraft
+            && o.rocket.is_none()
+            && o.on_map
+            && glasnost_sim::air::height(w, id) > 0
+    });
+    (rocket, plane)
+}
+
 /// The state hash of an AI duel after each tick until the game is over or
-/// `ticks` ticks ran; saved and loaded halfway (panics when the loaded game
-/// hashes differently).
-fn duel(map: &glasnost_map::Map, name: &str, ticks: i32) -> Vec<String> {
+/// `ticks` ticks ran; saved and loaded halfway and at the first tick with a
+/// rocket in flight and with an aircraft in the air (panics when the loaded
+/// game hashes differently). With `flies`, a full run must have flown
+/// both.
+fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<String> {
     let mut g = Game::new(
         fixture::rules(),
         map,
@@ -105,8 +138,14 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32) -> Vec<String> {
     )
     .expect("the synthetic duel loads");
     let mut out = Vec::new();
+    let (mut rocket_saved, mut plane_saved) = (false, false);
     while g.world.tick < ticks {
-        if g.world.tick == ticks / 2 {
+        let (rocket, plane) = in_flight(&g.world);
+        let first_rocket = rocket && !rocket_saved;
+        let first_plane = plane && !plane_saved;
+        rocket_saved |= rocket;
+        plane_saved |= plane;
+        if g.world.tick == ticks / 2 || first_rocket || first_plane {
             let loaded = Game::load(&g.save(), fixture::rules(), fixture::catalogue())
                 .expect("the duel's save loads");
             assert_eq!(
@@ -123,6 +162,12 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32) -> Vec<String> {
             break;
         }
     }
+    if flies && ticks >= SKIRMISH_TICKS {
+        assert!(
+            rocket_saved && plane_saved,
+            "{name}: the full duel flies a rocket ({rocket_saved}) and an aircraft ({plane_saved})"
+        );
+    }
     out
 }
 
@@ -130,9 +175,17 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32) -> Vec<String> {
 /// skirmish and the duels stop earlier when their game is over).
 pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     match scenario {
-        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks),
+        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, true),
         Scenario::DuelDiagonal => {
-            return duel(&fixture::map_diagonal(), "synthetic-duel-diagonal", ticks);
+            return duel(
+                &fixture::map_diagonal(),
+                "synthetic-duel-diagonal",
+                ticks,
+                true,
+            );
+        }
+        Scenario::DuelNaval => {
+            return duel(&fixture::map_naval(), "synthetic-duel-naval", ticks, false);
         }
         _ => {}
     }
@@ -163,7 +216,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     let (rep, rules) = match scenario {
         Scenario::Scripted => (testkit::scripted_replay(SEED, ticks), testkit::rules()),
         Scenario::Combat => (testkit::combat_replay(SEED, ticks), testkit::combat_rules()),
-        Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal => {
+        Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => {
             unreachable!("handled above")
         }
     };
