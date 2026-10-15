@@ -1,7 +1,7 @@
 ---
 id: Q-0796
 title: When a cloak generator's growth or shrinking becomes pending
-status: open
+status: answered
 related: [S-0516]
 ---
 

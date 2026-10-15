@@ -1,7 +1,7 @@
 ---
 id: Q-0795
 title: The cell-arrival update for locomotors outside S-0516 claim 22's table
-status: open
+status: answered
 related: [S-0516, S-0207, S-0208, S-0503, S-0501]
 ---
 

@@ -2,13 +2,13 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792]
+requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796]
 supersedes: []
 ---
 
@@ -72,7 +72,8 @@ Two kinds of rule are kept apart throughout.
   - The coverage belongs to the owner only. Allies do not share it.
   - This is the *sensed cell* of S-0309 (Terms).
 - **Cell-arrival update.** The movement event that relocates mobile sensor coverage and
-  tests adjacency reveal. Its timing depends on the locomotor (claim 22). The earlier name
+  tests adjacency reveal. It can also result from a superweapon warp or fall landing.
+  placement alone is distinct. Its timing depends on the movement or relocation (claim 22). The earlier name
   *completed-cell movement event* means this event, not every cell-boundary crossing.
 - **Idle generator.** A cloak generator with neither growth nor shrinking pending. This is
   independent of its radius and of being in operation (claim 20).
@@ -292,9 +293,11 @@ Two kinds of rule are kept apart throughout.
     has a cell-arrival update (claim 22), the game checks each of the 8 neighbouring
     cells that pass the usable-area test. This is the same event that relocates its sensor
     disc, if any; an object need not itself be a sensor to receive this reveal test.
-    Walking and hovering use the events in claim 22's table, including same-cell updates.
-    Ordinary aircraft flight supplies no such event, so flying past a sensor does not
-    cause this adjacency uncloak.
+    All movement and relocation rows in claim 22 use this test, including same-cell
+    updates. Ordinary aircraft flight, jumpjet flight above touchdown and rocket flight
+    supply no such event, so flying past a sensor does not cause this adjacency uncloak.
+    A jumpjet's touchdown, a surviving superweapon warp's arrival effects and a fall landing
+    do supply it. Entering play alone, including unloading, does not.
     - For each such cell it takes a single candidate from infantry, vehicles, aircraft and
       buildings in the ground layer. For position (*x*, *y*, *z*) in leptons, let *u* = *x* mod 256
       and *w* = *y* mod 256, residues from 0 to 255. Its distance is the integer
@@ -317,8 +320,9 @@ Two kinds of rule are kept apart throughout.
     - Only a cloaked object that moves is revealed this way. A sensor that walks up to a stationary
       cloaked object reveals nothing by adjacency; its coverage (claim 22) only lets its house see
       and attack the object.
-    - Backing: `measurable` (CS8, CS17 candidate checks, CS18 parts C and J) for event timing,
-      standing-position preference and first-listed integer-distance ties. The distinction
+    - Backing: `measurable` (CS8, CS17 candidate checks, CS18 parts C and J, CS20) for event
+      timing, standing-position preference and first-listed integer-distance ties, except the
+      fixture-limited movement cases marked `unmeasured` in claim 22. The distinction
       between table-root and exact-root candidate distances is `unmeasured`: no legal
       sub-cell placement pair distinguishing the winning candidate has been established.
       CS18 part C's non-standing-position extension is conditional on finding such placements,
@@ -416,7 +420,8 @@ Two kinds of rule are kept apart throughout.
     - Confidence: high
 
 20. **Growth, shrinking and ownership.**
-    - **Growth.** For positive type radius *r*, a generator starts with no covered cells and
+    - **Growth.** A newly created generator is idle at radius 0, with no covered cells.
+      For positive type radius *r*, becoming in operation makes growth pending as below. It
       adds radius 1 on its first growth update, then radius 2, and so on through *r*, one per
       tick. Radius 0 is an empty field, not the radius-zero circle of F5. A zero or negative
       type radius gives no field and cannot initiate a neighbour restart by shrinking.
@@ -425,9 +430,39 @@ Two kinds of rule are kept apart throughout.
       as invalid with an importer warning and treated as zero: the original instead lets its
       growth radius wrap through invalid sizes. This invalid-data failure is not reproduced.
       Every object on a newly covered cell is re-evaluated (claim 6).
-    - **Shrinking.** When the generator goes out of operation, the field shrinks by one ring per
-      tick to 0. Cells outside the shrinking circle leave the field at once, and their objects are
-      re-evaluated (claim 9 (c)).
+    - **Pending changes.** Operation is S-0405 claim 8's building state, separate from
+      field radius and field phase. The ordinary building turn detects changes in operation
+      before its field update, so a newly pending direction can take its first step that turn.
+      Merely remaining in operation does not repeatedly request growth.
+
+      | Field state | Event | Next field state and radius effect |
+      |---|---|---|
+      | Idle or shrinking, radius unequal to type radius | A change to being in operation is detected | Growing from the current radius; no wait for the shrink to reach 0 |
+      | Shrinking, radius equal to type radius | A change to being in operation is detected | Still shrinking; no growth request |
+      | Growing | A change to being in operation is detected | Still growing |
+      | Idle or growing, positive current radius | A change to being out of operation is detected | Shrinking from the current radius |
+      | Any phase, current radius 0 | A change to being out of operation is detected | Phase unchanged: idle stays idle, growing stays growing, shrinking stays shrinking |
+      | Idle, below full radius | Ordinary update with operation unchanged | Still idle, even in operation; no automatic recovery |
+      | Growing, current radius equals type radius | Field update | Idle, no radius change |
+      | Shrinking, current radius 0 | Field update | Idle, no radius change and no neighbour-restart test |
+
+      The radius-0 growing case can arise by a restart followed by loss of operation before
+      its next field update. That update still grows: pending growth has no further power
+      gate. Similarly, restoring operation at full radius before the first shrink step does
+      not reverse shrinking; a later unchanged-operation turn does not request growth even
+      after the collapse. A fresh unpowered placement instead remains idle at radius 0.
+      An idle below-full field requires a new operation transition or a neighbour restart
+      to grow; changing the type radius alone is not a growth request.
+    - **Shrinking.** A pending shrink reduces the radius by one per tick to 0. Cells outside
+      the shrinking circle leave the field at once, and their objects are re-evaluated
+      (claim 9 (c)). Growth becomes idle only on the update after reaching the type radius, and
+      shrinking becomes idle only on the update after reaching 0. The building-centre
+      interruptions below do not change these phase-ending tests.
+    - **Manual power-off.** An accepted power-off order has an additional immediate effect:
+      shrinking becomes pending even at radius 0, and a current radius of 0 becomes the
+      type radius before the shrink. It does not add coverage. This differs from ordinary
+      low power or another operation change (`quirks.cloak_generator_zero_radius_shutdown`).
+      S-0405 claim 10 owns which orders are accepted.
     - **Removal.** When the generator is removed, sold or destroyed, the field vanishes at once.
     - **Capture.** When it is captured, the field also vanishes at once, and it grows again for the
       new owner if the building is in operation.
@@ -472,9 +507,12 @@ Two kinds of rule are kept apart throughout.
       this stop. At radius 0 the following shrink update stops without retrying the omitted
       cells or the restart.
     - **Immediate collapse.** Sale, destruction, removal and capture clear the field without
-      building-centre interruptions and perform the same neighbour-restart test. On capture,
-      this happens for the old field before any new-owner growth.
-    - Backing: `measurable` (CS11, CS17, CS18 parts D and I, CS19), except the restart of
+      building-centre interruptions and perform the same neighbour-restart test, even when
+      both current and type radius are 0. For type radius 0 its strict integer-cell reach is
+      Δ*X*² + Δ*Y*² < 16 square cells. There need not have been any covered cell to clear.
+      This differs from ordinary shrinking starting at radius 0, which performs no test.
+      On capture, this happens for the old field before any new-owner growth.
+    - Backing: `measurable` (CS11, CS17, CS18 parts D and I, CS19, CS21), except the restart of
       an idle below-full positive-radius neighbour is `unmeasured`: no ordinary setup for
       that idle state is established. CS19 gives the conditional test. Its eligibility
       rule is settled; only construction of that state remains unavailable.
@@ -500,7 +538,11 @@ Two kinds of rule are kept apart throughout.
     *R* supplies its owner's sensor disc of radius *R*. Entering play centres it on the object's
     cell; subsequent relocation follows the events below, not continuous position. The sensors
     flag alone gives no coverage; it serves claims 13 and 18.
-    - **Entering play.** The disc is added when the object enters play.
+    - **Entering play.** The disc is added when the object enters play, including successful
+      unloading, a carrier putting down its cargo, and initial parachute release. This is
+      not itself a cell-arrival update and supplies no adjacency reveal. It does not wait
+      for the object's next locomotor update. Boarding has already removed its disc, subject
+      to the removal-centre quirk below; any leaked coverage is not repaired by unloading.
     - **Movement.** At a cell-arrival update, the old disc is removed around the last recorded
       coverage cell and a disc is added around the object's cell at that update. That cell
       becomes the recorded coverage cell. This happens even if it equals the old cell.
@@ -508,14 +550,43 @@ Two kinds of rule are kept apart throughout.
 
       | Locomotor | Cell-arrival update for sensor coverage and claim 13 |
       |---|---|
-      | Driving or ship tracks | Track arrival at the cell centre (S-0207 claim 7, S-0504 claim 1), not the earlier boundary crossing |
+      | Driving or ship tracks | Track arrival at the cell centre (S-0207 claims 7 and 12, S-0504 claim 1), not the earlier boundary crossing; also a driving curve's chain-point arrival update (S-0207 claim 22) |
       | Walking infantry | Arrival and snap to the chosen standing position (S-0208 claims 6 and 23), including intermediate walking targets and same-cell arrivals; not reservation, boundary crossing or a physical step alone |
       | Hovering, including amphibious hovering | The non-refusing heading-point choices and no-point restoration cases of S-0503 claim 15. Coverage uses the actual position at that event, before any cached final travel, not the newly chosen heading cell. A clear choice can produce it when movement starts. Arrival need not snap to a cell centre; crossing a boundary during later travel does not produce it |
       | Ordinary flying aircraft | None from taking off, flight across cells, destination arrival or landing. Coverage remains where entering play or another independent coverage-changing event left it (`quirks.flying_sensor_disc_stationary`) |
 
-      S-0501 claims 1–8 own ordinary flying movement; S-0502 claim 3 describes the distinct
-      jumpjet locomotor, not ordinary aircraft flight. The table does not add a jumpjet timing rule.
-      The sensors flag without a nonzero sensors-sight gives no disc in flight either.
+      | Teleporting locomotor, any mobile object kind | At the destination in the jump tick, after position, height and landing-layer placement, not reservation or phasing-in completion (S-0207 claims 20 and 22) |
+      | A jumpjet | At completed touchdown (S-0502 claim 15), after landing placement and before the later sight refresh and crate pickup; none on takeoff, in-flight cell crossings, cruising arrival or hovering |
+      | Rocket flight | None during launch, flight or impact (S-0506 claims 14–21); its entering-play disc stays behind until an independent coverage-changing event |
+      | Underground movement | On completion of emergence, not underground cell crossings |
+      | Mechanical walking | At completion and snap to its movement point, not intermediate boundary crossings |
+      | Drop-pod descent | No cell-arrival update from descent or touchdown alone; landing leaves and re-enters play, so coverage follows those independent removal and placement rules |
+
+      S-0501 claims 1–8 own ordinary flight; S-0502 claim 3 identifies the distinct jumpjet
+      movement. The stationary-flight quirk below applies to the flight portions of all three
+      flying modes, but does not suppress a jumpjet's real touchdown event. A sensors flag
+      without nonzero sensors-sight gives no disc in any of them. Missile-like projectiles,
+      including a superweapon's projectile, are not mobile sensor objects and have neither a
+      disc nor claim 13's adjacency reveal; their flight belongs to S-0306 claims 1 and 14–15.
+    - **Teleport arrival consequences.** The teleporting locomotor's vehicle arrival reporting
+      and crushing precede these sensor effects. Entry interactions can remove an infantry
+      mover before it receives them. For a surviving arrival, disc relocation precedes the
+      adjacency test and the landing cell's entered-by actions. Jump-time crate pickup,
+      destination removal and the landing animation follow (S-0207 claim 22). No cells
+      between departure and destination become disc centres or receive an adjacency test.
+    - **Superweapon teleport.** S-0513 claim 39's removal and appearance are not ordinary
+      leaving-play and entering-play sensor changes: coverage stays at its old recorded cell
+      through departure, landing retries and appearance. A surviving member gets a cell-arrival
+      update at its later arrival-effects update, after arrival sound and the arrival-fate test
+      (S-0513 claim 38), before the landing animation and arrival hold. Its disc then transfers
+      to the destination, and adjacency reveal applies. It does not wait for its own locomotor
+      or hold expiry. A member killed by the arrival-fate test gets no such arrival update.
+    - **Drops and unloads.** A successful ground unload or carrier put-down adds the disc at
+      placement without an adjacency test. Any later walking or driving arrival is a separate
+      event. A parachute release likewise adds coverage immediately in its release cell, and
+      descent does not move it continuously. Completed fall landing is a cell-arrival update,
+      including a same-cell update, after height becomes 0 and falling ends, before the
+      parachute is told to end (S-0522 claims 9, 12 and 13).
     - **Owner change.** The disc moves from the old owner to the new one.
     - **Leaving play.** The disc is removed around the object's current cell, not necessarily
       the last recorded coverage cell (`quirks.mobile_sensor_removal_centre`). If it crossed a
@@ -525,7 +596,13 @@ Two kinds of rule are kept apart throughout.
     - **Floor.** Removal never takes a mobile sensor's count below 0.
 
     A mobile type's disguise-detection range has no effect (claim 40).
-    - Backing: `measurable` (CS12 parts a and b, CS18 parts B and J)
+    - Backing: `measurable` (CS12 parts a and b, CS18 parts B and J, CS20). Underground,
+      mechanical-walking and drop-pod rows, and carrier vehicle put-down, are `unmeasured`:
+      no supported skirmish fixture for those otherwise unused movement modes or the
+      vehicle-lifting carrier is established here. The rocket's no-adjacency-event rule is
+      also `unmeasured` until a pre-cloaked rocket fixture is established; its stationary
+      sensor disc is measurable without cloaking the rocket. CS20 gives conditional checks
+      rather than claiming a completed observation.
     - Confidence: high
 
 23. **Sensor-array buildings.** A building whose type is a sensor array adds the sensor disc of
@@ -1009,10 +1086,15 @@ F6, owner's disguise cycle (integers):
   sensor's disc around its current position cell, producing the coverage drift of claim 22
   when it has not yet completed movement into that cell. Off: remove the disc actually last
   added by that sensor, retaining the floor at zero.
-- **`quirks.flying_sensor_disc_stationary`** (default on). Ordinary flying movement never
-  relocates a sensor disc, even on landing. Off: horizontal cell-boundary crossings during
-  that movement relocate the disc to the new current cell. This alternative changes coverage
-  only; it does not add claim 13 adjacency uncloak events to ordinary flight.
+- **`quirks.flying_sensor_disc_stationary`** (default on). Ordinary aircraft flight, rocket
+  flight and airborne jumpjet movement never relocate a sensor disc. Ordinary aircraft
+  landing also does not; jumpjet touchdown does, as a real cell-arrival update. Off:
+  horizontal cell-boundary crossings during these flights relocate the disc to the new cell.
+  This alternative changes coverage only; it adds no adjacency uncloak events to flight.
+- **`quirks.cloak_generator_zero_radius_shutdown`** (default on). Manual power-off makes
+  shrinking pending and substitutes the type radius for a current radius of 0, without
+  adding coverage. Off: it requests shrinking only at a positive current radius, matching
+  ordinary loss of operation. It never invents a positive radius for an empty field.
 - **`quirks.cloak_field_building_interrupt`** (default on). Claim 20's partial coverage and
   interrupted shrinking/restart are retained. Off: apply each circle in full, without an
   early stop at an own building's centre.
@@ -1034,8 +1116,8 @@ F6, owner's disguise cycle (integers):
 | `CloakRadiusInCells` (building type) | *r*, also claim 23 removal | integer, kept as signed 8-bit; zero gives empty field; negative effective value warns and uses zero for generator growth | 20 |
 | `Sensors` (object type) | Sensors flag, claims 13 and 18 | boolean | no |
 | `SensorsSight` (object type) | *R*, claims 22–23, cell-arrival disc and removal drift; a nonzero range, not the sensors flag, supplies coverage for aircraft too | integer, cells | 0 |
-| No data key | Claims 13 and 22: walking, hovering and ordinary flying cell-arrival timing | engine behaviour; locomotor choice belongs to S-0208, S-0503 and S-0501 | claim 22 table |
-| No data key | Claim 20: own-centre interruption, including radius 1, and idle-neighbour eligibility | engine behaviour, not a separate radius or power setting | idle excludes both growing and shrinking |
+| No data key | Claims 13 and 22: cell-arrival timing for every movement mode, warp, drop and unload, distinct from entering-play coverage | engine behaviour; locomotor import belongs to S-0207 claim 14; ordinary flight, jumpjets and rockets to S-0501, S-0502 and S-0506 | claim 22 table and relocation clauses |
+| No data key | Claim 20: phase transitions, own-centre interruption, idle-neighbour eligibility and zero-radius immediate collapse | engine behaviour, not a separate radius or power setting; operation and accepted power orders belong to S-0405 claims 8 and 10 | initially idle at radius 0; operation changes request direction, unchanged operation does not; immediate collapse tests neighbours even for type radius 0 |
 | No data key | Claims 11, 13, 18 and 42: object-crush uncloak (not overlay-only), candidate distance, ties, explicit building uncloak and within-turn timing | engine behaviour | fixed |
 | No data key | Claim 16: passenger cloak state, stage and elapsed delay | engine behaviour, independent of transport capacity imports in S-0507 | preserved on ordinary boarding and exit |
 | `LightGrey` (Colors) | Claim 38 fallback radar colour | named colour definition, S-0103 claims 6–10; use its one-shade scheme's radar colour as for an ownerless radar object in S-0410 claim 8 | fixed lookup name; colour values come from user data |
@@ -1381,6 +1463,110 @@ update becomes idle again. If an in-operation idle below-full positive-radius st
 available, repeat with it and expect a decrement floored at 0 followed by growth, not
 exclusion by radius alone. This last state-construction test is conditional, not a completed
 measurement. The eligibility test is field state plus operation, not radius.
+
+### CS20: Other arrivals and placements (claims 13 and 22; Q-0795)
+
+Use CS-fixture and the common three-run skirmish setup. Give each tested mobile type the
+same positive sensor range. In separate runs give it a cloaking veterancy ability and cloak
+it on the ground before movement. Remove weapons, field changes and damage as other reveal
+causes. Keep stationary cloaked witnesses at old-only and new-only disc edges, beyond
+adjacency, and an enemy type-flag sensor in a neighbouring destination cell. Record coverage,
+position, cloak state and sound every tick, with event-resolution recordings where an order
+inside one tick is being tested. Coverage lets one house see a still-cloaked witness, whereas
+adjacency reveal changes the mover's cloak state globally. Do not confuse those outcomes.
+
+- **Own teleport.** Use the teleporting locomotor on a vehicle, then on fixture infantry and
+  aircraft. Record reservation, jump, phasing-in completion and destination removal. Expect
+  disc transfer and adjacency reveal in the jump tick at the landing cell, not reservation,
+  intervening cells or phase completion. Add a landing-cell entered-by action whose visible
+  effect is recorded, and a crate in a separate run. Expect the sensor effects before the
+  tag action and crate pickup. For a vehicle use S-0207 claim 22's arrival-report/crushing
+  controls: their effects precede disc transfer. A consumed infantry entrant is not a
+  surviving-arrival test. A different tick or reversed resolvable order falsifies the claim, but
+  end-of-tick coincidence alone leaves the within-tick order inconclusive.
+- **A jumpjet.** Fly across several cells, pause hovering at the destination, then land. Expect
+  coverage to stay at its initial cell during flight and hovering and transfer on completed
+  touchdown, with the adjacency test then, not at cruising arrival. Record landing placement,
+  sensor changes, sight refresh and crate pickup to test their stated order. Repeat landing
+  in the same cell: the adjacency test still occurs. A transfer in flight, missed touchdown
+  transfer or in-flight adjacency uncloak falsifies the corresponding rule. Takeoff requires
+  a compatible infantry or vehicle fixture; an ordinary flying aircraft is not this test.
+- **Rocket.** Give a spawned rocket type a sensor range and observe from placement until
+  impact, with edge witnesses away from its impact damage. Expect no flight transfer or
+  adjacency reveal. The disc remains at placement until removal, whose current-cell
+  subtraction can leave leaked coverage under the existing removal-centre quirk. A flight
+  transfer falsifies the rule. A no-adjacency-reveal test requires a rocket already fully
+  cloaked before flight; no such fixture is established, so that sub-test remains conditional
+  and unmeasured, not confirmed merely by an uncloaked rocket staying uncloaked. Ordinary
+  steering projectiles are a separate no-disc control, not rocket aircraft with their sensors
+  flag cleared.
+- **Superweapon warp.** Warp a living sensor vehicle to a clean landing, then repeat with a
+  forced redirected landing. Record old coverage at departure, off-map retry updates,
+  destination appearance and the later arrival-effects update of S-0513 claim 39. Expect
+  no disc removal at departure and no addition at mere appearance; transfer and adjacency
+  reveal occur at the surviving arrival-effects update, after the fate check. Compare a
+  long arrival hold: transfer must not wait for its expiry. Use an arrival that fails the
+  fate check as a no-arrival-update control. A different transfer tick falsifies the rule.
+- **Release and unloading.** Board a sensor vehicle or infantry unit, move the transport,
+  and record successful ordinary unloading before any passenger locomotor update. Expect
+  coverage at exit placement immediately, but no adjacency uncloak solely from placement.
+  Record its later ordinary arrival separately. Repeat with a carrier putting down a sensor
+  vehicle if a data-only carrier fixture can be made operational; without one this carrier
+  sub-test remains conditional. Drop sensor infantry with a parachute: expect coverage at
+  release, none of the flight crossings as relocation events, and a same-cell arrival update
+  and possible adjacency uncloak when falling ends at height 0. Observe the parachute-end
+  request after that event. Contrary timing or a placement-only uncloak falsifies the rule.
+- **Unused movement modes, conditional.** If a sanctioned data-only skirmish fixture supplies
+  underground, mechanical-walking or drop-pod movement, repeat the disc-edge and adjacency
+  controls. Expect underground transfer only after emergence completes, mechanical walking
+  at movement-point snap, and no drop-pod arrival test solely from touchdown; the latter's
+  landing placement uses removal/re-entry coverage instead. Log failure to construct such
+  a fixture as unavailable, not confirmation. These rows remain unmeasured until then.
+
+### CS21: Generator phase requests (claim 20; Q-0796)
+
+Use CS-fixture, the common recording setup and three deterministic repeats. Record operation,
+phase, radius and covered cells on every building update, not just the visible cloak fade.
+Use a powered positive-radius generator and separately a zero-type-radius one.
+
+- **Initial low power.** Place the generator out of operation through insufficient power,
+  without issuing a manual power-off order. Expect idle at radius 0 indefinitely. Restore
+  power: the first turn detecting operation makes growth pending and can grow radius 1
+  that turn. Growing or shrinking before that transition falsifies the initial-state rule.
+- **Partial shrink reversal.** Let growth reach full radius and become idle. Cut supply,
+  allow two shrink steps while the current radius remains positive, then restore supply.
+  Expect growth from that current radius in the first turn detecting restored operation,
+  without waiting for radius 0. Collapse to 0 despite that qualifying transition falsifies
+  the reversal. Sell another nearby source during the restored generator's pending growth:
+  it must not restart, because growing is not idle.
+- **Zero-radius pending cases.** Arrange a neighbour collapse after this generator's turn
+  to restart it at radius 0, then cut supply before its next turn. Expect its pending growth
+  to survive the detected loss of operation and advance one radius. Contrast the initially
+  idle unpowered radius-0 placement, which stays idle. A forced shrink or lost growth at
+  this zero-radius operation transition falsifies the table.
+- **No automatic recovery.** On a full idle generator issue accepted manual power-off and
+  power-on orders without an intervening building turn. Expect shrinking to remain pending
+  despite operation being restored before a field step; unchanged operation does not ask
+  for growth. After collapse and its stop update the generator remains idle at radius 0
+  while in operation, until a further operation transition or neighbour restart. Automatic
+  growth on the next unchanged-operation turn falsifies this rule. Verify both orders were
+  accepted; an intervening turn or rejected order makes this trial inconclusive. A fixture
+  making an idle positive radius less than a changed type radius is not established: if
+  sanctioned runtime type changes become available, confirm unchanged-operation updates
+  likewise leave it idle. That positive-radius extension remains unmeasured.
+- **Manual versus supply loss.** At idle radius 0 with positive type radius, issue an accepted
+  manual power-off order. Expect shrinking pending with radius set to the type radius,
+  without adding coverage. Compare supply loss alone, which preserves idle at radius 0.
+  Already existing overlapping coverage may be cleared by the ensuing shrink. A different
+  immediate phase/radius falsifies the manual rule. The quirk-off control is on our engine
+  only and never invents a positive radius for the empty field.
+- **Immediate collapse at type radius 0.** Place full idle operational neighbours at cell
+  displacements of 3 and 4 cells from a zero-radius generator. Sell, destroy, remove and
+  capture that source in separate runs. Expect the 3-cell neighbour to restart, but not
+  the 4-cell neighbour: the strict squared reach is less than 16 square cells. The source
+  has covered nothing. Repeat ordinary shrinking already at radius 0 as a no-restart
+  control. No inside restart on immediate collapse, a boundary restart, or a restart from
+  the ordinary zero-radius stop update falsifies the corresponding rule.
 
 ## Open questions
 
