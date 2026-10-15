@@ -2,7 +2,7 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -612,8 +612,9 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     A destruction without an attacking object gives no house a kill, but still gives the victim's
     house a loss when it qualifies. This includes defeat and surrender hits. Passenger deaths
     are counted individually when their death rules credit them to an attacker (S-0312).
-    Selling, cancellation, map exit, boarding and deployment conversion are not destructions
-    for these totals merely because an object leaves the map or ceases to exist.
+    Selling, cancellation, map exit, boarding, deployment conversion and consumption by a
+    recycling building (S-0603 claim 11) are not destructions for these totals merely because
+    an object leaves the map or ceases to exist.
 
     Every change of owner to a different house, including capture and mind control, additionally
     gives the gaining house one kill for a not-scored-unmarked object, without giving the
@@ -1270,8 +1271,8 @@ then for capture and a mind-control/return pair. Expected: each eligible destruc
 No-attacker surrender gives losses only; capture/control/return each gives the gaining
 house 1 kill and the old owner no loss. Test a not-scored victim (neither death counter)
 and insignificant victims (building excluded, other kinds included), then an insignificant
-building capture (gain kill included). Compare normal sale, boarding and deploy/pack-up
-controls: no death counter merely from removal. For passenger deaths compare S-0312's
+building capture (gain kill included). Compare normal sale, boarding, deploy/pack-up and
+consumption by a recycling building controls: no death counter merely from removal. For passenger deaths compare S-0312's
 carrier outcomes with the individual passenger death records, not carrier disappearance alone.
 
 For score, use an invented type price whose owner-adjusted value is recorded before each
