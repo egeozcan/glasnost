@@ -2,7 +2,7 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -264,12 +264,12 @@ Two kinds of rule are kept apart throughout.
     A hit that stops before that point does not uncloak. Such hits are:
     - a non-negative hit on a temporarily invulnerable target
     - a hit on a warping target
+    - a hit blocked by a tank bunker sheltering the target, not by an infantry garrison
     - a hit by a warhead that the target is immune to by kind (radiation, psionic, poison)
     - a hit that a warhead not affecting allies makes on an allied target
     - a berserk-warhead hit
     - a hit from an attacker of the target's own type and owner, when the target's type is immune
-      to its own type
-    - a hit rejected by the target's garrison protection before ordinary damage resolution.
+      to its own type.
 
     The invulnerability and warping exclusions above describe ordinary hits, not hits that
     explicitly bypass those defences (S-0302 claim 10).
@@ -587,9 +587,9 @@ Two kinds of rule are kept apart throughout.
     - **(d) Leaving deployed mode.** A vehicle stops being deployed.
     - **(e) Disguise house leaves the game.** The house its disguise names leaves the game.
 
-    No additional removal cause was traced. In particular, the traced disguise state survives:
-    - infiltration
-    - entering a transport or a building
+    Infiltration uses up the spy rather than leaving a surviving unit whose disguise could be
+    observed (S-0510 claim 2). Disguise is preserved through:
+    - entering a transport or a building without being used up
     - a change of owner, including mind control
     - being detected.
     - Backing: `measurable` (CS13, part c; CS14, part c)
@@ -1035,7 +1035,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. For detectors test the detection-radius disc after an initially unpowered building is removed. | A formerly −1 cell needs two additions. Array removal uses cloak radius; detector removal uses detection radius. |
 | 27–29 | Compare owner, mutual-ally and enemy views on explored ground with/without own sensors. Record clicks, shadow, radar and images every tick. Include a stage count reaching fraction 255. | Claim 28 bands hold. Unsensed allies see the cloak image but cannot click or list it on radar. Fading vehicles have no shadow. Fraction 255 is not drawn for non-owners. |
 | 30–32 | Copy undisguised/disguised infantry, disguised/undisguised vehicles, rock overlays and terrain objects. Create permanent disguisers with each side default. Remove the disguise house. Observe image, colour, health and acquisition. | Claim 31 copies and rejected kinds hold, without target damage. Defaults have the owner's house and do not fool enemy logic. Cleared permanent infantry resets to default; a vehicle clears outright. |
-| 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry, infiltration, capture and vehicle undeployment. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise; vehicle undeployment clears it. |
+| 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry, capture and vehicle undeployment. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise; vehicle undeployment clears it. |
 | 35, 36 | Vary disguise house among observer, ally and enemy. Vary ownership and detector coverage. Observe acquisition, retaliation, automatic crush choice versus ordered drive-through, cell entry, cursor, hover bar/name, insignia and scenery selection/flash. | Outcomes using claim 35 change with its predicate as claim 36 and the owning specs state. Disguise blocks automatic crush choice, not an otherwise valid drive-through. Detection changes the observer's treatment, not the copied disguise. |
 | 37–39 | Capture the owner's full 256-tick cycle and each Table B band. Compare ally/enemy images and radar colours. Fire vehicles using two fake-blink times, also while undisguised; compare infantry. | Owner bands/cycle hold. Non-owners see real during vehicle fake blink, then the same disguise again. Infantry firing starts no fake blink. Radar uses owner colour when the owner allies the viewer, otherwise a non-empty disguise house's colour; repeat opposite one-way alliances as CS16 (c). |
 | 41 | Compare stock submarines with an underwater fixture vehicle stripped of all cloak sources. Fire after surfacing; add sensors and then cause adjacency reveal. | The control stays surfaced. Ordinary transitions give submerged states and F2 surfacing delay. Sensing alone does not surface it; adjacency can. |
