@@ -2,7 +2,7 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -62,7 +62,8 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 - **Garrisoned building, firing occupant.** As S-0302 (Terms) for the garrisoned building. Its
   occupants fire through the shared occupant/muzzle index owned by S-0313 claim 6 and used by
   S-0308 claim 13. It advances after each successful non-disc-laser shot, stays unchanged after
-  a disc-laser shot, and returns to 0 when occupants leave or are killed. Its *firing occupant*
+  a disc-laser shot, and returns to 0 when the building is emptied by occupants leaving or
+  being killed (claim 15). Its *firing occupant*
   at a given moment is the occupant at the index then, that is, the one whose weapon the building's next
   shot uses.
 - **Actual cost.** The cost of a type for a given house: the type's cost multiplied by that
@@ -369,6 +370,28 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
       here: no part isolates their owner-dependent presentation.
     - Confidence: medium
 
+15. **Emptying a garrison and changes of occupant.** Emptying the building by evacuation or
+    killing its occupants resets its shared occupant/muzzle index to 0 (S-0313 claim 6).
+    After reoccupation, its next shot therefore uses the first occupant, and a destruction
+    credited to the building before any further index change selects that occupant under
+    claim 8. This describes a whole-building emptying action, not a reset triggered by every
+    individual occupant leaving or dying.
+
+    A distinct, limited case is established for scenario set-up: when an individual occupant
+    is removed from the building's occupancy during set-up, the remaining occupants keep
+    their relative order and the numeric index stays unchanged. It is not reduced modulo
+    the new count. If that index still names an occupant, claim 8 uses that occupant, not
+    necessarily the same individual as before removal. This does not establish a normal
+    skirmish order or death event that removes just one occupant while leaving the others
+    inside. Nor does it establish a safe experience recipient when a retained index no
+    longer names an occupant (Open questions).
+    - Backing: `measurable` for evacuation and reoccupation (X15). Reset when all occupants
+      are killed is `unmeasured` here: X15 does not isolate killing from other building
+      changes. The individual set-up removal is `unmeasured`: no validated data-only
+      scenario for selectively removing an already-garrisoned occupant during set-up is
+      supplied. No prediction is made for an unestablished individual gameplay removal.
+    - Confidence: high for whole-building emptying; medium for individual set-up removal
+
 ## Formulas
 
 All floating-point steps follow S-0205: double results with a 53-bit significand, rounded toward
@@ -517,6 +540,7 @@ one tick that credit the same recipient add their gains one after another, each 
 | Rules, country section, keys `VeteranInfantry`, `VeteranUnits`, `VeteranAircraft` | country veteran lists for infantry, vehicles and aircraft (claim 11) | list of type names | empty |
 | Map, `[Units]` and `[Aircraft]`, the ninth comma-separated value of an entry; `[Infantry]`, the tenth | map veterancy value *n* (claim 11, F5) | integer | each scenario writes it |
 | Rules, `[AudioVisual]`, `EliteFlashTimer` | length of the elite flash (claim 14, presentation) | integer, ticks | owned by the rendering specs |
+| No user-data field | shared occupant/muzzle index and its reset (claim 15) | runtime state, not an imported setting | initially 0; S-0313 claim 6 |
 
 ## Measurement scenarios
 
@@ -776,6 +800,19 @@ that gives the veteran list firepower, then a map override giving sight alone: e
 On our engine repeat the two whitespace variants with `quirks.list_items_untrimmed` off:
 expected loss 200 for both. The off-state and warnings are design checks, not oracle measurements.
 
+**X15: experience selection after emptying (claims 8 and 15).** Reuse X3 c2's named test
+map, houses, game speed and settings, but use three distinguishable occupants in entry order
+*A*, *B*, *C*, all initially at experience 0. Let the building make exactly one ordinary
+non-disc-laser shot at a durable target, leaving its index at 1. Evacuate everyone, then
+reoccupy in the same order. In one fresh run record the first firing occupant and muzzle:
+expected *A* and muzzle 0. In another run use X3 c3's one-shot disc-laser victim after
+reoccupation, with *A* costing 100, victim cost 500, ratio 4 and cap 2.5 as invented test
+inputs. Record occupant experience at destruction. Expected: *A* gains 1.25, *B* and *C*
+stay at 0, since the disc-laser shot retains index 0. No other shot or occupant change may
+intervene. A different first shooter, muzzle, recipient or experience delta falsifies the
+corresponding reset/selection prediction. Use one valid fresh skirmish per run, director
+and mods off. This tests complete evacuation only, not individual removal.
+
 **Coverage outside numbered claims.** Import parsing and warning predictions are inherited from
 the referenced import specs where applicable. Ability-list whitespace, case matching, empty and
 unknown items, replacement and empty/missing retention are `measurable` (X14), confidence high.
@@ -788,6 +825,14 @@ out-of-scope AI policies are design rules, not oracle predictions. X1's wait tes
 
 ## Open questions
 
+- Q-0660 question 2 remains open for normal skirmish gameplay: no validated individual
+  departure/death transition that leaves other occupants inside is established here.
+  Claim 15 distinguishes the retained-index set-up case from whole-building emptying.
+  If an individual removal leaves an index outside the remaining occupant range, its
+  experience recipient and a safe replacement behaviour also remain unspecified. Do not
+  infer a reset, modulo reduction or shooter credit from claim 8. Q-0660 question 1's
+  wording correction is answered by claim 15 and Terms; the request is not listed as
+  fully answered in front matter.
 - Which object a destruction that claim 9 does not list credits; erasure and assault are now
   covered, but other destruction paths were not exhaustively traced.
 - Which game-mode setting makes skirmish starting units elite, and whether it can be reached.
