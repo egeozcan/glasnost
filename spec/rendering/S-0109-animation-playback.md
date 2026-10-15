@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1074,7 +1074,9 @@ forms are those of S-0003.
 | `Translucency` | integer | translucency field (claim 20) | 0 |
 | `DoubleThick` | boolean | claim 21 | no |
 | `ShouldFogRemove` | boolean | fog-remove flag (claim 24) | yes |
-| `Report` | sound name | start sound (claim 13) | none |
+| `StartSound` | single sound-entry name, case-insensitive, first 127 value characters; unknown retains earlier reference | start sound (claim 13; S-0701 claim 22) | retains earlier reference, initially no sound |
+| `Report` | same single-reference form; read only when the start reference after reading `StartSound` is still no sound | fallback alias for the start sound, not an additional sound | no sound |
+| `StopSound` | same single-reference form; unknown retains earlier reference | end sound (S-0701 claim 22) | retains earlier reference, initially no sound |
 | `TiberiumChainReaction` | boolean | resource chain reaction of the start event (claim 13; S-0401 claim 20) | no |
 | `SpawnsParticle` | particle-type name | particle requests of the middle event (claim 14) | none |
 | `NumParticles` | integer | number of particle requests per middle event (claim 14) | 0 |
@@ -1084,6 +1086,11 @@ forms are those of S-0003.
 | `MakeInfantry` | integer | infantry creation at the end (claim 16; S-0611 claims 9 to 11 for selection, placement and retries) | −1 (none) |
 | `IsFlamingGuy` | boolean | burning-walker flag (S-0615 claims 4 to 11) | no |
 | `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007), and so claim 25 | no |
+
+A retained start-sound reference also prevents `Report` from being read in a later layer
+that omits `StartSound`; this includes a reference previously supplied by the alias.
+These sound-reference forms, retention and fallback precedence have high confidence and
+are `measurable` in S-0701 scenario F3, including distinct aliases and repeated layers.
 
 Game-wide keys:
 
