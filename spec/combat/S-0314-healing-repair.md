@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -379,11 +379,23 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    they take their ordinary object updates, and uses the same game-wide rate as building repair.
    It is free. A vehicle, infantry unit or landed aircraft still in the superweapon warp's
    leaving stage after its warp update skips this healing in that turn (S-0513 claim 48).
-   A pending warp alone does not impose that exclusion; other warp-turn continuation
-   boundaries retain that claim's unresolved status. Objects out of play do not take these
-   updates (S-0203); healing inside transports and hospitals remains the separate open question below.
+   In the original, pending alone does not establish that exclusion; other warp-turn
+   continuation boundaries retain S-0513 claim 48's unresolved status.
+   **Engine design:** S-0513 claim 51 suppresses this healing for vehicles, teleporter infantry
+   and landed aircraft from their first pending update through arrival effects, including
+   departure, off-map retries and placement, with no ordinary healing before or after warp
+   work in those turns. During arrival hold, including its expiry turn, ordinary healing
+   eligibility is considered after the hold-end test; this does not override another healing
+   refusal. The extension beyond the confirmed leaving-stage exclusion is a design rule,
+   not confirmed original behaviour, and has no quirk switch.
+   Objects out of play do not ordinarily take these updates (S-0203); warp updates follow
+   S-0513 claim 51's separate scheduling rule. Healing inside transports and hospitals
+   remains the separate open question below.
    - Backing: `measurable` for living objects taking updates (H7) and the leaving-stage
-     exclusion (S-0513 claim 48, SW23). The health-0 exclusion is
+     exclusion (S-0513 claim 48, SW23). The engine-design continuation rule is `measurable`
+     in our engine (H8 f; S-0513 claim 51, SW23 part f); original continuation at the other
+     boundaries remains `unmeasured` for claim 48's incomplete per-kind evidence.
+     The health-0 exclusion is
      `unmeasured`: no scenario here keeps a zero-health object in an ordinary living update
      without destruction handling, which would confound the observation.
    - Confidence: high
@@ -405,8 +417,12 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     - aircraft and buildings are not healed this way.
 
     This healing requires reaching ordinary update work too: the still-leaving-stage
-    exclusion of claim 9 and S-0513 claim 48 applies equally to it, without implying
-    a blanket exclusion for every turn of a pending or arriving warp.
+    exclusion of claim 9 and S-0513 claim 48 applies equally to it. In our engine,
+    claim 9's design rule from S-0513 claim 51 also suppresses this healing from the
+    first pending update through arrival effects. Arrival hold and its expiry turn
+    offer ordinary healing eligibility after the hold-end test, without overriding
+    another refusal. This extension is engine design, not confirmation of the
+    original's unresolved continuation boundaries.
     *a*<sub>v</sub>, *a*<sub>i</sub>, *n*<sub>v</sub> and *n*<sub>i</sub> are game-wide fields
     (Import mapping, intervals in ticks). An object at full health or at 0 health gains nothing.
     Several buildings of a house add up: two such buildings double the amount, not the frequency.
@@ -420,8 +436,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     delivery, but neither kind heals damage from that delivery later in the same turn.
     - Backing: `measurable` (H8 parts a to e, including the building-kind exclusion and
       same-turn parasite ordering; S-0614 claim 18; S-0513 claim 48, SW23 for the
-      leaving-stage exclusion). The
-      health-0 exclusion is `unmeasured` for the same destruction-handling reason as claim 9.
+      leaving-stage exclusion). The engine-design continuation rule is `measurable`
+      in our engine (H8 f; S-0513 claim 51, SW23 part f); original continuation at the
+      other boundaries remains `unmeasured` for claim 48's incomplete per-kind evidence.
+      The health-0 exclusion is `unmeasured` for the same destruction-handling reason as claim 9.
     - Confidence: high (amounts, intervals, the kinds, the stacking, same-turn parasite ordering); medium (the events that change
       the totals, the floor at removal, and that power plays no part)
 
@@ -1456,6 +1474,13 @@ Expected: no gain from either source on those turns; a gain falsifies that exclu
 Record pending, departure and arrival turns separately rather than extending this
 prediction to unresolved continuation boundaries. This is SW23's proposed test, not
 a completed measurement.
+For our engine only, also apply S-0513 claim 51's SW23 part f contract test to both
+healing sources: on due healing ticks, expect no gain from the first pending update
+through departure, retries, placement and arrival effects. During arrival hold and
+its expiry turn, expect the ordinary due gain only when the object remains otherwise
+eligible after the hold-end test. A gain in an excluded turn, or suppression solely
+by this contract in an otherwise eligible hold turn, falsifies the design contract.
+These engine-only expectations do not settle the original's unresolved boundaries.
 
 **H8 g: service notifications (claims 7 and 17).** Use S-0524 claim 14's C16
 hospital and vehicle-repair fixtures, repeating destination entered-by tags and entrant
