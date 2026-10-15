@@ -2,11 +2,11 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327]
 supersedes: []
@@ -126,8 +126,8 @@ addition:
   takes no draw of its own (claim 10).
 - **Fence post, fence line.** A fence post is a building whose type the rules data marks as a post.
   Between two matching fence posts within range the original builds a line of fence-section
-  buildings, the fence line. Stock data has no such building type. The fence rules have no spec yet,
-  a pointer only.
+  buildings, the fence line. This rule applies when the imported rules data defines matching
+  fence-post building types. The fence rules have no spec yet, a pointer only.
 - **Visceroid flags.** Two flags of a vehicle type in the rules data (Import mapping). A type has
   "either visceroid flag" when at least one of the two is on.
 - **Animation terms of S-0109.** *Bouncing type* (S-0109, Terms), *random rate* and *random rate
@@ -250,9 +250,9 @@ original's recording modes are retained as deferred context, not implementation 
    clearing runs: anything that asks it for a raw value then receives 0, so a ranged draw with span 0 … 2147483646 under
    claim 4 returns its lower bound, and the stream does not advance. Our engine need not have this
    state.)
-   - Backing: `unmeasured` (the random-state recorder of the Measurement scenarios gives only the number
-     of raw values taken since the seeding, modulo 250, so draws during the clearing, had there
-     been any, could not be told apart from the map loading's own draws that follow)
+   - Backing: `unmeasured` (no scenario samples both ends of clearing separately from map
+     loading; the first-tick state alone cannot assign earlier consumption to clearing
+     rather than loading)
    - Confidence: medium
 
 ### Seeding and saved games
@@ -373,6 +373,24 @@ original's recording modes are retained as deferred context, not implementation 
         our engine's rule, not an additional oracle outcome.
       - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
         happens at a time the spec of that feature fixes, and the creation draw comes with it.
+    - **Parasite ranged choices.** S-0614 claims 9 and 10 own these choices on the
+      scenario random stream. A drone parasite's delivery to a non-infantry host
+      takes R(0, 1) after creating its effects and before its hit; an infantry
+      delivery takes no rocking choice. For a grappling parasite:
+      - Each push start takes R(0, 1) for its rocking direction, followed by three
+        wakes. Each wake takes R(−180, 180) and then R(−64, 64), integer
+        displacement components in leptons, before that wake is created. Thus every
+        push start has six wake-displacement ranged choices, not six fixed raw values.
+      - Each strike creates three splash effects before its cull test. Each splash
+        takes R(0, 1), then R(0, *n* − 1) to select from the game-wide splash
+        list of length *n*, before that splash is created.
+      - The first push starts at the end of the grab. After a strike, a new push's
+        direction and wake choices occur only after a hit that leaves the host
+        carrying the parasite; a cull or lost attachment takes no next-push choices.
+      These are explicit ranged choices, with raw-value consumption governed by
+      claim 4 (including rejection and equal bounds). They are not complete raw
+      counts for the delivery, strike or push: effect creation and playback may
+      contribute additional draws, which S-0614 leaves unestablished.
     - **Lightning sound choice.** Each lightning strike takes one raw value, read as
       unsigned and reduced modulo the game-wide lightning sound list's length, after
       the bolt-animation choice and all that animation's creation draws, but before
@@ -553,6 +571,7 @@ original's recording modes are retained as deferred context, not implementation 
       | A produced object is created, with its draw, when its production begins | `measurable` (R5 c) |
       | Pack-up vehicle and temporary hidden-slave creation draws precede placement and old-group removal, including successful placement | `measurable` (S-0402 H24), high confidence; retaining these draws with the failed-pack-up quirk off is an `unmeasured` design rule |
       | Production starts receive values at their causing actions, not in payment-priority order | `measurable` (S-0404 P11 B/C); the between-house order-boundary extension is `unmeasured` design, not an oracle result |
+      | Parasite explicit ranged choices, including six wake-displacement choices per push start and their ordering around effects and hits | `measurable` (S-0614 P8); high confidence for the explicit choices, medium for their composition with additional effect-creation choices, which remains unestablished |
       | Lightning sound choice: stream, count, guards and position within a strike | `measurable` (S-0701 F6); high confidence for stream/count/order, medium for the same-point guard |
       | Pre-placed objects: an entry that is dropped takes no draw, a visceroid-flagged vehicle takes one R(0, 29), an infantry unit takes no placement draw, a building's upgrade takes its own creation draw | `measurable` (R8 G) |
       | Pre-placed objects: one that is created but cannot be placed has still taken its creation draw | `unmeasured` (no case is established in which the original creates a pre-placed object and then fails to place it: an entry on a cell that is not legal is unspecified there, and a vehicle is placed whatever occupies its cell, S-0009 claim 38) |
@@ -565,6 +584,7 @@ original's recording modes are retained as deferred context, not implementation 
       | Veins: other land-type exclusions, slope thresholds, sloped placement and connections, and other vein-family overlay types | `unmeasured` (R8 B/E use flat sites with the vein flag on; no scenario part isolates these other conditions or formulas) |
       | Walls, ore and gems take no draw | `measurable` (R8 C) |
       | Crates, the high bridge overlays and the veinhole-monster overlay (and the monster it creates) take no draw | `unmeasured` (map crates are never created in a skirmish, S-0009 claim 12, and the high bridges and the veinhole monster need set-up conditions of rules that have no spec yet, so no scenario can yet place them in a known state) |
+      | Fence lines: linking posts, section creation and their position in loading | `unmeasured` (no scenario part supplies a fence-post fixture; the fence rules have no spec yet), low confidence |
       | What sets off a vein placement during play; the recompute draws | `unmeasured` (the recompute's triggers are bound up with other effects, such as a harvesting unit's or a veinhole monster's own draws, that no spec lists yet, and one recompute gives at most five values, each telling only its remainder modulo 3, too few to find its place in the stream the way R8 does) |
       | Animation creation: the stage-delay draw, and nothing else for a type without start-event effects | `measurable` (R8 F) |
       | Animation creation: the bouncing draws | `measurable` (R8 F, variant ii) |
@@ -723,13 +743,11 @@ original's recording modes are retained as deferred context, not implementation 
       recalculation's tile-animation draws, then the next piece's raw value. There is no
       intervening cell-animation draw, even if the written type names a cell animation.
 
-    S-0010 claims 12 and 19 and this spec's revision 8 loading table already fixed the
-    game-start pass after starting units and end-of-loading tags, but not explicitly against
-    secret labs or a skipped starting-unit step. The bridge-piece exclusion in claim 10
-    already excluded piece cell animations; the end-row and marker exclusions are now explicit.
-    S-0009 claim 28 already put cleanup before the late phase but did not place it against
-    the second pass. Claim 15 separately completes the downstream particle and smudge creation draws. S-0412 claim 14 now fixes the relative positions without asserting
-    that secret labs or recalculation take the final loading draws.
+    S-0010 claims 12 and 19 own the recalculation passes and tile-animation eligibility.
+    S-0009 claim 28 owns unused-house cleanup. Claim 10 supplies the low-bridge exclusions,
+    and claim 15 completes downstream particle and smudge creation draws. S-0412 claim 14
+    agrees with these relative positions without asserting that secret labs or recalculation
+    take the final loading draws.
     - Backing: `measurable` (R10 variants A and B for game-start placement,
       R12 for low-bridge cell-animation exclusion, R13 for resource-glint setup at
       frequencies 0, 1 and 2). Glint choices at other frequencies and extreme-span
@@ -1087,7 +1105,7 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | Starting units | house by house, as S-0009 claim 46 orders them: each house's base unit and other starting units, each with its type choice, creation draw and placement draws; after the last house, one ranged draw over 0 … 65535 whose value has no effect | S-0009, claims 45 and 46; claim 10 |
 | Initial crates | crate placement draws when the crate setting is on; exact placement counts remain owned by the crate rules | S-0412 claim 10 |
 | Secret labs | the conditional secret-lab choice draws, after initial crates and before end-of-loading tags and the game-start recalculation | S-0407 claim 14; claim 14 |
-| Fence lines | for each fence post on the map that can link to a matching post: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. Stock data has no fence posts, so this row is empty with stock data (low confidence) | fence rules (pointer); claim 10 |
+| Fence lines | When fence posts in the imported rules data can link on the map: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. If no such posts are present, this row has no draws (low confidence) | fence rules (pointer); claim 10 |
 | End of loading | the tags created at the end of loading, in registration order | S-0011, claim 34 |
 | Game-start recalculation pass | in visiting order, the creation and immediate start-event draws of each tile animation this pass starts, after starting units, initial crates, secret labs and end-of-loading tags and before the first tick, even when no starting units were placed. A cell that started one in the second pass starts no second one and takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; claim 10 |
 | Resource-glint setup | after the game-start recalculation and before tick 0, in visiting order: each eligible cell's ranged choice, then any animation-creation and immediate start-event draws for a zero result, before the next cell's choice. No choices when no glint type is configured | claim 14 |
@@ -1234,12 +1252,16 @@ The recorder is part of the measurement setup (the project lead has approved it)
   advanced by some count. *Falsified if,* in either, the seed changes or the state matches a fresh
   seeding.
 - **R3, saved games (claim 9).** A small test map with one human house and ten infantry of a type
-  with idle animations, no computer players, no crates and no other moving objects, with the random-state
-  recorder.
-  *Procedure:* at tick 300, read the recorder, save the game, and read the recorder again. Let that
+  with idle animations in the observed area, no crates and no other moving objects in that area,
+  plus one distant bystander computer player under the glossary's void rule. Use the random-state
+  recorder and scripted input; repeat any run voided by the bystander.
+  *Procedure:* after tick 300, open the options menu to stop simulation, read the recorder,
+  save the game without resuming play, and read the recorder again. Let that
   run continue without loading for 1800 ticks (2 game minutes), video-recorded (run 0). Then load
-  the save twice (runs 1 and 2), read the recorder right after each load, give no orders and
-  video-record 1800 ticks.
+  the save twice (runs 1 and 2), read the recorder at load completion before any resumed tick,
+  give no orders and video-record 1800 ticks. Use scripted input to resume each run identically.
+  If the recorder cannot isolate the pre-tick load checkpoint, the state comparison is
+  inconclusive, not evidence of failed restoration.
   *Expected (required):* the stream state and position read just before the save, just after the
   save and right after each load are all equal: saving takes no draw, and loading restores the
   saved state rather than seeding anew. *Expected (secondary):* the same infantry perform the same
@@ -1309,11 +1331,13 @@ The recorder is part of the measurement setup (the project lead has approved it)
   advance attributable to it after accounting for unrelated draws.
 - **R7, network checksum draws (claim 12; kept for the future multiplayer spec, not required of the skirmish engine).** Two machines in a network game on R5 (a)'s map,
   with the random-state recorder on one machine (it reads that machine's stream; both machines hold the
-  same state). During the control interval, *expected:* the position advances by exactly 2 in
-  every tick, apart from occasional ticks with one more ranged draw R(0, 2) (whose raw values the
-  recorded state predicts). Repeat on the same map as a skirmish: *expected:* no advance.
-  *Falsified if* the network game's advance per tick is not 2 (allowing the extra draws), or the
-  skirmish shows any advance in the control interval.
+  same state). During the control interval, *expected:* after accounting for the bystander's
+  and other unrelated draws as in R5 (a), the remaining advance is exactly 2 in every tick,
+  apart from occasional ticks with one more ranged draw R(0, 2) (whose raw values the recorded
+  state predicts). Repeat on the same map as a skirmish: *expected:* no remaining advance
+  after that accounting. *Falsified if* the network game's remaining advance per tick is not
+  2 (allowing the extra draws), or the skirmish shows an unexplained advance in the control
+  interval. Void a tick whose unrelated draws cannot be accounted for.
 
 - **R8, overlay placement draws (claim 10, map-loading table)** *(statistical runs)*. No run
   needs a chosen seed: each run uses the seed the game chose, which the random-state recorder reads.
