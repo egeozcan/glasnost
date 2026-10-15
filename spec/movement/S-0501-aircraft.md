@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -57,6 +57,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   V3-rocket and dreadnought-missile types, which use their locomotor's own answer (S-0506 claim 22; claim 18 here uses that answer).
   The in-the-air answer is the exact test that S-0308's *airborne* leaves to this spec for
   aircraft.
+- **strike aircraft**: an aircraft linked to a strike (S-0519 claims 17 and 20), not every
+  visiting aircraft or every aircraft dispatched from outside the map.
 - **visiting aircraft**: an aircraft marked as not meant to stay on the map. Successful placement
   sets this mark when the type is not both selectable and landable, or its primary weapon is a
   camera weapon. It does not clear an existing mark. A dispatch can mark an aircraft before
@@ -158,7 +160,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 5. **Speed fraction.** While a living aircraft that is not landing has a destination, its target
    speed fraction is *τ* = min(1, *d* / *S*), where *d* is the truncated table square root of
    the squared planar difference between its position and destination point (S-0204 claim 5),
-   without a building-size subtraction, and *S* its type's slowdown distance (Formula F4). When *τ* < 0.1:
+   without a building-size subtraction, and *S* its type's signed integer slowdown distance
+   (Formula F4). This quotient applies only for *S* ≠ 0. For *S* = 0, the ordinary target
+   fraction is 1 at every distance, including *d* = 0; the distance clamp and 0.1 adjustment
+   below still apply. This is not the fixed-full-speed exception. When *τ* < 0.1:
    - if *d* < 86 leptons, the current fraction is halved at once and *τ* = 0,
    - otherwise *τ* = 0.1.
 
@@ -178,7 +183,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    implementation that omits it behaves identically.
 
    **Consequence: ordinary slowing ends at fraction 0 short of the point.** Without the
-   fixed-full-speed case below, an aircraft whose converted speed *V* is at least 10 slows
+   fixed-full-speed case below, and with *S* > 0, an aircraft whose converted speed *V* is at least 10 slows
    until, after some step, *d* < 86 and *d* < *S* / 10. From then on each tick halves its
    fraction and lowers it by 0.1, so it reaches exactly 0 within a few ticks, normally in one,
    and stays there while the destination point is unchanged: it hovers that far short of the
@@ -364,12 +369,14 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 17. **End of the run.** A run ends when the aircraft has no target or no ammunition left. Then:
     - with no ammunition, a visiting aircraft or an aircraft of a human-controlled house forgets
       its target,
-    - an airstrike aircraft that still has ammunition queues *retreat*,
+    - a strike aircraft that still has ammunition queues *retreat*,
     - every other aircraft falls back to rest (claim 18), which normally sends it to a pad.
 
     An aircraft that still has ammunition and a target when its run ends goes straight into its
-    next run.
-    - Backing: `measurable` (scenario AC8)
+    next run. Separately, a strike cancellation queues *retreat* for the affected strike aircraft
+    under S-0519 claim 19, without waiting for the run to end. Cancellation does not itself
+    unlink them; their later fall-back and retreat follow claims 18 and 34 here.
+    - Backing: `measurable` (scenario AC8; S-0519 claim 19's cancellation scenario)
     - Confidence: high
 
 18. **Falling back to rest (aircraft).** When one of the first three situations in table T2 (State and ordering) applies, the aircraft has that row's stated outcome and S-0215 claim 13's common effects do not occur. In all other cases the common effects apply, and the aircraft's next behaviour is the result specified by the applicable remaining situation in table T2. In flight, an armed aircraft
@@ -486,8 +493,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     claim 13). Claim 42 gives one use: guidance requests the aiming facing toward it below
     256 leptons of the flight point when the aircraft lacks a target or ammunition. When other
     uses make it the requested heading remains open.
-    - Backing: `measurable` (scenario AC14); `unmeasured` for the time of application, which
-      has not been traced
+    - Backing: `measurable` (scenario AC14); `unmeasured` for application times other than
+      claim 42's aiming request, because those uses have not been traced
     - Confidence: high (the choice and conversion); low (its application timing)
 
 26. **Servicing.** A pad that has one or more aircraft settled on it services them at a fixed
@@ -890,7 +897,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       its aiming facing; between 512 and 256 leptons guidance turns that facing back toward the
       spot in the same update, and below 256 leptons guidance also aims it at the target. Its
       direction of travel never turns toward the target.
-    - It slows to a fraction of exactly 0 short of the spot (claim 5) and keeps no minimum
+    - With positive slowdown distance it slows to a fraction of exactly 0 short of the spot
+      (claim 5) and keeps no minimum
       speed. At the next processing of *approaching* it moves to *firing* where it hovers,
       keeping its destination. If it first comes within 16 leptons with a positive fraction,
       the distance row applies instead and it then stops the same way.
@@ -902,10 +910,12 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       hold. A refusal is handled by T1 as usual.
     - With converted speed below 10 it can hover with a positive fraction and never reach
       *firing* (Edge cases).
-    - Backing: `measurable` (scenario AC24)
+    These ordinary slowing consequences assume *S* > 0, as in AC24.
+    - Backing: `measurable` (scenario AC24), except the strafer's 8192-unit exception:
+      `unmeasured`, because AC24's ordinary aircraft cannot exercise it and no isolated
+      strafer setup is supplied here
     - Confidence: high for the order within an update, the zero-fraction test, the facings
-      requested and the retained flight point; medium for the strafer's 8192-unit exception,
-      which this request did not exercise
+      requested and the retained flight point; medium for the strafer's 8192-unit exception
 
 ## Formulas
 
@@ -931,8 +941,14 @@ division truncated toward zero.
 
 > **F4 Speed fraction.** This formula gives ordinary destination-dependent slowing under
 > claim 5, not its fixed-full-speed exception. Let *f*₀ be the current fraction before slowing,
-> *d* the integer raw planar point distance in leptons, and *S* the slowdown distance in leptons.
-> *τ*₀ = min(1, *d* / *S*). For *τ*₀ < 0.1 and *d* < 86, *τ* = 0 and
+> *d* the non-negative integer raw planar point distance in leptons, and *S* the signed
+> integer slowdown distance in leptons. For *S* ≠ 0, *τ*₀ = min(1, *d* / *S*), with
+> floating-point division, not integer division. For *S* = 0, *τ*₀ = 1 for both positive
+> and zero *d*, without evaluating a quotient in this formula. Thus zero slowdown distance
+> causes no distance-dependent halving: at positive *d* the fraction approaches 1; at
+> *d* = 0 the distance clamp makes it 0 before the adjustment raises it to 0.1.
+> These are the fractions before subsequent guidance or landing rules, not a promise of
+> eventual arrival. For *τ*₀ < 0.1 and *d* < 86, *τ* = 0 and
 > *f*ₕ = *f*₀ × 0.5. Otherwise *f*ₕ = *f*₀ and *τ* = max(0.1, *τ*₀).
 > The distance-clamped fraction is *f*꜀ = min(*f*ₕ, *d*). The pre-adjustment fraction *f*ₚ
 > is 0.05 when *τ* = 0, *f*꜀ = 0 and *d* > 0, and *f*꜀ otherwise.
@@ -1088,7 +1104,7 @@ which decide the direction of travel.
 | Situation | Next behaviour |
 |---|---|
 | its current behaviour has been overridden | the overridden one is restored; a restored *patrol* starts from its first stage |
-| current behaviour is *retreat*, *paradrop approach*, *paradrop overfly*, *spy-plane approach* or *spy-plane overfly*, and it is not an airstrike aircraft | unchanged |
+| current behaviour is *retreat*, *paradrop approach*, *paradrop overfly*, *spy-plane approach* or *spy-plane overfly*, and it is not a strike aircraft | unchanged |
 | queued behaviour is *paradrop approach* or *spy-plane approach* | that behaviour starts now |
 | on the ground, visiting, with passengers | *unload* (in a team: *guard*) |
 | on the ground, visiting, no passengers, not in a team | forgets target and destination; *retreat* |
@@ -1276,7 +1292,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   and fractions around each F4 threshold, including distance 0, and around 128, 512 and 768
   leptons. Expected: F4's halving, then distance clamp, then creep restart, then the 0.1
   adjustment, followed by claim 5's target replacement, which the next movement tick's own
-  calculation replaces (AC24 isolates this). At *d* = 0
+  calculation replaces (AC24 isolates this). With positive slowdown distance, at *d* = 0
   in ordinary slowing with positive incoming fraction, the adjusted fraction must be 0.
   Record the pre-slowing and adjusted fractions separately; a result differing from F4
   falsifies the resulting-fraction rule, not every observationally equivalent intermediate
@@ -1286,6 +1302,17 @@ listed in Open questions are not claimed confirmed by these scenarios.
   cases must not follow ordinary slowing, including no distance clamp at a zero-distance
   tick reached with the run lock held. An unreachable zero-distance example is recorded as a
   coverage gap, not inferred from another distance.
+  A named zero-slowdown test-map override sets the slowdown distance to 0 on a controllable,
+  non-fighter, non-strafing, non-fly-by aircraft. Keep a target and ammunition so that it holds
+  height without the fixed-full-speed exception. Record post-step distance and fractions before
+  guidance as well as at the end of the tick. Expected at positive distance: target 1 and current
+  fraction min(1, incoming fraction + 0.1), without halving. If a post-step distance of exactly
+  0 is reached, expect current fraction 0.1 before guidance, not 0 or a non-finite value.
+  Retargeting to a stationary object at the aircraft's planar position may expose that boundary.
+  Failure to reach it is a coverage gap, not confirmation. A differing fraction, non-finite
+  result or program error falsifies the corresponding zero-distance or positive-distance rule.
+  Repeat with a named negative-slowdown override of −500 leptons: below 86 leptons expect
+  halving and target 0; at or above 86 expect target 0.1, under F4's remaining rules.
   An edge-flight variant records the push-back attempt
   and a refused tick; AC23 isolates the random fallback and its draw.
 - **AC4 Landing, take-off and refusal (claims 6 to 8).** Start with an empty tracked-passable
@@ -1344,7 +1371,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   one shot, followed by spending one round; flag off, alternating burst and single shot without
   spending the pending round while the run continues. End the target or interrupt the order:
   the pending round must then be spent once. With no ammunition, a human-owned aircraft clears
-  its target and rests; a visiting airstrike with ammunition and no target retreats. In-burst
+  its target and rests; a strike aircraft with ammunition and no target retreats. In-burst
   draws and the final rearm delay must match S-0301 claims 2 and 4, not one check per burst shot.
 - **AC9 Scatter (claim 16).** Have infantry in the target cell of a durable target under a strafing
   run. Record scatter requests and accepted destinations at each firing pass. Expected: a
