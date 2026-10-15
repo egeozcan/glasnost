@@ -2,7 +2,7 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,7 +45,8 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
   facing is the way its turret points, as an absolute facing on the map, not relative to the body.
   A vehicle without a turret still has a turret facing; nothing shows it, and its firing check does
   not read it: the check compares the body facing instead (claim 10 (c)). Claim 9's turret-less rule
-  keeps that unseen turret facing equal to the body's target facing. The barrel elevation is
+  gives that unseen turret facing the body's target facing when a facing error re-aims the body.
+  It does not establish equality during all other movement. The barrel elevation is
   S-0105's (claim 6). A building has no body that turns: it has a barrel elevation and one facing that turns, the turret facing of S-0105 claim 5,
   called its *turret facing* here.
 - **Placement facing.** The facing at which an object is put on the map: 256 × *v* for a vehicle
@@ -133,7 +134,7 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
 4. **Turning counts ticks.** The progress of a turn counts ticks (the tick number, S-0201), not real
    time. A turn takes the same number of ticks at every game speed (glossary claim G3), and makes
    no progress while no ticks run.
-   - Backing: `measurable` (scenario R2, run at two game speeds)
+   - Backing: `measurable` (R2 at two game speeds and run e's pause)
    - Confidence: high
 
 5. **Setting a facing at once.** Some events set a facing to a value at once instead of turning
@@ -172,7 +173,9 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
    The same rule applies to the jumpjet turn-rate field and to the doubled rate of claim 13.
    S-0105's statement that a turn rate of 0 or less turns at once refers to ω after this
    conversion; a negative field reaches ω only through this claim.
-   - Backing: `measurable` (scenario R2 for 1 … 127; scenario R3 for 0 and a negative value)
+   - Backing: `measurable` (R2 run d for positive rates and clamping; R3 runs a, b, c′, d,
+     e and f for zero and both negative branches). Absent-key conversion is `unmeasured`:
+     these scenarios set the field explicitly and do not isolate an omitted key.
    - Confidence: high
 
 7. **Which facing uses which rate.**
@@ -206,16 +209,23 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
    - Confidence: medium
 
 9. **Where a vehicle's turret points.** Each tick, the target facing that a vehicle's turret has
-   at the end of the tick is the one given by the first row of this table that applies (Formulas F2
-   for the spin step). Other rows that apply in the same tick give the turret a target too, which
-   leaves a trace in its facing ("Several rows in one tick" below). A row whose effect sets a target
-   facing equal to the current target changes nothing (claim 3).
+   at the end of the tick follows this priority: spin overrides target aiming (turret-locked or
+   ordinary), and target aiming overrides facing-error aiming. The table displays this priority
+   from highest to lowest, not the order used to combine same-tick facing changes. Lower-priority
+   target changes can still leave an observable remainder jump in the facing ("Several rows in
+   one tick" below and F5). A row that gives the target already in force changes nothing (claim 3).
+   Rows saying "no change" do not override an applicable target-setting row.
+
+   The target-aiming and rest rows below require a vehicle with a turret. The facing-error row
+   describes turret re-aiming for such a vehicle; the separate "Without a turret" paragraph
+   gives the body-and-turret response for a vehicle without one. Only the spin row has no
+   turret requirement.
 
    | Situation in this tick | Turret target facing |
    |---|---|
    | The type has a spinning turret | the turret's current facing rounded to the nearest 256th of a turn, plus 2048 (F2) |
    | It has a target, the turret was not turning at the end of the previous tick, and it has a turret weapon that is turret-locked and not omni-fire | the body's current facing |
-   | It has a target, the turret was not turning at the end of the previous tick, and it has a turret weapon that is not omni-fire | the direction of the target (S-0204, claim 8) |
+   | It has a target, the turret was not turning at the end of the previous tick, and it has a turret weapon that is neither turret-locked nor omni-fire | the direction of the target (S-0204, claim 8) |
    | It has a target and its firing check gives a facing error (claim 10) | the direction of the target |
    | It has a target otherwise (the turret was still turning, it has no turret weapon, or that weapon is omni-fire) | no change (`quirks.turret_reaim_after_turn`) |
    | No target, the turret is not turning, at least *G* + 5 ticks have passed since the vehicle last fired, the vehicle is not inside a tank bunker, and it is not a deployed simple-deployer vehicle; it has a movement destination and no turret-locked turret weapon | the direction of the movement destination, except no change while the vehicle's locomotor is held by an enemy's vehicle-seizing weapon |
@@ -245,12 +255,16 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
    turret never turns its body by this rule; claim 16 gives one more rule for turret-less vehicles
    of the track class.
 
-   **Several rows in one tick.** The table gives the turret's target at the end of the tick. Three
-   of its rows can apply in the same tick: the spin row, the target row (the second row if it
-   applies, otherwise the third) and the facing-error row. The rest rows need "no target", so they
+   **Several rows in one tick.** Three target-setting rows can apply in the same tick: the
+   facing-error row, one target-aiming row (turret-locked if applicable, otherwise ordinary), and
+   the spin row. Their combined observable facing is F5's composition in that explicit order:
+   facing error, target aiming, spin. This is the reverse of their displayed priority. In
+   particular, turret-locked aiming overrides a facing error, and spin overrides either kind of
+   target aiming; this does not erase a lower-priority turn's remainder jump. The rest rows need "no target", so they
    never apply together with any of these three. A tick in which more than one of the three applies
-   leaves an observable trace in the turret facing: the turn towards the final target starts from
-   the start value that Formulas F5 gives, not from the turret's current value, and the facing that
+   leaves an observable trace in the turret facing: the final replacement turn starts from
+   F5's *s*ₖ₋₁, which includes the earlier rows' same-tick facing changes, rather than necessarily
+   from the facing before any row acted. Its visible facing in that tick is *s*ₖ. The facing that
    the spin row rounds (F2) is the value F5 gives just before the spin row, *s*ₖ₋₁ when the spin
    row applies (it is always the last row in F5's numbering), not the value before the tick's other
    rows. Each replaced target counts as a new target facing by claim 3, so one equal to
@@ -263,36 +277,46 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
      including the replaced-target trace, R7 run a for the rule without a turret, R9 for the tank
      bunker, deployed and seized conditions and for a vehicle without a turret weapon, and R11 for
      the turret-locked row holding the turret on the body)
+     The never-fired 100-tick initial age, elite/secondary turret-weapon choice, full horizontal
+     locomotor-moving test, and spin without a turret are `unmeasured`: no scenario here varies
+     their discriminating conditions. R9 run e tests the seized condition only if its recorded
+     movement destination persists; otherwise that condition remains `unmeasured` because the
+     setup has not established the necessary held-with-destination state. Counting the last shot
+     of every weapon is likewise `unmeasured`: R4 run d uses only one weapon.
    - Confidence: high for the spin row, for a spinning turret never counting as turning, and for
      what the facing-error row does when it applies (when it applies is claim 10, medium); medium
      for the turret-locked, omni-fire, re-aim, rest and turret-less rows, for which locomotor states
      count as moving and for the replaced-target trace; low for the seized condition and for the
-     exact meaning of "last fired" (the tick of the last shot of any weapon)
+     exact meaning of "last fired" (the tick of the last shot of any weapon).
 
 10. **When the firing check gives a facing error.** The firing check belongs to S-0301 (the firing
     cycle). This spec relies on four properties of it, which decide when the
     facing-error row of claim 9 can act:
-    - (a) A target out of the weapon's range gives a range result, never a facing error.
+    - (a) A target out of the weapon's range never gives a facing error. It gives an
+      out-of-range result unless a higher-priority refusal applies (S-0301 claim 9).
     - (b) While the turret was turning at the end of the previous tick (as the target rows read
-      it), the check gives a "turret still turning" result instead of a facing error, unless the
-      weapon's projectile is a homing projectile. That result also stops the shot. So for a weapon
+      it), the check cannot give a facing error unless the weapon's projectile is a homing
+      projectile. It gives "turret still turning" when no higher-priority refusal applies
+      (S-0301 claim 9). That result also stops the shot. So for a weapon
       with a projectile that does not home, a turning turret is never re-aimed: it finishes its
       turn, waits one tick (claim 9) and only then turns towards where the target is now. Only
       vehicles with a turret that does not spin keep this state, so a vehicle without a turret, or
       with a spinning turret, can get a facing error in any tick; the body of a vehicle without a
-      turret is re-aimed every tick (claim 9).
+      turret is re-aimed every tick that the check actually gives a facing error (claim 9).
     - (c) The weapon counts as pointing at the target, and gives no facing error, while the
       vehicle's *aiming facing* differs from the direction of the target by at most 2048 facing
       units, or by at most 4096 when its projectile is a homing projectile. The aiming facing is
       the turret facing for a vehicle whose type has the turret flag, and the body facing for a
       vehicle whose type has not; the unseen turret facing of a vehicle without
-      a turret is never compared. An omni-fire weapon never gives a facing error.
+      a turret is never compared. An omni-fire weapon, or any weapon of a visceroid type,
+      never gives a facing error (S-0310 claim 2).
     - (d) The firing check of a tick sees the turret facing that targets given in earlier ticks
       produce at that tick number. A target that claim 9 gives in the same tick, even one reached
       at once (Θ = 0), is seen first by the next tick's check.
     - Backing: `measurable` (scenario R5 tests (a); scenario R7 runs b and c with scenario R4
       runs a and g test (b) and (d); scenario R11 tests both tolerances of (c) from both sides, and
-      R6 run g the one at exactly 2048)
+      R6 run g the one at exactly 2048. R4 run h isolates (d) for an instantaneous turn.
+      S-0310 scenario T2 runs c and d cover omni-fire and visceroid exemptions)
     - Confidence: medium (these are stated here only because the turret rule depends on them, and
       S-0301 (the firing cycle) and S-0310 (turrets and facing for fire) specify the relevant
       firing-check and aiming behaviour)
@@ -303,8 +327,9 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     ω = 1, 512 for ω = 2, 1024 for ω = 3 or 4, and 2048 for every ω of 5 or more. A full turn thus
     takes 256, 128, 64 or 32 ticks (`quirks.turret_spin_quantised`).
 
-    While the vehicle has a target, the target rows of claim 9 act in the same ticks, and the
-    several-rows rule changes the course. Two consequences, both following from claims 1 and 9
+    For a vehicle with a turret and a valid turret weapon that is neither turret-locked nor
+    omni-fire, having a target enables the target-aiming rows in the same ticks as spin, and
+    F5 changes the course. Under those conditions, two consequences follow from claims 1 and 9
     with F2:
     - With ω = 1 the turret still spins, but each tick's turn starts from the remainder jump of a
       turn towards the target, so the steps are 256 facing units or more, many of them larger and
@@ -315,7 +340,8 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
       target's direction rounded to the nearest 256th of a turn plus 2048, and holds there while
       the target lasts. With a smaller ω of 9 or more it spins until it comes near the target's
       direction and then holds there in the same way.
-    - Backing: `measurable` (scenario R6)
+    - Backing: `measurable` (R6 runs a to e for unopposed spin, f to h for target traces
+      and the instantaneous hold, and i for the approach-and-hold case)
     - Confidence: high for the rule without a target; medium for the with-target consequences
 
 ### Turning and moving
@@ -344,17 +370,21 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
 
 13. **Hovering locomotor.** A vehicle with the hovering locomotor keeps a movement heading that
     turns at twice the type's turn-rate field (passed through claim 6, so a field of 64 or more
-    gives 127). Its body facing turns towards its direction of travel at the type's own turn rate.
-    - Backing: `unmeasured` (no scenario here isolates the heading's rate from the hover movement
-      itself, which the hover movement spec owns; Open questions)
-    - Confidence: medium for the rates; low for how the heading drives the movement
+    gives 127). Its body facing turns at the type's own turn rate. While its throttle is above 0,
+    the body aims at the point one neighbour step beyond its heading point in the next stored
+    path direction, or at the heading point when no further step remains (S-0503 claim 5).
+    It therefore looks ahead along the path rather than necessarily along its direction of travel.
+    How the movement heading controls throttle and travel is S-0503 claims 2, 5 and 6.
+    The body facing does not steer the vehicle.
+    - Backing: `measurable` (S-0503 scenario H2 for heading rate and body aim)
+    - Confidence: medium
 
 14. **The jumpjet locomotor.** A jumpjet keeps a movement heading that turns at the type's jumpjet
     turn-rate field (absent-key default 4, passed through claim 6). When a unit gets the jumpjet
     locomotor, the heading is set at once to map east (16384). The rules data also has a game-wide
     jumpjet turn rate (Import mapping). It has no effect on play: from the moment a unit gets the
     locomotor, the heading turns at the type's field.
-    - Backing: `unmeasured` (as claim 13: the heading's rate cannot be separated from jumpjet
+    - Backing: `unmeasured` (the heading's rate cannot be separated from jumpjet
       flight, which the jumpjet movement spec owns; Open questions)
     - Confidence: medium
 
@@ -363,7 +393,9 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     a larger one, which is at least 32512 and at most a half turn, takes exactly 1 tick
     (`quirks.infantry_fixed_turn_rate`). Many infantry actions set the facing at once anyway
     (S-0107).
-    - Backing: `measurable` (scenario R3, run c)
+    - Backing: `unmeasured`: R3 run c cannot distinguish rate 127 from an action setting
+      the facing at once. No scenario here establishes an infantry action that necessarily uses
+      a timed turn; S-0107 claims 9 and 11 instead describe instantaneous settings.
     - Confidence: high for the rate; medium for which infantry facing changes go through it
 
 ### Turret-less vehicles of the track class
@@ -397,13 +429,17 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     ending looping, continuation and overlap of audible instances belong to S-0701 claim 23.
     Finishing a turn does not imply that its current sound sample is cut at once. This claim
     establishes sampling for vehicles only, not aircraft or buildings.
-    - Backing: `measurable` (scenario R12; S-0701 scenario F12 for instance lifetime)
+    - Backing: `measurable` (scenario R12; S-0701 scenario F12 for instance lifetime).
+      A positive-duration turn beginning and ending between samples, or ending between a
+      sample and its sound update, is `unmeasured`: these tick-aligned scenarios do not
+      establish an event that produces either interval.
     - Confidence: high for vehicle sampling and the distinction from the re-aim gate
 
 ## Formulas
 
 **F1. Turning** (claims 1 to 3). Integers. A turning facing with rate ω (1 … 127) gets target ψ₁
-at tick number *t*₀ while its current value is ψ₀:
+at tick number *t*₀ while its current value is ψ₀. Giving its existing target again leaves the turn unchanged
+(claim 3); the formulas below apply to a changed target:
 
 > Δ = δ(ψ₀, ψ₁) (S-0204, F5), Θ = ⌊|Δ| / (256 ω)⌋ ticks, β = trunc(Δ / Θ) facing units per tick
 > (truncated toward zero, defined when Θ ≥ 1).
@@ -425,7 +461,7 @@ that is *f* rounded to the nearest 256th of a turn, a half step rounding up:
 > target = 256 × ((*f*₂₅₆ + 8) mod 256), with *f*₂₅₆ = ⌊(*f* + 128) / 256⌋ mod 256.
 
 Integers, facing units. With F1 applied every tick and a turret that starts on a multiple of 256,
-the step per tick is 2048 / max(1, ⌊2048 / (256 ω)⌋) (an exact division for every ω),
+for ω ≥ 1 the step per tick is 2048 / max(1, ⌊2048 / (256 ω)⌋) (an exact division for every such ω),
 which gives 256, 512, 1024, 1024 and 2048 for ω = 1, 2, 3, 4 and 5 or more.
 
 **F3. Turn rate from the field** (claim 6). For an integer field value *v*:
@@ -439,15 +475,15 @@ which gives 256, 512, 1024, 1024 and 2048 for ω = 1, 2, 3, 4 and 5 or more.
 facing (turret facing with the turret flag, body facing without it) and *d* the direction of its target, the weapon counts as pointing at the target when
 |δ(*f*, *d*)| ≤ 2048, or |δ(*f*, *d*)| ≤ 4096 for a homing projectile.
 
-**F5. Observable facing when several turret rows apply** (claim 9). All values are integers in facing units. In a tick where *k* ≥ 1 of the spin, target and facing-error rows apply, let τ₀ be the target in force before the tick and *s*₀ the facing supplied by F1 for that tick before these rows have an effect. Let τ₁ … τₖ be the target facings supplied by the applicable rows, listed in their table order, from lowest to highest. The final target is τₖ.
+**F5. Observable facing when several turret rows apply** (claim 9). All values are integers in facing units. In a tick where *k* ≥ 1 of the spin, target and facing-error rows apply, let τ₀ be the target in force before the tick and *s*₀ the facing supplied by F1 for that tick before these rows have an effect. Let τ₁ … τₖ be the target facings supplied by the applicable target-setting rows in this explicit composition order: facing error, then target aiming (turret-locked if applicable, otherwise ordinary), then spin. Omit inapplicable rows. This is lowest to highest priority, the reverse of their displayed order in claim 9, so the final target τₖ is the highest-priority applicable target. Rows saying "no change" supply no τᵢ.
 
 The following table gives the observable result associated with each row’s target, relative to the target and facing state immediately before that row:
 
 | Relation of row target to preceding target | Result for target and facing |
 |---|---|
-| τᵢ = τᵢ₋₁ | No change to the turn or facing. |
-| τᵢ ≠ τᵢ₋₁ and the replacement duration Θᵢ is positive | The target becomes τᵢ. The replacement turn starts from *s*ᵢ = (τᵢ − βᵢ × Θᵢ) mod 65536, which is F1’s value at ε = 0, including its remainder jump Δᵢ − βᵢΘᵢ. Θᵢ and βᵢ are given by F1 for the difference from the preceding facing to τᵢ. |
-| τᵢ ≠ τᵢ₋₁ and the replacement duration is zero, or ω ≤ 0 | The target and facing become τᵢ at once. |
+| τᵢ = τᵢ₋₁ | No change to the turn; *s*ᵢ = *s*ᵢ₋₁. |
+| τᵢ ≠ τᵢ₋₁ and the replacement duration Θᵢ is positive | The target becomes τᵢ. The replacement turn's starting facing is *s*ᵢ₋₁; its same-tick visible facing is *s*ᵢ = (τᵢ − βᵢ × Θᵢ) mod 65536, F1’s value at ε = 0 including the remainder jump Δᵢ − βᵢΘᵢ. Θᵢ and βᵢ are given by F1 for Δᵢ = δ(*s*ᵢ₋₁, τᵢ). |
+| τᵢ ≠ τᵢ₋₁ and either the replacement duration is zero or ω ≤ 0 | The target and facing become τᵢ at once; *s*ᵢ = τᵢ. |
 
 For the spin row, its target is the F2 target derived from the facing supplied by the preceding applicable row. If the final row’s target equals the target in force immediately before that row, the existing turn continues unchanged. Earlier effective target changes can therefore affect the facing visible in the tick even though the highest applicable row supplies the final target. With only one applicable row, this is claims 1 and 3. Example (scenario R4 run f): *s*₀ = 0 and τ₀ = 0; the facing-error row gives τ₁ = 16383 and *s*₁ = 3 (Θ₁ = 63, β₁ = 260); the turret-locked row gives τ₂ = 0, whose replacement turn completes at once, so the turret rests at 0.
 
@@ -494,10 +530,11 @@ For the spin row, its target is the F2 target derived from the facing supplied b
   new direction of its target from tick *t*₀ + Θ + 1 at the earliest, unless a facing error
   re-aims it sooner, which only a homing projectile allows (claims 9 and 10 (b)). With a projectile
   that does not home, such a vehicle fires at the earliest in that same tick *t*₀ + Θ + 1.
-- A facing error found in a tick re-aims the turret in that same tick. When the target row, the
-  spin row or both also apply in that tick, the first of them in claim 9's table gives the target in
-  force at the end of the tick, and the turn towards it starts from the value that claim 9's
-  several-rows rule gives.
+- A facing error can change the turret facing in that same tick, but turret-locked aiming
+  can leave it pointing with the body instead (R4 run f), and spinning can leave it at the
+  rounded target direction plus 2048 facing units instead (R6 run g). The end target has priority
+  spin, then target aiming, then facing error. F5 retains any remainder jumps from overridden
+  targets; their effect is visible in the faster spin of R6 runs f and h.
 - A driving vehicle that turns in place (claim 12) for Θ ≥ 1 ticks begins the step's track, and
   makes progress, in the same tick *t*₀ + Θ in which its body reaches the step's facing, not in
   the tick after it. After a turn that completes at once (Θ = 0 or ω = 0) it begins in tick
@@ -523,7 +560,7 @@ For the spin row, its target is the F2 target derived from the facing supplied b
   quantised steps of claim 11, so turn rates 3 and 4 spin alike and every rate of 5 or more spins at
   2048 facing units per tick. Off: the spin row's target is the facing that F2 reads plus
   256 × min(ω, 8) facing units, without rounding, so a spinning turret without a target turns by
-  exactly 256 × ω facing units per tick, capped at 2048.
+  exactly 256 × ω facing units per tick, capped at 2048. At ω = 0 this alternative does not spin.
 - **`quirks.infantry_fixed_turn_rate`** (default: on, the original). Infantry bodies turn at the
   fixed rate 127 (claim 15). Off: infantry use their type's turn rate by claim 6.
 - **`quirks.set_facing_keeps_target`** (default: on, the original). Setting a facing at once to the
@@ -562,8 +599,9 @@ The importer warns about every negative value of either turn-rate key (claim 6).
 
 ## Measurement scenarios
 
-All scenarios run under the glossary's *measurement setup*, with a recorder that reads the tick
-number. Where a scenario needs a field value that stock data does not have, it names a test rules
+All scenarios cover skirmish only and run under the glossary's *measurement setup*, with a
+read-only recorder that reads the tick number. Use game speed 1 and 800 × 600 pixels unless
+specified otherwise. No engine add-ons or unlisted data overrides are active. Where a scenario needs a field value that stock data does not have, it names a test rules
 file (or test art file): a loose copy of that file in which only the fields named are changed,
 removed after the run. Times in ticks are taken as differences between runs that share the same
 order latency, or are counted from the first tick in which the recorded facing changes, so the
@@ -573,8 +611,19 @@ the test objects, so that nothing picks a target by itself. Targets that a scena
 targets* are unarmed vehicles of the human player, attacked with the force-fire modifier
 (S-0214): no object
 picks them as a target by itself, so the test vehicle has a target only when it is ordered to.
+The observed area comprises all test objects and their travel routes. Void and repeat any run
+where an unnamed bystander object enters it or acts on a test object, or the bystander is defeated
+before recording ends. Void any aiming run where the named target disappears before the required
+observations (unless its destruction is part of the procedure), or where recorded positions
+do not give the claimed direction and range.
 Every vehicle a scenario pre-places starts with its body and turret at its placement facing
 (claim 5); the scenarios with a turret recorder check this in the first tick.
+
+**Hover heading and body aim (claim 13).** Use S-0503 scenario H2, with its stock hovering
+vehicle, turning routes and per-tick recorder. Compare the recorded movement heading with F1
+at twice the imported turn-rate field after claim 6's conversion, and the body facing with
+S-0503 claim 5's look-ahead aim at the type's own rate. A different heading rate, or body aim
+following travel direction instead of the look-ahead point on the turn, falsifies claim 13.
 
 **R1. Half-turn sense (claims 1, 2 and 12).**
 - *Setup:* a purpose-made flat map; one human player; a named test rules file that sets one stock
@@ -608,25 +657,40 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   127, Δ = 15360, so Θ = 0). Observable: *k* = the tick number of the first tick in which the
   position changes minus that of the first tick in which the recorded body facing is 16384.
   Expected: *k* = 0 for facing values 0 and 4 (turns of 64 and 60 ticks), and *k* = 1 for the turn
-  that completes at once. Falsified if *k* = 1 after the 64- or 60-tick turn (the track begins in
-  the tick after the facing is reached), or *k* = 0 after the turn that completes at once.
+  that completes at once. Falsified if any valid run gives a different *k*.
+- *Run d (positive rates and clamp, claim 6):* repeat the east move twice for each field
+  value *v* from 1 through 127, then 128 and 200. Let *w* = min(*v*, 127). In separate
+  sub-runs use placement values (64 − *w*) mod 256 and (65 − *w*) mod 256. These give
+  clockwise differences 256*w* and 256(*w* − 1) facing units to the east step. Record body
+  facing and position every tick. Expected: F1 at ω = *w*; the first sub-run has Θ = 1 and
+  the second Θ = 0. When *w* = 1 the second starts already aligned and needs no turn.
+  Falsified if any facing, turn duration or step-start delay differs. These boundary pairs
+  distinguish high rates even when a quarter-turn test would be instantaneous at all of them.
+- *Run e (pause, claim 4):* repeat the rate-1 run, open the options menu during the turn,
+  wait five seconds, then close it. Record tick number and body facing before and after the
+  interval with no ticks. Repeat twice. Expected: neither advances while ticks stand still.
+  The turn still completes after 64 ticks. Any facing progress during that interval or a
+  different tick duration falsifies the claim.
 
 **R3. Rate 0, a negative rate and infantry (claims 6, 12 and 15).**
 - *Setup:* as R2 with facing value 0; a named test rules file sets the vehicle's turn-rate field to
   0 (run a), −200 (run b) and 56 (runs c′ and d), and in run c an infantry type's turn-rate field to
-  1. Run d is the control: the vehicle is pre-placed with map facing value 128 (body facing 32768,
-  map south), so it needs no turn.
-- *Procedure:* runs a, b, c′ and d: order a move one cell to map south. Run c: pre-place the soldier
+  1. Runs e and f set the vehicle's field to −256 and −5 respectively. Run d is the control:
+  the vehicle is pre-placed with map facing value 128 (body facing 32768, map south), so it
+  needs no turn.
+- *Procedure:* runs a, b, c′, d, e and f: order a move one cell to map south. Run c: pre-place the soldier
   facing map north (map facing value 0, the infantry facing written as the map's infantry entry
   allows) and order it to move one cell to map south.
-- *Observable:* *m* as in R1; in runs a, b, c′ and d also the body facing every tick.
+- *Observable:* *m* as in R1; in runs a, b, c′, d, e and f also the body facing every tick.
 - *Runs:* 2 each.
 - *Expected:* run a: the body takes the facing 32768 in the first tick in which it changes, with no
   value in between, and *m*_a − *m*_d = 1 (a turn that completes at once still delays the step by
   one tick, claim 12), not 128. Runs b and c′ give the same *m*, with *m*_b − *m*_d = 2 (a half turn
-  of ⌊32768 / (256 × 56)⌋ = 2 ticks). In run c the soldier turns within 1 tick, not in 128 ticks.
+  of ⌊32768 / (256 × 56)⌋ = 2 ticks). Runs e and f match run a's instantaneous change and
+  one-tick movement delay. In run c the soldier turns within 1 tick, not in 128 ticks; this is
+  only a compatibility check, not evidence separating the fixed rate from an instantaneous setting.
 - *Falsified if:* run a shows a facing between 0 and 32768; *m*_a − *m*_d ≠ 1; *m*_b ≠ *m*_c′ or
-  *m*_b − *m*_d ≠ 2; the soldier takes visibly longer than 1 tick. A value *m*_a − *m*_d = 0 would
+  *m*_b − *m*_d ≠ 2; run e or f differs from run a; the soldier takes visibly longer than 1 tick. A value *m*_a − *m*_d = 0 would
   show that a turn completing at once costs no tick, against claim 12 and R2 run c.
 
 **R4. Turret aiming (claims 7, 8, 9 and 10).**
@@ -652,6 +716,8 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
     that its turret weapon is turret-locked whatever its current weapon number is.
   - Run g: as run a, with a second test rules file that also gives the weapon's projectile a
     projectile turn-rate field of 1 (a homing projectile).
+  - Run h: as run a, but turn rate 127. Keep the target alive through the first shot; record
+    the first tick in which the vehicle has that target as well as both facings and shots.
 - *Observable:* the turret and body facings every tick; the tick of the first shot.
 - *Runs:* 1 each.
 - *Expected:*
@@ -675,9 +741,14 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
     of 16383 (16383 − 260 × 15 = 12483), unless something outside this spec delays it, and in any
     case before the turret stops in tick *T* + 63. With the 2048 tolerance it would come in tick
     *T* + 56 at the earliest (16383 − 260 × 7 = 14563).
+  - Run h: in the first tick with the target, the turret changes to 16383 at once, but no shot
+    occurs: that tick's firing check still sees facing 0. With no other firing restriction,
+    the first shot is in the following tick. Void the timing comparison if the recorder
+    shows another restriction. A shot in the first tick falsifies claim 10 (d); any different
+    facing or a later first shot in an otherwise eligible run also falsifies the prediction.
 - *Falsified if:* run a ends at another facing, takes another number of ticks, or fires before
-  tick *T* + 64; run b turns counter-clockwise or does not take 127 ticks; in run c the turret
-  stays at 0 or turns another way; in run d the turret never returns, or returns before *G* + 5
+  tick *T* + 64; run b turns counter-clockwise or does not take 127 ticks; run c's facings or
+  completion ticks differ from the prediction; in run d the turret never returns, or returns before *G* + 5
   ticks; in run e the turret turns towards the target; in run f the turret moves away from 0 or
   the vehicle fires; in run g the first shot comes before tick *T* + 48,
   or only once the turret has stopped. A first
@@ -710,7 +781,7 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   vehicle has a target and the ticks in which it fires. A named test rules file gives one stock
   vehicle type with a turret (and a weapon that is neither omni-fire nor turret-locked, with a
   projectile that does not home) the turret-spins flag and, in separate runs, the turn rates
-  named below. For runs f to h the same file gives the own target's type a strength field high
+  named below. For runs f to i the same file gives the own target's type a strength field high
   enough that the target survives the run; the own targets stand 5 cells from the test vehicle,
   within range.
 - *Procedure:*
@@ -721,11 +792,14 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   - Run g, turn rate 127, three sub-runs: order an attack on an own target due map north (g1, its
     direction is 0), due map east (g2, 16383) or due map west (g3, 49153).
   - Run h, turn rate 1: as run f with the own target due map west.
+  - Run i: as run f, with turn rates 9 and 16 in separate sub-runs. Issue the attack when the
+    recorded turret facing is near map west, so it cannot already hold near the east target.
 - *Observable:* the change of the turret facing per tick; the number of ticks per full turn,
   counted as the ticks between two successive ticks in which the recorded facing is smaller than in
-  the tick before (the turret has passed facing 0 clockwise); and in runs f to h whether and when
+  the tick before (the turret has passed facing 0 clockwise); and in runs f to i whether and when
   the vehicle fires.
-- *Runs:* 1 per rate or sub-run; at least 3 full turns each in runs a to f and h.
+- *Runs:* 1 per rate or sub-run; at least 3 full turns each in runs a to f and h. In run i
+  record the whole approach and at least 64 ticks of holding.
 - *Expected:*
   - Runs a to e: steps of 256, 1024, 1024, 2048 and 2048 facing units per tick (once the facing is
     on a multiple of 256), so 256, 64, 64, 32 and 32 ticks per turn.
@@ -736,6 +810,9 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
     (g1), 18432 (g2) or 51200 (g3) in every tick while the target lasts. The vehicle fires in g1
     (the turret is 2048 from the target's direction) and g3 (2047), and never in g2 (2049).
   - Run h: as run f, with 230 ticks per full turn.
+  - Run i: the turret's per-tick course follows F1, F2 and F5, approaches the east target,
+    then holds at 18432 for at least 64 ticks while the target lasts. Any course differing
+    from those formulas, continued spinning, or a different held facing falsifies the claim.
 - *Falsified if:* rates 3 and 4 differ, rates 5 and 9 differ, or rate 1 is not 256 ticks per turn
   in run a. In run f or h, every step is 256 and a turn takes 256 ticks (the target rows did not act
   on the spinning turret, or the spin step ignored their trace), or a turn takes another number of
@@ -743,7 +820,8 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   the facing before the tick's other rows), or in g3 it alternates between 51200 and 53248 (only
   the facing-error row acted, not the target rows), or the vehicle fires in g2 or never fires in g1
   or g3. A run in which the vehicle moves or its body turns is invalid and says nothing about these
-  claims.
+  claims. Any valid run whose per-tick facing differs from F1, F2 and F5 also falsifies
+  the composition, including a different step or full-turn duration in runs a to e.
 
 **R7. A new target during a turn (claims 1, 3, 9 and 10).**
 - *Setup:* a purpose-made flat map; a recorder that reads body and turret facings every tick.
@@ -790,15 +868,15 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   a rest row of claim 9 gives the turret a new target in that very tick, the turret may already
   have begun a new turn and differ from the body by that turn's remainder jump (claim 1), which is
   at most 127 facing units at turn rate 1.
-- *Falsified if:* in run a the turret starts at 0 and turns to 16384; in run b the turret differs
+- *Falsified if:* in run a either facing differs from 16384 in any recorded tick; in run b the turret differs
   from the body by more than 127 facing units in the first tick back, in particular if it shows the
   value it had when it went in or a value on its old turn towards 32767. If the body itself comes
   out within a sixteenth of a turn of 32767, repeat run b with the own target due map east instead.
 
 **R9. What keeps an idle turret where it is (claim 9, rest-row conditions).**
-- *Setup:* purpose-made flat maps; a recorder that reads the turret and body facings, whether the
-  vehicle has a target and a movement destination, and the direction of the destination from the
-  vehicle, every tick. Each run has an unarmed enemy vehicle within range at a direction away from
+- *Setup:* purpose-made flat maps; a recorder that reads the turret and body facings, turret
+  target facing, whether the vehicle has an attack target and a movement destination, and the
+  direction of the destination from the vehicle, every tick. Each run has an unarmed enemy vehicle within range at a direction away from
   the test vehicle's body facing.
   - Run a: a stock vehicle type with a turret sits inside a stock tank bunker.
   - Run b (control for a): the same vehicle on open ground next to the bunker.
@@ -818,11 +896,13 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
 - *Expected:* runs a and c: the turret keeps the facing at which it last fired. Runs b and d: once
   *G* + 5 ticks have passed since the last shot, the turret turns to the body's facing. Run e: before
   the vehicle is held, its turret turns towards the direction of its destination, not to its body
-  facing; while it is held, its turret facing does not change, although the direction of its
-  destination does; after release it turns towards the destination again.
+  facing; while it is held, no new turret target towards that destination is given. Its prior
+  turn may finish, after which it rests at the unchanged target despite the destination direction
+  changing. After release a resting turret turns towards the destination again.
 - *Falsified if:* in run a or c the turret turns to the body's facing; in run b or d it does not
   (which invalidates the pair); in run e the turret follows the body facing before the vehicle is
-  held, or follows the direction of the destination while it is held. If the recorder shows that
+  held, or gets a new turret target towards the changing destination while held. Continuing
+  an already-started turn while held does not falsify the rule. If the recorder shows that
   a held vehicle has no movement destination, run e tests the no-destination rest row instead
   and says nothing about the seized condition.
 
@@ -879,8 +959,9 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   re-aim gate never counting it as turning. Sound requests follow the latest sample, and
   instance endings follow S-0701 claim 23 rather than cutting the current audio sample.
 - *Falsified if:* a sample follows the previous-tick re-aim gate instead of current turning,
-  an instantaneous turn supplies a turning sample, or spinning suppresses the sample. Void a
-  run if another target or an unnamed bystander object changes the observed turn.
+  an instantaneous turn supplies a turning sample, spinning suppresses the sample, or a
+  sound request does not follow the latest recorded sample under S-0701 claim 23's eligibility
+  conditions. Void a run if another target or an unnamed bystander object changes the observed turn.
 
 ## Open questions
 
@@ -888,18 +969,19 @@ Every vehicle a scenario pre-places starts with its body and turret at its place
   weapon's shot is not confirmed; scenario R4 run d uses only one weapon.
 - Aircraft turning: the flying locomotor may set the body facing at once in some flight phases,
   the aircraft specs should say when the rate of claim 7 applies.
-- Hovering and jumpjet headings (claims 13 and 14): how the heading turns into movement belongs to
-  the movement specs of those locomotors, and no scenario here isolates the heading's rate.
+- The jumpjet heading (claim 14): how the heading turns into movement belongs to the jumpjet
+  movement spec, and no scenario here isolates its rate. Hover heading and body aim are covered
+  by S-0503 claims 2, 5 and 6 and scenario H2.
 - Which infantry facing changes go through the fixed rate 127 and which are set at once (claim 15,
   S-0107).
 - Whether the unseen turret facing of a vehicle without a turret can drift away from the body
   facing (for example after the body is set at once while driving, claim 12). It no longer affects
   firing, which compares the body facing there (claim 10 (c)), but a type with the turret-spins
   flag and no turret flag (next item) still has the question.
-- A type with the turret-spins flag but without the turret flag: claim 9 applies the spin row to
-  it, but it is not stated whether the other rows of claim 9 act on its turret, whether the rule
-  for a vehicle without a turret (claim 9) and claim 16 apply to its body, or, if both the spin row
-  and that rule set its turret target in one tick, which target is in force at the end of it.
+- A type with the turret-spins flag but without the turret flag: the target-aiming and rest
+  rows require a turret, and the spin target still overrides a turret target given by the
+  "Without a turret" response (claim 9). No scenario here validates that unusual combination,
+  especially its simultaneous body-turn and spin observations; it remains unmeasured.
 - The original's weapon-count field when the key is absent (Import mapping) has no established
   value; our engine uses 0 there, which gives the type no numbered weapons.
 - The rest of the firing check (the order of its other results, and what else stops a shot) is the
