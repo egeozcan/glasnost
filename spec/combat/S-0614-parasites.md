@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -241,8 +241,9 @@ addition:
     - when the parasite's type is trainable (S-0311), the parasite gains experience by F5,
     - the parasite leaves the host (claim 13) and is **not** held afterwards: the 3 × *R* hold of
       claim 13 is cancelled at once,
-    - the host starts to sink as S-0312 (claim 10) describes for a killed ship, whatever its type's
-      weight. Its health is not changed and no hit is delivered.
+    - the host starts to sink, whatever its type's weight. Its health is not changed and no hit
+      is delivered. Once sinking is set, S-0504 claims 4 and 5 own the descent, wakes, random
+      draws, restrictions while sinking and removal; this claim owns only the cull's trigger.
 
     Because no hit is delivered, the cull credits no destruction to anyone under S-0302 (claim 14)
     and S-0311 (claims 7 to 10): there is no kill value, no rank multiplier and no score. The host uses the ordinary local unit-lost announcement rules.
