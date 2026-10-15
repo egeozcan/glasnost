@@ -1339,6 +1339,10 @@ pub struct Quirks {
     // spec: S-0511 claims 7 and 19, Edge cases
     #[serde(default = "on")]
     pub bridge_span_cap: bool,
+    /// A span check passes over collapsed piers at both ends, so a pier collapse can join two spans into one checked extent; off: a collapsed pier stays eligible as a start or far piece.
+    // spec: S-0511 claim 7, Edge cases
+    #[serde(default = "on")]
+    pub collapsed_pier_span_search: bool,
     /// A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated.
     // spec: S-0511 Edge cases
     #[serde(default = "on")]
@@ -2040,6 +2044,7 @@ impl Default for Quirks {
             bridge_event_band_short: true,
             bridge_family_by_block: true,
             bridge_span_cap: true,
+            collapsed_pier_span_search: true,
             low_bridge_wrong_axis_recheck: true,
             low_strip_regress: true,
             pier_loss_notice_skips_chipped: true,
@@ -2942,6 +2947,10 @@ impl Quirks {
             ("bridge_event_band_short", self.bridge_event_band_short),
             ("bridge_family_by_block", self.bridge_family_by_block),
             ("bridge_span_cap", self.bridge_span_cap),
+            (
+                "collapsed_pier_span_search",
+                self.collapsed_pier_span_search,
+            ),
             (
                 "low_bridge_wrong_axis_recheck",
                 self.low_bridge_wrong_axis_recheck,

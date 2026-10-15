@@ -716,7 +716,7 @@ fn building_fallback_sounds() {
     assert!(heard(&mut a, now + 100).is_empty());
 }
 
-// spec: S-0701 claim 21 (the report at the firing position, any owner, no draw); interim: Q-0327 (entry 0)
+// spec: S-0701 claims 21 and 32 (the report at the firing position, any owner, no draw: entry r mod n, r the firer's report value)
 #[test]
 fn weapon_report() {
     let mut w = world();
@@ -724,22 +724,24 @@ fn weapon_report() {
     let gun = veterancy::type_combat(&w, tank)
         .and_then(|c| c.slots[0])
         .expect("gun");
-    let mut a = audio(&w, &["Bang0", "Bang1"]);
-    let mut n = SoundNames::default();
-    n.set_report(
-        &w.rules().combat.weapon(gun).name.clone(),
-        &["Bang0", "Bang1"],
-    );
-    a.set_names(n);
-    let mut u = Rng::new(1);
-    let fx = Effect::Shot {
-        firer: tank,
-        weapon: gun,
-        from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
-    };
-    a.tick(&w, &[fx], &mut u);
-    assert_eq!(u.taken(), 0);
-    assert_eq!(heard(&mut a, 0), ["Bang0"]);
+    let name = w.rules().combat.weapon(gun).name.clone();
+    // r mod 2 picks the entry: 4 the first, 65535 the second.
+    for (r, want) in [(4u16, "Bang0"), (65535, "Bang1")] {
+        let mut a = audio(&w, &["Bang0", "Bang1"]);
+        let mut n = SoundNames::default();
+        n.set_report(&name, &["Bang0", "Bang1"]);
+        a.set_names(n);
+        let mut u = Rng::new(1);
+        let fx = Effect::Shot {
+            firer: tank,
+            weapon: gun,
+            from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+            report: r,
+        };
+        a.tick(&w, &[fx], &mut u);
+        assert_eq!(u.taken(), 0);
+        assert_eq!(heard(&mut a, 0), [want], "r = {r}");
+    }
 }
 
 // spec: S-0701 claim 22 (an animation's start sound, positional, any owner)

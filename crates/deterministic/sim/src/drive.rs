@@ -29,6 +29,9 @@ pub struct Track {
     pub target: (i32, i32),
     /// The cell the track ends in.
     pub target_cell: CellXY,
+    /// The heading point's stored world height: the vehicle's height when
+    /// the track began (S-0207 claim 24).
+    pub height: i32,
     /// Index of the next point to pass.
     pub next: usize,
     /// The last point passed (for `quirks.drive_subpoint_compounding` off).
@@ -718,6 +721,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 e: use_e,
                 target,
                 target_cell,
+                // spec: S-0207 claim 24 (the heading point receives the vehicle's current world height when the track begins, before any progress: an exact copy, no terrain sampling or deck lift)
+                height: ob.pos.z,
                 next: 0,
                 last: (ob.pos.x, ob.pos.y),
                 cells: cells.clone(),
@@ -1179,6 +1184,8 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
                 e: None,
                 target,
                 target_cell: e,
+                // Q-0793 (interim: the exit track's heading point also copies the vehicle's height at its start; S-0207 claim 24 covers ordinary tracks only)
+                height: ob.pos.z,
                 next: 0,
                 last: (x, y),
                 cells: vec![e],

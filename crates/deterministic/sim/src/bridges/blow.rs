@@ -132,9 +132,17 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
             } else if let Some(d) = o.drive.as_ref() {
                 // The drive claims carry no layer of their own: they were
                 // made in the vehicle's layer, the deck.
+                let heading = d.track.as_ref().map(|t| {
+                    let p = Pos::new(t.target.0, t.target.1, t.height);
+                    (t.target_cell, crate::teleport::reservation_layer(w, p))
+                });
                 for &cl in &d.claims {
-                    // spec: S-0511 claim 9 (the heading point's reservation and the deck flag of the cell it leaves are cleared)
-                    w.cells.claim_vehicle(cl, Layer::Deck, false);
+                    // spec: S-0511 claim 9 and S-0207 claim 24 (the heading point's reservation is cleared in the layer of its stored height, the track-start height; the deck flag of the cell it leaves is cleared)
+                    let layer = match heading {
+                        Some((hc, l)) if hc == cl => l,
+                        _ => Layer::Deck,
+                    };
+                    w.cells.claim_vehicle(cl, layer, false);
                 }
                 let stationary = d.track.is_none();
                 if stationary {
@@ -250,9 +258,8 @@ pub fn heads_to(w: &World, id: ObjectId, c: CellXY, z: i32) -> bool {
                 // spec: S-0511 claim 11 (both drive and ship tests require a current heading point)
                 return false;
             };
-            // spec: S-0511 claim 11 (the end cell of the unfinished current track with the unit's current world height, not a resampled height)
-            // Q-0676 (interim: the drive heading point has no stored height of its own; its test takes the unit's height, so it coincides with the track test)
-            t.target_cell == c && near(o.pos.z)
+            // spec: S-0511 claim 11 and S-0207 claim 24 (the heading-point test: its cell c and its stored height, the vehicle's height at the track's start, within 104 leptons; or the track test: the end cell of the unfinished current track with the unit's current world height)
+            t.target_cell == c && (near(t.height) || near(o.pos.z))
         }
         // spec: S-0511 claim 11 (drop-pod, fly, jumpjet, rocket, teleport and tunnel locomotion do not count)
         _ => false,

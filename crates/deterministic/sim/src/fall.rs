@@ -101,12 +101,9 @@ fn land(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let marked = o.fall.bomb_mark;
     let health = o.health;
+    // spec: S-0511 claim 10 (one hit per landing, not one on every later grounded update; landing does not spend or clear the bomb mark, even when the object survives, so a later fall without a new mark still ends with this hit)
     if marked && health > 0 {
         landing_hit(w, id, health);
-    }
-    // Q-0677 (interim: the bomb mark is spent on landing, after the landing hit, whose death effects read it, S-0312 claims 11 and 12)
-    if let Some(ob) = w.obj_mut(id) {
-        ob.fall.bomb_mark = false;
     }
 }
 

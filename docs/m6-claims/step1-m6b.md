@@ -176,3 +176,23 @@ S-0410 revision 20 and S-0507 revision 6) belong to the cloak work and are not t
   placeholder centre (Q-0673) and air release (Q-0672) are in `transport.rs`.
 - **S-0503 (rev 3 to 5), (a).** See `S-0503.md`; Q-0675 retired, Q-0679 filed.
 - **S-0511 (rev 3 to 4), (a).** See `S-0511.md`; Q-0676 to Q-0678 filed.
+
+## Spec revisions since 17:50 (cloak round)
+
+Buckets as above. Request answers retired from `docs/development.md` in this round: Q-0676 to
+Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q-0791, Q-0792
+(S-0516), Q-0793 (S-0207 exit tracks), Q-0794 (S-0314 driving destination point).
+
+- **S-0516 (rev 5 to 6), S-0203 (rev 28), S-0209 (rev 34), S-0210 (rev 21), S-0410 (rev 20),
+  S-0507 (rev 6), (a).** See `S-0516.md`; the two new quirks
+  `cloak_field_building_interrupt` and `mobile_sensor_removal_centre` are built. WP25 needs no
+  disguise house; a no-house disguise shows the neutral radar colour.
+- **S-0503 (rev 5 to 6), (a).** See `S-0503.md`; claim 18's held destination point is
+  `HoverState::held` (Q-0679).
+- **S-0207 (rev 25 to 26), S-0511 (rev 4 to 5), (a).** See `S-0511.md`; `Track::height`
+  (claim 24, Q-0676), the retained bomb mark (Q-0677), the combined span extent and
+  `quirks.collapsed_pier_span_search` (Q-0678).
+- **S-0314 (rev 18 to 19), (a).** See `depot-cycle.md`; claim 17's movement-report table, the
+  empty place 0 and the arrival's ready mark (Q-0790).
+- **S-0504 (rev 14), (a).** Claim 7's two other amphibious zones are tested
+  (`claim_7_other_amphibious_zones_match_the_flag`); Q-0643's marker is retired.

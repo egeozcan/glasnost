@@ -378,6 +378,38 @@ fn height_follows_surface_at_points() {
     assert_eq!(sn.pos.2, w.surface_at(x, y));
 }
 
+// spec: S-0207 claim 24 (an ordinary track's heading point stores the vehicle's world height when the track begins, not the target's surface; it stays unchanged while the vehicle's own height follows claim 5; the next track copies the height anew)
+#[test]
+fn heading_point_keeps_the_track_start_height() {
+    // Flat start cell, a ramp in the cell ahead and one more cell beyond.
+    let mut s = scene(car(WHEEL, 3, false), 0);
+    s.set_cell(cell(0, -1), 1, 0);
+    let (mut w, id) = start(&s, &[N, N]);
+    let start_z = w.obj(id).unwrap().pos.z;
+    let mut sn = first_moving_tick(&mut w, id);
+    let first = sn.track.clone().expect("a track");
+    let target_z = w.surface_at(first.target.0, first.target.1);
+    assert!(target_z > start_z, "the target lies higher");
+    assert_eq!(first.height, start_z, "the start height, not the target's");
+    let mut rose = false;
+    let mut second = None;
+    while let Some(t) = sn.track.clone() {
+        if t.target == first.target {
+            assert_eq!(t.height, start_z, "kept while the track runs");
+            rose |= sn.pos.2 > start_z;
+        } else if second.is_none() {
+            second = Some(t);
+        }
+        sn = step(&mut w, id);
+    }
+    assert!(rose, "the vehicle's own height changed on the track");
+    let second = second.expect("a second track");
+    assert_eq!(
+        second.height, target_z,
+        "the next track copies the height anew"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Turn in place
 

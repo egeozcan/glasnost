@@ -403,6 +403,12 @@ pub fn span_limit(w: &World) -> Option<i32> {
 
 /// The nearest far piece after `start` along `line` within the span limit.
 pub fn far_from(w: &World, start: CellXY, line: Line, ramps_only: bool) -> Option<CellXY> {
+    far_where(w, start, line, |c| is_far_piece(w, c, line, ramps_only))
+}
+
+/// The nearest cell after `start` along `line` within the span limit that
+/// satisfies `is`.
+fn far_where(w: &World, start: CellXY, line: Line, is: impl Fn(CellXY) -> bool) -> Option<CellXY> {
     let f = line.step();
     let limit = span_limit(w);
     let mut k = 0;
@@ -413,7 +419,7 @@ pub fn far_from(w: &World, start: CellXY, line: Line, ramps_only: bool) -> Optio
         }
         let c = at(start, f, k);
         w.cells.cell(c)?;
-        if is_far_piece(w, c, line, ramps_only) {
+        if is(c) {
             return Some(c);
         }
     }
@@ -439,10 +445,17 @@ pub fn band(w: &mut World, first: CellXY, last: CellXY, line: Line) {
     }
 }
 
-/// The span check of claim 7 for named loss cell `named`. `pier` is the
-/// reference cell of a pier this attempt collapsed directly, given for its
-/// far-side named cell (Q-0678).
-pub fn span_check(w: &mut World, named: CellXY, pier: Option<CellXY>, ctx: &mut Ctx) {
+/// Whether a pier piece at `c` may end a claim 7 span: a non-collapsed pier,
+/// or any pier with `quirks.collapsed_pier_span_search` off.
+fn span_end_pier_ok(w: &World, c: CellXY, line: Line) -> bool {
+    // spec: S-0511 claim 7 and Edge cases (quirks.collapsed_pier_span_search: a collapsed pier, state 4, never qualifies as a start or far piece; off: it stays eligible at the same sub-tiles as a live pier)
+    !w.rules().quirks.collapsed_pier_span_search
+        || pieces::pier_along(w, c, line).is_none_or(|(_, k)| k < 4)
+}
+
+/// The span check of claim 7 for named loss cell `named`, searched on the
+/// tiles and marks as they stand after the change and its notices.
+pub fn span_check(w: &mut World, named: CellXY, ctx: &mut Ctx) {
     // spec: S-0511 claim 7 (the first neighbour of the named loss cell in N, NE, E, SE, S, SW, W, NW order carrying a deck or bridge-body mark supplies the bridge)
     let Some(b) = crate::regions::STEPS
         .iter()
@@ -455,12 +468,9 @@ pub fn span_check(w: &mut World, named: CellXY, pier: Option<CellXY>, ctx: &mut 
     let Some((sc, line, _)) = pieces::section_of(w, b) else {
         return;
     };
-    // spec: S-0511 claim 7 (from that section cell toward the start side up to the legal-map boundary, passing over non-bridge cells: the nearest start ramp, or non-collapsed pier, at its start sub-tile; none: no span check)
+    // spec: S-0511 claim 7 (from that section cell toward the start side up to the legal-map boundary, passing over non-bridge cells: the nearest start ramp, or non-collapsed pier, at its start sub-tile; no exception for a direct collapse's far-side named cell; none: no span check)
     let start = walk_back(w, sc, line, |c| {
-        is_start_piece(w, c, line)
-            && (pieces::pier_along(w, c, line).is_none_or(|(_, k)| k < 4)
-                // Q-0678 (interim: the far-side search of a direct pier collapse also accepts that pier as its span's start)
-                || pier.is_some_and(|r| pieces::pier_reference(w, c, line) == Some(r)))
+        is_start_piece(w, c, line) && span_end_pier_ok(w, c, line)
     });
     let Some(start) = start else {
         return;
@@ -470,8 +480,10 @@ pub fn span_check(w: &mut World, named: CellXY, pier: Option<CellXY>, ctx: &mut 
 
 /// The span check of claim 7 for the span starting at `start`.
 pub fn span_check_from(w: &mut World, start: CellXY, line: Line, ctx: &mut Ctx) {
-    // spec: S-0511 claim 7 (no far piece within 29 cells: the check does nothing)
-    let Some(far) = far_from(w, start, line, false) else {
+    // spec: S-0511 claim 7 (the nearest far ramp, or non-collapsed pier, within 29 cells; none: the check does nothing)
+    let Some(far) = far_where(w, start, line, |c| {
+        is_far_piece(w, c, line, false) && span_end_pier_ok(w, c, line)
+    }) else {
         return;
     };
     let f = line.step();

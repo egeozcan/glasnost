@@ -6969,6 +6969,11 @@
           "type": "boolean",
           "default": true
         },
+        "collapsed_pier_span_search": {
+          "description": "A span check passes over collapsed piers at both ends, so a pier collapse can join two spans into one checked extent; off: a collapsed pier stays eligible as a start or far piece.",
+          "type": "boolean",
+          "default": true
+        },
         "corridor_free_part_unusable_cells": {
           "description": "Cells of an unusable category belong to the free part.",
           "type": "boolean",

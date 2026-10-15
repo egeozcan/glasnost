@@ -16,7 +16,7 @@
 //! pad flag tethers a vehicle ([`pad_exchange`]); an ordinary depot's
 //! vehicle stays untethered while it is repaired. Reaching the docking
 //! point's cell during movement queues *repair* and *sleep*
-//! ([`movement_arrival`]). Interim rules of Q-0790 are marked with its ID.
+//! ([`movement_arrival`]).
 
 use glasnost_map::CellXY;
 use serde::{Deserialize, Serialize};
@@ -372,21 +372,34 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     crate::process::standard_delay(w, id)
 }
 
-/// Whether the vehicle has a moving destination (S-0314 Terms): a
-/// destination while its locomotor reports movement (Q-0790 interim: the
-/// hovering locomotor's *is moving*, S-0503 Terms, and otherwise a track,
-/// a turn in place or a stored step, [`crate::occupancy::in_progress`]).
+/// Whether the vehicle has a moving destination (S-0314 Terms): an
+/// order-level destination while its locomotor gives claim 17's movement
+/// report. Driving and ship: its locomotor destination point is present, or
+/// its heading point, the track target, is
+/// present and differs horizontally from its position (Q-0794 interim for
+/// the destination point). Hovering: S-0503 claim 5's *is moving*.
 fn moving_destination(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
+    // spec: S-0314 Terms (an order-level movement destination is needed in every row)
     if o.dest.is_none() {
         return false;
     }
-    // spec: S-0314 Terms (moving destination: a destination and the locomotor reporting movement; a destination on a stationary vehicle is not one); Q-0790 (interim: the locomotor's movement test)
     if o.hover.is_some() {
-        crate::hover::moving(w, id)
-    } else {
-        crate::occupancy::in_progress(w, id)
+        // spec: S-0314 claim 17 (hovering: a locomotor destination point or heading point present, S-0503 claim 5's is moving, not the throttle-dependent is moving now)
+        return crate::hover::moving(w, id);
     }
+    if let Some(d) = o.drive.as_ref() {
+        // spec: S-0314 claim 17 (driving or ship: the locomotor destination point present, or the heading point present and differing from the current horizontal position, x and y only; a turn in place, a track or stored steps are not sufficient by themselves)
+        // Q-0794 (interim: our driving locomotor keeps no destination point apart from the order-level destination, which it clears on reaching its goal cell; the point counts as present while that destination's goal cell exists and differs from the vehicle's cell)
+        let dest_point = crate::path::goal_cell(w, id).is_some_and(|g| g != o.pos.cell());
+        let heading = d
+            .track
+            .as_ref()
+            .is_some_and(|t| t.target != (o.pos.x, o.pos.y));
+        return dest_point || heading;
+    }
+    // Other locomotors: their own movement test.
+    crate::occupancy::in_progress(w, id)
 }
 
 /// The pad depot's tether exchange in the repeated entry request (S-0314
@@ -413,7 +426,7 @@ pub fn pad_exchange(w: &World, k: ObjectId, id: ObjectId) -> bool {
     if !moving_destination(w, id) {
         return true;
     }
-    // spec: S-0314 claim 17 (or the vehicle in contact place 0 is more than 128 leptons from that centre: its current world position with height, the floating-point Euclidean distance truncated toward zero); Q-0790 (interim: an empty place 0 does not pass)
+    // spec: S-0314 claim 17 (or the vehicle in contact place 0 is more than 128 leptons from that centre: its current world position with height, the floating-point Euclidean distance truncated toward zero; an empty place 0 fails, with no substitute position)
     contacts(w, k)
         .into_iter()
         .find(|&(p, _)| p == 0)
@@ -447,9 +460,10 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     {
         return;
     }
-    // spec: S-0314 claim 17 (reaching the supplied docking-point cell during movement queues repair at the depot and sleep at the vehicle; no exact horizontal agreement and no tether required, and no tether created); Q-0790 (interim: no ready mark, so each start follows S-0215 claim 11)
+    // spec: S-0314 claim 17 and S-0215 claim 29 (reaching the supplied docking-point cell during movement sets the depot's ready mark and queues repair there and sleep at the vehicle, neither with an immediate start; no exact horizontal agreement and no tether required, and no tether created)
     if let Some(b) = w.obj_mut(k) {
         b.beh.queue(Some(Behaviour::Repair));
+        b.beh.ready_mark = true;
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Sleep));
