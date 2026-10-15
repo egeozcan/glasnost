@@ -494,7 +494,7 @@ fn replace(w: &mut World, b: &StartingBuilding) {
     let placed = crate::econ::placement::cell_test(w, b.type_index, b.cell, &test);
     if placed {
         // spec: S-0524 claim 13 (ordinary during-play placement, not map-loading placement: construction is queued and its build-up follows S-0215 claim 1 and S-0406 claims 14, 15 and 17; the power switch begins on; no special restoration shortcut; a deploy alone sets the ready mark at entry, S-0406 claim 17)
-        // Q-0840 interim: a restored building takes the placed timing of S-0406 claim 17 (the ready mark at the last build-up stage), not the deployed one
+        // spec: S-0524 claim 15 and S-0406 claim 17 (a restored replacement enters with its ready mark clear, the placed case: the mark follows the build-up range, even without a build-up sprite; healing an existing building starts no construction)
         crate::econ::placement::begin_construction(w, id, false);
         // spec: S-0406 claim 1 and F4 (the centre of the cell at the surface height)
         let z = w.surface_at(256 * b.cell.x + 128, 256 * b.cell.y + 128);

@@ -1512,3 +1512,130 @@ fn i1_action_coverage() {
     assert_eq!(mp_triggers::action_coverage(108), Coverage::Seam);
     assert_eq!(mp_triggers::event_coverage(1), Coverage::Implemented);
 }
+
+// --- Claim 15 (Q-0840 answered): a restored replacement's construction readiness -------------
+
+/// What a restored replacement's construction does, measured on the way.
+#[derive(Debug)]
+struct Restored {
+    /// The tick of the restoration (before the tick's turn pass).
+    entry: i32,
+    /// The ready mark at entry.
+    mark_at_entry: bool,
+    /// The first tick at the end of which *construction* is current.
+    current: Option<i32>,
+    /// The first construction processing.
+    first: Option<i32>,
+    /// The first tick at the end of which the construction state is over.
+    handover: Option<i32>,
+}
+
+/// Restores a removed starting TOWER of Alphaland on a game whose TOWER type
+/// has `frames` build-up image frames (`None`: no build-up sprite), then
+/// runs 300 ticks recording the ready mark, the start and the handover.
+fn restored_construction(mut r: Ruleset, frames: Option<i32>) -> Restored {
+    {
+        let t = r.sim.buildings.get_mut("TOWER").unwrap();
+        t.econ.buildup = frames.map(|_| true);
+        t.econ.buildup_frames = frames;
+    }
+    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "TOWER", at(0, 0))]);
+    // Past the first ticks, so that no start-up pass is mixed in.
+    run(&mut w, 6);
+    let old = buildings(&w, "TOWER")[0];
+    glasnost_sim::objects::remove(&mut w, old);
+    let a = country(&w, "Alphaland");
+    mp_triggers::restore_starting_buildings(&mut w, a, None);
+    let new = buildings(&w, "TOWER")[0];
+    let mut out = Restored {
+        entry: w.tick,
+        mark_at_entry: w.obj(new).unwrap().beh.ready_mark,
+        current: None,
+        first: None,
+        handover: None,
+    };
+    for _ in 0..300 {
+        let t = w.tick;
+        step(&mut w);
+        let o = w.obj(new).unwrap();
+        if out.current.is_none() && o.beh.current == Some(glasnost_sim::rules::Behaviour::Construction) {
+            out.current = Some(t);
+        }
+        out.first = out.first.or(o.econ.construction.first);
+        if out.handover.is_none() && !o.econ.construction.building_up {
+            out.handover = Some(t);
+            break;
+        }
+    }
+    out
+}
+
+// spec: S-0524 claim 15 (a restored replacement enters with its ready mark clear; a positive-delay range of at least 2 stages sets the mark when an eligible building turn first lands on the last stage; construction becomes current at that turn's second per-tick start, its first processing is on the next tick, and the handover follows F6; the build-up runs twice, as for a placed building) and S-0406 claim 17 (restored replacement, positive delay: C = R + 1, H follows F6)
+#[test]
+fn claim15_restored_multi_stage_range_runs_twice_and_hands_over_by_f6() {
+    // 10 image frames: n = 5 stages, d_b = 9 ticks (S-0108 claim 5), the range of 36 ticks.
+    let k = restored_construction(ruleset(), Some(10));
+    assert!(!k.mark_at_entry, "the mark is clear at entry");
+    // The mark is set, and consumed by the start, in the turn that first lands on the last stage: construction is current at the end of it.
+    let r = k.current.expect("construction becomes current");
+    assert_eq!(r, k.entry + 36, "R follows entry by the range: {k:?}");
+    assert_eq!(k.first, Some(r + 1), "C = R + 1");
+    // The second run restarts the range at stage 0: the handover is a range later.
+    assert_eq!(k.handover, Some(r + 1 + 36), "H = C + (n - 1) x d_b: {k:?}");
+}
+
+// spec: S-0524 claim 15 (a zero-delay range, including the ordinary no-build-up-sprite range: the mark is still clear at entry; the first eligible building turn sets it without advancing the stage and starts queued construction at its second per-tick start; construction is first processed on the next tick and hands over on the following tick; missing art does not make restoration an immediately completed building or a deployed entry) and S-0406 claim 17 (U the actual first eligible turn: C = U + 1, H = U + 2)
+#[test]
+fn claim15_restored_zero_delay_range_sets_the_mark_at_its_first_eligible_turn() {
+    let k = restored_construction(ruleset(), None);
+    assert!(!k.mark_at_entry, "the mark is clear at entry, missing art included");
+    let u = k.current.expect("the first eligible building turn starts construction");
+    assert!(u >= k.entry, "{k:?}");
+    assert_eq!(k.first, Some(u + 1), "C = U + 1");
+    assert_eq!(k.handover, Some(u + 2), "H = U + 2");
+}
+
+// spec: S-0524 claim 15 (the shared quirks.placed_buildup_twice applies to restored replacements too: off sets the mark at entry and uses the deployed-style start) and S-0406 claim 17 and Edge cases (off: C = U + 1 and the handover follows F6; U the first eligible building turn)
+#[test]
+fn claim15_restored_replacement_follows_the_placed_buildup_twice_switch() {
+    let mut r = ruleset();
+    r.globals.quirks.placed_buildup_twice = false;
+    let k = restored_construction(r, Some(10));
+    assert!(k.mark_at_entry, "off: the mark is set at entry");
+    let u = k.current.expect("construction becomes current at the first turn");
+    assert_eq!(k.first, Some(u + 1), "C = U + 1");
+    assert_eq!(k.handover, Some(u + 1 + 36), "H follows F6");
+}
+
+// spec: S-0524 claim 15 (a positive delay with 1 stage or fewer: the range does not report completion and the placed-building non-completion rule of S-0406 claim 18 applies) and S-0406 claim 18 (applies to restored replacements as to placed buildings)
+#[test]
+fn claim15_restored_single_stage_range_never_completes() {
+    for frames in [3, 1] {
+        let k = restored_construction(ruleset(), Some(frames));
+        assert!(!k.mark_at_entry);
+        assert_eq!(k.current, None, "frames {frames}: the range reports no ready mark");
+        assert_eq!(k.handover, None, "frames {frames}: construction never completes");
+    }
+}
+
+// spec: S-0524 claim 15 (healing an existing building under claim 9 does not restart its construction or change its ready mark)
+#[test]
+fn claim15_healing_an_existing_building_does_not_restart_construction() {
+    let r = ruleset();
+    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "TOWER", at(0, 0))]);
+    run(&mut w, 10);
+    let b = buildings(&w, "TOWER")[0];
+    hit(&mut w, b, 300);
+    let (mark, entry) = {
+        let o = w.obj(b).unwrap();
+        (o.beh.ready_mark, o.econ.construction.entry)
+    };
+    let a = country(&w, "Alphaland");
+    mp_triggers::restore_starting_buildings(&mut w, a, None);
+    assert_eq!(buildings(&w, "TOWER"), vec![b], "the same building");
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.health, TOWER_HP, "healed");
+    assert!(!o.econ.construction.building_up, "no construction cycle");
+    assert_eq!(o.beh.ready_mark, mark, "its ready mark is unchanged");
+    assert_eq!(o.econ.construction.entry, entry, "no fresh entry");
+}
