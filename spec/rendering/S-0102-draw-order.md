@@ -2,11 +2,11 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742]
 supersedes: []
@@ -560,8 +560,8 @@ screen rows.
     own drawing in the object pass, so it is drawn in the object's own layer at the object's place
     in that layer's list. It is not drawn in a pass of its own, and an aircraft's shadow is not
     drawn in the ground layer. It is drawn only when the object's movement type gives it a shadow,
-    around the shadow draw point that the movement type gives (S-0105 Terms; Open questions). It
-    is a depth reader only, with the same depth bias *U* as the object's body (claim 13) and the
+    around its shadow draw point. S-0105 claim 40 defines that point for aircraft; vehicle
+    shadow points remain unresolved (Open questions). It is a depth reader only, with the same depth bias *U* as the object's body (claim 13) and the
     upright profile of F2, anchored at the last row of the shadow image's own copy rectangle, not
     the flat profile of the other shadows. So:
     - an aircraft's shadow, drawn in the top layer, darkens ground-layer object pixels it falls on
@@ -582,10 +582,9 @@ screen rows.
     No earlier pose's exclusions persist, even when another object supplies a reused footprint.
     The original retained cached cutouts, causing stale gaps or darkening current part pixels.
     S-0105 claim 39 fixes that drawing-only defect without a switch.
-    - Backing: `measurable` (scenario D23, including D23 (d) for Q-0213). The bias value itself is tested only relative to the
-      body's (both use *U*); whether an aircraft's body shows over its own shadow is `unmeasured`, because an
-      aircraft's shadow and its own body overlap only when it is on or very near the ground, where
-      the shadow point is not settled.
+    - Backing: `measurable` (scenario D23, including D23 (d) for Q-0213 and D23 (e) for
+      aircraft own-body overlap). The bias value itself is tested only relative to the
+      body's (both use *U*).
     - Confidence: high for the drawing inside the object's own drawing (and so its layer and list
       place), the reader-only test, the bias *U*, the upright profile and current vehicle
       own-image exclusions; corrected reuse is a departure tested against this spec, not the
@@ -1965,6 +1964,16 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     caches void the reuse comparison. The full frame and rocking controls, turret/barrel
     inclusion and freshness rules are owned by S-0105 claim 39 and MS-27.
 
+  - (e) Own aircraft image. Use the common setup at speed index 2 on unobstructed flat
+    terrain, with one bystander computer player outside the observed area. Capture a stock
+    voxel aircraft during take-off and landing, selecting poses where the shadow footprint
+    placed by S-0105 claim 40 overlaps opaque body pixels and passes the scene-depth test.
+    Repeat with the type's shadow disabled through a named map override, matching position,
+    height, facing and pose; remove the override afterwards. Expected: every qualifying
+    own-body overlap pixel equals the no-shadow control, while qualifying shadow pixels
+    outside the body darken. Any own-body pixel darkened by the aircraft's shadow falsifies
+    claim 18. A run with no qualifying overlap is inconclusive, not confirmation.
+
 - **D24, centred placement (claim 19).** Setup: a flat map at level 0 with a stock building, a
   stock infantry unit standing alone in a cell (its position from the standing-position rules of
   S-0208) and a stock tree. Prefer sprites whose canvas width or height is odd. For each, read from
@@ -2542,11 +2551,13 @@ the current owning specs; no requested part owned here remains open.
   drawing in the same group has not been identified.
 - **Tunnel digging term** of the unit depth adjustment and its interaction with the underground
   layer; to be settled with the tunnel movement spec.
-- **Shadow point of voxel models:** where the shadow draw point of a vehicle or aircraft lies (claim 18), in
-  particular how high an airborne unit's shadow is drawn, is given by its movement type and has not
-  been determined. Vehicle own-image overlap is settled by S-0105 claim 39 and claim 18 here:
-  every appearance excludes the current completed image, including reuse. This spec owns the drawing order and scene depth of the shadow; the point itself depends on the
-  movement types (S-0106 and the movement specs).
+- **Vehicle voxel shadow point:** where a vehicle's shadow draw point lies (claim 18), in
+  particular its vertical placement while airborne, remains unresolved and depends on its
+  movement type (S-0106 and the movement specs). Aircraft shadow anchors are settled by
+  S-0105 claim 40, including high-bridge qualification and non-positive heights. Vehicle
+  own-image overlap is settled by S-0105 claim 39 and claim 18 here: every appearance excludes
+  the current completed image, including reuse. This spec owns shadow drawing order and scene
+  depth, not the surface anchor.
 
 - **Situational unit term *s*:** besides the ordinary −1, these cases are known but only partly
   determined, low confidence: −2 when the unit faces toward certain raised neighbouring tiles; −3 for
