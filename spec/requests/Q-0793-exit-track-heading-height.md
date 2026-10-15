@@ -1,9 +1,9 @@
 ---
 id: Q-0793
 title: Which height an exit track's heading point stores
-status: open
+status: answered
 related: [S-0207, S-0511]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

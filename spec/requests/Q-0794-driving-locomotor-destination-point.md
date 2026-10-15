@@ -1,9 +1,9 @@
 ---
 id: Q-0794
 title: When a driving vehicle's locomotor destination point is present
-status: open
+status: answered
 related: [S-0314, S-0207, S-0212]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
