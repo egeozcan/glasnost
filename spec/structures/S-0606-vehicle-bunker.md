@@ -2,7 +2,7 @@
 id: S-0606
 title: Vehicle bunker
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -230,8 +230,9 @@ have not been fully traced.
    - **Death of a building contact:** S-0312 claim 17, with claim 13's exception.
    - **Erasure:** S-0514 claim 12.
    - **Behaviour returns:** S-0215 claims 15, 17 and 26.
-   - **Not a takeover target:** S-0601 claim 3. The Psychic Dominator's sweep belongs to
-     planned S-0612 and is not specified here.
+   - **Ordinary mind control:** S-0601 claim 3 excludes a bunkered vehicle. The Psychic
+     Dominator instead follows S-0612 claim 13: a reached, otherwise eligible vehicle is
+     taken over without ending the bunker link (claim 15).
    - **Magnetic lift:** S-0607 claims 1 to 3. Locomotor-warhead attacks on a bunkered vehicle are redirected to
      the bunker (S-0309 claim 24).
    - **Drain of the bunker building:** planned S-0608; no drain rule is claimed here.
@@ -243,14 +244,19 @@ have not been fully traced.
     - Backing: `unmeasured`: a statement of scope, with nothing to observe
     - Confidence: high
 
-11. **Selection and orders.** While the bunker link holds, neither the bunkered vehicle nor the
-    occupied bunker passes the selection test, by click, band box or any other selection input.
-    The vehicle is not *movable* (S-0214 Terms). A new selection therefore supplies no order
-    route to it, and no player input is known that gives it *unload*. This does not prove that every
-    hotkey, pre-existing selection or queued-order route is excluded. S-0214 owns the input
-    rules. This claim gives only the state they test.
-    - Backing: `measurable` (scenario K6)
-    - Confidence: high (fresh selection refusal); medium (absence of a known unload-input route)
+11. **Selection and orders.** While the bunker link holds, the bunkered vehicle and occupied
+    bunker are excluded from ordinary band-box selection (S-0214 claim 19). This is not a
+    universal selection refusal: the bunker link alone does not exclude ordinary click selection.
+    Other click-selection conditions still apply (S-0214 claim 12). The vehicle is not
+    *movable* (S-0214 Terms), which does not by itself forbid selection or *deploy*.
+    S-0214 claim 4 owns the action tables, including the bunkered vehicle's deploy action.
+    An end-to-end player-input route from pointing at the occupant through selection to
+    claim 12's *unload* has not been established here. Band-box exclusion is not evidence
+    that no such route exists.
+    - Backing: `measurable` (scenario K6); `unmeasured` for end-to-end unload-input
+      reachability, pending the separate click and deploy checks in K6
+    - Confidence: high (ordinary band-box exclusion and no link-only click exclusion),
+      low (end-to-end unload-input reachability)
 
 ### Leaving
 
@@ -298,9 +304,7 @@ have not been fully traced.
       erasure)
     - Confidence: high (destruction and sale); medium (erasure)
 
-14. **Released in place: vehicle dies, is erased or is warped.** When a bunkered vehicle is
-    destroyed (in the hit that destroys it, before its other death effects), completes erasure
-    (S-0514 claim 12), or joins a warp group (S-0513 claim 34):
+14. **Released in place: vehicle dies, is erased or is warped.** When a bunkered vehicle is destroyed, completes erasure (S-0514 claim 12), or joins a warp group (S-0513 claim 34), its link and contact have ended, the bunker is back at *clearing* with *guard* queued, and the walls-down effects have happened by the time the vehicle's other death effects are resolved:
     - the walls-down effects of claim 12 happen,
     - the bunker link ends on both sides, and the bunker ends contact with the vehicle,
     - the bunker returns to *clearing* and queues *guard*, without an immediate start.
@@ -317,10 +321,15 @@ have not been fully traced.
     - **Removal by another route:** no additional reachable skirmish release route has been
       established. Behaviour of other removals is untraced, not a guarantee that a stale
       occupancy relation persists (Open questions).
-    - **Other influences:** a bunkered vehicle cannot be taken over (S-0601) or latched (S-0614
-      claim 2).
-    - Backing: `measurable` for bunker ownership change (scenario K7); `unmeasured` for a
-      bunkered vehicle's ownership change and other removal routes, because no reachable
+    - **Other influences:** ordinary mind control cannot take over a bunkered vehicle
+      (S-0601 claim 3), and a parasite cannot latch (S-0614 claim 2). The Psychic Dominator
+      can take over a vehicle that its sweep reaches and that passes its remaining eligibility
+      conditions (S-0612 claim 13). In a 2 × 2 bunker, the occupant is reached: its position
+      coincides with the foundation centre, and the tied within-cell distance does not let the
+      bunker hide it from the sweep. The vehicle changes owner without leaving the bunker or
+      ending the link. Other foundation sizes retain S-0612 claim 13's conditional reachability.
+    - Backing: `measurable` for either side's ownership change (scenario K7 and S-0612
+      claim 13, scenario PD10); `unmeasured` for other removal routes, because no reachable
       independent setup has been established
     - Confidence: medium
 
@@ -446,10 +455,9 @@ Ordering consequences:
   - Default: original behaviour (switch on).
 - **A turreted vehicle without a turret weapon cannot enter**, even though its type is
   bunkerable (claim 1). This is by design of the test, not a bug, and has no switch.
-- **Occupied bunker cannot be newly selected** (claim 11). Fresh selection therefore supplies
-  no route to order the vehicle out. Claims 13 and 14 are the established reachable
-  releases in skirmish play. No switch: this is the
-  original's rule. Whether glasnost should offer an exit order is an open question for the lead.
+- **Ordinary band-box exclusion** (claim 11) does not establish click-selection refusal or
+  unload-input unreachability. Claims 13 and 14 are the established reachable releases here.
+  Claim 12's end-to-end input route remains open. No selection quirk is introduced.
 - **Foundations other than 2 × 2.** F1's ±128 displacement and T1/T2 assume a 2 × 2 foundation. For
   other sizes the docking point and release point need not be cell centres. The rules are still
   applied as written. The importer warns when a bunker type's foundation is not 2 × 2.
@@ -491,10 +499,7 @@ General setup: stock data, director off and mods off, except for the explicitly 
 fixtures below under the glossary's measurement-setup allowance. Use a tiny flat clear map, game
 speed index 2, 800 × 600, one human house and one bystander computer player. The observed area
 is the bunker and its approach lanes. Apply the glossary's bystander void rule, not an assumption
-that the computer player gives no orders. Run three recorded seeds per case using the bench's
-scripted mouse and keyboard input and a read-only recorder of ticks, positions, facings,
-behaviours, contacts, occupancy, selection, animation and random-stream state. Record seeds,
-not fixed random-state writes.
+that the computer player gives no orders. Run three recorded seeds per case using scripted mouse and keyboard input and a read-only recorder of ticks, positions, facings, behaviours, contacts, occupancy, selection, animation and random-stream state. Record seeds, not fixed random-state writes.
 
 - **K1. Entry timeline (claims 4 to 7, S1, T1).** Order one eligible tank into an own bunker
   from each of four quadrants, in separate runs. Put an own infantry unit on another foundation
@@ -574,8 +579,14 @@ not fixed random-state writes.
   with equal firing-check outcomes. *Expected:* S-0609 claim 5's spin change per eligible tick,
   not a shot every tick. Bunker-only missing spin updates falsify claim 9. Attempt click,
   band-box, type selection and group recall for both bunker and vehicle, plus movement and
-  deploy input. *Expected:* neither passes a new selection test, and the occupant is not
-  movable. Successful new selection or ordinary movement input falsifies claim 11. Record
+  deploy input, recording the pointed object separately from the selected object and issued
+  order. *Expected:* an ordinary band box adds neither, and the occupant is not movable.
+  A click must not be refused solely because of the bunker link. Addition by an ordinary
+  box or a link-only click refusal falsifies claim 11. For any successfully clicked occupant,
+  try a self-click and the deploy command, recording the resolved action, queued behaviour
+  and any claim 12 release. This settles unload-input reachability rather than presuming
+  failure from the band-box test. If unload is reached, also record T2, the nearby-cell
+  destination, walls-down effects and both links/contact to test claim 12. Record
   guard behaviour and map presence, and compare routes through the empty and occupied
   foundation as in S-0209 claim 5's scenario C23: occupied blocking cells must cause a bypass.
   Missing map presence, a passenger relation or a route through an occupied blocking cell
@@ -585,12 +596,18 @@ not fixed random-state writes.
   it while occupied, recording both owners and occupancy/contact state. *Expected:* the
   vehicle retains its owner and occupancy relation with no release. Changed vehicle ownership,
   a release or lost occupancy falsifies the claim. This tests a bunker owner change only.
+  For vehicle ownership change, use S-0612 claim 13's scenario PD10 with a 2 × 2 bunker
+  and an otherwise eligible occupant surviving the sweep damage. Record both owners,
+  permanent control and both links/contact at the sweep. *Expected:* the vehicle changes
+  owner, the bunker does not, and occupancy/contact persist with no release. A reached,
+  eligible survivor keeping its former owner or losing the link falsifies the relevant claim.
 
 ## Open questions
 
-1. **Input reachability (claim 11).** Selection failure is traced, but pre-existing selection,
-   queued orders and every possible hotkey route have not been exhaustively checked. No
-   player-input route to claim 12's unload has been established.
+1. **Input reachability (claim 11).** Ordinary band-box exclusion is established, not a
+   universal selection ban. K6 must test pointing, ordinary click selection and deploy
+   separately to establish an end-to-end player-input route to claim 12's unload. Other
+   hotkeys, pre-existing selections and queued orders have not been exhaustively checked.
 2. **No nearby cell (claim 12).** What destination the vehicle gets when the nearby-cell search
    finds no cell was not established.
 3. **Pulse and release (Edge cases).** Can the vehicle actually advance on its release track
@@ -599,8 +616,8 @@ not fixed random-state writes.
 4. **Interruption during entry.** If a vehicle is given another order before *occupied* but keeps
    its contact, the bunker may keep waiting at its stage and refuse every other vehicle (claim 3).
    Not traced.
-5. **Psychic Dominator.** Whether S-0612's sweep can reach a bunkered vehicle was not
-   established. A direct owner change does not itself end the bunker link (claim 15).
+5. **Psychic Dominator (resolved).** S-0612 claim 13 establishes conditional sweep eligibility
+   and reachability for a vehicle in a 2 × 2 bunker. Claim 15 records the retained link.
 6. **Re-asking the docking point (claim 4).** Whether the docking point is re-asked on every
    route refresh or only when the route is built was not traced. The two give different docking
    cells for a vehicle that drives around the bunker.
@@ -609,5 +626,5 @@ not fixed random-state writes.
 
 ## Questions for the project lead
 
-- Should glasnost offer an explicit exit order invoking claim 12, despite no established normal
-  selection-based route in the original? This spec does not authorise that input departure.
+- If K6 fails to establish the original's click-and-deploy exit route, should glasnost offer an
+  explicit exit order invoking claim 12? This spec does not authorise an input departure.
