@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -116,9 +116,15 @@ addition:
    no area hits, whether or not attachment succeeds (S-0614 claim 1). Its later explosion
    animation and debris are not suppressed by that exception. This is a projectile-producer
    rule, not an exclusion for other producers using the same warhead.
+   A projectile detonation that selects the electric-charge effect likewise bypasses ordinary
+   area damage at any target (S-0518 claim 11), even when it registers no charger. This bypass
+   does not suppress shared effects: radiation creation before effect selection, or the later
+   explosion animation, warhead debris and light flash where configured. It is not a general
+   immunity to effects of that shot, nor an exclusion for other producers using the same warhead.
    - Backing: `measurable` (scenario A1, variant e, for the inert flag; A14, variant f, for the
      damage amount 0; S-0614 scenarios P1 and P3 for parasite-projectile area-hit suppression,
-     and A14 variant o for their later animation and debris),
+     and A14 variant o for their later animation and debris; S-0518 scenarios TC1 and TC4 for
+     electric-charge area-damage bypass and preserved common effects),
      `unmeasured` for area damage without a warhead (no producer with a
      reproducible named-data setup for that case is established) and for the projectile without
      a warhead (the original stops, so there is no effect value to compare)
@@ -365,13 +371,16 @@ addition:
     producer allows resource reduction. Resource-explosion detonations produced by an animation's
     resource chain reaction forbid this reduction (S-0401 claim 20), so neighbouring scanned
     resource cells lose nothing through this rule and make no spread-offer draws through it.
-    The chain reaction's own emptying of its source cell remains S-0401's rule. Other producers
-    named here allow reduction. Craters remove resources by a rule of their own (S-0109 claim 18).
+    The chain reaction's own emptying of its source cell remains S-0401's rule. Crate gas
+    detonations also forbid resource reduction (S-0520 claim 23). Crate explosion and napalm
+    area damage allow it (S-0520 claims 16 and 17). The other producers named here allow
+    reduction. Craters remove resources by a rule of their own (S-0109 claim 18).
     - Backing: `measurable` (scenario A10, variant d, with a test overlay type; S-0401 scenario
-      E17 and A10 variant h for the resource-explosion exception), and `unmeasured` for resource
-      permission of the other producers: A10 uses a projectile, not each death, crash, damaging
-      animation, superweapon and trigger producer
-    - Confidence: high for the resource-explosion exception; medium for the other producers
+      E17 and A10 variant h for the resource-explosion exception; S-0520 scenarios CR12 and
+      CR17 for crate permissions), and `unmeasured` for resource permission of the remaining
+      producers: these scenarios do not test each death, crash, damaging animation, superweapon
+      and trigger producer
+    - Confidence: high for the resource-explosion and crate permissions; medium for the remaining producers
 
 18. **Bridges.** When the bridge-destruction game option is on and the warhead has the wall
     flag, a detonation may make destroy attempts at its centre cell. In a skirmish the setup
@@ -453,7 +462,11 @@ addition:
     game-wide nullify animation appears instead of the chosen one (at the same point), and claim 22
     does not happen. If the projectile is no longer in play after its area damage, none of this and
     nothing of claim 22 happens (S-0306 says when a projectile leaves play).
-    - Backing: `measurable` (scenario A14; variant e for the invisible projectile, through the
+    Crate explosions also use F5 for their blast animations (S-0520 claim 16), with their
+    supplied damage amount and demolition warhead, but always with a non-water land type:
+    even a blast over water never selects the splash case. This use of F5 does not imply a
+    projectile, its invisible-kind scatter, its nullify-animation substitution or its debris.
+    - Backing: `measurable` (scenario A14; S-0520 scenario CR12 for crate blast selection; variant e for the invisible projectile, through the
       recorder's stream position; variant h for the draw of a nullified electromagnetic
       detonation; variant i for *Q* against *P*); `unmeasured` for the projectile that leaves play
       (how that can happen is not established)
@@ -585,9 +598,11 @@ The state and effects of a successful hit are:
 
 Comparisons and state values use exact integer arithmetic. Units: *D*, *a* and *T* are wall-hit points; *r* is a ranged-draw result; *s* and *L* are damage stages; *v* is overlay data value, in increments of 16 per stage.
 
-**F5. Explosion animation** (claim 21). Let *D* be the projectile's damage amount, *W* the warhead,
-*L* the land type of claim 21 (water, another land type, or none for air) and *Q* = (*q*ₓ, *q*ᵧ,
-*q*_z) the projectile position. With *D* = 0 there is no animation and no draw. Otherwise the
+**F5. Explosion animation** (claim 21). Let *D* be the producer's supplied damage amount,
+*W* the warhead, *L* the land type (water, another land type, or none for air), and
+*Q* = (*q*ₓ, *q*ᵧ, *q*_z) the position used for the bridge and height tests. For projectiles,
+claim 21 supplies their then-current damage amount, land type and projectile position. For
+crate explosions (S-0520 claim 16), *Q* is the blast point and *L* is always non-water. With *D* = 0 there is no animation and no draw. Otherwise the
 animation is given by the first case of this table whose condition holds; *n*ₛ is the length of the
 game-wide splash list and *n*_W the length of *W*'s animation list.
 
@@ -865,6 +880,7 @@ warnings above are design rules, not claimed oracle observations.
 | rules, warhead section, `CellSpread` | spread *S* | decimal (single) | 0 |
 | no user-data key | within-sector arrival order and alternative global tracking order (claim 11, F7) | fixed behaviour; `quirks.flying_search_sectors` is an engine option, not an imported field | sector search on |
 | rules, warhead section, `Parasite` | parasite flag: projectile area damage replaced by attachment (claim 2; S-0614 claim 1) | boolean | no |
+| rules, warhead section, `ElectricAssault` | electric-charge effect: when selected, replaces projectile area damage but preserves shared effects (claim 2; S-0518 claim 11) | boolean | no |
 | rules, warhead section, `PercentAtMax` | edge fraction *p* | decimal (single) | 1.0 |
 | rules, warhead section, `Verses` | versus values *v* (F3; S-0003 claim 13 owns the parse, S-0305 the order of the armour classes) | percent list | 100 % each |
 | rules, warhead section, `Wall`, `Wood`, `WallAbsoluteDestroyer` | wall flags (claim 16) | boolean | no |
