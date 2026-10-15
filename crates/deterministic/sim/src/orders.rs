@@ -122,6 +122,15 @@ pub enum Order {
         /// The other house.
         house: HouseId,
     },
+    /// A superweapon fire order (S-0213 orders table; S-0512 claim 8,
+    /// S-0513 claim 2): the type by its position in the superweapon type
+    /// list, and the target cell.
+    FireSuperweapon {
+        /// The superweapon type, by list position.
+        sw: u32,
+        /// The target cell.
+        cell: CellXY,
+    },
 }
 
 impl Order {
@@ -146,6 +155,7 @@ impl Order {
             | Order::Place { .. }
             | Order::SellWall { .. }
             | Order::Surrender
+            | Order::FireSuperweapon { .. }
             | Order::Alliance { .. } => None,
         }
     }
@@ -374,6 +384,9 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
         Order::Primary { actor } => primary(w, actor),
         Order::Surrender => crate::econ::victory::surrender(w, house),
         Order::Alliance { house: other } => crate::econ::victory::alliance(w, house, other),
+        Order::FireSuperweapon { sw, cell } => {
+            crate::superweapons::launch::fire(w, house, sw, cell)
+        }
         Order::Behaviour { .. } => {}
     }
 }

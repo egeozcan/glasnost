@@ -149,6 +149,7 @@ pub fn create_converted(
         ),
         econ: Default::default(),
         cloak: Default::default(),
+        sw: Default::default(),
     };
     w.objects.insert(id, obj);
     veteran_at_creation(w, id);

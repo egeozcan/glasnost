@@ -20,6 +20,7 @@ use glasnost_sim::econ::{TypeRef, power, production};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rng::Rng;
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
+use glasnost_sim::superweapons::SwEvent;
 use glasnost_sim::targeting::{ClickResult, KeyCommand};
 use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
@@ -605,6 +606,7 @@ impl Audio {
             // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
             // The cloak events are presentation-only (selection, S-0516 claim 26).
             Effect::Cloak { .. } => {}
+            Effect::Superweapon { event, sw, pos, .. } => self.superweapon(w, *event, *sw, *pos),
             Effect::OverlayCrushed { overlay, pos } => {
                 let s = self
                     .names
@@ -613,6 +615,32 @@ impl Audio {
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
         }
+    }
+
+    /// The positional sounds of superweapon events (S-0513 claims 5, 18,
+    /// 32 and 44; S-0701 claim 25). The sound names come from the rules.
+    fn superweapon(&mut self, w: &World, event: SwEvent, sw: Option<u32>, pos: Option<Pos>) {
+        let at = pos.map_or(Where::Screen, Where::Fixed);
+        let r = w.rules_arc();
+        let s = &r.superweapons;
+        let ty = sw.and_then(|i| s.types.get(i as usize));
+        let name = match event {
+            // spec: S-0513 claim 5 (the nuclear siren at the target point)
+            SwEvent::Siren => s.dig_sound.clone(),
+            // spec: S-0513 claim 15 (the storm sound at the storm's start)
+            SwEvent::StormStart => s.storm.sound.clone(),
+            // spec: S-0701 claim 25 (the lightning sound the simulation chose, at the strike point)
+            SwEvent::Lightning(k) => s.storm.sounds.get(k as usize).cloned(),
+            // spec: S-0513 claim 32 (the type's start and special sounds at the target)
+            SwEvent::ShieldStart => ty.and_then(|t| t.start_sound.clone()),
+            SwEvent::ShieldFade => ty.and_then(|t| t.special_sound.clone()),
+            // spec: S-0513 claim 44 (the camera sound at the plane)
+            SwEvent::Camera => s.camera_sound.clone(),
+            // Announcements, messages, markers and radar events are the
+            // interface's (S-0701 claim 28; S-0410).
+            _ => None,
+        };
+        self.play_in(w, name.as_deref(), at);
     }
 
     fn sound(

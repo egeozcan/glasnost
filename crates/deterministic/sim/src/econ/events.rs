@@ -65,6 +65,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     // spec: S-0414 claim 4 (the on-map counts: a leaving)
     crate::econ::victory::leaving_map(w, id);
     crate::econ::power::leaving_map(w, id);
+    // spec: S-0512 claim 2 (d) (a building giving a superweapon being removed: the availability check at once)
+    crate::superweapons::charge::building_removed(w, id);
     crate::econ::shroud::leaving_map(w, id, for_good);
     // spec: S-0516 claims 20, 22, 23 and 40 (leaving play: discs, fields and building coverage)
     crate::cloak::leaving_map(w, id);

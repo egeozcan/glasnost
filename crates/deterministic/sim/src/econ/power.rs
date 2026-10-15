@@ -232,10 +232,11 @@ pub fn under_pulse(w: &World, id: ObjectId) -> bool {
     false
 }
 
-/// Being erased (glossary; the erasing weapons of the combat specs). Seam.
+/// Being erased (glossary): a superweapon warp member in its leaving stage
+/// (S-0513 claim 39). The chrono weapons' erasure (S-0514) is a seam
+/// inside [`crate::superweapons::being_erased`].
 pub fn being_erased(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    crate::superweapons::being_erased(w, id)
 }
 
 /// Being drained (S-0405 Terms; special-abilities specs). Seam.

@@ -310,6 +310,8 @@ pub struct WarheadRules {
     pub temporal: bool,
     /// Disguise flag (S-0516 claim 31).
     pub makes_disguise: bool,
+    /// The missile-maker flag (S-0513 claim 8).
+    pub nuke_maker: bool,
 }
 
 impl WarheadRules {
@@ -1012,6 +1014,8 @@ pub fn tables(
                 temporal: b(h.temporal),
                 // spec: S-0516 Import mapping (MakesDisguise absent: no)
                 makes_disguise: b(h.makes_disguise),
+                // spec: S-0513 Import mapping (NukeMaker absent: no)
+                nuke_maker: b(h.nuke_maker),
             }
         })
         .collect();

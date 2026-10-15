@@ -448,6 +448,7 @@ pub fn new_game(
         scaled_spawn_delay: Default::default(),
         flying: Default::default(),
         cloak: Default::default(),
+        sw: Default::default(),
         spawned: Default::default(),
         triggers: Default::default(),
         econ: crate::econ::WorldEcon {
