@@ -42,7 +42,9 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
                     Target::Cell(c) => Pos::centre(c, 0),
                     Target::Object(x) => w.obj(x).map_or(o.pos, |d| d.pos),
                 };
-                // spec: S-0206 claim 9 (a movement destination: its direction, S-0204 claim 8)
+                // spec: S-0206 claim 9 (a movement destination: its direction, S-0204 claim 8;
+                // no change while the vehicle is seized, S-0607 claims 5 and 20. Seam: no
+                // seizing warhead exists in our engine yet)
                 targets.push(direction(
                     i64::from(p.x - o.pos.x),
                     i64::from(p.y - o.pos.y),

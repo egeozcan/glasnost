@@ -550,6 +550,9 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0312 claim 17 (contacts within 256 leptons, or any for a helipad, are destroyed by ten times their strength)
     let helipad = rules.buildings[o.type_index as usize].building.helipad;
     let rp = w.reference_point(id);
+    // spec: S-0312 claim 17 (revision 25: the contacts held just before the destroying hit; a
+    // bunkered vehicle is let out first and excluded, S-0606 claim 13. Seam: tank bunkers are
+    // not built, so no contact here can be a bunkered vehicle)
     let contacts: Vec<ObjectId> = w
         .objects
         .values()

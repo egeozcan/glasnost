@@ -435,8 +435,10 @@ pub fn track_held(w: &World, spawner: ObjectId) -> bool {
     launching_count(w, spawner) > 0
 }
 
-/// A mobile spawner restrained by a magnetic beam (S-0506 claims 6 and
-/// 13). Seam: no magnetic beam exists in our engine yet.
+/// A mobile spawner that is seized (S-0506 claims 6 and 13, revision 8):
+/// the magnetic-lift state of S-0607 claims 5 and 20, which lasts past the
+/// grip until the unit's own locomotor returns. Seam: no magnetic lift
+/// exists in our engine yet.
 pub fn magnet_held(_w: &World, _spawner: ObjectId) -> bool {
     false
 }
@@ -946,7 +948,7 @@ fn can_launch(w: &World, spawner: ObjectId, c: &SpawnController, missile: bool) 
     if c.state == ControllerState::CoolingDown {
         return false;
     }
-    // spec: S-0506 claim 6 (a mobile spawner not restrained by a magnetic beam)
+    // spec: S-0506 claim 6 (a mobile spawner that is not seized, S-0607 claims 5 and 20)
     if o.kind.is_mobile() && magnet_held(w, spawner) {
         return false;
     }
@@ -1246,11 +1248,11 @@ pub fn owner_changed(w: &mut World, spawner: ObjectId) {
 
 /// A killing hit on an object (S-0506 claims 9 and 13; S-0312): a slot
 /// object is announced as lost; a spawner clears its slots unless it is
-/// held by a magnetic beam.
+/// seized (S-0607 claims 5 and 20).
 pub fn killed(w: &mut World, id: ObjectId) {
     lost(w, id);
     if w.obj(id).is_some_and(|o| o.spawn.is_some()) && !magnet_held(w, id) {
-        // spec: S-0506 claim 13 (the spawner destroyed or starting to crash, unless held by a magnetic beam)
+        // spec: S-0506 claim 13 (the spawner destroyed or starting to crash, unless it is seized)
         clear_slots(w, id);
     }
 }

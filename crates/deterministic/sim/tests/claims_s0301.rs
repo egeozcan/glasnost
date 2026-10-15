@@ -272,6 +272,30 @@ fn claim_2_full_delay_is_rate_plus_one_draw() {
     }
 }
 
+// spec: S-0301 claim 2 and F1 (revision 12: each floating-point operation rounds by quirks.chop_rounding and S-0205; each conversion to ticks truncates toward zero)
+#[test]
+fn claim_2_full_delay_rounds_by_the_rounding_switch() {
+    for chop in [true, false] {
+        let mut r = base();
+        r.globals.quirks.chop_rounding = chop;
+        r.sim.weapons.insert("ZAP".into(), zap(37));
+        r.sim.difficulty.insert(
+            "normal".into(),
+            DifficultyRow {
+                rof: Some(d("0.7")),
+                ..Default::default()
+            },
+        );
+        let (mut w, a, _) = duel(&r);
+        let m = mode(&w);
+        let h = w.houses[0].combat.rof_factor;
+        let u = peek(&w, 0, 2);
+        let want = int(37, m).mul(h, m).add(int(u, m), m).to_i32_common();
+        fire_slot(&mut w, a, 0);
+        assert_eq!(delay(&w, a), want, "chop_rounding {chop}");
+    }
+}
+
 // spec: S-0301 claim 3 and F2 (h = RZ₅₃(ℓ × κ), the normal row's factor times the country's, for every player house)
 #[test]
 fn claim_3_house_factor_is_row_times_country() {
@@ -578,6 +602,22 @@ fn claim_5_effect_weapons_fire_at_their_bare_rate() {
         let (made, draws) = fire_slot(&mut w, a, 0);
         assert!(made);
         assert_eq!((delay(&w, a), draws), (30, 0), "effect kind {kind}");
+    }
+}
+
+// spec: S-0301 claim 5 (revision 12: a magnetic-beam weapon is not an effect weapon; it takes the full delay of claim 2 and F1, with its R(0, 2) draw)
+#[test]
+fn claim_5_magnetic_beam_weapon_is_not_an_effect_weapon() {
+    let mut r = base();
+    r.sim.weapons.get_mut("ZAP").unwrap().is_mag_beam = Some(true);
+    let (mut w, a, _) = duel(&r);
+    for _ in 0..4 {
+        let (u, n) = next(&w, 0, 2);
+        let (made, draws) = fire_slot(&mut w, a, 0);
+        assert!(made);
+        assert_eq!(draws, n, "one draw R(0, 2), as for an ordinary weapon");
+        assert_eq!(delay(&w, a), 30 + u);
+        w.tick = w.obj(a).unwrap().combat.rearm_until;
     }
 }
 

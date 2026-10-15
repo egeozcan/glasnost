@@ -1637,6 +1637,42 @@ pub struct Quirks {
     // spec: S-0606 claim 6 and Edge cases
     #[serde(default = "on")]
     pub bunker_clear_nearest_only: bool,
+    /// A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped; off: the order is kept until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4. Not implemented yet (wave 2).
+    // spec: S-0517 claim 5 and Edge cases
+    #[serde(default = "on")]
+    pub airborne_deploy_order_dropped: bool,
+    /// A drain attempt that forms a link while the drainer is still linked to another building does not end the first link, which stays drained (blackout, refused firing, sale refusal, payouts) until the drainer is removed; off: forming a new link first ends the old one with all of claim 14's effects. Not implemented yet (wave 2).
+    // spec: S-0608 claim 4 and Edge cases
+    #[serde(default = "on")]
+    pub drain_relink_strands_previous: bool,
+    /// Only a drainer that is a vehicle performs the position check, so an infantry or aircraft drainer keeps its link after it moves away until claim 11 or 13 ends it; off: every drainer performs it. Not implemented yet (wave 2).
+    // spec: S-0608 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub drain_position_check_vehicles_only: bool,
+    /// In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first. Not implemented yet (wave 2).
+    // spec: S-0513 claim 4 and Edge cases; S-0611 claim 4 and Edge cases
+    #[serde(default = "on")]
+    pub superweapon_block_one_layer: bool,
+    /// When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible. Not implemented yet (wave 2).
+    // spec: S-0513 State and ordering and Edge cases; S-0611 claim 4
+    #[serde(default = "on")]
+    pub superweapon_list_cut_by_removal: bool,
+    /// The conversion test's position choice reads the cell's ground record even for a victim on a high-bridge deck; off: a victim on a deck is tested against the deck record. Not implemented yet (wave 2).
+    // spec: S-0611 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub mutation_test_ground_record: bool,
+    /// A refused mutation victim's standing position is free from its death tick while it plays die-2, and its removal frees that position again even if a walker took it; off: the position stays taken until removal, which frees only the victim's own mark. Not implemented yet (wave 2).
+    // spec: S-0611 claim 7 and Edge cases
+    #[serde(default = "on")]
+    pub refused_mutation_frees_position: bool,
+    /// An infantry-making animation marks its position taken and sets the cell's infantry house in every update, and frees the position at its end whatever holds it; off: it holds the position only while no other unit does, leaves the infantry house alone while other infantry stands there and frees only its own mark. Not implemented yet (wave 2).
+    // spec: S-0611 claim 8 and Edge cases
+    #[serde(default = "on")]
+    pub infantry_animation_occupancy: bool,
+    /// A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation. Not implemented yet (wave 2).
+    // spec: S-0615 claim 16 and Edge cases
+    #[serde(default = "on")]
+    pub disc_laser_no_house: bool,
 }
 
 impl Default for Quirks {
@@ -2041,6 +2077,15 @@ impl Default for Quirks {
             absorber_release_bridge_ends_search: true,
             absorber_release_second_round_skips_rear: true,
             bunker_clear_nearest_only: true,
+            airborne_deploy_order_dropped: true,
+            drain_relink_strands_previous: true,
+            drain_position_check_vehicles_only: true,
+            superweapon_block_one_layer: true,
+            superweapon_list_cut_by_removal: true,
+            mutation_test_ground_record: true,
+            refused_mutation_frees_position: true,
+            infantry_animation_occupancy: true,
+            disc_laser_no_house: true,
         }
     }
 }
@@ -3051,6 +3096,39 @@ impl Quirks {
                 self.absorber_release_second_round_skips_rear,
             ),
             ("bunker_clear_nearest_only", self.bunker_clear_nearest_only),
+            (
+                "airborne_deploy_order_dropped",
+                self.airborne_deploy_order_dropped,
+            ),
+            (
+                "drain_relink_strands_previous",
+                self.drain_relink_strands_previous,
+            ),
+            (
+                "drain_position_check_vehicles_only",
+                self.drain_position_check_vehicles_only,
+            ),
+            (
+                "superweapon_block_one_layer",
+                self.superweapon_block_one_layer,
+            ),
+            (
+                "superweapon_list_cut_by_removal",
+                self.superweapon_list_cut_by_removal,
+            ),
+            (
+                "mutation_test_ground_record",
+                self.mutation_test_ground_record,
+            ),
+            (
+                "refused_mutation_frees_position",
+                self.refused_mutation_frees_position,
+            ),
+            (
+                "infantry_animation_occupancy",
+                self.infantry_animation_occupancy,
+            ),
+            ("disc_laser_no_house", self.disc_laser_no_house),
         ]
     }
 

@@ -1105,7 +1105,7 @@ pub fn host_curtain_started(w: &mut World, host: ObjectId) {
 }
 
 /// An effect replaces the host's locomotor (claim 12): only a naval
-/// parasite exits. A hook for the locomotor-seizing weapon topic.
+/// parasite exits. A hook for the seizing warhead (S-0607 claims 1 and 5).
 pub fn locomotor_replaced(w: &mut World, host: ObjectId) {
     if let Some(p) = parasite_of(w, host)
         && naval(w, p)
