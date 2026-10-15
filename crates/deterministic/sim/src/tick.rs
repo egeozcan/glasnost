@@ -105,6 +105,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
             crate::air::end_turn(w, id);
             return;
         }
+        if crate::naval::sinking(w, id) {
+            // spec: S-0312 claims 15 and 32 (a vessel destroyed while sinking stays in play at 0 health because it is sinking); S-0504 claim 4 (each own update of a sinking vessel descends, and it leaves play below −400 leptons); S-0504 claim 13 (no ordinary living updates are asserted for it, so it takes no others)
+            crate::naval::sinking_turn(w, id);
+            return;
+        }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
         crate::combat::death::infantry_death_turn(w, id);
         return;

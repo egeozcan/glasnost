@@ -703,8 +703,8 @@ fn killing_hit(
         }
         return HitResult::PostMortem;
     }
-    // spec: S-0504 claim 13 (a further killing hit on a sinking vessel takes the ordinary path: no exception
-    // to credit or death effects; S-0312 claim 10 leaves it at 1 health, still sinking, its descent not restarted)
+    // spec: S-0504 claim 13 and S-0312 claim 32 (a further killing hit on a sinking vessel takes the ordinary path: destruction
+    // registered again and the death effects; claim 10's conditions leave it at 1 health, otherwise 0 health, still sinking)
     if o.combat.delay_kill_until.is_some() && !rules.quirks.delay_kill_credited_again {
         // spec: S-0302 Edge cases (delay_kill_credited_again off: no further credit)
     } else {

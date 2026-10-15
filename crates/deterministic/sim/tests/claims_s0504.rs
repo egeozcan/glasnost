@@ -1155,21 +1155,112 @@ fn claim_13_further_killing_hit_continues_descent() {
     assert_eq!(gone1, gone0, "removal not extended");
 }
 
-// spec: S-0504 claim 13 (a cull-started descent: a later killing hit is tested against the ordinary sinking conditions; a type failing them is not restored to 1 health, its death is S-0312's)
-#[test]
-fn claim_13_cull_started_type_failing_the_condition_dies() {
-    let mut w = world(rules());
-    let scow = at(&mut w, "SCOW", 0, 0, 0);
+/// The naval ruleset with explosion and destruction lists on SCOW, DIVER
+/// and SKIFF, and a crashable copy of SCOW, CRASHER.
+fn rules_with_death_anims() -> Ruleset {
+    let mut r = rules();
+    let names = |v: &[&str]| Some(v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+    for n in ["SCOW", "DIVER", "SKIFF"] {
+        let c = &mut r.sim.vehicles.get_mut(n).unwrap().combat;
+        c.explosion = names(&["BOOM1", "BOOM2"]);
+        c.destroy_anim = names(&["WRECK1", "WRECK2", "WRECK3"]);
+    }
+    let mut crasher = r.sim.vehicles["SCOW"].clone();
+    crasher.crashable = Some(true);
+    r.sim.vehicles.insert("CRASHER".into(), crasher);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("CRASHER".into());
+    r
+}
+
+fn anim_names(w: &World) -> Vec<String> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Anim { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Starts `name`'s descent by a cull (S-0614 claim 11), runs 5 ticks, then
+/// kills it when `hit`; returns the world, the vessel, and the tick at
+/// which it leaves play (within 400 ticks).
+fn culled_then_hit(name: &str, hit: bool) -> (World, ObjectId, Option<i32>) {
+    let mut w = world(rules_with_death_anims());
+    let v = at(&mut w, name, 0, 0, 0);
     open(&mut w);
-    naval::start_sinking(&mut w, scow);
+    naval::start_sinking(&mut w, v);
     for _ in 0..5 {
         tick::step(&mut w);
     }
-    assert_eq!(kill(&mut w, scow), HitResult::NowDead);
-    assert!(
-        w.obj(scow).is_none_or(|o| o.health != 1),
-        "not restored to 1 health"
-    );
+    if hit {
+        assert_eq!(kill(&mut w, v), HitResult::NowDead);
+    }
+    let mut gone = None;
+    let mut w2 = w.clone();
+    for _ in 0..400 {
+        tick::step(&mut w2);
+        if w2.obj(v).is_none() {
+            gone = Some(w2.tick);
+            break;
+        }
+    }
+    (w, v, gone)
+}
+
+// spec: S-0312 claim 32 table row 2 and claim 15; S-0504 claims 4 and 13 (a cull-started vessel failing claim 10's conditions, no weight or underwater, ends a killing hit at 0 health with claim 9's explosion and destruction animations and their two list picks, and stays in play because it is sinking; it keeps its descent and leaves play below −400 leptons at the same tick as without the hit)
+#[test]
+fn claim_13_cull_started_type_failing_the_condition_dies() {
+    for name in ["SCOW", "DIVER"] {
+        let (_, _, gone0) = culled_then_hit(name, false);
+        let mut w = world(rules_with_death_anims());
+        let v = at(&mut w, name, 0, 0, 0);
+        open(&mut w);
+        naval::start_sinking(&mut w, v);
+        for _ in 0..5 {
+            tick::step(&mut w);
+        }
+        let z = w.obj(v).unwrap().pos.z;
+        let losses = |w: &World| w.houses[0].econ.result.stats.losses;
+        let l0 = losses(&w);
+        w.effects.clear();
+        let mut probe = w.rng.clone();
+        assert_eq!(kill(&mut w, v), HitResult::NowDead);
+        let o = w.obj(v).expect("stays in play");
+        assert_eq!(
+            (o.health, o.pos.z),
+            (0, z),
+            "{name}: 0 health, no height change"
+        );
+        assert!(naval::sinking(&w, v), "{name}: still sinking");
+        assert_eq!(losses(&w), l0 + 1, "{name}: destruction registered");
+        // spec: S-0312 claim 9 (one list pick from each list, explosion first)
+        let a = anim_names(&w);
+        let e = probe.list_pick(2) as usize;
+        let d = probe.list_pick(3) as usize;
+        assert_eq!(
+            a,
+            vec![
+                ["BOOM1", "BOOM2"][e].to_string(),
+                ["WRECK1", "WRECK2", "WRECK3"][d].to_string()
+            ],
+            "{name}"
+        );
+        assert_eq!(w.rng, probe, "{name}: the two list picks only");
+        // The descent goes on at 0 health: 5 leptons per own update.
+        tick::step(&mut w);
+        let o = w.obj(v).expect("still in play");
+        assert_eq!((o.health, o.pos.z), (0, z - 5), "{name}");
+        let (_, _, gone1) = culled_then_hit(name, true);
+        assert!(gone0.is_some(), "{name}: the culled descent ends");
+        assert_eq!(
+            gone1, gone0,
+            "{name}: leaves play at the end of the same descent"
+        );
+    }
     // The eligible type, cull-started, is restored to 1 health and keeps sinking.
     let mut w = world(rules());
     let skiff = at(&mut w, "SKIFF", 0, 0, 0);
@@ -1183,6 +1274,62 @@ fn claim_13_cull_started_type_failing_the_condition_dies() {
     let o = w.obj(skiff).unwrap();
     assert_eq!((o.health, o.pos.z), (1, z));
     assert!(naval::sinking(&w, skiff));
+}
+
+// spec: S-0312 claim 32 table row 1 (an eligible vessel already sinking: no claim 9 explosion or destruction animation and no list picks at a further killing hit)
+#[test]
+fn claim_32_eligible_further_hit_shows_no_vessel_animations() {
+    let mut w = world(rules_with_death_anims());
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    kill(&mut w, skiff);
+    for _ in 0..10 {
+        tick::step(&mut w);
+    }
+    w.effects.clear();
+    let probe = w.rng.clone();
+    assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
+    assert!(anim_names(&w).is_empty(), "{:?}", anim_names(&w));
+    assert_eq!(w.rng, probe, "no draws for a type without debris or crew");
+    assert_eq!(w.obj(skiff).unwrap().health, 1);
+}
+
+// spec: S-0312 claims 15 and 32 (a crashable type that was sinking cannot start a crash below the surface: a killing hit removes it at the end of its effects, after claim 9's animations)
+#[test]
+fn claim_32_crashable_sinking_type_is_removed() {
+    let mut w = world(rules_with_death_anims());
+    let v = at(&mut w, "CRASHER", 0, 0, 0);
+    open(&mut w);
+    naval::start_sinking(&mut w, v);
+    for _ in 0..5 {
+        tick::step(&mut w);
+    }
+    w.effects.clear();
+    assert_eq!(kill(&mut w, v), HitResult::NowDead);
+    assert!(w.obj(v).is_none(), "removed at once");
+    assert_eq!(
+        anim_names(&w).len(),
+        2,
+        "explosion and destruction animations"
+    );
+}
+
+// spec: S-0312 claim 32 and S-0302 claim 8 (at 0 health a sinking vessel is out of ordinary damage: a later lethal hit registers no further destruction)
+#[test]
+fn claim_32_zero_health_aftermath_takes_no_further_kill() {
+    let mut w = world(rules_with_death_anims());
+    let v = at(&mut w, "SCOW", 0, 0, 0);
+    open(&mut w);
+    naval::start_sinking(&mut w, v);
+    tick::step(&mut w);
+    kill(&mut w, v);
+    let losses = |w: &World| w.houses[0].econ.result.stats.losses;
+    let l0 = losses(&w);
+    w.effects.clear();
+    let _ = kill(&mut w, v);
+    assert_eq!(losses(&w), l0, "no second destruction at 0 health");
+    assert!(anim_names(&w).is_empty());
+    assert_eq!(w.obj(v).unwrap().health, 0);
 }
 
 // spec: S-0504 claim 13; S-0314 claims 9 and 10 (a sinking vessel at 0 health is not revived by self-healing)
