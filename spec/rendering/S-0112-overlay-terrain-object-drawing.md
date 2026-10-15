@@ -2,11 +2,11 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0012, Q-0021]
 supersedes: []
@@ -105,8 +105,9 @@ and *quirk switch*.
   with the smallest *x* and the smallest *y*.
 - **Wall building.** A building type with the building wall flag that names a wall overlay type
   (Import mapping). Placing one, from the map's building list or by building it in play, puts a wall
-  overlay of that type in its cell, recorded as owned by the placing house, instead of a standing
-  building (claim 7).
+  overlay of that type in its cell, initially owned by the placing house, instead of a standing
+  building. Map entries must survive S-0009 claim 27; ownership before play follows S-0210
+  claim 14 (a) (claim 7).
 
 ## Behaviour
 
@@ -362,7 +363,13 @@ and *quirk switch*.
      |---|---|---|
      | from the overlay list | none | without the overlay data stream: toward its edge neighbours of the same overlay type; with the stream: those of the data value the stream gives, connected or not (S-0009 claim 13) |
      | from the overlay list | a building of the map's building list | from the neighbours as they stand once that building is placed: the overlay list's walls and everything the map's building list has placed up to and including that entry (the walls of its wall buildings among them) |
-     | from a wall building of the map's building list (placed as a wall built in play, so at stage 0, owned by the building's owner) | its own placement or a later one | as in the row above, for that last placement |
+     | from a surviving wall-building entry of the map's building list (stage 0, initially owned by the building's owner at placement; before play, reassigned by S-0210 claim 14 (a), including to no owner) | its own placement or a later one | as in the row above, for that last placement |
+
+     A human-owned wall-building entry dropped under S-0009 claim 27 places no wall and causes
+     no placement recomputation. Dropping it does not remove a wall supplied independently by the
+     overlay list. For every surviving wall, whether from the overlay list or a wall building,
+     S-0210 claim 14 (a) determines ownership before play, replacing any placement-time owner,
+     even with no owner. That reassignment changes neither damage stage nor connection bits.
 
      Consequences: a wall at either end of a gate three cells long, or beside a one-cell tower,
      starts joined to it, whether it comes from the overlay list or from a wall building listed
@@ -374,7 +381,8 @@ and *quirk switch*.
      walls belong to the wall-damage rules (S-0303 claim 16 and F4, S-0210 claim 8). Who may sell a
      wall is S-0213's (claim 12). Placing a gate, tower or wall building where walls already lie
      is not covered here.
-   - Backing: `measurable` (OV6: map A for the same-type bits, the initial state next to gates,
+   - Backing: `measurable` (S-0210 claim 14, scenario K12 part c, for pre-play ownership
+     reassignment and dropped human-owned wall buildings; OV6: map A for the same-type bits, the initial state next to gates,
      recomputation after a placement in play and after a sale; map B for the stream's data values,
      the reach of a wall's placement, the absence of recomputation after a hit that leaves the wall
      standing, the reach of a removal, and the reach of a tower's and a gate's placement (its
@@ -390,7 +398,8 @@ and *quirk switch*.
      from the hits' draws, so no scenario separates the order.
    - Confidence: high for the same-type bits; medium for the gate and tower exceptions, the
      initial state of overlay-list walls and of wall buildings, the triggers and reaches of
-     recomputation and the order of the tower's hits.
+     recomputation and the order of the tower's hits. High for pre-play ownership reassignment
+     and dropped human-owned wall buildings.
 
 8. **Overlay shadows.** Every cell that holds an overlay also draws the shadow, if any, that the
    table below gives it, in every game and at every detail level, cells with a veinhole marker
@@ -614,12 +623,12 @@ flat and sloped runs respectively.
 ## Edge cases and quirks
 
 - **Walls in the local player's colour** (claim 1, row 4). The original draws every wall with the
-  local player's 53-shade house-colour palette, although each wall cell records the house that
-  placed it. A wall's colour therefore depends on which house is the local player, not on who built
+  local player's 53-shade house-colour palette, although each wall cell records its owner,
+  which may differ from the placing house (claim 7; S-0210 claim 14). A wall's colour therefore depends on which house is the local player, not on who built
   it.
   `quirks.wall_local_player_colour` (default on). Off: a wall is drawn with the 53-shade
-  house-colour palette of the house recorded as its owner; a wall with no owner (placed by the
-  map's overlay list) keeps the local player's palette.
+  house-colour palette of the house recorded as its owner; a wall with no owner keeps the local
+  player's palette.
 - **Resource and mine palettes fixed at program start** (claim 2). Ore, gems and veins use the
   temperate theater palette, and ore-spawning terrain objects the snow unit palette, whatever the
   theater. `quirks.resource_palettes_from_start` (default on). Off: both tables are rebuilt with the
@@ -692,8 +701,8 @@ read from screenshots at 800 × 600 in the 5-6-5 layout and compared with the ex
 entries after S-0103's 16-bit packing (claim 9). "Sprite frame *f*" means the picture of image frame
 *f* of the named sprite, rendered offline from the stock file with the expected palette for
 comparison. Use one bystander computer player separated from the observed area, which contains
-all named test cells and objects; the glossary's bystander void rule applies. Director and
-unrelated mods are off, and named test files are removed afterwards. Tick-labelled lossless
+all named test cells and objects; the glossary's bystander void rule applies. Unrelated mods are
+off, and named test files are removed afterwards. Tick-labelled lossless
 screen capture and scripted input are the recording tools; any needed harness extension is
 proposed to the user, not assumed installed.
 
@@ -932,6 +941,10 @@ inconclusive, never evidence for the claim.
     plus its bits, the hit landed while the wall still had a link); in group R *A* loses its bit
     when its gate leaves or keeps it after its tower leaves; in map D *W* loses its bit or *W*2
     gains one.
+  - *Ownership companion test:* S-0210 claim 14, scenario K12 part c, specifies the setup,
+    recorder, expected ownership and falsifiers for wall-building reassignment, the no-owner
+    result and dropped human-owned entries. Run it alongside OV6 for claim 7's ownership
+    statements; the connection-bit expectations above are unchanged by reassignment.
 - **OV7, bridge decks (claims 1, 6 and 8).** A high bridge four cells long, on legal cells, whose
   deck cells have data value 0, at known coordinates, under a red map tint of 0.50. Six runs.
   - *Observable:* the sprite frames each deck cell shows as its body and its shadow, matched
@@ -1153,7 +1166,7 @@ inconclusive, never evidence for the claim.
   for three kinds, two height levels, three detail levels and their controls. Record matching
   screenshots once the named objects are present and stationary; destroy the rubble-producing
   building with scripted input before that capture.
-  - *Part A (wall).* A wall overlay placed by the map's overlay list, with no owner. *Expected:* ⌊*v*/4⌋ in the
+  - *Part A (wall).* A wall overlay placed by the map's overlay list. *Expected:* ⌊*v*/4⌋ in the
     overlap, as in D35 (a): the tree's shadow darkens it a second time. With the −15 of an
     upright body the overlay shadow would be farther than the tree's and the overlap would be ⌊*v*/2⌋.
   - *Part B (veinhole marker).* A veinhole as in OV10 part A with loose marker sprites whose shadow
@@ -1185,8 +1198,8 @@ inconclusive, never evidence for the claim.
     inconclusive if the game refuses the reordered list or a block does not appear.
 
 - **OV18, ore and gems under cover and glow (claim 1).** Use the common skirmish setup with
-  one bystander computer player separated from the observed ore and gem cells. Director and
-  unrelated mods are off. No harvester enters the observed area; any change of a test cell's
+  one bystander computer player separated from the observed ore and gem cells. Unrelated mods
+  are off. No harvester enters the observed area; any change of a test cell's
   overlay type or data value voids the run. Choose flat test cells with known body sprites and
   non-transparent body pixels inside their height-0 diamonds, outside shadows and other objects.
   Named test shroud sprite: all 47 pieces are uniformly index *v* inside their cell's diamond
