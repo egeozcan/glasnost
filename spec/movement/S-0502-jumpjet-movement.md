@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -55,9 +55,10 @@ Pointers, not repeated here:
   - Occupancy, entry outcomes and standing positions: S-0209.
   - The nearby-cell search: S-0212 claim 25.
   - Deploying vehicles: S-0517.
-- **Chrono weapons and teleports.** A jumpjet as the target of a chrono weapon (including one
-  that is erased while in the air) and a jumpjet moved by a teleport belong to S-0514. This spec
-  does not say what a teleported jumpjet does on arrival (Open questions).
+- **Chrono weapons and teleports.** Temporal delivery to a jumpjet requires the ground render
+  layer (S-0514 claim 1; S-0102 claim 3), not a particular jumpjet flight state or combat
+  airborne test. Ground-layer delivery still faces S-0514 claim 3's lock refusals.
+  Superweapon teleport eligibility, landing and arrival belong to S-0513 claims 34 to 40.
 - **Cloaking.** A jumpjet can start to cloak only on the ground: S-0516 claim 4.
 - **Airborne.** A jumpjet state is not either of the glossary's *airborne* tests. Whether a
   jumpjet counts as in the air for combat is given by S-0307's height test and S-0308's
@@ -402,7 +403,8 @@ New terms:
       - its sight is refreshed at its new position
       - it releases its hover slot
       - it enters *grounded*
-      - it picks up any crate in its landing cell
+      - it attempts crate pickup in its landing cell under S-0520 claim 6; pickup rejection
+        does not reverse the completed landing
       - a deploy-to-land vehicle's landing request ends (S-0517).
     - Backing: `measurable` (scenario J9) for ordinary landing checks, entering and living
       touchdown. Magnetic-lift bypass and deploy-turn suppression are `unmeasured` here,
@@ -672,7 +674,7 @@ round-toward-zero arithmetic.
 | heading shift | 16383 | facing units | F5 |
 | angle divisor | 65534 | facing units per 2π | F5 |
 | neighbour draw range | 0 to 7 | step direction | claim 21 |
-| absent-key defaults | see Import mapping | | engine constants |
+| absent-key defaults | see Import mapping | varies by field | engine constants |
 
 ## State and ordering
 
@@ -958,7 +960,10 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
     before/after reservation, a cloaked blocker and a high-bridge cell. Record the reservation
     and entry outcome. Expected: exactly the pass/fail combinations of claim 15; any contrary
     reservation or reroute falsifies it. Check each tick that continued descent uses *c*.
-  - Place a crate in a landing cell. Expected: it is picked up at touchdown. Record the same
+  - Place an eligible crate in a landing cell. Expected: pickup occurs at touchdown under
+    S-0520 claim 6. Repeat with a successful unit power-up: its pickup rejection does not
+    reverse the completed landing. Re-ascent or restoration of the old move order solely
+    because pickup was rejected falsifies this result. Record the same
     tick's speed fraction, position, on-deck state, occupancy, sight footprint, destination,
     moving flag and flight state. Repeat from above the high bridge. Expected: touchdown at
     bridge-adjusted height 0, even before the on-deck state is set, rather than descent to the
@@ -1039,8 +1044,6 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 - **A crash start while idle.** A grounded jumpjet, or a hovering one with no move order, takes
   no update (claim 3). Whether something else wakes it when it starts to crash in the air is not
   traced.
-- **Teleported jumpjets.** What a jumpjet does after a teleport puts it at a new position
-  (S-0514) is not traced here.
 - **Stopping outside a landing.** Which orders stop a moving jumpjet through claim 17 (for
   example the stop command of S-0213) is not traced. Only the failed landing is.
 - **A failed move order.** When the nearby-cell search of claim 16 finds nothing, the ordered
