@@ -130,7 +130,7 @@ fn weapon_fields_and_not_given_values() {
                 [Zap]\nROF=40\nBurst=2\nSpeed=30\nRange=5.5\nMinimumRange=1\nCellRangefinding=yes\n\
                 IsSonic=yes\nUseSparkParticles=no\nUseFireParticles=1\nIsRailgun=yes\nIsMagBeam=no\n\
                 Temporal=yes\nSpawner=no\nDiskLaser=yes\nDecloakToFire=no\nLobber=yes\nNeverUse=no\n\
-                DrainWeapon=yes\nFireWhileMoving=no\nSuicide=yes\nSupress=yes\nFireOnce=no\nRevealOnFire=yes\n\
+                DrainWeapon=yes\nFireWhileMoving=no\nSuicide=yes\nSupress=yes\nFireOnce=no\nRevealOnFire=yes\nCamera=yes\n\
                 Warhead=Boom\nProjectile=Dart\nDamage=10\n[Boom]\nCellSpread=1\n[Dart]\nROT=0\n";
     let (s, w) = direct(&[base], "", &["Zap"], &["Dart"], IniQuirks::default());
     let z = &s.weapons["Zap"];
@@ -159,6 +159,8 @@ fn weapon_fields_and_not_given_values() {
     assert_eq!((z.supress, z.fire_once), (Some(true), Some(false)));
     // spec: S-0409 Import mapping (RevealOnFire, a boolean)
     assert_eq!(z.reveal_on_fire, Some(true));
+    // spec: S-0501 Import mapping (Camera, a weapon boolean)
+    assert_eq!(z.camera, Some(true));
     assert!(!warned(&w, "Zap Range"));
     // Another negative value replaces the held one, with a warning; −2 is unlimited and quiet.
     let (s, w) = direct(

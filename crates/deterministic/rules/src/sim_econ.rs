@@ -110,6 +110,28 @@ pub struct EconFields {
     /// Aircraft: `AirportBound` (S-0407 claim 16); absent: no.
     #[serde(default)]
     pub airport_bound: Option<bool>,
+    /// Aircraft: `Landable`, the landable flag (S-0501 Terms and claim 6);
+    /// absent: no.
+    #[serde(default)]
+    pub landable: Option<bool>,
+    /// Aircraft: `Fighter`, the fighter flag (S-0501 claims 11 and 19);
+    /// absent: no.
+    #[serde(default)]
+    pub fighter: Option<bool>,
+    /// Aircraft: `FlyBy` (S-0501 claims 4, 5 and 10); absent: no.
+    #[serde(default)]
+    pub fly_by: Option<bool>,
+    /// Aircraft: `FlyBack` (S-0501 claim 10); absent: no.
+    #[serde(default)]
+    pub fly_back: Option<bool>,
+    /// Aircraft: `FlightLevel`, the cruise height in leptons (S-0501
+    /// Terms); absent: unset, the game-wide value.
+    #[serde(default)]
+    pub flight_level: Option<i32>,
+    /// Buildings: `UnitReload`, the reload-pad flag (S-0501 Terms and
+    /// claim 26); absent: no.
+    #[serde(default)]
+    pub unit_reload: Option<bool>,
     /// Infantry: `Nominal` (S-0414 Terms, *nominal survivor*); absent: no.
     #[serde(default)]
     pub nominal: Option<bool>,
@@ -651,6 +673,26 @@ pub struct EconGeneral {
     /// onto a dock in 1/256 turns (S-0404 claim 13); absent: 0.
     #[serde(default)]
     pub pose_dir: Option<i32>,
+    /// `[General] FlightLevel`, the game-wide cruise height in leptons
+    /// (S-0501 Terms); absent: 500.
+    #[serde(default)]
+    pub flight_level: Option<i32>,
+    /// `[General] ReloadRate`, the pad reload rate *r* in game minutes, a
+    /// double (S-0501 F10); absent: 0.05.
+    #[serde(default)]
+    pub reload_rate: Option<Decimal>,
+    /// `[General] CurleyShuffle`, the re-approach flag (S-0501 claim 14);
+    /// absent: no.
+    #[serde(default)]
+    pub curley_shuffle: Option<bool>,
+    /// `[General] AttackingAircraftSightRange`, the reveal radius on firing
+    /// in cells (S-0501 claim 20); absent: 5.
+    #[serde(default)]
+    pub attacking_aircraft_sight_range: Option<i32>,
+    /// `[AudioVisual] SpyPlaneCameraFrames`, the spy-plane approach delay in
+    /// ticks (S-0501 claim 34); absent: 16.
+    #[serde(default)]
+    pub spy_plane_camera_frames: Option<i32>,
     /// `[CombatDamage] C4Warhead`, a warhead key (S-0414 claim 5); absent:
     /// none.
     #[serde(default)]
