@@ -2,7 +2,7 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -521,8 +521,8 @@ above the terrain*.
     - Confidence: high
 
 26. **Shared kamikaze re-orders (Q-0645).** The shared cycle is checked once per tick,
-    outside object turns, after planted-bomb detonations and before diving-aircraft steering
-    and the turn pass (S-0203 claim 1, rows 2, 10 and 5). Its ammunition, target and queued
+    outside object turns, before diving-aircraft steering and the turn pass (S-0203 claim 1).
+    Its ammunition, target and queued
     behaviour changes are already available to each aircraft's turn in that tick. Spawn
     controllers act within their spawners' turns (claim 24), so a missile released by such a
     turn cannot receive a shared-cycle order in that same tick, even if a cycle was due then.
@@ -1085,9 +1085,9 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   In a separate variant clear a spawner's slots during preparation by capture or destruction.
   Expected: flagged survivors join in descending slot index without replacing the known
   shared deadline. Establish that deadline with an earlier normal release; do not infer it
-  from an empty initial game. Arrange a slot-clearing release before an already due cycle
-  through a planted-bomb event where reachable: it can receive that cycle's order, whereas release
-  during the turn pass cannot. Record zero scenario draws across the shared assignment
+  from an empty initial game. Where reachable, trigger slot clearing by a timed planted bomb
+  during its carrier's turn (S-0519 claim 4): the released aircraft cannot receive that tick's
+  already-completed shared-cycle order, even when the cycle was due. Record zero scenario draws across the shared assignment
   itself; exclude later behaviour processing, firing and damage from that sample. A
   different tick, cell, ammunition reset, enrollment priority, pre-turn boundary or draw
   count falsifies the corresponding prediction. If sub-tick sampling cannot resolve order
