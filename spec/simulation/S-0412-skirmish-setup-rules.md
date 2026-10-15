@@ -2,7 +2,7 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -90,8 +90,8 @@ S-0413 claim 6). In addition:
   the house (claims 4 and 5). A player house gets an index and an applied row together when it is
   created; the neutral and special houses get an index but never an applied row (claim 5).
 - **Crate.** A random-bonus object placed on a cell, as S-0009 (Terms, *crate type*) describes it.
-  What a crate gives and how crates expire or come back belong to the crate rules, which have no
-  spec yet (a pointer only).
+  Placement, expiry and replacement belong to S-0520 claims 2–4; pickup and power-ups belong to
+  S-0520 claims 6–27.
 - **Secret lists.** S-0407's game-wide lists of secret infantry, vehicle and building types (claim
   14 there); K9 part a only sets how many entries they hold in total.
 - **Human participant.** A person taking part in the game through the lobby, observers included. In
@@ -377,8 +377,8 @@ S-0413 claim 6). In addition:
     participant (Terms), which then starts with min(max(*C*<sub>min</sub>, 0), *C*<sub>max</sub>)
     crates under the switch, so none when the crate minimum is 0. Integers, exact. Where each crate goes, the
     draws it takes, and how crates are replaced after being collected or after their time runs out,
-    belong to the crate rules (no spec yet; S-0203 row 16 gives the place of crate replacement in
-    the tick). With the crate setting off, no crate is placed automatically at game start and none
+    belong to S-0520 claims 3 and 4, with pickup replacement detailed in S-0520 claim 11.
+    S-0203 claim 1, row 16 gives the place of crate expiry and replacement in the tick. With the crate setting off, no crate is placed automatically at game start and none
     is replaced. Map triggers can still create crates regardless of the setting (S-0524 claim 4).
     While the setting is off, those crates do not expire, although they can still be collected.
     A map's own pre-placed crate overlays never appear in a skirmish either way (S-0009 claim 12).
@@ -483,8 +483,8 @@ S-0413 claim 6). In addition:
     and the items below, except that all of it is over before tick 0.
     - **Draws.** These groups of scenario-stream draws occur in this order: the starting-unit
       draws (S-0009 claims 45 and 46 for standard skirmish mode); the initial crate draws,
-      when the crate setting is on, each crate taking its own draws (claim 10; crate rules,
-      no spec yet); the secret-lab draws, one ranged draw per secret lab when the conditions
+      when the crate setting is on, each crate taking its own draws (claim 10; S-0520 claims
+      2 and 3); the secret-lab draws, one ranged draw per secret lab when the conditions
       of S-0407 claim 14 hold; the end-of-loading tag draws (S-0011 claim 34); and the
       game-start tile-animation creation draws described by S-0202 claim 14. The last group
       draws only when that pass starts an animation. Thus secret-lab choices are not the last
