@@ -1142,6 +1142,10 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
     if ended && crate::transport::arrival(w, id) {
         return true;
     }
+    if ended {
+        // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
+        crate::depot::movement_arrival(w, id);
+    }
     // spec: S-0207 claim 19 (a) (at a track target, not between track targets; it does not wait for a behaviour processing)
     if ended
         && crate::walk::arrival_stop_holds(w, id)

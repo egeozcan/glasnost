@@ -12,9 +12,11 @@
 //! depot side is its *repair* behaviour's progress count (the phase) and
 //! [`DepotState::serviced`].
 //!
-//! Interim rules tied to requests: the tether moment and the stopping point
-//! (Q-0680, kept for a depot without the pad flag) and the departure-cell
-//! tests (Q-0674).
+//! Tether (claim 17): only the repeated entry request at a depot with the
+//! pad flag tethers a vehicle ([`pad_exchange`]); an ordinary depot's
+//! vehicle stays untethered while it is repaired. Reaching the docking
+//! point's cell during movement queues *repair* and *sleep*
+//! ([`movement_arrival`]). Interim rules of Q-0790 are marked with its ID.
 
 use glasnost_map::CellXY;
 use serde::{Deserialize, Serialize};
@@ -70,6 +72,15 @@ const ARRIVAL_FACING: u16 = 16384;
 /// The settling hold distance (S-0314 claim 21), strict.
 // spec: S-0314 Constants (settling hold distance: 200 leptons, strict, to the docking point)
 const SETTLING_HOLD: i32 = 200;
+
+/// The place-0 distance of the pad exchange (S-0314 claim 17), strict.
+// spec: S-0314 claim 17 (the vehicle in contact place 0 more than 128 leptons from the foundation centre)
+const PAD_PLACE0: i32 = 128;
+
+/// The vertical difference that still stops a depot approach in the
+/// docking-point cell (S-0314 claim 18), strict.
+// spec: S-0314 claim 18 (a vertical difference strictly below 208 leptons)
+const DOCK_HEIGHT: i32 = 208;
 
 /// The early guard start distance (S-0314 claim 17), strict.
 // spec: S-0314 Constants (early guard repair-start distance: 64 leptons, strict, to the foundation centre)
@@ -156,9 +167,9 @@ fn alliance_and_place(w: &World, k: ObjectId, id: ObjectId) -> Option<u32> {
 
 /// The depot's permission (S-0314 claim 16; S-0214 table V, building-entry
 /// value n): whether depot `k` accepts vehicle `id`. `standing` applies the
-/// refusal of a vehicle already standing on the depot (Q-0680 interim: the
-/// click and the queued-entry retry ask it; the repeated entry request of
-/// an approaching vehicle does not).
+/// refusal of a vehicle already standing on the depot: the click and the
+/// queued-entry retry ask it; the repeated entry request of an entering
+/// vehicle does not (claim 17).
 pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
     let (Some(b), Some(o)) = (w.obj(k), w.obj(id)) else {
         return false;
@@ -182,7 +193,7 @@ pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
     if crate::naval::naval_match_refuses(w, k, id) {
         return false;
     }
-    // spec: S-0314 claim 16 (a vehicle already standing on this very depot receives no new acceptance; Q-0680 interim: the click and the queued retry)
+    // spec: S-0314 claim 16 (a vehicle already standing on this very depot receives no new acceptance through this query); claim 17 (the repeated entry request is not a repeat of that test: entering a foundation cell does not trigger the refusal)
     if standing && standing_on(w, k, id) {
         return false;
     }
@@ -304,26 +315,25 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
             return crate::process::standard_delay(w, id);
         }
     };
-    let dock = docking_point(w, k, id);
-    let on_dock = standing_on(w, k, id) || o.pos.cell() == dock.cell();
-    if link(w, id).is_some_and(|l| l.depot == k && !l.tethered) && on_dock {
-        // spec: S-0314 claim 17 (the completed entry exchange tethers the vehicle to the contacted building; Q-0680 interim: once it stands in a foundation cell or the docking point's cell)
-        if let Some(ob) = w.obj_mut(id)
+    if !tethered(w, id) {
+        // spec: S-0215 claim 29 and S-0314 claim 17 (only acceptance or an existing tether permits continued entry; without a tether a non-accepting reply ends contact and the actor falls back to rest)
+        if !request(w, id, k, false) {
+            release(w, id);
+            crate::process::fall_back(w, id, false);
+            return crate::process::standard_delay(w, id);
+        }
+        if pad_exchange(w, k, id)
+            && let Some(ob) = w.obj_mut(id)
             && let Some(l) = ob.depot.link.as_mut()
         {
+            // spec: S-0314 claim 17 (the pad depot's repeated request establishes tether; without the pad flag this exchange sets none, and neither reservation nor occupying a foundation or docking-point cell sets it)
             l.tethered = true;
         }
     }
-    let tethered = tethered(w, id);
-    // spec: S-0215 claim 29 (only acceptance or an existing tether permits continued entry; without a tether a non-accepting reply ends contact and the actor falls back to rest)
-    if !tethered && !request(w, id, k, false) {
-        release(w, id);
-        crate::process::fall_back(w, id, false);
-        return crate::process::standard_delay(w, id);
-    }
-    if !tethered {
-        // spec: S-0314 claim 18 (the depot directs the vehicle toward the building as its destination; the docking point is the destination position)
-        if o.dest != Some(Target::Object(k)) || o.path.steps.is_empty() && !on_dock {
+    if !tethered(w, id) {
+        let arrived = at_dock(w, k, id);
+        // spec: S-0314 claim 18 (the depot directs the vehicle toward the building as its destination; the docking point is the destination position); claim 17 (an untethered vehicle that has reached the docking-point cell is not sent off again)
+        if !arrived && (o.dest != Some(Target::Object(k)) || o.path.steps.is_empty()) {
             crate::econ::assign_destination(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
@@ -350,7 +360,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         && w.obj(id)
             .is_some_and(|x| x.beh.current == Some(Behaviour::Enter))
     {
-        // spec: S-0215 claim 29 and S-0314 claim 17 (no longer moving, tethered and still in enter: it reports arrival; the depot queues repair and sets its ready mark, the vehicle queues sleep, neither with an immediate start)
+        // spec: S-0215 claim 29 and S-0314 claim 17 (the completed-entry exchange: no longer moving, tethered and still in enter, it reports arrival; the depot queues repair and sets its ready mark, the vehicle queues sleep, neither with an immediate start)
         if let Some(b) = w.obj_mut(k) {
             b.beh.queue(Some(Behaviour::Repair));
             b.beh.ready_mark = true;
@@ -360,6 +370,90 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         }
     }
     crate::process::standard_delay(w, id)
+}
+
+/// Whether the vehicle has a moving destination (S-0314 Terms): a
+/// destination while its locomotor reports movement (Q-0790 interim: the
+/// hovering locomotor's *is moving*, S-0503 Terms, and otherwise a track,
+/// a turn in place or a stored step, [`crate::occupancy::in_progress`]).
+fn moving_destination(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.dest.is_none() {
+        return false;
+    }
+    // spec: S-0314 Terms (moving destination: a destination and the locomotor reporting movement; a destination on a stationary vehicle is not one); Q-0790 (interim: the locomotor's movement test)
+    if o.hover.is_some() {
+        crate::hover::moving(w, id)
+    } else {
+        crate::occupancy::in_progress(w, id)
+    }
+}
+
+/// The pad depot's tether exchange in the repeated entry request (S-0314
+/// claim 17).
+pub fn pad_exchange(w: &World, k: ObjectId, id: ObjectId) -> bool {
+    let Some(bt) = w
+        .obj(k)
+        .and_then(|b| w.rules().buildings.get(b.type_index as usize))
+    else {
+        return false;
+    };
+    // spec: S-0314 claim 17 and Import mapping (a depot with the pad flag, Helipad, and neither the resource-unloading, Refinery, nor the obsolete-unloading flag)
+    if bt.raw.helipad != Some(true)
+        || bt.raw.econ.refinery == Some(true)
+        || obsolete_unloading(w, k)
+    {
+        return false;
+    }
+    let c = w.reference_point(k);
+    // spec: S-0314 claim 17 (the vehicle occupies the cell containing the depot's foundation centre)
+    if w.obj(id).is_none_or(|o| o.pos.cell() != c.cell()) {
+        return false;
+    }
+    if !moving_destination(w, id) {
+        return true;
+    }
+    // spec: S-0314 claim 17 (or the vehicle in contact place 0 is more than 128 leptons from that centre: its current world position with height, the floating-point Euclidean distance truncated toward zero); Q-0790 (interim: an empty place 0 does not pass)
+    contacts(w, k)
+        .into_iter()
+        .find(|&(p, _)| p == 0)
+        .and_then(|(_, v)| w.obj(v))
+        .is_some_and(|v| crate::naval::depot_distance(v.pos, c) > PAD_PLACE0)
+}
+
+/// Whether the vehicle stands in the docking-point cell of depot `k` at a
+/// vertical difference strictly below 208 leptons (S-0314 claim 18).
+fn at_dock(w: &World, k: ObjectId, id: ObjectId) -> bool {
+    let dock = docking_point(w, k, id);
+    w.obj(id).is_some_and(|o| {
+        // spec: S-0314 claim 18 (being in the docking-point cell with a vertical difference strictly below 208 leptons stops the approach)
+        o.pos.cell() == dock.cell() && (o.pos.z - dock.z).abs() < DOCK_HEIGHT
+    })
+}
+
+/// The movement-arrival exchange (S-0314 claim 17): an entering vehicle
+/// in depot contact that reaches the supplied docking-point cell during
+/// movement makes the depot queue *repair* and itself queue *sleep*,
+/// tethered or not. Called by the locomotors at a reached track target or
+/// heading point.
+pub fn movement_arrival(w: &mut World, id: ObjectId) {
+    let Some(l) = link(w, id) else { return };
+    let k = l.depot;
+    let Some(o) = w.obj(id) else { return };
+    if o.kind != Kind::Vehicle
+        || o.beh.current != Some(Behaviour::Enter)
+        || o.dest != Some(Target::Object(k))
+        || !at_dock(w, k, id)
+    {
+        return;
+    }
+    // spec: S-0314 claim 17 (reaching the supplied docking-point cell during movement queues repair at the depot and sleep at the vehicle; no exact horizontal agreement and no tether required, and no tether created); Q-0790 (interim: no ready mark, so each start follows S-0215 claim 11)
+    if let Some(b) = w.obj_mut(k) {
+        b.beh.queue(Some(Behaviour::Repair));
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        ob.beh.queue(Some(Behaviour::Sleep));
+    }
 }
 
 /// The processing delay *D* of a depot (S-0314 F1): the rate delay of

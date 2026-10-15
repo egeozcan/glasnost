@@ -471,6 +471,8 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
             if crate::transport::arrival(w, id) {
                 return;
             }
+            // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
+            crate::depot::movement_arrival(w, id);
             // spec: S-0503 claims 7 and 15 (the initial path update can finish or fail the move before the choice)
             let old = path_update(w, id, Some(p));
             choice = choose_next(w, id, old);
