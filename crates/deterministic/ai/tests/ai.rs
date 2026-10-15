@@ -352,6 +352,36 @@ fn a_broke_house_sells_a_building() {
     assert!(!sold, "no sale while the economy runs");
 }
 
+// A unit type refused for a reason other than a missing building (here
+// its build limit) does not send the tech climb to build more factories of
+// its kind: a factory the house already has clears nothing.
+#[test]
+fn a_refused_unit_builds_no_extra_factory() {
+    let mut r = fixture::ruleset();
+    // spec: S-0407 F2 (a build limit of 0 refuses the type whatever has been built)
+    r.sim
+        .vehicles
+        .get_mut("GUNR")
+        .expect("fixture gun")
+        .econ
+        .build_limit = Some(0);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut most = 0;
+    step_until(&mut g, 15_000, |w| {
+        most = most.max(of(w, 0, "FACT").len());
+        false
+    });
+    assert_eq!(most, 1, "house 0 kept one vehicle factory");
+}
+
 /// The skirmish ruleset with slave miners for harvesters: SLAVE (a walker
 /// with a rifle, storage 2, harvest rate 3), SMV (a slave-miner vehicle
 /// with three slaves, built at the war factory, deploying into SMB) and SMB

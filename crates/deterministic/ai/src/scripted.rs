@@ -532,8 +532,22 @@ impl Script {
         let mut options: Vec<Vec<u32>> =
             blockers.into_iter().map(|p| Self::meeting(w, p)).collect();
         if options.is_empty() {
-            // Only the factory is missing.
-            options.push(Self::factories_for(w, t));
+            // Every prerequisite is met: a factory of its kind may be
+            // missing. A factory type the house already has does not help
+            // (the type is refused for another reason, such as its build
+            // limit or the factory's owner countries), so only the others
+            // are tried.
+            let missing: Vec<u32> = Self::factories_for(w, t)
+                .into_iter()
+                .filter(|&index| {
+                    let b = TypeRef {
+                        kind: Kind::Building,
+                        index,
+                    };
+                    tech::present_count(w, self.house, b) == 0
+                })
+                .collect();
+            options.push(missing);
         }
         for list in options {
             let mut list: Vec<TypeRef> = list
