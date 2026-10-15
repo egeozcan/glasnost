@@ -2,7 +2,7 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -52,8 +52,8 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
   and launcher recipients, but not for the selected garrison occupant. The infiltrated-factory
   rules of claim 11 test it too.
 - **Naval.** A type flag (Import mapping), tested by the infiltrated-factory rules of claim 11.
-- **Unscored.** A type flag (Import mapping): the destruction of an object of such a type gives no
-  experience to anyone (claim 7).
+- **Unscored.** A type flag (Import mapping): destruction of such an object gives no ordinary
+  kill experience (claim 7). Erasure's separate direct gain is exempt (claim 9).
 - **Missile spawn.** A type flag of the missiles that a launching object creates and steers (for
   example a submarine's or a launcher's missile); the launching object is the missile's
   *launcher*. S-0506 claims 1–13 own the spawning rules.
@@ -104,7 +104,8 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 
 2. **Experience changes only by the rules of this spec.** Experience changes by kills (claims 7
    to 10), is set at creation (claim 11), by the armory (claim 12) and by a deployment (claim 13),
-   and is changed by crates (the crate spec). A grappling naval parasite also gains experience
+   and is changed by crates (the crate spec). Erasure also gives the leader a separate direct
+   gain (claim 9). A grappling naval parasite also gains experience
    from a cull under S-0614 claim 16 and F5. No other change is known.
    - Backing: the named changes inherit their claims' backing. The assertion that no other
      change exists is `unmeasured`: a finite set of scenarios cannot exclude every interaction.
@@ -183,8 +184,9 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 
 ### Experience from kills
 
-7. **Kill value.** The destruction of an object of an unscored type gives no experience to anyone,
-   and the credited object's house adds nothing to its score total for it. Every other destruction
+7. **Kill value.** The destruction of an object of an unscored type gives no ordinary kill experience,
+   and the credited object's house adds nothing to its score total for it. This does not exclude
+   erasure's separate direct gain (claim 9). Every other destruction
    credited to an object (claim 9) carries a kill value *V* (Formulas F1, F2). *V* is the actual
    cost of the destroyed object's type for the destroyed object's own house, multiplied by 1, 2 or
    3 as the destroyed object was a rookie, a veteran or elite, its rank being that of its
@@ -248,7 +250,24 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    with that switch off, no further destruction is registered during the countdown or at expiry.
 
    The original also credits an object in other kinds of destruction:
-   - an erasure by an erasing weapon is credited to its firer.
+   - an erasure is credited to its leading attacker (S-0514 claim 13). Independently of that
+     ordinary credit, a trainable leader receives a direct capped gain under S-0514 F5:
+     the target's actual cost for the target's own house divided by the product of the leader's
+     actual cost for its own house and the veteran ratio. This uses F3's floating-point
+     addition, rounding and cap, but no victim-rank multiplier, allied zero or unscored-type
+     exclusion. It goes to the leader itself, not a transport or launcher; ordinary credit
+     still selects its recipient by claim 8. The direct gain precedes the ordinary gain,
+     each capped separately. S-0514 owns `quirks.erasure_double_experience` (default original):
+     with it off, only ordinary credit remains.
+   - an assault that clears garrison occupants instead records the surviving assaulter as
+     destroyed by each removed occupant (S-0508 claim 14). The occupant receives ordinary
+     kill credit and any experience under claims 7, 8 and 10, with the assaulter as victim.
+     Each such credit raises the assaulter's destruction notifications and runs its house's
+     loss bookkeeping, without damaging or removing the assaulter or playing its normal
+     death animation. The occupants are removed without their own destruction notifications.
+     Scoring exemptions still apply. S-0508 owns `quirks.assaulter_reversed_kill_credit`
+     (default original): with it off, the removed occupants are the victims and the surviving
+     assaulter receives ordinary kill credit instead.
    - passengers killed together with their transport are credited as S-0312 claim 5 says (each
      passenger's death to the attacker of the killing hit), and so are the passengers still inside
      a destroyed building (S-0312 claim 19, item h: the same credit).
@@ -258,21 +277,26 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
      So the planter gains experience for them as for any credited kill (claim 8), and when there
      is no planter nobody does.
    - Backing: `measurable` (scenario X1 for hits; scenario X3, part d, for erasure, parts e and f
-     for transport and absorbed passengers; X12 for repeated lethal hits and ordinary expiry).
-     Passengers still inside other destroyed buildings, absorbed passengers that cannot be
+     for transport and absorbed passengers; X12 for repeated lethal hits and ordinary expiry,
+     S-0514 E6 for direct erasure gain and S-0508 G10 for reversed assault notifications and
+     bookkeeping). Nonzero assault experience or score for hostile occupants is `unmeasured`:
+     G10 has no validated data-only fixture for a locally ordered assaulter with hostile
+     occupants. Passengers still inside other destroyed buildings, absorbed passengers that cannot be
      placed, healing/nonlethal follow-up hits and a separately recorded charge planter at expiry
      are `unmeasured`: X3 does not isolate those passenger cases, and S-0302 claim 16 leaves
      the follow-up/planter cases unmeasured. No dedicated parts are supplied here
    - Confidence: high (hits, the lack of retained attacker at ordinary expiry, and the credit of
-     passengers killed with a transport or inside a building); medium (repeated lethal-hit credit,
-     erasure and absorbed passengers); low (healing/nonlethal follow-ups and charge-planter expiry)
+     passengers killed with a transport or inside a building, and erasure gains and cost bases),
+     medium (repeated lethal-hit credit, reversed assault bookkeeping and absorbed passengers),
+     low (healing/nonlethal follow-ups and charge-planter expiry)
 
 10. **Experience gained.** The recipient's experience *e* becomes *e*′ of Formulas F3: the kill
     value divided by the product of the recipient type's actual cost and the game-wide veteran
     ratio, added to *e*, and limited to the game-wide veteran cap. The recipient type's actual cost
     is computed for the destroyed object's house, not the recipient's own
-    (`quirks.experience_cost_victim_house`). The cap limits only this gain: experience above the
-    cap that was set by claims 11 to 13 is not lowered by it until the object is given a kill value
+    (`quirks.experience_cost_victim_house`). The cap limits gains, not starting or assigned
+    experience. Apart from erasure's separately capped direct gain (claim 9), experience above
+    the cap that was set by claims 11 to 13 is not lowered by it until the object is given a kill value
     (a kill value of 0 included). That gain sets experience to the cap when its computed sum is
     at least the cap, as it is for nonnegative gains from experience above the cap; negative gains
     can instead leave a sum below it (F3). With the absent-key default of the cap, 1.0, kills
@@ -592,7 +616,14 @@ are explicitly 1 unless a part names another value.
   gives *B* 0.125 and leaves *A* at 0. Void if another shot or an occupant change precedes the
   destruction. S-0313 P5 part b separately tests repeated disc-laser index retention.
 - *Part d (erasure):* a trainable unit of cost 1000 with an erasing weapon erases cost-500
-  rookie targets, ratio 4 and cap 2.5 as X1. *Expected:* veteran after 8 erasures, elite after 16.
+  rookie targets, ratio 4 and cap 2.5 as X1. Use a single attacker outside a transport, with no
+  launcher and no joiners. Record its exact experience after each erasure. *Expected:* direct
+  gain 0.125 plus ordinary gain 0.125, totaling 0.25 per erasure until capped: veteran after
+  4 erasures, elite after 8 and experience 2.5 after 10. A different delta, cap or promotion
+  count falsifies this prediction. S-0514 E6 separately tests the cost-house distinction,
+  victim-rank/allied/unscored exceptions and recipient redirection. On our engine with
+  `quirks.erasure_double_experience` off, expect only 0.125 per erasure, veteran after 8,
+  elite after 16 and the cap after 20.
 - *Part e (passengers killed with their transport):* a transport vehicle type of cost 500 that
   explodes on death carries two passengers of cost 500 each (rookies), and is shot dead by *K* (the
   cost-1000 trainable killer of X1, ρ = 4, cap 2.5); repeat with fresh transports. *Expected:* each
@@ -757,8 +788,8 @@ out-of-scope AI policies are design rules, not oracle predictions. X1's wait tes
 
 ## Open questions
 
-- Which object a destruction that claim 9 does not list credits (erasure is only medium; other
-  paths, such as occupants killed on their own, were not traced).
+- Which object a destruction that claim 9 does not list credits; erasure and assault are now
+  covered, but other destruction paths were not exhaustively traced.
 - Which game-mode setting makes skirmish starting units elite, and whether it can be reached.
 - Whether the resource-proof ability has any effect in the original (one candidate rule was not
   checked).
