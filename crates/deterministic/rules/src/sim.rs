@@ -763,6 +763,141 @@ pub struct General {
     /// Game-wide economy values (M5, S-0401 to S-0416).
     #[serde(default)]
     pub economy: crate::sim_econ::EconGeneral,
+    /// `V3RocketType`, the rocket type of set A (aircraft type name) (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_type: Option<String>,
+    /// `V3RocketPauseFrames`, the pause time of set A, ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_pause_frames: Option<i32>,
+    /// `V3RocketTiltFrames`, the tilt (raise) time of set A, ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_tilt_frames: Option<i32>,
+    /// `V3RocketPitchInitial`, the initial pitch of set A, quarter turns, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_pitch_initial: Option<Decimal>,
+    /// `V3RocketPitchFinal`, the final pitch of set A, quarter turns, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_pitch_final: Option<Decimal>,
+    /// `V3RocketTurnRate`, the pitch turn rate of set A, radians per tick, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_turn_rate: Option<Decimal>,
+    /// `V3RocketRaiseRate`, the raise rate of set A, leptons per tick, truncated (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_raise_rate: Option<Decimal>,
+    /// `V3RocketAcceleration`, the acceleration of set A, leptons per tick per tick, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_acceleration: Option<Decimal>,
+    /// `V3RocketAltitude`, the cruise altitude of set A, leptons (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_altitude: Option<i32>,
+    /// `V3RocketDamage`, the damage of set A (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_damage: Option<i32>,
+    /// `V3RocketEliteDamage`, the elite damage of set A (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_elite_damage: Option<i32>,
+    /// `V3RocketBodyLength`, the body length of set A, leptons (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_body_length: Option<i32>,
+    /// `V3RocketLazyCurve`, the lazy-curve flag of set A (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_rocket_lazy_curve: Option<bool>,
+    /// `DMislType`, the rocket type of set B (aircraft type name) (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_type: Option<String>,
+    /// `DMislPauseFrames`, the pause time of set B, ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_pause_frames: Option<i32>,
+    /// `DMislTiltFrames`, the tilt (raise) time of set B, ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_tilt_frames: Option<i32>,
+    /// `DMislPitchInitial`, the initial pitch of set B, quarter turns, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_pitch_initial: Option<Decimal>,
+    /// `DMislPitchFinal`, the final pitch of set B, quarter turns, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_pitch_final: Option<Decimal>,
+    /// `DMislTurnRate`, the pitch turn rate of set B, radians per tick, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_turn_rate: Option<Decimal>,
+    /// `DMislRaiseRate`, the raise rate of set B, leptons per tick, truncated (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_raise_rate: Option<Decimal>,
+    /// `DMislAcceleration`, the acceleration of set B, leptons per tick per tick, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_acceleration: Option<Decimal>,
+    /// `DMislAltitude`, the cruise altitude of set B, leptons (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_altitude: Option<i32>,
+    /// `DMislDamage`, the damage of set B (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_damage: Option<i32>,
+    /// `DMislEliteDamage`, the elite damage of set B (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_elite_damage: Option<i32>,
+    /// `DMislBodyLength`, the body length of set B, leptons (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_body_length: Option<i32>,
+    /// `DMislLazyCurve`, the lazy-curve flag of set B (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_lazy_curve: Option<bool>,
+    /// `CMislType`, the rocket type of set C (aircraft type name) (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_type: Option<String>,
+    /// `CMislPauseFrames`, the pause time of set C, ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_pause_frames: Option<i32>,
+    /// `CMislTiltFrames`, the tilt (raise) time of set C, ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_tilt_frames: Option<i32>,
+    /// `CMislPitchInitial`, the initial pitch of set C, quarter turns, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_pitch_initial: Option<Decimal>,
+    /// `CMislPitchFinal`, the final pitch of set C, quarter turns, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_pitch_final: Option<Decimal>,
+    /// `CMislTurnRate`, the pitch turn rate of set C, radians per tick, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_turn_rate: Option<Decimal>,
+    /// `CMislRaiseRate`, the raise rate of set C, leptons per tick, truncated (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_raise_rate: Option<Decimal>,
+    /// `CMislAcceleration`, the acceleration of set C, leptons per tick per tick, a single (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_acceleration: Option<Decimal>,
+    /// `CMislAltitude`, the cruise altitude of set C, leptons (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_altitude: Option<i32>,
+    /// `CMislDamage`, the damage of set C (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_damage: Option<i32>,
+    /// `CMislEliteDamage`, the elite damage of set C (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_elite_damage: Option<i32>,
+    /// `CMislBodyLength`, the body length of set C, leptons (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_body_length: Option<i32>,
+    /// `CMislLazyCurve`, the lazy-curve flag of set C (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_lazy_curve: Option<bool>,
+    /// `V3Warhead` (combat-damage section), the warhead of rocket set A (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_warhead: Option<String>,
+    /// `V3EliteWarhead` (combat-damage section), the elite warhead of rocket set A (S-0506 Import mapping).
+    #[serde(default)]
+    pub v3_elite_warhead: Option<String>,
+    /// `DMislWarhead` (combat-damage section), the warhead of rocket set B (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_warhead: Option<String>,
+    /// `DMislEliteWarhead` (combat-damage section), the elite warhead of rocket set B (S-0506 Import mapping).
+    #[serde(default)]
+    pub d_misl_elite_warhead: Option<String>,
+    /// `CMislWarhead` (combat-damage section), the warhead of rocket set C (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_warhead: Option<String>,
+    /// `CMislEliteWarhead` (combat-damage section), the elite warhead of rocket set C (S-0506 Import mapping).
+    #[serde(default)]
+    pub c_misl_elite_warhead: Option<String>,
 }
 
 /// One land type's row (S-0211 claim 2): multipliers per locomotion class and
@@ -1260,6 +1395,10 @@ pub struct UnitType {
     /// `MissileSpawn` (S-0311 claim 8).
     #[serde(default)]
     pub missile_spawn: Option<bool>,
+    /// Art `Trailer` of an aircraft type's image section, the trailer
+    /// animation of a rocket missile (S-0506 claim 21, S-0004 claim 14).
+    #[serde(default)]
+    pub trailer: Option<String>,
 }
 
 /// Combat fields that infantry, vehicle, aircraft and building types share
@@ -1435,6 +1574,18 @@ pub struct CombatFields {
     /// `Drainable` (S-0308 row 8).
     #[serde(default)]
     pub drainable: Option<bool>,
+    /// `Spawns`, the spawned aircraft type (S-0506 Import mapping).
+    #[serde(default)]
+    pub spawns: Option<String>,
+    /// `SpawnsNumber`, the spawn count (S-0506 Import mapping).
+    #[serde(default)]
+    pub spawns_number: Option<i32>,
+    /// `SpawnRegenRate`, the regeneration time in ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub spawn_regen_rate: Option<i32>,
+    /// `SpawnReloadRate`, the reload time in ticks (S-0506 Import mapping).
+    #[serde(default)]
+    pub spawn_reload_rate: Option<i32>,
     /// Art `PrimaryFireFLH` (S-0313).
     #[serde(default)]
     pub primary_fire_flh: Option<Flh>,

@@ -258,6 +258,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::econ::slaves::master_killed(w, id, hit);
     // spec: S-0402 claim 14 (a killed slave is lost to its master: the regeneration delay starts)
     crate::econ::slaves::lost(w, id);
+    // spec: S-0506 claims 9 and 13 (a killed slot object is announced as lost; a killed spawner clears its slots)
+    crate::spawn::killed(w, id);
     // spec: S-0312 table, step 1 (debris)
     debris(w, id);
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon)
@@ -307,7 +309,11 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 let name = tc.explosion[k].clone();
                 effects::anim(w, &name, o.pos);
             }
-            // spec: S-0312 claim 16 (an aircraft on the ground leaves play at once; no aircraft flies in our engine)
+            // spec: S-0506 claim 20 (a rocket missile destroyed above the terrain keeps the rocket-flight mode and detonates later; quirks.destroyed_rocket_still_detonates)
+            if crate::rocket::keeps_flying_when_destroyed(w, id) {
+                return;
+            }
+            // spec: S-0312 claim 16 (an aircraft on the ground leaves play at once; no aircraft flies in our engine) and S-0506 claim 20 (a rocket missile on the ground: removed at once, no detonation)
             leave_play(w, id);
         }
         Kind::Building => building_death(w, id, hit),

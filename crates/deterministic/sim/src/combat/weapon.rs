@@ -11,10 +11,22 @@ use crate::world::{Layer, ObjectId, Target, World};
 
 /// Whether an object is in the air in the sense of S-0308 (Terms,
 /// *airborne*): an aircraft or jumpjet in flight, an object falling or
-/// carried. The aircraft and movement specs own the test; in our engine no
-/// object flies yet (aircraft stand landed, jumpjets are not moved), so no
-/// object is in the air.
+/// carried. The aircraft and movement specs own the test. An object of a
+/// rocket type answers by its height (Q-0611); for every other object the
+/// answer is [`aircraft_in_air`].
 pub fn in_air(w: &World, id: ObjectId) -> bool {
+    if crate::spawn::rocket_type(w, id).is_some() {
+        // Q-0611 (interim): a rocket-type object uses the 208-lepton height test of S-0307 Terms in every phase (S-0501 Terms, S-0307 claim 26, S-0308 Airborne)
+        return airborne_by_height(w, id);
+    }
+    aircraft_in_air(w, id)
+}
+
+/// The in-the-air answer of an object that is not of a rocket type. Seam
+/// for the aircraft and jumpjet lanes (S-0501): in our engine no ordinary
+/// aircraft flies yet (aircraft stand landed, jumpjets are not moved), so
+/// none is in the air.
+pub fn aircraft_in_air(w: &World, id: ObjectId) -> bool {
     let _ = (w, id);
     false
 }

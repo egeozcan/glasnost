@@ -126,11 +126,22 @@ pub fn destruction_credited(
         // spec: S-0311 claim 7 (the credited object's house adds V to its score)
         h.combat.score = h.combat.score.wrapping_add(value);
     }
-    // spec: S-0311 claim 8 (case 2: a trainable credited object; open-topped passengers, missile spawns and garrisons are seams)
-    let trainable = type_combat(w, obj).is_some_and(|tc| tc.trainable);
-    if !trainable {
+    // spec: S-0311 claim 8 (case 2: a trainable credited object gains it itself; open-topped passengers and garrisons are seams)
+    let trainable = |id: ObjectId| type_combat(w, id).is_some_and(|tc| tc.trainable);
+    let obj = if trainable(obj) {
+        obj
+    } else if crate::spawn::missile_type(w, obj) {
+        // spec: S-0311 claim 8 and S-0506 claim 19 (an untrainable missile-spawn object: its launcher, when it exists and is trainable; otherwise nobody)
+        match crate::spawn::launcher_of(w, obj) {
+            Some(l) if trainable(l) => l,
+            _ => return,
+        }
+    } else {
         return;
-    }
+    };
+    let Some(oo) = w.obj(obj).cloned() else {
+        return;
+    };
     if value == 0 && !rules.quirks.zero_kill_value_caps {
         // spec: S-0311 Edge cases (zero_kill_value_caps off: a kill value of 0 never changes experience)
         return;

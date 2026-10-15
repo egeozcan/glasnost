@@ -358,6 +358,10 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     if !own(w, house, id) {
         return false;
     }
+    // spec: S-0214 Terms (movable) and S-0506 claim 10 (a spawner whose launching count lies strictly between 0 and N is not movable)
+    if crate::spawn::partly_launched(w, id) {
+        return false;
+    }
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
         Some(Kind::Infantry | Kind::Vehicle) => true,

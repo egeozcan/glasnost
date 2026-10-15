@@ -108,6 +108,9 @@ pub enum Sound {
     /// A queue request refused as it is applied, by the queue limit or the
     /// build limit (S-0404 claim 3, S-0701 claim 24).
     QueueRefused,
+    /// A rocket missile's take-off sound at the end of its tilt or raise
+    /// (S-0506 claim 15): `of` is the missile's type, `pos` its position.
+    TakeOff,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

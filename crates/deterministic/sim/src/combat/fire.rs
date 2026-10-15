@@ -150,9 +150,17 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0302 claim 2 (the shot damage is fixed at the moment of firing)
     let damage = crate::combat::damage::shot_damage(w, firer, weapon);
     let fp = crate::combat::position::fire_point(w, firer, slot, k);
-    let launched = crate::combat::projectile::launch(w, firer, weapon, shot_target, fp, damage);
+    if wr.spawner {
+        // spec: S-0301 Terms (spawner weapon) and S-0506 claim 3 (a spawner shot launches no projectile; it hands its target to the spawn controller)
+        crate::spawn::shot(w, firer, shot_target);
+    }
+    let launched = if wr.spawner {
+        None
+    } else {
+        crate::combat::projectile::launch(w, firer, weapon, shot_target, fp, damage)
+    };
     // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were)
-    if launched.is_none() && wr.projectile.is_some() {
+    if launched.is_none() && wr.projectile.is_some() && !wr.spawner {
         return false;
     }
     // spec: S-0409 claim 16 (a shot from a reveal-on-fire weapon reveals the firer to the target's owner)

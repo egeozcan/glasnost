@@ -939,6 +939,11 @@ pub fn search(
         }
         let (slot, _) = would_use(w, a, Some(t));
         let ans = check(w, a, Some(t), slot, true);
+        if ans == Answer::Impossible && ao.spawn.is_some() {
+            // spec: S-0309 claim 4 (a spawner that gets impossible keeps the target and resets its spawn controller, S-0506 claim 11)
+            crate::spawn::impossible(w, a);
+            return None;
+        }
         if !matches!(
             ans,
             Answer::Illegal | Answer::OutOfRange | Answer::Impossible

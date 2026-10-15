@@ -786,6 +786,8 @@ pub struct SimRules {
     pub econ: crate::econ::EconRules,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::Rules,
+    /// Spawners and rocket parameter sets (S-0506).
+    pub missiles: crate::spawn::MissileRules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -1175,7 +1177,9 @@ impl SimRules {
             mode,
         );
         let econ = crate::econ::EconRules::new(r, mode);
+        let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
         Self {
+            missiles,
             econ,
             triggers: crate::triggers::Rules::new(r),
             combat,

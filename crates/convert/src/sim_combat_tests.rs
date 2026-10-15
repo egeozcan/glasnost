@@ -1189,3 +1189,68 @@ fn debris_maximum_departures_warn() {
     ));
     assert!(!warned(&w, "Zero DebrisMaximums keeps a maximum of -1"));
 }
+
+/// spec: S-0506 Import mapping (the spawn keys of an object type, the three rocket parameter sets of `[General]`, their warheads in the combat-damage section), S-0004 claim 14 (an aircraft's art trailer)
+#[test]
+fn missile_fields() {
+    let base = "[VehicleTypes]\n1=Lobber\n[AircraftTypes]\n1=Dart\n2=Glider\n[Animations]\n1=Puff\n\
+                [Lobber]\nSpawns=dart\nSpawnsNumber=2\nSpawnRegenRate=150\nSpawnReloadRate=40\nMissileSpawn=yes\n\
+                [Dart]\nSpawned=yes\nMissileSpawn=yes\nImage=DARTART\n[Glider]\nSpawned=yes\n\
+                [General]\nV3RocketType=dart\nV3RocketPauseFrames=3\nV3RocketTiltFrames=12\n\
+                V3RocketPitchInitial=0.25\nV3RocketPitchFinal=0.75\nV3RocketTurnRate=0.125\n\
+                V3RocketRaiseRate=2.5\nV3RocketAcceleration=0.5\nV3RocketAltitude=300\n\
+                V3RocketDamage=77\nV3RocketEliteDamage=99\nV3RocketBodyLength=64\nV3RocketLazyCurve=no\n\
+                DMislType=Glider\nDMislLazyCurve=yes\nCMislType=none\nCMislDamage=5\n\
+                [CombatDamage]\nV3Warhead=Boom\nV3EliteWarhead=BigBoom\nDMislWarhead=Pow\nCMislEliteWarhead=Zap\n";
+    let art = "[DARTART]\nTrailer=Puff\n[Glider]\nTrailer=none\n";
+    let (s, _) = sim(base, "", art);
+    let l = &s.vehicles["Lobber"];
+    assert_eq!(l.combat.spawns.as_deref(), Some("Dart"));
+    assert_eq!(
+        (
+            l.combat.spawns_number,
+            l.combat.spawn_regen_rate,
+            l.combat.spawn_reload_rate
+        ),
+        (Some(2), Some(150), Some(40))
+    );
+    assert_eq!(l.missile_spawn, Some(true));
+    let d = &s.aircraft["Dart"];
+    assert_eq!((d.spawned, d.missile_spawn), (Some(true), Some(true)));
+    assert_eq!(d.trailer.as_deref(), Some("Puff"));
+    assert_eq!(s.aircraft["Glider"].trailer, None);
+    let g = &s.general;
+    assert_eq!(g.v3_rocket_type.as_deref(), Some("Dart"));
+    assert_eq!(
+        (g.v3_rocket_pause_frames, g.v3_rocket_tilt_frames),
+        (Some(3), Some(12))
+    );
+    assert_eq!(dec(&g.v3_rocket_pitch_initial), Some("25e-2"));
+    assert_eq!(dec(&g.v3_rocket_pitch_final), Some("75e-2"));
+    assert_eq!(dec(&g.v3_rocket_turn_rate), Some("125e-3"));
+    assert_eq!(dec(&g.v3_rocket_raise_rate), Some("25e-1"));
+    assert_eq!(dec(&g.v3_rocket_acceleration), Some("5e-1"));
+    assert_eq!(
+        (
+            g.v3_rocket_altitude,
+            g.v3_rocket_damage,
+            g.v3_rocket_elite_damage,
+            g.v3_rocket_body_length,
+            g.v3_rocket_lazy_curve
+        ),
+        (Some(300), Some(77), Some(99), Some(64), Some(false))
+    );
+    assert_eq!(g.d_misl_type.as_deref(), Some("Glider"));
+    assert_eq!(g.d_misl_lazy_curve, Some(true));
+    // `none` names no type; an absent key gives no value (the engine applies the defaults).
+    assert_eq!(g.c_misl_type, None);
+    assert_eq!(g.c_misl_damage, Some(5));
+    assert_eq!(g.d_misl_pause_frames, None);
+    assert_eq!(
+        (g.v3_warhead.as_deref(), g.v3_elite_warhead.as_deref()),
+        (Some("Boom"), Some("BigBoom"))
+    );
+    assert_eq!(g.d_misl_warhead.as_deref(), Some("Pow"));
+    assert_eq!(g.d_misl_elite_warhead, None);
+    assert_eq!(g.c_misl_elite_warhead.as_deref(), Some("Zap"));
+}

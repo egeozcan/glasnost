@@ -39,6 +39,8 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     // spec: S-0310 claim 9 (the firing check, range test included, for the weapon it would use)
     let slot = choose_slot(w, id, Some(t));
     let answer = check(w, id, Some(t), slot, true);
+    // spec: S-0506 claim 11 (an impossible answer to an attempt with the spawner weapon resets the controller)
+    crate::spawn::firing_answer(w, id, slot, answer);
     match answer {
         Answer::CanFire => {
             if u.vehicle.deploy_to_fire {
@@ -326,6 +328,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
                 answer = check(w, id, Some(t), slot, true);
             }
         }
+        // spec: S-0506 claim 11 (an impossible answer to an attempt with the spawner weapon resets the controller)
+        crate::spawn::firing_answer(w, id, slot, answer);
         let rotate = |w: &mut World| {
             if b.turret {
                 let d = dir(w, building_aim_point(w, id), t);

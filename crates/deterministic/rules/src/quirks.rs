@@ -1277,6 +1277,10 @@ pub struct Quirks {
     // spec: S-0503 Edge cases
     #[serde(default = "on")]
     pub hover_elevated_heading_point: bool,
+    /// A zero step length while heading exactly at the heading point sets the throttle and fraction to 1 at once; off: no reset. Not implemented yet (wave 2).
+    // spec: S-0503 Edge cases
+    #[serde(default = "on")]
+    pub hover_stalled_start_reset: bool,
     /// The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell. Not implemented yet (wave 2).
     // spec: S-0511 claim 8, Edge cases
     #[serde(default = "on")]
@@ -1667,6 +1671,7 @@ impl Default for Quirks {
             unload_failed_exit_gunner_handover: true,
             hover_brake_undershoot: true,
             hover_elevated_heading_point: true,
+            hover_stalled_start_reset: true,
             bridge_event_band_short: true,
             bridge_family_by_block: true,
             bridge_span_cap: true,
@@ -2450,6 +2455,7 @@ impl Quirks {
                 "hover_elevated_heading_point",
                 self.hover_elevated_heading_point,
             ),
+            ("hover_stalled_start_reset", self.hover_stalled_start_reset),
             ("bridge_event_band_short", self.bridge_event_band_short),
             ("bridge_family_by_block", self.bridge_family_by_block),
             ("bridge_span_cap", self.bridge_span_cap),

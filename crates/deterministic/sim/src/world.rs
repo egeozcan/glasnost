@@ -323,6 +323,12 @@ pub struct World {
     /// The raised effective spawn delay of each scalable projectile type
     /// a vehicle has fired (S-0306 claim 16), by projectile type.
     pub scaled_spawn_delay: BTreeMap<crate::combat::data::ProjectileId, i32>,
+    /// The tracked flying objects (S-0303 Terms, F7).
+    #[serde(default)]
+    pub flying: crate::combat::flying::Flying,
+    /// Spawned objects' launchers and released missiles (S-0506).
+    #[serde(default)]
+    pub spawned: crate::spawn::SpawnedObjects,
     /// Effects created since the drawing last took them (explosions,
     /// launches, deaths): presentation only, neither saved nor hashed.
     #[serde(skip)]
