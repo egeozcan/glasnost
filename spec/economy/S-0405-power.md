@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -277,21 +277,28 @@ house's own update in a tick, which comes after the turn pass and before orders 
    whose sale has been ordered is in operation until the selling behaviour becomes its current
    behaviour (at the sale's first processing, S-0408 claim 6) and is not in operation from then on,
    including while the build-down waits for docked units. The state of the build-up or build-down
-   sprite does not enter the test. A building being erased stays in operation by this test (its
-   output and drain are 0, claims 1 and 2). The power condition reads the house's totals as they
-   stand (claim 7). Two consequences: a
+   sprite does not enter the test. An erasing lock switches the building off (S-0514 claim 4),
+   so it fails the switch condition unless it has two or more chargers; with those chargers it
+   must still pass every other condition. Being erased is not a separate condition of this
+   test; its output and drain are nevertheless 0 (claims 1 and 2). When the last attacker lets
+   go before completion, the building is switched on regardless of its pre-lock state
+   (S-0514 claim 10). S-0514 owns `quirks.erasure_release_switches_on`, default original.
+   With it off, release restores the pre-lock switch state. The power condition reads the
+   house's totals as they stand (claim 7). Two consequences: a
    building of a type with the needs-power flag but no base drain never stops for low power; and a
    building with two or more chargers passes the switch and power conditions even under low
    power or when switched off, but must still pass every other condition. The test is the same for every house; no rule of it depends on whether the owner is human-
    or computer-controlled.
    - Backing: `measurable` (scenario W6, parts a to f and j; S-0515 scenarios TB3 and TB8 for
-     manned state; scenario W4, part a for the blackout row); `unmeasured` for a building being erased staying in operation (its output and drain are 0
-     and the erasure has effects of its own on the building, so no observable separates the two
-     states); `unmeasured` for the health-0 row (no scenario here keeps a destroyed building
+     manned state; scenario W4, part a for the blackout row; S-0514 scenario E7 for erasure's
+     switch changes); `unmeasured` for operation with two or more chargers while being erased
+     (erasure has disabling effects of its own, so no scenario here separates the operation
+     result from those effects); `unmeasured` for the health-0 row (no scenario here keeps a destroyed building
      available to test its operation separately), and for the distinction between queued and
      current construction or selling behaviour (W6 tests current behaviour only).
    - Confidence: high (switch, low power, construction and selling behaviours), medium (chargers,
-     pulse, blackout, manned state), low (being erased)
+     pulse, blackout, manned state, the charger exception during erasure); high (erasure's
+     switch changes)
 
 9. **What stops when a building is not in operation.** A building that is not in operation:
    - cannot fire: its firing check (S-0301, claim 9) answers *impossible* or *illegal*, as T1
