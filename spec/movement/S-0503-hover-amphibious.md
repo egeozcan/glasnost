@@ -2,7 +2,7 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -48,8 +48,7 @@ Pointers, not repeated here:
 **Cross-spec corrections required at hand-off.** S-0206 claim 13's body aim must follow claim 5
 below, not necessarily the travel direction. S-0207 claim 19 d's stop permits claim 7's final
 already-computed step. S-0405 claim 13's description of inactivity must allow the settling, spin,
-residual travel and fall of claims 8 and 10–11. S-0312 claim 11's assertion that stock play has no
-source of the bomb mark must be removed: claim 11 below supplies one. These corrections must be
+residual travel and fall of claims 8 and 10–11. These corrections must be
 checked together at sign-off. Further coordinated additions: S-0209 claim 1 and its
 between-steps definition must use claim 13 below for hovering; S-0212 claims 8, 21 and 23
 must distinguish claim 14's ρ test, claim 12's immediate-search timer restart and claim 7's
