@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -69,26 +69,31 @@ vehicle's movement is heading to (S-0207). In addition:
 ### Deploying
 
 1. **Where deploying happens.** A deploy order gives a deploying vehicle the *unload* behaviour (S-0213,
-   claim 10). Each processing of *unload* by a deploying vehicle makes at most one deploy attempt (claims 2 and
-   5), and the processing ends with the standard delay of S-0215 (claim 6: the *unload* rate delay plus one draw
+   claim 10). Each processing of *unload* that reaches the building-deploy rule below makes at most one
+   deploy attempt (claims 2 and 5), and that processing ends with the standard delay of S-0215 (claim 6: the *unload* rate delay plus one draw
    over 0 … 2 from the scenario random stream), whatever the attempt's outcome. The first attempt is
    made at the first processing after the order applies at which the vehicle is still (claim 2).
    A deploying vehicle in *hunt* also seeks a
    spot and deploys (S-0215, claim 27); the attempt itself then follows claims 3 to 6.
    A vehicle's *unload* follows this spec only when no higher-priority unload behaviour applies.
    A vehicle that is not bunkered unloads passengers when its type has passenger capacity above
-   zero. Otherwise, a type with the deploy-fire flag and without the simple-deployer flag fires
-   its deploy weapon (S-0215). Otherwise, a type with the harvester or weeder flag follows the
+   zero. Otherwise, a type with the deploy-fire flag and without the simple-deployer flag attempts
+   to fire its slot-0 weapon at its own cell, under S-0517 claim 2. That processing uses a delay
+   of 14 + *u* ticks instead of the standard delay, where *u* is one draw over the integers 0 … 2
+   from the scenario random stream, even when firing is refused. The addition is exact integer
+   arithmetic, with no rounding. Otherwise, a type with the harvester or weeder flag follows the
    harvesting rules (S-0402). Only when none of these conditions applies does a type that deploys
    into a building make a deploy attempt. A deploying type meeting any of these higher-priority
    conditions therefore does not deploy through *unload*. The importer warns about such types.
-   - Backing: `measurable` (scenarios D1 and D9); the bunkered condition is `unmeasured`
+   - Backing: `measurable` (scenarios D1 and D9; S-0517 scenario P2 for the deploy-fire weapon,
+     own-cell target and delay, including P2 R for draw attribution); the bunkered condition is `unmeasured`
      (scenario D9, Not covered). Precedence between two higher-priority rules applying together
      is `unmeasured`: D9 isolates each rule, not their overlapping combinations.
      The delay draw at the processing that completes a deploy is
      `unmeasured`: the vehicle is removed in that tick, so its processing timer cannot be read, and
      the bystander's draws keep the draw log from attributing the draw to it (Measurement scenarios)
-   - Confidence: high (attempts at each processing); medium (the first-processing timing); low (the
+   - Confidence: high (attempts at each processing; deploy-fire slot and delay); medium (the
+     first-processing timing; deploy-fire draw after refusal); low (the
      precedence of the other *unload* rules)
 
 2. **A deploy attempt.** Before a turn has begun, a moving deploying vehicle makes no attempt: it
@@ -878,7 +883,9 @@ are repetitions that guard against void runs.
   harvester flag; (d) the weeder flag; (e) the deploy-fire flag with the simple-deployer flag.
 - Runs: 3 per type, observed area as above.
 - Observable: whether the building appears after a deploy order.
-- Expected: (a) to (d) do not deploy; (e) deploys.
+- Expected: (a) to (d) do not deploy; (e) deploys. S-0517 claim 2 and its scenario P2 own
+  (b)'s slot-0 firing at its own cell and 14 … 16 tick processing delays, including refusal
+  and attributed-draw controls; D9 tests only the exclusion of building deployment.
 - Falsified if: any of (a) to (d) deploys, or (e) does not.
 - Not covered: the bunkered exception to passenger unloading. No scripted input is known that gives
   a deploy order to a bunkered vehicle, so that part of claim 1 is `unmeasured`. D9 also does not
