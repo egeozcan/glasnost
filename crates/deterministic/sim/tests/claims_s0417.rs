@@ -852,3 +852,116 @@ fn hover_exit_reports_clear_and_factory_closes() {
     let h2 = new_unit(&mut w, Kind::Vehicle, "HOVR");
     assert_eq!(release::release(&mut w, k, h2), Outcome::Released);
 }
+
+// spec: S-0417 claim 5 and F4 (the hover's destination (x0 + 4, y0 + 1) can lie on K's own foundation); S-0209 claim 5 (row VP3: a building the vehicle is in contact with gives none on a cell that is not one of its blocking cells, S-0209 Terms); S-0503 claim 15 (normal completion in the contacted factory's cell is a cell-arrival update); S-0417 claims 7 and 2 (the report there ends the tether, K closes)
+#[test]
+fn hover_exit_across_own_foundation_reports_clear() {
+    // An invented 5 × 3 factory whose first two columns block (an
+    // impassable-rows value of 2): the fixed hover destination is a foundation
+    // cell the contacted hover may enter, and so are the cells between.
+    let mut r = ruleset_with([5, 3]);
+    r.sim
+        .buildings
+        .get_mut("VF")
+        .unwrap()
+        .number_impassable_rows = Some(2);
+    let hover = glasnost_rules::sim::UnitType {
+        locomotion_class: Some(glasnost_rules::sim::LocomotionClass::Hover),
+        locomotor: Some(glasnost_rules::sim::Locomotor::Hover),
+        ..wheel(700)
+    };
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("HOVR".into());
+    r.sim.vehicles.insert("HOVR".into(), hover);
+    let mut w = game(&r);
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let c = top_left(&w, k);
+    let dest = CellXY::new(c.x + 4, c.y + 1);
+    let h = new_unit(&mut w, Kind::Vehicle, "HOVR");
+    assert_eq!(release::release(&mut w, k, h), Outcome::Released);
+    // Row VP3: in contact, a non-blocking cell of K gives no blocker; a
+    // blocking cell still does.
+    let level = glasnost_sim::occupancy::reference_level(&w, h);
+    assert_eq!(
+        glasnost_sim::occupancy::vehicle_outcome(&w, h, dest, level),
+        glasnost_sim::occupancy::Outcome::Clear
+    );
+    assert_eq!(
+        glasnost_sim::occupancy::vehicle_outcome(&w, h, CellXY::new(c.x + 1, c.y + 1), level),
+        glasnost_sim::occupancy::Outcome::Blocked
+    );
+    let mut sent = false;
+    let mut report_at = None;
+    for _ in 0..1500 {
+        step(&mut w);
+        let u = w.obj(h).unwrap();
+        sent |= u.dest == Some(Target::Cell(dest));
+        if report_at.is_none() && u.contact.is_none() {
+            report_at = Some(u.pos.cell());
+        }
+        let o = w.obj(k).unwrap();
+        if report_at.is_some()
+            && o.beh.current == Some(Behaviour::Guard)
+            && o.beh.gate.door == Door::Closed
+        {
+            break;
+        }
+    }
+    assert!(sent, "sent to (x0 + 4, y0 + 1)");
+    assert_eq!(report_at, Some(dest), "the report at completion in K's cell");
+    assert!(!release::tethered(&w, h));
+    let o = w.obj(k).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "the factory closes");
+    assert_eq!(o.beh.gate.door, Door::Closed);
+    // The next vehicle is not refused as busy, and it leaves in its turn:
+    // the first one does not hold the apron (claim 8's reply moves it on).
+    let h2 = new_unit(&mut w, Kind::Vehicle, "HOVR");
+    assert_eq!(release::release(&mut w, k, h2), Outcome::Released);
+    let mut second = false;
+    for _ in 0..1500 {
+        step(&mut w);
+        second |= w.obj(h2).unwrap().contact.is_none();
+        let o = w.obj(k).unwrap();
+        if second && o.beh.current == Some(Behaviour::Guard) && o.beh.gate.door == Door::Closed {
+            break;
+        }
+    }
+    assert!(second, "the second hover reports clear");
+    let o = w.obj(k).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "the factory closes again");
+    assert_eq!(o.beh.gate.door, Door::Closed);
+}
+
+// spec: S-0207 claim 22 (an own-locomotor teleport of any object kind has its arrival update in the jump tick); S-0417 claim 10 and S-0208 claim 23 (a tethered infantry unit reports clear on a cell-arrival update; no run-away reply); Q-0697 (interim: the jump's update is a tethered teleporting infantry unit's report); S-0417 claim 14 (the place is free again)
+#[test]
+fn claim_10_teleporting_infantry_reports_at_its_jump() {
+    let mut r = ruleset();
+    let g = r.sim.infantry.get_mut("GRUNT").unwrap();
+    g.teleporter = Some(true);
+    g.locomotor = Some(glasnost_rules::sim::Locomotor::Teleport);
+    let mut w = game(&r);
+    let (k, rally) = barracks_with_rally(&mut w);
+    let Target::Cell(rc) = rally else {
+        unreachable!()
+    };
+    let grunt = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, grunt), Outcome::Released);
+    assert!(release::tethered(&w, grunt));
+    let mut jumped = false;
+    for _ in 0..200 {
+        step(&mut w);
+        let o = w.obj(grunt).unwrap();
+        if o.pos.cell() == rc {
+            jumped = true;
+            assert_eq!(o.contact, None, "the report in the jump tick");
+            assert!(!release::tethered(&w, grunt));
+            break;
+        }
+        assert_eq!(o.contact, Some(k), "contact until the jump");
+    }
+    assert!(jumped, "it jumps to the rally point");
+    let next = new_unit(&mut w, Kind::Infantry, "GRUNT");
+    assert_eq!(release::release(&mut w, k, next), Outcome::Released);
+}
