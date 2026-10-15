@@ -1200,6 +1200,7 @@ impl Builder<'_> {
         }
         self.general_combat(&mut rec);
         self.general_econ(&mut rec);
+        self.general_sw(&mut rec);
         rec.node()
     }
 

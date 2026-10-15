@@ -301,6 +301,7 @@ const PROJECTILE_COMBAT: &[Row] = &[
 /// Combat fields of warheads (`Verses` has its own reading).
 const WARHEAD_COMBAT: &[Row] = &[
     ("makes_disguise", "MakesDisguise", Bool, "S-0516"),
+    ("nuke_maker", "NukeMaker", Bool, "S-0513"),
     ("cell_spread", "CellSpread", Dec, "S-0302, S-0303"),
     ("percent_at_max", "PercentAtMax", Dec, "S-0302, S-0303"),
     ("prone_damage", "ProneDamage", Dec, "S-0302"),

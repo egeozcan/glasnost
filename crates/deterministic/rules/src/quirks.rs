@@ -1691,6 +1691,82 @@ pub struct Quirks {
     // spec: S-0612 claim 14 and Edge cases; S-0601 claim 13
     #[serde(default = "on")]
     pub dominator_marks_own_objects: bool,
+    /// Removing an upgrade makes the immediate superweapon availability check only when the upgrade names a first superweapon; off: an upgrade naming either superweapon field makes it.
+    // spec: S-0512 claim 2 and Edge cases
+    #[serde(default = "on")]
+    pub superweapon_upgrade_second_removal_waits: bool,
+    /// A superweapon granted by buildings while its house has low power starts suspended, whether or not the type is power-dependent, and no other condition suspends it at the grant; off: the grant suspends exactly when the claim 6 test would.
+    // spec: S-0512 claim 4 and Edge cases
+    #[serde(default = "on")]
+    pub superweapon_grant_suspends_by_house_power: bool,
+    /// A second-stage launch and a set-charge action start the clock running even on a suspended record; off: a suspended record's clock stays stopped at the new remaining time.
+    // spec: S-0512 claims 10 and 14 and Edge cases
+    #[serde(default = "on")]
+    pub superweapon_restart_ignores_suspension: bool,
+    /// A fire order needs a granted, ready record whose clock is running; off: it needs a granted, ready record that is not suspended.
+    // spec: S-0512 claim 8 and Edge cases
+    #[serde(default = "on")]
+    pub superweapon_order_tests_clock: bool,
+    /// Setting a superweapon's charge keeps an existing ready state; off: it clears readiness and the new clock completes normally.
+    // spec: S-0512 claim 14 and Edge cases
+    #[serde(default = "on")]
+    pub set_charge_keeps_ready: bool,
+    /// Drain-mode orders change the drain state without testing grant, readiness, the clock or suspension, restart the clock even when suspended, and do not consume a one-time record; off: they need a granted record that is not suspended, and a one-time record is consumed on launch.
+    // spec: S-0512 claim 19 and Edge cases
+    #[serde(default = "on")]
+    pub drain_orders_bypass_normal_checks: bool,
+    /// A second stage's link names a kind whose number is a position in the superweapon type list; off: the first stage is the first type in the list of that kind.
+    // spec: S-0512 claim 11 and Edge cases
+    #[serde(default = "on")]
+    pub predependent_kind_as_list_position: bool,
+    /// A missile superweapon whose house cannot start a launch sequence consumes its charge and launches nothing; off: the order is refused and the record stays ready.
+    // spec: S-0512 claim 8 and Edge cases; S-0513 claim 7
+    #[serde(default = "on")]
+    pub missile_without_launcher_consumes_charge: bool,
+    /// A superweapon fire order fires the first type in list order whose aim action is the selected type's; off: it fires the selected type.
+    // spec: S-0512 claim 16; S-0513 claim 2 and Edge cases
+    #[serde(default = "on")]
+    pub superweapon_order_first_type_of_action: bool,
+    /// A permanent grant on a suspended record leaves it suspended for good; off: the grant also resumes it.
+    // spec: S-0512 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub permanent_grant_freezes_suspension: bool,
+    /// A one-time grant keeps the suspension of a record lost while suspended; off: it ends any suspension.
+    // spec: S-0512 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub one_time_grant_keeps_stale_suspension: bool,
+    /// Only the first silo type in type-list order that names the superweapon can launch it; off: every such silo type is considered, in type-list order.
+    // spec: S-0513 claim 7 and Edge cases
+    #[serde(default = "on")]
+    pub nuke_silo_first_type_only: bool,
+    /// A silo launches at the target last recorded for its current owner; off: at the target recorded when it accepted the launch.
+    // spec: S-0513 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub silo_target_of_current_owner: bool,
+    /// The curtain's hit on an organic vehicle or aircraft does not ignore defences and credits nobody; off: it ignores defences and credits the launching house.
+    // spec: S-0513 claim 24 and Edge cases
+    #[serde(default = "on")]
+    pub curtain_organic_vehicle_defended: bool,
+    /// Starting protection on a protected object replaces its timer and kind; off: the longer remaining time is kept, with the kind of the effect that gave it.
+    // spec: S-0513 claim 25 and Edge cases
+    #[serde(default = "on")]
+    pub protection_restart_replaces: bool,
+    /// A warp kills an organic object without the teleporter flag even when it is protected; off: a protected organic object is left alone.
+    // spec: S-0513 claim 35 and Edge cases
+    #[serde(default = "on")]
+    pub warp_kill_before_protection: bool,
+    /// A blocked warp landing searches with the track locomotion class and a simplified movement zone; off: with the member's own class and zone.
+    // spec: S-0513 claim 37 and Edge cases
+    #[serde(default = "on")]
+    pub warp_redirect_as_tracked: bool,
+    /// A naval warp member landing on a road cell sinks; off: a road cell that is water is not counted.
+    // spec: S-0513 claim 38 and Edge cases
+    #[serde(default = "on")]
+    pub warp_naval_road_cell: bool,
+    /// The spy plane count is the length of the first side group's paradrop infantry list, and none when that list and its count list differ in length; off: exactly one plane.
+    // spec: S-0513 claim 43 and Edge cases
+    #[serde(default = "on")]
+    pub spy_plane_count_from_paradrop_list: bool,
 }
 
 impl Default for Quirks {
@@ -2108,6 +2184,25 @@ impl Default for Quirks {
             disc_laser_no_house: true,
             dominator_damage_storm_house: true,
             dominator_marks_own_objects: true,
+            superweapon_upgrade_second_removal_waits: true,
+            superweapon_grant_suspends_by_house_power: true,
+            superweapon_restart_ignores_suspension: true,
+            superweapon_order_tests_clock: true,
+            set_charge_keeps_ready: true,
+            drain_orders_bypass_normal_checks: true,
+            predependent_kind_as_list_position: true,
+            missile_without_launcher_consumes_charge: true,
+            superweapon_order_first_type_of_action: true,
+            permanent_grant_freezes_suspension: true,
+            one_time_grant_keeps_stale_suspension: true,
+            nuke_silo_first_type_only: true,
+            silo_target_of_current_owner: true,
+            curtain_organic_vehicle_defended: true,
+            protection_restart_replaces: true,
+            warp_kill_before_protection: true,
+            warp_redirect_as_tracked: true,
+            warp_naval_road_cell: true,
+            spy_plane_count_from_paradrop_list: true,
         }
     }
 }
@@ -3167,6 +3262,70 @@ impl Quirks {
                 "dominator_marks_own_objects",
                 self.dominator_marks_own_objects,
             ),
+            (
+                "superweapon_upgrade_second_removal_waits",
+                self.superweapon_upgrade_second_removal_waits,
+            ),
+            (
+                "superweapon_grant_suspends_by_house_power",
+                self.superweapon_grant_suspends_by_house_power,
+            ),
+            (
+                "superweapon_restart_ignores_suspension",
+                self.superweapon_restart_ignores_suspension,
+            ),
+            (
+                "superweapon_order_tests_clock",
+                self.superweapon_order_tests_clock,
+            ),
+            ("set_charge_keeps_ready", self.set_charge_keeps_ready),
+            (
+                "drain_orders_bypass_normal_checks",
+                self.drain_orders_bypass_normal_checks,
+            ),
+            (
+                "predependent_kind_as_list_position",
+                self.predependent_kind_as_list_position,
+            ),
+            (
+                "missile_without_launcher_consumes_charge",
+                self.missile_without_launcher_consumes_charge,
+            ),
+            (
+                "superweapon_order_first_type_of_action",
+                self.superweapon_order_first_type_of_action,
+            ),
+            (
+                "permanent_grant_freezes_suspension",
+                self.permanent_grant_freezes_suspension,
+            ),
+            (
+                "one_time_grant_keeps_stale_suspension",
+                self.one_time_grant_keeps_stale_suspension,
+            ),
+            ("nuke_silo_first_type_only", self.nuke_silo_first_type_only),
+            (
+                "silo_target_of_current_owner",
+                self.silo_target_of_current_owner,
+            ),
+            (
+                "curtain_organic_vehicle_defended",
+                self.curtain_organic_vehicle_defended,
+            ),
+            (
+                "protection_restart_replaces",
+                self.protection_restart_replaces,
+            ),
+            (
+                "warp_kill_before_protection",
+                self.warp_kill_before_protection,
+            ),
+            ("warp_redirect_as_tracked", self.warp_redirect_as_tracked),
+            ("warp_naval_road_cell", self.warp_naval_road_cell),
+            (
+                "spy_plane_count_from_paradrop_list",
+                self.spy_plane_count_from_paradrop_list,
+            ),
         ]
     }
 
@@ -3349,6 +3508,8 @@ mod tests {
             ("triggers", &["S-0011"][..]),
             ("rules-import", &["S-0006"][..]),
             ("rendering", &["S-0107"][..]),
+            // The M7 superweapon specs (S-0612 and after) are not built yet.
+            ("superweapons", &["S-0512", "S-0513"][..]),
         ] {
             for e in std::fs::read_dir(format!("{root}/{dir}")).expect("spec dir") {
                 let p = e.expect("entry").path();

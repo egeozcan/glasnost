@@ -826,6 +826,9 @@ pub struct General {
     /// Game-wide economy values (M5, S-0401 to S-0416).
     #[serde(default)]
     pub economy: crate::sim_econ::EconGeneral,
+    /// Game-wide superweapon values (M6b, S-0512 and S-0513).
+    #[serde(default)]
+    pub superweapons: crate::sim_econ::SwGeneral,
     /// `V3RocketType`, the rocket type of set A (aircraft type name) (S-0506 Import mapping).
     #[serde(default)]
     pub v3_rocket_type: Option<String>,
@@ -2267,6 +2270,9 @@ pub struct WarheadType {
     /// `MakesDisguise` (S-0516 claim 31).
     #[serde(default)]
     pub makes_disguise: Option<bool>,
+    /// `NukeMaker`, the missile-maker flag (S-0513 claim 8).
+    #[serde(default)]
+    pub nuke_maker: Option<bool>,
     /// `Wall`.
     #[serde(default)]
     pub wall: Option<bool>,
