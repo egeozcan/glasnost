@@ -2,11 +2,11 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371]
 supersedes: []
@@ -45,7 +45,7 @@ S-0206 (turn rates), S-0207 (ground vehicle movement), S-0208 (infantry movement
 (occupancy and crowding), S-0210 (crushing), S-0212 (pathfinding), S-0213 (human orders), S-0214
 (order targeting rules), S-0301 (the firing cycle), S-0307 (weapon range test), S-0308 (weapon
 choice), S-0309 (target acquisition), S-0312 (death and destruction), S-0402 (harvest cycle), S-0406 (building placement) and
-S-0412 (skirmish setup rules) and S-0417 (factory unloading, structures). All cited specs are approved; references also follow their current correction drafts.
+S-0412 (skirmish setup rules), S-0417 (factory unloading, structures) and S-0501 (aircraft). All cited specs are approved; references also follow their current correction drafts.
 This spec cites S-0412's Terms, its claims 3, 4 and 5 and its scenario K10 for the house skill
 level and the difficulty index of each house at game start (claim 5 for the index of the neutral
 and special houses).
@@ -211,8 +211,10 @@ Terms used by this spec:
 - **Ready to change:** an actor's per-kind condition for letting its queued behaviour become current
   (claim 11).
 - **Resting behaviour, falling back to rest:** when an actor has finished what its behaviour asked
-  for, because a move arrived or a target died, it *falls back to rest*: it goes through the common effects of
-  claim 13, then chooses a resting behaviour by the rules of claims 14 and 15 and queues it. The
+  for, because a move arrived or a target died, it *falls back to rest*: it goes through the common
+  effects of claim 13, then chooses a resting behaviour by claims 14 and 15 (aircraft: S-0501
+  claim 18) and queues it. Aircraft have the early exits that claim 13 lists, which skip the
+  common effects. The
   resting behaviours are mostly *guard* and *area guard*. The **placement fall-back** is the
   fall-back to rest that an actor makes at the moment it is placed on the map (created, or leaving a
   factory or a transport). Fall-backs made by orders, processings and damage are ordinary ones; a
@@ -436,6 +438,8 @@ Terms used by this spec:
      are `unmeasured`: no verified later rule supplies the missing start, and no oracle
      recording has yet identified one. B36 is the settling investigation, not backing for
      a conjectured first-tick start or a claim that the queue remains pending forever.
+     The human-owner set-up comparison is also `unmeasured`: skirmish drops that owner's
+     map building entries, and construction or capture cannot isolate set-up placement.
    - Confidence: high for placement; low for the unresolved bootstrap
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
@@ -481,7 +485,8 @@ Terms used by this spec:
      building makes current at its per-tick start (claim 11; for a building, its first per-tick
      start of the tick) is processed on that same tick,
    - (b) a start that happens after the actor's processing for tick *t* (for example one caused by
-     another actor's update later in the tick, or a building's second per-tick start, claim 11) is
+     another actor's update later in the tick, a building's second per-tick start, or an aircraft's
+     end-of-update start, claim 11) is
      processed on tick *t* + 1 (or in a second turn of the same tick, claim 2),
    - (c) a start that a processing itself causes is overridden by the delay that processing then
      chooses: the new behaviour is first processed when that delay runs out. Each claim below that
@@ -521,8 +526,12 @@ Terms used by this spec:
    No rule of the original's program makes *queued move* current; only data that names it can (for
    example an object that a map places with that behaviour). *Attack move* becomes current in the
    same way, and also through the attack-move orders that S-0213 (claim 6) turns into *attack move*
-   itself (claim 12). As far as studied, player input never creates those orders (S-0213, claim 6),
-   so in practice only data puts an actor into *attack move*.
+   itself (claim 12). Ordinary player input can create attack-move orders, but the eligible
+   target-only and destination-only orders produce *attack* and *move*, respectively, rather
+   than the standing behaviour *attack move*. As far as studied, ordinary player input does not
+   create an attack-move order whose translation produces the standing behaviour *attack move*.
+   Thus, within the ordinary-input cases studied, data is the only established way to put an
+   actor into *attack move*.
 
    A shared processing still reads the properties of the behaviour that is current: an actor in
    *sticky* uses the rate (and, for a building, the anti-air rate) of *sticky*, not of *guard*, and
@@ -734,8 +743,13 @@ Terms used by this spec:
     left its construction state. A building also has a second per-tick start on the same tick,
     without the construction-state condition, which sees the ready mark as that tick's processing
     has left it; a behaviour that the second start makes current is not the one processed on that
-    tick, and is first processed on the next tick (claim 3b); see the building rule below. Aircraft have no such general per-tick start: their queued behaviours
-    start through aircraft rules (aircraft spec), using the readiness below. An infantry unit that
+    tick, and is first processed on the next tick (claim 3b); see the building rule below.
+    Aircraft have a per-tick start after their processing and movement, not before processing:
+    a behaviour made current there is first processed on a later tick (claim 3b). S-0501 claim 31
+    also permits a ready aircraft to start its queued behaviour during its locomotor's step,
+    while alive and neither landing nor taking off, without a height test, and at the end of
+    an ordinary fall-back to rest. The early exits of S-0501 claim 18 do not reach that last
+    opportunity. S-0501 claim 31 owns all three aircraft start points. An infantry unit that
     is ready to change and has neither a current nor a queued behaviour falls back to rest (claims
     13 and 14) at its per-tick start, and the behaviour that this fall-back queues, if any, becomes
     current at that same per-tick start. Readiness depends on the actor kind:
@@ -765,8 +779,9 @@ Terms used by this spec:
       - it is in contact with nothing and stands on a cell of a vehicle-factory building that is the
         cell (*x*, *y* + 1), where (*x*, *y*) is the top-left cell of that building's foundation
         (the cell where a new vehicle leaves the factory).
-    - **Aircraft** are ready unless the current behaviour is *sticky* or *rescue*, or the aircraft is
-      in a flight phase that does not allow it (the aircraft spec owns the phases).
+    - **Aircraft** readiness is S-0501 claim 31's rule: not in *sticky* or *rescue*, no run lock
+      except in *spy-plane approach*, and no processing-cleared aircraft ready mark. The run lock
+      is the glossary's term; the aircraft ready mark is distinct from the building mark below.
     - **Buildings** are ready while their ready mark (Terms) is set. Every processing of an armed
       building in *guard*, *sticky* or *area guard*, and every processing of *attack* by a building
       without the SAM flag that has a target, sets the mark (claim 32). The construction state
@@ -803,8 +818,9 @@ Terms used by this spec:
       stock game travels below the surface, and no setup is known that puts one there. The two
       *unload* rules with the allowance to interrupt movement: they fire only at the last stage of
       an unloading or of a descent, which belong to the transport and movement specs, and no setup
-      is known that has the vehicle moving at that instant. Aircraft readiness: the flight phases
-      belong to the aircraft spec, and no scenario here tests them (Open questions). The building's
+      is known that has the vehicle moving at that instant. Aircraft readiness and queued starts
+      have S-0501 claim 31's backing: AC10 tests ordinary flight, take-off, landing and run-lock
+      timing; its remaining exclusions are `unmeasured` for the reasons that claim gives. The building's
       second per-tick start is measurable at construction entry under S-0406 claim 17 and PL11.
       Of the infantry conditions, being in the middle
       of firing, falling and a sequence that is not interruptible are `unmeasured`: the first and
@@ -814,7 +830,7 @@ Terms used by this spec:
     - Confidence: high (infantry, and the vehicle conditions on *sticky* or *rescue* and on
       moving); medium (the list of three vehicle transitions, the unload or deploy cycle, the
       vehicle-factory conditions and buildings); low (the two *unload* rules, the vehicle below the
-      surface and aircraft)
+      surface); aircraft readiness and start timing have S-0501 claim 31's confidence
 
 11a. **Failed departure while harvesting.** A non-teleporting harvester leaving a
     refinery's docking cell has no special behaviour-start or retry rule. The failure
@@ -849,8 +865,11 @@ Terms used by this spec:
     system, queues the ordered behaviour without an immediate start; the order also sets the
     target, destination and guard spot it carries. The behaviour therefore becomes current at the
     actor's next per-tick start (claim 11; for aircraft, through the aircraft rules that claim 11
-    points to), that is, at the actor's first update after the order takes effect if the actor is
-    ready to change then, otherwise at the first later update at which it is. In a single-player
+    points to). For infantry, vehicles and buildings, this is the actor's first update after the
+    order takes effect if the actor is ready at that start, otherwise the first later permitted
+    start. Aircraft use the three opportunities of S-0501 claim 31, including their
+    end-of-update start after processing; starting there does not process the new behaviour
+    in that same turn. In a single-player
     game (a skirmish or a campaign mission) an order takes effect after the turn pass of one tick
     and before any object's turn in the next (S-0203, claim 7), so this is the actor's update on
     the next tick at the earliest; network games are out of scope here, as in S-0203. An order for the behaviour
@@ -863,7 +882,12 @@ Terms used by this spec:
     a destination, else *attack* if it carries a target, else *attack move* itself (claim 5); an
     ineligible mobile actor gets *attack* if the order carries a target, else *move*; a building
     gets *attack move* itself. S-0213 owns this translation and its backing; this spec adds only
-    that the result goes through the queue like any other ordered behaviour.
+    that the result goes through the queue like any other ordered behaviour. In particular,
+    ordinary eligible target-only and destination-only input queues *attack* and *move*,
+    respectively, not the standing behaviour *attack move*. No ordinary-input path studied
+    establishes that standing behaviour (claim 5). Losing eligibility before application can
+    expose the ineligible-mobile translation without creating a building order or an order
+    with neither reference (S-0213 claim 6).
 
     Every such order also forgets the target and destination that an override put aside (claim 10),
     but leaves the suspended slot as it is (`quirks.stale_suspended_revert`). For a mobile actor it clears the guard spot and the queued
@@ -879,9 +903,10 @@ Terms used by this spec:
     stopped falls back to rest at a later processing (claims 22 and 23), once it has stopped moving.
     The order specs own the stop order's further conditions.
     - Backing: `measurable` (scenario B3; scenario B14, case b, for the two attack-move orders that
-      input creates). The attack-move orders that input cannot create (an order with neither target
-      nor destination, an ineligible actor, a building) are `unmeasured` here: the measurement setup
-      cannot issue them, and S-0213 owns their translation. The stop order's exemption for
+      input creates). Attack-move orders with no established input path (neither target nor
+      destination, or a building) are `unmeasured` here: the measurement setup cannot issue them.
+      Translation after loss of eligibility is also `unmeasured` here; S-0213 claim 6 owns that
+      case and the translation's backing. The stop order's exemption for
       *construction* and *selling* is `unmeasured`: a building has no destination, queued
       destinations or route for the stop order to clear, and whether the input can give the stop
       order to a building that is being built or sold is not established; a mobile actor carries
@@ -892,9 +917,16 @@ Terms used by this spec:
       a moving vehicle, which follows from claim 11, the clearing rules and the stop order's
       exceptions)
 
-13. **Falling back to rest: common effects.** Whenever an infantry unit, vehicle or aircraft falls
-    back to rest, the effects of this table take place, and the tables of claims 14 and 15 (for
-    aircraft, the aircraft spec's own rules) decide on the state they leave. In particular, a
+13. **Falling back to rest: common effects.** An aircraft first checks the three early-exit rows
+    of S-0501 claim 18: restoration of an overridden behaviour; keeping *retreat*, either
+    paradrop behaviour or either spy-plane behaviour when it is not an airstrike aircraft,
+    or starting queued *paradrop approach* or *spy-plane approach*. A matching row ends that
+    fall-back without any common effects below, including refresh, and without the ordinary
+    end-of-fall-back queued start. S-0501 claim 18 owns those rows and their backing.
+
+    Otherwise, when an infantry unit, vehicle or aircraft falls back to rest, the effects of
+    this table take place, and the tables of claims 14 and 15 (for aircraft, S-0501 claim 18)
+    decide on the state they leave. In particular, a
     destination that one of these effects gives counts as the actor's destination there, so that the
     table's destination row applies.
 
@@ -920,7 +952,8 @@ Terms used by this spec:
     *eaten* is sent by that processing (claim 28), not by the fall-back.
 
     These effects take place at most once per actor per tick: in a second fall-back to rest on the
-    same tick none of them happens, and only the table of claim 14 or 15 applies. An actor using a temporal
+    same tick none of them happens, and only the rest-choice rules of claim 14 or 15
+    (aircraft: S-0501 claim 18) apply. An actor using a temporal
     weapon also lets its victim go. Attack-move memory is refreshed before the table's effects:
     S-0309 claim 23 (b) owns removal and resumption. The rows judge the current behaviour and
     destinations left by that refresh, including any readiness-dependent immediate start.
@@ -1956,20 +1989,27 @@ apply in our engine to the actors of every player house.
     - *missile*: buildings only (superweapons and structures); infantry, vehicles and aircraft
       process it by the default rule of claim 4 (table T1),
     - *paradrop approach*, *paradrop overfly*, *spy-plane approach*, *spy-plane overfly*: aircraft
-      only (aircraft and superweapons); the other kinds process them by the default rule of claim 4,
-    - *retreat*, *rescue*, *patrol*: team logic of the original's AI (out of scope) and the
+      only (S-0501 claim 34 for spy-plane flight; superweapons and paradrops
+      own the remaining effects); the other kinds process them by the default rule of claim 4,
+    - *retreat* for aircraft: S-0501 claim 34; other *retreat*, *rescue* and *patrol*: team logic
+      of the original's AI (out of scope) and the
       route orders of the order specs. *Patrol* for vehicles also restarts an unfinished unload or
       deploy cycle at each processing, as in *move* (claim 22): the restart changes neither the
       outcome nor the delay of the processing, and has the same consequence for readiness,
-    - all aircraft-specific processing (*attack*, *guard*, *hunt*, *move*, *enter*, *unload*):
-      aircraft.
-    - Backing: `unmeasured` (pointer only: it states which topic owns each rule, not a behaviour).
+    - aircraft-specific *attack* and run completion: S-0501 claims 12–18; *enter* and pad
+      docking: S-0501 claim 24; *guard*, *hunt*, *move*, *retreat* and spy-plane flight:
+      S-0501 claims 29–34. In particular, aircraft *hunt*'s choice queues *attack* without an
+      immediate start; it becomes current at a permitted opportunity of S-0501 claim 31,
+      not by bypassing readiness. Aircraft fall-back and queued starts are S-0501 claims 18
+      and 31 (claims 11 and 13 here); aircraft *unload* remains with transports.
+    - Backing: pointers inherit the cited claims' backing; the aircraft *hunt* queue/start
+      distinction is `measurable` (S-0501 AC10, recording queued and current behaviours against
+      the readiness and start opportunities of S-0501 claim 31).
       The default processing it names for the other kinds is the rule of claim 4 (table T1). The
-      one behaviour it adds, the restart of an unfinished unload or deploy cycle in a vehicle's
-      *patrol*, is `unmeasured` for the reason claim 22 gives: the deploy specs own the cycle, so
+      restart of an unfinished unload or deploy cycle in a vehicle's *patrol* is `unmeasured` for the reason claim 22 gives: the deploy specs own the cycle, so
       no setup in this spec can time it.
-    - Confidence: high (that these behaviours have their own processing); low (the *patrol*
-      restart, as for *move* in claim 22)
+    - Confidence: high (that these behaviours have their own processing, and that aircraft *hunt*
+      queues without an immediate start); low (the *patrol* restart, as for *move* in claim 22)
 
 ### Gates
 
@@ -2302,7 +2342,14 @@ apply in our engine to the actors of every player house.
     and raw direction draws is the same for both houses and all maps. The number of
     raw values consumed by the ranged request can differ through S-0202's rejection
     rule; the draw ranges can differ through the recorded radius.
-    - Backing: `measurable` (B37, with S-0212 P26 for the final search and timing)
+    - Backing: `measurable` (B37, with S-0212 P26 for the final search and timing).
+      Precedence and retention of a separately set base centre, and a start-assigned cell
+      before any building refresh, are `unmeasured`: B37 supplies no repeatable ordinary
+      setup or map action that sets either record for a neutral or special house. A price-factor
+      change alone not refreshing the records is also `unmeasured`: no scenario here changes
+      that factor during a game while isolating it from a building event. Damage-only
+      retention is tested separately in B37. These gaps do not qualify the covered
+      no-base fallback, building refresh or draw rules.
     - Confidence: high for selection and draw assignments; medium for record-refresh
       geometry and usable-area correction
 
@@ -2954,7 +3001,10 @@ veterancy ability lists (veterancy specs).
 ## Measurement scenarios
 
 Common setup: the measurement setup of the glossary, a small flat test map, skirmish, stock data
-unless a scenario names a test file. Any game speed, held fixed within a run: no scenario here
+unless a scenario names a test file. No external automated player or state-changing engine add-on
+is active. The scenarios' ban on an external controller excludes such additional automation,
+not their stated scripted mouse/keyboard inputs, map actions or the original's computer player.
+Any game speed, held fixed within a run: no scenario here
 observes a delay that the game speed changes. A rule that waits on a speed-normalised delay
 (glossary, claim G3) inherits that dependence, for example claim 11's infantry readiness while a
 *cheer* plays; where an infantry unit of a scenario may play such a sequence, its runs are not
@@ -3469,7 +3519,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   (b) Route row and claim 15, row 3: with the route-mode input of S-0213 (claim 16), give an
   unarmed vehicle of the human-controlled house, in *move*, a planned route of three move points,
   each 6 cells from the last, and commit it. Expected: when it arrives at the first point and
-  falls back to rest, the next point becomes its destination with no new order, while the
+  falls back to rest, the next point eventually becomes its destination without further player input, while the
   recorder shows its queued destinations empty. Record the route-generated order and its
   boundary of application: the next point is not assigned inside the fall-back. With no other
   destination, that fall-back can queue *guard* under claim 15; the later route order replaces
@@ -4088,7 +4138,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   in-range case, repeat (d) with the unreachable target stationary in range across a known
   attack processing tick: expected target kept and no destination, but these end states
   alone cannot count the two unchanged-state steps (claim 37 a2, backing).
-  Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. `[OWNER: Define “director” and restate the required setup condition; its meaning is unclear.]` Run without mods, apart from the named test data. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle, infantry; only infantry for e).
+  Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. No external controller may play either house or alter game state. Run without mods or engine add-ons, apart from the named test data permitted by the common setup. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle and infantry in a, b, c, c2 and f; vehicle only in d and g; infantry only in e).
 
 - **B33 (claim 13, Q-0202).** Common setup and fixed game speed 2. First repeat B15 b/c on a
   tiny open map with three ordinary move route points, no held attack-move input modifiers and
@@ -4119,23 +4169,26 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   These collision cases remain `unmeasured` until a legal input sequence establishes the
   prerequisites; this scenario proposes recording them, not a state-writing harness.
 
-- **B35 (claims 1 and 11).** Use the common skirmish setup, speed 2, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and mods off,
-  a tiny open-ground map and one unarmed map-placed building with no turret. Record its body
+- **B35 (claims 1 and 11).** Use the common skirmish setup, speed index 2, with no external
+  controller playing either house or altering game state, and no mods or engine add-ons
+  except the named test data below. Use a tiny open-ground map and one unarmed map-placed
+  building of the neutral house with no turret. Record its body
   state and current and queued behaviours at entry and each turn. Expected at game set-up:
   idle body and *guard* queued, not a construction body or *construction* queued. One run.
   Named test art gives its idle body a range of 3 stages and delay 4 ticks; a second run gives
   the range delay 0. Observe the ready mark through a read-only recorder before each per-tick
   start. Expected: landing on the last stage sets it in the first run, wrapping alone does not.
-  every non-advancing turn sets it in the zero-delay run. Repeat with a named test type that
+  Every non-advancing turn sets it in the zero-delay run. Repeat with a named test type that
   has a turret: idle *guard* does not set it through this body-range rule. No weapon or other
   ready-mark-setting rule is present. Replay S-0406 PL11 with turreted and non-turreted types
   to confirm that queued *construction* qualifies in both. A different entry body/queue or
   any ready-mark change contrary to these conditions falsifies the corresponding rule.
   Runs: one per case. The observation area is the test building and its surrounding cells.
-  the common bystander void rule applies. Remove the named test data afterwards.
+  The common bystander void rule applies. Remove the named test data afterwards.
 
-- **B34 (claim 26, Q-0231).** Tiny flat skirmish test map, game speed index 2, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and
-  mods off, one human-controlled house and one bystander computer player kept away from the
+- **B34 (claim 26, Q-0231).** Tiny flat skirmish test map, game speed index 2, no external
+  controller playing either house or altering game state, no mods or engine add-ons,
+  one human-controlled house and one bystander computer player kept away from the
   observed area. Place a stock armed vehicle, then in a separate run a stock armed infantry
   unit that is not a deployer, in *area guard* with no guard spot. Use the read-only recorder
   to identify its first processing and verify at entry: no target, no destination, nothing
@@ -4155,14 +4208,17 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   state, and a sequence eligible under S-0107 claim 14. Expect the idle timer to restart on
   that first processing by that claim; a visible idle sequence is not required on every run. The idle
   action's draws and eligibility remain owned by S-0107, not inferred from a total draw count.
-  Falsifiers: a targeting timer left expired until the next processing despite the verified
-  conditions, acquisition deferred despite the first search selecting the enemy, a delay draw
+  Falsifiers: a guard spot other than the actor's own cell, a targeting timer left expired
+  until the next processing despite the verified conditions, acquisition deferred despite
+  the first search selecting the enemy, a processing interval other than 1 tick after
+  successful acquisition or outside claim 26's ordinary delay in the no-enemy run, a delay draw
   after successful acquisition, or no idle-action attempt in the eligible no-enemy infantry
   run. Per-tick searches or actions of other objects must be separated by the recorder; if
   they cannot be separated, that run cannot establish the draw assignment.
 
-- **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed 2, 800 × 600, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]`
-  and mods off. Place a stock turreted defence for a non-player owner and a named enemy
+- **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed index 2, 800 × 600, no external
+  controller playing either house or altering game state, and no mods or engine add-ons
+  except the named test data below. Place a stock turreted defence for a non-player owner and a named enemy
   unit in its range; keep the bystander away. Record current, queued and suspended
   behaviours, ready mark, body state, target, processing timer and first shot from
   placement through tick 1000. Before any turn, expect idle body, *guard* queued,
@@ -4173,9 +4229,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   named data afterwards. Record the first mark setter and first start if either occurs:
   their ticks are investigation results, not predicted by this revision. Capture each
   pre-turn and both per-tick-start boundaries, including the host before and after each
-  upgrade installation, rather than only end-of-tick snapshots. Also run all three
-  cases for the human owner without orders, keeping the enemy unable to damage them.
-  A first-start recording must identify the event that supplies readiness or bypasses
+  upgrade installation, rather than only end-of-tick snapshots. Keep the named enemy
+  unable to damage the buildings. A human-owner set-up comparison remains unmeasured:
+  skirmish drops map building entries for the human-controlled owner (S-0009 claim 27),
+  and constructing or capturing a building is not set-up placement. Do not substitute
+  either for that comparison. A first-start recording must identify the event that supplies readiness or bypasses
   it, then repeat without that event as a control. If no start occurs by tick 1000,
   report a bounded pending queue, not proof of perpetual inactivity. This settles the
   bootstrap tick and armed/unarmed/upgrade comparison when a repeatable first event is
@@ -4183,13 +4241,14 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Enemy action before the first recorded turn invalidates the placement observation.
 
 - **B37 (claim 38, Q-0238 and Q-0312).** Reuse S-0212 P26's unreachable-destination
-  skirmish setup for the neutral and special houses, speed 2, 800 × 600, `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and
-  mods off. Use the read-only recorder, not writes, to record the house's base centre,
+  skirmish setup for the neutral and special houses, speed index 2, 800 × 600, with no
+  external controller playing either house or altering game state, and no mods or engine
+  add-ons except the named test-map data below. Use the read-only recorder, not writes, to record the house's base centre,
   base-start cell, radius, selected centre, final destination and scenario random-stream
   state at give-up. Separate unrelated draws from other objects. Three valid runs per
-  owner and case. Cases: no base/start; a start assigned by ordinary setup; one and
-  then two owned map buildings of unequal purchase prices; loss or owner change of
-  one of them; loss of the last building. Keep the units in the same area while moving
+  owner and case. Cases: no base/start; one and then two owned map buildings of unequal
+  purchase prices; nonlethal damage to one building without entry, removal or owner
+  change; loss or owner change of one of them; loss of the last building. Keep the units in the same area while moving
   the buildings between runs, and move the failing unit between two unreachable areas
   while keeping the house records fixed. Use a flat map first, then a plateau at the
   local area's top edge, then a smaller local area shifted within the map.
@@ -4207,15 +4266,18 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   centre from F11, a radius/record change contrary to F12, a unit-relative no-base
   point, an outer-choice index draw, omitted direction draw, or a correction/final-search
   draw. Record the seed; repeat naturally different seeds rather than writing the
-  stream. A separately set centre case may be checked only when reached by ordinary
-  map actions; otherwise record it untested. A snapped empty world point would
+  stream. A start-assignment case or separately set centre case may be checked only
+  after a repeatable ordinary setup or map-action input for that house is established
+  and recorded. Neither is supplied by this fixture, so record those branches untested,
+  not as confirmed by the no-base and owned-building runs. A snapped empty world point would
   falsify the no-retry qualification.
   Named test-map rules may give unequal invented prices and keep buildings alive
   long enough to record refresh. Remove the named test data afterwards.
 
 - **B38 (claim 11a).** Extend S-0402 H20's human-owned, non-contact ordinary
   harvester on a docking cell, with the same stock types, speed 2, remote bystander,
-  `[OWNER: Define “director” and state the required setup condition; its meaning is unclear.]` and mods off. Use three runs per case. Give a harvest order and record
+  no external controller playing either house or altering game state, and no mods or
+  engine add-ons. Use three runs per case. Give a harvest order and record
   the selected field cell, failed route category, destination, current and queued
   behaviours, readiness, processing timer and each processing tick with a read-only
   recorder and scripted input. Use S-0212 claim 23's fixtures to distinguish a
@@ -4244,7 +4306,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   rule starts it, or whether the queue genuinely remains pending without an outside
   event. The armed/unarmed and set-up-upgrade comparisons are B36. No first-tick ready
   mark is adopted as a workaround here. Question 3's queued/current ambiguity is resolved
-  by claim 1; S-0009 claim 40 needs the same wording.
+  by claim 1; retain S-0009 claim 40's matching queued-*guard* wording.
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
   geometric answer, also answering Q-0312. S-0212 claim 23a supplies the same-tick queue
   and destination rules and final nearby search. Keep Q-0238 open until the
@@ -4282,8 +4344,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   placement fall-back skips the land-type test of claim 15, row 4.
 - The absent-key default of the auto-deploy delay list: no engine default is known. (The guard
   stray distance has none in the original; claim 36 b gives our engine's replacement.)
-- Aircraft readiness (claim 11): which flight phases do not allow a change of behaviour. The
-  aircraft spec owns the phases, and no scenario here tests aircraft readiness.
+- Aircraft readiness and queued-start opportunities are now owned by S-0501 claim 31,
+  with ordinary-flight coverage in AC10. The unisolated exclusions remain as that claim states,
+  not an unspecified list of flight phases here.
 - The bunker rule of claim 17 and its exact conditions remain owned by the structures specs.
   It is not the only identified threat-point sender: S-0417 claim 4's factory apron-neighbour
   clearing supplies another setup for the paralysed refusal (scenario B6, part c).
@@ -4318,7 +4381,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - S-0009 claim 40 already says set-up queues *guard* without promising it current.
   Retain that correction at hand-off. Q-0241's bootstrap remains open.
-- S-0212 claim 23a and its Q-0238 hand-off question already cite
+- S-0212 claim 23a's backing should inherit claim 38's unmeasured qualifications for
+  separately set centre precedence and start-assigned records: B37 does not supply their
+  legal setup. Its covered geometry, draw and failure-timing backing is unchanged.
+  S-0212 claim 23a and its Q-0238 hand-off question already cite
   claim 38 and F11–F12 here for the complete centre geometry and no-base usable-area
   correction. S-0212 claim 25 also supplies the separate base-record-refresh search
   with claim 38's parameters. Retain these matching contracts in its current correction draft and confirm
