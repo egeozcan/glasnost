@@ -658,7 +658,7 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
   - `quirks.repair_consumes_engineer_always`;
   - `quirks.repair_walk_unbounded`.
 - **Save format 21.** `Object::fall`, `Cells::alternate`, `Cells::pier_levels` and `World::map_rng` are new state, and they are hashed.
-- **Save format 23.** `Cells::section_self` and `Cells::covered_by` (claim 2's responsible section) are new state, and they are hashed.
+- **Save format 24.** `Cells::section_self` and `Cells::covered_by` (claim 2's responsible section) are new state, and they are hashed.
 - **Not built.**
   - The own AI does not repair bridges, because it needs S-0509's entry.
   - The bridge-repaired and repair sounds are effects, but audio does not play them.
