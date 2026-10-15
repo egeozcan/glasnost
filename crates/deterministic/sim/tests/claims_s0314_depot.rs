@@ -357,6 +357,50 @@ fn claim_6_cannot_pay_and_low_funds() {
     );
 }
 
+// spec: S-0314 claim 25 (without a rally point the departure cell is the first candidate of the 3 × 3 foundation exit list that gives free; an occupied candidate is skipped; Q-0682 answered)
+#[test]
+fn claim_25_departure_cell_from_the_exit_list() {
+    let list = glasnost_sim::econ::release::exit_list(3, 3, false, true);
+    let (mut w, _d, v) = docked_scene(600);
+    let first = testkit::mid(SIZE, list[0].0, list[0].1);
+    let second = testkit::mid(SIZE, list[1].0, list[1].1);
+    spawn(&mut w, Kind::Vehicle, "TRUCK", 0, list[0].0, list[0].1);
+    assert!(run_until(&mut w, 600, |w| contact(w, v).is_none()));
+    assert_ne!(first, second);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(second)));
+}
+
+// spec: S-0314 claims 6 and 25 (with every exit-list cell occupied and no rally point there is no cell: no departure is ordered and contact is retained, the vehicle stays in its sleep; freeing a cell lets a later retry send it away)
+#[test]
+fn claim_25_no_departure_cell_keeps_contact() {
+    let list = glasnost_sim::econ::release::exit_list(3, 3, false, true);
+    let (mut w, d, v) = docked_scene(600);
+    let mut blockers = Vec::new();
+    for &(a, b) in &list {
+        if w.cells.footprint().is_legal(testkit::mid(SIZE, a, b))
+            && !blockers
+                .iter()
+                .any(|&x: &ObjectId| w.obj(x).unwrap().pos.cell() == testkit::mid(SIZE, a, b))
+        {
+            blockers.push(spawn(&mut w, Kind::Vehicle, "TRUCK", 0, a, b));
+        }
+    }
+    for _ in 0..300 {
+        tick::step(&mut w);
+    }
+    assert_eq!(contact(&w, v), Some(d), "contact retained");
+    assert!(docked(&w, v));
+    assert_eq!(w.obj(v).unwrap().dest, None, "no departure ordered");
+    assert_eq!(sounds(&w, Sound::UnitRepaired), 0);
+    objects::remove(&mut w, blockers[0]);
+    let dd = d_rep(&w);
+    assert!(run_until(&mut w, dd + 2, |w| contact(w, v).is_none()));
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(Target::Cell(testkit::mid(SIZE, list[0].0, list[0].1)))
+    );
+}
+
 // spec: S-0314 claim 6 (a depot with a rally point sends the vehicle there)
 #[test]
 fn claim_6_sent_to_the_rally_point() {
@@ -609,6 +653,41 @@ fn claim_21_remote_repair() {
     assert!(docked(&w, v));
 }
 
+// spec: S-0314 claim 21 (settling at 200 leptons or more from the docking point: a moving vehicle takes no step and has its locomotor switched on, checked again after D ticks; once it stands still there it takes the settling step without the near-point locomotor-off; Q-0681 answered)
+#[test]
+fn claim_21_distant_settling() {
+    let (mut w, d, v) = docked_scene(300);
+    // The settling step and one working step, then cannot pay: back to settling.
+    w.houses[0].credits = 6;
+    next_step(&mut w, v, 600).unwrap();
+    next_step(&mut w, v, 600).unwrap();
+    assert!(next_step(&mut w, v, 100).is_none());
+    assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
+    assert!(run_until(&mut w, 300, |w| w.obj(v).unwrap().pos.cell().x
+        >= testkit::mid(SIZE, 4, 0).x));
+    w.obj_mut(v).unwrap().depot.loco_off = true;
+    let dd = d_rep(&w);
+    assert!(
+        run_until(&mut w, dd + 1, |w| !depot::locomotor_off(w, v)),
+        "the distant moving check switches the locomotor on"
+    );
+    assert_eq!(contact(&w, v), Some(d), "settling and contact kept");
+    assert!(run_until(&mut w, 900, |w| w.obj(v).unwrap().pos.cell()
+        == testkit::mid(SIZE, 10, 10)
+        && !glasnost_sim::occupancy::in_progress(w, v)));
+    w.houses[0].credits = 1000;
+    let h = health(&w, v);
+    assert!(
+        next_step(&mut w, v, dd + 2).is_some(),
+        "the settling step far away"
+    );
+    assert!(health(&w, v) > h);
+    assert!(
+        !depot::locomotor_off(&w, v),
+        "no locomotor-off at 200 leptons or more"
+    );
+}
+
 // spec: S-0314 Edge cases (quirks.depot_remote_repair off: a docked vehicle given a move order loses its contact)
 #[test]
 fn quirk_depot_remote_repair_off() {
@@ -774,10 +853,18 @@ fn claim_23_queued_entry() {
         "full health does not queue"
     );
     assert_eq!(w.obj(c).unwrap().dest, None);
-    assert!(run_until(&mut w, 3000, |w| contact(w, b) == Some(d)));
+    let mut at = w.obj(b).unwrap().pos;
+    assert!(run_until(&mut w, 3000, |w| {
+        let hit = contact(w, b) == Some(d);
+        if !hit {
+            at = w.obj(b).unwrap().pos;
+        }
+        hit
+    }));
     assert_eq!(contact(&w, a), None);
-    assert!(run_until(&mut w, 2, |w| w.obj(b).unwrap().beh.current
-        == Some(Behaviour::Enter)));
+    // spec: S-0314 claim 23 (the retry follows the turn's movement: the turn that takes the place does not move the vehicle; a ready vehicle makes enter current at once without processing it; Q-0683 answered)
+    assert_eq!(w.obj(b).unwrap().pos, at, "no movement in the retry's turn");
+    assert_eq!(w.obj(b).unwrap().beh.current, Some(Behaviour::Enter));
     assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
 }
 

@@ -123,12 +123,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
     crate::combat::heal::turn(w, id);
-    if w.obj(id)
-        .is_some_and(|o| o.kind == crate::rules::Kind::Vehicle)
-    {
-        // spec: S-0314 claim 23 (a vehicle with a queued entry asks again every tick; Q-0683 interim: in its own turn, before its behaviour processing)
-        crate::depot::vehicle_turn(w, id);
-    }
     let sinking = crate::naval::sinking(w, id);
     process::turn(w, id);
     if w.obj(id).is_none() {
@@ -191,6 +185,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Ship) => !held && crate::naval::tick(w, id),
         _ => false,
     };
+    if kind == Kind::Vehicle {
+        // spec: S-0314 claim 23 (the queued-entry retry, once per ordinary living vehicle turn, after that turn's locomotor movement, self-healing and due behaviour processing; not before movement and not an extra behaviour processing; Q-0683 answered)
+        crate::depot::vehicle_turn(w, id);
+    }
     // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once)
     crate::transport::sync(w, id);
     // spec: S-0614 claim 18 (an attached parasite acts late in its host's turn: after self-healing, behaviour processing and movement, before the separate firing update; a host killed by it does nothing more)
