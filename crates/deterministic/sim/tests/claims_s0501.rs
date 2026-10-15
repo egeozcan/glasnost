@@ -289,14 +289,24 @@ fn attack_take_off_run_return_rearm() {
     assert!(full_ammo, "rearms: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 4 to 8 and 33 (end to end: a move order flies the aircraft to the cell, where it lands)
+// spec: S-0501 claims 4 to 8 and 33 (end to end: a move order flies the aircraft to the cell, where it lands); S-0417 claim 11 (the exit tether of a type that need not return to a dock ends when it leaves the ground)
 #[test]
 fn move_order_flies_to_the_cell() {
     let (mut w, _k, a) = built("JET");
+    let tethered = |w: &World| {
+        w.obj(a)
+            .unwrap()
+            .econ
+            .exit
+            .as_ref()
+            .is_some_and(|e| e.tethered)
+    };
+    assert!(tethered(&w), "tethered while docked");
     let goal = testkit::mid(SIZE, 8, 6);
     click(&mut w, a, ClickOn::Cell(goal));
     let flew = run_until(&mut w, 200, |w| air::height(w, a) > 100);
     assert!(flew, "takes off: {}", describe(&w, a));
+    assert!(!tethered(&w), "the tether ends at take-off");
     let there = run_until(&mut w, 2000, |w| {
         w.obj(a).unwrap().pos.cell() == goal && air::on_ground(w, a)
     });
