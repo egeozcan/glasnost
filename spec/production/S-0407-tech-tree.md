@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -136,10 +136,11 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    The set changes only at a recheck (claim 12), and what it holds after a recheck depends on these
    conditions, judged at the recheck:
    - (a) its tech-tree answer (claims 2 to 10) is allowed or at limit, and
-   - (b) the house has a factory building that could make it, with the tech-tree condition, power
-     and docks left out (S-0404, Terms: a factory of its kind, on the map, not being sold or queued to be sold, of the
-     matching naval kind, and whose *type's* owner countries share at least one country with the
-     type's owner countries, claim 11), and
+   - (b) the house has a factory building of its kind, on the map, neither being sold nor
+     queued to be sold, of the matching naval kind, and whose *type's* owner countries share
+     at least one country with the type's owner countries (claim 11). This offer-factory
+     test excludes the build-limit answer, power state and dock availability. The tech-tree
+     answer is tested separately by (a), and
    - (c) the taken-up set itself: with a *qualifying factory* as defined in Terms, a recheck leaves
      the set as follows:
 
@@ -180,7 +181,8 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    every moment: a type at limit is offered but an order to start or queue it is refused (claim 13).
    A held-item resume is exempt from this issue-time limit test; its own icon shows its item state
    rather than darkening (S-0411 claims 3 and 4). The neutral and special houses build nothing.
-   - Backing: `measurable` (scenarios T1 and T2; the frozen offer by T14 runs 7 and 8,
+   - Backing: `measurable` (scenarios T1 and T2; build-limit exclusion from the offer-factory
+     test by T10 (a)'s offer-factory control; the frozen offer by T14 runs 7 and 8,
      queued-sale factory exclusion by S-0411 S2's sale extensions; capacity-aware admission
      and suppressed losses by S-0411 S10). The every-player capacity extension is
      `unmeasured`, a project rule rather than an observable rule of the original's computer production
@@ -247,7 +249,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    spies infiltrates a building on the tech-lab list that is not a radar building (glossary) and has no power output
    (power field 0 or below): the flag is chosen by the infiltrated building *type's* base-planning-side
    field: 0 gives the first flag, 1 the second and any other value the third, including the
-   field's absent-key default of −1. The flag is never cleared during the game. Infiltration itself belongs to the special-abilities specs.
+   field's absent-key default of −1. The flag is never cleared during the game. Infiltration itself belongs to S-0510 claim 3, row E3.
    - Backing: `measurable` (scenario T6)
    - Confidence: high (the requirement); medium (the infiltration conditions and the choice of
      flag; T6 runs 1 to 8 test them)
@@ -499,8 +501,10 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     the capture, and no longer for its old owner: as a prerequisite (claim 8), as a factory (claims 1
     and 11), as an override building (claim 3) and, for a secret lab, with its secret type (claim 4).
     Capturing does not grant stolen tech (claim 6 needs a spy) and does not change either house's
-    ever-built counts.
-    - Backing: `measurable` (scenarios T2, T9 and T13; the ever-built counts by T10 (h))
+    ever-built counts. An ownership change leaves a secret lab's secret type unchanged and
+    takes no random draw (S-0515 claim 8).
+    - Backing: `measurable` (scenarios T2, T9 and T13; the ever-built counts by T10 (h),
+      secret-type persistence and no ownership-change draw by T9's ownership-change variant)
     - Confidence: high
 
 16. **Queue-time limit.** When a type is queued behind an item (S-0404, claim 3: the line holds an
@@ -539,7 +543,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     that type in production, a copy at its positive limit therefore cannot start.
     - Backing: `measurable` (scenario T12, runs 1 to 7; pad-total changes also by
       S-0501 AC18). The list-only switch-off alternative is `unmeasured`, a design rule
-      rather than an observable rule of the original
+      rather than an observable rule of the original. F3's build-limit sum overflow is
+      `unmeasured`: the scenarios cannot practically create enough owned or released
+      objects to overflow those counts
     - Confidence: high (absent docking-place count, pad-total placement and removal),
       medium (ownership transfer, queue tests and the application-time limit on a queued
       start; T12 run 6)
@@ -593,12 +599,13 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 > **F3. Queue-time refusal** (claim 16). With *Q* the number of copies of the type in the line
 > (item and queue): *L* > 0: refused when *O* + *Q* ≥ *L*. *L* ≤ 0: refused when *L* = −2³¹ or
 > *E* + *Q* ≥ −*L*.
-> Dock-bound aircraft type: with *D* the sum defined in claim 16 and *T* the total number of docks,
+> Dock-bound aircraft type: with *D* the sum defined in claim 16 and *T* the house's pad total,
 > refused when *D* ≥ *T*; *L*, *O* and *E* play no part (with
 > `quirks.dock_bound_aircraft_ignores_limit` off the order is refused when the dock test or the
-> *L* test above refuses). All quantities and intermediate sums are signed 32-bit integers; an
-> integer result outside the signed 32-bit range wraps modulo 2³², as in S-0205 claim 1. −*L* is
-> as in F2; comparisons only, no rounding.
+> *L* test above refuses). The build-limit quantities and their intermediate sums are signed
+> 32-bit integers; a result outside that range wraps modulo 2³², as in S-0205 claim 1.
+> The pad-capacity quantities *D* and *T* use exact non-negative integer count arithmetic,
+> as in S-0501 claim 30 and F12. −*L* is as in F2; comparisons only, no rounding.
 
 > **F4. Secret lab draw** (claim 14). Lab *k* = 0 … *n* − 1 (*n* ≤ *N*): *r*ₖ = one ranged draw over
 > 0 … *N* − 1 − *k* (S-0202, claim 4, the range rule), secret type = entry *r*ₖ of the concatenated list.
@@ -632,7 +639,7 @@ after the placement order is applied, while the building is still in its constru
 
 ## Edge cases and quirks
 
-- **Sidebar tie order** (`quirks.sidebar_tie_newest_first`, default on = the original): when fully tied newly admitted icons are ordered, the higher registration index comes first. With the switch off, the lower registration index comes first. Existing icons keep their earlier positions when another factory makes them available.
+- **Sidebar tie order** (`quirks.sidebar_tie_newest_first`, default on = the original): among fully tied icons of one kind newly admitted at the same recheck, the higher registration index comes first (claim 17). With the switch off, the lower registration index comes first. Across different rechecks or kinds, S-0004 claim 11's new-icon tie rule applies to claim 17's admission order instead; registration index alone does not decide. Existing icons keep their earlier positions when another factory makes them available.
 
 - `quirks.unscored_vehicle_stays_counted` (default original; owned by S-0414, claim 4). It is the
   single switch for the present count of vehicle types as well: claim 8 (b) reads the count it
@@ -736,7 +743,8 @@ lost.
 Measurement setup (glossary); a tiny purpose-made skirmish map, one human house (the local player,
 whose build icons are observed) and one bystander computer player (glossary). Unless a part
 states otherwise, run once per configuration at speed index 2 and 800×600, crates off, engine
-add-ons and director off; repeat unexpected results in a fresh session. Use named test rules
+add-ons off. Disable any external automation that chooses game actions, except the scripted
+mouse and keyboard input specified by the scenario. Repeat unexpected results in a fresh session. Use named test rules
 files in the map's override sections, scripted input, test triggers to give, destroy and capture
 buildings, and a recorder logging the sidebar's icon list and darkened state per tick. The
 observed area of every scenario is the human house's base and the buildings of the bystander that
@@ -933,6 +941,12 @@ of the scenarios.
 - Run 3 (loss of the lab, claim 4): as run 1, the human house captures one lab and its secret type
   is offered; the lab is then destroyed (test trigger). Expected: the icon is gone in the first
   house update after the destruction (claim 12), unless another condition lifts the type.
+- Ownership-change variant (claim 15): use one lab with no fixed secret type and secret lists
+  of total length 3. After its first capture, give it to the neutral house and back by test
+  triggers five times in otherwise quiet ticks. Record the offered secret type after each
+  acquisition and the scenario stream state immediately before and after each ownership
+  change. Expected: the same type every time, and no stream advance at any ownership change.
+  A changed type or a draw attributable to the ownership change falsifies the claim.
 - Run 4 (more labs than entries, and no entries): four labs and test secret lists of total
   length 3; then a second game with four labs and empty secret lists. Expected: in both games the
   stream state is the same before and after the assignment (no draw is taken) and no lab gives a
@@ -998,6 +1012,14 @@ of the scenarios.
   change of owner or a deploy moves an ever-built count (claims 10 and 15). In (i), a darkened icon
   would mean that such objects count towards a positive limit.
 
+- Offer-factory control extending part (a), claim 1 (b): after release of the limited vehicle, with
+  no item of its type in production, place an unrelated test building to force a recheck.
+  Keep its eligible factory on the map and the tab below capacity. Expected: the vehicle's
+  icon remains present and darkened after that recheck, although its build-limit answer
+  is at limit. Disappearance falsifies exclusion of the build-limit answer from the
+  offer-factory test; an undarkened icon falsifies the limit test. Record the icon before
+  and after the recheck under the common setup.
+
 - Part (j), ever-built exclusions (claim 10): at speed index 2, use named map override sections
   defining four test types of one unit kind, each with *L* = −1 and otherwise met conditions.
   The four combinations are neither flag, don't-score only, insignificant only, and both flags.
@@ -1009,7 +1031,8 @@ of the scenarios.
   copy cannot be ordered. The don't-score-only and both-flags icons remain offered and permit
   another start. A failed or cancelled first release makes that sub-test inconclusive.
   Any other icon or second-start result after a successful release falsifies the flag rule.
-  Use scripted input and the common sidebar recorder at 800×600; no engine add-ons or director.
+  Use scripted input and the common sidebar recorder at 800×600, under the common setup's
+  restrictions on engine add-ons and external automation.
 
 **T11. Build order and the offer.**
 - Run 1 (at limit): the local player's build order (scripted input) for an offered test vehicle
@@ -1202,8 +1225,8 @@ Backing).
 
 **T15. Simultaneous admissions (Q-0191, claim 17).**
 - Setup: the common measurement setup, speed index 2, seed logged by the random-state recorder,
-  engine add-ons and director
-  off. Named test data defines two distinguishable icons A and B of one kind, with A registered
+  with the common setup's restrictions on engine add-ons and external automation.
+  Named test data defines two distinguishable icons A and B of one kind, with A registered
   before B, otherwise tied on every S-0004 claim 11 key, including display name, current price,
   category rank and side. Keep the tab below capacity. Both share one prerequisite building
   and have eligible factories. Repeat separately for infantry, vehicles, aircraft and buildings.
@@ -1229,10 +1252,9 @@ Backing).
 
 ## Changes for other specs
 
-- S-0004 claim 13: its find-only rule still creates no type, but prerequisite-list failures must
-  defer to S-0407 claim 8 (d) and `quirks.prerequisite_names_dropped`. With that switch off,
-  an invalid prerequisite entry remains unmet rather than acting as an absent entry. Qualify
-  the prerequisite result in scenario I1 as the default-switch result.
+None. S-0004 claim 13 and scenario I1 already agree with claim 8 (d): failed lookup
+creates no type in either setting, and an invalid prerequisite remains unmet with
+`quirks.prerequisite_names_dropped` off.
 
 ## Open questions
 
