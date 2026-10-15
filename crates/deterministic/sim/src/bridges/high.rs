@@ -419,7 +419,7 @@ pub fn band(w: &mut World, first: CellXY, last: CellXY, line: Line) {
 
 /// The span check of claim 7 for the span holding `from` along `line`.
 pub fn span_check(w: &mut World, from: CellXY, line: Line, ctx: &mut Ctx) {
-    // spec: S-0511 claim 7 (the span's start piece: the nearest toward the start side; Q-0717's walk is unbounded)
+    // spec: S-0511 claim 7 (the span's start piece); Q-0710 (interim: the nearest start piece toward the start side, with no bound)
     let Some(start) = walk_back(w, from, line, |c| is_start_piece(w, c, line)) else {
         return;
     };
