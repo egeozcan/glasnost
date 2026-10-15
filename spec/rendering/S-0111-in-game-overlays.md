@@ -2,7 +2,7 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -431,9 +431,9 @@ S-0108 (Formulas F3).
     skipped) in a period that lasts about the same real time at every game speed. Its period is the pulsing marker's period that the glossary (claim G3 and its Open
     questions) leaves to the rendering specs. It is drawn only, and affects no game state. With
     `quirks.speed_normalised_delays` off, *p* = max(2, ⌊14 / 4⌋) = 3 ticks at every speed. A unit
-    carrying an attached bomb shows the bomb sprite the same way when its cell (the cell of its
-    position) is not under shroud by the same test (the special-abilities specs own its image
-    frames).
+    carrying an attached bomb shows the bomb sprite only when the bomb is visible to the local
+    player (S-0519 claim 10) and its cell (the cell of its position) is not under shroud by the
+    same test. Its image frames follow S-0519 Formulas F3, not the wrench's animation.
     - Backing: `measurable` (scenario OV14)
     - Confidence: high for the period, the image frames, the cell tested and its centre height,
       medium for the shroud condition as seen on screen and for the case below level 0
@@ -880,11 +880,17 @@ involved.
     *c*<sub>y</sub> + 1) of the three explored and the area under the wrench uncovered, expected no
     wrench (the level height would test that cell).
 
-  Then use a unit carrying an attached bomb (if a stock weapon attaches one), with the sprite's
-  location in view and free of shroud shading. Compare its tested cell unexplored and explored:
-  expected no bomb sprite in the former state and the bomb sprite in the latter. Falsified if the period does
-  not follow F4, a state (a) shows the wrench, a state (b) does not, or the bomb sprite ignores the
-  shroud. An attached-bomb sub-test that cannot reach both explored and unexplored tested-cell
+  Then use a unit carrying an attached bomb planted by the local player's house, with the
+  sprite's location in view and free of shroud shading. After S-0519 claim 10's visibility
+  recomputation, compare its tested cell unexplored and explored: expected no bomb sprite in
+  the former state and the bomb sprite in the latter. For an independent visibility control,
+  have an opponent plant a bomb on an own unit in explored territory, with no local bomb
+  detector in range, then move a local detector into range. After each visibility recomputation,
+  expect no icon without detection and an icon with detection, with image frames following
+  S-0519 Formulas F3. Record plant ticks, detector positions and tick-stamped screenshots.
+  Falsified if the period does not follow F4, a state (a) shows the wrench, a state (b) does not,
+  or the bomb sprite ignores either the shroud or bomb visibility, or uses different image
+  frames. An attached-bomb sub-test that cannot reach both explored and unexplored tested-cell
   states while keeping eligible bomb pixels in view is unmeasured, not passed.
 - **OV14-D (claim 19; engine-alternative conformance, not an original-game measurement).** Replay the
   repaired-building timing test in our engine with `quirks.speed_normalised_delays` off, at game
