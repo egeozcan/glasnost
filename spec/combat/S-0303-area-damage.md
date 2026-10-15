@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -347,26 +347,30 @@ addition:
       animation, superweapon and trigger producer
     - Confidence: high for the resource-explosion exception; medium for the other producers
 
-18. **Bridges.** When the map's destroyable-bridges setting is on and the warhead has the wall
-    flag, a detonation whose centre cell is part of a bridge may destroy a section of it. For a high
-    bridge, *P* must lie in a height window from (*h* − 2) × 104 + 416 (exclusive) to (*h* + 1) ×
-    104 + 416 (inclusive) leptons, where *h* is the height level of the bridge cell; for a low
-    bridge there is no height test. A destruction is attempted when a ranged draw *r* over 1 to the
-    game-wide bridge strength (inclusive) gives *r* < *D*, or without a draw when the warhead is the
-    game-wide ion-cannon warhead. Each bridge test that applies to the cell takes its own draw.
-    Each attempt either succeeds or fails. Which it does depends on the bridge piece in the centre
-    cell, whatever the draw gave, and a failed attempt can still change the bridge: for some pieces
-    it alters the cell without succeeding. The ion-cannon warhead follows a failed attempt with
-    further attempts at the same cell and no new draw, up to four attempts in all, stopping at the
-    first that succeeds, so that it can complete a destruction that one attempt leaves unfinished.
-    Any other warhead makes one attempt after its draw. Which attempts succeed, and what each
-    attempt changes, belong to the bridge specs, which are not written.
-    - Backing: `measurable` (scenario A12; statistical for the chance, variant b for the repeats
-      and variant c for the height window); `unmeasured` for the exact membership and ordering of
-      several bridge tests on one cell: no scenario identifies a cell where several apply, and
-      the bridge-piece acceptance rules are not established
-    - Confidence: medium (the chance and the flags); low (the exact set of bridge cells each test
-      accepts, the height window, and the repeats)
+18. **Bridges.** When the bridge-destruction game option is on and the warhead has the wall
+    flag, a detonation may make destroy attempts at its centre cell. In a skirmish the setup
+    screen's option replaces the map's destroyable-bridges setting (S-0511 claim 1).
+    Eligible tests and their chance draws follow this order: high bridge-role family, high
+    wooden-bridge-role family, low wooden-bridge-role family, low bridge-role family. S-0511
+    claim 1 defines membership: a high test accepts the family's section on a high-bridge cell
+    or its pier in state 0 to 3; a low test accepts only a low piece not yet destroyed.
+    Only a cell marked as high bridge imposes a height window: *P* must lie above
+    (*h* − 2) × 104 + 416 and at or below (*h* + 1) × 104 + 416 leptons, where *h* is that
+    cell's integer height level. The expressions use exact integer arithmetic. A pier cell
+    without that marking, like a low-bridge cell, has no height exclusion.
+    Each eligible test passing the height condition takes its own ranged draw *r* over 1 to
+    the game-wide bridge strength (inclusive), and makes an attempt exactly when *r* < *D*.
+    The game-wide ion-cannon warhead bypasses those chance draws and always makes the attempt.
+    For a high test only, it follows a failed attempt with further attempts at the same cell,
+    with no new chance draw, up to four attempts in all, stopping at the first success.
+    A low test makes just one attempt, including for that warhead. Other warheads make one
+    attempt per successful chance test. An attempt's bridge changes, occupant effects and
+    resulting draws are those of S-0511 claims 1 to 15; a failed attempt can still damage a
+    piece, so the high-test retries can finish a destruction that one attempt leaves unfinished.
+    - Backing: `measurable` (scenario A12 for chance, high-only repeats, height and skirmish
+      gate; S-0511 scenarios B1, B7 and B11 for membership); `unmeasured` for the ordering of
+      multiple eligible tests on one cell: no established fixture distinguishes every pair
+    - Confidence: medium
 
 19. **Exploding overlays.** When the centre cell holds an overlay whose type has the explodes flag
     (such as a barrel), that overlay is removed, the game-wide barrel-explosion animation appears at
@@ -571,11 +575,7 @@ lies outside the list (Edge cases).
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). A non-positive *N* creates no pieces and takes no allocation or type-choice draws. This non-positive-total case is `unmeasured`: A15 and A19 use positive totals, not a setup producing a non-positive total. Confidence: high. All debris is created at the projectile position *Q* (claim 22).
 
 For a nonempty retained type list, number its *m* types from 0 to *m* − 1 as *t*₀ … *t*ₘ₋₁,
-paired with signed maxima *u*₀ … *u*ₘ₋₁. The allocation state is the remaining count *ℓ*, initially
-*N*, together with an assignment number *j*, initially 0. While *ℓ* is positive, the next signed
-scenario-random-stream value supplies *raw*ⱼ; the selected type is *t*ᵢⱼ, where *i*ⱼ is the ordinary
-non-negative remainder of *j* divided by *m*. With wrap meaning S-0205 claim 1's signed 32-bit
-wrap, the state transition is:
+paired with signed maxima *u*₀ … *u*ₘ₋₁. Allocation is described by the remaining count *ℓ* (initially *N*) and assignment number *j* (initially 0). For each assignment made while the remaining count is positive, the next signed scenario-random-stream value is *raw*ⱼ, and the selected type is *t*ᵢⱼ, where *i*ⱼ is the ordinary non-negative remainder of *j* divided by *m*. The allocation state changes according to the following table; “wrap” means S-0205 claim 1's signed 32-bit wrap:
 
 | Quantity | Value or transition |
 |---|---|
@@ -663,7 +663,7 @@ order of registration, each once.
 | Height level | 104 | leptons | claim 18 (glossary) |
 | Healing reach | 8 (exclusive) | leptons | claim 13 |
 | Resource reduction divisor | 10 | damage per resource unit | claim 17 |
-| Bridge repeats for the ion-cannon warhead | 3 | further attempts | claim 18; scenario A12 variant b |
+| High-test repeats for the ion-cannon warhead | 3 | further attempts | claim 18; scenario A12 variant b; low tests never repeat |
 | Neighbour wall hit | 200 | wall-hit points | F4, as S-0210 |
 | Stage step in the overlay data value | 16 | data value per stage | F4, as S-0210 |
 | Barrel debris chance per entry | 15 | percent (draw < 15) | claim 19 |
@@ -887,7 +887,8 @@ warnings above are design rules, not claimed oracle observations.
 | rules, the general section, `WeaponNullifyAnim` | nullify animation (claims 15 and 21) | animation name | none |
 | map, the special-flags section, `Inert` | inert flag (claim 2) | boolean | no |
 | map, the special-flags section, `HarvesterImmune` | harvester immunity (claim 9) | boolean | no |
-| map, the special-flags section, `DestroyableBridges` | destroyable bridges (claim 18); the skirmish lobby's bridge setting is the map specs' | boolean | owned by the map specs |
+| rules, `MultiplayerDialogSettings`, `BridgeDestruction` | default of the bridge-destruction game option (claim 18; S-0511 claim 1) | boolean | yes |
+| map, the special-flags section, `DestroyableBridges` | ignored in skirmish: replaced by the setup screen's bridge-destruction option (claim 18; S-0511 claim 1) | boolean | not used in skirmish |
 
 For `AnimList`, `SplashList`, `BarrelDebris`, `MetallicDebris` and `DebrisTypes`, the
 case-insensitive whole-item spellings `none` and `<none>` are omitted (claim 25). Names otherwise
@@ -1131,17 +1132,27 @@ detonation on a bridge that allows destruction leaves the section standing. *Var
 repeats):* for each cell position of a high bridge and of a low bridge, one detonation of a warhead
 with the wall flag and a damage amount above the bridge strength (so that its single attempt is
 certain to be made) on one copy of the map, and one detonation of the ion-cannon warhead on another. The
-observable is the state of the bridge cells afterwards. *Expected:* for some cell position the
-ion-cannon detonation leaves more destroyed than the single attempt. *Falsified if:* the two agree at
-every tested position; that would leave the claimed observable benefit of repeats unsupported,
-not establish the absence of repeats. *Variant c (height window):* use a high-bridge cell where
+observable is the state of the bridge cells afterwards. *Expected:* an intact high section becomes damaged after the single ordinary attempt but is
+lost after the ion-cannon's retries (S-0511 claim 3). An intact low strip becomes damaged after
+either detonation; an already-damaged low strip becomes destroyed after either (S-0511 claim 13).
+The low comparisons use ordinary straight strips away from end pieces and neighbouring damage.
+*Falsified if:* the ion-cannon leaves the intact high section merely damaged, or destroys an
+intact low strip that the ordinary attempt only damages. *Variant c (height window):* use a high-bridge cell where
 variant b's certain single attempt destroys a section, with a wall-capable warhead and damage
 above bridge strength. Vary the recorded detonation height across both endpoints of claim 18,
 including each endpoint and a point 1 lepton on either side; use the vertical test projectile
 and discard runs that do not attain the requested height. Expected: no high-bridge draw or
 attempt at the lower endpoint, an attempt 1 lepton above it and at the upper endpoint, and none
-1 lepton above the upper endpoint. Repeat over a low bridge: no such height exclusion.
-Any different recorded attempt or draw outcome falsifies the height rule.
+1 lepton above the upper endpoint. Repeat over a low bridge and a pier cell without the
+high-bridge marking: no such height exclusion. Any different recorded attempt or draw outcome
+falsifies the height rule. *Variant d (skirmish gate):* repeat a certain attempt on fresh copies
+of each family and bridge kind with the setup option on and off, crossed with the map setting
+on and off. Record bridge changes and chance draws. Expected: attempts and their chance draws
+follow only the setup option, with none when it is off, regardless of the map setting. A map
+setting that overrides the option falsifies the gate. *Variant e (membership):* repeat on a
+low piece already in the destroyed class and on intact or damaged pieces of both families,
+with ordinary warheads. Expected: no chance draw or attempt for the destroyed piece; one chance
+draw per eligible low test otherwise, as S-0511 claim 1. Any contrary draw count falsifies it.
 
 **A13. Exploding overlays (claims 19, 20).** *Setup:* a stock exploding overlay (barrel) in the
 centre cell of a detonation with a warhead that cannot damage overlays otherwise, and another in a
@@ -1332,9 +1343,9 @@ has no oracle value to compare.
   particular, where an object that crosses into a sector in flight comes in that sector's order
   (after the objects already registered there, or by its first registration), which fixes the
   hit order among tracked flying objects (claim 11, medium confidence).
-- The exact set of bridge cells each bridge test of claim 18 accepts, what destroying a section
-  does, which attempts fail and what a failed attempt leaves behind (claim 18); this belongs to the
-  bridge specs, which are not written.
+- The order of several eligible bridge tests on one cell (claim 18) lacks a fixture that
+  distinguishes every pair. Bridge-piece acceptance and attempt effects are specified by
+  S-0511 claims 1 to 15, not open here.
 - The boundary with S-0302: this spec states the falloff on the defended amount and, for completeness,
   the versus step and cap as the original computes them in one expression (F3); S-0302 owns the
   defences (its F2), the versus step and the cap, and must agree.
