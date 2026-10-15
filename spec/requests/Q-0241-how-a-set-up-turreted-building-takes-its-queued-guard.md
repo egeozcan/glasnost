@@ -1,9 +1,9 @@
 ---
 id: Q-0241
 title: How a turreted building placed at game set-up makes its queued guard current
-status: open
+status: answered
 related: [S-0215, S-0009, S-0108]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
