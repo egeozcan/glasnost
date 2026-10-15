@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,13 +23,10 @@ from its pads; and the flight and return of non-missile aircraft launched from a
 The shared spawn-controller cycle, including replacement, reload and release, belongs to
 S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The spy plane's dispatch and reveal are planned S-0513 and the
 delivery of paratroopers and cargo is planned S-0522; only their flight is covered here.
-**Paired correction.** S-0407 claim 16 and its Import mapping must use claim 30's helipad
-accounting and absent docking-place count of 1, not 0, and share the list-only capacity quirk.
-Its queue-time build-limit quirk remains owned there. S-0314 claims 4 and 5 can replace their
-unmeasured aircraft-step limitation with claims 26 and 27 and scenario AC16 here.
-S-0504 claim 3 must qualify its carrier example by S-0506's launching count: preparing
-non-missile aircraft alone do not impose a movement hold. S-0506 claim 10 must describe that
-hold as preventing the next step, not freezing an already active step (claim 35 here).
+Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
+claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
+launching-count movement hold: it prevents the next step, not completion of an active step,
+and preparing non-missile aircraft alone do not impose it (claim 35 here).
 
 This spec covers skirmish; network games and campaigns are out of scope. Player houses controlled
 by our AI use the human-controlled rules below. Computer-only behaviour described here records
@@ -318,10 +315,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Backing: `measurable` (scenario AC8)
     - Confidence: high
 
-18. **Falling back to rest (aircraft).** The first three rows of table T2 (State and ordering) are
-    checked before anything else and, when one applies, end the fall-back without S-0215 claim 13's
-    common effects. Otherwise the common effects apply, and then the aircraft's next behaviour
-    follows the rest of table T2. In flight, an armed aircraft
+18. **Falling back to rest (aircraft).** When one of the first three situations in table T2 (State and ordering) applies, the aircraft has that row's stated outcome and S-0215 claim 13's common effects do not occur. In all other cases the common effects apply, and the aircraft's next behaviour is the result specified by the applicable remaining situation in table T2. In flight, an armed aircraft
     with dock types looks for a pad (claim 21) and asks it for contact. When the pad grants it, it
     gets the pad as destination and queues *enter*. Otherwise a pad-bound aircraft crashes
     (claim 9), and any other aircraft gets a landing spot near its house's buildings (Formula F8)
@@ -337,6 +331,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       overridden behaviour and the two other early-exit rows are also `unmeasured`: AC10 has
       not established normal inputs that isolate a fall-back invocation in those states.
       The computer and team cases are context, not extra rules for our AI houses.
+      F8's fallback choice near another own object is also `unmeasured`: no specific
+      object-selection rule or distinguishing scenario is established (Open question 5).
     The pad-search rows need the in-the-air answer (Terms); the other rows use the on-the-ground
     test.
     - Confidence: high (the in-flight and pad rows); medium (the ground rows and the computer
@@ -528,14 +524,18 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 ### Other behaviours
 
 33. **Hunt and move.** In *hunt* an armed aircraft with ammunition picks a target (S-0309) and
-    starts *attack*; without a target, or without ammunition, it falls back to rest. In *move* an
+    queues *attack* without an immediate start. It becomes current only at a permitted
+    readiness-dependent opportunity of claim 31; the hunt processing does not itself start it.
+    Without a target, or without ammunition, it falls back to rest. In *move* an
     aircraft flies to the flight point of its destination, and when its locomotor has stopped
     there it falls back to rest. *Move* uses the standard delay. *Hunt* returns a delay of
     1 tick after finding a target or failing to find one, and the standard delay only when
     it had no ammunition. When a living
     aircraft that is not pad-bound is in flight in *guard* with a destination and nothing queued,
     it queues *move*.
-    - Backing: `measurable` (scenario AC10)
+    - Backing: `measurable` for hunt queueing, delays and move completion (scenario AC10).
+      The exact flight-point geometry is `unmeasured`: AC10 records a destination and completion
+      but cannot establish a point-selection rule that remains untraced (Open question 2).
     - Confidence: medium
 
 34. **Retreat and the spy plane's flight.** In *retreat* an aircraft with no destination takes a
@@ -553,8 +553,15 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     slot aircraft. Launch placement is requested 10 leptons above the spawner's firing point
     (S-0506 claim 7), but claim 1 can replace that height. At launch the aircraft gets *move*
     toward the neighbouring cell of the spawner's cell in step direction 0 (glossary).
-    Its attack runs follow claims 12 to 17. A returning aircraft is taken off the map only in
-    the spawner's cell and with the signed integer world-height difference
+    That is the initial launch destination, not a direction maintained throughout preparing.
+    At each later launch pass in which the slot is already preparing and a controller target
+    is present, its destination is replaced by the step-direction-4 neighbour of the spawner's
+    cell at that pass, with *move* queued again. No arrival at the direction-0 neighbour is
+    required. With no controller target, such a preparing slot instead returns (T4).
+    Release into attacking follows S-0506 claim 8 and can occur in the launch pass itself.
+    An aircraft released in that pass has no later preparing pass for that sortie and need
+    not receive a direction-4 destination. Its attack runs follow claims 12 to 17.
+    A returning aircraft is taken off the map only in the spawner's cell and with the signed integer world-height difference
     *z*ₐ − *z*ₛ < 20 leptons. This is not an absolute-distance test: there is no lower bound,
     so an aircraft below the spawner also satisfies the height condition. Reload and the
     subsequent full-health, full-ammunition docked state follow S-0506 claim 9. A slot aircraft
@@ -772,8 +779,7 @@ division truncated toward zero.
 | any strafe pass | other refusal | no ammunition: *done*, run lock off; otherwise retry same pass; 1 tick |
 | *done* | — | run lock off, pending round spent (if any ammunition), then claim 17; 1 tick |
 
-**T2. Fall back to rest (aircraft).** Rows are tried in order; "in flight" and "on the ground" are
-this spec's tests (Terms).
+**T2. Fall back to rest (aircraft).** Where more than one situation applies, the result is the one in the earlier table row. "In flight" and "on the ground" are this spec's tests (Terms).
 
 | Situation | Next behaviour |
 |---|---|
@@ -808,11 +814,15 @@ this spec's tests (Terms).
 | *guard* on the pad, target, ammunition ≥ ⌊*A*/2⌋ | its processing | *attack*; takes off; the reservation ends |
 
 **T4. Carrier slot aircraft flight.** Events are evaluated at S-0506 claim 2's launch passes.
-The shared slot states and release decision remain S-0506 claims 4 and 8's rules.
+The state in the first column is the slot's state entering that pass. Thus the launch row and
+an already-preparing row do not both apply to the same slot in its launch pass. The shared
+release decision of S-0506 claim 8 can still make a newly launched or already-preparing slot
+attacking in that same pass; it does not require either neighbour to have been reached.
 
 | Slot state | Event | Next state | Flight effect |
 |---|---|---|---|
-| preparing | controller target present | preparing, until shared release | *move* toward the spawner-cell neighbour in step direction 4 |
+| docked | launches under S-0506 claim 6 | preparing, until shared release | initial destination is the spawner-cell neighbour in step direction 0; queue *move* |
+| preparing | controller target present | preparing, until shared release | replace destination with the current spawner-cell neighbour in step direction 4; queue *move* again |
 | preparing | no controller target | returning | clear target, spawner as destination, *move* |
 | attacking | ammunition left and controller target present | attacking | receive controller target and queue *attack* again |
 | attacking | no ammunition or no controller target | returning | clear target, spawner as destination, *move* |
@@ -1035,7 +1045,17 @@ listed in Open questions are not claimed confirmed by these scenarios.
   that row unmeasured rather than counting ordinary fallback as its test.
   Observe guard at cruise height and below it, and hunt both with and without ammunition.
   Expected hunt delay: 1 tick except the no-ammunition standard delay; guard and move use the
-  delays stated in claims 29 and 33. Use a named guard-test override if a stock aircraft cannot
+  delays stated in claims 29 and 33. For a successful hunt, use a named hunt-test map placing an
+  armed, ammunition-bearing aircraft in *hunt* with an eligible ground target. Record current
+  and queued behaviours immediately after hunt processing and at claim 31's later start
+  opportunities, along with readiness, landing and take-off state. Expected: *hunt* remains
+  current and *attack* is queued after that processing; *attack* becomes current only at a
+  permitted ready opportunity, and is not processed again in that update. A ready aircraft
+  may therefore end the same tick in *attack*, which alone does not establish an immediate
+  start by hunt. A start within hunt processing, a start while not ready, or a start outside
+  claim 31's opportunities falsifies this distinction. An end-of-tick-only record cannot
+  distinguish queueing from an immediate start and does not confirm it.
+  Use a named guard-test override if a stock aircraft cannot
   reach a required state by orders. Queue a different order during a run lock, ordinary flight,
   take-off and landing. Log when it becomes current and first processes: no change through the
   run lock, the ordinary living non-transition movement opportunity has no height restriction,
@@ -1123,9 +1143,21 @@ listed in Open questions are not claimed confirmed by these scenarios.
   remove the target in approach and give an empty retreat destination: expect retreat and a
   new edge destination respectively. Compare removal with AC6's retreat exception.
 - **AC21 Carrier aircraft (claims 35 and 36).** Attack with a carrier and record each slot's
-  launch request, actual position, first two destinations, target, return, off-map interval,
-  health and ammunition. Expected: directions 0 then 4, aircraft's own attack runs, return when
-  empty or target-free, and pickup only in the spawner cell with signed world-height difference
+  launch request, actual position, destination changes, slot states entering and leaving each
+  launch pass, controller target, return, off-map interval, health and ammunition. Keep a
+  durable target in range and use several slots so an early aircraft remains preparing across
+  passes while later slots wait for launch spacing. Expected: its launch pass assigns the
+  direction-0 neighbour; the next pass it enters already preparing with a controller target
+  replaces that destination with the direction-4 neighbour, regardless of arrival at the first
+  neighbour. Each further preparing pass with a target refreshes the direction-4 destination
+  using the spawner's cell at that pass. Move the spawner to distinguish a refreshed destination
+  from a retained old cell. A direction-4 assignment at launch instead of direction 0, or a
+  retained direction-0 destination after a later targeted preparing pass, falsifies this rule.
+  Separately use the named single-slot carrier test-map override: release in the launch pass
+  must allow attacking without an intervening direction-4 assignment. Neither a second
+  destination nor arrival at either neighbour is a universal release requirement. Observe the
+  aircraft's own attack runs, return when empty or target-free, and pickup only in the spawner
+  cell with signed world-height difference
   strictly below 20 leptons. Record world heights separately: a difference of 20 must not pass,
   while 19 does. If normal flight and carrier motion can produce a negative difference,
   it must pass too; failure to reach that variant is a coverage gap, not confirmation of an
