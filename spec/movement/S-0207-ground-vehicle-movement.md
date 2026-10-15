@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600]
 supersedes: []
 ---
 
@@ -1326,10 +1326,31 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     is divisible by 10, it creates one instance of the game-wide wake animation at its own
     position, provided it is off a bridge deck, its cell's land type is water, and that animation
     is defined. Moving now means its body is turning, or it has a heading point and its current
-    speed is above zero. There is no underwater-type exclusion for driving wakes, unlike the
-    ship rule of S-0504 claim 2. Wake creation takes no random draw beyond the animation's
-    ordinary creation draws (S-0109 claim 3).
-    - Backing: `measurable` (D25)
+    integer progress rate *s* is above 0. Here *s* is the rate of claim 2, evaluated with the
+    vehicle's current speed fraction and factors at the wake check: *s* = trunc(*s*₂ × *ρ*),
+    in progress units per tick, with that claim's floating-point arithmetic, intermediate
+    truncations and flag-carrying adjustment when applicable. It is not the fraction *ρ*
+    itself, accumulated progress, distance actually travelled, or a remembered rate from the
+    last moving tick. With no body turn, a positive *ρ* that still gives *s* = 0 produces no
+    wake, even on an otherwise eligible tick. Positive *s* can produce a wake without a
+    position change. The heading point is the active track's target (Terms), not a path
+    destination retained between tracks. Thus waiting or being between tracks does not
+    qualify through the heading-point test; turning in place can still qualify independently.
+
+    The wake check uses the position, heading point, turning state and speed fraction after
+    that tick's locomotor movement and track transitions, including any newly begun track.
+    Each wake is at the post-movement position. Completing a track can remove heading-point
+    eligibility even if the vehicle travelled earlier in that tick, unless another track has
+    supplied a new heading point or its body is still turning. Creation occurs within the
+    vehicle's own turn, as part of its locomotor movement, after movement's effects and their
+    simulation-stream draws, before that locomotor update ends; it is not a separate
+    end-of-tick wake pass. Its animation enters the update order under S-0203 claim 4.
+    Wake creation takes no random draw beyond the animation's ordinary creation draws
+    (S-0109 claim 3), which therefore follow any draws taken by that movement.
+    There is no underwater-type exclusion for driving wakes, unlike the ship rule of
+    S-0504 claim 2. That claim owns the ship rate, cadence and within-turn wake timing.
+    - Backing: `measurable` (D25 for eligibility gates; D25a for the rate, heading-point
+      boundaries, position and draw ordering; Q-0600)
     - Confidence: high
 
 ## Formulas
@@ -1985,6 +2006,7 @@ its new destination from that tick.
 | country section, key `SpeedUnitsMult`; the country's matching keys for infantry and aircraft do not feed this spec | *κ*, for progress and the lead estimate (claims 2 and 18) | decimal (S-0003, claim 6), stored in single precision | keeps value; engine default 1.0 |
 | land-type sections | *M* | S-0211 | S-0211 |
 | `[General]`, key `Wake` | game-wide wake animation (claim 23) | animation type name | keeps value; engine default none |
+| No data key | wake's integer-rate test, active-track heading eligibility and post-movement creation timing (claim 23) | engine behaviour; rate reuses the speed, country and veterancy fields above and runtime speed fraction and bonus | fixed rules of claim 23; no separate wake-speed field |
 | vehicle section, key `Underwater` | underwater-type flag; does not suppress driving wakes (claim 23) | boolean | keeps value; engine default no |
 | infantry, vehicle and aircraft type sections, key `Locomotor` (building type sections read it too, without effect) | locomotor (claim 14, table T3) | class identifier: hexadecimal digits in groups of 8, 4, 4, 4 and 12, joined by hyphens, in braces, letters in either case; the value is read whole after trimming. A value of another form is ignored; an identifier not in T3 is treated as not given (departure, claim 14); both warn | keeps value in force; engine default the teleporting locomotor |
 
@@ -3004,6 +3026,39 @@ and frame capture; compare scenario-stream state with the animation draws of S-0
 Expected: one wake on eligible tick numbers divisible by 10, including turning in place on water,
 none on land, on the deck or without an animation; changing the underwater flag alone does not
 suppress it. Any other cadence, exclusion or extra wake-specific draw falsifies claim 23.
+
+**D25a. Driving wake rate and within-turn timing (claim 23; Q-0600).** *Setup:* D25's
+water map and settings, with one human-controlled test vehicle and one bystander computer
+player kept outside the observed crossing. Use named map test data, "driving-wake-speed",
+giving the water-capable drive vehicle acceleration and a small positive acceleration factor
+so that a straight start has at least 10 ticks with *ρ* > 0 but *s* = 0. Keep a defined wake
+animation and initially align the body with the travel direction. These are diagnostic map
+overrides, not stock measurements; remove them after testing. *Procedure:* order a long
+straight crossing and record through final arrival. Repeat from each of the ten start-tick
+residues modulo 10, then repeat with the original type fields as a stock control.
+*Observable:* per-tick fraction, computed current *s*, progress budget, active track target,
+body turning, pre/post-movement position, and wake creation position, using the read-only
+recorder and frame capture. Include track starts, a final arrival with no replacement track,
+and a between-track wait while the move destination remains. *Expected:* no wake solely
+from positive *ρ* when *s* = 0 and the body is not turning. Positive *s* with a heading point
+can qualify even if position does not change. A wake uses post-movement position and state.
+A completed track with no new heading point and no body turn creates none, despite earlier
+travel that tick. A retained move destination does not qualify during the between-track wait.
+*Falsified if:* the fraction alone qualifies, lack of displacement alone suppresses an eligible
+positive-rate wake, pre-movement position or a cleared track target is used, or a retained
+destination substitutes for an absent heading point. A run without the intended zero-rate
+interval, eligible no-displacement tick or boundary tick is inconclusive for that sub-test.
+
+For draw ordering, add a named map variant with a crate collected during a continuing water
+crossing and a wake animation with a distinguishable random creation delay (S-0109 claim 3).
+Record a collection on an eligible wake tick that retains a heading point or body turn, together
+with the scenario stream before and after the movement effects and wake creation. Compare
+the crate outcome and animation delay with the raw stream values: movement's collection draws
+must precede the animation's creation draw. Reverse assignment falsifies the order. Repeat
+until three such qualifying collection ticks are recorded; no qualifying collection makes this
+sub-test inconclusive. This proposes recorder observations, not an already completed measurement.
+Void any run where an unnamed bystander object reaches the observed area or acts on a test
+object, or the bystander is defeated before the recording ends.
 
 **D26. Driving launch hold (claim 6).** Repeat S-0504 N4 at game speed index 2, director and
 mods off, using its stock carrier and missile-vessel controls. In named diagnostic map variants,
