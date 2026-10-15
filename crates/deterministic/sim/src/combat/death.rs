@@ -226,8 +226,7 @@ fn mark_killed(w: &mut World, id: ObjectId) {
 pub fn leave_play(w: &mut World, id: ObjectId) {
     let crash_row = w.obj(id).is_some_and(|o| {
         o.kind == Kind::Vehicle
-            && w
-                .rules()
+            && w.rules()
                 .unit(o.kind, o.type_index)
                 .is_some_and(|u| u.vehicle.crashable)
     });

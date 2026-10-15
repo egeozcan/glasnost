@@ -27,8 +27,8 @@ use serde::{Deserialize, Serialize};
 use crate::occupancy::{self, Outcome};
 use crate::regions::STEPS;
 use crate::rules::{Behaviour, Kind};
-use glasnost_rules::sim::{LocomotionClass, MovementZone};
 use crate::world::{Layer, ObjectId, Pos, Target, World};
+use glasnost_rules::sim::{LocomotionClass, MovementZone};
 
 /// Transport state of an object (S-0507 claims 3, 6 and 11).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -470,7 +470,8 @@ pub fn arrival(w: &mut World, p: ObjectId) -> bool {
         return false;
     }
     if o.kind == Kind::Vehicle
-        && !(o.beh.current == Some(Behaviour::Enter) && o.contact.is_some_and(|c| is_transport(w, c)))
+        && !(o.beh.current == Some(Behaviour::Enter)
+            && o.contact.is_some_and(|c| is_transport(w, c)))
     {
         // spec: S-0507 claim 6 (a vehicle boards only while its current behaviour is enter and its contact is a transport)
         return false;
@@ -556,8 +557,7 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
 
 fn gunner(w: &World, t: ObjectId) -> bool {
     w.obj(t).is_some_and(|o| o.kind == Kind::Vehicle)
-        && w
-            .obj(t)
+        && w.obj(t)
             .and_then(|o| w.rules().unit(o.kind, o.type_index))
             .is_some_and(|u| u.combat.gunner)
 }
@@ -733,11 +733,10 @@ fn open_cell(w: &World, t: ObjectId, c: CellXY) -> bool {
         return false;
     }
     // spec: S-0507 claim 9 (no vehicle or building occupies it)
-    let blocked = w
-        .cells
-        .list(c, Layer::Ground)
-        .iter()
-        .any(|&x| w.obj(x).is_some_and(|x| matches!(x.kind, Kind::Vehicle | Kind::Building)));
+    let blocked = w.cells.list(c, Layer::Ground).iter().any(|&x| {
+        w.obj(x)
+            .is_some_and(|x| matches!(x.kind, Kind::Vehicle | Kind::Building))
+    });
     if blocked {
         return false;
     }
@@ -1094,7 +1093,10 @@ pub fn process_air_unload(w: &mut World, t: ObjectId) -> i32 {
         return crate::process::standard_delay(w, t);
     }
     if !crate::air::on_ground(w, t) && o.dest.is_none() {
-        let dropship = w.rules().unit(o.kind, o.type_index).is_some_and(|u| u.dropship);
+        let dropship = w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.dropship);
         if dropship {
             // spec: S-0507 claim 13 (in the air with no destination, a dropship type searches for a landing spot); Q-0705 (interim: the landing spot of S-0501 claim 41)
             let s = crate::air::landing_spot(w, t);
@@ -1240,5 +1242,10 @@ pub fn passenger_weapon_index(w: &World, firer: ObjectId) -> Option<usize> {
         return None;
     }
     // spec: S-0308 Edge cases (a passenger weapon index outside −1 … 17 is treated as 0, a departure)
-    Some(usize::try_from(i).ok().filter(|&x| x < crate::combat::data::SLOTS).unwrap_or(0))
+    Some(
+        usize::try_from(i)
+            .ok()
+            .filter(|&x| x < crate::combat::data::SLOTS)
+            .unwrap_or(0),
+    )
 }

@@ -7,7 +7,9 @@ mod common;
 use common::{Scene, cell, code_tile};
 use glasnost_map::terrain::land;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Decimal, LandRow, LandType, LocomotionClass, Locomotor, MovementZone, UnitType};
+use glasnost_rules::sim::{
+    Decimal, LandRow, LandType, LocomotionClass, Locomotor, MovementZone, UnitType,
+};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::transport;
@@ -239,4 +241,3 @@ fn ship_transport_cannot_unload_on_water() {
     assert!(!transport::may_unload(&w, t));
     assert_eq!(cursor(&w, &[t], ClickOn::Object(t)), Action::NoDeploy);
 }
-
