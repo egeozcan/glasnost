@@ -208,7 +208,10 @@ fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
             // spec: S-0503 Terms (D's height: the surface height of its cell, plus 416 leptons on a high-bridge cell)
             Some(Pos::new(x, y, w.surface_at(x, y) + deck))
         }
-        Target::Object(t) => w.obj(t).map(|x| x.pos),
+        // spec: S-0314 claim 18 (a vehicle in depot contact: the supplied docking point is the destination position, not the building's)
+        Target::Object(t) => {
+            crate::depot::heading_point(w, id, t).or_else(|| w.obj(t).map(|x| x.pos))
+        }
     }
 }
 

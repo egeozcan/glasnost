@@ -941,3 +941,38 @@ fn sold_depot_frees_a_hover_with_the_quirk_off() {
     let o = w.obj(v).unwrap();
     assert_ne!((o.pos.x, o.pos.y), before, "the hover moves away");
 }
+
+// spec: S-0314 claim 18 (the supplied docking point, not the building's position, is the destination position, for a hovering vehicle too); S-0503 claim 7 (the hover stops in its destination's cell); S-0314 claims 6, 16 and 17 (it docks and the depot repairs it)
+#[test]
+fn hover_docks_at_a_three_by_three_depot_and_is_repaired() {
+    let mut r = rules();
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("SKIMMER".into());
+    r.sim.vehicles.insert(
+        "SKIMMER".into(),
+        UnitType {
+            locomotion_class: Some(LocomotionClass::Hover),
+            locomotor: Some(Locomotor::Hover),
+            movement_zone: Some(MovementZone::Amphibious),
+            ..wheel(600)
+        },
+    );
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT");
+    let v = spawn(&mut w, Kind::Vehicle, "SKIMMER", 0, 6, 1);
+    w.obj_mut(v).unwrap().health = 300;
+    open(&mut w);
+    click_enter(&mut w, v, d);
+    assert!(
+        run_until(&mut w, 900, |w| docked(w, v)
+            && w.obj(d).unwrap().beh.current == Some(Behaviour::Repair)),
+        "the hover docks and the depot starts repair"
+    );
+    assert_eq!(w.obj(v).unwrap().pos.cell(), dock_cell(), "in the docking cell");
+    assert!(
+        run_until(&mut w, 900, |w| health(w, v) > 300),
+        "the depot repairs the hover"
+    );
+}

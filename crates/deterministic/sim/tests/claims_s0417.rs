@@ -965,3 +965,61 @@ fn claim_10_teleporting_infantry_reports_at_its_jump() {
     let next = new_unit(&mut w, Kind::Infantry, "GRUNT");
     assert_eq!(release::release(&mut w, k, next), Outcome::Released);
 }
+
+// spec: S-0417 claims 5, 7 and 8, S-0212 claim 24 and departure D3 (a hover whose fixed destination holds another building is sent to the nearby-cell substitute, which becomes its destination: it reports clear, leaves the apron and comes to rest there)
+#[test]
+fn hover_exit_cell_with_building_adopts_substitute() {
+    let mut r = ruleset_with([3, 2]);
+    let hover = glasnost_rules::sim::UnitType {
+        locomotion_class: Some(glasnost_rules::sim::LocomotionClass::Hover),
+        locomotor: Some(glasnost_rules::sim::Locomotor::Hover),
+        ..wheel(700)
+    };
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("HOVR".into());
+    r.sim.vehicles.insert("HOVR".into(), hover);
+    let mut w = game(&r);
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let c = top_left(&w, k);
+    let exit = CellXY::new(c.x + 4, c.y + 1);
+    let other = glasnost_sim::testkit::spawn(&mut w, Kind::Building, "VF", 0, exit, 0);
+    let o0 = top_left(&w, other);
+    let foot: Vec<CellXY> = (0..2)
+        .flat_map(|dy| (0..3).map(move |dx| CellXY::new(o0.x + dx, o0.y + dy)))
+        .collect();
+    assert!(foot.contains(&exit));
+    let h = new_unit(&mut w, Kind::Vehicle, "HOVR");
+    assert_eq!(release::release(&mut w, k, h), Outcome::Released);
+    let mut substitute = None;
+    let mut reported = false;
+    let mut rested = false;
+    // Well before the give-up of S-0212 claim 23a, which would otherwise end
+    // an orbit around the unreachable building cell much later.
+    for _ in 0..300 {
+        step(&mut w);
+        let u = w.obj(h).unwrap();
+        if let Some(Target::Cell(d)) = u.dest
+            && d != exit
+        {
+            substitute = Some(d);
+        }
+        reported |= u.contact.is_none();
+        let o = w.obj(k).unwrap();
+        if reported
+            && u.dest.is_none()
+            && o.beh.current == Some(Behaviour::Guard)
+            && o.beh.gate.door == Door::Closed
+        {
+            rested = true;
+            break;
+        }
+    }
+    let s = substitute.expect("the substitute replaces the destination");
+    assert!(!foot.contains(&s), "the substitute is not a cell of the other building");
+    assert!(reported, "the hover reports clear");
+    assert!(rested, "the move ends and the factory closes");
+    assert_eq!(w.obj(h).unwrap().pos.cell(), s, "at rest in the substitute cell");
+    assert!(!release::tethered(&w, h));
+}
