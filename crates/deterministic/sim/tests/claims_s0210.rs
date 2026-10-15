@@ -490,6 +490,36 @@ fn a_crushable_overlay_stays_and_ends_the_slowdown() {
     assert!(!w.obj(id).unwrap().crush_slowdown);
 }
 
+// spec: S-0210 claim 4 (the crushed type's crush sound plays at the crusher's position)
+// spec: S-0210 claim 8 (every crushed overlay plays its crush sound at the crusher)
+#[test]
+fn crushing_plays_the_crush_sounds() {
+    use glasnost_sim::combat::effects::{Effect, Sound};
+    let (mut w, id) = overlay_world("MASHER", BRUSH, 0, &[]);
+    let mut s = scene();
+    s.place_unit(ALPHA, "MASHER", cell(0, 0), 64);
+    s.place_infantry(BETA, "GRUNT", cell(0, 0), 2);
+    let mut w2 = s.build();
+    let m = one(&w2, Kind::Vehicle, "MASHER");
+    let pos = w.obj(id).unwrap().pos;
+    w.effects.clear();
+    crush::at_cell_centre(&mut w, id);
+    assert!(
+        w.effects
+            .iter()
+            .any(|e| matches!(e, Effect::OverlayCrushed { overlay, pos: p } if *overlay == BRUSH && *p == pos))
+    );
+    let grunt = w2.rules().index_of(Kind::Infantry, "GRUNT").unwrap();
+    let mpos = w2.obj(m).unwrap().pos;
+    w2.effects.clear();
+    crush::at_cell_centre(&mut w2, m);
+    assert!(w2.effects.iter().any(|e| matches!(
+        e,
+        Effect::Sound { sound: Sound::Crush, of: Some(t), pos: Some(p), .. }
+            if t.kind == Kind::Infantry && t.index == grunt && *p == mpos
+    )));
+}
+
 // spec: S-0210 claim 8 (a wall is crushed only by a crusher of movement zone crusher-all, and is then removed)
 #[test]
 fn a_wall_is_crushed_only_by_a_crusher_all_crusher() {
@@ -507,13 +537,12 @@ fn a_wall_is_crushed_only_by_a_crusher_all_crusher() {
     assert!(!w.obj(id).unwrap().crush_slowdown);
 }
 
-const HIT_NOTE: &str = "S-0210 claim 8: a wall hit succeeded";
-
-fn hit_noted(w: &World) -> bool {
-    w.notes.iter().any(|n| n.starts_with(HIT_NOTE))
+fn stage_at(w: &World, c: CellXY) -> u8 {
+    w.cells.cell(c).unwrap().overlay_data / 16
 }
 
 // spec: S-0210 claim 8 (stage D − 2 hits undamaged neighbours of the same type: one draw each when S > 200)
+// spec: S-0210 F3 (north, east, south, west; success when the draw is below 200); S-0303 F4 (a successful hit raises the stage by one)
 #[test]
 fn a_wall_at_stage_d_minus_two_hits_its_undamaged_neighbours() {
     // Stage 2 = D − 2 (data 32 … 47). North and east: undamaged FENCE;
@@ -535,13 +564,18 @@ fn a_wall_at_stage_d_minus_two_hits_its_undamaged_neighbours() {
     crush::at_cell_centre(&mut w, id);
     assert_eq!(overlay_at(&w, cell(0, 0)), NO_OVERLAY);
     assert_eq!(w.rng, expect, "exactly two ranged draws over 0 … 300");
-    assert_eq!(hit_noted(&w), draws.iter().any(|&r| r < 200));
-    // The neighbours themselves stay (the hit's effect is the overlay specs').
+    // North took the first draw, east the second: each rises to stage 1 on success.
+    assert_eq!(stage_at(&w, cell(0, -1)), u8::from(draws[0] < 200));
+    assert_eq!(stage_at(&w, cell(1, 0)), u8::from(draws[1] < 200));
+    // South (damaged) and west (another type) are not hit.
+    assert_eq!(stage_at(&w, cell(0, 1)), 1);
+    assert_eq!(stage_at(&w, cell(-1, 0)), 0);
     assert_eq!(overlay_at(&w, cell(0, -1)), FENCE);
     assert_eq!(overlay_at(&w, cell(-1, 0)), LOWWALL);
 }
 
 // spec: S-0210 claim 8 (with a wall strength of at most 200 the hit always succeeds and takes no draw)
+// spec: S-0303 F4 (the successful hit raises the neighbour to stage 1; it stays, as 1 is not L − 1)
 #[test]
 fn a_weak_wall_hit_always_succeeds_without_a_draw() {
     let (mut w, id) = overlay_world("MASHALL", PALING, 32, &[(0, -1, PALING, 0)]);
@@ -549,7 +583,8 @@ fn a_weak_wall_hit_always_succeeds_without_a_draw() {
     crush::at_cell_centre(&mut w, id);
     assert_eq!(overlay_at(&w, cell(0, 0)), NO_OVERLAY);
     assert_eq!(w.rng, rng);
-    assert!(hit_noted(&w));
+    assert_eq!(overlay_at(&w, cell(0, -1)), PALING);
+    assert_eq!(stage_at(&w, cell(0, -1)), 1);
 }
 
 // spec: S-0210 claim 8 (another stage, or a type with at most two stages: removed, no hit)
@@ -576,7 +611,9 @@ fn other_stages_remove_the_wall_without_hits() {
             "overlay {ov} data {data}"
         );
         assert_eq!(w.rng, rng, "overlay {ov} data {data}");
-        assert!(!hit_noted(&w), "overlay {ov} data {data}");
+        for n in [cell(0, -1), cell(1, 0), cell(0, 1), cell(-1, 0)] {
+            assert_eq!(stage_at(&w, n), 0, "overlay {ov} data {data}: no hit");
+        }
     }
 }
 
@@ -741,7 +778,8 @@ fn wall_defaults_are_one_stage_and_strength_one() {
     crush::at_cell_centre(&mut w, id);
     assert_eq!(overlay_at(&w, cell(0, 0)), NO_OVERLAY);
     assert_eq!(w.rng, rng);
-    assert!(!hit_noted(&w));
+    // The neighbour (one stage only) was not hit: it still stands (a hit would remove it, s ≥ L).
+    assert_eq!(overlay_at(&w, cell(0, -1)), 5);
 }
 
 /// A scene with FENCE walls at `walls` and HUTs of the given houses.

@@ -174,6 +174,21 @@ pub fn door_frame(
     p + if damaged && damaged_door { d64 } else { 0 }
 }
 
+/// The body frame of a gate whose door is opening or closing (S-0108
+/// claim 4): *p* when not damaged and *p* + *G* + 1 when damaged, with *p*
+/// the door position clamped to 0 … *G* − 1 (no clamp of claim 3). `None`
+/// for a door at rest, which claim 2's stationary rows draw. *p* itself is
+/// the Q-0685 interim: claim 23's door-frame rule with *D* = *G*.
+pub fn gate_frame(door: DoorView, g: i32, damaged: bool, mode: Rounding) -> Option<i64> {
+    if !matches!(door, DoorView::Opening { .. } | DoorView::Closing { .. }) {
+        return None;
+    }
+    // interim: Q-0685 (p from claim 23 and F8 with D = G, clamped to 0 … G − 1)
+    let p = door_frame(door, g, false, false, mode);
+    // spec: S-0108 claim 4 (p when not damaged, p + G + 1 when damaged)
+    Some(p + if damaged { i64::from(g) + 1 } else { 0 })
+}
+
 /// The door-stage count *D* and the damaged-door flag of a building
 /// (S-0108 claim 24) from the values of `DoorStages` and `DamagedDoor` in
 /// the art section named by its image name; neither is inferred from the
@@ -405,5 +420,25 @@ mod tests {
         assert_eq!(door_inputs(Some(b"3"), Some(b"no")), (3, false));
         assert_eq!(door_inputs(Some(b"4abc"), Some(b"Yes please")), (4, true));
         assert_eq!(door_inputs(Some(b"-2"), Some(b"1")), (-2, true));
+    }
+
+    // spec: S-0108 claim 4 (a moving gate: p undamaged, p + G + 1 damaged, p within 0 … G − 1; at rest: the stationary rows); interim: Q-0685 (p by claim 23's rule with D = G)
+    #[test]
+    fn moving_gate_frames() {
+        let g = 9;
+        assert_eq!(gate_frame(DoorView::Closed, g, false, RZ), None);
+        assert_eq!(gate_frame(DoorView::Open, g, true, RZ), None);
+        // Opening, 90 ticks: q = 0 gives 0, q = 1/2 gives trunc(4.5) = 4, q = 1 holds G − 1.
+        let opening = |r| DoorView::Opening { m: 90, r };
+        assert_eq!(gate_frame(opening(90), g, false, RZ), Some(0));
+        assert_eq!(gate_frame(opening(45), g, false, RZ), Some(4));
+        assert_eq!(gate_frame(opening(0), g, false, RZ), Some(8));
+        // Closing runs backwards: q = 0 gives G, clamped to G − 1; q = 1 gives 0.
+        let closing = |r| DoorView::Closing { m: 90, r };
+        assert_eq!(gate_frame(closing(90), g, false, RZ), Some(8));
+        assert_eq!(gate_frame(closing(0), g, false, RZ), Some(0));
+        // Damaged: + G + 1, so G + 1 … 2G.
+        assert_eq!(gate_frame(opening(90), g, true, RZ), Some(10));
+        assert_eq!(gate_frame(opening(0), g, true, RZ), Some(18));
     }
 }

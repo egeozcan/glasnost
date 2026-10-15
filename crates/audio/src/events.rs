@@ -99,6 +99,7 @@ enum RadarKind {
     UnitProduced,
     UnitLost,
     AllyAttacked,
+    UnitRepaired,
 }
 
 impl RadarKind {
@@ -111,6 +112,8 @@ impl RadarKind {
             RadarKind::UnitProduced => (2, 200),
             RadarKind::UnitLost => (8, 200),
             RadarKind::AllyAttacked => (8, 600),
+            // spec: S-0701 F7 (unit repaired 2, 400)
+            RadarKind::UnitRepaired => (2, 400),
         }
     }
 }
@@ -599,6 +602,14 @@ impl Audio {
                 house,
                 pos,
             } => self.sound(w, *sound, *of, *house, *pos),
+            // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
+            Effect::OverlayCrushed { overlay, pos } => {
+                let s = self
+                    .names
+                    .overlay_crush(u32::from(*overlay))
+                    .map(str::to_owned);
+                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+            }
         }
     }
 
@@ -660,6 +671,32 @@ impl Audio {
                 {
                     self.announce(Announcement::UnitReady);
                 }
+            }
+            // spec: S-0314 claim 6; S-0701 claim 28 (repair complete: the depot owner's, only when it is the local player, through the F7 kind unit repaired at the depot; suppressed with the event)
+            Sound::UnitRepaired => {
+                if house.is_some()
+                    && house == self.local
+                    && let Some(p) = pos
+                    && self.radar_event(RadarKind::UnitRepaired, cell_of(p), w.tick)
+                {
+                    self.announce(Announcement::RepairComplete);
+                }
+            }
+            // spec: S-0210 claim 4 (the crushed type's crush sound at the crusher's position, any owner)
+            Sound::Crush => {
+                self.play_in(w, ts.crush.as_deref(), at);
+            }
+            // spec: S-0207 claim 20 (e) (the departure sound at the old point; the type's sound overrides the game-wide one)
+            Sound::ChronoOut => {
+                self.play_in(w, ts.chrono_out.as_deref(), at);
+            }
+            // spec: S-0207 claim 20 (e) (the arrival sound at L; the type's sound overrides the game-wide one)
+            Sound::ChronoIn => {
+                self.play_in(w, ts.chrono_in.as_deref(), at);
+            }
+            // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
+            Sound::LowFunds if house.is_some() && house == self.local => {
+                self.announce(Announcement::LowFunds);
             }
             _ => {}
         }

@@ -504,6 +504,24 @@ fn claim_12_unsellable_builder() {
     assert_eq!(w.cells.cell(c(0, 0)).unwrap().overlay, 0);
 }
 
+// spec: S-0408 Edge cases (quirks.wall_sale_no_refund off: a wall sale pays the refund of the wall overlay's builder; on: nothing)
+#[test]
+fn quirk_wall_sale_no_refund_off() {
+    let mut r = rules();
+    r.globals.quirks.wall_sale_no_refund = false;
+    let mut w = game(&r);
+    set_wall(&mut w, c(0, 0), Some(A));
+    let credits = w.houses[0].credits;
+    let walla = TypeRef {
+        kind: Kind::Building,
+        index: w.rules().index_of(Kind::Building, "WALLA").unwrap(),
+    };
+    let expected = sell::refund(&w, A, walla);
+    assert!(expected > 0);
+    assert!(sell::wall_sale(&mut w, A, c(0, 0), false));
+    assert_eq!(w.houses[0].credits, credits + expected);
+}
+
 // spec: S-0408 claim 12 (the owner must be a human-controlled house, in our engine a player house: a neutral house's wall stays)
 #[test]
 fn claim_12_non_player_owner() {

@@ -171,6 +171,9 @@ pub struct SoundNames {
     anim_stop: BTreeMap<String, String>,
     reports: BTreeMap<String, Vec<String>>,
     announcements: BTreeMap<Announcement, String>,
+    /// Overlay types' `CrushSound`, by overlay registration index (S-0210
+    /// Import mapping).
+    overlay_crush: BTreeMap<u32, String>,
     /// `[AudioVisual] SellSound` (S-0408, S-0701 Import mappings).
     pub sell: Option<String>,
     /// `[AudioVisual] RadarOn` (S-0410 Import mapping).
@@ -494,7 +497,29 @@ impl SoundNames {
                 }
             }
         }
+        // spec: S-0210 Import mapping (`CrushSound` of an overlay type: the crushed overlay's sound)
+        if let Some(reg) = r.registries.get("overlays") {
+            let types = r.types.get("overlays");
+            for (i, name) in reg.iter().enumerate() {
+                let s = types
+                    .and_then(|m| m.get(name))
+                    .and_then(|t| name_field(t.ini.get("CrushSound")));
+                if let Some(s) = s {
+                    out.overlay_crush.insert(i as u32, s);
+                }
+            }
+        }
         out
+    }
+
+    /// An overlay type's crush sound (S-0210 claim 8), by registration index.
+    pub fn overlay_crush(&self, overlay: u32) -> Option<&str> {
+        self.overlay_crush.get(&overlay).map(String::as_str)
+    }
+
+    /// Sets an overlay type's crush sound (tests and tools).
+    pub fn set_overlay_crush(&mut self, overlay: u32, sound: &str) {
+        self.overlay_crush.insert(overlay, sound.to_owned());
     }
 
     /// The sound names of a type, by simulation kind and registration
@@ -610,6 +635,14 @@ mod tests {
         let mut puff = BTreeMap::new();
         puff.insert("Report".into(), "Poof".into());
         r.art_sections.insert("Puff".into(), puff);
+        r.registries
+            .insert("overlays".into(), vec!["Rock".into(), "Fence".into()]);
+        let mut fence = ImportedType::default();
+        fence.ini.insert("CrushSound".into(), "Crunch".into());
+        r.types
+            .entry("overlays".into())
+            .or_default()
+            .insert("Fence".into(), fence);
         r
     }
 
@@ -626,6 +659,9 @@ mod tests {
         assert_eq!(hut.deploy.as_deref(), Some("Whirr"));
         assert_eq!(hut.packup.as_deref(), Some("Clunk"));
         assert_eq!(hut.crush, None, "an empty value is no sound");
+        // spec: S-0210 Import mapping (`CrushSound` of an overlay type, by registration index)
+        assert_eq!(n.overlay_crush(0), None);
+        assert_eq!(n.overlay_crush(1), Some("Crunch"));
         let grunt = n.of_type(Kind::Infantry, 0).unwrap();
         assert_eq!(grunt.voice_select, ["Yes1", "Yes2"]);
         assert_eq!(grunt.enter_water.as_deref(), Some("Splish"));

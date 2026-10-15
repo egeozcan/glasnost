@@ -1015,11 +1015,23 @@ pub fn pad_position(w: &World, k: ObjectId, unit: ObjectId) -> (Pos, u32) {
         .map(|e| e.place);
     // spec: S-0404 claim 15 (an aircraft already in contact keeps that place; otherwise it takes the first empty place)
     let place = kept.unwrap_or_else(|| first_free_place(w, k, count.max(1) as u32));
+    (pad_position_at(w, k, place), place)
+}
+
+/// The position of contact place `place` of building `k` (S-0404 claim 15;
+/// S-0314 claim 18 for repair depots).
+pub fn pad_position_at(w: &World, k: ObjectId, place: u32) -> Pos {
+    let c = w.reference_point(k);
+    let Some(b) = building_rules(w, k) else {
+        return c;
+    };
+    // spec: S-0404 Import mapping (NumberOfDocks, rules, absent 1)
+    let count = b.raw.econ.number_of_docks.unwrap_or(1);
     // spec: S-0404 Import mapping (Helipad, UnitRepair absent: no)
     let pad = b.raw.helipad.unwrap_or(false) || b.raw.unit_repair.unwrap_or(false);
     if !pad {
         // spec: S-0404 claim 15 (without either flag: c)
-        return (c, place);
+        return c;
     }
     let offsets = b.raw.econ.docking_offsets.clone().unwrap_or_default();
     let at = |i: usize| offsets.get(i).copied().unwrap_or([0; 3]); // spec: S-0404 Import mapping (new places start at 0, 0, 0)
@@ -1041,7 +1053,7 @@ pub fn pad_position(w: &World, k: ObjectId, unit: ObjectId) -> (Pos, u32) {
         ),
         None => c,
     };
-    (p, place)
+    p
 }
 
 /// The stages of a factory's unloading (S-0417 table S1), kept in the
@@ -1081,7 +1093,9 @@ fn door_time(w: &World, k: ObjectId) -> i32 {
 fn contacted(w: &World, k: ObjectId) -> Option<ObjectId> {
     w.objects
         .values()
-        .find(|o| o.contact == Some(k))
+        // A vehicle in depot contact with a repairing naval yard is not a
+        // factory release (S-0314 claim 17 and S-0417 are separate contacts).
+        .find(|o| o.contact == Some(k) && o.depot.link.is_none_or(|l| l.depot != k))
         .map(|o| o.id)
 }
 

@@ -1478,12 +1478,19 @@ impl Builder<'_> {
     /// Overlays and their shadows (S-0112 claims 1 to 9; S-0102 claims 12,
     /// 13 and 24; S-0009 claim 12).
     fn overlays(&mut self) {
-        let q = OverlayQuirks::default();
-        let k = Kind::Overlays;
-        let list_len = self.import.outcome.registries.get(&k).map_or(0, Vec::len);
         let grid = self.cells_loaded.unwrap_or(&self.map.cells);
         let cells: Vec<(CellXY, glasnost_map::Cell)> =
             grid.iter().map(|(c, cell)| (c, *cell)).collect();
+        self.overlays_in(cells, false);
+    }
+
+    /// The overlays and shadows of `cells`, as [`Builder::overlays`] draws
+    /// them; `live` cells (redrawn during play) are not added to the
+    /// object list, so their items name no object.
+    fn overlays_in(&mut self, cells: Vec<(CellXY, glasnost_map::Cell)>, live: bool) {
+        let q = OverlayQuirks::default();
+        let k = Kind::Overlays;
+        let list_len = self.import.outcome.registries.get(&k).map_or(0, Vec::len);
         let runs = self.tiberium_runs();
         let (local_hsv, _) = self.owner_colour(HUMAN);
         let mut beyond = 0usize;
@@ -1593,13 +1600,15 @@ impl Builder<'_> {
             let (qx, qy) = cell_top(c.x, c.y);
             let p = (qx, qy + 15 - TERRAIN_LIFT * level + shift);
             let name = self.import.outcome.registries[&k][idx].name.clone();
-            let object = self.add_object(ObjectInfo {
-                kind: "overlay",
-                type_name: String::from_utf8_lossy(&name).into_owned(),
-                owner: String::new(),
-                cell: c,
-                entry: format!("type index {o}, data {d}"),
-                notes: Vec::new(),
+            let object = (!live).then(|| {
+                self.add_object(ObjectInfo {
+                    kind: "overlay",
+                    type_name: String::from_utf8_lossy(&name).into_owned(),
+                    owner: String::new(),
+                    cell: c,
+                    entry: format!("type index {o}, data {d}"),
+                    notes: Vec::new(),
+                })
             });
             // spec: S-0112 claim 9 (an image frame beyond the sprite draws nothing)
             if let (Some((sprite, frame)), Some(row)) = (&body, paint_row)
@@ -1621,7 +1630,7 @@ impl Builder<'_> {
                     Paint::Lit(row),
                     Group::Overlays,
                     false,
-                    Some(object),
+                    object,
                 )
             {
                 self.built.scene.items.push(item);
@@ -1665,7 +1674,7 @@ impl Builder<'_> {
                     Paint::Shadow,
                     Group::Shadows,
                     false,
-                    Some(object),
+                    object,
                 )
             {
                 shadows.push(item);
@@ -2056,6 +2065,26 @@ impl Builder<'_> {
                 self.drop_object("unknown building type");
                 continue;
             };
+            // spec: S-0112 claim 7 (a wall building of the map's building list is placed as its wall
+            // overlay, which the game's cells hold); S-0406 claim 10 (no building remains)
+            if self.cells_loaded.is_some()
+                && self.rules.is_some_and(|r| {
+                    r.index_of(
+                        glasnost_sim::rules::Kind::Building,
+                        &String::from_utf8_lossy(&p.type_name),
+                    )
+                    .and_then(|t| r.buildings.get(t as usize))
+                    .is_some_and(|b| {
+                        b.raw.econ.wall.unwrap_or(false)
+                            && b.raw.econ.to_overlay.as_deref().is_some_and(|o| {
+                                r.overlays.iter().any(|v| v.name.eq_ignore_ascii_case(o))
+                            })
+                    })
+                })
+            {
+                self.drop_object("wall building placed as its wall overlay");
+                continue;
+            }
             let Some(art) = self.import.arts.get(&(Kind::Buildings, i)).cloned() else {
                 self.drop_object("building without art");
                 continue;
@@ -2085,7 +2114,8 @@ impl Builder<'_> {
             let facing = facing_from_value(p.facing);
             // A map-placed building is not unloading when the scene is built.
             let items = self.building_items(
-                i, &art, p.cell, cell.level, &p.owner, condition, facing, object, None, ground,
+                i, &art, p.cell, cell.level, &p.owner, condition, facing, object, None, None,
+                ground,
             );
             self.built.scene.items.extend(items);
         }
@@ -2110,9 +2140,24 @@ impl Builder<'_> {
         facing: u16,
         object: u32,
         unloading: Option<Unloading>,
+        gate_door: Option<unload::DoorView>,
         ground: &mut Vec<GroundEntry>,
     ) -> Vec<Item> {
         let mut items = Vec::new();
+        let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
+        // spec: S-0108 Import mapping (GateStages, an art key: integer, absent 9)
+        let gate_stages = self
+            .art_value(Kind::Buildings, i, b"GateStages")
+            .and_then(value::integer)
+            .unwrap_or(9);
+        // spec: S-0108 claim 4 (a gate opening or closing draws frame p, or p + G + 1 damaged, from
+        // the body sprite; F8's rounding mode as the rules hold it)
+        let moving_gate = gate_door.filter(|_| gate).and_then(|d| {
+            let mode = self.rules.map_or(Rounding::TowardZero, |r| r.mode);
+            unload::gate_frame(d, gate_stages, condition.0, mode)
+        });
+        // spec: S-0108 claim 4 (while the gate moves no unloading or under-door image is drawn)
+        let unloading = unloading.filter(|_| moving_gate.is_none());
         let (hsv, _) = self.owner_colour(owner);
         let z = LEVEL_LEPTONS * i32::from(level);
         let lz = height_lift(z);
@@ -2164,12 +2209,14 @@ impl Builder<'_> {
         // spec: S-0108 claim 3 (a negative start is kept: a negative index draws nothing)
         let k = idle[0];
         let occupiable = rule_bool(self.import, Kind::Buildings, i, b"CanBeOccupied", false);
-        let gate = rule_bool(self.import, Kind::Buildings, i, b"Gate", false);
         let (damaged, badly) = condition;
         // spec: S-0108 claim 2 (outside construction the occupiable rule comes before the stationary
         // gate rule: occupiable 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or below,
         // damaged above; a gate 0, damaged G + 1; others k, damaged k + 1 in the idle state)
-        let f: i32 = if occupiable {
+        let f: i32 = if let Some(m) = moving_gate {
+            // spec: S-0108 claim 2 (a moving gate uses claim 4, before the occupiable rule)
+            i32::try_from(m).unwrap_or(-1)
+        } else if occupiable {
             // spec: S-0108 Import mapping (TechLevel absent: 255)
             let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
             // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule)
@@ -2181,12 +2228,7 @@ impl Builder<'_> {
             ))
         } else if gate {
             if damaged {
-                // spec: S-0108 Import mapping (GateStages, an art key: integer, absent 9)
-                let g = self
-                    .art_value(Kind::Buildings, i, b"GateStages")
-                    .and_then(value::integer)
-                    .unwrap_or(9);
-                g.saturating_add(1)
+                gate_stages.saturating_add(1)
             } else {
                 0
             }
@@ -2195,7 +2237,12 @@ impl Builder<'_> {
         };
         let n_i = i32::try_from(n).unwrap_or(i32::MAX);
         // spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋ − 1); with no body frames nothing is drawn)
-        let body_frame = drawn_body_frame(f, n_i);
+        let body_frame = if moving_gate.is_some() {
+            // spec: S-0108 claim 4 (the clamp of claim 3 does not apply to a moving gate)
+            f
+        } else {
+            drawn_body_frame(f, n_i)
+        };
         // spec: S-0108 claim 3, F2 (an index below 0 or at or past N draws nothing)
         let frame_of = |x: i32| usize::try_from(x).ok().filter(|&x| x < n);
         let normal_z = self
@@ -2255,7 +2302,9 @@ impl Builder<'_> {
         }
         // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
         // spec: S-0108 claim 3 (a negative bib index draws nothing; one past the bib sprite neither)
+        // spec: S-0108 claim 4 (no bib while a gate opens or closes)
         if let Some(bib) = art.building_sprites.get("bib").cloned()
+            && moving_gate.is_none()
             && let Ok(bib_frame) = usize::try_from(f)
             && let Some(item) = self.place_sprite(
                 &bib,
@@ -3800,6 +3849,45 @@ impl Painter {
         *scene = b.built.scene;
         (entries, b.built.notes)
     }
+    /// The overlay and overlay-shadow items of `cells` as they stand during
+    /// play (S-0112 claims 1 to 9): every body before every shadow (S-0102
+    /// claim 16 rank 3). The items name no object.
+    pub fn live_overlays(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        cells: Vec<(CellXY, glasnost_map::Cell)>,
+    ) -> (Vec<Item>, BTreeSet<String>) {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+        };
+        let start = b.built.scene.items.len();
+        b.overlays_in(cells, true);
+        let items = b.built.scene.items.split_off(start);
+        *self = b.p;
+        *scene = b.built.scene;
+        (items, b.built.notes)
+    }
+
     /// Draws the live game's own buildings into `scene`: for each, its
     /// items (body, shadow, bib, then any voxel turret or barrel).
     pub fn buildings(
@@ -3856,6 +3944,7 @@ impl Painter {
                 d.facing,
                 d.object,
                 d.unloading,
+                d.gate_door,
                 &mut ground,
             );
             for g in ground {
@@ -3889,8 +3978,8 @@ fn condition_of(r: &SimRules, h: i32, strength: i32) -> (bool, bool) {
     )
 }
 
-/// A building the live game put on the map (deployed or placed), not one
-/// of the map's own.
+/// A building the live game draws: one it put on the map (deployed or
+/// placed), or a gate of the map's own (whose door moves).
 #[derive(Clone, Debug)]
 pub struct LiveBuilding {
     /// Import registration index of its type.
@@ -3908,6 +3997,9 @@ pub struct LiveBuilding {
     /// Its unloading state, while it unloads a unit (S-0417 Terms; S-0108
     /// claims 22 and 23).
     pub unloading: Option<Unloading>,
+    /// The door of a gate (S-0215 claim 35; S-0108 claim 4); `None` for
+    /// any other building.
+    pub gate_door: Option<unload::DoorView>,
 }
 
 /// A greyscale-free minimap: each cell as two pixels with its tile radar

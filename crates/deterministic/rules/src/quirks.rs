@@ -1397,15 +1397,15 @@ pub struct Quirks {
     // spec: S-0515 claim 6 and Edge cases
     #[serde(default = "on")]
     pub cash_cycle_lapse: bool,
-    /// A docked vehicle ordered away keeps receiving paid repair steps wherever it stands still; off: a move or attack order ends its contact as for an approaching vehicle, so steps happen only at the depot. Not implemented yet.
+    /// A docked vehicle ordered away keeps receiving paid repair steps wherever it stands still; off: a move or attack order ends its contact as for an approaching vehicle, so steps happen only at the depot.
     // spec: S-0314 claim 21 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_remote_repair: bool,
-    /// After its depot is destroyed, a docked vehicle stays asleep and neither fires nor reacts until ordered; off: destruction gives contacts the sale's run-away notice and they switch to guard. Not implemented yet.
+    /// After its depot is destroyed, a docked vehicle stays asleep and neither fires nor reacts until ordered; off: destruction gives contacts the sale's run-away notice and they switch to guard.
     // spec: S-0314 claim 22 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_loss_leaves_sleep: bool,
-    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. Not implemented yet.
+    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. The depot cycle keeps the switched-off state (`depot::locomotor_off`); the hovering locomotor (S-0503) is not built yet, so nothing is stranded in play.
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,

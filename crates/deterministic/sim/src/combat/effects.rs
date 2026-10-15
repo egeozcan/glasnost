@@ -87,6 +87,14 @@ pub enum Effect {
         /// The waypoint cell's centre, for 55 and 99.
         pos: Option<Pos>,
     },
+    /// A crusher crushed an overlay (S-0210 claim 8): the overlay type's
+    /// crush sound plays at the crusher's position.
+    OverlayCrushed {
+        /// The overlay type, by registration index.
+        overlay: u8,
+        /// The crusher's position.
+        pos: Pos,
+    },
 }
 
 /// The sounds of [`Effect::Sound`].
@@ -111,6 +119,22 @@ pub enum Sound {
     /// A rocket missile's take-off sound at the end of its tilt or raise
     /// (S-0506 claim 15): `of` is the missile's type, `pos` its position.
     TakeOff,
+    /// A depot finished repairing a vehicle (S-0314 claim 6, S-0701 claim
+    /// 28): the repair-complete announcement and the *unit repaired* radar
+    /// event, for the depot's owner at the depot's position.
+    UnitRepaired,
+    /// The low-funds announcement of a depot that cannot pay (S-0314 claim
+    /// 6), for the depot's owner.
+    LowFunds,
+    /// A crushed object's crush sound (S-0210 claim 4): `of` is the crushed
+    /// object's type, `pos` the crusher's position.
+    Crush,
+    /// A teleporting object's own jump left its old point (S-0207 claim 20
+    /// e): `of` is its type, `pos` the old point.
+    ChronoOut,
+    /// A teleporting object's own jump arrived at its landing point (S-0207
+    /// claim 20 e): `of` is its type, `pos` the landing point.
+    ChronoIn,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

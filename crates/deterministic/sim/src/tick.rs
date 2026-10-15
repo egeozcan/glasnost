@@ -123,6 +123,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
     crate::combat::heal::turn(w, id);
+    if w.obj(id)
+        .is_some_and(|o| o.kind == crate::rules::Kind::Vehicle)
+    {
+        // spec: S-0314 claim 23 (a vehicle with a queued entry asks again every tick; Q-0683 interim: in its own turn, before its behaviour processing)
+        crate::depot::vehicle_turn(w, id);
+    }
     let sinking = crate::naval::sinking(w, id);
     process::turn(w, id);
     if w.obj(id).is_none() {

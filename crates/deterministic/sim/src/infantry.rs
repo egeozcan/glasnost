@@ -266,6 +266,8 @@ fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
     // spec: S-0207 claim 20 (a) (the teleporting locomotor takes a destination at once)
     crate::teleport::take_destination(w, id);
+    // spec: S-0314 claim 22 (a destination given while a depot or tank bunker occupies the cell switches the locomotor on)
+    crate::depot::destination_given(w, id);
     let Some(o) = w.obj(id) else { return };
     // spec: S-0107 claim 15 (clearing a destination makes no request)
     let Some(new) = o.dest else { return };

@@ -382,6 +382,39 @@ fn a_refused_unit_builds_no_extra_factory() {
     assert_eq!(most, 1, "house 0 kept one vehicle factory");
 }
 
+// spec: S-0314 claim 24 (our AI sends a vehicle to a depot only by an ordinary enter order): a damaged idle army vehicle of a house with an accepting repair depot is given an enter order on it; a healthy one is not.
+#[test]
+fn sends_damaged_vehicles_to_a_depot() {
+    let mut r = fixture::ruleset();
+    let mut depot = r.sim.buildings["FACT"].clone();
+    depot.factory = None;
+    depot.unit_repair = Some(true);
+    r.sim.buildings.insert("DEPO".into(), depot);
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("DEPO".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "depot"));
+    let map = fixture::map();
+    let mut w = glasnost_sim::load::new_game(rules, &map, fixture::catalogue(), &fixture::setup(5))
+        .expect("loads");
+    let at = |dx: i32, dy: i32| fixture::at(dx, dy);
+    let d = testkit::spawn(&mut w, Kind::Building, "DEPO", 0, at(-10, 4), 0);
+    let hurt = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, at(-12, 0), 0);
+    let fine = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, at(-12, 2), 0);
+    w.obj_mut(hurt).unwrap().health = 100;
+    assert_eq!(w.tick % glasnost_ai::scripted::THINK_PERIOD, 0);
+    let orders = Brain::new(&w, &map, HouseId(0)).think(&w);
+    let enter = |id: ObjectId| {
+        orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, behaviour: glasnost_sim::rules::Behaviour::Enter, dest: Some(Target::Object(t)), .. }
+                if *actor == id && *t == d)
+        })
+    };
+    assert!(enter(hurt), "{orders:?}");
+    assert!(!enter(fine));
+}
+
 /// The skirmish ruleset with slave miners for harvesters: SLAVE (a walker
 /// with a rifle, storage 2, harvest rate 3), SMV (a slave-miner vehicle
 /// with three slaves, built at the war factory, deploying into SMB) and SMB

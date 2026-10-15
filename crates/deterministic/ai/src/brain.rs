@@ -50,6 +50,12 @@ const DEFEND: i64 = 12; // nocite: tuning of our own opponent
 /// defend the base; a wave further out goes on.
 const RECALL: i64 = 30; // nocite: tuning of our own opponent
 
+/// An idle army vehicle with health at or below this share (in percent)
+/// of its strength is sent to a repair depot.
+const REPAIR_BELOW: i64 = 50; // nocite: tuning of our own opponent
+/// The scale of [`REPAIR_BELOW`].
+const PERCENT: i64 = 100; // nocite: percent scale
+
 /// The default plan of an AI house: types by role, two harvesters, waves of
 /// six (tuning of our own opponent).
 pub fn default_plan() -> Plan {
@@ -101,6 +107,9 @@ impl Brain {
             self.place_done(w, &mut v);
             v
         };
+        if w.tick % THINK_PERIOD == 0 {
+            self.send_for_repair(w, &mut out);
+        }
         self.rebuild_yard(w, &mut out);
         self.find_deploy_spot(w, &mut out);
         self.defend(w, &mut out);
@@ -231,6 +240,46 @@ impl Brain {
                     attack_move: false,
                     target: None,
                     dest: Some(Target::Cell(c)),
+                });
+            }
+        }
+    }
+
+    /// Sends damaged idle army vehicles to a repair depot of the house that
+    /// accepts them, by the enter order a person gives with a click (S-0314
+    /// claim 24: our AI uses ordinary enter orders only, which follow
+    /// claims 16 to 23).
+    fn send_for_repair(&self, w: &World, out: &mut Vec<Order>) {
+        let own = self.script.own(w);
+        let depots: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| glasnost_sim::depot::is_depot(w, id))
+            .collect();
+        if depots.is_empty() {
+            return;
+        }
+        for id in self.script.of_role(w, Role::Army) {
+            let Some(o) = w.obj(id) else { continue };
+            if o.kind != Kind::Vehicle || !idle(w, id) || o.contact.is_some() {
+                continue;
+            }
+            let strength = i64::from(glasnost_sim::combat::damage::strength(w, id));
+            if i64::from(o.health) * PERCENT > strength * REPAIR_BELOW {
+                continue;
+            }
+            let at = o.pos.cell();
+            if let Some(&d) = depots
+                .iter()
+                .filter(|&&d| glasnost_sim::depot::accepts(w, d, id, true))
+                .min_by_key(|&&d| (w.obj(d).map_or(i64::MAX, |b| dist2(b.pos.cell(), at)), d))
+            {
+                out.push(Order::Behaviour {
+                    actor: id,
+                    behaviour: Behaviour::Enter,
+                    attack_move: false,
+                    target: None,
+                    dest: Some(Target::Object(d)),
                 });
             }
         }

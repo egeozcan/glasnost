@@ -246,6 +246,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             if !live_on_map(w, actor) || crate::econ::tethered(w, actor) {
                 return;
             }
+            // spec: S-0314 claims 20 and 23 (an approaching vehicle given another order loses its depot contact; any order clears a queued entry)
+            crate::depot::stop_order(w, actor);
             let t = w.tick;
             let harvester = w
                 .obj(actor)
@@ -501,6 +503,10 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     {
         return;
     }
+    // spec: S-0314 claims 20 and 23 (an order to a vehicle in depot contact, or an enter order on a depot that holds a contact)
+    if crate::depot::order_applied(w, actor, b, dest) {
+        return;
+    }
     // spec: S-0213 table T3 (b) (a tethered actor keeps its link, unless it is in contact with a building of the unloading kind)
     let keeps = crate::econ::tethered(w, actor)
         && !w
@@ -559,6 +565,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     }
     // spec: S-0213 claim 21 (the destination assignment of the applied order decides the prone get-up, S-0107 claim 15)
     crate::infantry::destination_assigned(w, actor, ob.dest);
+    // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)
+    crate::depot::order_entered(w, actor, b, dest);
 }
 
 /// Group destinations (S-0213 claim 7). Returns, per behaviour order, the

@@ -218,6 +218,9 @@ pub struct Object {
     pub walk: Option<WalkState>,
     /// Infantry state (S-0107).
     pub infantry: Option<InfantryState>,
+    /// Depot-cycle state (S-0314 claims 6 and 16 to 24).
+    #[serde(default)]
+    pub depot: crate::depot::DepotState,
     /// Teleporting locomotor state (S-0207 claim 20).
     #[serde(default)]
     pub teleport: Option<crate::teleport::TeleportState>,

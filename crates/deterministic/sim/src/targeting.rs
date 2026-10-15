@@ -1160,8 +1160,21 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
     } else {
         k
     };
-    // spec: S-0214 table V value n (rows n1 to n3 need a docking answer accepts, which no contact exchange gives yet: n4)
-    let n = b;
+    // spec: S-0214 table V value n (an accepting allied building: allied with the actor, docking answer accepts; for a repair depot S-0314 claim 16's permission)
+    let accepting = b == Action::Select
+        && building(w, t).is_some()
+        && ally
+        && crate::depot::accepts(w, t, actor, true);
+    let n = if !accepting {
+        // spec: S-0214 table V row n4 (row n2's recycling building is not built: no building type of ours recycles)
+        b
+    } else if unit(w, actor).is_some_and(|u| u.zone == MovementZone::Fly) {
+        // spec: S-0214 table V row n1 (movement zone fly: no-enter)
+        Action::NoEnter
+    } else {
+        // spec: S-0214 table V row n3 (an accepting allied building: enter)
+        Action::Enter
+    };
     // spec: S-0214 table V value q (row q1: a moving transport refuses)
     let q = if !matches!(
         n,

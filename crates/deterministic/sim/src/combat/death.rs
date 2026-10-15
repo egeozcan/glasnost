@@ -585,6 +585,9 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
                 no_escape: true,
             };
             damage::apply(w, c, h);
+        } else if crate::depot::link(w, c).is_some_and(|l| l.depot == id) {
+            // spec: S-0314 claim 22 (a destroyed depot's surviving contacts: released without a run-away notice)
+            crate::depot::depot_destroyed(w, id, c);
         } else if let Some(x) = w.obj_mut(c) {
             x.contact = None;
         }

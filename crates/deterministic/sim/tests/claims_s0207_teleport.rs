@@ -832,3 +832,150 @@ fn claim_20_high_bridge_entry_is_asked_at_deck_level() {
         assert_eq!(l.cell() == dc, !deck_taken, "deck taken {deck_taken}");
     }
 }
+
+// spec: S-0214 claims 11 and 26 (a left click on a cell with a teleporting unit selected gives a move to that cell)
+// spec: S-0207 claim 20 (a), (d) and (e) (in play: the landing point is fixed when the order applies and the unit jumps on its next movement update; a warp animation and the departure sound at the old point, the arrival sound and a second warp animation at L, in that order)
+#[test]
+fn claim_20_click_move_teleports_in_play() {
+    use glasnost_sim::combat::effects::{Effect, Sound};
+    use glasnost_sim::targeting::{self, ClickOn, Modifiers};
+    use glasnost_sim::world::HouseId;
+    let mut s = scene(false);
+    s.ruleset.sim.general.warp_out = Some("WARPX".into());
+    let (mut w, id) = start(&s);
+    let from = w.obj(id).unwrap().pos;
+    let dc = cell(5, -9);
+    let r = targeting::click(
+        &w,
+        HouseId(0),
+        &[id],
+        ClickOn::Cell(dc),
+        Modifiers::default(),
+    );
+    assert_eq!(r.orders.len(), 1, "the click gives a move order");
+    for o in r.orders {
+        assert!(glasnost_sim::orders::issue(&mut w, HouseId(0), o));
+    }
+    w.effects.clear();
+    let mut seen = Vec::new();
+    let landed = run_until(&mut w, 5, |w| w.obj(id).unwrap().pos.cell() == dc);
+    assert!(
+        landed <= 2,
+        "it jumps on the movement update after the order"
+    );
+    seen.extend(w.effects.iter().cloned());
+    let to = centre(&w, dc);
+    assert_eq!(w.obj(id).unwrap().pos, to);
+    let jumper = w.rules().index_of(Kind::Vehicle, "JUMPER").unwrap();
+    let order: Vec<(&str, Pos)> = seen
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Anim { name, pos } if name == "WARPX" => Some(("warp", *pos)),
+            Effect::Sound {
+                sound: Sound::ChronoOut,
+                of: Some(t),
+                pos: Some(p),
+                ..
+            } if t.kind == Kind::Vehicle && t.index == jumper => Some(("out", *p)),
+            Effect::Sound {
+                sound: Sound::ChronoIn,
+                of: Some(t),
+                pos: Some(p),
+                ..
+            } if t.kind == Kind::Vehicle && t.index == jumper => Some(("in", *p)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        order,
+        [("warp", from), ("out", from), ("in", to), ("warp", to)]
+    );
+}
+
+// spec: S-0207 claim 20 (j) (a request to turn the body turns it at S-0206's turn rate, as for other locomotors)
+#[test]
+fn claim_20j_body_turns_at_the_turn_rate() {
+    let mut s = scene(false);
+    let mut driver = jumper(false);
+    driver.locomotor = None;
+    s.vehicle("DRIVER", driver);
+    s.place_unit(0, "DRIVER", cell(3, 3), 64);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let ids = objects_of(&w, Kind::Vehicle);
+    let t = w.tick;
+    let omega = w.rules().unit(Kind::Vehicle, 0).unwrap().turn_rate;
+    for &id in &ids {
+        let o = w.obj_mut(id).unwrap();
+        o.body.turn_to(32768, t, omega);
+    }
+    let facings = |w: &World| -> Vec<u16> {
+        ids.iter()
+            .map(|&id| w.obj(id).unwrap().body.value(w.tick))
+            .collect()
+    };
+    let mut turned = false;
+    for _ in 0..20 {
+        run(&mut w, 1);
+        let f = facings(&w);
+        assert_eq!(f[0], f[1], "the teleporter turns as the driver does");
+        turned |= f[0] != 32768;
+    }
+    assert!(turned, "the turn takes time");
+    assert_eq!(facings(&w), [32768, 32768]);
+}
+
+// spec: S-0207 claim 20 (a) (a held object, S-0614 Terms, drops the destination and does nothing: no landing point, no mark moved, no jump)
+#[test]
+fn claim_20_held_object_drops_the_destination() {
+    let s = scene(false);
+    let (mut w, id) = start(&s);
+    let until = w.tick + 50;
+    w.obj_mut(id)
+        .unwrap()
+        .parasite
+        .get_or_insert_with(Default::default)
+        .hold_until = Some(until);
+    let from = w.obj(id).unwrap().pos;
+    let dc = cell(0, -8);
+    let _ = glasnost_sim::orders::issue(&mut w, glasnost_sim::world::HouseId(0), move_to(id, dc));
+    run(&mut w, 3);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.pos, from);
+    assert_eq!(o.dest, None);
+    assert!(o.teleport.as_ref().is_none_or(|t| t.landing.is_none()));
+    assert!(!marked(&w, dc));
+}
+
+// spec: S-0207 claim 20 (e) and (j), claim 22 (a teleporting crusher landing on a cell has a vehicle's arrival effects: cell-centre crushing, S-0210 claims 3 and 4, before the entered-by raise)
+#[test]
+fn claim_20_crusher_landing_crushes() {
+    use glasnost_sim::combat::effects::{Effect, Sound};
+    let mut s = Scene::new();
+    let mut t = jumper(false);
+    t.crusher = Some(true);
+    s.vehicle("JUMPER", t);
+    let mut g = unit_type(FOOT, 4, 8);
+    g.crushable = Some(true);
+    s.infantry("GRUNT", g);
+    s.place_unit(0, "JUMPER", cell(0, 0), 64);
+    s.place_infantry(1, "GRUNT", cell(0, -6), 0);
+    let (mut w, id) = start(&s);
+    let grunt = objects_of(&w, Kind::Infantry)[0];
+    order_move(&mut w, id, cell(0, -6));
+    w.effects.clear();
+    run_until(&mut w, 5, |w| w.obj(id).unwrap().pos.cell() == cell(0, -6));
+    assert_eq!(
+        w.obj(id).unwrap().pos.cell(),
+        cell(0, -6),
+        "it landed there"
+    );
+    assert!(w.obj(grunt).is_none(), "the infantry is crushed");
+    assert!(w.effects.iter().any(|e| matches!(
+        e,
+        Effect::Sound {
+            sound: Sound::Crush,
+            ..
+        }
+    )));
+}

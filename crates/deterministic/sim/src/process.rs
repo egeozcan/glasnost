@@ -586,6 +586,14 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Harvest), Kind::Infantry) if crate::econ::slaves::is_slave(w, id) => {
             crate::econ::slaves::process_slave(w, id)
         }
+        // spec: S-0215 claim 29 and S-0314 claims 16 to 18 (a vehicle's enter at a repair depot)
+        (Some(Behaviour::Enter), Kind::Vehicle) if crate::depot::entering_depot(w, id) => {
+            crate::depot::process_enter(w, id)
+        }
+        // spec: S-0314 claim 6 and S-0504 claim 8 (a repair depot's repair processing)
+        (Some(Behaviour::Repair), Kind::Building) if crate::depot::is_depot(w, id) => {
+            crate::depot::process_repair(w, id)
+        }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
         }

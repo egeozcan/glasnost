@@ -8,6 +8,7 @@
 use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_rules::sim::MovementZone;
 
+use crate::combat::effects::{Effect, Sound};
 use crate::occupancy;
 use crate::rules::Kind;
 use crate::scatter::{self, ScatterRequest};
@@ -157,6 +158,16 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
         }
         // spec: S-0210 claim 4 (removed on the same tick, no damage)
         crate::objects::remove(w, x);
+        // spec: S-0210 claim 4 (the crushed type's crush sound plays at the crusher's position)
+        w.effects.push(Effect::Sound {
+            sound: Sound::Crush,
+            of: Some(crate::econ::TypeRef {
+                kind: ob.kind,
+                index: ob.type_index,
+            }),
+            house: None,
+            pos: Some(cr.pos),
+        });
     }
 }
 
@@ -184,6 +195,13 @@ fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
         // spec: S-0210 claim 8 (crushing an overlay ends the crush-slowdown state)
         ob.crush_slowdown = false;
     }
+    if let Some(pos) = w.obj(id).map(|o| o.pos) {
+        // spec: S-0210 claim 8 (every crushed overlay plays its crush sound at the crusher)
+        w.effects.push(Effect::OverlayCrushed {
+            overlay: cell.overlay,
+            pos,
+        });
+    }
     if !ov.wall && r.quirks.crushable_overlay_stays {
         // spec: S-0210 claim 8 (a crushable overlay that is not a wall stays, quirks.crushable_overlay_stays)
         return;
@@ -209,8 +227,8 @@ fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
                 true
             };
             if ok {
-                // What a successful hit does to a wall belongs to the overlay specs (not yet written).
-                w.note("S-0210 claim 8: a wall hit succeeded; its effect on the wall waits for the overlay specs");
+                // spec: S-0303 F4 (what a successful wall hit does: the stage rises by one, with F4's neighbour and removal rules)
+                crate::combat::area::wall_success(w, n, false);
             }
         }
     }

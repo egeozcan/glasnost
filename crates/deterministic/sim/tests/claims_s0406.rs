@@ -725,6 +725,52 @@ fn claim_9_wall_without_builder_stays() {
     assert_eq!(buildings_at(&w, c(0, 0)).len(), 1);
 }
 
+// spec: S-0406 claim 9 (a gate-flag type: the own wall of index 0, 2 or 26 in each foundation cell, by the silent wall sale, and own laser-fence buildings, removed without refund)
+#[test]
+fn claim_9_gate_row() {
+    let mut r = rules();
+    let gate = r.sim.buildings.get_mut("GATE1").unwrap();
+    gate.foundation = Some([2, 1]);
+    let mut fence = building(1, 1);
+    fence.laser_fence = Some(true);
+    fence.cost = Some(500);
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("FENCE".into());
+    r.sim.buildings.insert("FENCE".into(), fence);
+    let mut w = with_yard(&r);
+    // Left cell: an own wall of O0 (WALLA builds it). Right cell: an own laser-fence building.
+    set_overlay(&mut w, c(0, 0), 0, 0, Some(A));
+    let f = put(&mut w, "FENCE", 0, c(1, 0));
+    let credits = w.houses[0].credits;
+    w.effects.clear();
+    assert!(place(&mut w, "GATE1", c(0, 0)));
+    assert_eq!(overlay(&w, c(0, 0)).0, glasnost_map::NO_OVERLAY);
+    assert!(
+        w.obj(f).is_none(),
+        "the own laser-fence building is removed"
+    );
+    assert_eq!(w.houses[0].credits, credits, "no refund");
+    assert!(w.effects.is_empty(), "no sound");
+}
+
+// spec: S-0406 Edge cases (quirks.wall_exception_skips_ground: on, a wall exception skips (d); off, (d) is still asked)
+#[test]
+fn quirk_wall_exception_skips_ground_off() {
+    let mut r = rules();
+    let mut w = with_yard(&r);
+    let test = placement::Test::order(A);
+    set_overlay(&mut w, c(0, 0), 0, 0, Some(A));
+    w.cells.grid.get_mut(c(0, 0)).unwrap().slope = 2;
+    assert!(placement::cell_test(&w, ty(&w, "TOWER"), c(0, 0), &test));
+    r.globals.quirks.wall_exception_skips_ground = false;
+    let mut w = with_yard(&r);
+    set_overlay(&mut w, c(0, 0), 0, 0, Some(A));
+    w.cells.grid.get_mut(c(0, 0)).unwrap().slope = 2;
+    assert!(!placement::cell_test(&w, ty(&w, "TOWER"), c(0, 0), &test));
+}
+
 // spec: S-0406 claim 10 (a wall type becomes its wall overlay, owned by the placing house; no building remains)
 // spec: S-0406 claim 10 (on a damaged own wall the cell ends with an undamaged wall)
 #[test]
