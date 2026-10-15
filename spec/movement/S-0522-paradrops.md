@@ -2,11 +2,11 @@
 id: S-0522
 title: Parachutes and drops
 topic: movement
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0736, Q-0750, Q-0751, Q-0752, Q-0753, Q-0754]
 supersedes: []
@@ -248,11 +248,16 @@ alternative rules to apply alongside this spec.
    marks ground. These are exact integer-lepton comparisons and addition, without rounding.
    Landing at deck height retains a deck mark.
 
+   Release adds any mobile sensor coverage immediately at the release cell, without an
+   adjacency-reveal test, under S-0516 claim 22. Descent does not continuously relocate
+   that coverage.
+
    On failure the paratrooper stays in the plane as its first passenger, and the ammunition goes
    back up by 1, so the next attempt uses the same side. A failed attempt that reaches the
    standing-position table's centre-class row has still taken that row's draw.
    - Backing: `measurable` (scenarios P4 and P6) for ordinary above-deck releases and the
-     listed refusal/draw cases; `unmeasured` for actual-height marking below or exactly at
+     listed refusal/draw cases. Release sensor effects use S-0516 claim 22's scenarios.
+     `unmeasured` for actual-height marking below or exactly at
      the bridge-height boundary, because those scenarios do not establish a release at
      those heights
    - Confidence: high
@@ -306,11 +311,14 @@ alternative rules to apply alongside this spec.
     animation is attached to it (its parachute), its rate follows the parachute recurrence of S-0511
     F3; with none attached, the no-parachute recurrence. It lands when its height above the surface
     (the deck on a bridge cell) is less than 1 lepton after a fall step: its height becomes 0 and
-    falling ends. There is no fall damage: a paratrooper is not hurt by landing. While it falls it
+    falling ends. Landing then supplies S-0516 claim 22's cell-arrival update, including
+    a same-cell update, with sensor-disc relocation and adjacency reveal before any
+    remaining parachute is told to end (claim 13). There is no fall damage: a paratrooper
+    is not hurt by landing. While it falls it
     shows the *parachute* sequence and, on landing, asks for *stand* (S-0107 claim 21 and its state
     table); what it may not do while falling is S-0214's.
     - Backing: `measurable` (scenario P8) for parachute attachment, expiry and landing,
-      `unmeasured` for a non-parachute animation selecting the slow recurrence, because no
+      and S-0516 claim 22's scenarios for landing sensor effects; `unmeasured` for a non-parachute animation selecting the slow recurrence, because no
       fixture retaining such an attachment during descent has been established
     - Confidence: high
 
