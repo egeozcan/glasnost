@@ -1,9 +1,9 @@
 ---
 id: Q-0611
 title: When does a rocket missile of the set-A or set-B type count as in the air?
-status: open
+status: answered
 related: [S-0506, S-0501, S-0307, S-0308, S-0303, S-0309]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0612
 title: Is a rocket missile listed in the cell it is over?
-status: open
+status: answered
 related: [S-0506, S-0303, S-0209, S-0309]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need

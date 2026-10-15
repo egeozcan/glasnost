@@ -1,9 +1,9 @@
 ---
 id: Q-0615
 title: In which ticks do a rocket missile's phases begin and end, and where does a launch pass stand in its spawner's tick?
-status: open
+status: answered
 related: [S-0506, S-0203]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need

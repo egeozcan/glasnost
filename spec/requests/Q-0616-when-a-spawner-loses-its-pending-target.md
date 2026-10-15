@@ -1,9 +1,9 @@
 ---
 id: Q-0616
 title: When does a spawner's pending target get cleared without a launch?
-status: open
+status: answered
 related: [S-0506, S-0301, S-0309, S-0215]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need

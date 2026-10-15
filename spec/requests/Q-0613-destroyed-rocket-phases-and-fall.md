@@ -1,9 +1,9 @@
 ---
 id: Q-0613
 title: Does a destroyed rocket missile keep its phase timers, and does it fall?
-status: open
+status: answered
 related: [S-0506, S-0312]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need

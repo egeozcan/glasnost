@@ -2,13 +2,13 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616]
 supersedes: []
 ---
 
@@ -33,6 +33,14 @@ Boundaries:
   and their cycle (claims 1 to 9 and 11 to 13) are defined here and hold for carriers too.
 - The nuclear missile superweapon is S-0513. Its missile is not a spawned object and nothing in
   this spec applies to it.
+
+**Required companion change.** This draft depends on S-0204 claim 13's exact raw-angle
+contract. That claim is present in the companion draft but absent from the currently approved
+S-0204. The two must be handed off together: S-0204 must supply the complete raw-angle contract
+before these rocket formulas can be implemented exactly. Its existing claim 8's facing surrogate
+alone is insufficient. This is a named cross-spec dependency, not a claim that the missing
+contract is already approved. Scenario R20 below states the local angle test without relying
+on a scenario absent from the approved companion.
 
 ## Terms
 
@@ -103,7 +111,8 @@ above the terrain*.
 3. **Shots hand over a pending target.** A shot of a spawner weapon (S-0301, Terms) launches no
    projectile. It sets the controller's pending target to the shot's target, unless that target is
    already the controller target, in which case nothing changes. Clearing the spawner's own target
-   clears the pending target too. A nonempty pending target replaces the controller target in a
+   affects pending only under claim 25; it need not cancel a shot awaiting its first adoption.
+   A nonempty pending target replaces the controller target in a
    pass when the controller is idle, when a rocket slot launches, or when a non-missile slot is
    preparing, attacking or returning. A later shot can therefore redirect launches not yet made,
    but cannot redirect a rocket whose aim point is already fixed (claim 14).
@@ -315,7 +324,9 @@ above the terrain*.
       not on the lazy curve enters *descent* by claim 17,
     - *descent*: it steers its nose to the aim point (claim 17) until it detonates.
     A rocket missile is not a tracked flying object, and cannot be found by the flying-object search
-    of S-0303 claim 6, before the end of its tilt or raise.
+    of S-0303 claim 6, before the end of its tilt or raise. Claim 23 separately excludes it from
+    cell scans even then. Registration, sector crossings and the alternative global hit order
+    follow S-0303 claim 11; these do not change the tracking start defined here.
     - Backing: `measurable` (scenario R10)
     - Confidence: high
 
@@ -345,6 +356,11 @@ above the terrain*.
     - **Descent:** the pitch turns towards the line-of-sight angle to the aim point by at most the
       set's turn rate per tick (Formulas F7).
     - Backing: `measurable` (scenario R10) for the flight paths in its tested distance range.
+      Selected raw-angle contributions are `measurable` only where R20 obtains an update
+      distinguishing the exact entries of S-0204 claim 13 from the facing surrogate of
+      S-0204 claim 8. Exhaustive raw-angle equality and independence of fixed entries from
+      either shared quirk setting are `unmeasured`: no legal flight geometries exposing
+      every entry or mode-comparison scenario are established here.
       `unmeasured` for integer squared-distance overflow in F6 and F7: R10 does not isolate
       distances large enough to wrap the sum, and no discriminating path is established here.
     - Confidence: high for the lazy curve and the descent steering; medium for the plain-cruise
@@ -368,8 +384,8 @@ above the terrain*.
 
     It also detonates after a positive-speed movement attempt with health below 1 (claim 20),
     even if that attempt was rejected at the map edge. When it detonates it
-    stops being a tracked flying object, then the detonation of S-0303 takes place at its *nose
-    point* (Formulas F9) with:
+    stops being a tracked flying object (ending its tracking-order membership under S-0303
+    claim 11), then the detonation of S-0303 takes place at its *nose point* (Formulas F9) with:
     - damage amount: the set's damage, or the set's elite damage for an elite launch; the
       firepower multipliers, veterancy and the spawner weapon's own damage play no part (S-0302,
       claim 2 does not apply: there is no shot),
@@ -393,17 +409,23 @@ above the terrain*.
     - above the terrain (height above the terrain 1 lepton or more): it shows its type's explosion
       list animation (S-0312, claim 16) and starts to crash, but it keeps the rocket-flight movement
       mode, and it detonates by claim 19, with its full damage and warhead, at the end of its
-      next tick of movement. A missile destroyed while its speed is 0 (in pause, tilt or raise)
+      next positive-speed movement attempt. A missile destroyed while its speed is 0 (in pause, tilt or raise)
       has no health-triggered detonation until a positive-speed movement attempt
       (`quirks.destroyed_rocket_still_detonates`; with it off, a
       destroyed rocket missile is removed without a detonation),
     - on the ground (height below 1): it is removed at once, without a detonation.
+
+    The hit does not restart or suspend the rocket's phase timer. Pause, tilt and raise continue
+    with the same expiry ticks as for an undamaged missile (claim 24). There is no additional
+    crash-fall displacement: pause and tilt keep the position fixed, raise retains its ordinary
+    rise, and positive-speed motion remains F1. S-0501 claim 9's growing fall contribution belongs
+    to ordinary aircraft flight, not rocket-flight movement. Thus a missile killed in pause or
+    tilt reaches its first positive-speed attempt on the same tick as its surviving counterpart,
+    unless another event removes it first, such as claim 13's on-the-rail removal. Damage before
+    that tick's rocket update can cause detonation in the killing tick. Existing pre-move impact
+    tests still take precedence over the health-triggered detonation.
     - Backing: `measurable` (scenario R13)
-    - Confidence: medium for continued rocket flight; high for the health test in a positive-speed
-      movement attempt and the ground removal. The exact post-kill trajectory remains untraced:
-      this claim does not assert that the ordinary crash fall is absent.
-    - Backing limitation: `unmeasured` for any additional crash displacement before that attempt,
-      no complete trajectory trace is established (R13 is the proposed discriminating test).
+    - Confidence: high
 
 21. **Cosmetic effects.** During positive-speed flight a trailer animation appears at the
     missile's current position every 3 ticks. A set-C missile also emits take-off animations in
@@ -411,6 +433,90 @@ above the terrain*.
     therefore change the delay before the first animation of the next phase. Animation behaviour
     and its random draws follow S-0109.
     - Backing: `measurable` (scenario R15)
+    - Confidence: high
+
+22. **In-the-air answer.** For an aircraft whose type is the set-A or set-B rocket type, the
+    in-the-air answer is false before flight starts and during pause, tilt and raise, and true
+    during ascent, cruise and descent. This phase test is independent of height, speed, health
+    and rail membership. The transition to ascent at tilt/raise expiry already gives true,
+    although speed stays zero until the next update. A destroying hit does not itself change
+    this answer while the rocket remains in play. A distinct set-C type instead uses the
+    ordinary aircraft test: on the map and height above the terrain at least 208 leptons
+    (S-0307 claim 26). If parameter sets name the same type, matching A or B is enough to select
+    the phase test. Weapon choice, range and area-damage distance use their owning specs'
+    in-the-air rules, not flying-search registration as a substitute.
+    - Backing: `measurable` (scenario R16)
+    - Confidence: high
+
+23. **Cell scans and occupancy.** A rocket missile in rocket-flight movement is not listed among
+    the objects in the cell under it, in any flight phase, including pause, tilt and raise at
+    its launch point. Crossing cells does not add it to those cell lists. It sets no
+    object-present occupancy flag there. Consequently S-0303 claim 5's cell scan cannot hit it:
+    before claim 15's tracking start it is absent from both area-damage candidate searches.
+    After that start it can be found through S-0303 claim 6's flying-object search, subject to
+    that search's restrictions. S-0209 claims 1 and 13 own the general occupancy and cell-list
+    rules. Being below the ordinary airborne threshold does not make a rocket ground-listed.
+    - Backing: `measurable` (scenario R17)
+    - Confidence: high
+
+24. **Exact flight and pass boundaries.** Let *t*₀ be the tick fixing the aim point, *P* the
+    nonnegative integer pause time, and *T* the nonnegative integer tilt time, both in ticks.
+    The timer starts in *t*₀ with zero elapsed ticks, not one elapsed tick. Its first rocket
+    update is in that same tick. With positive acceleration and positive type speed,
+    uninterrupted ordinary rocket updates and no earlier removal, the boundaries are:
+
+    | Pause time | Phase boundaries and first positive-speed movement attempt |
+    |---|---|
+    | *P* = 0 | tilt starts at *t*₀, including set C; tilt ends and ascent starts at *t*₀ + *T*; first positive-speed attempt at *t*₀ + *T* + 1 |
+    | *P* > 0 | pause ends at *t*₀ + *P*, starting tilt or set-C raise; that phase ends at *t*₀ + *P* + max(*T*, 1); first positive-speed attempt one tick later |
+
+    With both times zero, ascent starts in *t*₀ and movement starts in *t*₀ + 1. With positive
+    pause and zero tilt, the two transitions occupy successive ticks. Positive speed need not
+    change an integer position yet: F1 truncates speed and coordinates, so the first visible
+    displacement can be later. On an expiry tick the new phase's update is not also applied:
+    tilt expiry fixes final pitch and tracking but does not accelerate, and pause expiry does
+    not interpolate pitch or raise height. Raise adds its rate only on updates before expiry,
+    so positive *T* gives *T* − 1 raise increments. Tick arithmetic here is integer.
+
+    Ascent tests the altitude before F1 moves it. The update first finding cruise altitude still
+    accelerates and moves with ascent pitch, records the cruise-start horizontal distance before
+    that movement, and does not apply cruise steering. Cruise acceleration and pitch/heading
+    steering begin in the next tick. Crossing cruise altitude during an F1 step cannot apply
+    cruise steering in that same tick. Likewise the plain-cruise update selecting descent still
+    uses cruise pitch and acceleration; descent pitch starts in the next update.
+
+    For a vehicle or ship spawner, a shot made by its ordinary firing step on a tick with a due
+    launch pass cannot be adopted by that pass; the next pass is its first opportunity. A shot
+    from an aircraft spawner's attack run can be adopted by a pass due on that same tick, under
+    claims 3–5. A pending target supplied before the tick is also available to the pass. These
+    observable timing rules do not define a global phase before every kind of firing (S-0203 owns
+    global turn order).
+    - Backing: `measurable` (scenario R18)
+    - Confidence: high
+
+25. **Pending targets without an own target.** No launch pass drops pending merely because the
+    spawner has no own target. Adoption and launch still obey claims 3–6. A target change that
+    actually changes the spawner's held target to empty requests a pending clear. That clear
+    succeeds only when the controller target is nonempty. If the controller target is empty,
+    pending survives. Asking to clear an already empty own target also leaves pending unchanged
+    (`quirks.spawner_pending_target_survives_idle_clear`). With this switch off, any explicit
+    own-target clear empties pending, even when own target or controller target is already empty.
+
+    Direct nonempty own-target replacement does not itself alter pending: another spawner shot
+    must supply a replacement. Clearing and restoring the same own target before a pass neither
+    undoes an effective pending clear nor cancels pending that survived the clear. Move/stop
+    orders, fall-backs and acquisition use these rules only insofar as they actually clear or
+    replace the own target. S-0215 claims 12–15 and S-0309 claims 4 and 23 own those events.
+    The order or behaviour name is not a separate controller cancellation rule.
+
+    Loss notification for the pending target itself clears it immediately, regardless of the
+    own target. Loss of the controller target clears that target and resets only when no pending
+    replacement exists (claim 11). Explicit resets clear both records. Finding no candidate in
+    a search is not an additional pending-clear event. An actual target-loss notification is
+    distinct from merely observing a targetless spawner at a pass.
+    - Backing: `measurable` (scenario R19), except a shot supplied with no own target ever set:
+      `unmeasured`, because no normal-input setup establishing that independent shot is known.
+      Its adoption rule is nevertheless fully specified above.
     - Confidence: high
 
 ## Formulas
@@ -423,8 +529,9 @@ explicit single store narrows to 24 bits, also toward zero. RZ₅₃ and RZ₂�
 Products associate left to right and parentheses fix grouping; operations are not fused.
 S-0205 claims 4, 5 and 7 own the shared rounding-mode switch and conversion rules. Integer conversions below truncate
 toward zero. Every sine and cosine below is the table trigonometry of S-0105 Formulas F1,
-including its negative-angle quirk, not a mathematical-library sine or cosine. *T*, *σ* and the table square root *r* are those of S-0204 (Formulas F1
-and F3). *trunc* truncates toward zero.
+including its negative-angle quirk, not a mathematical-library sine or cosine. The table square
+root *r* is defined by S-0204 claim 5, the tangent step *σ* by S-0204 claim 8, and the exact
+raw angles *T* by the required companion S-0204 claim 13. *trunc* truncates toward zero.
 
 **F1. Rocket step** (claim 18). With *s* = trunc(*v*), *F* the body facing read as a signed 16-bit
 value, θ = (*F* − 16383) × (−2π / 65536) (double precision):
@@ -494,9 +601,11 @@ dimensionless, angles in radians.
 *i* = |trunc(RZ₅₃(*u* / *σ*))|. The sign comes from RZ₂₄(*u*).
 For *i* ≤ 4096, the magnitude is the original single-precision *T*(*i*); for larger *i* it is the
 single-precision π/2. The signed value widens exactly to a double. The narrowing for the sign
-does not narrow the quotient used to select the index. S-0204 claim 8 describes the raw table.
-Its corrections to integer facings are not corrections to these angles. Its surrogate angles
-are not an exact substitute here.
+does not narrow the quotient used to select the index. S-0204 claim 13 supplies the exact
+raw angles, the same angles used before S-0204 claim 8's integer-facing conversion. Neither
+facing corrections nor surrogate angles are applied here. Fixed raw entries remain unchanged
+with either setting of the shared table-direction quirk. The rounding-mode quirk changes the
+arithmetic sites stated here, not those entries.
 
 **F7. Descent pitch.** With *ρ* and *ℓ* formed as in F6 using the integer squared-distance domain,
 δ = RZ₅₃(*ℓ* − *p*). The old single pitch widens exactly and δ stays double precision through
@@ -620,6 +729,10 @@ Ordering consequences:
 - **`quirks.rail_missile_vanishes_with_spawner`** (default on). Claim 13: missiles on the rail vanish
   with no detonation when the spawner dies or changes hands. Off: they are released like preparing
   missiles.
+- **`quirks.spawner_pending_target_survives_idle_clear`** (default on). Claim 25. An own-target
+  clear can leave pending alive when the controller target is empty, permitting a later launch
+  despite cancellation of the own target. Off: every explicit own-target clear empties pending.
+  Neither setting adds a per-pass sweep of targetless spawners.
 - **`quirks.rocket_aim_at_heading_point`** (default on). Claim 14.
 - **`quirks.destroyed_rocket_still_detonates`** (default on). Claim 20.
 - **`quirks.rocket_stalls_at_map_edge`** (default on). Claim 18: a missile whose path leaves the
@@ -638,6 +751,7 @@ Ordering consequences:
 
 | Key (file, section) | Concept | Parse form | Absent-key default |
 |---|---|---|---|
+| No data key | raw pitch angles (claim 17), airborne answer (claim 22), cell exclusion (claim 23), tick boundaries (claim 24), pending-clear conditions (claim 25) | fixed behaviour; raw angles from S-0204 claim 13 | not imported |
 | `Spawns` (rules, object type) | spawned type | aircraft type name | none (no controller) |
 | `SpawnsNumber` (rules, object type) | spawn count *N* | integer | 0 |
 | `SpawnRegenRate` (rules, object type) | regeneration time | integer, ticks | 0 |
@@ -698,7 +812,8 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   in-range target between appearances. Expected: the later launch adopts the pending target,
   while the earlier missile keeps its fixed aim. Both slots enter the rail interval together at
   the final launch pass, but their individual flight timers start from their own first move orders.
-  Clear the spawner's own target before adoption: the pending shot does not cause a launch.
+  Clear the own target before first adoption: with an empty controller target the pending shot
+  survives (claim 25), rather than being cancelled merely by that clear.
   During cooling down, deliver another shot and record the next appearances: no launch occurs
   until a later pass after the return to idle. Fire again at the already adopted target while a
   different pending target is waiting: the pending replacement remains, not overwritten.
@@ -803,8 +918,10 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   detonation with the set's full damage on its first moving tick after its ascent starts.
   Expected timing is the next rocket update with positive speed, which can be in the killing tick
   if the hit precedes that update. Removal without the predicted detonation falsifies continued
-  rocket flight. Record any extra fall before the update separately: it decides the unresolved
-  crash displacement, not the confirmed health test. A named low launch-height variant tests
+  rocket flight. Compare killed and surviving launches in separate runs: phase expiry ticks
+  match, with no extra crash fall. Pause and tilt keep the body fixed; set-C raise keeps its
+  ordinary rise. A changed expiry tick, extra downward movement or delayed first positive-speed
+  attempt falsifies claim 20. A named low launch-height variant tests
   immediate ground removal without detonation.
 - **R14. Carrier cycle (claims 4, 9, 12, 13).** Use an ordinary carrier and an in-range target.
   Record aircraft destinations, ammunition, health, return cell, reload interval and pips.
@@ -823,17 +940,74 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   with the shared timer carrying across phase changes. Count any animation draws with the
   random-state recorder. Different sustained intervals or independent phase timers falsify.
 
+- **R16. Phase airborne status (claim 22).** Use named A/B and distinct-C launcher variants
+  with long pause/tilt and low cruise altitude, and a two-weapon defence whose ground/airborne
+  choices have distinguishable shot effects. These are the additional test-map timing, altitude
+  and weapon overrides. Keep all other targeting gates legal under S-0308/S-0309. Record chosen
+  weapon, phase and height each tick. Expected A/B: ground choice in pause/tilt/raise, airborne
+  from expiry onward even below 208 leptons, unchanged by crossing that height. Distinct C
+  follows the 208-lepton threshold. Repeat a destroying hit before ascent on a long-pause
+  variant: the hit alone does not change classification. A different weapon choice with all
+  other gates satisfied falsifies; inability to fire alone proves no classification answer.
+- **R17. Cell exclusion (claim 23).** On a named map extend the launcher's fire point over an
+  otherwise empty adjacent cell, with long pause/tilt and high missile health. These are the
+  additional fire-point and health test overrides. Detonate a named small-spread test weapon
+  there during pause, tilt, raise and flight. Record health, phase, terrain and explosion height.
+  Expected: no cell-scan hit in any phase. At terrain height choose flight altitude so S-0303
+  claim 6's flying search cannot include it; repeat at eligible explosion height after tracking
+  and expect a flying-search hit. Before tracking neither search hits it. Order a vehicle
+  through the empty launch cell: no occupancy flag is contributed by the missile and it does
+  not obstruct entry. Record occupancy as well as movement. A cell-scan hit or missile-contributed
+  flag falsifies. Do not infer occupancy from a cell still holding its launcher.
+- **R18. Boundary ticks (claim 24).** Extend R2/R10 with named pause/tilt pairs (0, 0), (0, 1),
+  (1, 0), (1, 1), (3, 4), invented durations in ticks; include set C with and without pause.
+  Give the test missile positive acceleration and positive type speed. Record aim-fixing tick,
+  phase, pitch, speed, tracking and position. Expected: claim 24's exact table, raise increments
+  only before expiry and first position change by F1, not necessarily on first positive speed.
+  Record pre-step ascent altitude: the update finding cruise altitude still uses ascent pitch,
+  with cruise steering next tick. Time a vehicle/ship's ordinary shot exactly on a pass tick:
+  adoption waits until the next pass, initial launch one further pass later (claim 5). On a
+  named aircraft-spawner variant give an ordinary aircraft a spawned type, positive spawn count
+  and spawner weapon: its attack-run shot supplies pending before the pass and can be adopted
+  in that same tick. Different boundaries, pitch-update or adoption ticks falsify.
+- **R19. Pending cancellation (claims 3 and 25).** Extend R2 with move, stop, target-loss,
+  fall-back and acquisition variants between shot and pass. Record own, controller and pending
+  targets and appearances each tick. Use ordinary carriers for replacement shots where missiles
+  would give busy. With empty controller target an own-target clear leaves pending intact.
+  Do not infer cancellation from failed launch while moving (claim 6). With nonempty controller
+  target, supply a different pending target then clear own target: expected immediate pending
+  clear. Restore own target without another shot: pending is not restored. Direct nonempty
+  own-target replacement without a clear or another shot leaves pending alone. Destroy pending's
+  target: its loss notification clears pending immediately. Lose the controller target with
+  and without pending replacement: reset only without replacement. A failed search leaving an
+  already empty own target unchanged does not cancel pending. Classify by actual target changes,
+  not behaviour name. Different pending changes or adoption falsify. A shot with no own target
+  ever set remains outside this scenario's established normal-input reach.
+
+- **R20. Raw-angle discrimination (claim 17).** Extend R10 with a set-A lazy-cruise missile
+  and a set-B descent missile aimed at a stationary target. Vary only firing distance and
+  test-map terrain height, retaining R10's parameter settings. Use the common setup, recorder
+  and five-run count. Record position, fixed aim point, phase, cruise-start distance and exact
+  single-precision pitch immediately before and after each rocket update. Compute the index
+  and two F6/F7 predictions from those inputs: one using the exact raw entries required by
+  S-0204 claim 13, the other using S-0204 claim 8's surrogate without integer-facing corrections.
+  Seek nonzero indices, including 40 and 1024 where reachable, and both signs of aim-height
+  difference. Count an update only when the predictions differ after final single-precision
+  rounding. Lazy cruise must have a cruise-distance ratio other than 1; descent must reach
+  its line-of-sight pitch rather than only taking the maximum pitch step. Expected: the
+  recorded pitch equals the exact-entry prediction. In particular, descent reaching the
+  line-of-sight pitch at index 1024 gives 12841411 / 8388608 radians for a positive angle,
+  its negation for a negative angle. A different pitch in a valid distinguishing update
+  falsifies the exact-entry use. Coincident predictions, unavailable indices or signs, or
+  observation only of drawn orientation or integer positions are inconclusive, not coverage.
+  Entries without a valid distinguishing update remain unmeasured; this scenario does not
+  test every entry or either shared quirk's alternative setting.
+
 ## Open questions
 
-- Whether a destroyed rocket missile keeps running its phases (pause and tilt timers) while it is
-  crashing, and whether the crash fall of S-0312 claim 16 moves it too (claim 20; scenario R13).
 - The complete list of events that reset the controller (claim 11) and clear its slots (claim 13),
   especially other disabling effects than the electromagnetic pulse.
 - Whether all building docking classifications in claim 14 are reachable as stock rocket targets.
-- S-0204 claim 8 describes but does not supply all original raw arctangent entries. F6 and F7
-  retain these angles rather than converting them to integer facings; the facing corrections
-  cannot supply exact rocket pitches. A complete shared raw-angle table contract is needed
-  from S-0204 before these formulas can be implemented bit-exactly.
 
 ## Questions for the project lead
 
