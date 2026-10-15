@@ -1441,9 +1441,10 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool, sat: bool) {
     }
 }
 
-/// The whole-map re-cover of a house when an enemy spy infiltrates one of
-/// its radar buildings (claim 15; the infiltration is the special-abilities
-/// specs'): nothing happens while its spy satellite is active.
+/// The whole-map re-cover of a house when a spy of any other house, allies
+/// included, infiltrates one of its radar buildings (claim 15: alliance is
+/// not tested for the effect; entry and its effect selection are S-0510's):
+/// nothing happens while its spy satellite is active.
 pub fn radar_infiltrated(w: &mut World, h: HouseId) {
     // spec: S-0409 claim 15 (radar infiltration re-covers the whole map, unless H has an active spy satellite)
     if !spy_satellite_active(w, h) {

@@ -373,10 +373,11 @@ pub fn blackout_running(w: &World, h: HouseId) -> bool {
         .is_some_and(|end| w.tick <= end)
 }
 
-/// Starts a timed blackout of length `d` ticks for a house (claim 6): the
-/// spy's entry into a building with base output (special-abilities specs,
-/// with *d* the game-wide spy blackout length, [`Rules::spy_blackout`]) or a
-/// superweapon effect.
+/// Starts a timed blackout of length `d` ticks for a house (claim 6): a
+/// spy's entry only when S-0510's single-effect selection picks the
+/// blackout effect (S-0510 claims 1 and 3, row E2; *d* the game-wide spy
+/// blackout length, [`Rules::spy_blackout`]), or a force-shield launch
+/// (S-0513 claim 30).
 pub fn start_blackout(w: &mut World, h: HouseId, d: i32) {
     let t0 = w.tick;
     let one_short = w.rules().quirks.blackout_one_short;
