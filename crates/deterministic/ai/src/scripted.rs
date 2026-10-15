@@ -18,14 +18,16 @@
 //!    tree: for an army type the house cannot build yet, build the
 //!    cheapest building that clears one of its blockers (an unmet
 //!    prerequisite, read off the tech tree as a player reads the sidebar's
-//!    tooltips, or a missing factory of its kind), climbing further when
+//!    tooltips, or a missing factory of its kind: an aircraft's pad, a
+//!    ship's naval yard), climbing further when
 //!    that building is itself blocked; a building is only ordered when the
 //!    spiral has a cell for it (a naval yard needs water);
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
 //!    to harvest; a slave miner counts as a harvester (and, deployed, its
 //!    building too), needs no refinery, and is sent to harvest at the
 //!    nearest explored resource cell, the order a person gives it;
-//! 5. once the harvesters are kept, build army units round-robin, and when
+//! 5. once the harvesters are kept, build army units round-robin (one
+//!    type per kind: vehicles, infantry, aircraft), and when
 //!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
 //!    knowledge: the map's start waypoints), and once every start position
 //!    has been visited, to the nearest cell of a coarse search grid that
@@ -33,7 +35,9 @@
 //!    A smaller wave goes too once units have waited long enough, so a house
 //!    that cannot afford a full wave still attacks. A unit whose goal lies
 //!    outside its reach region (a ship, for a goal on land) goes to the
-//!    nearest cell of its region instead.
+//!    nearest cell of its region instead. An idle aircraft with ammunition
+//!    left attacks the nearest seen enemy and flies back to rearm by
+//!    itself.
 //!
 //! Types are found by role from the rules (a building with power output, the
 //! refinery flag, a factory kind; a harvester; a unit with a primary weapon)
@@ -46,6 +50,7 @@
 use std::collections::BTreeMap;
 
 use glasnost_map::CellXY;
+use glasnost_sim::combat::{check, weapon};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
@@ -133,18 +138,24 @@ pub enum Role {
 /// The factories the plan builds, in order.
 const FACTORIES: [FactoryKind; 2] = [FactoryKind::Infantry, FactoryKind::Vehicle]; // nocite: the script's own build order, not game behaviour
 
-/// Every building, vehicle and infantry type.
+/// Every building, vehicle, infantry and aircraft type.
 pub fn all_types(w: &World) -> Vec<TypeRef> {
     let r = w.rules();
     let n = |k: Kind| match k {
         Kind::Building => r.buildings.len(),
         Kind::Vehicle => r.vehicles.len(),
+        Kind::Aircraft => r.aircraft.len(),
         _ => r.infantry.len(),
     };
-    [Kind::Building, Kind::Vehicle, Kind::Infantry]
-        .into_iter()
-        .flat_map(|kind| (0..n(kind) as u32).map(move |index| TypeRef { kind, index }))
-        .collect()
+    [
+        Kind::Building,
+        Kind::Vehicle,
+        Kind::Infantry,
+        Kind::Aircraft,
+    ]
+    .into_iter()
+    .flat_map(|kind| (0..n(kind) as u32).map(move |index| TypeRef { kind, index }))
+    .collect()
 }
 
 /// A type's name.
@@ -154,6 +165,7 @@ fn name_of(w: &World, t: TypeRef) -> &str {
         Kind::Building => r.buildings.get(t.index as usize).map(|b| b.name.as_str()),
         Kind::Vehicle => r.vehicles.get(t.index as usize).map(|u| u.name.as_str()),
         Kind::Infantry => r.infantry.get(t.index as usize).map(|u| u.name.as_str()),
+        Kind::Aircraft => r.aircraft.get(t.index as usize).map(|u| u.name.as_str()),
         _ => None,
     }
     .unwrap_or("")
@@ -189,6 +201,17 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
                 _ => false,
             }
         }
+        Kind::Aircraft => {
+            let Some(u) = r.aircraft.get(t.index as usize) else {
+                return false;
+            };
+            // An armed flying aircraft that is not a spawner's slot type
+            // (those come with their spawner, S-0506 claim 1).
+            let slot = u.raw.spawned == Some(true)
+                || u.raw.missile_spawn == Some(true)
+                || r.missiles.spawners.values().any(|s| s.spawned == t.index);
+            role == Role::Army && u.primary.is_some() && u.locomotor == Locomotor::Fly && !slot
+        }
         Kind::Vehicle | Kind::Infantry => {
             let list = if t.kind == Kind::Vehicle {
                 &r.vehicles
@@ -200,9 +223,8 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             };
             let ground = matches!(t.kind, Kind::Infantry)
                 || deploy::deploys_into(w, t.kind, t.index).is_none();
-            // Only types the simulation moves: driving, walking and
-            // teleporting vehicles and infantry (the scripts use no
-            // aircraft).
+            // Only types the simulation moves: driving, walking,
+            // teleporting and ship vehicles and infantry.
             let moves = u.locomotor != Locomotor::None;
             match role {
                 Role::Harvester => (u.harvester || is_slave_miner(w, t)) && moves,
@@ -275,6 +297,21 @@ pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
                     | Some(Behaviour::Move)
             )
     })
+}
+
+/// Whether unit `id` can attack enemy `e` at all, as its cursor shows: the
+/// weapon it would use against it (S-0308 claim 3) passes the firing check
+/// without the range test, short of an illegal target or an impossible
+/// shot (S-0301 claim 9). An aircraft out of a ground weapon's reach is
+/// not worth a unit's attention.
+pub(crate) fn can_attack(w: &World, id: ObjectId, e: ObjectId) -> bool {
+    let t = Some(Target::Object(e));
+    let (slot, weapon) = weapon::would_use(w, id, t);
+    weapon.is_some()
+        && !matches!(
+            check::check(w, id, t, slot, false),
+            check::Answer::Illegal | check::Answer::Impossible
+        )
 }
 
 /// The squared distance between two cells.
@@ -744,7 +781,7 @@ impl Script {
         } else {
             self.candidates(w, Role::Army)
         };
-        for kind in [Kind::Vehicle, Kind::Infantry] {
+        for kind in [Kind::Vehicle, Kind::Infantry, Kind::Aircraft] {
             let of_kind: Vec<TypeRef> = army_types
                 .iter()
                 .copied()
@@ -760,9 +797,35 @@ impl Script {
             }
         }
 
-        // 5. Army units.
-        let army = self.of_role(w, Role::Army);
+        // 5. Army units. An idle aircraft with ammunition left (on its pad,
+        // rearmed) attacks the nearest seen enemy; it flies back to its pad
+        // by itself (S-0501 claims 21 to 30).
+        let (air, army): (Vec<ObjectId>, Vec<ObjectId>) = self
+            .of_role(w, Role::Army)
+            .into_iter()
+            .partition(|&id| w.obj(id).is_some_and(|o| o.kind == Kind::Aircraft));
         let enemies = self.seen_enemies(w);
+        for id in air
+            .into_iter()
+            .filter(|&id| idle(w, id) && glasnost_sim::air::ammo_left(w, id))
+        {
+            let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
+                continue;
+            };
+            if let Some(&(e, _)) = enemies
+                .iter()
+                .filter(|&&(e, _)| can_attack(w, id, e))
+                .min_by_key(|&&(_, c)| (dist2(c, at), c.y, c.x))
+            {
+                out.push(Order::Behaviour {
+                    actor: id,
+                    behaviour: Behaviour::Attack,
+                    attack_move: false,
+                    target: Some(Target::Object(e)),
+                    dest: None,
+                });
+            }
+        }
         let mut waiting: Vec<ObjectId> = Vec::new();
         for id in army.iter().copied().filter(|&id| idle(w, id)) {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
@@ -770,7 +833,7 @@ impl Script {
             };
             let near = enemies
                 .iter()
-                .filter(|&&(_, c)| dist2(c, at) <= ENGAGE * ENGAGE)
+                .filter(|&&(e, c)| dist2(c, at) <= ENGAGE * ENGAGE && can_attack(w, id, e))
                 .min_by_key(|&&(_, c)| dist2(c, at));
             if let Some(&(e, _)) = near {
                 out.push(Order::Behaviour {

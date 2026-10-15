@@ -37,8 +37,8 @@ use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{
-    Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, deploys_into_yard, dist2, idle,
-    is_yard,
+    Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, can_attack, deploys_into_yard,
+    dist2, idle, is_yard,
 };
 use crate::skirmish::start_cells;
 
@@ -273,7 +273,11 @@ impl Brain {
             if busy {
                 continue;
             }
-            if let Some(&(e, _)) = intruders.iter().min_by_key(|&&(e, c)| (dist2(c, at), e)) {
+            if let Some(&(e, _)) = intruders
+                .iter()
+                .filter(|&&(e, _)| can_attack(w, id, e))
+                .min_by_key(|&&(e, c)| (dist2(c, at), e))
+            {
                 out.push(Order::Behaviour {
                     actor: id,
                     behaviour: Behaviour::Attack,

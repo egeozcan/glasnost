@@ -279,3 +279,69 @@ fn builds_a_navy_on_a_water_map() {
     // spec: S-0504 claim 4 (a killed ship on water sinks)
     assert!(sunk > 0, "a ship sank");
 }
+
+// The houses climb to an aircraft pad, build planes on it, send idle
+// planes with ammunition against seen enemies, and the planes fly back to
+// their pads and rearm (S-0501 claims 21 to 30).
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn flies_aircraft_from_pads() {
+    let run = run_for(LIMIT);
+    let mut most: [BTreeMap<String, usize>; 2] = Default::default();
+    // Per plane: seen in the air with a target, spent a round, back on the
+    // ground after that, rearmed there.
+    #[derive(Default)]
+    struct Seen {
+        attacked: bool,
+        spent: bool,
+        landed: bool,
+        rearmed: bool,
+    }
+    let mut planes: BTreeMap<u32, Seen> = BTreeMap::new();
+    run.replay
+        .run(
+            fixture::rules(),
+            &fixture::map(),
+            fixture::catalogue(),
+            |w| {
+                for h in 0..2u8 {
+                    for (k, v) in counts(w, h) {
+                        let e = most[usize::from(h)].entry(k).or_default();
+                        *e = (*e).max(v);
+                    }
+                }
+                let jet = w.rules().index_of(Kind::Aircraft, "JET");
+                for o in w
+                    .objects
+                    .values()
+                    .filter(|o| o.on_map && o.kind == Kind::Aircraft && Some(o.type_index) == jet)
+                {
+                    let s = planes.entry(o.id.0).or_default();
+                    let up = glasnost_sim::air::in_the_air(w, o.id);
+                    if up && o.target.is_some() {
+                        s.attacked = true;
+                    }
+                    if o.combat.ammo < 2 {
+                        s.spent = true;
+                    }
+                    if s.spent && !up && glasnost_sim::air::on_ground(w, o.id) {
+                        s.landed = true;
+                        if o.combat.ammo == 2 {
+                            s.rearmed = true;
+                        }
+                    }
+                }
+            },
+        )
+        .expect("the replay runs");
+    let pads: usize = most
+        .iter()
+        .map(|m| m.get("HPAD").copied().unwrap_or(0))
+        .sum();
+    assert!(pads > 0, "a house built a pad: {most:?}");
+    assert!(!planes.is_empty(), "a house built planes: {most:?}");
+    assert!(planes.values().any(|s| s.attacked), "a plane attacked");
+    assert!(planes.values().any(|s| s.spent), "a plane fired");
+    assert!(planes.values().any(|s| s.landed), "a plane came back down");
+    assert!(planes.values().any(|s| s.rearmed), "a plane rearmed");
+}

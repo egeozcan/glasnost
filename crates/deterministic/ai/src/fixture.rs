@@ -11,7 +11,9 @@
 //!   docks at PROC), GUNR (a gun vehicle), LNCH (a V3-like launcher with
 //!   one rocket slot of the set-A type RKT, needs LAB); the testkit's
 //!   CART, CRUSHER and BUGGY stay registered.
-//! - Aircraft: RKT (the set-A rocket type, S-0506).
+//! - Aircraft: RKT (the set-A rocket type, S-0506), JET (an armed plane,
+//!   two rounds, docks at HPAD); HPAD is a 2 × 2 aircraft factory, helipad
+//!   and reload pad with one docking place, needing RADR.
 //! - Infantry: WALKER (the testkit's rifleman).
 //! - Resource: ORE (overlays 0 … 11, stages 0 … 11).
 //! - Naval: NAVY (naval yard, 3 × 3, needs FACT) and BOAT (a gunboat with
@@ -144,6 +146,12 @@ pub fn ruleset() -> Ruleset {
     radr.econ.prerequisite = Some(vec!["FACT".into()]);
     let mut lab = building(2, 2, 1500, -60);
     lab.econ.prerequisite = Some(vec!["RADR".into()]);
+    let mut hpad = building(2, 2, 800, -20);
+    hpad.factory = Some("aircraft".into());
+    hpad.helipad = Some(true);
+    hpad.econ.unit_reload = Some(true);
+    hpad.econ.number_of_docks = Some(1);
+    hpad.econ.prerequisite = Some(vec!["RADR".into()]);
     let mut navy = building(3, 3, 1000, -20);
     navy.factory = Some("vehicle".into());
     navy.naval = Some(true);
@@ -157,6 +165,7 @@ pub fn ruleset() -> Ruleset {
         ("RADR", radr),
         ("LAB", lab),
         ("NAVY", navy),
+        ("HPAD", hpad),
     ] {
         r.sim.buildings.insert(n.into(), b);
         push(&mut r, "buildings", n);
@@ -219,6 +228,38 @@ pub fn ruleset() -> Ruleset {
         },
     );
     push(&mut r, "aircraft", "RKT");
+    let mut jet = UnitType {
+        strength: Some(200),
+        speed: Some(30),
+        rot: Some(12),
+        locomotor: Some(Locomotor::Fly),
+        tech_level: Some(1),
+        owner: owners(),
+        cost: Some(1000),
+        sight: Some(8),
+        primary: Some("Missile".into()),
+        ..Default::default()
+    };
+    jet.combat.ammo = Some(2);
+    jet.econ.landable = Some(true);
+    jet.econ.dock = Some(vec!["HPAD".into()]);
+    r.sim.aircraft.insert("JET".into(), jet);
+    // The re-approach flag (S-0501 claim 14): an ordinary attacker ends each
+    // run, spends its round and so flies back to rearm.
+    r.sim.general.economy.curley_shuffle = Some(true);
+    push(&mut r, "aircraft", "JET");
+    r.sim.weapons.insert(
+        "Missile".into(),
+        WeaponType {
+            damage: Some(60),
+            rof: Some(30),
+            range: dec("6"),
+            speed: Some(60),
+            projectile: Some("Rocket".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
     r.sim.weapons.insert(
         "Launch".into(),
         WeaponType {
