@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 41
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634]
 supersedes: []
@@ -1298,6 +1298,13 @@ Terms specific to this spec:
     A wait, turn, retry delay or failed search that retains the movement goal keeps the
     point present. S-0207 claim 25 owns its assignment and clearing; neither search success
     nor goal-cell inequality substitutes for that presence test.
+    Separately, a driving or ship vehicle with no active track removes an order-level
+    cell destination when it occupies that cell, or falls back to rest when it has
+    approach destinations (S-0207 claim 26). This is locomotion cleanup, not search
+    failure or give-up: it needs no successful search, exact point alignment or due
+    behaviour processing. Mere cell equality does not clear a building destination.
+    Final-track completion clears the locomotor point, not the order-level goal.
+    Absent an intervening effect, the next no-track update clears that cell goal.
 
     For a hovering unit, the destination used by its movement completion and path searches
     in claims 20–23 is its movement destination, not its order-level destination. A search
@@ -1326,7 +1333,8 @@ Terms specific to this spec:
     - Backing: `measurable` (scenario P5, and P9's train refresh run for the train rule; P5 run 1i
       for the absence of the refresh in the walk locomotor; S-0504 N11 for ship refresh
       timing; S-0207 D29 for driving and ship destination presence before search and
-      during retained-goal waits, including same-cell assignment; S-0503 H12 and H15
+      during retained-goal waits, including same-cell assignment; S-0207 D30 for
+      no-track cell-goal cleanup distinguished from search failure; S-0503 H12 and H15
       for the hover movement/order-level destination split).
       The exact lepton-scale refresh boundary and the distinction between the
       table root and an exact Euclidean root are `unmeasured` for both driving and ships:
@@ -1619,6 +1627,7 @@ Terms specific to this spec:
     | Failed ordinary approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
     | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4); none when that read gives no reach region | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
+    | Starting-building restoration displacement (S-0524 claim 13) | the displaced occupant's old cell | the occupant type's | *normal* | none | never | no | no | the occupant's old cell |
     | Trigger crate placement (S-0524 claim 4) | the waypoint-slot cell | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Random crate placement (S-0520 claim 3) | the candidate cell supplied by S-0520 claim 3 | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Unit crate placement fallback (S-0520 claim 13) | the crate cell | the awarded unit type's | *normal* | none | never | no | no | none |
@@ -1642,8 +1651,9 @@ Terms specific to this spec:
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
-    The trigger-crate, random-crate, unit-crate fallback, transport-shore, vehicle-passenger-exit,
-    bunker-exit, paradrop and air-strike rows allow bridge cells and ask for no no-overlay condition. S-0606 claim 12 owns
+    The restoration-displacement, trigger-crate, random-crate, unit-crate fallback,
+    transport-shore, vehicle-passenger-exit, bunker-exit, paradrop and air-strike rows
+    allow bridge cells and ask for no no-overlay condition. S-0606 claim 12 owns
     bunker-exit release and the still-unestablished outcome when that search finds no cell. For trigger and random crates, selection
     is not placement: a selected cell outside the height-aware usable area or holding
     any overlay is refused without another nearby search around that centre. S-0524
@@ -1654,6 +1664,17 @@ Terms specific to this spec:
     Its result replaces the target only when there is a result and it is not itself a
     water-role tile; otherwise the original target remains. This post-selection refusal
     does not cause another search.
+
+    Restoration displacement uses a 1 × 1-cell footprint. The old-cell reference
+    selects by reference distance among preferred collected cells, not globally over
+    all nearby cells. S-0524 claim 13 owns reverse lifting-order placement and its
+    ordinary placement fall-back: earlier re-placed occupants affect later searches.
+    Placement uses the selected cell's terrain-surface centre without a bridge lift,
+    facing 0. With no result, placement is nevertheless attempted at the blank
+    stand-in at cell (0, 0), under S-0009 claim 44; failure of that placement, or of
+    placement at a found cell, removes the occupant. This does not make the stand-in
+    a qualifying search result. Failed building placement's return of lifted occupants
+    is a separate caller rule of S-0524 claim 13, not this nearby search.
 
     Both transport rows use a 1 × 1-cell footprint. S-0507 claims 8 and 10 own their
     unchecked no-result handling: although the search finds no cell, each caller uses
@@ -1770,7 +1791,9 @@ Terms specific to this spec:
       parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
       parasite-exit host-mobility parameters (S-0614 scenario P4), for trigger-crate
-      search settings and post-selection refusal (S-0524 scenario C4), for random-crate
+      search settings and post-selection refusal (S-0524 scenario C4), for restoration
+      displacement settings, reference choice and unchecked no-result placement
+      (S-0524 scenario C14), for random-crate
       search settings and post-selection refusal (S-0520 scenario CR1), for unit-crate
       fallback settings (S-0520 scenario CR9), for paradrop
       target-adjustment settings and retention of the original target after refusal
@@ -3594,6 +3617,24 @@ destination falsifies that part. If no ordinary-order fixture yields multiple pr
 candidates, the selection comparison is inconclusive. S-0507 T9 supplies the proposed
 shore witness; shore approach and both unchecked no-result cases retain the unmeasured
 qualifications of claim 25, rather than being confirmed by ordinary successful exits.
+
+**P29. Restoration displacement and no-track cleanup (claims 20 and 25).**
+Use tiny skirmish maps with stock types and data, director and mods off, game speed
+index 2, and read-only tick/state recording. For displacement, follow S-0524 C14:
+sell a starting building, park ground occupants on its former foundation, and trigger
+restoration. Predict each search from the occupant's old cell and T5, recording
+placement cells and facing. Expect reference-distance choice within the collected
+sequence, facing 0, and earlier re-placements affecting later searches. In a variant
+with every candidate blocked through the radius cap, expect a stand-in placement
+attempt and removal if it fails, not indefinite off-map retention. Another search
+class, reference, reach restriction or no-result outcome falsifies that subclaim.
+For cleanup, follow S-0207 D30 with same-cell move and accepted same-cell building
+entry controls. Expect the cell goal removed at the first no-track locomotion update,
+without requiring a search, while cell equality alone retains the building goal.
+Record final-track arrival separately: absent intervening effects, cell-goal removal
+is at the next no-track update, not completion itself. Search-dependent cleanup or
+unconditional same-cell building-goal removal falsifies that distinction. These are
+proposed recorder runs, not completed measurements.
 
 ## Open questions
 
