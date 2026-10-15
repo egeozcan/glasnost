@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,6 +45,12 @@ and S-0215 claim 10's jump-time target-loss and reversion contract with those co
 Retain S-0207 claim 20 e and S-0209 claim 1's aircraft reservation lifecycle and shared
 `quirks.teleport_aircraft_ground_reservation` alongside the vehicle contract above.
 Claims 20–22 include the ship refresh, chase-cut and retry rules of S-0504 claim 9.
+**Required S-0504 correction:** claim 9 must replace its floating-point Euclidean-root
+definition with the spatial table-root distance of claim 20 and S-0204 claim 5,
+truncated toward zero to integer leptons, for both refresh and chase cutting.
+There is no ship-specific exact-root exception. The shared `quirks.table_root_distance`
+alternative applies as stated under Formulas. Hand off that correction with this draft.
+The currently approved S-0504 distance wording contradicts this contract.
 Claim 25a completes the aircraft landing footprint search used by S-0501 claim 41.
 S-0501 owns building and fallback-object selection and map-edge destinations; its former
 footprint uncertainty must be removed at the coordinated hand-off. Equal-distance fallback
@@ -68,7 +74,7 @@ claims so that no aggregate check is mistaken for independent evidence:
 |---|---|---|
 | Search selection | first-recorded route retention and its margin (11), original tie differences (12a), corridor progress, free-part and closure predicates, individual sector and connection choices (13 to 13b), flattening precedence and straight-run V's (17), threat and post-tunnel transformations (18) | These jointly predict a stored path, but no proposed scenario separates each remaining predicate from the others. They are unmeasured route hypotheses, not settled observations of intermediate work. Their exact definitions keep the reference predictions falsifiable as a family. |
 | Unreachable or oversized cases | shared comparisons of unusable cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
-| Remaining caller/state distinctions | ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations must not be used to confirm them. |
+| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations must not be used to confirm them. |
 
 Scenarios P20 to P25 add separate probes of reachable height, nearby-search, blocker-chain,
 cost and timing rules. Their qualification conditions are checked against observable state.
@@ -1296,7 +1302,12 @@ Terms specific to this spec:
     The walk locomotor cuts no stored path for a chased unit either.
     - Backing: `measurable` (scenario P5, and P9's train refresh run for the train rule; P5 run 1i
       for the absence of the refresh in the walk locomotor; S-0504 N11 for ship refresh
-      timing). The ship retained-old-step effect and chase cut are `unmeasured`: no
+      timing). The exact lepton-scale refresh boundary and the distinction between the
+      table root and an exact Euclidean root are `unmeasured` for both driving and ships:
+      P5 and S-0504 N11 place the heading point well beyond the threshold, not at a
+      qualifying separation where the two roots change the refresh decision. They test
+      refresh timing, not that rounding distinction. The ship retained-old-step effect
+      and chase cut are `unmeasured`: no
       qualifying stock setup separates them from unchanged replacement routes or the
       chased unit's own cell-entry reactions (S-0504 claim 9). The hovering chase cut is
       `unmeasured`: S-0207 scenario D21 explains why its effect cannot be isolated from the
@@ -1538,6 +1549,8 @@ Terms specific to this spec:
     | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4); none when that read gives no reach region | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
     | Trigger crate placement (S-0524 claim 4) | the waypoint-slot cell | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
+    | Random crate placement (S-0520 claim 3) | the candidate cell supplied by S-0520 claim 3 | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
+    | Unit crate placement fallback (S-0520 claim 13) | the crate cell | the awarded unit type's | *normal* | none | never | no | no | none |
     | Paradrop target adjustment (S-0522 claim 1) | the target cell | *foot* | *normal* | none | never | no | no | none |
     | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
@@ -1554,10 +1567,13 @@ Terms specific to this spec:
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
-    The trigger-crate and paradrop rows allow bridge cells and ask for no no-overlay
-    condition. For a trigger crate, selection is not placement: a selected cell outside
-    the height-aware usable area or holding any overlay is refused without searching for
-    another candidate. S-0524 claim 4 owns placement capacity and the other crate rules.
+    The trigger-crate, random-crate, unit-crate fallback and paradrop rows allow bridge
+    cells and ask for no no-overlay condition. For trigger and random crates, selection
+    is not placement: a selected cell outside the height-aware usable area or holding
+    any overlay is refused without another nearby search around that centre. S-0524
+    claim 4 owns trigger placement; S-0520 claim 3 owns random placement's subsequent
+    candidate attempts. S-0520 claim 13 owns unit-crate placement and its outcome when
+    the fallback search or placement fails.
     The paradrop row is used only when the target is a water-role tile (S-0522 claim 1).
     Its result replaces the target only when there is a result and it is not itself a
     water-role tile; otherwise the original target remains. This post-selection refusal
@@ -1647,7 +1663,9 @@ Terms specific to this spec:
     scatter, click-handling tick for move orders and rally points (S-0213 claim 20 and S-0214
     claim 11), failure tick for ordinary approach failure, landing-point fixation tick for
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
-    action tick for trigger crate placement (S-0524 claim 4), launch tick for paradrop
+    action tick for trigger crate placement (S-0524 claim 4), placement-attempt tick for
+    random crate placement (S-0520 claim 3), pickup tick for unit-crate placement fallback
+    (S-0520 claim 13), launch tick for paradrop
     target adjustment (S-0522 claim 1), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
     harvester step-off (S-0402 claim 13), release tick for
     aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
@@ -1665,7 +1683,9 @@ Terms specific to this spec:
       parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
       parasite-exit host-mobility parameters (S-0614 scenario P4), for trigger-crate
-      search settings and post-selection refusal (S-0524 scenario C4), for paradrop
+      search settings and post-selection refusal (S-0524 scenario C4), for random-crate
+      search settings and post-selection refusal (S-0520 scenario CR1), for unit-crate
+      fallback settings (S-0520 scenario CR9), for paradrop
       target-adjustment settings and retention of the original target after refusal
       (S-0522 scenario P1), for the
       final nearby search after give-up (P26), for base-record-refresh parameters
@@ -1964,7 +1984,13 @@ AI-visible-rules specs.
   (`quirks.substitution_distance_flat_destination`).
 - **F6b. Cell centre to cell centre** (claim 24): *n* = Δ*x*² + Δ*y*².
 - **F6c. Unit to point** (claims 20 and 27): *n* = Δ*x*² + Δ*y*² + Δ*z*², between the unit's position
-  and its heading point (claim 20) or the other unit's position (claim 27).
+  and its heading point (claim 20) or the other unit's position (claim 27). This same
+  ⌊*r*(*n*)⌋ distance applies to ship refresh and chase cutting: it is not an exact
+  Euclidean square root followed by integer truncation. The original forms the squares
+  and sum in double-precision floating point under S-0205's round-toward-zero mode.
+  For signed 32-bit differences and a sum below 2⁵³ square leptons, those operations are
+  exact, as in S-0204 claim 6. That is the arithmetic domain of this formula, not a
+  guarantee for arbitrary representable world-height separations.
 
 *D* / 256 in claim 20 is an integer division of the non-negative integer *D*.
 
@@ -3463,8 +3489,11 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   unit's own movement zone, not *infantry*; no scenario checks this.
 - The mechanical-walker locomotor also computes paths. Whether it uses claim 22's blockage
   modes and claim 20's immediate refresh like the driving locomotor is not established.
-  Ship refresh, chase-cut and retry rules are included in claims 20–22, agreeing with
-  S-0504 claim 9. Hovering chase-cut, fresh-search delay and blocked-step rules are
+  Ship refresh, chase-cut and retry rules are included in claims 20–22. S-0504 claim 9
+  needs the distance correction explicitly listed in the Summary; its timing rules agree.
+  The lepton-scale refresh boundary and table-root distinction remain unmeasured for
+  driving and ships: neither P5 nor S-0504 N11 supplies a discriminating boundary setup.
+  Hovering chase-cut, fresh-search delay and blocked-step rules are
   included there too; unlike driving and ships, hovering has no last-step refresh.
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
