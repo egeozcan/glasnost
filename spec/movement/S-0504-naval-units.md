@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -168,7 +168,7 @@ a carrier's controller is launching ordinary aircraft.
    Other sinking triggers belong to their movement specs. S-0502 claim 19 owns the
    jumpjet trigger after a magnetic-lift drop onto water where the vehicle cannot stand,
    not on a deck or beach; an ordinary shot-down jumpjet is not set sinking by its movement.
-   Magnetic lift itself belongs to planned S-0607. Other possible movement triggers remain
+   The magnetic-lift water-landing outcome belongs to S-0607 claim 17. Other possible movement triggers remain
    outside this claim. A squid's cull is S-0614 claim 11, not an ordinary killing hit.
    Once sinking is set, claims 4 and 5 apply in the same way, without adding health loss
    or destruction credit to the cull.
