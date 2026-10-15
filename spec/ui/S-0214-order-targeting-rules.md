@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -125,9 +125,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   onto is *being erased* (glossary), from the first lock until the last lets go or the object is
   removed. An object that is materialising after a chrono jump is *phasing in*. For an
   object's own jump with the teleporting locomotor, its delay is *D* ticks from S-0207 F9,
-  and its end tick and harvester exception are S-0207 claim 20 (f)'s. This does not give the
-  duration of a superweapon teleport's after-effect. A destination given to the teleporting
-  locomotor while phasing in is dropped, not saved for the end (S-0207 claim 20 (a), (f)).
+  and its end tick and harvester exception are S-0207 claim 20 (f)'s. A superweapon teleport's
+  after-effect, the *arrival hold*, instead follows S-0513 claim 40, including its persistent
+  held delay and `quirks.warp_hold_persists`; it is not a universal rules-delay hold.
+  A destination given to the teleporting locomotor while phasing in is dropped, not saved for
+  the end (S-0207 claim 20 (a), (f)).
   This is separate from the click refusal of row GC1.
 - **Parasite.** An object that has latched onto a mobile unit and harms it from there (for
   example a unit that climbs inside a vehicle, or one that grabs a ship). Its rules belong to
@@ -331,7 +333,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      G5 and G10; Scenario T6 also for an armed garrisoned building). Row G2, and the being-erased
      and phasing-in part of row GC1, by Scenario T9 parts A and B, which click at a tick timed to
      the state with scripted input. The own-jump duration and dropped-destination rule cited
-     in Terms are backed by S-0207 claim 20 and Scenario D22 runs 5 and 6. The launching-count
+     in Terms are backed by S-0207 claim 20 and Scenario D22 runs 5 and 6. The superweapon
+     arrival hold is backed by S-0513 claim 40 and Scenario SW13 part c. The launching-count
      and hold exclusions in *movable* are backed by S-0506 claim 10 (R6) and S-0614 claims 7
      and 8 (P1 and P9), respectively.
    - Confidence: medium
