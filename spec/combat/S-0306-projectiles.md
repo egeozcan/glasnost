@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -36,10 +36,11 @@ trigonometry* sin_t and cos_t (F1 there). From S-0205: RZ₅₃, RZ₂₄, trunc
 a ranged draw from the scenario random stream. From S-0301: *firer*, *shot*, *firing check*, *void
 shot* (claim 15 there). From S-0312: the *nearby point* N(*Q*, *λ*, snap off) of distance *λ* (F2
 there). From S-0303: the warhead's *electromagnetic flag* (F5 there). From S-0313: *fire point* *F*
-and the *spray attack* of a firer (claim 9 there). From S-0209: *gate* and *open gate* (Terms there).
+and the *spray attack* of a firer (claim 9 there). From S-0214: *vehicle-like building* (Terms there).
 A *radar event* is a marker of some kind that the interface specs show on the radar (S-0011, claim 32
 has the trigger action that raises one). From S-0307: *airborne*, *elevation level* of a cell, and the *subject-to-elevation* property (claim
-6 there). From S-0211: *firestorm wall* and a house's *firestorm* (Terms there). From S-0206:
+6 there). From S-0211: *firestorm wall*, a house's *firestorm*, *laser-fence flag* and
+*inactive laser-fence section* (Terms there). From S-0206:
 *homing projectile* (turn-rate field not 0). In addition:
 
 - **Turn-rate field** ρ. The projectile type's integer turn-rate field (Import mapping). S-0206
@@ -585,8 +586,8 @@ S-0501 claim 20.
     - Backing: `measurable` (scenarios P6, P7, P9, P11, P13, P18; P22 to P25 and P29 to P34 for
       single rows, P36 for the speed row; P26 for removal and T2; S-0614 scenario P11 for
       carrier loss, with that spec's unmeasured qualification for other removal causes, and
-      P32 runs f and g for the open-gate
-      and firer exceptions of the first row). The rule that the rows of this spec never remove a
+      P32 runs f, g, i and j for the open-gate control, firer exception, inactive laser-fence
+      section exception and vehicle-like-building exception of the first row). The rule that the rows of this spec never remove a
       steering projectile for leaving the map is `unmeasured`: what then happens to such a
       projectile is not established (Open questions), so no scenario could predict an outcome
       that would confirm or falsify it.
@@ -1077,7 +1078,7 @@ what happens when several rows apply. Straight and arcing projectiles share ever
 
 | Kind | Condition | Result | Confidence |
 |---|---|---|---|
-| straight, arcing | *P*′ is below the terrain of its cell; or *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell) going up or down; or *P*′ is 0 to 149 leptons above the terrain and its cell holds a building (not the firer, not an open gate, not allied with the firer's house) or one of the three wall overlays of S-0307 claim 11 | detonate (z at the deck height going up, 20 below it going down, otherwise unchanged) | medium |
+| straight, arcing | *P*′ is below the terrain of its cell; or *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell) going up or down; or *P*′ is 0 to 149 leptons above the terrain and its cell holds either an eligible building (not the firer, not an inactive laser-fence section, not a vehicle-like building, not allied with the firer's house) or, with no building present, one of the three wall overlays of S-0307 claim 11 | detonate (z at the deck height going up, 20 below it going down, otherwise unchanged) | medium |
 | straight, arcing | the cell of *P*′ is the cell of *K* and *h* < 208 | detonate; "reached" for claim 20 | high |
 | straight, arcing | the cells of *P*′ and *K* hold the same building and *h* < 208 | detonate; "reached" | medium |
 | not steering | the infantry, vehicle, aircraft or building nearest to *P*′ in its cell is at *d*₃ < 128 leptons from *P*′ and is neither the firer nor allied with the firer's house (with no firer, any object counts) | detonate; the position moves onto that object unless inaccurate | medium |
@@ -1329,6 +1330,8 @@ that no fix would change.
 | rules, `[General]` | `MissileROTVar` | *m* (claim 13) | decimal, double | 0.25 |
 | rules, `[General]` | `MissileSafetyAltitude` | claim 17 | integer, leptons | 500 |
 | rules, `[WallModel]` | `AlliedWallTransparency` | claim 22 | boolean | no |
+| rules, building | `LaserFence` | laser-fence flag for T1's inactive-section exception (S-0211 claim 11) | boolean | no |
+| rules, building | `UndeploysInto` | vehicle reference used by the vehicle-like-building test, together with a 1 × 1 foundation (S-0214 Terms and Import mapping) | vehicle type name | none |
 | rules, warhead | `Wall` | wall-damaging warhead (S-0307 claim 11) | boolean | no |
 | rules, warhead | `EMEffect` | electromagnetic flag (claim 20 c; S-0303 F5) | boolean | no |
 
@@ -2202,27 +2205,36 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   point predicts the recorded outcome and the one against the origin does not.
 
 **P32. Building band, wall overlays and the same building (T1, the first row and the same-building row).**
+- The exceptions here concern only the building-band test. Except in run h, use a target cell beyond
+  the obstacle and accept a crossing only when no other detonation row applies, in particular no
+  nearest-object proximity, arrival or same-building row. Use named test-map overrides for the projectile and
+  exceptional building types, with director and mods off, at game speed 2.
 - Setup: a straight, not inaccurate test projectile with ρ = 0, fired across a cell holding an enemy
   building so that it is about 100 leptons above the terrain there (run a) or 200 above it (run b),
   run c: the building is allied with the firer; run d: a wall segment of the wall overlay in that
   cell, the projectile 100 above the terrain; run e: an overlay that is not a wall (an ore patch)
   instead; run f: the building is an enemy gate held open by its owner's vehicle passing through
-  it while the projectile crosses at about 100 above the terrain; run g (the firer exception): the
+  it while the projectile crosses at about 100 above the terrain (the gate is neither laser-fence
+  flagged nor vehicle-like); run g (the firer exception): the
   firer is a stock defensive building with the test weapon, firing at a vehicle 5 cells away, and
   the run counts only when the recorded height of the projectile in a turn that ends in the
   firer's own cells is 0 to 149 above the terrain; run h (the same-building row): an enemy stock
   building with a foundation of at least 2 × 2 cells as the shot target, the fire point raised so
   that the projectile enters a cell of the building other than the cell of *K* at 150 to 207
   leptons above the terrain, with a start-of-turn height below 208 (the run counts only when the
-  recording shows this).
+  recording shows this). Run i: replace run a's building by a map-placed enemy laser-fence
+  section, initially inactive (S-0211 Terms). Run j: replace it by an enemy vehicle-like building
+  (S-0214 Terms). Pair i and j with an otherwise matching ordinary-building control.
 - Observable: the projectile's cell and height per tick, the detonation tick and point.
 - Runs: 1 each.
-- Expected: (a) and (d) detonation in the first turn whose new position lies in that cell and 0 to
-  149 above the terrain; (b), (c), (e), (f) the projectile flies over the cell; (g) it leaves the
-  firer's cells without detonating; (h) detonation in the first turn whose new position lies in a
-  cell of the building, although it is above the band of the first row and not in the cell of *K*.
-- Falsified if: (a) or (d) flies on, (b), (c), (e) or (f) detonates in that cell, (g) detonates
-  in the firer's cells, or (h) flies on into the cell of *K* before detonating.
+- Expected: (a), (d) and (f) detonation in the first turn whose new position lies in that cell and
+  0 to 149 above the terrain. In (b), (c), (e), (i) and (j) the projectile flies over the cell,
+  while the ordinary-building controls detonate. (g) It leaves the firer's cells without detonating.
+  (h) detonation in the first turn whose new position lies in a cell of the building, although it
+  is above the band of the first row and not in the cell of *K*.
+- Falsified if: (a), (d) or (f) flies on, (b), (c), (e), (i) or (j) detonates in that cell, an
+  ordinary-building control flies on, (g) detonates in the firer's cells, or (h) flies on into the
+  cell of *K* before detonating.
 
 **P33. Bridge deck crossings (T1).**
 - Setup: a map with a high bridge. Run a: an arcing projectile lobbed over the bridge so that it
