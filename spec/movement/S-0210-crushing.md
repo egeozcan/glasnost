@@ -2,11 +2,11 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0020, Q-0036]
 supersedes: []
@@ -274,17 +274,17 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
 
    While the state lasts, a vehicle with the driving or ship locomotor that is of an accelerating
    type and not passive has its speed held down on every tick on which its locomotor updates its
-   speed fraction. For the driving locomotor these are the updates of S-0207 claim 10. The ship
-   locomotor updates its speed fraction under the same conditions: in each moving tick, only for a
-   vehicle of an accelerating type that is not passive. On each such tick, with either
+   speed fraction. The update rules are S-0207 claim 10 for the driving locomotor and apply
+   unchanged to the ship locomotor by S-0504 claim 1. The slowdown applies to those updates only
+   for a vehicle of an accelerating type that is not passive. On each such update, with either
    locomotor, the crush-slowdown state takes precedence over every other rule for the new speed
    fraction (braking near the destination, sinking, accelerating, decelerating): the target
    fraction and the speed fraction both become the smaller of the target fraction and 0.2
    (Formulas F4). So the speed fraction does not ramp: a vehicle in the
    state jumps at once to the lowered target, from rest as well as from a higher speed. A new target
    fraction set when a later track begins is lowered again on the next update, so the limit lasts as
-   long as the state. How the ship locomotor's speed fraction changes outside the state is not part
-   of this spec. A vehicle of a type that is not accelerating is not slowed. A vehicle with the
+   long as the state. Outside the state, the ship locomotor's speed-fraction rules are owned by
+   S-0504 claim 1, which applies S-0207 claim 10. A vehicle of a type that is not accelerating is not slowed. A vehicle with the
    walking-vehicle locomotor is never slowed by the state; there it affects only how the vehicle is
    drawn (claim 12).
 
@@ -1141,9 +1141,6 @@ cell-centre crushing.
 
 ## Open questions
 
-- **Ship speed outside the crush-slowdown state.** S-0207 covers only the driving locomotor, so
-  claim 9 states the ship locomotor's speed update only as far as the state is concerned. The rest
-  of the ship locomotor's speed rules belong to a movement spec not yet written.
 - Whether other locomotors that carry vehicles over the ground (for example hovering vehicles) crush
   at cell centres the same way was examined only for the driving locomotor. For the ship and
   walking-vehicle locomotors only the crush-slowdown state of claim 9 and the warning of claim 7 were
