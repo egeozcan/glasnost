@@ -1,0 +1,670 @@
+---
+id: S-0507
+title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
+topic: combat
+revision: 1
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-15
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0507: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
+
+## Summary
+
+How a unit becomes a passenger of a vehicle or aircraft transport and how it gets out again:
+who may board and how capacity is counted, the exchange between the transport and a unit that
+wants to board, the order in which passengers are held and let out, how a vehicle transport
+chooses where to unload, its cadence and the places where it may not unload, how a transport
+aircraft lets its passengers out, and what changes for passengers of an open-topped transport
+while they ride, board and leave.
+
+Skirmish only; network games and campaigns are out of scope. The original's team joins are
+out of scope too; unloading gives no team membership in our engine.
+
+This spec does not repeat what other specs own:
+- Cursor and order verdicts for entering and unloading: S-0214 (transport verdicts *x* and *q*,
+  table VD, row AC7).
+- Passengers' place in the update order, and their turns while inside: S-0203 (claim 3).
+- Death of passengers with their transport, passengers killed by a high fall, and passengers who
+  escape a destroyed transport: S-0312 (claims 5, 12 and 16).
+- The gunner weapon switch and the weapon of an open-topped passenger: S-0308 (claims 5, 6 and 10).
+- Combat effects of firing from inside an open-topped transport:
+  - the damage multiplier: S-0302 (claim 2),
+  - the range bonus and the transport's shortest range: S-0307 (claims 5 and 13),
+  - experience: S-0311 (claim 8),
+  - fire points: S-0313 (claim 5),
+  - target choice when the transport is mind-controlled: S-0309 (claim 10).
+- The target hand-down from an order to an open-topped transport: S-0213 (table T3, part (f),
+  and claim 8).
+- The *enter* behaviour in general and the standard delay: S-0215 (claims 6 and 29).
+- Aircraft flight, landing and pads: S-0501.
+- Buildings that take units inside (tank bunkers, garrisons and absorbing buildings): the
+  structures and garrison specs.
+- Vehicles of a transport type that fire a deploy weapon instead of carrying anyone: planned S-0517.
+
+## Terms
+
+- **Transport.** A vehicle or aircraft whose type has a capacity above 0 (Import mapping). A
+  *vehicle transport* is a vehicle that is a transport, an *air transport* an aircraft that is one.
+- **Allied for boarding.** The transport owner's house counts the candidate's house as allied
+  (including itself); this is a one-way test.
+- **Capacity.** A transport type's imported passenger count: an integer.
+- **Size, size limit.** Every infantry and vehicle type has a *size*, a floating-point number. A
+  transport type has a *size limit*, also floating point: the largest size of one passenger it
+  takes.
+- **Load.** The sum of its passengers' sizes that a vehicle transport counts (claim 1, Formulas
+  F1).
+- **Passenger order.** The order in which a transport holds its passengers. *Position 1* is the
+  front of the order (claim 3).
+- **Would-be passenger.** A unit in *enter* whose contact is a transport.
+- **Unloading phases.** The four phases of a vehicle transport's *unload* processing: *settling*,
+  *turning*, *letting out* and *finished* (claims 8 to 12, table U).
+- **Kept passenger.** For a vehicle transport whose type's turret count is above 0, the passenger
+  that stays inside during an unload (claim 11).
+- **Rear direction.** The step direction derived from body facing by F3; the half-turn
+  adjustment is one facing unit short of an exact half turn.
+
+## Behaviour
+
+### Who may board
+
+1. **Capacity of a vehicle transport.** A vehicle transport accepts a candidate only when both
+   hold:
+   - its load plus the candidate's size is at most its capacity, and
+   - the candidate's size is at most the transport's size limit.
+
+   Both comparisons are made in floating point. The load is a whole number: each passenger's size
+   is added to it in turn and the sum is truncated toward zero after each addition (Formulas F1).
+   For non-negative sizes and representable loads, a fractional size counts for less than its value: passengers of size 0.6 add nothing
+   to the load at all (Edge cases, `quirks.transport_load_truncated`). The candidate's own size
+   enters the comparison untruncated.
+
+   The size limit's absent-key default is 0, and nothing replaces it. A transport type whose data
+   gives no size limit therefore accepts no candidate of positive size.
+   - Backing: `measurable` (scenario T1)
+   - Confidence: high
+
+2. **Capacity of an air transport.** In ordinary loading, an air transport counts heads, not sizes. It accepts a
+   candidate allied with its owner while the number of its passengers is below its capacity, and
+   refuses one when that number has reached its capacity. It gives neither answer (claim 4) to a
+   candidate that is not allied with its owner. Neither the candidates' sizes nor its size limit
+   play a part, and claim 4's vehicle-specific exclusions do not apply. Flight-specific states
+   suppressing the query are not specified here (Open questions). So a mind-controlled
+   unit may board an air transport, and it is released from the control when it boards (claim 6).
+   - Backing: `measurable` (T2) for ordinary loading; `unmeasured` for flight-state query
+     suppression, whose complete observable conditions are not traced here.
+   - Confidence: medium
+
+3. **Passenger order.** A unit that boards goes to position 1, and every passenger already
+   inside moves one position back. Passengers leave from position 1. So a transport lets its
+   passengers out last-in first-out, and position 1 is always the passenger that boarded most
+   recently (after claim 10's put-back, the one put back). S-0313 claim 5 and S-0312 claim 5 read
+   this order.
+   - Backing: `measurable` (scenario T3)
+   - Confidence: high
+
+4. **Who a vehicle transport will not take.** Asked whether a candidate may board, a vehicle
+   transport whose type has a capacity gives the docking answer *neither* (S-0214 Terms, *docking
+   answer*), rather than accepting or refusing, when any of these holds:
+   - the candidate is not allied with the transport's owner (a house is allied with itself),
+   - the transport is being erased (glossary *being erased*),
+   - a building occupies the transport's cell,
+   - the candidate is mind-controlled,
+   - the candidate is an infantry unit or vehicle with a parasite inside it (S-0614 claim 1),
+   - the candidate is a mind controller that controls at least one object now.
+
+   Otherwise it accepts or refuses by claim 1. The loading exchange of claim 5 does not ask this
+   question, so a candidate excluded here can still walk up to the transport. It is turned away
+   only when it arrives (claim 6), where *neither* counts as a refusal. S-0214's transport verdicts give
+   no *enter* for a *neither* answer, so a player's cursor does not offer such an entry. Only
+   an already-established attempt whose candidate becomes excluded can expose this result.
+   No trigger forcing an otherwise illegal entry is established here.
+   - Backing: `measurable` (T4) for reachable cursor and arrival tests. `unmeasured` for
+     building-cell and unreachable exclusion combinations: no normal-order witness is established.
+   - Confidence: high
+
+### Boarding
+
+5. **The loading exchange.** At each processing of *enter*, the passenger asks its contact to
+   load it. This is separate from the eligibility question of claims 1, 2 and 4.
+
+   A vehicle transport in *move* with a destination or a moving locomotor refuses. Otherwise
+   a requester other than its current contact must pass claim 1's tests to proceed. With no
+   current contact, an eligible requester becomes its contact.
+
+   With no destination, the transport takes the requester as its destination when it stands
+   on water or their cells have different reach regions for the requester's movement zone.
+   This reply is not acceptance: an untethered requester breaks contact and falls back to
+   rest, although the transport has acquired that destination. Boarding on the same attempt
+   is not guaranteed.
+
+   In other cases it accepts when claim 1's tests pass. With its locomotor stopped, body not
+   turning, no tether, and a requester not moving toward a destination, it calls the requester
+   to its own cell. Failure to take that destination ends contact. An already-contacted
+   requester failing the capacity tests receives neither answer.
+
+   Only acceptance, or an existing tether, keeps the passenger in *enter*. Every other answer
+   breaks contact and falls back to rest (S-0215 claim 29). With neither contact nor a pending
+   entry partner it also falls back to rest. Processing ends with the standard delay
+   (S-0215 claim 6).
+
+   An air transport accepts a loading request while its count is below its positive capacity,
+   even while moving. It calls a passenger not currently moving toward a destination only
+   while its own locomotor is stopped. Full aircraft give neither answer. The loading exchange
+   does not itself test alliance or claim 4's exclusions.
+   - Backing: `measurable` (T5 and T6) for the approach, ordinary stopped/moving and
+     capacity-change exchanges. `unmeasured` for destination-assignment failure, loss of both
+     entry partners, existing-tether exceptions and the precise turning/contact gates:
+     no isolating ordinary-input scenario is established for these combinations.
+   - Confidence: high for replies; medium for reach-region interpretation
+
+6. **The moment of boarding.** A would-be passenger boards when it arrives at the transport's
+   cell while the transport is its destination. A vehicle boards only while its current behaviour
+   is *enter* and its contact is a transport. At that moment the transport answers again by claims
+   1, 2 and 4.
+
+   **If it accepts**, in the same tick the passenger:
+   - forgets the target it had stored for later use,
+   - leaves the bridge-deck layer if it was on it,
+   - returns its gattling stage to the first stage (S-0308),
+   - is released from any mind control that held it,
+   - leaves the map (S-0203 claim 3 for whether it stays in play),
+   - is recorded as riding in this transport, and goes to position 1 (claim 3).
+
+   If the transport is a gunner type, this is the boarding event of S-0308 claim 6. If the
+   boarding unit is itself an open-topped transport, its own passengers lose their targets.
+
+   **If it does not accept** (a refusal or *neither*), an infantry unit gives up its destination,
+   queues *guard*, and scatters (glossary *scatter*) even if it would otherwise not.
+   A refused vehicle likewise clears its destination, queues *guard*, and receives a forced
+   scatter request.
+   - Backing: `measurable` (T3, T4, T6 and T12; T3 also tests boarding resets)
+   - Confidence: high for acceptance; medium for the refused infantry's reaction
+
+### Unloading a vehicle transport
+
+7. **When a vehicle transport may unload.** An unload order to a vehicle transport is refused (it
+   lacks deploy readiness, S-0214 Terms) when any of these holds:
+   - it stands on a tunnel cell or at a tunnel's edge (S-0214 Terms, *tunnel cell*),
+   - it is disabled,
+   - it is inside a tube,
+   - it is on a bridge,
+   - its own cell, or any of its four straight neighbours (step directions 0, 2, 4 and 6), carries
+     a bridge deck,
+   - its cell's land type is water,
+   - it stands on a building's cell, unless that building is a tank bunker.
+
+   In the original the water refusal applies only to human-controlled houses. In our engine it
+   applies to every player house. Neutral and special houses retain the original's non-human
+   exemption. A computer player's habit of unloading
+   on water is a behaviour our AI may reproduce by moving to shore first (claim 8).
+   - Backing: `measurable` (T7) for bridge, water, disabled and tunnel-land tests. `unmeasured`
+     for the tunnel-edge classification, tube-interior and non-bunker building-cell readiness:
+     the edge predicate is unresolved and no normal-input witness is established for the latter two.
+   - Confidence: high for bridge, water and building rows; medium for tunnel land and tube,
+     and low for the tunnel-edge classification
+
+8. **Settling.** The first phase of a vehicle transport's *unload* processing, outside a tank
+   bunker (a bunker unload follows the structures rules instead):
+   - While its locomotor is moving, it waits 10 ticks and checks again.
+   - Standing on water with no destination, it searches nearby for a wheeled-standable location,
+     takes it as its destination, and waits 10 ticks. With a reachable shore found, it drives
+     there before anyone gets out. Search ties and search failure remain open. This holds
+     whoever queued *unload* (claim 7 refuses only the order).
+   - Otherwise it chooses an unloading cell (claim 9). If it has no passengers, or no cell is
+     chosen, it queues *guard*, waits one standard delay, and the unload ends with nobody out.
+   - Otherwise it turns its body so that its rear points at the chosen cell. A train instead
+     turns to its present facing rounded to 8 steps (S-0204 claim 11), so an exact 8-step
+     facing stays unchanged. It enters *turning* and is processed again after 1 tick.
+   - Backing: `measurable` (T8 and T9), except shore approach is `unmeasured` until T9's
+     ordinary-order/map witness is established; human unloading orders on water are refused.
+   - Confidence: high
+
+9. **Choosing the unloading cell.** The transport scores each of its 8 neighbouring cells. The
+   score of the neighbour in step direction *d* is Formulas F2:
+   - **+128** when all of these hold:
+     - the cell's land type lets infantry walk on it (its foot land multiplier is not 0),
+     - no vehicle or building occupies it,
+     - not all of its infantry positions are taken,
+     - the occupant used for its alliance test, if any, is allied from the transport owner's
+       side (not every occupant is tested independently),
+   - **−128** otherwise,
+   - **minus** the gap between that direction and the transport's rear facing,
+   - **minus a further 100** for step direction 4 (map south).
+
+   The highest score wins, and ties keep the lower direction number. A cell is chosen only when the
+   best score is above 0. So the transport unloads behind itself where it can, avoids south, and
+   gives up when no neighbour is open. The gap is not reduced modulo a turn (Edge cases,
+   `quirks.unload_facing_gap_no_wrap`).
+   - Backing: `measurable` (scenario T9)
+   - Confidence: high for the formula; medium for the occupancy terms
+
+10. **Letting out.** After *turning* ends (claim 12), the transport lets out one passenger per
+    processing, from position 1. Each processing ends with the standard delay (S-0215 claim 6).
+
+    For passenger *P* it tries exit directions, counting clockwise from the rear direction
+    (Formulas F3):
+    - **First round:** all 8 directions, the rear direction first. A direction serves when *P*
+      could move into both the neighbouring cell and the cell beyond it in the same direction:
+      the movement specs' entry test (glossary *entry outcome*, S-0209) for *P* finds each of
+      them open, with nothing in the way.
+    - **Second round** (only if the first finds none): the 7 directions after the rear direction.
+      The rear direction itself is not tried again (Edge cases,
+      `quirks.unload_second_round_skips_rear`). A direction serves when *P* could enter the
+      neighbouring cell.
+    - In both rounds a neighbouring cell that carries a bridge deck is passed over.
+
+    *P* is put on the map at the centre of the serving neighbour cell, facing the exit direction:
+    - an infantry unit in a free infantry position of that cell,
+    - a vehicle at a nearby location where it can stand, searched from that centre; exact
+      search ties are not specified here.
+
+    **On success:**
+    - *P* is no longer a passenger,
+    - if the transport is open-topped and *P*'s owner differs from the transport's, *P* loses its
+      target,
+    - *P* queues *move*, to the far cell (first round) or to the neighbour cell (second round),
+    The original also adds *P* to its team when it has one; that effect is out of scope.
+
+    **On failure:** *P* stays inside at position 1 and the processing ends. A gunner transport's
+    weapon number becomes *P*'s mode index, subject to S-0308 claim 5's clamping and
+    charge-turret exception, even when others remain (an exception needed in S-0308 claim 6,
+    `quirks.unload_failed_exit_gunner_handover`). For its only passenger,
+    removal and replacement also restart S-0308 claim 6's gunner hand-over.
+    The next processing tries *P* again.
+    - Backing: `measurable` (scenarios T3 and T10) for exit order, rounds, deck exclusion,
+      placement, cadence and the multi-passenger gunner change. `unmeasured` for the
+      single-passenger failed-exit hand-over restart: no scenario here isolates its effect
+      from the unchanged weapon number. Exact vehicle placement-search ties remain open.
+    - Confidence: high for the order, the rounds and the cadence; medium for which entry
+      outcomes count as open; high for the bridge-deck check and gunner weapon-number change
+
+11. **The kept passenger and the end of unloading.** A transport whose type's turret count (Import
+    mapping) is above 0 keeps one passenger inside when it unloads, unless exactly one passenger is aboard when
+    the unload starts. The passenger kept is the last one in the order (the one that boarded
+    first), because passengers leave from position 1.
+
+    When the number of passengers inside is no more than the number to keep, the unload enters
+    *finished* and waits one standard delay. At its next processing the transport queues *guard*
+    with the allowance to interrupt movement of S-0215 claim 11.
+    - Backing: `measurable` (scenario T10)
+    - Confidence: high
+
+12. **Turning.** At each processing in *turning*, a transport whose body is still turning waits
+    one standard delay (S-0215 claim 6) and checks again. Once its body has stopped turning, it
+    enters *letting out* and is processed again 1 tick later. So the first passenger gets out 1
+    tick after the first processing that finds the turn finished.
+    - Backing: `measurable` (scenario T8)
+    - Confidence: high
+
+### Unloading an air transport
+
+13. **Air transports.** An air transport in *unload* behaves as follows:
+    - **Landed** (on the ground, not pitched) at its destination, or with none: each processing
+      attempts to release position 1 at its own cell, unless tethered. Placement failure is
+      not specified here; the original's team join is out of scope.
+    - **No passengers left:** it falls back to rest.
+    - **A carrier aircraft** carrying a vehicle under it uses different unloading, out of scope.
+    - **In the air with no destination:** a type with the dropship flag searches for a dock
+      or landing spot. With a destination it uses a flight/landing approach, but exact alternate
+      destinations and transition conditions remain open rather than being supplied by this spec.
+
+    Passenger-release processing ends with the standard delay. During approach a stopped
+    aircraft can reach the release phase after a 1-tick processing instead. Landing search,
+    alternate destinations and flight transitions are not completely traced: this claim does
+    not guarantee that an arbitrary airborne transport lands.
+    - Backing: `measurable` for landed release order and cadence (T11).
+      `unmeasured` for tether inhibition until T11's ordinary-contact witness is established,
+      and for airborne transitions, including the 1-tick approach processing:
+      no complete landing witness is established.
+    - Confidence: medium for release; low for airborne transitions
+
+### Open-topped transports
+
+14. **Which transports are open-topped.** A transport is open-topped when its type has the
+    imported open-topped flag. Vehicles and aircraft can both have it. While inside, its
+    passengers are in play and take turns (S-0203 claim 3). They choose and fire weapons by the
+    combat specs listed in the Summary.
+    - Backing: `measurable` (scenario T12)
+    - Confidence: high
+
+15. **What an open-topped transport passes to its passengers.**
+    - **Position.** Whenever the transport moves to a new position, its passengers' positions
+      become the transport's position at once. Range and fire-point rules (S-0307 and S-0313) see
+      them where the transport is.
+    - **Targets given.** The transport gives its target to its passengers when an order sets it
+      (S-0213 table T3, part (f), and claim 8).
+    - **Targets taken away.** Every passenger loses its target when the transport leaves the map
+      for any reason, for example when it boards another transport (claim 6) or enters a
+      building.
+    - **Getting out** (claim 10). A passenger whose owner differs from the transport's loses its
+      target. Any other passenger keeps it.
+    - Backing: `measurable` (scenario T12)
+    - Confidence: medium
+
+## Formulas
+
+**F1. Load of a vehicle transport.** For passengers with sizes *s*₁, …, *s*ₙ:
+
+> *L*₀ = 0, *L*ₖ = trunc(RZ₅₃(*L*ₖ₋₁ + *s*ₖ)), *L* = *L*ₙ.
+
+RZ₅₃ rounds arithmetic toward zero to a double, as S-0205 claims 4 and 5 specify.
+trunc converts to an integer toward zero (S-0205 claim 7). With the rounding quirk off,
+RN₅₃ replaces RZ₅₃. Each addition is rounded before conversion. Since *L*ₖ₋₁ is
+a whole number, for non-negative sizes and sums within the integer domain this is equivalent
+to *L* = Σ ⌊*s*ₖ⌋: each passenger counts
+its size rounded down, and the order of boarding does not matter. A candidate of size *s* is
+accepted when RZ₅₃(*L* + *s*) ≤ *C* and *s* ≤ *S*<sub>max</sub>, with exact comparisons
+of double-precision values, where
+*C* is the capacity (an integer) and *S*<sub>max</sub> the size limit.
+
+Worked examples:
+- Capacity 3, size limit 2, candidates of size 1.5. The load after 0, 1 and 2 passengers is 0,
+  trunc(1.5) = 1 and trunc(2.5) = 2. A candidate is accepted at *L* = 0 and *L* = 1, and refused at
+  *L* = 2 (3.5 > 3). The transport holds 2.
+- Capacity 2, size limit 1, candidates of size 0.6. The load stays 0, since trunc(0 + 0.6) = 0, so every
+  candidate passes and the transport takes any number (`quirks.transport_load_truncated`). With
+  exact sums it would hold 3.
+
+**F2. Unloading-cell score.** Let *f* be the transport's body facing (glossary *facing*, 0 to
+65535). Its rear facing in 256 steps is
+
+> *r* = ⌊(⌊((*f* + 32767) mod 65536) / 128⌋ + 1) / 2⌋ mod 256.
+
+For a value *v* from 0 to 255, let σ(*v*) = *v* when *v* < 128 and *v* − 256 otherwise. For step
+direction *d* (0 to 7), let *P*(*d*) = 100 when *d* = 4, and *P*(*d*) = 0 for every other step
+direction. Then
+
+> score(*d*) = *B*(*d*) − |σ(32*d*) − σ(*r*)| − *P*(*d*),
+
+where *B*(*d*) = 128 or −128 by claim 9. Integer arithmetic, exact. The gap |σ(32*d*) − σ(*r*)| runs
+from 0 to 255 and is not reduced modulo 256 (Edge cases). The chosen direction is the smallest *d*
+with the largest score, and is used only if that score is above 0. The transport then turns to the
+8-step facing ((*d* + 4) mod 8) × 8192, except the train rule of claim 8.
+
+Worked example: transport facing map north (*f* = 0, *r* = 128, σ(*r*) = −128), every neighbour
+open. Scores for *d* = 0 to 7: 0, −32, −64, −96, 28, 96, 64, 32. Direction 5 (map south-west) is
+chosen.
+
+**F3. Rear direction and exit order.** The rear direction is
+
+> *q* = ⌊(⌊((*f* + 32767) mod 65536) / 4096⌋ + 1) / 2⌋ mod 8.
+
+The first round tries directions (*q* + *k*) mod 8 for *k* = 0, 1, …, 7. The second round tries
+*k* = 1, …, 7. Integer arithmetic, divisions round down, modulo gives a non-negative
+remainder; the result has units of step directions.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Settling wait | 10 | ticks | Claim 8, while moving or after choosing a shore location |
+| Turning step | 1 | tick | Claims 8 and 12 |
+| Open-cell base score | 128 | score points | Claim 9, F2; −128 for a closed cell |
+| South penalty | 100 | score points | Claim 9, F2, step direction 4 |
+| Facing per step direction | 32 | 256-step facing units | F2 |
+| Exit rounds | 8 then 7 | directions | Claim 10 |
+| Size absent-key default | 1.0 | size | Import mapping |
+| Size limit absent-key default | 0.0 | size | Import mapping; no replacement value |
+| Capacity absent-key default | 0 | passengers | Not a transport |
+
+## State and ordering
+
+**Table U: unload phases of a vehicle transport** (claims 8 to 12).
+
+| Phase | Event | Next phase | Effect |
+|---|---|---|---|
+| settling | locomotor moving | settling | wait 10 ticks |
+| settling | on water, no destination | settling | the transport chooses a nearby location where a wheeled unit can stand as its destination; it waits 10 ticks |
+| settling | no passengers, or no cell scores above 0 | (unload ends) | queue *guard*; standard delay |
+| settling | a cell is chosen | turning | decide the kept passenger; turn rear to the cell; 1 tick |
+| turning | body still turning | turning | standard delay |
+| turning | body stopped | letting out | 1 tick |
+| letting out | more passengers than kept, exit found | letting out | one passenger out (claim 10); standard delay |
+| letting out | more passengers than kept, no exit | letting out | passenger put back at position 1; standard delay |
+| letting out | no more than kept | finished | standard delay |
+| finished | processing | (unload ends) | queue *guard* with the allowance to interrupt movement |
+
+**Ordering consequences.**
+- A loaded transport ordered to unload while driving lets nobody out until it has stopped and then
+  turned. The first passenger appears 1 tick after the first processing that finds the turn
+  finished. Later passengers appear at successive processings with their respective standard delays.
+- Because passengers leave from position 1, the unit that boarded last leaves first. A transport whose
+  turret count is above 0 keeps the unit that boarded first when more than one was aboard at
+  the start.
+- A passenger that fails to find an exit blocks those behind it. The transport keeps retrying the
+  same passenger each processing and lets out nobody else until it gets out or the unload is
+  interrupted.
+
+## Edge cases and quirks
+
+- **Facing gap without wrap (`quirks.unload_facing_gap_no_wrap`, default on).** The gap between a
+  neighbour's direction and the rear facing in F2 is not taken the short way round the circle.
+  When the rear points between map south-east and map south-west, neighbours on the far side of
+  south get gaps above 128 and drop out, even if they are open and next to the rear. For example a
+  transport facing map north unloads to the south-west, never the south-east. *Fixed behaviour:*
+  use the signed facing difference (glossary), so the gap is at most 128.
+- **Rear direction skipped in the second round (`quirks.unload_second_round_skips_rear`, default
+  on).** When no direction has two clear cells, the second round starts one step clockwise of the
+  rear, so a passenger cannot get out straight behind the transport even if that neighbour is free.
+  If it is the only free neighbour, nobody gets out. *Fixed behaviour:* the second round tries the
+  rear direction first, as the first round does.
+- **Gunner hand-over after a failed exit (`quirks.unload_failed_exit_gunner_handover`, default
+  on).** Subject to S-0308 claim 5, a failed exit changes its weapon number to position 1's mode index,
+  even when others remain. *Fixed behaviour:* a failed exit leaves its gunner role and weapon
+  number unchanged.
+- **Load counted in whole sizes (`quirks.transport_load_truncated`, default on).** A passenger
+  adds its size rounded down to the load (claim 1, F1), so passengers smaller than 1 add nothing
+  and a vehicle transport takes any number of them; a passenger of size 1.9 counts as 1. The
+  candidate's own size is not rounded. Stock data may give no fractional sizes, but a mod can.
+  *Fixed behaviour:* retain the double-precision sum, rounded at each addition by S-0205
+  claims 4 and 5, without converting each partial sum to an integer.
+
+## Import mapping
+
+| Rules section | Key | Concept | Parse form | Absent-key default |
+|---|---|---|---|---|
+| Vehicle and aircraft type sections | `Passengers` | capacity (Terms); above 0 makes a transport | integer (S-0003) | 0 |
+| Infantry and vehicle type sections | `Size` | size (Terms; claim 1, F1) | floating point (S-0003) | 1.0 |
+| Vehicle and aircraft type sections | `SizeLimit` | size limit (claim 1) | floating point (S-0003) | 0.0 |
+| Vehicle and aircraft type sections | `OpenTopped` | open-topped transport (claim 14) | boolean (S-0003) | no |
+| Vehicle type sections | `Gunner` | gunner type (S-0308; claims 6 and 10) | boolean (S-0003) | no |
+| Vehicle type sections | `TurretCount` | turret count: above 0 gives a kept passenger (claim 11) | integer (S-0003) | 0 |
+| Vehicle type sections | `IsTrain` | train: rounds its existing facing rather than facing the exit (claim 8) | boolean (S-0003) | no |
+| Aircraft type sections | `IsDropship` | dropship flag (claim 13) | boolean (S-0003) | no |
+| Aircraft type sections | `Carryall` | carrier aircraft, excluded from ordinary passenger release | boolean (S-0003) | no |
+| Unit type sections | `EnterTransportSound`, `LeaveTransportSound` | sounds of boarding and getting out (presentation); whose type supplies each sound remains open | sound name | none |
+
+The movement zone (claim 5) and the foot land multiplier (claim 9) come from S-0211's import
+mapping.
+
+## Measurement scenarios
+
+Use the glossary's measurement setup: tiny flat skirmish maps, a human observer and a
+bystander computer player kept outside the test area. The units and cells named below form
+that area; void any run with interference. Director and other mods are off. Use game-speed
+index 2 and 800 × 600, one run per part unless noted. A *test file* is a named map rules layer
+removed after the run; all numbers below are invented test data, not stock values. Read ticks,
+positions, passengers, targets, behaviours and weapon numbers with a read-only recorder.
+Video and scripted ordinary input provide an independent view of orders and visible exits.
+Every difference from a part's expected result falsifies that part; a run that cannot reach
+its stated setup is inconclusive, not confirmation.
+
+**T1. Capacity by size (claim 1).** A test file defines a vehicle transport with capacity 3 and
+size limit 2, a second one with capacity 2 and size limit 1, a third with capacity 3 and no size
+limit, and infantry types of size 1.5, 2.5, 1.0 and 0.6. Units are ordered to enter one by one.
+The recorder counts passengers.
+- *Size 1.5, first transport:* two board and the third is turned away.
+- *Size 2.5, first transport:* turned away even when it is empty.
+- *Size 1.0, first transport:* three board.
+- *Size 0.6, second transport:* six of six board (`quirks.transport_load_truncated`).
+- *Size 1.0, third transport:* turned away.
+- *Falsified if:* any count differs, including only three size-0.6 units boarding or the third
+  transport taking anyone. Also vary size limit across a candidate's size while the load stays
+  below capacity, to isolate the separate size-limit comparison.
+
+**T2. Air transport counts heads (claim 2).** A test file defines an air transport with capacity 2
+and no size limit, and an infantry type of size 3. The transport is landed.
+- *Run 1:* two size-3 units board, a third is turned away.
+- *Run 2:* with one seat free, an infantry unit of a third house that a mind controller of house B
+  holds is selected by B and ordered through ordinary input to enter. House B is allied with the transport's owner; a
+  controlled unit belongs to its controller's house, so without that alliance the answer would be
+  *neither* (claim 2). *Expected:* it boards, and after unloading it belongs to its original house.
+- *Falsified if:* sizes limit the air transport, or the controlled unit is turned away.
+
+**T3. Last-in first-out (claims 3, 6 and 10).** A test vehicle transport with capacity 5 and a
+large size limit, on open flat ground. Board five distinguishable infantry types A, B, C, D, E in
+that order, then order an unload.
+- *Expected:* they get out in the order E, D, C, B, A.
+- *Recorded:* boarding and appearance ticks, passenger count, and exit order.
+- *Reset variants (claim 6):* board a unit with an archived target, a unit that was on a bridge
+  deck, and a test gattling vehicle after it has spun up. Record archived target, bridge-layer
+  state and gattling stage on the boarding tick. Expected: no archived target, ground layer,
+  stage 0, off-map and riding the transport. Any retained reset state or different order
+  falsifies the corresponding part.
+
+**T4. Exclusions and arrival refusals (claims 4 and 6).** With T3's transport empty, compare
+cursor verdicts for an enemy infantry unit, an allied mind-controlled infantry unit, an own
+vehicle carrying a parasite, and an own mind controller holding an object. Expected: no
+*enter* action; the same controller after release gets *enter*. Repeat while the transport
+is being erased. Observe each verdict before another condition changes.
+For arrival, establish legal *enter* first, then make the passenger excluded before arrival
+(for example give the entering controller a target to control). Record whether it remains in
+*enter*, reaches the cell, fails to board, clears its destination, queues *guard* and receives
+forced scatter. Repeat for infantry and vehicle passengers. If changing the exclusion also
+cancels *enter*, that run does not test the arrival reaction. A witness for a transport on a
+building cell, and exclusion combinations unreachable by normal orders, remains open.
+
+**T5. Transport approaches, but entry breaks off (claim 5).** A test amphibious transport on
+water next to shore, infantry on shore, ordered to enter while neither is tethered. Record
+the transport's destination and the infantry's contact and behaviour at each processing.
+Expected: the transport takes the infantry as destination, but the infantry breaks contact
+and falls back to rest on the non-accepting reply. A continuing untethered *enter* falsifies
+it. Repeat on land in separate reach regions for the infantry's movement zone. Control on
+land in the same region: transport stays still and infantry walks to it and boards.
+
+**T6. Refused while moving (claims 5 and 6).** Order the transport to move, then order an infantry
+unit to enter it while it drives.
+- *Expected:* the unit's enter attempt is refused and it rests.
+- *Repeat* with the transport standing: the unit boards on reaching its cell.
+- *Aircraft variant:* establish entry contact, then start the aircraft moving; its loading
+  reply remains acceptance while seats are free, unlike the vehicle's refusal. Repeat full:
+  without a tether its requester breaks contact on a non-accepting reply. Record the reply
+  effects and the requester's behaviour, not merely whether boarding finishes.
+- *Capacity-change variant:* establish contact with a vehicle, fill it with another passenger
+  before the first arrives, and record the first requester's next processing. Expected:
+  neither answer and, without a tether, broken contact rather than indefinite waiting.
+
+**T7. Where unloading is refused (claim 7).** A loaded vehicle transport:
+- on a bridge,
+- on a cell next to a bridge deck (straight neighbour), and on a cell diagonally next to one,
+- on water, for a human-controlled and for a computer-controlled house,
+- on a tank bunker's cell, and on another building's cell (a test map lets it stand there).
+- *Recorded:* whether the unload order is given (cursor) and whether anyone gets out.
+- *Expected:* refused on the bridge, next to the deck, on water for the human-controlled house,
+  and on the non-bunker building cell. A diagonal deck and a tank bunker alone do not refuse
+  readiness, although independent cursor checks may still refuse an order.
+- *Additional runs:* disable a loaded transport and place one on a tunnel-land cell; readiness
+  is refused. Acceptance in either run falsifies the corresponding refusal. Tunnel-edge
+  classification is unmeasured: this proposal does not identify which non-tunnel-land cells
+  qualify. A tube-interior witness remains open, since ordinary input cannot select it there.
+- *Our engine:* also refused on water for an AI player house; neutral and special houses keep
+  their original exemption.
+
+**T8. Settling and turning timing (claims 8 and 12).** A loaded test vehicle transport driving
+north is ordered to unload; a second run starts it standing.
+- *Recorded:* processing ticks and phases, the tick it stops, the tick its turn ends, and the
+  tick the first passenger appears.
+- *Expected:* moving settling checks are 10 ticks apart. Choosing an exit schedules the first
+  turning check 1 tick later; checks that still find turning wait one standard delay.
+  The first passenger appears 1 tick after a processing that finds the turn finished,
+  so between 1 tick and one standard delay plus 1 tick after the turn ends. Later passengers
+  appear at successive processings separated by their respective standard delays, including
+  each delay's random component.
+- *Train:* a named train type at an exact 8-step facing does not turn to the chosen exit.
+  Repeat at a non-exact facing: expect the nearest 8-step facing, not the exit-facing result.
+- *Empty/blocked variants:* no passengers, then no positive-score neighbour: no exit, queued
+  *guard*. A passenger appearing before settling/turning completes falsifies this part.
+
+**T9. Unloading cell and south penalty (claims 8 and 9).** A loaded transport standing at each of
+the 8 body facings (8-step), all neighbours open.
+- *Recorded:* the body facing requested during settling, and the eventual exit cell separately.
+- *Expected:* the requested body facing matches F2's chosen cell, with the rear pointing at it.
+  For example facing north with all neighbours open: rear points south-west. Release follows
+  claim 10's separate exit search; an exit cell alone does not establish the scoring choice.
+- *Second run:* block every neighbour except the one straight south (step direction 4). Facing
+  north, the transport unloads south (score 128 − 0 − 100 = 28). Facing south, nobody gets out and
+  it rests in *guard* (score 128 − 128 − 100 = −100).
+- *Occupancy variants:* block a neighbour with a vehicle, a building, all infantry positions,
+  or a single enemy infantry unit; restore it with one allied infantry unit and a free position.
+  Record body turn and exit cell and compare F2. Any mismatched choice falsifies claim 9.
+- *Shore run:* observe a loaded computer-controlled amphibious transport whose ordinary
+  computer behaviour queues *unload* on water, or a named map reinforcement that arrives
+  already in that behaviour. With one nearby reachable shore, expect it to approach shore
+  before release. Do not simulate the setup by writing its behaviour. If no such map witness
+  is available, this part remains unmeasured. Search ties are not predicted.
+
+**T10. Exit rounds, blocking and the kept passenger (claims 10 and 11).**
+- *(a)* Rear neighbour free but the cell beyond it blocked, one side neighbour with both cells free:
+  the first passenger exits via that side and walks two cells out.
+- *(b)* Only the rear neighbour free, its far cell blocked: nobody gets out
+  (`quirks.unload_second_round_skips_rear`).
+- *(c)* A test transport whose turret count is above 0, with three passengers: two get out and the first-boarded
+  stays.
+- *(d)* The same with one passenger: it gets out.
+- *End timing, parts c and d:* record processing ticks, phases and queued behaviour after
+  the passenger count reaches the kept count. At the next letting-out processing, expect
+  *finished* with one standard delay; at the following processing, expect queued *guard*
+  with S-0215 claim 11's movement-interruption allowance. Earlier or later completion
+  falsifies this timing.
+- *(e)* A named gunner transport with two passengers of different mode indices: the first
+  boarded has mode 2, the last mode 3. Let settling choose an exit, then move blockers into
+  every exit during its turn, before release. Expected after the failed exit: both still
+  inside, most recently boarded still position 1, weapon number changes from 2 to 3.
+  Clear blockers: the same passenger exits first. A retained weapon number 2 falsifies the
+  failed-exit hand-over. Repeat with an entry-restricted vehicle passenger at position 1
+  and an infantry passenger behind it: failure of the first blocks the second.
+- *(f)* Allow only a bridge-deck neighbour during the letting-out phase: no passenger is placed
+  on it. Any such placement falsifies the deck exclusion.
+- Record exit cell, placement position, facing, queued movement destination, passenger order,
+  weapon number and ticks in every part. Any departure from the listed results falsifies it.
+
+**T11. Landed air transport unloading (claim 13).** A named air transport, already landed
+with zero pitch and no destination, loaded with distinguishable passengers, ordered to unload.
+Expected: successful placements at its own cell, last-boarded first, one per release processing
+with the respective standard delays, then rest when empty. Record placement and processing ticks.
+A tethered landed run should release nobody until untethered; use an ordinary pad/contact
+witness if available, not state writes. Release while tethered falsifies that part.
+An airborne run is exploratory only: record destinations, landing and processing delays to
+close the incomplete flight contract, without assuming every aircraft can land there.
+
+**T12. Open-topped passengers (claims 14 and 15).** A stock open-topped transport with two armed
+infantry passengers.
+- *(a)* Drive it past an enemy: the passengers fire while inside. Record passenger and
+  transport positions each tick: all agree after each transport position change. Repeat with
+  a named open-topped aircraft carrying infantry to test that the flag is not vehicle-only.
+- *(b)* Order it to attack: both passengers take its target.
+- *(c)* A test file defines a larger transport that takes the open-topped one. While its
+  passengers have a target, it boards the larger transport. Expected: every passenger's
+  target is nothing on the boarding tick. Also enter a suitable absorbing building: targets
+  clear on leaving the map. A retained target falsifies either part.
+- *(d)* A test transport owned by house A, carrying an allied house B's unit, with a target, then
+  unloaded: B's unit has no target after leaving. An own unit keeps its target.
+
+## Open questions
+
+- The infantry type flag that makes an air transport forget its target and destination and leave
+  when an infantry unit boards it is not identified (low). It is not stated as a claim.
+- Exact aircraft boarding geometry and flight-specific refusal states are not traced here.
+- Normal-input witnesses for shore approach, tube-interior readiness and building-cell tests.
+- Which non-tunnel-land cells count as a tunnel's edge for claim 7's refusal (S-0214 Terms,
+  *tunnel cell*); do not infer that every neighbour of tunnel land qualifies.
+- Whether the boarding and leaving sounds are the passenger's or the transport's.
+- Exact shore-search ties and failure behaviour (claim 8).
+- Air transport placement failure and complete airborne unload transitions (claim 13).
+- Which occupant supplies claim 9's alliance test on a mixed-occupancy cell.
