@@ -929,6 +929,7 @@ fn s0513_claim_1_a_selection_takes_precedence() {
         sw: 0,
         from_source: false,
     };
+    let selected = p.selection.clone();
     p.click_map(
         Button::Left,
         None,
@@ -936,6 +937,11 @@ fn s0513_claim_1_a_selection_takes_precedence() {
         Modifiers::default(),
     );
     assert!(fired(&p).is_empty());
+    assert_eq!(p.selection, selected, "the units stay selected");
+    assert!(
+        matches!(p.tool, Tool::Superweapon { sw: 0, .. }),
+        "the aim stays"
+    );
 }
 
 fn source_pick(p: &mut Play, house: HouseId) {

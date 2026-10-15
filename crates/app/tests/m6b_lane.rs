@@ -659,10 +659,12 @@ fn standing(l: u8) -> bool {
 fn ready_sw(lane: &mut Lane, kind: SwKind) -> Option<u32> {
     let w = lane.world();
     let types = &w.rules().superweapons.types;
-    let unknown = types.iter().filter(|t| t.kind.is_none()).count();
+    let unknown: Vec<usize> = (0..types.len())
+        .filter(|&i| types[i].kind.is_none())
+        .collect();
     let Some(sw) = w.rules().superweapons.first_of_kind(kind) else {
         println!(
-            "no superweapon type of this kind ({} types, {unknown} without a recognised kind)",
+            "no superweapon type of this kind ({} types; list positions without a recognised kind: {unknown:?})",
             types.len()
         );
         return None;
