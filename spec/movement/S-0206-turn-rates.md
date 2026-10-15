@@ -2,7 +2,7 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -383,10 +383,19 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     turn-rate field (absent-key default 4, passed through claim 6). When a unit gets the jumpjet
     locomotor, the heading is set at once to map east (16384). The rules data also has a game-wide
     jumpjet turn rate (Import mapping). It has no effect on play: from the moment a unit gets the
-    locomotor, the heading turns at the type's field.
-    - Backing: `unmeasured` (the heading's rate cannot be separated from jumpjet
-      flight, which the jumpjet movement spec owns; Open questions)
-    - Confidence: medium
+    locomotor, the heading turns at the type's field. During ordinary crash motion, each tick
+    gives the heading a target 11520 facing units clockwise ahead of its current value, modulo
+    65536, and the heading turns towards that target by claim 1 at this same rate (S-0502
+    claim 18). The lead is not the angular distance travelled in one tick: repeated targeting
+    still uses F1's integer duration, truncated step and remainder jump. A unit held by magnetic
+    lift does not spin (S-0502 claim 18).
+    - Backing: `measurable` (jumpjet heading and crash spin below, using S-0502 scenarios J7
+      and J12 for the rate and ordinary crash spin, and J1 run b for the game-wide rate's lack
+      of effect). The initial eastward setting and absent-key default are `unmeasured` here:
+      these turning runs do not isolate attachment or an omitted type field. The magnetic-lift
+      exception has S-0502 claim 18's backing limitation.
+    - Confidence: high for the crash target and its use of claim 1; medium for the remaining
+      heading rules
 
 15. **Infantry.** An infantry body facing has the fixed turn rate 127, whatever the type's turn-rate
     field says. A turn of fewer than 32512 facing units (127 × 256) therefore completes at once, and
@@ -506,6 +515,7 @@ For the spin row, its target is the F2 target derived from the facing supplied b
 | Pointing tolerance, homing projectile | 4096 | facing units | F4; claim 10 |
 | Hover movement heading factor | 2 | times the turn-rate field | Claim 13 |
 | Heading of a jumpjet locomotor when attached | 16384 | facing units (map east) | Claim 14 |
+| jumpjet crash spin lead | 11520 | facing units clockwise | Claim 14; S-0502 claim 18 |
 
 ## State and ordering
 
@@ -624,6 +634,20 @@ vehicle, turning routes and per-tick recorder. Compare the recorded movement hea
 at twice the imported turn-rate field after claim 6's conversion, and the body facing with
 S-0503 claim 5's look-ahead aim at the type's own rate. A different heading rate, or body aim
 following travel direction instead of the look-ahead point on the turn, falsifies claim 13.
+
+**jumpjet heading and crash spin (claim 14).** Use S-0502 scenarios J7 and J12 with their
+measurement setup, flight routes and crash procedure. Record the movement heading and its target
+facing each tick, as well as the body facing, position and tick number. Repeat each route and crash
+twice. For J7, compare each uninterrupted heading turn with F1 using the type's imported jumpjet
+turn-rate field after claim 6's conversion. Distinguish changes to the desired direction from
+changes to the rate: start a fresh F1 prediction whenever the recorded target changes. For J12,
+compare the heading trace with F1 under a new target each crash tick equal to the current heading
+plus 11520 facing units, modulo 65536. Do not substitute a constant angular step of 256 × ω for
+that repeated-target prediction. Expected: both traces follow the same converted rate, and the
+crash targets have the stated clockwise lead. A different rate in either trace, a different lead
+or an opposite-sense spin falsifies claim 14. Use S-0502 scenario J1 run b to vary only the
+game-wide turn rate: an altered heading trace falsifies its lack of effect. These runs do not
+test magnetic lift.
 
 **R1. Half-turn sense (claims 1, 2 and 12).**
 - *Setup:* a purpose-made flat map; one human player; a named test rules file that sets one stock
@@ -969,9 +993,10 @@ following travel direction instead of the look-ahead point on the turn, falsifie
   weapon's shot is not confirmed; scenario R4 run d uses only one weapon.
 - Aircraft turning: the flying locomotor may set the body facing at once in some flight phases,
   the aircraft specs should say when the rate of claim 7 applies.
-- The jumpjet heading (claim 14): how the heading turns into movement belongs to the jumpjet
-  movement spec, and no scenario here isolates its rate. Hover heading and body aim are covered
-  by S-0503 claims 2, 5 and 6 and scenario H2.
+- The jumpjet heading's initial eastward setting and absent-key type rate (claim 14) are not
+  isolated by the turning scenarios here. Heading rate during flight and ordinary crash spin
+  now have the jumpjet heading and crash spin scenario above, using S-0502 scenarios J7 and J12.
+  Hover heading and body aim are covered by S-0503 claims 2, 5 and 6 and scenario H2.
 - Which infantry facing changes go through the fixed rate 127 and which are set at once (claim 15,
   S-0107).
 - Whether the unseen turret facing of a vehicle without a turret can drift away from the body
