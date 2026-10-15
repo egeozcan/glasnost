@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -311,8 +311,9 @@ original's recording modes are retained as deferred context, not implementation 
 
 ### Which systems draw from which stream
 
-10. **Scenario random stream: everything that can change game state, and more.** Every random
-    decision that can affect game state draws from the scenario random stream: for example combat
+10. **Scenario random stream: game-state decisions and more.** Except for low-bridge repair's
+    piece choices on the map-generator stream (claim 13), random decisions that can affect game
+    state draw from the scenario random stream: for example combat
     (projectile spread, scatter, damage-related picks), unit behaviour (idle actions, S-0107),
     computer-player decisions, map loading and start positions (S-0009), resource growth and
     spread (including the vein patterns below), random map events, crates and triggers. Several
@@ -685,9 +686,18 @@ original's recording modes are retained as deferred context, not implementation 
     setting itself, with a ranged draw R(0, 65535) of the unsynchronised random stream (claim 11),
     whenever the player asks it to choose all its settings at random. Until it has made such a
     choice in a session the setting is 0, so a random map generated without one is played from a
-    seed drawn at game start. The
-    map-generator stream is used for nothing but generating the random map, whose rules belong to
-    a future spec. A third generator of a different kind serves only the original's setup screens
+    seed drawn at game start. Besides generating the random map, whose rules belong to a future
+    spec, this stream supplies low-bridge repair's piece choices during play (S-0511 claim 20).
+    Each strip requiring a random intact piece takes an unsigned raw value *g* and computes
+    *r* = trunc(*g* × 4 × *c*), where *c* is the double-precision constant nearest
+    1 / (2³² − 1). Both multiplications use double-precision floating-point arithmetic, with
+    the final result truncated toward zero to an integer. A result above 3 is rejected and
+    another raw value is taken until *r* lies in 0 … 3. Each such strip therefore consumes
+    one accepted raw value plus all preceding rejection retries, in increasing bridge-axis
+    coordinate order. This is not claim 4's ranged-draw rule. Strips requiring no random
+    piece choice take no map-generator value; occupant deaths and scatter retain their own
+    scenario-stream draws (S-0511 claims 17 and 20).
+    A third generator of a different kind serves only the original's setup screens
     (to choose a network game's seed, claim 8), visual effects and the names of saved-game files.
     Our engine need not reproduce it.
 
@@ -698,8 +708,8 @@ original's recording modes are retained as deferred context, not implementation 
     | The random-map setup screen chooses the setting with a ranged draw R(0, 65535) of the unsynchronised stream | `measurable` (R9 b) | medium |
     | Without a random-settings choice in a fresh session, the game-start map-generator seed comes from R(0, 65535) of the newly seeded unsynchronised stream | `measurable` (R9 e) | low |
     | The hidden setting is initially 0 and 0 selects the fallback | `unmeasured` (R9 e reads the resulting seed, not the hidden setting; no scenario part distinguishes the sentinel itself) | low |
-    | No map-generator-stream draw during R9's sampled play | `measurable` (R9 c) | medium |
-    | Used for nothing but generating the random map, across every possible feature | `unmeasured` (R9 c observes only one kind of play; a finite set of runs cannot establish an exhaustive list of users) | medium |
+    | No map-generator-stream draw during R9's sampled play without low-bridge repair | `measurable` (R9 c) | medium |
+    | Low-bridge repair piece choices: stream, formula, consumption including rejection retries, and strip order | `measurable` (R9 f; S-0511 claim 20) for ordinary choices and order; `unmeasured` for the rejection endpoint, which needs a particular raw value in 2³² that the recorder cannot force | medium |
     | The third generator and its uses | `unmeasured` (a list of the only uses a generator has cannot be confirmed by any finite number of runs; its one use that reaches a game, the local-network seed, shows through that seed's range in R2 b) | medium |
     - Backing: `measurable` (scenario R9) for the parts so marked above; the rest `unmeasured`,
       with the reasons given above
@@ -1503,7 +1513,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   all its settings at random, and read the unsynchronised stream's state again. Generate the map,
   use it and start the game. At the first tick read the map-generator stream's seed and state,
   then play 3 game minutes, with the starting units moving and fighting, and read the
-  map-generator stream's state again. 3 runs.
+  map-generator stream's state again. No low bridge is repaired during this interval. 3 runs.
   *Expected:* (a) the map-generator seed lies in 0 … 65535, and there is a count *N*, found as in
   R2 (a), for which the seed's computed state (claims 2 and 3) equals the recorded one; (b) the
   seed equals *x* mod 65536 for one of the raw values *x* that the unsynchronised stream gave
@@ -1525,6 +1535,18 @@ The recorder is part of the measurement setup (the project lead has approved it)
   passes with chance about 1000 / 65536 per run, so all three runs pass with chance below 4 in a
   million). *Falsified if* in some run the map-generator seed matches no such
   x<sub>*k*</sub>. A seed of 0 is allowed when the predicted draw gives 0.
+  (f) *In-play low repair.* Use S-0511 claim 20's low-bridge fixture and repair procedure:
+  a small stock-data test map with a damaged or destroyed low bridge, its hut, a human
+  engineer and a distant bystander computer player, at a recorded fixed speed, director
+  and mods off. Include several strips needing random intact pieces and an intact end
+  piece needing no random choice. Sample the map-generator state immediately before and
+  after engineer entry, and record each resulting overlay position. Repeat three times,
+  including bridges along both axes. Compute successive raw values from the pre-entry
+  state and apply claim 13's formula, counting rejected values too. *Expected:* exactly
+  those choices and the resulting state advancement, assigned in increasing axis-coordinate
+  order, with no value for the intact end piece. *Falsified by:* a mismatching position,
+  strip order or stream advancement. Void a run if unrelated actors affect the bridge.
+  This does not promise to encounter the rare rejection endpoint.
 
 - **R10, game-start animation draws (claim 10, loading-draw table).** Reuse S-0010 G4 part C's
   named theater fixtures: run 1 starts an animation only in the game-start pass, and run 2 starts
