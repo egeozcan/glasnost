@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -154,6 +154,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | A heal-all crate hit (S-0520 claim 14) | yes | yes | none | none |
    | The damage of a sonic wave (wave specs) | no | no | the wave's firing object | none |
    | Radiation exposure (S-0525 claims 9 and 10), at distance 0 leptons with the radiation-site warhead | no | yes | none | none |
+   | Gas particle damage (S-0613 claim 13), with the particle type's damage, warhead and distance from that claim | no | no | none | the owner house of the particle's system (none for the shared gas system) |
    | A parasite's delivery (S-0614 claims 6 and 10) | no (yes for a drone's delivery to an infantry host) | yes | the parasite | none |
    | The detonation of the demolition warhead when a destroyed ore-spawning terrain object bursts (claim 20) | no | no | none | none |
    | A detonation set off by the lightning-storm bolt of the weather superweapon (superweapon specs) | no | no | none | the superweapon's owner |
@@ -208,6 +209,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house; also
      bridge-destruction hits through S-0511 claims 9–11 and 15 and scenarios B3, B5 and B6, and
      radiation exposure through S-0525 claims 9 and 10, scenarios RF1 and RF7,
+     gas-particle hits through S-0613 claim 13 and scenarios G4 and G10,
      planted bombs and suicide hits through S-0519 scenarios T6, T7 and T12, and
      crate hits through S-0520 scenarios CR10 and CR12, with heal-all exceptions in D32),
      `unmeasured` (a damaging animation's row:
@@ -225,7 +227,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      no precise source setup and expected metadata are established here)
    - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
-     owner; radiation-exposure metadata; crate-hit and suicide-hit metadata),
+     owner; radiation-exposure and gas-particle metadata; crate-hit and suicide-hit metadata),
      medium (planted-bomb metadata; a
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
@@ -591,13 +593,18 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       berserk changes no health. When no stage 1 or stage 2 row stops it, it has the following
       effect, whatever its column. Unless an attacking house is given and the target's owner is
       allied with it, the target's type is immune to psionics or the target is a building, the
-      target goes berserk for *T* ticks, as the berserk duration of Formulas gives: the modified
+      target receives a remaining berserk time of *T* countdown updates (S-0610 claim 5),
+      as the berserk duration of Formulas gives: the modified
       amount of claim 6 (F3) at distance 0, taken of the hit's amount after the defences of claim 5,
       or of its delivered amount when the hit ignores defences. Ignoring defences changes only which
       amount enters: every case of claim 6 (inert game, healing reach, falloff, versus value, cap)
       applies to *T* in both cases. So *T* is 0 in an inert game and for an amount of 0, and a
-      negative amount stays negative. What a *T* of 0 or less does is not
-      traced here (Open questions); the special-abilities specs own being berserk. Such a hit
+      negative amount stays negative. S-0610 claims 4 and 5 own entry and expiry: a new
+      berserk state drops the target and queues *hunt*, even for *T* ≤ 0, which expires at
+      the next countdown update. For *T* ≥ 1, expiry is on the *T*-th countdown update
+      following the hit; the first may be in the hit tick, so *T* is not necessarily the
+      number of elapsed ticks. S-0610 claim 5 owns expiry's target loss and queued behaviour.
+      Such a hit
       reports *unchanged*, but it sets off none of the reactions that claim 12 ties to a result: no
       trigger event of the target's tag, no damage effect or removal of one (claim 13), no loss of a
       disguise (D23, part f). In the three excepted cases nothing happens and the hit reports
@@ -615,9 +622,10 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       shot (claim 1) carries no attacking house: then an allied target goes berserk too (and the
       allies row of claim 8 does not apply to it either, since that row needs an attacker).
     - Backing: `measurable` (scenario D10 for readiness loss, D23 part f for the lack of reactions to a berserk hit, D17 for berserk, its duration, its
-      reset, its stages and who goes berserk, including parts g, g2, g3 and g4); `unmeasured` (a *T* of 0 or less: the
-      special-abilities specs own being berserk, and no observable of it is known for a state that
-      ends at once; and *T* for a hit that ignores defences: a trigger kill with a berserk demolition warhead
+      reset, its stages and who goes berserk, including parts g, g2, g3 and g4, with
+      entry and update-count expiry through S-0610 claims 4 and 5, scenario P2, and
+      *T* ≤ 0 through D17 part i, supplementing S-0610 scenario P3's conditional stock setup).
+      `unmeasured` (*T* for a hit that ignores defences: a trigger kill with a berserk demolition warhead
       can deliver one, but the original then hangs on its survivor, preventing observation of
       when the berserk state ends; the absence of trigger reactions to a berserk hit: D23 f
       observes disguise only and no tag-event test is supplied here; the direction of the
@@ -627,8 +635,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       and happens even when a later row stops the hit); medium (berserk duration, its reset, and
       the stages); medium (a detonation of a firer that has been killed carries no attacking
       house; one of a death weapon carries the dying object's house); low (that one of a firer in a
-      closed transport carries its house; a
-      *T* of 0 or less, and *T* for a hit that ignores defences)
+      closed transport carries its house; *T* for a hit that ignores defences).
+      Entry and update-count expiry, including *T* ≤ 0: medium (S-0610 claims 4 and 5)
 
 11. **Health change.** A hit whose amount *m* after claims 5 to 8 is not 0 changes the target's
     health *H* (Formulas F4):
@@ -1105,7 +1113,8 @@ damage-reduces-readiness flag and a strength of 0.
 defences (cases (ii) to (vi)), with *r* = 0 and with *d* in the place of *d*₃, where *d* is the amount after F2 for a hit
 that does not ignore defences and the delivered amount *d*₀ for a hit that does. Whether the hit
 ignores defences changes only *d*, never which of F3's cases applies. No minimum for undemolishable
-buildings applies (buildings are never made berserk, claim 10). Unit: ticks.
+buildings applies (buildings are never made berserk, claim 10). Unit: countdown updates
+(S-0610 claim 5), conventionally ticks; the first update may occur in the hit tick.
 
 **F7, delayed-kill countdown** (claim 16). *F*: the warhead's delay field (integer, ticks); *α*:
 its delay-at-edge factor (single); *s*: its spread (single, cells); *r*: the distance.
@@ -1267,13 +1276,11 @@ Observable consequences within one hit:
 - **Readiness loss with a strength of 0** (claim 10, F6). A type with the damage-reduces-readiness flag
   and a strength of 0 loses all its ammunition to any hit that passes stage 1 (F6). Reproduced, with
   an importer warning, because it comes only from data that gives no strength.
-- **A berserk duration of 0 or less** (claim 10). Reproduced as the claim says: the target is made
-  berserk with that remaining time, and our engine takes what the special-abilities specs give for
-  a duration of 0 or less. No quirk switch here: the duration is just the modified amount of F3,
-  which this spec fixes, and this spec has no alternative meaning for a mod to want; whether the
-  original misbehaves with a state that ends at once is for the special-abilities specs to find
-  and to switch, as the Open questions say. The importer warns for a berserk warhead whose
-  damage field is 0 or negative.
+- **A berserk duration of 0 or less** (claim 10). S-0610 claims 4 and 5 own the entry effects
+  and expiry at the next countdown update. The switch `quirks.berserk_zero_duration`, owned by
+  S-0610 claim 5, defaults to those original effects; off, a hit with *T* ≤ 0 has no berserk
+  effect. The duration calculation here is unchanged. The importer warns for a berserk warhead
+  whose damage field is 0 or negative.
 - **`quirks.readiness_heal_over_max`** (claim 10, F6; default on, the original). On: a negative
   hit on a type with the damage-reduces-readiness flag raises its ammunition by F6 with no upper
   limit, so ammunition can exceed the type's ammunition field (a healing weapon aimed at such an
@@ -1310,7 +1317,8 @@ Observable consequences within one hit:
 | Rules, object type section, `Armor` | armour class (S-0305) | S-0305 | none |
 | Rules, object type section, `Immune` | immune row of claim 8; also immune terrain types (claim 20) | boolean | no |
 | Rules, unit or building type section, `TypeImmune` | type-immune row of claim 8 | boolean | no |
-| Rules, unit or building type section, `ImmuneToRadiation`, `ImmuneToPsionicWeapons`, `ImmuneToPoison`, `ImmuneToPsionics` | claim 8 rows, claim 10 (berserk) | boolean | no |
+| Rules, unit or building type section, `ImmuneToRadiation`, `ImmuneToPoison` | claim 8 rows | boolean | no |
+| Rules, infantry, vehicle, aircraft or building type section, `ImmuneToPsionicWeapons`, `ImmuneToPsionics` | claim 8 psychic row, claim 10 berserk exception (S-0610 claim 1) | boolean | yes for building types, no for others |
 | Rules, unit or building type section, `VeteranAbilities`, `EliteAbilities` | veteran firepower and armour bonuses (owned by S-0311) | list (S-0311) | empty |
 | Rules, unit or building type section, `Ammo`, `DamageReducesReadiness`, `ReadinessReductionMultiplier` | *A*ₘₐₓ and claim 10, *κ* (F6) | integer; boolean; decimal (S-0003), held as a single | −1 (no ammunition limit, S-0301); no; 0.0, so no loss |
 | Rules, infantry type section, `Cyborg` | claim 15 | boolean | no |
@@ -1658,9 +1666,11 @@ parts use their stated replay checks and rejection thresholds instead.
   continuation as in d2. These tests deliberately hang the original and must each run alone.
 - **D17 (claim 8 stages, claim 10).** (a) A test warhead that makes targets go berserk (damage
   300, versus 100 %) hits a test vehicle of another house. *Observable:* the tick at which the
-  target stops firing at units of its own side. *Expected:* about 300 ticks; health unchanged. A
-  second hit of damage 50 at tick 100 sets the remaining time to 50 (the berserk state ends 50
-  ticks after the second hit, not 250). (b) The same warhead, fired by a unit that is not killed
+  target stops firing at units of its own side, and each countdown update read-only.
+  *Expected:* expiry on the 300th countdown update after application, health unchanged.
+  A second hit of damage 50 at tick 100 resets the remaining count to 50, rather than adding
+  time; expiry is on the 50th countdown update after reapplication. Count an update in the hit
+  tick when it follows the hit (S-0610 claim 5). (b) The same warhead, fired by a unit that is not killed
   until the shot lands (force-fired by scripted input where the target is not otherwise legal),
   against a target of an allied house and against a target of the firing unit's own house, against a
   target whose type is immune to psionics, and against a test building: no berserk state and no
@@ -1701,6 +1711,15 @@ parts use their stated replay checks and rejection thresholds instead.
   (damage 300) on a target whose country has the armour factor 2.0 for its kind, once with versus
   100 % and once with versus 50 %. *Expected:* about 150 ticks (the defended amount trunc(300 / 2),
   not 300) and about 75 ticks (versus applied to the defended amount: trunc(150 × 0.5)).
+  (i) Named test map D17-zero-duration gives the berserk warhead a zero versus value for the
+  susceptible vehicle's armour class; repeat with a negative versus value and positive shot
+  damage. Keep other protections off. Start the human-owned vehicle attacking a durable enemy,
+  apply one hit and record target, queued behaviour, berserk state and countdown updates
+  read-only, including between events in the hit tick. Expected: unchanged health, target
+  dropped and *hunt* queued at entry, then berserk cleared, time set to 0, target dropped and
+  *guard* queued at the first countdown update. Repeat with the hit before and after the
+  vehicle's update to distinguish same-tick from later-tick expiry. No entry effects or expiry
+  at a different update falsifies this part (S-0610 claims 4 and 5).
   *Falsified if* any of these differs, in particular a berserk state in (c) with an immune target
   or in (d), none in (e), none in (g) or (g2) with the firer killed, one in (g) with the firer
   alive, or berserk in *G* in (g4) or damage to *G* in (g5), or none in *E* in either; (g3) is the open case of claim 1.
@@ -2020,8 +2039,6 @@ parts use their stated replay checks and rejection thresholds instead.
 
 ## Open questions
 
-- What a berserk duration of 0 or less does in the original (claim 10) is not traced; the
-  special-abilities specs should say.
 - From which side the alliance tests are made is not settled. Alliance is one-way (glossary,
   *alliance*). Claim 8's allies row is worded from the attacker's owner ("the attacker's owner is
   allied with the target's owner"), and claim 10's berserk exception and its "own side or its
