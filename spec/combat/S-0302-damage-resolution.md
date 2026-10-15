@@ -2,13 +2,13 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 23
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0061, Q-0075, Q-0081, Q-0170]
+requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
 supersedes: []
 ---
 
@@ -76,8 +76,11 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   markers of claim 1. A projectile's detonation delivers one hit to every object it reaches
   (S-0303); other sources deliver hits too (claim 1).
 - **Delivered damage *d*₀.** The integer amount a hit delivers, before the target's side of this
-  spec. For a detonation it is the projectile's damage when it detonates: the shot damage of
-  claim 2, less whatever S-0306 (claim 18) took off it in flight.
+  spec. For an ordinary projectile detonation it is the projectile's damage when it detonates:
+  the shot damage of
+  claim 2, less whatever S-0306 (claim 18) took off it in flight, then scaled for prism support
+  when applicable (S-0518 claim 9 and F1). Special effects that replace area damage deliver no
+  ordinary hit; electric charging is one such effect (S-0518 claim 11).
 - **Distance *r*.** The integer distance in leptons from the detonation point to the target that
   S-0303 gives with each hit; 0 for a hit that has no detonation point.
 - **Damage that ignores defences.** The glossary's term; the hit carries the *ignore-defences
@@ -107,13 +110,14 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   particles, which the wave and particle specs own, not by its projectile (claim 2).
 - **Start to cloak.** An object able to cloak starts to cloak when it begins to become hidden from
   other houses.
-- **Crate.** An overlay (glossary) that gives a bonus to the unit that picks it up; a future crate
-  spec owns crates (claim 4).
+- **Crate.** An overlay (glossary) that gives a power-up to the unit that picks it up.
+  S-0520 owns crates (claim 4).
 - **Veteran firepower bonus, veteran armour bonus.** The two veterancy abilities (glossary) that
   apply the veteran combat factor to a firer's shot damage (F1) and the veteran armour factor to a
   hit on the target (F2). S-0311 owns which ranks grant them.
 - **Undemolishable building.** A building whose type has the can-be-demolished flag off (Import
-  mapping); the flag also decides whether charges can be planted on it (special-abilities specs).
+  mapping). The flag gates the charge cursor and some starts of sabotage (S-0519 claim 12),
+  but charge planting at arrival does not test it (S-0519 claim 13).
 - **Defence building.** A building whose type's build category is *combat* (Import mapping).
 - **Laser-fence section, bridge repair hut.** Building types marked by the type flags of those names
   (Import mapping); the structures specs own what they do.
@@ -144,6 +148,10 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | A projectile's detonation, every hit of its area (S-0303) | no | no | the firing object, unless it has been killed since the shot (below) | the owner of the attacker |
    | The detonation of an object's death weapon (S-0312, claim 6) | no | no | the dying object | the dying object's house |
    | The detonation that follows the impact of an object that crashes while alive (S-0312, claim 16) | no | no | none | none |
+   | Planted-bomb detonation (S-0519 claim 5) | no | no | the planter, if it still exists | none |
+   | The suicide hit on the firer (S-0519 claim 11) | yes | no | none | none |
+   | The direct hit on a crate collector from explosion or napalm (S-0520 claims 16 and 17) | yes | no | none | none |
+   | A heal-all crate hit (S-0520 claim 14) | yes | yes | none | none |
    | The damage of a sonic wave (wave specs) | no | no | the wave's firing object | none |
    | Radiation exposure (S-0525 claims 9 and 10), at distance 0 leptons with the radiation-site warhead | no | yes | none | none |
    | A parasite's delivery (S-0614 claims 6 and 10) | no (yes for a drone's delivery to an infantry host) | yes | the parasite | none |
@@ -158,10 +166,15 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | Crushing by trains (S-0210) | yes | S-0210 says | S-0210 says | S-0210 says |
    | The damage of a damaging animation, such as a burning one (S-0109, claim 17) | not traced | not traced | not traced | not traced |
 
-   Other sources are believed to deliver damage that ignores defences too (damage from crates, side
-   effects of some superweapons, the surfacing of tunnelling units); their owning specs give their
-   markers, attacker and house; a crate source is believed to set the no-escape marker in some
-   cases and not in others. A detonation and a wave never ignore defences and never carry the
+   The crate explosion and napalm rows describe their direct hits only; their additional area
+   damage follows S-0303 with neither attacker nor attacking house (S-0520 claims 16 and 17).
+   Heal-all offers hits to the collecting house's objects taking simulation turns, including
+   off-map open-topped passengers, but not out-of-play closed-transport passengers (S-0520
+   claim 14). Claim 11 still governs healing, with the exceptions of claims 7 and 8.
+
+   Other sources are believed to deliver damage that ignores defences too (side effects of some
+   superweapons, the surfacing of tunnelling units); their owning specs give their markers,
+   attacker and house. A detonation and a wave never ignore defences and never carry the
    no-escape marker. Whether the damage of a damaging animation is a detonation in that sense,
    and which attacker and house it carries, is not traced: S-0109 (claim 17) says what such an
    animation delivers and when, and the combat specs own the rest.
@@ -194,13 +207,17 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      S-0414 claim 5 and its scenario V11; parasite deliveries through S-0614 claims 6 and 10,
      scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house; also
      bridge-destruction hits through S-0511 claims 9–11 and 15 and scenarios B3, B5 and B6, and
-     radiation exposure through S-0525 claims 9 and 10, scenarios RF1 and RF7),
+     radiation exposure through S-0525 claims 9 and 10, scenarios RF1 and RF7,
+     planted bombs and suicide hits through S-0519 scenarios T6, T7 and T12, and
+     crate hits through S-0520 scenarios CR10 and CR12, with heal-all exceptions in D32),
      `unmeasured` (a damaging animation's row:
      its hit metadata is not established, so no expected outcome can yet be supplied for a
      discriminating test; a firer removed
      from the game in flight by some means other than a killing hit or a cloak: no such means is
      identified, so no scenario can set it up; the wave's
-     attacking house column: a wave kill credits the attacker whether the wave carries its
+     attacking house column, and the absent attacking house of a planted-bomb detonation:
+     ordinary kill credit alone cannot distinguish an absent house from the attacker's house.
+     S-0519 claim 5 retains this limitation. A wave kill credits the attacker whether the wave carries its
      firer's house or none (claim 14), so a wave that carries its firer's house is not told apart
      from one that carries none; the wave's no-escape marker: D24 part f observes credit but
      does not provide a crewed target and an escape-chance control, so it cannot distinguish
@@ -208,7 +225,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      no precise source setup and expected metadata are established here)
    - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
-     owner; radiation-exposure metadata); medium (a
+     owner; radiation-exposure metadata; crate-hit and suicide-hit metadata),
+     medium (planted-bomb metadata; a
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
@@ -228,7 +246,13 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    Formulas F1. *D*ₛ is fixed at the moment of firing from the weapon's damage field *D*: a change of
    the firer's firepower multiplier or veterancy after the shot does not change it. The
    projectile's type may lower it in flight (S-0306, claim 18); the detonation delivers the damage
-   the projectile has at that moment, unchanged, to each object it reaches (S-0303). A weapon that delivers its damage through a sonic wave or through fire particles carries
+   the projectile has at that moment to each object it reaches (S-0303), except that prism support
+   scales it after flight loss and before area damage: without integer wrap, the delivered amount
+   is ⌊*D*ₜ × *M* / 256⌋, with integer *D*ₜ the damage remaining at detonation and integer *M*
+   the support multiplier. Rounding is toward −∞; S-0518 claim 9 and F1 own the multiplier and
+   signed 32-bit product-wrap rule. An electric-charge effect replaces ordinary area damage,
+   so delivers no ordinary damage hit (S-0518 claim 11), rather than delivering a zero-amount hit.
+   A weapon that delivers its damage through a sonic wave or through fire particles carries
    0 (the wave or particles deliver it, as their specs say). For any other weapon, *D*ₛ is *D*
    scaled by the factors below. Each factor, or product of factors, has its own truncation toward
    zero, so a later factor scales the already-truncated result of an earlier one:
@@ -248,13 +272,15 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      multipliers alone and for the sign rule; D15 part c for a firepower crate picked up while the
      projectile flies; D29 parts a and b for the veteran combat factor, and for the rule that the
      firepower multipliers and the veteran combat factor leave a non-positive *D* unchanged,
-     and D15 part d for a promotion during flight); `unmeasured` (the 0 carried by sonic-wave and
+     and D15 part d for a promotion during flight; S-0518 scenarios PS1 for support scaling
+     and TC1 and TC4 for electric-charge area-damage bypass); `unmeasured` (the 0 carried by sonic-wave and
      fire-particle weapons, which is an amount the projectile carries; what such weapons observably
      deal is the wave's and the particles' own damage, which specs not yet written own, so no
      scenario of this spec can tell it; the combined result when a firer is in two or three of the
      three situations, which D20 cannot set up, since no known firer is in any two of them at once)
    - Confidence: high (the plain case, the firepower multipliers, each of the three multipliers
-     alone, the sign rule); medium (that a crate picked up in flight changes nothing; the 0 carried
+     alone, the sign rule, support scaling and electric-charge area-damage bypass),
+     medium (that a crate picked up in flight changes nothing; the 0 carried
      by those weapons); low (that a promotion in flight changes nothing; the combined result of
      two or three of the multipliers, which no scenario reaches)
 
@@ -316,8 +342,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
 4. **Object firepower and armour multipliers.** Each object has a firepower multiplier and an
    armour multiplier, doubles that start at 1.0. A crate changes one of them by its imported factor
    only while it is exactly 1.0, so crate bonuses never stack. Nothing else in a skirmish changes
-   them. (Which crates exist and how they are picked up belong to a future crate spec; this claim
-   owns only the no-stacking rule and the starting value.)
+   them. S-0520 claims 10 and 19 own crate conversion, the affected area and recipients,
+   including off-map recipients, and the double-precision multiplication. This claim owns the
+   starting value and the no-stacking rule: a multiplier not exactly 1.0 is unchanged.
    - Backing: `measurable` (scenario D1 for the starting value, since no multiplier shows in its
      losses; scenario D15 for the no-stacking rule); `unmeasured` (the exclusion of every
      non-crate source of multiplier changes: D15 tests crates only, and no exhaustive scenario
@@ -398,11 +425,12 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    holds in an inert game too, for the hits that reach the building there (sonic waves, for
    example; detonations reach nothing, S-0303 claim 2). Buildings that can be demolished and all
    other objects get no such minimum. Quirk `quirks.undemolishable_heal_is_damage` (Edge cases).
-   - Backing: `measurable` (scenario D5; D9 for the inert game); `unmeasured` (a hit that ignores
-     defences with an amount of 0 or less: the known sources of such hits deliver the target's
-     whole health or more, so no scenario can set the case up)
-   - Confidence: high (medium for the inert game); low (a hit that ignores defences with an
-     amount of 0 or less)
+   A heal-all crate supplies a known hit that ignores defences with a negative or zero amount
+   (S-0520 claim 14). It therefore damages an undemolishable building by 1 health rather than
+   restoring it, even when the building was already at full health.
+   - Backing: `measurable` (scenario D5; D9 for the inert game; D32 for a heal-all hit that
+     ignores defences with a negative or zero amount)
+   - Confidence: high (medium for the inert game and the heal-all exception)
 
 8. **Hits that do nothing.** A hit changes no health when one of the rows of the table below holds
    for it. It then reports *unaffected*, except under the berserk row (claim 10).
@@ -473,6 +501,12 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    | 4 | The target is not a building and already has no health | yes | yes | yes |
    | 4 | The target's type is marked immune (to all damage) | yes | yes | no |
    | 4 | The amount is 0 after claims 5 to 7 | yes | yes | yes |
+
+   Being erased includes both an attached temporal beam and the beam-free leaving stage
+   (S-0514 claims 4 and 10; S-0513 claim 39). Its stage 1 row stops ordinary damage, healing and berserk
+   hits before either side effect of claim 10. It does not stop a hit that ignores defences.
+   That hit is still subject to every other applicable row. Temporal erasure itself is not a
+   health-damage hit: its delivery, lock refusals and progress belong to S-0514 claims 1 to 8.
 
    The last row is what makes a positive hit do nothing when the versus value, the falloff, an
    inert map or a missing warhead took it to 0 (unless claim 7 raised it to 1). A delivered amount
@@ -549,6 +583,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       that no stage 1 row stops, whether the hit ignores defences or not, and also for a negative
       hit, and it still happens when a stage 2, 3 or 4 row then stops the hit. A hit that a stage 1
       row stops causes no readiness loss.
+      Thus an ordinary hit on a target being erased causes neither readiness loss nor berserk.
+      A hit that ignores defences bypasses that particular protection (claim 8; S-0514 claim 17).
       Quirks `quirks.readiness_from_defended_damage` and, for a negative hit that raises
       ammunition above the type's field, `quirks.readiness_heal_over_max` (Edge cases).
     - **Berserk instead of damage** (unless a stage 1 or stage 2 row stops the hit). A hit whose warhead makes targets go
@@ -713,13 +749,17 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       does to the effect is not known; cell lists and draw order for foundation words other
       than the 2 × 2, 8-cell 3 × 3 and zero-size words: D18 supplies no run for them. Also unmeasured is
       the absence of all other draws: D18 and D22 record their named cases, not every hit
-      source and target combination)
+      source and target combination; the original's undefined outcome for a short damage-fire
+      list: D18 supplies all three entries, and no missing-entry variant is proposed. The
+      no-fire departure, retained draws and importer warning are design rules, not observations
+      of that undefined outcome)
     - Confidence: medium (the damage-effect draw, its conditions, the eligibility by behaviour and
       the counting from the end of the list; the building fires and their draws, including the
       position of the loop draws and the cells of every non-zero foundation word and their order,
       row by row and within a row by increasing map *x*; the zero-size foundation's lack of
       cells; the removal by a healing hit); low (the depth limit,
-      the removal and non-removal by the hits listed as unmeasured). Which of *W* and *H* is
+      the removal and non-removal by the hits listed as unmeasured, and the original's
+      short-list outcome). Which of *W* and *H* is
       which does not matter to the range.
 
 14. **Death.** A hit that takes the last health reports *now dead*. The kill is credited to the
@@ -1245,7 +1285,7 @@ Observable consequences within one hit:
   for a weapon damage field whose magnitude exceeds 2²⁴, where F3's narrowing to single precision
   starts to change the value.
 - **Rounding mode.** The formulas that depend on `quirks.chop_rounding` are listed under Formulas.
-  S-0205 revision 6 already indexes F1, F2, F3, F5, F6 and F7 of this spec in its effects table.
+  S-0205 already indexes F1, F2, F3, F5, F6 and F7 of this spec in its effects table.
 
 ## Import mapping
 
@@ -1298,13 +1338,14 @@ Observable consequences within one hit:
 | Rules, country section, `Armor` | nothing (claim 3); importer warning when given a value other than 1.0 | decimal | 1.0 |
 | Rules, AI section, `CompEasyBonus` | the row shift of claim 3 (note for AI designers) | boolean | not traced (low) |
 | Map, the special-flags section, `Inert` | inert game (claim 6) | boolean | no |
-| Rules, power-up section, `Armor`, `Firepower` | crate factors for *A*ₒ and *F*ₒ (claim 4; the crate spec owns them) | decimal | crate spec |
+| Rules, power-up section, `Armor`, `Firepower` | crate factors for *A*ₒ and *F*ₒ (claim 4; S-0520 claims 10 and 19 own them) | S-0520 Import mapping | S-0520 Import mapping |
 
 ## Measurement scenarios
 
 All scenarios use the measurement setup with named test files: a test map with override sections
-defining test weapons, warheads and types (invented values, never stock ones). The director,
-ordinary mods and engine add-ons are off; only the named test files are active. Health values are
+defining test weapons, warheads and types (invented values, never stock ones). Ordinary mods
+and engine add-ons are off; only the named test files are active. No external automation gives
+orders or changes game state, except for the scripted input specified by the scenario. Health values are
 read with a recorder that only reads the running game's state; the health bar is a cross-check.
 One human house and one computer house, the computer house one bystander computer player (glossary)
 whose objects that a scenario names are its test objects; the observed area is the area of the test
@@ -1562,7 +1603,7 @@ parts use their stated replay checks and rejection thresholds instead.
   armour bonuses. Hit each directly once with the damage-50, versus-250 % weapon. The deck
   unit has positive height above the terrain but height 0 above its surface.
   *Expected:* loss 125 for both, not 2 for the deck unit. Repeat every part three times at
-  game speed index 2, director and ordinary mods off under the common setup. Void a run
+  game speed index 2 under the common measurement setup above. Void a run
   with another hit, an unintended prone state, or movement away from the required height
   at impact. *Falsified if* any named loss differs; in particular, a loss of 125 in a valid
   near-surface run rejects the positive-height test, and a loss of 2 for the standing deck
@@ -1964,6 +2005,18 @@ parts use their stated replay checks and rejection thresholds instead.
   house with that warhead does not make the allied host berserk, because its detonation carries
   an attacking house. Void the run if no attachment occurs. Any contrary result in a valid run
   falsifies the corresponding metadata claim.
+
+- **D32 (claims 1 and 7: heal-all exceptions).** Use a tiny named test map with fixed heal-all
+  crates, one collecting house and no incidental combat. Place two undemolishable buildings of
+  that house, one damaged and one at full strength, both with more than 1 health.
+  Include an ordinary damaged building, a damaged
+  open-topped passenger and a damaged closed-transport passenger. Run at game speed index 2
+  under the common measurement setup above, using the read-only recorder and scripted pickup input.
+  Record health immediately before and after collecting the crate, and after unloading both
+  passengers. Expected: each undemolishable building loses 1 health, the ordinary building and
+  open-topped passenger reach strength, and the closed-transport passenger retains its earlier
+  health. Any different health delta falsifies the corresponding rule. S-0520 CR10 supplies
+  the ordinary heal-all and transport controls; CR12 tests the separate direct damaging hits.
 
 ## Open questions
 

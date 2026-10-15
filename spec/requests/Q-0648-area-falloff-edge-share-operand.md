@@ -1,9 +1,9 @@
 ---
 id: Q-0648
 title: Whether the area falloff's edge share is formed from the defended amount or its single-precision narrowing
-status: open
+status: answered
 related: [S-0302, S-0303, S-0205]
-answered-by: []
+answered-by: [S-0302]
 ---
 
 ## Need
