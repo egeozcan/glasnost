@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -381,9 +381,9 @@ Terms used by this spec:
   locomotor jump's phase-in length and harvester exception.
 - **Tunnel:** a pair of linked tunnel entrances on a map through which infantry and vehicles
   travel out of sight to the other entrance. The movement topic owns it.
-- **Radiation level:** the integer strength of radiation at a cell, which radiation weapons
-  leave and which fades over time (combat topic). A weapon's *radiation level field* is the
-  level it leaves (Import mapping).
+- **Radiation level:** S-0525 claim 7 defines a field's current integer *field level*.
+  Claim 31 tests only a field centred on the unit's cell, not the cell's radiation exposure.
+  A weapon's *radiation level field* is the level it leaves (Import mapping).
 - **Veterancy rank, veteran, elite:** an actor's *veterancy rank* is the experience rank that the
   veterancy specs give it; *veteran* and *elite* name ranks of those specs. This spec uses the
   words only as pointers: for the elite weapon (Terms, *primary, secondary and deploy weapon*), for
@@ -403,10 +403,10 @@ Terms used by this spec:
   *reactivated* when that rule switches it on again.
 - **Open-topped transport:** a transport (an actor that carries passengers) whose passengers can
   fire from inside it. The transport specs own both.
-- **Unload or deploy cycle:** a vehicle's cycle of unloading or deploying, as the deploy specs
-  define it. This spec uses only whether it has finished (claim 11) and that a vehicle's *move*
-  and *patrol* processings restart an unfinished one (claims 22 and 34). What the cycle is and how
-  long it lasts belong to the deploy specs (Open questions).
+- **Unload or deploy cycle:** the cycle named by the readiness and restart conditions in
+  claims 11, 22 and 34. No rule starts it for a vehicle, so for vehicles it is always finished
+  and those restart conditions never take effect (S-0517 claim 15). It is distinct from the
+  in-place vehicle deployment of S-0517 claims 3 to 8.
 
 ## Behaviour
 
@@ -451,9 +451,12 @@ Terms used by this spec:
    - its processing timer has expired,
    - it is not an infantry unit or vehicle travelling through a tunnel,
    - it is not an infantry unit or vehicle that is being erased, or that is in the leaving stage of a
-     chrono move (Terms). Such an actor also drops its target and destination on each such tick.
+     chrono move (Terms). Such an actor also drops its target and destination on each such tick,
+   - it is not a landed aircraft being erased. Such an aircraft drops its target and destination
+     and skips ordinary movement, turning, firing and behaviour processing for that turn
+     (S-0514 claim 17). This does not exclude its erasure update or presentation effects.
 
-   On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last two bullets
+   On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last three bullets
    above), the per-tick start of claim 11 takes no effect. On every other tick on which the actor
    does not process, the per-tick start still takes effect: for example on a tick on which only the
    timer has not expired (claim 3a, scenario B3, case k). The phase-in of a chrono move does
@@ -474,13 +477,13 @@ Terms used by this spec:
    event does not undo the behaviour processing or shots it already made, including an
    aircraft's attack-run shots. This does not place all firing before the parasite:
    S-0614 claim 18 distinguishes the later separate firing of infantry and vehicles.
-   - Backing: `measurable` (scenarios B1 and B18; S-0614 scenario P12 for parasite ordering). The second-turn case is `unmeasured`: S-0203
+   - Backing: `measurable` (scenarios B1 and B18; S-0514 E11 part a for landed-aircraft erasure,
+     S-0614 scenario P12 for parasite ordering). The second-turn case is `unmeasured`: S-0203
      marks the second turn itself as not observable by a recorder. The erasing edge is
      `unmeasured`: it needs an erasing weapon locked onto an actor at the moment its chrono move
      reaches the phase-in, and no setup is known that can time that.
    - Confidence: high (alive, health, timer and parasite ordering); medium (the tunnel, erasing and leaving-stage
-     exclusions, that the phase-in does not exclude, and that no other per-kind exclusion exists
-     for aircraft); low (the second-turn case and the erasing edge)
+     exclusions, including landed-aircraft erasure, and that the phase-in does not exclude); low (the second-turn case and the erasing edge)
 
 3. **A behaviour start is processed at once, unless the processing that caused it chooses later.**
    A behaviour start (start-next, claim 8, or force, claim 9) sets the processing timer to "expired
@@ -687,19 +690,20 @@ Terms used by this spec:
     - the target goes off the map (for example it enters a transport or a building), or is
       removed,
     - the target makes its teleporting locomotor's own jump (S-0207 claim 20 e), except for an
-      attacker whose erasing weapon remains locked onto the living target. Other attackers
+      attacker whose airstrike is aimed at the living target. Other attackers
       revert if overridden, then drop the jumping object if it is still their target; a revert
       that restores another target keeps that restored target. Projectiles lose the jumping
       target as S-0207 states,
     - the target changes owner (for example by mind control, or a building taken by a building
-      taker), except for an actor whose erasing weapon is locked onto that target (the target is
-      being erased by it),
+      taker), except for an actor whose airstrike is aimed at the living target,
     - the target starts to cloak, or, being of an underground type, goes underground, except
       when the target belongs to the actor's own house or a sensor of the actor's house covers the
       target's cell (Terms, *cloak* and *sensor*).
 
     The destruction and off-map/removal causes have no exception: they revert the actor whoever owns the target and
-    whatever covers its cell. The revert brings back the target that the override put aside even
+    whatever covers its cell. An erasing attacker has no exception to owner-change target loss:
+    dropping its ordinary target does not itself detach its beam (S-0514 claim 16).
+    The revert brings back the target that the override put aside even
     when that is the very object that caused the revert (an actor that already had its attacker
     as target when it overrode, which claim 18 allows only for owners that are not
     human-controlled): after a revert by destruction, off-map/removal or cloak/underground that object is the
@@ -724,9 +728,10 @@ Terms used by this spec:
         cloak, when an underground object goes underground and what a sensor covers belong to the
         visibility and movement topics, which no spec states, so no setup here can make a target
         start to cloak or go underground at a known tick,
-      - the erasing-weapon exceptions to owner change and a locomotor jump, because each needs an erasing weapon
-        locked onto a target at the moment of that event. Whether either event is reachable
-        with the lock retained belongs to the erasing-weapon rules; no setup here establishes it,
+      - the airstrike exceptions to owner change and a locomotor jump, because each needs an
+        airstrike aimed at a living target at the moment of that event, and no setup here
+        establishes that timing. Erasing attackers' owner-change target loss and beam retention
+        instead inherit S-0514 claim 16's measurable backing (E10 part h),
       - a removal that follows neither a killing hit nor going off the map, because every removal
         that a setup here can make comes after one of those, which has already caused the revert,
       - the suspended slot kept across a force, because the only force that a setup here can give
@@ -779,7 +784,7 @@ Terms used by this spec:
         claim 11), and a jumpjet vehicle in *unload* that is sent off again while it descends to land
         queues *guard* (movement specs). The allowance lasts until the slots next change (any
         queue that takes effect, start, force, override or revert ends it),
-      - its unload or deploy cycle has not finished,
+      - its unload or deploy cycle has not finished (never holds for vehicles, S-0517 claim 15),
       - it is in contact with a vehicle-factory building and the queued behaviour is neither *move*
         nor *enter*,
       - it is in contact with nothing and stands on a cell of a vehicle-factory building that is the
@@ -817,10 +822,10 @@ Terms used by this spec:
       transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for
       the construction ready mark and second start; scenario B35 for the body-range rule,
       and S-0417 U2 for factory release and unloading leaving the mark alone). Further parts are
-      `unmeasured`. The deploying and undeploying transitions and the unfinished unload or deploy
-      cycle: which vehicles have them, how long they last and how they end belong to the deploy
-      specs, and no setup in this spec can time an order inside them (as for claim 22). The
-      vehicle below the surface: no vehicle of the
+      `unmeasured`. Starting *move* inside a deploying or undeploying transition has
+      S-0517 claim 10's unreachable-input qualification. The unload or deploy cycle is always
+      finished for vehicles (S-0517 claim 15, measurable in P6), so it never blocks readiness.
+      The vehicle below the surface: no vehicle of the
       stock game travels below the surface, and no setup is known that puts one there. The two
       *unload* rules with the allowance to interrupt movement: they fire only at the last stage of
       an unloading or of a descent, which belong to the transport and movement specs, and no setup
@@ -1343,12 +1348,12 @@ apply in our engine to the actors of every player house.
 22. **Move.** If the actor has no destination, is not moving and has nothing queued, it falls back
     to rest and chooses a delay of 1 tick. Otherwise it chooses the standard delay. The movement
     itself is carried out by the locomotion rules on every tick, not by the processing.
-    - **Vehicles:** a vehicle in the middle of deploying or undeploying instead queues *guard* and
-      chooses 1 tick. Otherwise, a vehicle whose unload or deploy cycle (deploy specs) has not
-      finished restarts that cycle at each such processing, and the outcome and delay of that
-      processing are those of the general rule: the restart changes neither.
-      Consequence: since a vehicle is not ready to change until that cycle has finished (claim
-      11), a behaviour queued for a vehicle in *move* waits for the restarted cycle.
+    - **Vehicles:** a deployed vehicle or one in the middle of deploying or undeploying instead
+      queues *guard* and chooses 1 tick (S-0517 claim 10; transitions: S-0517 claims 3 to 8).
+      This special fallback applies only to *move*, not to *patrol*.
+      Otherwise the unfinished unload or deploy cycle would restart without changing the
+      general outcome or delay. No rule starts that cycle for vehicles, so it is always
+      finished and neither that restart nor a readiness delay from it occurs (S-0517 claim 15).
     - **Infantry:** a deployed infantry unit (current sequence one of the deploy kinds) of a
       human-controlled owner instead clears its destination and chooses 1 tick; one of a
       computer-controlled owner whose type's undeploy delay is negative starts its *undeploy*
@@ -1358,13 +1363,12 @@ apply in our engine to the actors of every player house.
       two rules for computer-controlled owners are the original's only (note for AI designers:
       in *move*, the original's deployed computer infantry packs up by itself if its type has a
       negative undeploy delay, and otherwise follows the general rule above).
-    - Backing: `measurable` (scenario B3; scenario B25 for the deployed infantry). The vehicle
-      that is deploying or undeploying while *move* is current, and the restart of an unfinished
-      unload or deploy cycle, are `unmeasured` here: which vehicles have such a cycle, how long it
-      lasts and how it ends belong to the deploy specs, and no input is known that leaves a vehicle
-      in *move* while it deploys, so no setup in this spec can time either (Open questions).
-    - Confidence: high (the general rule); medium (the vehicle and infantry special cases); low (the
-      deploying-vehicle case, the cycle restart and its consequence)
+    - Backing: `measurable` (scenario B3; scenario B25 for deployed infantry; S-0517 P3 b for
+      deployed vehicles and P6 for the inactive cycle). Processing *move* during a vehicle's
+      deploy or undeploy transition is `unmeasured`: ordinary orders cannot start it until
+      the transition ends (S-0517 claim 10).
+    - Confidence: high (the general rule and deployed-vehicle fallback); medium (the infantry
+      special cases and inactive cycle); low (processing during a vehicle transition)
 
 23. **Attack.** The general rules of an *attack* processing are the four below. Every rule whose
     condition holds applies in the same processing:
@@ -1394,7 +1398,7 @@ apply in our engine to the actors of every player house.
       |---|---|---|---|
       | it has explosive charges (by type or veterancy ability), and its target is a building that accepts charges and is not invisible | takes the target as destination and queues *sabotage* | 1 tick | 0 |
       | **original only:** computer-controlled owner, its target is a building, and its type infiltrates, or occupies or assaults buildings and may occupy this one | takes the target as destination and forces *capture* | 1 tick | 0 |
-      | human-controlled owner, and it is deployed (current sequence one of the deploy kinds) | runs its deployed-firing rule (infantry deploy specs) | the standard delay, not halved | 1 |
+      | human-controlled owner, and it is deployed (current sequence one of the deploy kinds) | runs its deployed-firing rule (S-0517 claim 16) | the standard delay, not halved | 1 |
 
       The first row is not limited to computer-controlled owners. **In our engine** the second row
       never matches, and the third applies to the deployed infantry of every house. **Original
@@ -1776,22 +1780,35 @@ apply in our engine to the actors of every player house.
     automatic yard reselection from this processing. Path failures retain S-0212 claim 23's
     categories and claim 11a's queue/start distinction; failed movement is not by itself an
     unconditional force to guard. For replacement move, attack and enter orders, S-0213
-    claim 5 owns contact and destination changes: a repeated enter to the same contacted
-    building is ignored apart from route termination; other accepted behaviour orders break
-    untethered contact but do not universally break tethered contact. Stop is S-0213 claim 8,
-    not a special depot-cancellation command. Exact subsequent stopping, release and retry
-    after each interruption, simultaneous pre-reservation requests, multi-place servicing,
-    depot sale/destruction and loss of power during existing contact remain open below.
-    No automatic repair-retreat trigger is established here; the retreat behaviour's name
-    alone does not establish such a trigger, and computer-player scripts remain out of scope.
+    claim 5 owns the ordinary order changes, with depot details in S-0314 claims 20 to 23:
+    - repeated enter to the same contacted depot is ignored apart from route termination only
+      while the vehicle is already in *enter*, not while docked in *sleep*,
+    - a docked vehicle normally retains contact and tether under new orders, with the
+      replacement-entry and same-depot-entry exceptions of S-0314 claim 20,
+    - a vehicle with a queued depot entry asks again every tick, not only at behaviour
+      processings (S-0314 claim 23). This is separate from the current *enter* processing's
+      repeated request above,
+    - S-0314 claim 22 owns the run-away notice on sale: clearing a depot destination,
+      changing *sleep* or *enter* to *guard*, and the possible scatter request. It also owns
+      release on destruction and existing-contact power consequences. S-0314 claim 21 owns
+      movement and servicing while contact remains.
+
+    Stop is S-0213 claim 8, not a special depot-cancellation command. S-0314 claim 23 owns
+    simultaneous-order contention and queued entry; claim 17 owns contact capacity and its
+    multi-place servicing qualifications.
+    S-0314 claim 24 finds no automatic repair return for a player-house vehicle: the name
+    *retreat* supplies no such trigger, and computer-player scripts remain out of scope.
 
     Every outcome of this enter processing chooses the standard delay, using the behaviour
     current when the delay is chosen (claim 6).
     - Backing: `measurable` (scenario B12; S-0507 T5 and T6 for loading replies,
-      S-0314 H16 for reservation and arrival; scenario B39 for depot processing and orders).
+      S-0314 H16 for reservation and arrival, H18 for orders, queued entry, run-away notices
+      and other interruption consequences; scenario B39 for depot processing and orders).
       The existing-tether exception inherits S-0507 claim 5's `unmeasured` backing.
-      Simultaneous requests and multiple-place servicing inherit S-0314 claim 17's open
-      qualifications; they are not claimed to follow the sequential one-place case.
+      The interruption details inherit S-0314 claims 20 to 23's confidence and limitations,
+      including the unresolved condition for sending the run-away scatter request.
+      Multiple-place servicing retains S-0314 claim 17's qualifications, not an extrapolation
+      from the sequential one-place case.
     - Confidence: high (reply rule, completed arrival and queue/start distinction),
       medium (reservation timing, early guard transition and ordinary approach)
 
@@ -1835,11 +1852,17 @@ apply in our engine to the actors of every player house.
     | Unit | Condition | Result | Delay |
     |---|---|---|---|
     | deployed | its type's undeploy delay is 0 or more | starts its *undeploy* sequence | frame count of that sequence |
-    | deployed | undeploy delay negative, its type deploys to fire and is not immune to radiation | runs its deployed-firing rule (infantry deploy specs) | standard delay |
+    | deployed | undeploy delay negative, its type deploys to fire and is not immune to radiation | runs its deployed-firing rule (S-0517 claim 16) | standard delay |
     | deployed | undeploy delay negative, deploys to fire, immune to radiation, and its cell has radiation of level at least *R* | nothing | *D*<sub>r</sub> + *U*(10, 20) |
     | deployed | undeploy delay negative, deploys to fire, immune to radiation, its cell has no radiation or a level below *R*, and the firing rules let it fire at its own cell | fires at its own cell, drops the target, starts its *deployed-fire* sequence | frame count of that sequence |
     | deployed | the same, but the firing rules do not let it fire | drops the target | *D*<sub>r</sub> + *U*(10, 20) |
     | undeployed | **original only:** computer-controlled owner, type deploys to fire, not immune to radiation, undeploy delay negative, no destination, no guard spot or standing on the guard spot's cell, and the ticks since the start tick exceed the auto-deploy delay *A* for the owner's difficulty index | if it is moving, it is told to stop; otherwise it starts its *deploy* sequence | standard delay if moving; else frame count of the *deploy* sequence |
+
+    In the radiation rows, “its cell has radiation of level at least *R*” means that the unit's
+    cell is the centre cell of a field whose current integer field level is at least *R*
+    (S-0525 claim 7). Exposure from fields centred elsewhere and residue left by ended fields
+    do not count. “No radiation or a level below *R*” means no such centre field, or its current
+    field level below *R*.
 
     Here *R* = trunc(*W* / 3), integer division truncating toward zero, with *W* the radiation level
     field of the unit's secondary weapon (Terms; always the second slot, whatever the spray-attack
@@ -2056,8 +2079,8 @@ apply in our engine to the actors of every player house.
     - *harvest*: economy, the harvest cycle,
     - *construction*, *selling*, *repair*: structures (build-up, selling, repair bays and service
       depots); *open* for buildings is claim 35,
-    - *unload* for vehicles: S-0507 claims 7–12 for transports, and the vehicle deploying
-      specs for deploying; aircraft passenger unloading: S-0507 claim 13; for factory buildings:
+    - *unload* for vehicles: S-0507 claims 7–12 for transports, and S-0517 claims 3 to 8
+      for in-place deploying; aircraft passenger unloading: S-0507 claim 13; for factory buildings:
       S-0417 (structures, factory unloading); other building unloading: structures,
     - *missile*: buildings only (superweapons and structures); infantry, vehicles and aircraft
       process it by the default rule of claim 4 (table T1),
@@ -2066,9 +2089,10 @@ apply in our engine to the actors of every player house.
       own the remaining effects); the other kinds process them by the default rule of claim 4,
     - *retreat* for aircraft: S-0501 claim 34; other *retreat*, *rescue* and *patrol*: team logic
       of the original's AI (out of scope) and the
-      route orders of the order specs. *Patrol* for vehicles also restarts an unfinished unload or
-      deploy cycle at each processing, as in *move* (claim 22): the restart changes neither the
-      outcome nor the delay of the processing, and has the same consequence for readiness,
+      route orders of the order specs. *Patrol* for vehicles would restart an unfinished unload
+      or deploy cycle without changing its ordinary outcome or delay, but that cycle is always
+      finished for vehicles, so the restart has no effect (S-0517 claim 15). The deployed or
+      transitioning vehicle's *move* fallback does not extend to *patrol* (S-0517 claim 10),
     - aircraft-specific *attack* and run completion: S-0501 claims 12–18; *enter* and pad
       docking: S-0501 claim 24; *guard*, *hunt*, *move*, *retreat* and spy-plane flight:
       S-0501 claims 29–34. In particular, aircraft *hunt*'s choice queues *attack* without an
@@ -2079,10 +2103,10 @@ apply in our engine to the actors of every player house.
       distinction is `measurable` (S-0501 AC10, recording queued and current behaviours against
       the readiness and start opportunities of S-0501 claim 31).
       The default processing it names for the other kinds is the rule of claim 4 (table T1). The
-      restart of an unfinished unload or deploy cycle in a vehicle's *patrol* is `unmeasured` for the reason claim 22 gives: the deploy specs own the cycle, so
-      no setup in this spec can time it.
+      inactive vehicle cycle is `measurable` (S-0517 P6); a restart cannot be timed because no
+      vehicle rule starts that cycle.
     - Confidence: high (that these behaviours have their own processing, and that aircraft *hunt*
-      queues without an immediate start); low (the *patrol* restart, as for *move* in claim 22)
+      queues without an immediate start); medium (the inactive vehicle cycle)
 
 ### Gates
 
@@ -2299,8 +2323,8 @@ apply in our engine to the actors of every player house.
       building does with a target out of range is claim 32. An aircraft's approach belongs to
       the aircraft specs. A deployed infantry unit (its current sequence one of the deploy kinds)
       of a human-controlled owner takes no approach step at all while deployed: it does not move
-      towards a target out of range (claim 23, third infantry row, and the infantry deploy
-      specs). **Original only:** a deployed infantry unit of a computer-controlled owner whose
+      towards a target out of range (claim 23, third infantry row, and S-0517 claim 16).
+      **Original only:** a deployed infantry unit of a computer-controlled owner whose
       type fires when deployed undeploys when its target is out of range (our AI can order an
       undeploy). Zero type speed is not an exclusion from the approach step. An otherwise
       ordinary, non-deployed infantry unit or vehicle with zero type speed takes the same step
@@ -3539,11 +3563,13 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   A paid step at reservation, a forced queue start, or that guard result at 64 leptons or
   farther falsifies the respective claim. At each repeatable pre-tether and post-tether
   point in separate runs issue move, attack, stop, or a repeated enter to the same building.
-  Compare contact and destination changes at order application with S-0213 claims 5 and 8,
-  rather than predicting that every order breaks a tether. A same-building repeated enter
-  changing the contact or destination, or a non-tethered non-accepting entry reply retaining
-  the contact instead of falling back, falsifies claim 29. Record later movement and release
-  as investigation of Q-0641, not as confirmation of an unstated cancellation rule. If the
+  Compare contact and destination changes at order application with S-0213 claims 5 and 8
+  and S-0314 claims 20 to 23, rather than predicting that every order breaks a tether.
+  A same-building repeated enter while already in *enter* changing contact or destination,
+  or an untethered non-accepting entry reply retaining contact instead of falling back,
+  falsifies claim 29. Test docked *sleep* separately: its same-depot enter is not ignored.
+  Reuse S-0314 H18 for retained docked contact, per-tick queued-entry retries and sale's
+  run-away notice, with that scenario's expected results and falsifiers. If the
   fixture cannot isolate early guard from completed arrival, that sub-test is inconclusive.
 
 - **B12 (claims 28 to 31; part e for the scatter off a building).** (a) A computer-controlled
@@ -3793,8 +3819,13 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   *D*<sub>r</sub> + 0, 1 or 2. (c) A type that deploys to fire and is immune to radiation (named test
   file giving its secondary weapon a radiation level *W*), deployed on a clean cell: expected it
   fires at its own cell and the interval equals its *deployed-fire* sequence's frame count; deployed
-  on a cell with radiation of level at least trunc(*W* / 3): expected intervals *D*<sub>r</sub> +
-  10 to 20, each value seen. (d) The firing rules refuse: the unit of (c) deployed on a clean
+  on the centre cell of a field whose current integer field level is at least trunc(*W* / 3):
+  expected intervals *D*<sub>r</sub> + 10 to 20, each value seen. Record centre, current field
+  level and cell exposure separately (S-0525 claim 7). Repeat with exposure from a neighbouring
+  centre only, then with residue after an ended field, and no field centred on the unit's cell:
+  expected the same own-cell firing as the clean-cell case when its firing check permits it.
+  Suppression solely by neighbouring exposure or residue falsifies the centre-field test.
+  (d) The firing rules refuse: the unit of (c) deployed on a clean
   cell, with a named test file giving its weapon a rate of fire longer than its *deployed-fire*
   sequence, so that its weapon is still rearming at the next processing. Expected: at that
   processing it drops its target and the interval is *D*<sub>r</sub> + 10 to 20, each value seen.
@@ -4411,8 +4442,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - Whether any stock map, campaign mission or team script puts an actor into *queued move* or
   *attack move*. The program itself never makes *queued move* current, and makes *attack move*
-  current only through the attack-move orders that S-0213 turns into *attack move* (claim 12),
-  which player input does not create as far as studied.
+  current only through the attack-move orders that S-0213 claim 6 translates to that standing
+  behaviour (claim 12). Ordinary eligible input creates target-only or destination-only orders,
+  neither of which translates to that standing behaviour; no ordinary input path for it is
+  established. Confirm this distinction with S-0213 claim 6 at joint sign-off.
 - Whether an attack-move order can reach a building in the original. Buildings are never eligible
   for attack-move (S-0214), so input does not create one; if one arrived, the building would queue
   *attack move* (claim 12).
@@ -4451,20 +4484,16 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   B20 tests base defence only.
 - The vehicle *unload* processing for deploying vehicles, *retreat* and *patrol*: claims 30
   and 34 point to other topics. S-0507 claims 7–12 own transport unloading.
-- **Q-0641, incomplete docking protocol (claim 29).** Reservation and ordinary completed
-  arrival are established, but exact approach/stopping and contact-release timing following
-  move, stop, attack or replacement entry, simultaneous pre-reservation requests, servicing
-  with multiple contact places, depot sale/destruction and existing-contact power loss remain
-  unresolved. A possible shared skill-gated automatic repair-retreat trigger is not established,
-  the processing of retreat does not prove how a unit is put into that behaviour. No AI-script
-  rule or automatic nearest-yard retry is inferred. S-0314 claims 16–18 and S-0504 claims 7,
-  8 and 12 supply permission, points and service thresholds, not those missing paths.
+- **Q-0641, depot coordination (claim 29).** S-0314 claims 16 to 24 now own permission,
+  contact, completed arrival, order interruption, queued entry, sale/destruction, existing-contact
+  power consequences and the absence of automatic player-house repair return. Claim 17 there
+  owns the separate multi-place servicing qualifications. Retain those contracts with claim 29
+  at sign-off, rather than treating them as unresolved here. The further vehicle-state condition
+  for sending a run-away scatter request remains open in S-0314 claim 22. Exact remaining
+  locomotor approach geometry is not supplied by the behaviour processing alone.
 - The refused deploy of claim 27 (vehicles): which situations let a deploying vehicle in *hunt*
   reach a spot where its building may not then be placed, so that the refusal and its queued
   *guard* can be observed. The deploy specs own the placement test.
-- The unload or deploy cycle that a vehicle's *move* and *patrol* processings restart (claims 22
-  and 34): what the cycle is, its length, and so whether the restart can keep a moving vehicle from
-  ever becoming ready to change. The deploy specs own the cycle.
 - The *enter* processing (claim 29) can, in some cases where the actor has nothing left to enter,
   fall back to rest and start the resting behaviour at once before choosing its standard delay,
   which would then take the rate of the started behaviour (claim 6). The entry protocol's specs
@@ -4498,8 +4527,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
 Joint hand-off checks: S-0213 claim 16 already supplies the route-order timing
-pointer, and the current S-0207 claim 20 e already supplies claim 10's live erasing-lock exception
-and restored-target distinction. S-0307 claims 15 to 25 and S-0406
+pointer. Confirm S-0207 claim 20 e and S-0208 claim 19 with claim 10's airstrike exception,
+not an erasing-lock exception, and its restored-target distinction. S-0307 claims 15 to 25 and S-0406
 claim 17 and S-0417's current claims 2, 4, 5, 13 and 14 supply the expanded search,
 construction, factory ready-mark and temporary-driving contracts cited here. Hand these corrections off together; no further
 behavioural edit to them is requested. Also confirm S-0207 claim 20 a/e with S-0209's
