@@ -51,9 +51,9 @@ give the same result in both modes.
 1. Under the default round-toward-zero arithmetic, does a 1-lepton step at a body facing from 32767
    to 32772 move the aircraft one lepton south only, or one lepton south and one lepton west?
    And at 49148 to 49155, one lepton west only, or one lepton west and one lepton north?
-2. Does the original apply round-toward-zero to the addition x + *s* × cos θ in the aircraft's
-   forward step (S-0205 claim 5's scope)? Or is that step, or this addition, computed in a way
-   that leaves a coordinate unchanged when the component is a tiny negative value?
+2. On a long flight with the body facing in 32767 to 32772 (just past due south), does the
+   aircraft's x coordinate fall by one lepton on every step, or stay unchanged? And with the
+   facing in 49148 to 49155 (just past due west), does y fall by one lepton on every step?
 3. Which governs if they disagree: S-0501 F3's table, or S-0208 F3 with S-0105 F1 under S-0205
    claim 5? Does AC24 (b3) expect the facing about 32076 and the side distance 11 under the
    default?
