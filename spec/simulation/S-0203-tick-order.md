@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -69,6 +69,8 @@ confidence and proposed measurements remain those of the owning claims.
 - **Planted bomb.** As in S-0213: a bomb that a bomb-planting infantry unit has attached to an
   object. It detonates when its own countdown ends (or earlier on its planter's detonate order,
   S-0213, claim 11). The combat specs own its countdown and its damage.
+- **Kamikaze.** An aircraft enrolled for the shared repeated attack orders of S-0506 claim 26.
+  The shared cycle is distinct from a spawn controller's launch pass in its spawner's turn.
 - **Storm bolt.** One lightning bolt of the storm that the weather superweapon calls down around
   its target. The superweapon specs own where and when bolts fall and what they damage.
 - **Disc laser.** The ring of laser beams that a weapon with that property in the rules data forms
@@ -180,6 +182,16 @@ confidence and proposed measurements remain those of the owning claims.
      - Backing: `measurable` (scenario O10, part A: the carrier's silence rules out a detonation in
        a later object's turn, such as the planter's; the observer's turn rules out a detonation in
        the carrier's own turn)
+     - Confidence: high
+   - **Row 17, shared kamikaze re-orders, comes after row 2 and before row 10.**
+     S-0506 claim 26 owns the shared cycle and its deadlines. Its due ammunition, target
+     and queued attack changes are available to aircraft turns in the same tick. A release
+     during a spawner's turn cannot receive that tick's already-completed shared-cycle order.
+     The assignment itself takes no scenario random draws; later aircraft behaviour processing
+     and firing keep their ordinary draws and gates. This is not the carrier-slot ordering
+     of S-0501 claim 35.
+     - Backing: `measurable` (S-0506 scenario R21 for the pre-turn boundary, a planted-bomb
+       release before the cycle where reachable, and absence of immediate assignment draws)
      - Confidence: high
    - **Row 3, the weather storm's update, with the strikes of its storm bolts, comes before the turn
      pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*, with the
@@ -659,7 +671,8 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 | 1 | Polling of map triggers: the per-tick raise of every polled tag (S-0011, claim 6) | (start of the tick) | A trigger action set off here takes effect before any object takes its turn in this tick; draw order | Claim 1, scenario O6 part A |
 | 9 | Growth and spread of resources, growth first (the resource specs own both) | 1 | Draw order | Claim 1 |
 | 2 | Detonation of planted bombs whose countdown ends | 9 | An object a bomb destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part A |
-| 10 | Steering of aircraft that dive into their target (the aircraft specs own it) | 2 | Draw order | Claim 1 |
+| 17 | Shared kamikaze re-orders, in enrollment order (S-0506 claim 26) | 2 | Due ammunition, target and queued attack changes are available to same-tick aircraft turns; releases during spawner turns miss this tick's cycle. Assignment takes no scenario draws | Claim 1; S-0506 scenario R21 |
+| 10 | Steering of aircraft that dive into their target (the aircraft specs own it) | 17 | Draw order | Claim 1 |
 | 11 | Teams, one after another in the order of the list of teams (the specs of teams own both) | 10 | Draw order | Claim 1 |
 | 12 | Disc lasers, the most recently fired first; each applies its damage in its own update | 11 | An object a disc laser destroys takes no turn in this tick unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1 |
 | 3 | The weather storm's update, with the strikes of its storm bolts | 12 | An object a bolt destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part B |
@@ -676,6 +689,7 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 After the last part of the tick, the tick number grows by 1, except in the final tick (S-0201,
 claim 1; S-0414 claims 8 and 16). That tick still runs every part, including orders after the
 houses; commitment of the result is earlier, at the start of row 7, not after the full tick.
+Row 17 takes no scenario draws and does not add a drawing part to claim 1's draw sequence.
 Work that other specs own, that this table does not list and that takes no draws from the
 scenario random stream has no place here (claim 1).
 
@@ -722,6 +736,12 @@ whose timing S-0402 owns; they do not change claim 12's precedence:
 | No data key | — | engine behaviour | fixed | claim 12's vehicle behaviour-start and processing precedence over a due group update; S-0402 claim 22 owns directed harvesting and its imported flags, and S-0215 claims 6 and 11 own processing delays and start gates |
 
 ## Measurement scenarios
+
+**Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
+procedure, sub-tick observables and falsifiers for same-tick aircraft access to the assigned
+orders, exclusion of turn-pass releases and zero scenario draws during assignment. Its
+planted-bomb variant tests enrollment before the shared cycle where reachable. End-of-tick
+samples alone do not establish the boundary; an unresolved sub-tick comparison is inconclusive.
 
 **Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
 purpose-made maps, at game speed index 6, with director and mods off except the named test data.
