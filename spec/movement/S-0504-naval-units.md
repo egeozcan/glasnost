@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -61,8 +61,8 @@ a carrier's controller is launching ordinary aircraft.
 - **Docking answer.** As S-0214 (Terms): the answer a building gives a unit that asks whether it
   may enter or dock.
 - **Docking point.** The world position a building supplies for a contacted unit's docking distance
-  test. It need not lie in an external neighbouring cell. Claim 12 fixes the naval vehicle-factory
-  case.
+  test. It need not lie in an external neighbouring cell. Claim 12 applies S-0314 claim 18's
+  selection and stopping rules to naval yards.
 - **Stored path, path retry timer.** As S-0212. Claim 9 specifies their ship-locomotor application.
 
 ## Behaviour
@@ -227,8 +227,8 @@ a carrier's controller is launching ordinary aircraft.
    - Confidence: high
 
 8. **Repair at a yard, and the starting distance.** A naval yard whose type has the repair flag
-   repairs vessels by the depot rules of S-0314 (claim 6). Claim 12 fixes the naval
-   vehicle-factory docking point; click legality remains S-0214's building-entry rule, and
+   repairs vessels by the depot rules of S-0314 (claim 6). Claim 12 specifies the naval-yard
+   docking point and stopping rule; click legality remains S-0214's building-entry rule, and
    ordinary enter behaviour is S-0215 claim 29. An enter order or initial contact is not itself
    a paid repair. Before its settling phase a depot (land
    or naval) with a docked vehicle *waits for it*: at each of its processings (S-0215 claim 2) it
@@ -330,18 +330,32 @@ a carrier's controller is launching ordinary aircraft.
       or the presence of a weight entry.
     - Confidence: high
 
-12. **Naval vehicle-factory docking point (Q-0641, partial).** A naval yard marked as a vehicle
-    factory supplies the centre of the cell displaced by (2, 1) cells along the map x and y axes
-    from its top-left foundation cell, at the yard's own world height. This is not a nearest-water
-    cell search, a rally point or the production release position of S-0404 claim 13. This
-    point takes precedence over imported pad docking displacements. Coordinates are signed
-    32-bit integers in leptons, with the wrapping arithmetic of S-0205 claim 1; selection takes
-    no floating-point calculation, rotation or random draw. Its cell may belong to the foundation:
-    there is no rule that repair must occur in an external neighbouring water cell. S-0209
-    claim 5 retains ownership of entry legality and blocking versus non-blocking foundation cells.
-    Claim 8 uses this point for the waiting distance, not an assumed foundation centre.
-    - Backing: `measurable` (N13).
-    - Confidence: high (point selection and precedence); medium (stock approach observations)
+12. **Naval-yard docking point and stopping (Q-0641, partial).** An ordinary naval repair
+    yard uses S-0314 claim 18's docking-point selection. Without obsolete-unloading,
+    resource-unloading or tank-bunker flags, the point is the foundation centre, including
+    world height, plus the imported docking displacement: the sole displacement for a count
+    of 1, or the assigned contact place's displacement for a greater count. A count of 0 or
+    no assigned place within the displacement count gives the foundation centre instead.
+    The obsolete-unloading flag, not the vehicle-factory flag, selects the fixed centre of
+    the cell displaced by (2, 1) cells from the top-left foundation cell, at yard height,
+    taking precedence over pad displacements. Coordinates and additions use signed 32-bit
+    integer leptons with S-0205 claim 1's wrapping arithmetic; displacement selection adds
+    no floating-point calculation, rotation or random draw.
+
+    A ship completes its ordinary cell-to-cell track. At track completion, reaching the
+    docking-point cell with a vertical difference strictly below 208 leptons suffices to
+    stop the approach (S-0314 claim 18). On ordinary level tracks its stopping position is
+    the cell centre, not necessarily the supplied point's horizontal position. Claim 8 still
+    measures distance to the supplied point, including its height: stopping need not put the
+    ship inside the starting distance. Neither point selection nor stopping searches for a
+    nearest-water cell, uses the rally point or uses S-0404 claim 13's production release
+    position. The docking cell may belong to the foundation; S-0209 claim 5 retains ownership
+    of entry legality and blocking versus non-blocking foundation cells.
+    - Backing: `measurable` (N13) for ordinary point selection and cell-centre stopping.
+      Unused flag combinations and the exact 208-lepton vertical boundary are `unmeasured`:
+      no stock-only setup here isolates them without also changing the route.
+    - Confidence: high (point selection, precedence, integer arithmetic and cell-based stop),
+      medium (stock approach observations)
 
 13. **Further killing hits during descent (Q-0646, naval part).** For a sinking vessel without
     death image frames that still meets S-0312 claim 10's ordinary killing-hit sinking
@@ -425,8 +439,8 @@ round-toward-zero arithmetic, then truncates the result toward zero to integer l
 
 > *d* = trunc(√((*x* − *a*)² + (*y* − *b*)² + (*z* − *c*)²)).
 
-Height counts. This is not the table square root of S-0204. Claim 12 fixes the naval
-vehicle-factory point; other building kinds can supply other points.
+Height counts. This is not the table square root of S-0204. Claim 12 applies the naval-yard
+point selection of S-0314 claim 18; the ship's stopping position need not equal that point.
 
 ## Constants
 
@@ -494,8 +508,9 @@ The following distinctions are not optional original-versus-fixed behaviours:
 | Rules, type section, `Spawns` | spawned type in the shared controller (S-0506 claim 1); claim 3 uses its launching count, not ordinary aircraft preparation | type name | none |
 | Rules, `[General]`, `ShipSinkingWeight` | sinking condition (S-0312 claim 10 owns it) | decimal, double precision | S-0312 |
 | Rules, vehicle-type section, `Weight` | claim 11's vehicle weight | decimal, double precision | 1.0 at type creation; preserve current value on later import |
-| Rules, building section, `WeaponsFactory` | claim 12's vehicle-factory flag | boolean | no |
-| Rules, building section, `DockingOffset0` and subsequent numbered entries | pad docking displacements, S-0404 claim 15; do not override claim 12 | integer lepton triples; S-0404 | S-0404 |
+| Rules, building section, `WeaponsFactory` | vehicle-factory flag; does not select claim 12's fixed docking point | boolean | no |
+| Rules, building section, `Weeder` | obsolete-unloading flag selecting claim 12's fixed docking point | boolean | no |
+| Art, building section, `DockingOffset0` and subsequent numbered entries | docking displacements used by claim 12; S-0404 claim 15 owns their import | integer lepton triples; S-0404 | S-0404 |
 | Rules, `[AI]`, `PathDelay` | claim 9's shared retry-delay field | decimal game minutes, single precision held as a double | S-0212 |
 | Rules, building section, `NumberOfDocks` | contact-place count for claim 14; shared depot capacity and several-place handling | integer | 1; later absent entries preserve the value in force (S-0314) |
 
@@ -725,10 +740,16 @@ building processing phase, docking point, health and credits per tick. Repeat fr
 side, then with a second damaged ship sent while the first is docked, and at full health.
 *Observable:* supplied docking point relative to the top-left foundation cell and yard height,
 foundation cells traversed, the successful waiting processing, settling and first paid repair.
-*Expected:* the point is always cell displacement (2, 1), at yard height, independent of approach
-side, release/rally location and pad displacements. Waiting/settling/repair timings follow claim 8,
-not immediate payment on contact or click. *Falsified if:* a compatible naval vehicle factory
-supplies another point, the point varies by approach, or payment precedes the stated gates.
+*Expected:* the supplied point follows claim 12's foundation-centre-plus-displacement
+selection for the assigned contact place, including height. Approach side and release/rally
+location do not change it. On a level ordinary track, the ship stops at the docking-point
+cell's centre, even when the supplied point is off-centre. Waiting/settling/repair timings
+follow claim 8's distance to the supplied point, not immediate payment on contact or click.
+*Falsified if:* an ordinary naval yard selects the fixed (2, 1) point solely because it is a
+vehicle factory, the point varies by approach rather than contact place, the ship relocates
+horizontally to the off-centre supplied point, or payment precedes the stated gates.
+If stock data supplies no off-centre point, that stopping distinction is inconclusive; use
+S-0314 H19 b's proposed recorder test rather than assuming exact alignment.
 Only use ordinary playable placements; an unenterable approach is not a distance-test failure.
 Record the second-ship, full-health and cancellation outcomes without assigning an untraced
 expected handshake: they are proposals to finish Q-0641, not completed claims. The missing
@@ -778,8 +799,8 @@ event recording; this proposes recording capability, not an oracle modification.
 
 ## Open questions
 
-- Q-0641 is partly answered: claims 8 and 12 fix the naval factory's waiting gate and docking
-  point. Full approach handshake, contact reservation timing and failure/retry routing are not
+- Q-0641 is partly answered here: claims 8 and 12 specify the naval yard's waiting gate,
+  docking point and cell-based stopping, with S-0314 claim 18 owning the shared rule. Full approach handshake, contact reservation timing and failure/retry routing are not
   established here. Do not infer them from aircraft pads, land depots or production release.
   Q-0641 is therefore not included in the answered-request list.
 - Q-0646: the death-image-frame path remains unresolved in S-0312 claim 32. That claim
