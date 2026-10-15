@@ -2,7 +2,7 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -104,7 +104,7 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 
 2. **Experience changes only by the rules of this spec.** Experience changes by kills (claims 7
    to 10), is set at creation (claim 11), by the armory (claim 12) and by a deployment (claim 13),
-   and is changed by crates (the crate spec). Erasure also gives the leader a separate direct
+   and is changed by crates (S-0520 claim 22). Erasure also gives the leader a separate direct
    gain (claim 9). A grappling naval parasite also gains experience
    from a cull under S-0614 claim 16 and F5. No other change is known.
    - Backing: the named changes inherit their claims' backing. The assertion that no other
