@@ -2,11 +2,11 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590]
 supersedes: []
@@ -448,6 +448,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     A tethered harvester whose refinery refuses (row 1's refusal while tethered) keeps its contact
     and goes on to the other rows.
 
+    **Tag notifications.** Ordinary refinery arrival and docking in *enter* add neither an
+    entered-by raise on the refinery's tag nor a destroyed-by-anything raise on the
+    harvester's own tag (S-0524 claim 14). Cell tags encountered on the approach are
+    separate; docking does not consume the harvester.
+
     So there is no backing in: the harvester arrives with whatever facing its path gives, and the
     turn of row 3 happens on the docking cell. The turn of row 3 aims at exactly 16384, so row 4
     holds at the first processing after the turn has ended; claim 11's facing range then holds at
@@ -490,7 +495,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       low power, part g for the construction state and for being sold, part h for being erased,
       H10 for the docking cell, the approach, the turn, the delays, the start of *unload*
       and the non-dock-unload contact stall,
-      H14 for the second route, its ordering and draw count). The selling-state
+      H14 for the second route, its ordering and draw count; S-0524 claim 14,
+      scenario C16 for the absence of docking tag raises). The selling-state
       arrival refusal and its destination-absent scatter case are `unmeasured`:
       H14 proposes timing controls but establishes no reliable overlap before
       the sale independently releases contact and tether.
