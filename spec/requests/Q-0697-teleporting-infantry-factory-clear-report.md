@@ -1,9 +1,9 @@
 ---
 id: Q-0697
 title: When a teleporting infantry unit released by an infantry factory ends its factory contact
-status: open
+status: answered
 related: [S-0417, S-0208, S-0207]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need

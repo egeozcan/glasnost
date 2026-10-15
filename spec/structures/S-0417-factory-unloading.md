@@ -2,13 +2,13 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0221, Q-0222, Q-0223]
+requests: [Q-0221, Q-0222, Q-0223, Q-0697]
 supersedes: []
 ---
 
@@ -22,8 +22,9 @@ released aircraft, the destination chosen on release from contact, and the relea
 S-0404 leaves to this spec (claim 14). S-0404 claim 13 owns release positions, facings, busy and
 failed results, and refunds; S-0404 claim 15 owns aircraft pad positions. Skirmish only: campaigns
 and network games are out of scope. This answers Q-0221, Q-0222 and Q-0223 and most of Q-0120.
-Still open: what moves a released infantry unit when there is no rally point (Open question 3)
-and the draws of putting a released unit on the map (Open question 8). Claim 14 owns the
+Q-0697's teleporting-infantry clear report is specified in claim 10. Still open: possible later
+unsolicited movement without a rally point (Open question 3) and the draws of putting a
+released unit on the map (Open question 8). Claim 14 owns the
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
 the search's no-draw rule; their untested cases remain qualified there.
 
@@ -314,8 +315,29 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     suppression does not apply. An ordinary infantry factory does not give the run-away reply:
     contact and tether simply end, without the report itself finishing or redirecting the
     exit walk. S-0208 claims 16 and 17 own walking completion; claim 23 excludes an entry
-    interaction that removes the unit before it can report and does not prescribe jumpjet
-    or teleporting arrival timing.
+    interaction that removes the unit before it can report. The jumpjet timing remains separate.
+
+    **Teleporting infantry clear report (Q-0697).** A released, tethered infantry unit moving
+    by its own teleporting locomotor reports clear on its first jump's cell-arrival update
+    after tether establishment. S-0207 claim 22 supplies that update in the jump tick, after
+    landing position, height and landing-layer listing change. Contact and tether end in that
+    same update, before the landing cell's entered-by tag is raised. Thus tag actions observe
+    the factory contact place already free. Neither phasing-in completion nor *move* falling
+    back to rest is required. The report has no foundation-exit or different-destination test:
+    claim 7's vehicle suppression does not apply. An ordinary infantry factory gives no
+    run-away reply and adds no scatter or exit-cell leg to this jump. This covers an ordinary
+    factory release to a clear rally cell, without an entry interaction removing the unit.
+
+    Landing-point reservation alone does not report clear. If the unit never jumps and has no
+    other cell-arrival update or independent contact-breaking event, it retains both contact
+    and tether as a resting walker does. There is no factory-release contact timeout. Clearing
+    a destination without jumping, resting in *guard*, and falling back to rest do not themselves
+    supply the missing arrival report. With every contact place held, a later release is busy
+    under claim 14 and S-0404 claim 13, not successfully released with a permanently stale link.
+    - Backing: `measurable` (U10 d for jump-time release and ordering, U10 e for the no-jump
+      control and a later commanded jump)
+    - Confidence: high (arrival/report connection, contact and tether loss, absence of vehicle
+      suppression); medium (combined factory-release and no-jump consequences)
 
     **Factory contact during jumpjet ascent.** The ordinary walking report above does not establish
     when a jumpjet ends factory contact or its tether. The unresolved factory-contact
@@ -333,18 +355,22 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     infantry found so far moves it off a building cell: the building-cell scatter of a walking
     unit applies only when a *move* ends, and the periodic scatter of a resting unit concerns a unit
     hidden behind higher ground, not a building. What moves the unit off the foundation, if
-    anything, is therefore not established (Open question 3). Only a cell arrival produces the
-    clear report, so if nothing moved it, it would stay in contact with K and hold one of K's
-    contact places (claim 14). With a single contact place the next infantry release would then be
-    busy (S-0404 claim 13), which makes the case observable (U10 b).
+    anything, is therefore not established (Open question 3). The no-arrival contact rule is
+    settled: while it remains resting without a cell-arrival update or an independent
+    contact-breaking event, it keeps contact and tether and holds one of K's contact places
+    (claim 14). This also applies to teleporting infantry that never jumps (U10 e). With a
+    single contact place the next infantry release is busy (S-0404 claim 13), which makes
+    retention observable (U10 b). This is not a promise that unrelated events can never move
+    the unit or break contact.
 
     The original's computer-controlled release also queues *area guard* and can choose a
     base-cell guard spot. Our player houses use the human rule; neutral and special houses retain
     the original owner rule.
     - Backing: `measurable` (U10 a and S-0208 W15 for ordinary release, first-arrival
       clear-report timing and the two-leg walk; U10 b for the
-      absence of an immediate no-rally destination; U10 c for jumpjet release). Teleporting
-      infantry, cloning contact hand-over, a rally in the appear cell and zero-draw contact
+      absence of an immediate no-rally destination and no-arrival contact retention,
+      U10 c for jumpjet release; U10 d/e for teleporting release). Cloning contact hand-over,
+      a rally in the appear cell and zero-draw contact
       exchanges are `unmeasured` here: these parts do not exercise those releases or isolate
       their contact draws. Non-player-house production is `unmeasured`: no stock factory-release
       setup for it is established. Later spontaneous movement in the no-rally case remains an
@@ -623,6 +649,8 @@ relative actor update orders; confidence medium.
 | `Locomotor` | rules, vehicle type | locomotor identifier, exit mode | S-0207 |
 | `Accelerates` | rules, vehicle type | boolean speed-update choice | S-0207 |
 | `JumpJet`, `Teleporter` | rules, infantry type | boolean exceptions to initial exit destination | S-0208 and S-0402 |
+| `Locomotor` | rules, infantry type | locomotor identifier, parsed as S-0207 claim 14; actual teleporting locomotion supplies claim 10's jump update, distinct from the boolean destination exception | S-0207 claim 14 |
+| No data key | runtime factory contact and tether | claim 10's jump-arrival clear report and no-arrival retention, not an imported delay | no release-contact timeout |
 | `Rate` in the current behaviour's section (`[Guard]` and the others named by S-0215) | rules | decimal game minutes, rate of claim 13's delay | S-0215 |
 | `HasStupidGuardMode` | rules, building type | boolean; set means no idle apron clearing (claim 13) | S-0215 |
 | `AirportBound` | rules, aircraft type | boolean; set means the type refuses the release tether (claim 11) | form and default owned by S-0407 |
@@ -784,6 +812,30 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   Record whether any contact or tether change coincides with the strict quarter-height
   threshold while still below target height. This observation investigates Open question 9,
   no contact-loss tick is predicted or scored from that threshold alone.
+  Part d (Q-0697): produce stock teleporting infantry with a clear rally cell several cells
+  away. Record landing reservation, actual position, contact, tether, factory contact-place
+  use, current/queued behaviour, destination and phasing-in state from release through the
+  first jump and phasing-in completion. Expect direct rally movement, contact and tether
+  ended in the jump tick's arrival update, not on reservation, phasing-in completion or
+  fall-back. Expect the contacted place free then, with no factory run-away scatter.
+  For an ordering control, give the landing cell an entered-by tag whose action changes a
+  scenario variable. The proposed read-only recorder samples contact and tether when that
+  variable changes: expect them already ended. End-of-tick coincidence alone cannot score
+  this ordering. Produce another unit after the jump: with a free exit and no other blocker,
+  the old contact must not make release busy. Falsifiers: either link surviving the ordinary
+  jump arrival, loss on reservation alone, a run-away detour, or contact still present when
+  the tag action executes. A run with an entry interaction removing the unit is not scored.
+  Part e: repeat with no rally and no new order for 300 ticks, recording every position,
+  arrival update and contact change. Expect no release-supplied destination or jump. During
+  any interval with no arrival or independent contact break, expect contact and tether retained.
+  Attempt a second release while all contact places are held: expect busy under S-0404
+  claim 13, including its refund rule, not an automatic release retry. Then order the first
+  unit to a distant clear cell and produce a fresh second unit after its jump: expect contact
+  loss on that jump and no busy result attributable to the old link. Falsifiers: automatic
+  timeout during an otherwise unchanged resting interval, no clear report on the commanded
+  jump, or a successful release with all contact places still held. Record any spontaneous
+  movement and its cause separately for Open question 3; do not assume a 300-tick observation
+  proves absence of all possible later events.
 - **U11, idle apron clearing.** Part a: an idle stock ground vehicle factory in *guard*, no
   production. Place an idle vehicle of the factory's own house on E by map pre-placement or a move
   order. Record the factory's guard processings, the scatter requests and the vehicle's
@@ -838,10 +890,12 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
    destination-triggered pad-contact release from physical lift-off; neither tether timing is
    inherited from the glossary.
 2. The aircraft's cell near K without a rally point: resolved by claim 14.
-3. What moves a released infantry unit off the foundation when there is no rally point, or the
-   rally point is its own cell (Q-0120). The release and its placement give no destination
-   (claim 10). No rule of resting infantry that would move it has been found. U10 b and U13 a
-   record what happens.
+3. Partly resolved (Q-0120, Q-0697): no-arrival contact retention, including a teleporting
+   unit that never jumps, is claim 10; release and placement give no destination without a
+   rally point or with a rally in the unit's own cell. Still open: whether some later
+   unsolicited event moves such a unit off the foundation, and its first tick and cause.
+   No such resting-infantry rule has been established. U10 b/e and U13 a record it. This
+   uncertainty does not defer the jump-time clear report or create a contact timeout.
 4. Failed temporary driving replacement and refused exit-track instructions: subsequent damage,
    movement and contact loss remain untraced. They must not be implemented as guaranteed
    permanent waits on the evidence here.
