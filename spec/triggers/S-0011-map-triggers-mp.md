@@ -2,11 +2,11 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0269, Q-0510]
 supersedes: []
@@ -1280,6 +1280,7 @@ are not part of I4's supported subset.
 | 33 | one-time superweapon grant | number slot as superweapon type index, trigger owner house; S-0512 claim 12 |
 | 34 | permanent superweapon grant | number slot as superweapon type index, trigger owner house; S-0512 claim 13 |
 | 100, 117 | plain and freezing radar-movie actions | number slot, ignored in skirmish; S-0201 claim 11 and its Import mapping. Campaign behaviour is out of scope |
+| 109 | invulnerability at a waypoint | waypoint slot only, eighth action item; number-slot house and duration values unused; S-0513 claim 22 |
 | 110 | pause action | number slot; S-0201 claim 10, including its departures, warnings and Import mapping |
 | 111 | evict occupants of first eligible attached building | no parameter slot; without hunting or inside fallback, S-0508 claims 10 to 13 |
 | 127 | chrono flash | number slot; S-0201 claim 11, including its quirk rules, warnings and Import mapping |
@@ -1683,12 +1684,26 @@ towards the top corner of the second cell. *Falsified if:* the centre or the rad
 (The condition that the whole map is not already revealed is not tested, claim 26.)
 
 **Scenario T17 (claims 28, 33).** *Setup:* a polled trigger with an explosion at a waypoint naming a
-weapon's registration index, with a neutral vehicle on the waypoint's cell. Variant B, on a map whose cell
-(0, 0) is legal: the waypoint slot names an undefined waypoint marker, with a neutral vehicle on cell
-(0, 0). *Observable:* the vehicles' health loss, compared with the named weapon's damage against the
-vehicle's armour by S-0303's area-damage rules and S-0302's damage resolution, including its
-distance from the detonation point. *Expected:* the loss matches that one area-damage application. In B, the
-vehicle on cell (0, 0) takes it. Variant C, with the random-state recorder: a weapon whose warhead selects a damage
+weapon's registration index, with a neutral vehicle on the waypoint's cell. *Observable:* the
+vehicle's health loss, compared with the named weapon's damage against its armour by S-0303's
+area-damage rules and S-0302's damage resolution, including its distance from the detonation
+point. *Expected:* the loss matches that one area-damage application.
+
+Variant B uses S-0524 scenario C11's off-map-point fixture, adapted to this explosion action:
+start a fresh oracle process per run, leave an in-range waypoint marker undefined, and record
+the requested detonation point and health with a read-only recorder. Use named test-map data
+giving the selected weapon's warhead enough spread to reach neutral vehicles on the nearest
+legal cells. Repeat with those legal corner cells at two different height levels, and compare
+an explicit non-legal waypoint near the same corner. With a blank stand-in, expect the
+undefined marker's point to be (128, 128, 0) integer leptons regardless of those legal terrain
+levels; S-0009 claim 44 owns the stand-in's original shared state and our blank-cell departure.
+Health loss must follow the ordinary area-damage calculation from that point, not from a
+snapped legal cell. Cell (0, 0) is never legal (S-0009 claims 1 and 2), so no vehicle is placed
+there. A different point, early rejection solely because the marker is undefined, or health
+loss inconsistent with that point falsifies this variant. Altered stand-in state remains
+exploratory rather than a second stable-height prediction.
+
+Variant C, with the random-state recorder: a weapon whose warhead selects a damage
 animation for the cell's land and whose area damage takes a draw (S-0303); the recorder's log shows
 the draws of the animation's creation before those of the damage. *Falsified if:* no damage, a loss
 that does not match the weapon, or in variant C the damage's draws before the animation's.
