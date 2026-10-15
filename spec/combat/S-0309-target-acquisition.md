@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -171,9 +171,10 @@ this spec:
    looks for a candidate despite the held charging target, and keeps that target if none is
    found. It neither waits for nor restarts the targeting timer. The ordinary behaviour-delay
    draws still apply (S-0215 claim 21). Whether claims 2 and 3 restrict this search remains
-   open in S-0518; the context here does not settle it. This is an explicit exception to
-   S-0215 claim 33's blanket statement that every search restarts the targeting timer:
-   that statement needs the coordinated correction listed in Changes for other specs below.
+   open in S-0518; the context here does not settle it. S-0215 claim 33 explicitly excepts
+   this search from the targeting-timer reset rule for searches covered by claim 4 here,
+   and from its ordering rule for processing draws before per-tick-search draws. A replacement
+   found by this search can be attacked in that same processing.
 
    An actor that carries an attack-move memory never runs the search of the first row, in any
    behaviour: it runs the search of the second row instead, which claim 23 describes. That search
@@ -856,13 +857,15 @@ this spec:
     25, part i), is an opportunity target. No other search marks one: not the attack-move search of
     claim 1's second row (claim 23), nor the area search or the map-wide search. A search that keeps its target sets none, and the mark
     stays as it was. (A spawned aircraft that is not a missile has one further case in which a new
-    target leaves it with none, and every change of target of an object that can call airstrikes
-    cancels the target of its airstrike in progress; the aircraft and superweapon specs own
-    both.)
+    target leaves it with none; the aircraft specs own that case.) Every change of target of an
+    object that can call airstrikes cancels its strike, whether or not the strike is in progress.
+    Setting the same target again does not cancel it. S-0519 claim 19 owns this cancellation.
     - Backing: `measurable` (scenario A6: part e for the temporal weapon and the locomotor warhead,
       part j for the airstrike, with run 2 for an airstrike in progress, part h for the own-cell
       and no-target cases, the sinking target included, part i for the spawned aircraft, part a for
-      the opportunity mark); the opportunity mark of a wall target is `unmeasured` (claim 25,
+      the opportunity mark); strike cancellation inherits S-0519 claim 19's backing, with
+      S-0519 scenario T18 part b covering cancellation after a strike has ended; the opportunity
+      mark of a wall target is `unmeasured` (claim 25,
       backing); that the third row judges the building that the first row gives is `unmeasured`,
       because no setup is known in which a target is set to a unit that is still in a tank bunker
       while it is dead, sinking or in a death sequence
@@ -2510,14 +2513,9 @@ scenario random state each tick, and identify attack processings using the proce
 
 ## Changes for other specs
 
-- **S-0215 claim 33:** replace the blanket “Every search, whoever runs it” timer-reset rule
-  with the rule for searches covered by S-0309 claim 4. Explicitly exclude the charging
-  break-off search of S-0518 claim 15 and S-0309 claim 1: it runs inside infantry attack
-  processing without waiting for or restarting the targeting timer and takes no timer-reset
-  draw. Its replacement can be attacked in that same processing; claim 33's ordering of
-  processing draws before per-tick-search draws does not apply to this inside-processing search.
-  Scenario A17 here supplements S-0518 scenario TC3. Confirm this coordinated correction
-  before handing the two specs off together.
+None. S-0215 claim 33 already includes the charging break-off exception and its backing
+through scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from
+targeting-timer resets.
 
 ## Questions for the project lead
 
