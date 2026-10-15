@@ -2,13 +2,13 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0742]
 supersedes: []
 ---
 
@@ -341,9 +341,25 @@ between a fire order and the effect.
     `quirks.superweapon_order_first_type_of_action` (S-0513 claim 2, default on = original,
     off: the order names the selected type). Thus selecting a ready later type can result in
     refusal for an earlier type's unready record, without spending the selected record's charge.
-    How the stage, label and progress look is the implementer's design. Presentation only. The giving building's own
-    charge animation follows the record's remaining time by S-0108 claim 18.
-    - Backing: `measurable` (scenarios X2 and X11, by labels, icon progress and countdown rows, and
+    **Charge overlay and label placement (Q-0742 question 5).** The original uses the same
+    imported clock overlay for production and superweapon icons. Its zero-based image frame is
+    clock stage + 1, exact integer addition: frames 1 through 54 for a superweapon whose progress
+    is visible. It is aligned to the icon's top-left corner, not drawn beside the icon or in the
+    battlefield countdown. An ordinary ready record has no overlay, even when suspended; a
+    drain-mode record retains it in all three drain states. The readiness label is separate text
+    on the icon, using the same centred top position as a production icon's ready label and its
+    on-hold label when there is no queue count. For the original's 60 × 48 pixel icon, the label's
+    horizontal anchor is 30 pixels from its left edge and its text origin is 1 pixel below its top
+    edge. All four label states use that same position and styling; suspension replaces any drain
+    state label with *on hold*. The clock overlay is composited after this label where both are
+    present. The label is not the superweapon display name, which is drawn near the icon's bottom.
+
+    These original-image and position details are reference presentation facts, not requirements
+    to reproduce the original shell: clock artwork, label fonts and positions remain the
+    implementer's design under S-0411 claim 8. The visible state and progress rules above still
+    apply. The giving building's own charge animation follows the record's remaining time by
+    S-0108 claim 18.
+    - Backing: `measurable` (scenarios X2, X11 and X14, by labels, icon progress and countdown rows, and
       S-0513 scenario SW1 part d for shared aim actions)
     - Confidence: high
 
@@ -566,6 +582,11 @@ Observable ordering:
 | `AuxBuilding` (rules, superweapon) | auxiliary building type for the giving-building test | building type name | none |
 | `UIName` (rules, superweapon) | display name of the countdown row | string-table label | — |
 | `SidebarImage` (rules, superweapon) | icon art, S-0007 claim 31 | — | — |
+| `GCLOCK2.SHP` (image file, no INI key) | shared production and superweapon clock overlay, claim 16 | imported sprite frames, numbered from 0; file resolution follows S-0005 | no alternate overlay established here; artwork is presentation design |
+| `TXT_READY` (string table) | ordinary and drain-mode ready label, claim 16 | fixed entry identifier, not literal game text | no alternate entry |
+| `TXT_HOLD` (string table) | suspended record's label, overriding ready or drain state, claim 16 | fixed entry identifier | no alternate entry |
+| `TXT_CHARGING` (string table) | drain-mode charging label, claim 19 | fixed entry identifier | no alternate entry |
+| `TXT_FIRESTORM_ON` (string table) | drain-mode active label, claim 19; the identifier does not restrict it to a particular effect kind | fixed entry identifier | no alternate entry |
 | `SuperWeapon`, `SuperWeapon2` (rules, building) | first and second superweapon fields | type name | none |
 | `ChargeToDrainRatio` (rules, `[General]`) | *ρ* of F5 | floating point | keeps previous value; initially 3 |
 | `MultiplayPassive` (rules, country) | passive house (S-0412 owns), claim 18 | boolean | no |
@@ -591,7 +612,9 @@ Kind words for `Type` and `PreDependent`, in kind-number order (0 to 11):
 
 A ready announcement is selected by superweapon kind, under S-0701 claim 28: missile, iron-curtain, storm, chronosphere, paradrop (including American paradrop), dominator, spy-plane, genetic-converter, force-shield and psychic-reveal kinds each request their corresponding kind-specific ready announcement. A chronosphere second-stage type and a type with no kind request no ready announcement.
 
-Readiness labels are the behavioural states *on hold*, *ready*, *charging* and *active*. Their wording is presentation design; the state shown in each circumstance is specified in claim 16 and claim 19.
+Readiness labels are the behavioural states *on hold*, *ready*, *charging* and *active*.
+The entries above identify the original's imported wording, not text to hard-code. Their wording
+is presentation design; the state shown in each circumstance is specified in claim 16 and claim 19.
 
 The two sound-entry references associated with a superweapon each keep their previous value when
 absent or unresolved (initially none). Their use does not establish a generic charging or
@@ -857,6 +880,29 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
 - *Falsified if:* the kind alone determines the granted type, matching is case-sensitive, a
   new omitted action matches nuke, omission clears an earlier action, or an unrecognised
   word retains it. Record sidebar readiness and consumption under S-0520 scenario CR15.
+
+**X14: shared clock and label placement (claim 16; Q-0742 question 5).**
+- *Setup:* use X1's stock superweapon and an unfinished production item. For drain states use
+  X11's explicitly named test-map override; no stock type exercises drain mode. Use the common
+  skirmish settings above, and repeat three times for each state.
+- *Procedure:* record tick-labelled close-ups of production and superweapon icons at several
+  matching progress values, then of the superweapon when ready, suspended while charging,
+  suspended while ready, and in each drain state. In separate fresh program sessions, use a
+  named local presentation-only probe string table replacing each of the four entries in Import
+  mapping with distinct short test text; retain other entries. No rules changes beyond X11's
+  named override are needed.
+- *Observable:* overlay frame outlines relative to icon bounds, the label's text origin and
+  alignment, which test label appears, and whether an overlay remains. Compare to the user's
+  imported clock image, not to a newly drawn approximation.
+- *Expected:* the same overlay image and stage-plus-one frame selection for production and
+  superweapon progress; superweapon frames follow F3. Ordinary readiness removes the overlay,
+  including while suspended. Drain states retain it. Labels use the top-centred position of
+  claim 16, with the corresponding imported test text; suspension always selects the suspended
+  label. The production queue-count exception does not move a superweapon label.
+- *Falsified if:* a different clock image or frame mapping is required, ordinary readiness keeps
+  its overlay, a drain state loses it, or any label's selected entry or original position differs.
+  Record the original F3 boundary error separately from our exact-stage display rule. These
+  captures check the original reference look; they do not impose its shell layout on our engine.
 
 ## Open questions
 
