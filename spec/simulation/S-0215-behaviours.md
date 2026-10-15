@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -262,7 +262,7 @@ Terms used by this spec:
   from them. Whether a given actor may enter a given absorbing building is decided by the building
   (structures specs).
 - **Occupiable building:** a building that a given infantry actor may occupy (garrison) at that
-  moment. The structures specs own that test; it involves the building type's can-be-occupied
+  moment. S-0508 claim 1 owns that test, including the building type's can-be-occupied
   flag. An **owned occupiable building** of a house is a building of that house whose type has the
   can-be-occupied flag and a tech level of 0 or more (Import mapping); typically a building the
   house could build, rather than a neutral structure placed by a map.
@@ -1728,24 +1728,72 @@ apply in our engine to the actors of every player house.
     original's computer player puts an actor in *capture* or *sabotage* that has lost its building
     into *hunt*; our AI can do so with an order.
 
-    The delay is always the standard delay. The capture, demolition or entry itself happens when the
-    actor reaches the building (the special-abilities specs). *Eaten* is processed by the same table,
+    The delay is always the standard delay. Building-arrival effects are separate from this
+    processing: S-0509 claims 1–11 own general entry and engineer outcomes, and S-0510
+    claims 1–10 own infiltration and other ordinary entrants. S-0508 claims 1–5 and 14–17
+    own garrison entry and assault; S-0509 claim 17 owns vehicle-like building destinations.
+    Demolition remains with its special-ability topic. *Eaten* is processed by the same table,
     except that occupiers, assaulters and infiltrators do not count as building takers and the hunt
     rule never applies. Its second row sends the same scatter request.
     - Backing: `measurable` (scenario B12; scenario B29, case c, for *eaten* and for the
       fall-back of a vehicle in *capture*)
     - Confidence: medium (the table); high (the options of the scatter request)
 
-29. **Enter.** An actor in *enter* keeps asking the object it is meant to enter (a transport, a
-    building) for permission. In the transport loading exchange, only acceptance or an existing
-    tether keeps the passenger in *enter*: without a tether, any non-accepting reply ends contact
-    and makes it fall back to rest, including a reply that makes the transport approach the
-    requester. The transport entry protocol and its timing are S-0507 claims 4–6; building
-    entry belongs to the structures specs.
-    - Backing: `measurable` (scenario B12; S-0507 T5 and T6 for loading replies).
-      The existing-tether exception inherits S-0507 claim 5's `unmeasured` backing: no
-      isolating ordinary-input scenario is established.
-    - Confidence: high (loading replies); low (building-entry summary only)
+29. **Enter.** An infantry unit or vehicle in *enter* repeats its entry request at each
+    processing, to its contact when present, otherwise to the object it remembers entering.
+    Only acceptance or an existing tether permits continued entry: without a tether, any
+    non-accepting reply ends contact and makes it fall back to rest. This includes a transport
+    reply that makes the transport approach the requester. The transport protocol and its
+    timing are S-0507 claims 4–6; aircraft entry is S-0501 claim 24.
+
+    **Repair buildings, land and naval.** Permission is S-0314 claim 16, with S-0504 claim 7's
+    naval-match test. Contact, arrival and servicing are distinct:
+
+    | State | Event | Result |
+    |---|---|---|
+    | permission given, not yet in contact | successful entry request | contact takes the first free place before physical arrival; the depot has max(d, 1) places for imported docking-place count d (S-0314 claim 17) |
+    | a one-place depot already holds another vehicle's contact | second vehicle makes an ordinary click | permission fails; no second enter order, waiting queue or displacement of the first contact (S-0314 claims 16–17) |
+    | approaching with contact | destination guidance | the ordinary land depot supplies the building destination and docking point of S-0314 claim 18; a vehicle-factory building uses S-0504 claim 12's point |
+    | completing entry | docking exchange | the vehicle turns toward 16384 facing units (map east); once no longer moving, tethered to the contacted building and still in enter, it reports arrival |
+    | arrival reported | repair building accepts completion | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start |
+
+    Behaviour starts still obey claims 3, 7 and 11: the completion is not a forced start of
+    either queued behaviour. Neither the click nor the contact reservation is a paid repair.
+    S-0314 claim 6 and S-0504 claim 8 own waiting, settling, stopping during repair and payment.
+    Foundation passability is unchanged (S-0209 claim 5); a docking point does not teleport
+    the vehicle or make every intervening foundation cell traversable.
+
+    **Earlier guard transition.** An unarmed repair building in the waiting stage of its guard
+    processing can queue repair before the completed entry report: a contacted mobile actor
+    must still be in enter, stand still, and have truncated spatial distance strictly below
+    64 leptons from the foundation centre (S-0314 claim 17). Distance uses floating-point
+    Euclidean calculation in three dimensions, truncated toward zero to integer leptons,
+    not the table square root. This processing chooses 1 tick without a delay draw. That
+    distance is not the later waiting distance to the docking point and makes no paid step.
+
+    **Failure and interruption.** The non-accepting-reply rule above also applies at repair
+    buildings. A vehicle retaining contact does not acquire a new reservation timeout or
+    automatic yard reselection from this processing. Path failures retain S-0212 claim 23's
+    categories and claim 11a's queue/start distinction; failed movement is not by itself an
+    unconditional force to guard. For replacement move, attack and enter orders, S-0213
+    claim 5 owns contact and destination changes: a repeated enter to the same contacted
+    building is ignored apart from route termination; other accepted behaviour orders break
+    untethered contact but do not universally break tethered contact. Stop is S-0213 claim 8,
+    not a special depot-cancellation command. Exact subsequent stopping, release and retry
+    after each interruption, simultaneous pre-reservation requests, multi-place servicing,
+    depot sale/destruction and loss of power during existing contact remain open below.
+    No automatic repair-retreat trigger is established here; the retreat behaviour's name
+    alone does not establish such a trigger, and computer-player scripts remain out of scope.
+
+    Every outcome of this enter processing chooses the standard delay, using the behaviour
+    current when the delay is chosen (claim 6).
+    - Backing: `measurable` (scenario B12; S-0507 T5 and T6 for loading replies,
+      S-0314 H16 for reservation and arrival; scenario B39 for depot processing and orders).
+      The existing-tether exception inherits S-0507 claim 5's `unmeasured` backing.
+      Simultaneous requests and multiple-place servicing inherit S-0314 claim 17's open
+      qualifications; they are not claimed to follow the sequential one-place case.
+    - Confidence: high (reply rule, completed arrival and queue/start distinction),
+      medium (reservation timing, early guard transition and ordinary approach)
 
 30. **Unload (infantry).** For an infantry type that deploys, *unload* switches between deployed and
     undeployed, and in every case forces *guard* and clears the unit's destination:
@@ -3479,6 +3527,25 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   object; the observation ends when that vehicle has deployed. Falsified by a valid run in which
   that tick ends with *hunt* neither current nor queued, or ends with *hunt* queued while the vehicle is ready to change, or by *hunt* queued
   for the human-controlled vehicle. Runs: three.
+- **B39 (claim 29, depot processing and interruption).** Use S-0314 H16's land-depot
+  setup and S-0504 N8's naval-yard setup, retaining their game speed, houses, observed areas
+  and void rules. Stock data only, no mods or external automated player. In three runs per
+  setup record processing ticks, reply categories, current/queued behaviours, contact,
+  tether, destination, body facing, motion, health and credits with a read-only recorder.
+  First let an entry complete without further input. Expected: contact precedes arrival,
+  the completed exchange requests map-east facing and queues repair/sleep without bypassing
+  readiness; no reservation-only paid step. An early unarmed guard transition must meet
+  the truncated centre-distance and stillness tests and choose a 1-tick processing delay.
+  A paid step at reservation, a forced queue start, or that guard result at 64 leptons or
+  farther falsifies the respective claim. At each repeatable pre-tether and post-tether
+  point in separate runs issue move, attack, stop, or a repeated enter to the same building.
+  Compare contact and destination changes at order application with S-0213 claims 5 and 8,
+  rather than predicting that every order breaks a tether. A same-building repeated enter
+  changing the contact or destination, or a non-tethered non-accepting entry reply retaining
+  the contact instead of falling back, falsifies claim 29. Record later movement and release
+  as investigation of Q-0641, not as confirmation of an unstated cancellation rule. If the
+  fixture cannot isolate early guard from completed arrival, that sub-test is inconclusive.
+
 - **B12 (claims 28 to 31; part e for the scatter off a building).** (a) A computer-controlled
   engineer placed in *capture* without a target: expected *hunt* queued at its first processing.
   (b) A deployer infantry type given *unload* while undeployed, with a test file that removes the area-fire flag from its deploy
@@ -4382,8 +4449,16 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   clearing supplies another setup for the paralysed refusal (scenario B6, part c).
 - Whether the recruitable property also keeps actors out of the computer player's teams (claim 20); scenario
   B20 tests base defence only.
-- The vehicle *unload* processing (transports, deploying vehicles), *retreat*, *patrol* and the entry
-  protocol of *enter*: claims 29, 30 and 34 point to other topics.
+- The vehicle *unload* processing for deploying vehicles, *retreat* and *patrol*: claims 30
+  and 34 point to other topics. S-0507 claims 7–12 own transport unloading.
+- **Q-0641, incomplete docking protocol (claim 29).** Reservation and ordinary completed
+  arrival are established, but exact approach/stopping and contact-release timing following
+  move, stop, attack or replacement entry, simultaneous pre-reservation requests, servicing
+  with multiple contact places, depot sale/destruction and existing-contact power loss remain
+  unresolved. A possible shared skill-gated automatic repair-retreat trigger is not established,
+  the processing of retreat does not prove how a unit is put into that behaviour. No AI-script
+  rule or automatic nearest-yard retry is inferred. S-0314 claims 16–18 and S-0504 claims 7,
+  8 and 12 supply permission, points and service thresholds, not those missing paths.
 - The refused deploy of claim 27 (vehicles): which situations let a deploying vehicle in *hunt*
   reach a spot where its building may not then be placed, so that the refusal and its queued
   *guard* can be observed. The deploy specs own the placement test.
