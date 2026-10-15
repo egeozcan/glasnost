@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
-requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282]
+requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798]
 supersedes: []
 ---
 
@@ -494,24 +494,70 @@ names the top-left cell of the foundation. In addition:
     ground; ordinary building place orders retain both conditions. The upgrade target's owner,
     type and room must still satisfy this claim when the order is applied: unlike adjacency and
     explored ground, those target conditions are checked again. A target lost, captured or filled
-    between issue and application can therefore refuse the upgrade. S-0408 (claim 5) owns which
-    upgrade a sale removes.
+    between issue and application can therefore refuse the upgrade. S-0408 claim 5 owns which
+    upgrade a sale removes: it sells the position named by the count, not an arbitrarily selected
+    upgrade. In particular, selling the first of three contiguous upgrades is not an available
+    ordinary sale operation.
+
+    **Upgrade precedence (Q-0798 question 3).** The numbered positions, not a separate
+    installation history, determine observable precedence. Empty positions are not compacted
+    by installation or sale. A successful installation replaces any type already recorded in
+    position *c*′; it does not search for the lowest empty position. The following distinction
+    applies to S-0308 claim 12's weapon resolution and S-0215 claim 32's attack gate:
+
+    | Use | Eligible upgrades and order |
+    |---|---|
+    | Weapon provider for a requested slot, count *c* from 1 to 3 | Positions 1 through *c*, in increasing position number, skipping empty positions and types without an ordinary weapon in that slot. The first provider wins. Positions above *c* do not participate even if still occupied. If none supplies the slot, S-0308 claim 12's occupant and host fallbacks apply. |
+    | Weapon provider, count 0 | No upgrade participates, even if positions retain types after a sale. |
+    | Attack gate | Applies only when the count is nonzero and position 1 is occupied. It tests that position's type only. An empty position 1 bypasses this gate: it does not substitute the first occupied higher position. S-0215 claim 32 owns the ordinary firing path used when the gate does not apply. |
+    | Count above 3 | There is no fourth valid upgrade position. The gate still refers only to position 1. For weapon resolution our engine considers positions 1 to 3 only, in that order; it ignores the excess count. The original's result after those three fail to supply the requested slot is unspecified under the bad-data departure below. |
+
+    Thus a level-2 installation on an empty target with room records its type in position 2:
+    it can supply weapons, but it does not activate the attack gate. Adding a level-less
+    upgrade next records it in position 3; the provider order is 2 then 3, while the gate
+    remains bypassed. Selling that last upgrade leaves position 2 first among weapon
+    providers. Selling the level-2 upgrade itself without the turret flag leaves count 1
+    and no recorded provider; another level-less installation then occupies position 2
+    again, not position 1.
+
+    A sale of a turret-flag upgrade can instead leave count 0 and occupied lower positions
+    (S-0408 claim 5). Those retained types provide no weapons while the count is 0. A new
+    level-less installation at count 0 records position 1 and activates that position's gate.
+    Higher retained positions remain ineligible until the count reaches them, and a later
+    installation at such a position replaces its retained type. A wall tower uses exactly
+    the same precedence rules: its uncapped count does not add valid positions or make
+    the last installed excess upgrade the first provider.
+
+    For counts above 3 the original may fail while resolving a slot not supplied by the
+    three valid positions; no stable additional provider order is specified. Restricting
+    our engine's search to the three valid positions, with the ordinary fallbacks if none
+    supplies the slot, extends this claim's existing bad-data departure and importer warning.
+    There is no new imported ordering field. Q-0798 questions 1 and 2 concern firing attempts
+    and delayed shots, not installation: their owners are S-0301 claims 9 and 14 and
+    S-0215 claim 32.
     - Backing: `measurable` (scenario PL10: parts a and b for the room rule, part c for a type
       without room, part d for the position, the full repair and the power and prerequisite
       effects, part e for the adjacency replacement, part f for the shroud condition, part g for
       level values that refuse, part h for a count above 3 that records no power and no position,
-      part i for the uncapped count of the wall tower type, part j for the application-time
+      part i for the uncapped count of the wall tower type, PL16 for weapon-provider precedence,
+      the position-1-only gate, sale retention and replacement, part j for the application-time
       target recheck, unmeasured if its required event timing cannot be established); `unmeasured` for the original's other
       effects of a *c*′ of 0 or above 3 (no game concept is known that this other alteration of
       the building's state changes, so there is no observable to propose, the larger counts risk a fault, and
-      our engine's departure does not depend on the answer), and for
+      our engine's departure does not depend on the answer). The original's weapon-resolution
+      outcome beyond the three valid positions is also `unmeasured`: it depends on unrelated
+      state and may fault; PL16 d proposes a diagnostic run, not a deterministic original result.
+      The bounded search in our engine is `unmeasured` design backing for the safe departure.
+      Also `unmeasured` for
       deciding again whether the house has radar (every input of S-0410's claim 1
       that an upgrade can change is a power change, which S-0410's claim 2 already lists as
       requesting that decision; an upgrade that changes none leaves the answer as it was, so
       no observation separates a decision made because of the upgrade from none)
     - Confidence: medium (the level rule, the full repair, the position, the replacement of the
       adjacency condition, the wall tower exception, no position recorded for a *c*′ of 0 or above
-      3); low (several levels at once, deciding radar again, the shroud condition for an upgrade)
+      3); high (position order, count-limited weapon providers, position-1-only attack gate,
+      no compaction and replacement of a retained type); low (several levels at once, deciding
+      radar again, the shroud condition for an upgrade, any original outcome beyond three positions)
 
 ### Other houses and the original's computer player
 
@@ -887,14 +933,14 @@ Observable consequences:
 | `Wall` (rules, overlay type; S-0210 owns it) | wall flag of an overlay type (claim 11) | boolean | no |
 | `Gate` (rules, building type) | gate-flag type (claims 3 b and 9) | boolean | no |
 | `LaserFencePost`, `LaserFence` (rules, building type) | laser-fence-post flag, laser-fence flag (claims 3 b and 9) | boolean | no |
-| `WallTower` (rules, `General`) | wall tower type (claims 8 and 9) | building type name | none |
+| `WallTower` (rules, `General`) | wall tower type (claims 8 and 9); its used upgrade count is uncapped but still has only three valid upgrade positions and the position-1-only gate (claim 12) | building type name | none |
 | `GDIGateOne`, `GDIGateTwo` (rules, `General`) | first pair of gate types (claim 8) | building type name | none |
 | `NodGateOne`, `NodGateTwo` (rules, `General`) | second pair of gate types (claim 8) | building type name | none |
 | `GuardRange` (rules, building type) | wall fill length *G* (claim 11) | cells in decimal form, converted to leptons as S-0215 (Import mapping) states | 0 (no fill) |
 | `FirestormWall` (rules, building type) | firestorm-wall type (claim 11, left open) | boolean | no |
 | `PowersUpBuilding` (rules, building type) | upgrade type and its target type (claim 12) | building type name | none |
-| `PowersUpToLevel` (rules, building type) | upgrade level field (claim 12) | integer | −1 |
-| `Upgrades` (rules, building type) | upgrade count of the target type (claim 12); a value above 3 on a type that some upgrade type names gets an importer warning (claim 12, departure) | integer | 0 |
+| `PowersUpToLevel` (rules, building type) | upgrade level field and resulting recorded position (claim 12, F5); skipped positions stay empty and do not move the attack gate to a higher position | integer | −1 |
+| `Upgrades` (rules, building type) | upgrade capacity of the target type (claim 12); the current used count also bounds weapon-provider eligibility, independently of occupied positions. A capacity above 3 on a type that some upgrade type names gets an importer warning; our engine never resolves weapons beyond the three valid positions (claim 12, departure) | integer | 0 |
 | `ToTile` (rules, building type; read once the theater's tiles are loaded) | to-tile field (claims 3 and 5) | tile name | none |
 | `Morphable` (theater data, tileset; S-0010 owns it) | the tileset test of the to-tile rule (claim 3) | boolean | no |
 | `Buildable` (rules, land type section; S-0211 owns it) | buildable flag *B* (claim 3 d) | boolean | no |
@@ -1448,6 +1494,52 @@ Each scenario names its observed area, the cells in which the void rule applies.
   or any sound/text request on the factory-condition ignore. Suppressed announcement playback
   alone is not a falsifier of a request.
 
+**PL16. Upgrade positions are not installation-history precedence (claim 12).**
+
+- Setup: a tiny flat skirmish map, game speed index 2, stock data except named map overrides
+  for a test armed host and upgrades. One human house and one isolated bystander computer
+  player; director and mods off. Use ordinary non-SAM hosts, with no delayed firing, no
+  occupants and stationary enemy targets. Give each upgrade distinguishable ordinary primary
+  and secondary weapons, observable by projectile or damage. A passing upgrade has identical
+  primary and secondary weapon types; a failing upgrade has an ordinary single-shot primary
+  and no secondary. Give the host its own distinguishable weapons. All upgrades in the sale
+  tests lack the turret flag except where explicitly stated. Three fresh runs per part:
+  record ticks, count, recorded types by position, resolved weapon identity, firing attempts
+  and successful shots separately using the read-only recorder and video. Any bystander
+  interference voids the run.
+- Procedure and expected results:
+  - (a) Give a host capacity 3. Install passing level-2 upgrade A, then a level-less upgrade B
+    with a distinguishable secondary and no primary. Position 1 stays empty, A occupies 2,
+    B occupies 3. Weapon providers prefer A where it has a weapon; in a fresh variant where
+    A lacks a secondary, B supplies it. Even when A is the failing type, it does not impose
+    the attack gate: position 1 is empty. Sell once and install C: only B is sold and C
+    replaces position 3; A retains precedence. Attempting to sell A directly while B remains
+    is not an available ordinary sale. Then sell to remove A and record count 1 with empty
+    positions; install a level-less D and observe position 2, not 1.
+  - (b) Install A, B and turret-flag C contiguously on a fresh capacity-3 host, then sell C.
+    Count becomes 0 while A and B remain recorded. Weapon lookup uses the host, not A or B.
+    Install a failing level-less D: it replaces A in position 1 and its gate suppresses firing,
+    even though B remains recorded in position 2. Install passing E next: E replaces B in
+    position 2, rather than being appended after the retained types. Use a fresh passing-D
+    control to distinguish E's secondary from B's when D has no secondary but a multi-shot
+    primary. Resolved secondary becomes E's, while the gate still tests D.
+  - (c) Name the host type as the wall tower in the test map, give it capacity 4 and install
+    four level-less upgrades. The first three supply both requested slots. The fourth raises
+    the count and repairs the host but is not a valid provider; positions 1 to 3 and their
+    provider priority do not change. The gate still tests position 1. Repeat with a level-2
+    first installation and empty position 1: the gate remains bypassed.
+  - (d) Diagnostic only, in a disposable run: repeat the count-4 tower test with none of the
+    three recorded types supplying the requested slot. Record host fallback, refusal, fault
+    or any other result without assuming one. Our engine must use the ordinary fallback,
+    with no fourth provider. An original result is evidence for further investigation,
+    not confirmation of a stable excess-position rule.
+- Falsifiers: compaction after sale, filling a lower hole rather than position *c*′, a weapon
+  supplied by a retained position above the count, a gate imposed by position 2 with position 1
+  empty, or changed precedence from the fourth installation in part c. Part d has no claimed
+  deterministic original outcome to falsify; it investigates the departure's unsafe case.
+- Tool: scripted normal input plus a read-only recorder. No game-state writes or harness
+  changes are required.
+
 ## Open questions
 
 1. The firestorm-wall fill rule (claim 11), the fate of an own laser-fence building under a placed
@@ -1475,6 +1567,13 @@ Each scenario names its observed area, the cells in which the void rule applies.
 
 ## Changes for other specs
 
+- S-0308 claim 12 and Terms: replace installation-history ordering with claim 12 here's
+  count-limited increasing-position provider order, skipping empty positions; count 0 ignores
+  retained upgrades. Counts above 3 use the three-position bad-data departure. The attack gate
+  is position-1-only, not the first nonempty provider.
+- S-0215 claim 32: the upgrade gate requires nonzero count and occupied position 1; an empty
+  position 1 bypasses it rather than testing a higher installed upgrade. Use claim 12 here
+  for retained positions and excess counts. Extend B36 with PL16's level-skip control.
 - S-0404 claim 10: its place-order row's no-recheck sentence refers only to adjacency and
   explored ground. Upgrade target ownership, compatibility and room are checked again at
   application under claim 12 here; make that distinction explicit at joint hand-off.

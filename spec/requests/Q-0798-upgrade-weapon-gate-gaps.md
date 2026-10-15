@@ -1,7 +1,7 @@
 ---
 id: Q-0798
 title: The upgrade weapon gate's missing-secondary attempt, delayed-shot buildings and the first installed upgrade
-status: open
+status: answered
 related: [S-0215, S-0308, S-0301, S-0406, S-0408]
 ---
 
