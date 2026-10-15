@@ -136,6 +136,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         return;
     }
     if kind == Kind::Building {
+        // spec: S-0513 claims 8 and 13 (a silo's accepted launch leaves on its next update)
+        crate::superweapons::nuke::silo_turn(w, id);
         crate::combat::behave::delayed_shot_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);

@@ -23,7 +23,7 @@
 //!   CURTAIN;
 //! - weapons Lift (upward, warhead Maker with the missile-maker flag,
 //!   projectile UpShot with detonation altitude 900), NukePayload (falling,
-//!   projectile Fall, warhead HE), Camera (the spy plane's: damage 4,
+//!   projectile Fall with detonation altitude 50 000, warhead HE), Camera (the spy plane's: damage 4,
 //!   range 3);
 //! - aircraft SPYP; vehicle BLOB (organic); infantry JUMPER (organic and
 //!   teleporter);
@@ -84,6 +84,9 @@ pub const BLACKOUT: i32 = 120;
 pub const FADE: i32 = 20;
 /// The upward projectile's detonation altitude.
 pub const UP_ALT: i32 = 900;
+/// The falling projectile's detonation altitude (high, so that only the
+/// ground ends its fall).
+pub const FALL_ALT: i32 = 50_000;
 
 fn reg(r: &mut Ruleset, registry: &str, name: &str) {
     r.registries
@@ -258,6 +261,7 @@ pub fn ruleset() -> Ruleset {
         "Fall".into(),
         ProjectileType {
             vertical: Some(true),
+            detonation_altitude: Some(FALL_ALT),
             ..Default::default()
         },
     );
