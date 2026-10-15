@@ -1378,10 +1378,15 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     let half = rules.quirks.ranged_draw_half_span;
     let wr = rules.combat.weapon(pr.weapon).clone();
     // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
+    // spec: S-0303 claim 2 and S-0519 claim 16 (an air-strike-flag warhead's projectile makes no area hits, whether or not it calls or redirects a strike; a projectile-producer rule only)
+    // spec: S-0303 claim 2 and S-0518 claim 11 (a detonation selecting the electric-charge effect bypasses area damage at any target, even when it registers no charger)
+    // Seam: S-0518 claim 11 ranks mind control and demolition charge planting above the
+    // electric-charge effect; neither is modelled (S-0601, S-0519 claim 13), so a flagged
+    // warhead always selects it. Charger registration is S-0518's (not built).
     let area = !rules
         .combat
         .warhead_of(pr.weapon)
-        .is_some_and(|h| h.parasite);
+        .is_some_and(|h| h.parasite || h.airstrike || h.electric_assault);
     if p.airburst {
         let res = detonation_inner(
             w,
@@ -1498,7 +1503,8 @@ pub fn projectile_detonation(
 }
 
 /// [`projectile_detonation`], without the area damage when `area` is false
-/// (S-0303 claim 2: a parasite-flag warhead's projectile).
+/// (S-0303 claim 2: a parasite-flag, air-strike-flag or electric-charge
+/// warhead's projectile).
 #[allow(clippy::too_many_arguments)]
 // spec: S-0303 claim 21 (N(P, 32, u mod 256), the invisible-projectile animation scatter)
 fn detonation_inner(
@@ -1538,7 +1544,7 @@ fn detonation_inner(
             },
         )
     } else {
-        // spec: S-0303 claim 2 (no area hits for a parasite-flag warhead's projectile)
+        // spec: S-0303 claim 2 (no area hits for a parasite-flag, air-strike-flag or electric-charge warhead's projectile)
         DetonationResult::Missed
     };
     let wh = rules.combat.warhead(h).clone();

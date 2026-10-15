@@ -1409,3 +1409,75 @@ fn f6_never_placed_with_minus_two() {
         assert!(draws, "seed {seed}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Claim 2: air-strike and electric-charge projectiles make no area hits.
+// ---------------------------------------------------------------------------
+
+/// A shot of an invented weapon (the invisible projectile Bullet with the
+/// HE warhead) from an Alpha CRUSHER at a Beta BUGGY three cells east, with
+/// `f` applied to HE, which is given an explosion animation. Returns the
+/// buggy's loss and the explosion animations shown.
+fn flagged_shot(f: impl FnOnce(&mut WarheadType)) -> (i32, usize) {
+    use glasnost_sim::combat::fire;
+    use glasnost_sim::world::Target;
+    let mut r = testkit::combat_ruleset();
+    weapon(&mut r, "ZAPHE", |t| {
+        t.projectile = Some("Bullet".into());
+        t.warhead = Some("HE".into());
+        t.damage = Some(40);
+        t.range = Some(dec("10"));
+    });
+    r.sim.vehicles.get_mut("CRUSHER").unwrap().primary = Some("ZAPHE".into());
+    let h = r.sim.warheads.get_mut("HE").unwrap();
+    h.anim_list = Some(vec!["BOOMA".into()]);
+    f(h);
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let a = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, 0, 0);
+    let b = put(&mut w, Kind::Vehicle, "BUGGY", BETA, 3, 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(b));
+    w.effects.clear();
+    assert!(fire::shot(&mut w, a, 0, Target::Object(b)), "the shot was made");
+    for _ in 0..300 {
+        if w.projectiles.is_empty() {
+            break;
+        }
+        testkit::run(&mut w, 1);
+    }
+    assert!(w.projectiles.is_empty(), "the projectile ended");
+    let booms = anims(&w).iter().filter(|(n, _)| n == "BOOMA").count();
+    (lost(&w, b), booms)
+}
+
+// spec: S-0303 claim 2 and S-0519 claim 16 (a projectile whose warhead has the air-strike flag makes no area hits; its explosion animation stays)
+#[test]
+fn claim_2_airstrike_projectile_makes_no_area_hits() {
+    let (plain, plain_booms) = flagged_shot(|_| {});
+    assert!(plain > 0, "the control shot hits");
+    assert_eq!(plain_booms, 1);
+    let (lost, booms) = flagged_shot(|h| h.airstrike = Some(true));
+    assert_eq!(lost, 0);
+    assert_eq!(booms, 1, "the explosion animation is not suppressed");
+}
+
+// spec: S-0303 claim 2 and S-0518 claim 11 (a projectile detonation selecting the electric-charge effect bypasses area damage at any target, here a vehicle that registers no charger; its explosion animation stays)
+#[test]
+fn claim_2_electric_charge_projectile_makes_no_area_hits() {
+    let (lost, booms) = flagged_shot(|h| h.electric_assault = Some(true));
+    assert_eq!(lost, 0);
+    assert_eq!(booms, 1, "the explosion animation is not suppressed");
+}
+
+// spec: S-0303 claim 2 (the air-strike and electric-charge exceptions are projectile-producer rules, not exclusions for other producers using the same warhead)
+#[test]
+fn claim_2_flagged_warhead_still_hits_from_other_producers() {
+    let mut r = testkit::combat_ruleset();
+    let h = r.sim.warheads.get_mut("HE").unwrap();
+    h.airstrike = Some(true);
+    h.electric_assault = Some(true);
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let b = put(&mut w, Kind::Vehicle, "BUGGY", BETA, 0, 0);
+    let he = wh(&w, "HE");
+    glasnost_sim::combat::projectile::detonate_area(&mut w, he, 100, centre(0, 0), None, None, false);
+    assert!(lost(&w, b) > 0);
+}
