@@ -2,7 +2,7 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -138,7 +138,7 @@ between a fire order and the effect.
 5. **Charging and becoming ready.** In every house update, before that update's checks of claim 2
    (a), a granted record that is not suspended, not ready and whose clock is running becomes ready
    when its remaining time has reached 0. A record whose clock started with remaining time *R* in
-   the house update of tick *s* therefore becomes ready in the house update of tick *s* + *R*; a
+   the house update of tick *s* therefore becomes ready in the house update of tick *s* + *R*; an
    ordinary record granted in tick *g*, charging without interruption, becomes ready in tick
    *g* + *T*. Becoming ready requests the announcement of S-0701 claim 28 only for the local
    player's own record; the kind chooses the announcement (Import mapping). Playback still
@@ -170,7 +170,9 @@ between a fire order and the effect.
    targeting mode of that superweapon if it was active. This refines S-0405 claim 15.
    - Backing: `measurable` (scenario X2). Electromagnetic-pulse independence is `unmeasured`:
      the giving-building and switch tests do not inspect that state, but no stock skirmish pulse
-     delivery is traced here to provide an independent observable test
+     delivery is traced here to provide an independent observable test. Independent targeting-mode
+     cancellation on suspension/resumption is also `unmeasured`: X2's power-switch input already
+     leaves aiming, so it does not isolate cancellation by the availability check
    - Confidence: high
 
 7. **Loss.** At the same checks, a granted record that is neither one-time nor a permanent trigger
@@ -222,12 +224,14 @@ between a fire order and the effect.
    - Backing: `measurable` (scenario X5)
    - Confidence: medium
 
-10. **Two-stage superweapons.** Firing the first stage at a cell, when it is ready and not
-    suspended, picks that cell as the source and starts the first effect stage (S-0513). It does not
-    consume the charge: for a normally completed record, remaining time stays 0 and it is ready
-    again in the next house update. The player may pick another source or never go on. If claim 14
-    has changed a ready record to positive remaining time, picking a source preserves that time
-    instead, and readiness returns only when it expires. One-time first stages follow claim 12. The fire order of the second
+10. **Two-stage superweapons.** Firing the first stage at a cell under claim 8's order test
+    picks that cell as the source and starts the first effect stage (S-0513 claim 33). Sidebar
+    targeting additionally requires that it is not suspended (claim 16). It does not
+    consume the charge: for a normally completed, unsuspended record, remaining time stays 0 and
+    it is ready again in the next house update. The player may pick another source or never go
+    on. If claim 14 has changed a ready record to positive remaining time, picking a source
+    preserves that time instead. In either case, readiness returns only at an eligible charge
+    check under claim 5: the time must have expired and suspension must have ended. One-time first stages follow claim 12. The fire order of the second
     stage is carried out without any check of its own record or of the first stage: it takes the
     first stage's last picked source, starts the second effect stage (S-0513), and then sets the
     first stage's record not ready, with its clock restarted with remaining time *T* from that tick.
@@ -245,8 +249,9 @@ between a fire order and the effect.
     not restart its flash window (claim 17). The original repeats both in the next house update,
     because it treats the still-expired clock as a new completion.
     - Backing: `measurable` (scenario X6) for source retention, completion, restart and repeated
-      announcement. Unchecked orders on a suspended linked first stage are `unmeasured`:
-      suspension cancels sidebar targeting, so the proposed normal-input test cannot issue one
+      announcement. First-stage firing through claim 8's suspension bypass and unchecked
+      second-stage orders on a suspended linked first stage are `unmeasured`: suspension cancels
+      sidebar targeting, so the proposed normal-input test cannot issue them
     - Confidence: high for the repeated completion announcement; medium for the two-stage contract
 
 11. **Finding the first stage.** The second stage's link field names a superweapon kind (Import
@@ -308,10 +313,10 @@ between a fire order and the effect.
     - Backing: `measurable` (scenario X7)
     - Confidence: high
 
-15. **Resetting the charge.** Spy infiltration of a building whose type has a first superweapon
-    (S-0510 owns when that happens) and the trigger action that resets a superweapon's charge
-    (S-0011) both reset the owner's record for that type: it stops being ready and its remaining
-    time becomes *T*. A running clock restarts from that tick; a stopped clock stays stopped.
+15. **Resetting the charge.** Spy infiltration resets only the building owner's record for the
+    building type's first superweapon, never its second (S-0510 claim 3, row E4). The trigger
+    action that resets a superweapon's charge (S-0011) resets the owner's record for the
+    specified type. In either case, the record stops being ready and its remaining time becomes *T*. A running clock restarts from that tick; a stopped clock stays stopped.
     Suspension itself is unchanged: an ordinary suspended record stays stopped at the full *T*,
     but a clock already running through suspension (claim 14) remains running. The reset does not grant a record
     that is not granted.
@@ -350,7 +355,7 @@ between a fire order and the effect.
     starting at the ready tick (claim 5 or 12), so the record counts in ticks *r* to *r* + *F* − 1
     for ready tick *r*. A drain-mode completion does not refresh the ready tick: its finite
     window instead uses its last one-time grant tick, or −100 if there has been none. Presentation only.
-    - Backing: `measurable` (scenario X9)
+    - Backing: `measurable` (scenario X9; drain-mode reference ticks by X11 part a)
     - Confidence: high
 
 18. **Countdown rows.** Each granted record whose type has the countdown flag and whose house is not
@@ -555,6 +560,8 @@ Observable ordering:
 | `SuperWeapon`, `SuperWeapon2` (rules, building) | first and second superweapon fields | type name | none |
 | `ChargeToDrainRatio` (rules, `[General]`) | *ρ* of F5 | floating point | keeps previous value; initially 3 |
 | `MultiplayPassive` (rules, country) | passive house (S-0412 owns), claim 18 | boolean | no |
+| `SpecialSound` (rules, superweapon) | effect-specific fading sound, S-0513 claim 32 | sound-entry reference | keeps previous value when absent or unresolved; initially none |
+| `StartSound` (rules, superweapon) | effect-specific start sound, S-0513 claim 32 | sound-entry reference | keeps previous value when absent or unresolved; initially none |
 
 Kind words for `Type` and `PreDependent`, in kind-number order (0 to 11):
 
@@ -577,10 +584,12 @@ A ready announcement is selected by superweapon kind, under S-0701 claim 28: mis
 
 Readiness labels are the behavioural states *on hold*, *ready*, *charging* and *active*. Their wording is presentation design; the state shown in each circumstance is specified in claim 16 and claim 19.
 
-The `SpecialSound` and `StartSound` keys are read as sound-entry references, keeping their previous
-value when absent or unresolved (initially none). This does not establish a generic charging or
+The two sound-entry references associated with a superweapon each keep their previous value when
+absent or unresolved (initially none). Their use does not establish a generic charging or
 recharge-completion sound: charge completion uses the kind-based announcement table above.
-Effect-specific use of these sound fields belongs to S-0513.
+Effect-specific use of these sound references belongs to S-0513 claim 32. Sound-reference default
+and unresolved-name retention are `unmeasured`: no scenario here independently isolates them.
+Confidence: high.
 
 ## Measurement scenarios
 
@@ -625,8 +634,11 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   with spare plants sufficient to prevent low power. Record its switch and house power as controls.
 - *Observable:* ready tick against a control run, the countdown row value during the suspension,
   and the label.
-- *Expected:* (a) and (b) ready 600 ticks (±2) later than the control, row frozen, label *on hold*.
-  (c) ready on the control tick; (d) no fire while switched off, fire after.
+- *Expected:* (a) and (b) ready exactly *d* ticks later than the control, where *d* is the
+  recorded resumption tick minus suspension tick (aim for 600 ticks), row frozen, label *on hold*.
+  (c) ready on the control tick, also during incomplete erasure or draining with full house
+  power; (d) no fire while switched off, fire after. A charge delay in either full-power
+  special-state run falsifies the corresponding independence rule.
 - *Falsified if:* any differs. Also sample the icon at successive stages and at readiness:
   stages must follow F3 except for the documented original boundary error, with 54 when ready.
   In a two-giving-building variant, switching off only one must not stop charge.
@@ -644,13 +656,17 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   enables its countdown row without changing its charge time or power dependence.
 - *Procedure:* (a) place the giving building while the house has low power; restore full power
   900 ticks later. (b) Control: place it under full power, then low power for 900 ticks.
-- *Expected:* (a) ready 900 ticks (±2) later than (b), row frozen while low power lasts; (b) ready
-  *T* after the grant. With the switch off our engine gives the control time in (a).
+- *Expected:* (a) ready exactly *T* ticks after the recorded resumption, row frozen from grant
+  until resumption; (b) ready *T* ticks after its own grant. Relative to each grant, (a)'s extra
+  delay is exactly its recorded resumption tick minus grant tick. With the switch off our engine
+  gives the control time in (a).
 - *Falsified if:* (a) shows no delay, or (b) is delayed. Also grant a power-dependent type under
   full power while its giving building is already switched off, using named test map
-  `S0512-offline-grant.map` to arrange the trigger and next unrelated recheck at distinct ticks.
-  Its row starts counting at grant and stops at that recheck, not at grant; any other boundary
-  falsifies claim 4's switched-off exception.
+  `S0512-offline-grant.map` to arrange the initial grant and next unrelated recheck at distinct ticks.
+  Arrange the switched-off building on the map before the first grant check, not a permanent
+  trigger grant (which bypasses building and power suspension). Its row starts counting at
+  grant and stops at the later recheck, not at grant; any other boundary falsifies claim 4's
+  switched-off exception.
 
 **X4: loss and regrant (claims 2, 7).**
 - *Procedure:* at half charge, sell the only giving building; when it is gone, place a new one.
@@ -691,9 +707,14 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   300 ticks, pick another source and complete the jump at tick *b*. In a separate run complete
   the destination without cancelling. Keep power full and the first stage granted.
 - *Observable:* source and destination cells, ready announcement requests, icon readiness,
-  countdown and the ready tick after completing the destination.
+  countdown, tab flashing and the ready tick after completing the destination. In a named
+  test-map variant `S0512-source-flash.map`, give the first stage a finite positive flash window
+  and wait until it has ended before picking the source.
 - *Expected:* the original repeats the ready announcement at the first house update after *a*.
-  The source pick alone leaves zero remaining time and permits another source pick. Completing
+  The source pick alone leaves zero remaining time and permits another source pick. In the
+  finite-window variant, the original restarts flashing at that next house update; our engine
+  neither repeats the announcement nor restarts flashing. A different original flash boundary
+  falsifies that presentation-bug account. Completing
   the destination restarts the first stage at *T*, with readiness at *b* + *T*.
 - *Falsified if:* a source pick consumes charge, another source cannot be picked, completion
   recharges the second stage instead, or the expected announcement or ready tick differs.
@@ -707,7 +728,10 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   building of a power-dependent type is sold while the house has low power, and a one-time grant
   of that type follows. Part g gives a permanent grant to a suspended record, then restores power.
   Part h sets a ready record to 0 %, waits briefly and fires it. Part i sets charge to 50 % while
-  suspended, waits more than *T*, and restores power. Use distinct records or fresh games.
+  suspended, waits more than *T*, and restores power. Part j grants a permanent record while
+  it is already charging but not suspended. Part k grants an ordinary one-time record with
+  no stale suspension, then cycles house power and removes any giving buildings before firing.
+  Use distinct records or fresh games.
 - *Expected:* one-time: ready in the tick of the action, no announcement, icon gone after firing,
   not granted again; one-time on a charging record: still charging, row unchanged; permanent grant:
   not suspended by low power; set 100 %: ready, with announcement, in the next tick; set 50 %:
@@ -718,6 +742,9 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   its announcement wait for the first eligible house charge check after resumption. Observe the
   original's icon-removal delay separately from our presentation fix. A consumed one-time type
   with a surviving giving building must instead be regranted at its next grant check at full *T*.
+  Part j preserves its prior countdown and ready tick, but subsequent low power or building loss
+  does not suspend or revoke it. Part k stays ready, selectable and granted until firing; power
+  and building checks must not change it.
 - *Falsified if:* any differs. Also apply −1 % and 101 % in named test map
   `S0512-charge-limits.map`: either changing the countdown falsifies the ignored-input rule.
 
@@ -728,7 +755,13 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   counting after power returns. Repeat with the reset-charge trigger instead of a spy. Also
   reset after X7 part i has restarted a suspended clock: it must continue counting at full *T*,
   while the label stays *on hold*. A reset on an ungranted type must not add an icon or row.
-- *Falsified if:* any expected countdown, readiness or grant result differs.
+- *First/second variant:* named test map `S0512-spy-reset.map` gives a spyable building two
+  distinct superweapon types, with neither radar, positive base power output nor tech-lab-list
+  membership. Let both records become ready, then infiltrate it. Only the first type's record
+  resets; the second stays ready with its countdown unchanged. In a separate run remove the
+  first field, keeping only the second: infiltration must not reset that second record.
+- *Falsified if:* any expected countdown, readiness or grant result differs, including any
+  infiltration reset of the second type's distinct record.
 
 **X9: flash window (claim 17).**
 - *Procedure:* a type with a positive flash setting *F*, and one with the setting absent; let each
@@ -764,6 +797,11 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   protected targets' health under identical shots before and after the early drain-state change.
 - *Expected:* (a) readiness has no announcement or newly started finite flash window. *Active*
   and early-return *ready* times follow F5; immediate reactivation uses the partial recharge.
+  For a building grant with no earlier one-time grant, its finite window is eligible only in
+  ticks earlier than −100 + *F*, regardless of when charging completes. Choose one test window
+  that ends before completion and another that extends beyond it; completing, activating and
+  returning early must never extend that boundary. For a one-time grant in tick *q*, the boundary
+  is instead *q* + *F*. Any refreshed boundary falsifies claim 17's drain-mode rule.
   Natural expiry starts *charging* at full *T*. Neither early return nor expiry ends the curtain
   effect: protection follows its own duration. A one-time drain record remains granted after
   firing. (b) no automatic readiness before setting charge, readiness *T* ticks after setting it,
@@ -801,6 +839,6 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   here. X6 tests the ordinary two-stage flow, not those bypasses.
 - Which houses still get house updates after defeat, and so how soon claim 22 applies, is S-0414's.
   The claim states "the next check".
-- The battle-lab force-shield availability and scope question is tracked in S-0513's Questions
-  for the project lead and scenario SW16. Claim 3 describes grants from imported building data.
-  It does not settle that scope decision.
+- Battle-lab force-shield availability follows claim 3's imported-building grant rule.
+  S-0513 claim 31 describes the effect and scenario SW16 proposes its test. There is no separate
+  unresolved effect-scope gate.
