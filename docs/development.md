@@ -657,6 +657,12 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
   - The own AI does not repair bridges, because it needs S-0509's entry.
   - The bridge-repaired and repair sounds are effects, but audio does not play them.
   - Row IC2 (fog of war) is not built.
+- **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=bridge-destroyed,bridge-repaired cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` picks the first offered map, by content, that has a hut within 3 cells of a high bridge. It demolishes that bridge through `hut::demolish` and writes `local-lane/m6b/bridge-destroyed.png` 30 ticks later. Then an engineer enters the hut through the seam, and it writes `bridge-repaired.png` 10 ticks later. On the first run on the user's install:
+  - the demolition left 22 of 30 high-bridge sections and 3 of 4 links enabled, with repair offered;
+  - the repair brought back 30 sections and 4 enabled links, with no repair offered;
+  - the first shot shows 40 animations created and 39 drawn.
+
+  The screenshots show the deck gone over the water with its explosions, then the deck whole again.
 
 Provisional rules of M6b bridges, each tied to a request:
 
