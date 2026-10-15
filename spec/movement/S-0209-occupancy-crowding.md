@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 25
+revision: 26
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
@@ -304,8 +304,12 @@ rank* and *elite weapon*), *n*
   glossary's *temporarily invulnerable*. How the effects start and end belongs to
   the superweapon specs.
 - **Parasite, victim.** A unit whose weapon attaches it to another unit, which it then damages from
-  inside, is a *parasite*; the unit it is attached to is its *victim*. Parasites belong to
-  the specs that glossary *parasite, victim* names. Here the walker is the parasite.
+  inside, is a *parasite*; the unit it is attached to is its *victim* or *host* (S-0614 claims 1 to 5).
+  Either an infantry mover or a vehicle mover can be the parasite in the entry tables below.
+  The overrides in claim 4 row WP1 and claim 5 row VP2 apply to entering a cell while moving,
+  not to the parasite's exit test. S-0614 claim 13 owns that separate test: the host blocks its own
+  cell, so a non-naval parasite must search for another exit cell. This pointer carries that
+  claim's medium confidence and `measurable` backing (its scenarios P4 and P9).
 - **Enslaved unit, master, master's unloading cell.** An *enslaved unit* is a unit that works for
   another object, its *master* (for example the slaves of a slave-miner harvester); the economy specs
   own them. The *master's unloading cell* is the cell the master stands in, or, for a master that is
@@ -596,7 +600,7 @@ rank* and *elite weapon*), *n*
    | Row | Occupant | Value | Confidence | Backing |
    |---|---|---|---|---|
    | | **Special relations to the walker** | | | |
-   | WP1 | any object in the cell in which the walker's victim stands, when the walker is a parasite attached to that victim | overrides: clear | low | U2 |
+   | WP1 | any object in the cell in which the walker's victim stands, when the walker is a parasite attached to that victim and asks to enter while moving, not for exit (S-0614 claim 13) | overrides: clear | low | U2 |
    | WP2 | the walker's master, when the walker is an enslaved unit and the cell is the master's unloading cell | none, and the walker is excused from the cell's vehicle-present flag (Terms *occupancy record*) | medium | C13 |
    | WP3 | the walker's mission target, or an occupant whose own position (for a building, the centre of its top-left foundation cell, S-0204 claim 3) lies in the cell that is its mission target (Terms), unless that occupant is being erased | overrides: clear, or blocked when that occupant is invulnerable | low | C2 (b) and (e); C14 (a) for the being-erased exception |
    | WP4 | any occupant other than the building itself, in a cell whose building is the walker's mission target, or has its reference point (S-0204 claim 4) in the cell that is the walker's mission target, unless the occupant is being erased | none | low | C17 (a); C17 (b) for the being-erased exception |
@@ -732,7 +736,8 @@ rank* and *elite weapon*), *n*
      `unmeasured`.
    - U2 (parasite): no stock infantry type is a parasite, and an attached parasite rides inside its
      victim instead of walking or driving, so no setup, with or without a test file, has a moving
-     parasite with a victim.
+     parasite with a victim. This uncertainty concerns movement entry only, not the separate
+     exit test owned by S-0614 claim 13.
    - U3 (train exception of row WP6): an order on a train gives a vehicle thief *select* (S-0214
      table I, row I14), so no order makes a train a thief's destination.
    - U4 (laser fence): which two states of a laser-fence section give no value is not known (Open
@@ -806,7 +811,7 @@ rank* and *elite weapon*), *n*
    |---|---|---|---|---|
    | | **Special relations to the vehicle** | | | |
    | VP1 | the vehicle itself | none, and the vehicle is excused from the cell's vehicle-present flag (Terms *occupancy record*) | medium | C21 (b) |
-   | VP2 | any object in the cell in which the vehicle's victim stands, when the vehicle is a parasite attached to that victim | overrides: clear | low | U2 |
+   | VP2 | any object in the cell in which the vehicle's victim stands, when the vehicle is a parasite attached to that victim and asks to enter while moving, not for exit (S-0614 claim 13) | overrides: clear | low | U2 |
    | VP3 | a building the vehicle is in contact with, when the cell is not one of that building's blocking cells (Terms) | none | low | C24 (c1) to (c3) |
    | VP4 | a vehicle of a type with the small-visceroid flag, the mover's type having that flag too, of any house | overrides: clear | medium | C20 (c) |
    | | **Buildings, by type** | | | |
