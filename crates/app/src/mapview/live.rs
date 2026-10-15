@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use glasnost_convert::kinds::Kind;
+use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_render::projection::project_lifted;
 use glasnost_render::scene::{Item, Scene};
@@ -237,9 +238,23 @@ pub struct Live {
     /// The cell pass as built, before any building left it.
     cell_pass: Vec<Item>,
     cell_pass_len: usize,
-    /// Static building objects ([`Built::objects`] indices) whose
-    /// simulation object is gone, as last drawn.
+    /// Static objects ([`Built::objects`] indices) left out of the cell
+    /// pass, as last drawn: buildings whose simulation object is gone, the
+    /// map's gates (drawn live) and the overlays of cells that changed.
     gone: BTreeSet<u32>,
+    /// The map's gates ([`Built::objects`] indices), drawn with the game's
+    /// own buildings so that their door shows (S-0108 claim 4).
+    live_gates: BTreeSet<u32>,
+    /// Each cell's static overlay objects ([`Built::objects`] indices).
+    overlay_codes: BTreeMap<CellXY, Vec<u32>>,
+    /// Each cell's overlay and overlay data value when the game started.
+    start_overlays: BTreeMap<CellXY, (u8, u8)>,
+    /// The cells whose overlay changed since the start (S-0112 claim 7,
+    /// S-0210 claim 8, S-0406 claim 10, S-0408 claim 12, harvesting), with
+    /// their overlay and data value as last drawn.
+    changed_overlays: BTreeMap<CellXY, (u8, u8)>,
+    /// The overlay items of the changed cells, as last drawn.
+    live_overlays: Vec<Item>,
     /// End of the object pass in the scene's items; the combat tail follows.
     objects_end: usize,
     /// End of the effects in the scene's items; the status extras follow.
@@ -477,6 +492,30 @@ impl Live {
                 terrain_ids.insert(i as u32, o.id);
             }
         }
+        // The map's gates are drawn with the game's own buildings, so that
+        // their door shows (S-0108 claim 4).
+        let live_gates: BTreeSet<u32> = building_ids
+            .iter()
+            .filter(|(_, id)| {
+                world
+                    .obj(**id)
+                    .and_then(|o| rules.buildings.get(o.type_index as usize))
+                    .is_some_and(|b| b.gate)
+            })
+            .map(|(code, _)| *code)
+            .collect();
+        let mut overlay_codes: BTreeMap<CellXY, Vec<u32>> = BTreeMap::new();
+        for (i, info) in built.objects.iter().enumerate() {
+            if info.kind == "overlay" {
+                overlay_codes.entry(info.cell).or_default().push(i as u32);
+            }
+        }
+        let start_overlays = world
+            .cells
+            .grid
+            .iter()
+            .map(|(c, cell)| (c, (cell.overlay, cell.overlay_data)))
+            .collect();
         let static_ground = std::mem::take(&mut built.ground);
         let static_layered = std::mem::take(&mut built.layered);
         let mut live = Self {
@@ -492,6 +531,11 @@ impl Live {
             cell_pass: built.scene.items[..built.scene.cell_pass_len].to_vec(),
             cell_pass_len: built.scene.cell_pass_len,
             gone: BTreeSet::new(),
+            live_gates,
+            overlay_codes,
+            start_overlays,
+            changed_overlays: BTreeMap::new(),
+            live_overlays: Vec::new(),
             objects_end: built.scene.items.len(),
             effects_end: built.scene.items.len(),
             ground: GroundLayer::default(),
@@ -648,7 +692,10 @@ impl Live {
                     self.counts.kills += 1;
                     continue;
                 }
-                Effect::Sound { .. } | Effect::Trigger { .. } | Effect::Hit { .. } => continue,
+                Effect::Sound { .. }
+                | Effect::Trigger { .. }
+                | Effect::Hit { .. }
+                | Effect::OverlayCrushed { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,
@@ -809,13 +856,38 @@ impl Live {
             .map(|(m, e)| (m.object, e))
             .collect();
         // Buildings the game removed leave the cell pass and the ground
-        // layer.
-        let gone: BTreeSet<u32> = self
+        // layer; so do the map's gates, which are drawn live.
+        let mut gone: BTreeSet<u32> = self
             .building_ids
             .iter()
             .filter(|(_, id)| self.world.obj(**id).is_none_or(|o| !o.on_map))
             .map(|(i, _)| *i)
             .collect();
+        gone.extend(self.live_gates.iter().copied());
+        // Overlays that changed during play are drawn again from the game's
+        // cells (S-0112 claims 1 to 9); their static items leave the cell pass.
+        let mut changed = self.changed_overlays.clone();
+        for (c, cell) in self.world.cells.grid.iter() {
+            let now = (cell.overlay, cell.overlay_data);
+            if changed.contains_key(&c) || self.start_overlays.get(&c) != Some(&now) {
+                changed.insert(c, now);
+            }
+        }
+        if changed != self.changed_overlays {
+            let cells: Vec<(CellXY, glasnost_map::Cell)> = changed
+                .keys()
+                .filter_map(|&c| Some((c, *self.world.cells.grid.get(c)?)))
+                .collect();
+            let (items, notes) = self.painter.live_overlays(inputs, scene, cells);
+            self.notes.extend(notes);
+            self.live_overlays = items;
+            self.changed_overlays = changed;
+        }
+        for c in self.changed_overlays.keys() {
+            if let Some(codes) = self.overlay_codes.get(c) {
+                gone.extend(codes.iter().copied());
+            }
+        }
         if gone != self.gone {
             scene.items.clear();
             scene.items.extend(
@@ -828,9 +900,12 @@ impl Live {
             self.gone = gone;
         }
         scene.items.truncate(self.cell_pass_len);
-        // The game's own buildings (deployed or placed) follow the cell
-        // pass, in object ID order (our placeholder order; the map's
-        // buildings keep their place in the cell pass).
+        // The changed overlays follow the cell pass (our placeholder place
+        // for them: the depth test orders them against the rest).
+        scene.items.extend_from_slice(&self.live_overlays);
+        // The game's own buildings (deployed or placed) and the map's gates
+        // follow, in object ID order (our placeholder order; the map's
+        // other buildings keep their place in the cell pass).
         let own: Vec<LiveBuilding> = self
             .world
             .objects
@@ -838,7 +913,10 @@ impl Live {
             .filter(|o| {
                 o.kind == SimKind::Building
                     && o.on_map
-                    && !self.building_ids.values().any(|id| *id == o.id)
+                    && !self
+                        .building_ids
+                        .iter()
+                        .any(|(code, id)| *id == o.id && !self.live_gates.contains(code))
             })
             .filter_map(|o| {
                 let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
@@ -860,6 +938,13 @@ impl Live {
                     facing: o.turret.value(self.world.tick),
                     object: sim_code(o.id),
                     unloading: self.unloading_of(o),
+                    // spec: S-0108 claim 4 (a gate's door: S-0215 claim 35)
+                    gate_door: self
+                        .rules
+                        .buildings
+                        .get(o.type_index as usize)
+                        .is_some_and(|b| b.gate)
+                        .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
                 })
             })
             .collect();

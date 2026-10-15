@@ -87,6 +87,14 @@ pub enum Effect {
         /// The waypoint cell's centre, for 55 and 99.
         pos: Option<Pos>,
     },
+    /// A crusher crushed an overlay (S-0210 claim 8): the overlay type's
+    /// crush sound plays at the crusher's position.
+    OverlayCrushed {
+        /// The overlay type, by registration index.
+        overlay: u8,
+        /// The crusher's position.
+        pos: Pos,
+    },
 }
 
 /// The sounds of [`Effect::Sound`].
@@ -118,6 +126,9 @@ pub enum Sound {
     /// The low-funds announcement of a depot that cannot pay (S-0314 claim
     /// 6), for the depot's owner.
     LowFunds,
+    /// A crushed object's crush sound (S-0210 claim 4): `of` is the crushed
+    /// object's type, `pos` the crusher's position.
+    Crush,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

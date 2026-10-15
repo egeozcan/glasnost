@@ -432,8 +432,16 @@ pub fn remove(w: &mut World, id: ObjectId) {
         // spec: S-0112 claim 7 (a destroyed gate or tower that leaves the map recomputes its fixed cells, without it)
         crate::walls::joiner_changed(w, j, cell, o.foundation);
         if j == crate::walls::Joiner::Tower {
-            // The wall hits of a departing wall tower (S-0112 claim 7, S-0303 F4) need wall damage (M4).
-            w.note("S-0112 claim 7: a departing wall tower's wall hits need wall damage (S-0303 F4, M4)");
+            // spec: S-0112 claim 7 (a destroyed wall tower: each wall of any type in an edge neighbour of its top-left cell, at stage 0 when its hit is dealt, takes a wall hit of 200, map north, east, south, west)
+            for (dx, dy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                let n = CellXY::new(cell.x + dx, cell.y + dy);
+                let stage0 = w.cells.cell(n).is_some_and(|x| {
+                    crate::walls::is_wall(w, x.overlay) && x.overlay_data / 16 == 0 // spec: S-0210 claim 8 (s = ⌊v / 16⌋)
+                });
+                if stage0 {
+                    crate::combat::area::wall_hit(w, n, 200, false); // spec: S-0112 claim 7 (a wall hit of 200; what it does is S-0303 F4)
+                }
+            }
         }
     }
 }
@@ -667,6 +675,24 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     });
                 }
                 continue;
+            }
+            if kind == Kind::Building {
+                let pt = crate::econ::placement::place_type(w, ti);
+                if pt.wall
+                    && let Some(ov) = pt.wall_overlay
+                {
+                    // spec: S-0112 claim 7 (a wall building of the map's building list is placed as a wall built in play: stage 0, owned by the building's owner; c and its four edge neighbours recomputed); S-0406 claim 10 (no building remains)
+                    // Its final owner is S-0210 claim 14 (a)'s, which runs later (Q-0684 interim).
+                    w.objects.remove(&id);
+                    // As for a wall placed in play, an overlay already in the cell stays (S-0406 claim 10's interim rule).
+                    if w.cells
+                        .cell(p.cell)
+                        .is_some_and(|x| x.overlay == glasnost_map::NO_OVERLAY)
+                    {
+                        crate::econ::placement::put_wall(w, p.cell, ov, Some(owner));
+                    }
+                    continue;
+                }
             }
             // spec: S-0011 claim 34 (the object's tag after its creation draw, before the draws of placing it)
             crate::triggers::object_tag(w, id, fields.tag.as_deref());

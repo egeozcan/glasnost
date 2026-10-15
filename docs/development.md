@@ -412,6 +412,25 @@ Provisional rules of M6b depot cycle, each tied to a request:
 | `depot::send_away` | without a rally point the exit cell is S-0212 claim 25's nearby-cell search (destination substitution) from the depot's top-left cell, skipping its foundation cells; none found gives no destination | Q-0682 |
 | `tick::object_turn`, `depot::vehicle_turn` | the queued-entry retry runs in the vehicle's own turn after self-healing and before its behaviour processing; on permission *enter* starts at once | Q-0683 |
 
+## Simulation (M6b: walls and gates)
+
+Walls and gates in play: S-0112 claim 7, S-0210 claims 4, 8, 13 and 14, S-0215 claim 35, S-0108 claims 2, 4 and 5, S-0406 claims 8 to 11 and S-0408 claim 12. Most of the rules were built in M5a (placement, fill, sale, bits, owners) and M4 (wall damage, S-0303 F4); M6b closes the gaps between them and draws the result. The ledger is [docs/m6-claims/walls-gates.md](m6-claims/walls-gates.md).
+
+- **Wall hits from crushing and towers.** A crushed wall at stage *D* − 2 now deals its neighbour hits through `combat::area::wall_success` (S-0303 F4), so the hit walls change stage or go. A destroyed wall tower deals S-0112 claim 7's four hits of 200 (`objects::remove`, through `combat::area::wall_hit`) after its departure has recomputed the bits; a tower that leaves alive deals none (open question of the claim).
+- **Map wall buildings.** A wall-type building of the map's building list is placed as its wall overlay at stage 0 (`objects::place_map_objects`, with `econ::placement::put_wall`); no building remains. Its owner is the building's, then S-0210 claim 14 (a) re-owns it with every other map wall (Q-0684). The viewer's static pass leaves such buildings out once the cells are loaded, so the overlay is drawn instead.
+- **Crush events.** `Effect::OverlayCrushed` and `Sound::Crush` (S-0210 claims 4 and 8); audio plays the overlay type's `CrushSound` and the crushed type's crush sound at the cell.
+- **Gates.** The door and the *open* behaviour (S-0215 claim 35, `process::gate_open`, `behaviour::Door`) were built before M6b. The view now draws every gate live, the map's included (`Live::live_gates`), with the door's frame of S-0108 claim 4 (`unload::gate_frame`): *p*, damaged *p* + *G* + 1, no clamp, no bib, unloading or under-door image while it moves.
+- **Overlays redrawn in play.** `Live::redraw` compares each cell's overlay and data value with the start of the game; a changed cell's static overlay items leave the cell pass and the cell is drawn again from the world (`Painter::live_overlays`). Walls built, sold, crushed, hit or filled, and harvested ore, so show their state. The redrawn items follow the cell pass (our placeholder place; the depth test orders them).
+- **Seams.** Gate build-up and selling reversal (S-0108 claim 4) wait for build-up drawing, which the live view does not do for any building. A gate's body tilt is not drawn: the renderer has no building tilt.
+- **What play needs.** A wall type is a building type with `Wall=yes` and `ToOverlay` naming an overlay with `Wall=yes`; a gate is a building with `Gate=yes` (and `GateStages` in art). A person builds a wall from the sidebar and places it: the fill closes gaps up to the guard range to the house's own walls. A tank with `Crusher=yes` and movement zone crusher-all drives through enemy walls; a gate opens when the owner's unit drives at it and closes behind it. A wall is sold with the sell-wall order (S-0213 table T1).
+
+Provisional rules of M6b walls and gates, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `objects::place_map_objects`, `crush::assign_wall_owners` | a wall from a wall building of the map's building list is placed owned by the building's owner, then S-0210 claim 14 (a) re-owns it with the other map walls; a wall building dropped from the map places no wall | Q-0684 |
+| `mapview::unload::gate_frame` | the gate's door position *p* is S-0108 claim 23's door-frame rule with *D* = *G*: opening trunc(*q* × *G*), closing *G* − trunc(*q* × *G*), clamped to 0 … *G* − 1 | Q-0685 |
+
 ## Simulation (M6a: aircraft)
 
 S-0501 (aircraft flight, attack runs and pads) is built in `glasnost_sim::air`. Its game-wide values are `SimRules::air` (`air::AirRules`: the cruise height, the service cadence from the reload rate, the re-approach flag, the attacking-aircraft sight range, the spy-plane camera frames and F4's decimal constants); the per-type keys (flight level, ammunition, landable, airport-bound, fighter, fly-by, fly-back, docks) and the pad keys (helipad, unit reload, docking places) are on the type rules. All are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0501.md](m6-claims/S-0501.md); the tests are in `crates/deterministic/sim/tests/claims_s0501.rs`.

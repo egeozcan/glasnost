@@ -990,7 +990,9 @@ pub fn heading_point(w: &World, id: ObjectId) -> Option<Pos> {
             w.surface_at(256 * c.x + 128, 256 * c.y + 128), // spec: S-0204 claim 3 (the cell centre)
         )),
         // spec: S-0314 claim 18 (a vehicle in depot contact heads for the docking point, not the building's position)
-        Target::Object(t) => crate::depot::heading_point(w, id, t).or_else(|| w.obj(t).map(|x| x.pos)),
+        Target::Object(t) => {
+            crate::depot::heading_point(w, id, t).or_else(|| w.obj(t).map(|x| x.pos))
+        }
     }
 }
 

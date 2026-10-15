@@ -602,6 +602,14 @@ impl Audio {
                 house,
                 pos,
             } => self.sound(w, *sound, *of, *house, *pos),
+            // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
+            Effect::OverlayCrushed { overlay, pos } => {
+                let s = self
+                    .names
+                    .overlay_crush(u32::from(*overlay))
+                    .map(str::to_owned);
+                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+            }
         }
     }
 
@@ -673,6 +681,10 @@ impl Audio {
                 {
                     self.announce(Announcement::RepairComplete);
                 }
+            }
+            // spec: S-0210 claim 4 (the crushed type's crush sound at the crusher's position, any owner)
+            Sound::Crush => {
+                self.play_in(w, ts.crush.as_deref(), at);
             }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
             Sound::LowFunds if house.is_some() && house == self.local => {

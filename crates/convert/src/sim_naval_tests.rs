@@ -143,7 +143,10 @@ fn depot_with_several_places_warns() {
                 [Lot]\nUnitRepair=yes\nNumberOfDocks=1\n";
     let (s, w) = sim(text);
     assert_eq!(s.buildings["Bay"].econ.number_of_docks, Some(2));
-    assert!(warned(&w, "buildings Bay NumberOfDocks=2 on a repair depot"));
+    assert!(warned(
+        &w,
+        "buildings Bay NumberOfDocks=2 on a repair depot"
+    ));
     assert!(!warned(&w, "buildings Pad NumberOfDocks"));
     assert!(!warned(&w, "buildings Lot NumberOfDocks"));
 }

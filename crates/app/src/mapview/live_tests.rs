@@ -18,7 +18,7 @@ use super::build::{
     InfantryFrame, Inputs, LiveBuilding, Mobile, Options, build_parts, infantry_frame,
 };
 use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
-use super::tests::{context, scene_map_text, shp};
+use super::tests::{RULES, context, context_with, scene_map_text, shp};
 use super::unload::{DoorView, Unloading};
 
 /// spec: S-0201 claims 2, 4 and 5 (16 × s ms at s = 1 … 6, 8 ms at index 0)
@@ -472,6 +472,61 @@ fn drawing_leaves_the_game_alone() {
     assert_eq!(save::state_hash(&live.world), save::state_hash(&reference));
 }
 
+/// spec: S-0112 claims 1 and 6 (an overlay is drawn from its cell's overlay and data value: a
+/// wall built, crushed or destroyed in play shows its new state), S-0210 claim 8, S-0406 claim 10
+#[test]
+fn overlays_changed_in_play_are_redrawn() {
+    let (mut live, mut scene) = synthetic_live();
+    let (import, catalogue, assets) = context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.redraw(&inputs, &mut scene);
+    let before = scene.items.len();
+    let c = live
+        .world
+        .cells
+        .grid
+        .iter()
+        .find(|(_, x)| x.overlay == glasnost_map::NO_OVERLAY)
+        .map(|(c, _)| c)
+        .expect("an empty cell");
+    // FENCEX (the import's overlay 2, upright) with data value 1: frame 1 (pixel 2).
+    {
+        let cell = live.world.cells.grid.get_mut(c).unwrap();
+        cell.overlay = 2;
+        cell.overlay_data = 1;
+    }
+    live.redraw(&inputs, &mut scene);
+    assert!(scene.items.len() > before);
+    let (qx, qy) = project_lifted(256 * c.x + 128, 256 * c.y + 128, 0);
+    let fence: Vec<_> = scene
+        .items
+        .iter()
+        .filter(|i| i.object.is_none() && scene.images[i.image as usize].pixels()[0] == 2)
+        .filter(|i| (i.x - qx).abs() < 16 && (i.y - qy).abs() < 32)
+        .collect();
+    assert!(!fence.is_empty(), "the new wall is drawn at its cell");
+    // Removed again: the picture is as it was.
+    {
+        let cell = live.world.cells.grid.get_mut(c).unwrap();
+        cell.overlay = glasnost_map::NO_OVERLAY;
+        cell.overlay_data = 0;
+    }
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(scene.items.len(), before);
+}
+
 // ---------------------------------------------------------------------------
 // Combat in the live view (synthetic combat ruleset, invented overlay art)
 // ---------------------------------------------------------------------------
@@ -779,6 +834,22 @@ fn unloading_items_with(
         let f = import.art_file.as_mut().expect("an art file");
         f.bytes.extend_from_slice(text.as_bytes());
     }
+    live_building_items((import, catalogue, assets), unloading, None, health)
+}
+
+/// Each item the live painter draws for HUTX at cell (2, 2), height 0, in
+/// the context `ctx`, with `unloading`, gate door `gate_door` and `health`.
+fn live_building_items(
+    ctx: (
+        glasnost_convert::Import,
+        glasnost_convert::theater::Catalogue,
+        super::build::Assets,
+    ),
+    unloading: Option<Unloading>,
+    gate_door: Option<DoorView>,
+    health: (i32, i32),
+) -> Vec<(i32, DepthTest, Profile, i32, u8)> {
+    let (import, catalogue, assets) = ctx;
     let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
     let map = decode(
         &doc,
@@ -814,6 +885,7 @@ fn unloading_items_with(
             facing: 0,
             object: sim_code(ObjectId(5)),
             unloading,
+            gate_door,
         }],
     );
     // spec: S-0108 claim 8 (centred on the foundation's top corner; canvas 40 wide)
@@ -941,6 +1013,36 @@ fn door_inputs_come_from_the_image_section() {
     let doors: Vec<_> = items.iter().filter(|i| i.0 == 3).map(|i| i.4).collect();
     // The first pixel is the frame + 1: frame 4 − 1 = 3 (the type section's 2 would give 1).
     assert_eq!(doors, [4]);
+}
+
+/// spec: S-0108 claim 4 (a gate opening or closing draws frame p, damaged p + G + 1, from the
+/// body sprite with no clamp, and no bib), claim 2 (a gate at rest: frame 0 and the bib), Import
+/// mapping (GateStages absent: 9); p is the Q-0685 interim (claim 23's door rule with D = G)
+#[test]
+fn moving_gate_draws_its_door_frame() {
+    let ctx = || {
+        let (import, catalogue, mut assets) = context_with(&format!("{RULES}[HUTX]\nGate=yes\n"));
+        // 40 frames: 20 body, 20 shadow; the first pixel is the frame + 1.
+        assets.insert(b"hutx.shp", shp((40, 30), 40, (4, 4), (6, 8)));
+        (import, catalogue, assets)
+    };
+    let full = (256, 256);
+    // At rest: frame 0 (pixel 1), shadow 20 (pixel 21), bib frame 0.
+    let rest = live_building_items(ctx(), None, Some(DoorView::Closed), full);
+    assert_eq!(rest.len(), 3, "{rest:?}");
+    assert_eq!(rest[0].4, 1);
+    assert_eq!(rest[1].4, 21);
+    // Opening halfway through 90 ticks: p = trunc(4.5) = 4 (pixel 5), shadow 24, no bib.
+    let half = Some(DoorView::Opening { m: 90, r: 45 });
+    let moving = live_building_items(ctx(), None, half, full);
+    assert_eq!(moving.len(), 2, "{moving:?}");
+    assert_eq!(moving[0].4, 5);
+    assert_eq!(moving[1].4, 25);
+    // (The damaged frames, p + G + 1, are checked in unload::tests::moving_gate_frames: this
+    // context has no simulation rules, so no building here is damaged.)
+    // Closing at its start: G, held at G − 1 = 8 (pixel 9).
+    let closing = Some(DoorView::Closing { m: 90, r: 90 });
+    assert_eq!(live_building_items(ctx(), None, closing, full)[0].4, 9);
 }
 
 /// spec: S-0417 Terms (unloading: the building's current behaviour is unload, a queued one is not),

@@ -108,7 +108,14 @@ fn open(w: &mut World) {
 }
 
 fn click(w: &mut World, actor: ObjectId, on: ObjectId) -> Vec<Order> {
-    targeting::click(w, ALPHA, &[actor], ClickOn::Object(on), Modifiers::default()).orders
+    targeting::click(
+        w,
+        ALPHA,
+        &[actor],
+        ClickOn::Object(on),
+        Modifiers::default(),
+    )
+    .orders
 }
 
 fn click_enter(w: &mut World, actor: ObjectId, on: ObjectId) {
@@ -214,7 +221,11 @@ fn end_to_end_click_repair_and_release() {
     assert_eq!(w.obj(v).unwrap().pos.cell(), dock_cell());
     assert!(run_until(&mut w, 100, |w| w.obj(v).unwrap().beh.current
         == Some(Behaviour::Sleep)));
-    assert_eq!(w.obj(v).unwrap().body.value(w.tick), 16384, "it docked facing east");
+    assert_eq!(
+        w.obj(v).unwrap().body.value(w.tick),
+        16384,
+        "it docked facing east"
+    );
     assert!(run_until(&mut w, 600, |w| health(w, v) > 300));
     assert!(run_until(&mut w, 3000, |w| contact(w, v).is_none()));
     assert_eq!(health(&w, v), 600, "repaired to full strength");
@@ -222,7 +233,10 @@ fn end_to_end_click_repair_and_release() {
     assert_eq!(credits - w.houses[0].credits, 90);
     assert_eq!(sounds(&w, Sound::UnitRepaired), 1);
     assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Move));
-    assert!(w.obj(v).unwrap().dest.is_some(), "sent away to an exit cell");
+    assert!(
+        w.obj(v).unwrap().dest.is_some(),
+        "sent away to an exit cell"
+    );
     assert!(run_until(&mut w, 600, |w| !depot::is_depot(w, v)
         && w.obj(v).unwrap().dest.is_none()));
     let c = w.obj(v).unwrap().pos.cell();
@@ -276,7 +290,11 @@ fn claim_6_phases_and_timing() {
     assert_eq!(health(&w, v), 570);
     let s2 = next_step(&mut w, v, 600).expect("second step");
     assert_eq!(s2 - s1, dd + k - 1);
-    assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep), "it sleeps while serviced");
+    assert_eq!(
+        w.obj(v).unwrap().beh.current,
+        Some(Behaviour::Sleep),
+        "it sleeps while serviced"
+    );
     let s3 = next_step(&mut w, v, 600).expect("third step");
     assert_eq!(s3 - s2, k);
     let s4 = next_step(&mut w, v, 600).expect("fourth step, done");
@@ -321,7 +339,11 @@ fn claim_6_cannot_pay_and_low_funds() {
     assert_eq!(w.houses[0].credits, 0);
     assert!(next_step(&mut w, v, 300).is_none(), "nothing more is paid");
     assert_eq!(contact(&w, v), Some(d), "contact kept");
-    assert_eq!(sounds(&w, Sound::LowFunds), 1, "heard once, on leaving working");
+    assert_eq!(
+        sounds(&w, Sound::LowFunds),
+        1,
+        "heard once, on leaving working"
+    );
     w.houses[0].credits = 1000;
     let dd = d_rep(&w);
     assert!(
@@ -383,7 +405,11 @@ fn claim_16_permission() {
     };
     open(&mut w);
     w.houses[0].credits = 0;
-    assert_eq!(act(&w, v), Action::Enter, "full health and no money still enter");
+    assert_eq!(
+        act(&w, v),
+        Action::Enter,
+        "full health and no money still enter"
+    );
     assert!(depot::accepts(&w, d, v, true));
     let hop = spawn(&mut w, Kind::Vehicle, "HOPPER", 0, 6, 3);
     assert_eq!(act(&w, hop), Action::NoEnter, "row n1: zone fly");
@@ -397,7 +423,10 @@ fn claim_16_permission() {
     assert_ne!(act(&w, v), Action::Enter);
     w.obj_mut(d).unwrap().econ.building.switched_off = false;
     let on = truck(&mut w, 0, 1, 1, 300);
-    assert!(!depot::accepts(&w, d, on, true), "standing on this very depot");
+    assert!(
+        !depot::accepts(&w, d, on, true),
+        "standing on this very depot"
+    );
     sell::sell(&mut w, ALPHA, d);
     assert!(!depot::accepts(&w, d, v, true), "selling");
 }
@@ -480,7 +509,12 @@ fn claim_17_early_guard_start() {
 #[test]
 fn claim_18_docking_point() {
     let mut r = rules();
-    r.sim.buildings.get_mut("DEPOT").unwrap().econ.docking_offsets = Some(vec![[0, 256, 0]]);
+    r.sim
+        .buildings
+        .get_mut("DEPOT")
+        .unwrap()
+        .econ
+        .docking_offsets = Some(vec![[0, 256, 0]]);
     let mut w = game(&r);
     let d = depot_at(&mut w, "DEPOT");
     let d2 = spawn(&mut w, Kind::Building, "DEPOT2", 0, -8, -8);
@@ -539,7 +573,11 @@ fn claim_20_same_depot_enter_while_docked() {
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
     tick::step(&mut w);
     tick::step(&mut w);
-    assert_eq!(contact(&w, v), None, "queued, then refused while standing on it");
+    assert_eq!(
+        contact(&w, v),
+        None,
+        "queued, then refused while standing on it"
+    );
     assert_eq!(w.obj(v).unwrap().depot.queued, None);
     let (mut w, d, v) = docked_scene(300);
     w.obj_mut(v).unwrap().health = 600;
@@ -672,7 +710,10 @@ fn claim_22_locomotor_switched_on_by_a_destination() {
     assert!(depot::locomotor_off(&w, v));
     assert!(orders::issue(&mut w, ALPHA, mv(v, 9, 9)));
     tick::step(&mut w);
-    assert!(!depot::locomotor_off(&w, v), "a destination on the depot's cell");
+    assert!(
+        !depot::locomotor_off(&w, v),
+        "a destination on the depot's cell"
+    );
 }
 
 // spec: S-0314 claim 22 (quirks.depot_loss_strands_hover on: a sale after settling leaves the locomotor off, the seam S-0503's hovering locomotor reads)
@@ -719,7 +760,11 @@ fn claim_23_queued_entry() {
     assert_eq!(contact(&w, b), None);
     assert_eq!(w.obj(b).unwrap().depot.queued, Some(d));
     assert_eq!(w.obj(b).unwrap().dest, None);
-    assert_eq!(w.obj(c).unwrap().depot.queued, None, "full health does not queue");
+    assert_eq!(
+        w.obj(c).unwrap().depot.queued,
+        None,
+        "full health does not queue"
+    );
     assert_eq!(w.obj(c).unwrap().dest, None);
     assert!(run_until(&mut w, 3000, |w| contact(w, b) == Some(d)));
     assert_eq!(contact(&w, a), None);

@@ -21,7 +21,7 @@ use glasnost_vfs::theater::Theater;
 
 use super::build::{Assets, Built, Options, build};
 
-const RULES: &str = "[BuildingTypes]\n1=HUTX\n[InfantryTypes]\n1=MANX\n[VehicleTypes]\n1=CARX\n[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n\
+pub(super) const RULES: &str = "[BuildingTypes]\n1=HUTX\n[InfantryTypes]\n1=MANX\n[VehicleTypes]\n1=CARX\n[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n\
     [OREX]\nTiberium=yes\n[CRATEX]\nCrate=yes\n[FENCEX]\nDrawFlat=no\n\
     [SmudgeTypes]\n0=CRATERX\n[CRATERX]\nWidth=2\n[TerrainTypes]\n0=TREEX\n1=MINEX\n[MINEX]\nSpawnsTiberium=yes\n\
     [Colors]\nC0=1,2,3\nC1=10,200,200\nC2=20,200,200\nC3=30,200,200\nC4=40,200,200\nC5=50,200,200\n\
@@ -124,7 +124,7 @@ fn art_of(image: &str, sprite: &str) -> TypeArt {
 }
 
 /// The test context with the rules text `rules`.
-fn context_with(rules: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
+pub(super) fn context_with(rules: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
     context_full(rules, ART)
 }
 

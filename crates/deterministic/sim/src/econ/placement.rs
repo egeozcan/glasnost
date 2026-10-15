@@ -774,7 +774,7 @@ pub fn construction_turn(w: &mut World, id: ObjectId) {
 
 /// Puts a wall overlay in a cell for its owner (S-0406 claim 10; S-0112
 /// claim 7: a new wall starts with data value 0).
-fn put_wall(w: &mut World, c: CellXY, overlay: u8, owner: Option<HouseId>) {
+pub(crate) fn put_wall(w: &mut World, c: CellXY, overlay: u8, owner: Option<HouseId>) {
     let Some(i) = w.cells.idx(c) else { return };
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = overlay;

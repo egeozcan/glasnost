@@ -53,6 +53,8 @@ const RECALL: i64 = 30; // nocite: tuning of our own opponent
 /// An idle army vehicle with health at or below this share (in percent)
 /// of its strength is sent to a repair depot.
 const REPAIR_BELOW: i64 = 50; // nocite: tuning of our own opponent
+/// The scale of [`REPAIR_BELOW`].
+const PERCENT: i64 = 100; // nocite: percent scale
 
 /// The default plan of an AI house: types by role, two harvesters, waves of
 /// six (tuning of our own opponent).
@@ -263,7 +265,7 @@ impl Brain {
                 continue;
             }
             let strength = i64::from(glasnost_sim::combat::damage::strength(w, id));
-            if i64::from(o.health) * 100 > strength * REPAIR_BELOW {
+            if i64::from(o.health) * PERCENT > strength * REPAIR_BELOW {
                 continue;
             }
             let at = o.pos.cell();

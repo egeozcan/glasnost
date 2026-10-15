@@ -290,7 +290,9 @@ fn still(w: &World, id: ObjectId) -> bool {
 /// standard delay (S-0215 claim 29).
 pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     let t = w.tick;
-    let Some(o) = w.obj(id).cloned() else { return 1 };
+    let Some(o) = w.obj(id).cloned() else {
+        return 1;
+    };
     // spec: S-0215 claim 29 (the entry request goes to the contact when present, else to the object it remembers entering)
     let k = match (link(w, id), o.dest) {
         (Some(l), _) => l.depot,
@@ -342,7 +344,10 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         }
         return crate::process::standard_delay(w, id);
     }
-    if still(w, id) && w.obj(id).is_some_and(|x| x.beh.current == Some(Behaviour::Enter)) {
+    if still(w, id)
+        && w.obj(id)
+            .is_some_and(|x| x.beh.current == Some(Behaviour::Enter))
+    {
         // spec: S-0215 claim 29 and S-0314 claim 17 (no longer moving, tethered and still in enter: it reports arrival; the depot queues repair and sets its ready mark, the vehicle queues sleep, neither with an immediate start)
         if let Some(b) = w.obj_mut(k) {
             b.beh.queue(Some(Behaviour::Repair));
@@ -383,7 +388,9 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     let t = w.tick;
     let d = delay_d(w);
     let ku = count_k(w);
-    if w.obj(k).is_some_and(|b| b.beh.seen() == Some(Behaviour::Selling)) {
+    if w.obj(k)
+        .is_some_and(|b| b.beh.seen() == Some(Behaviour::Selling))
+    {
         return d;
     }
     let Some(v) = serviced(w, k) else {
@@ -638,12 +645,7 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
 /// order's ordinary effects (S-0314 claims 20 and 23; S-0504 claim 14).
 /// Returns `true` when the order ends here (claim 23: no destination, no
 /// ordinary effects).
-pub fn order_applied(
-    w: &mut World,
-    id: ObjectId,
-    b: Behaviour,
-    dest: Option<Target>,
-) -> bool {
+pub fn order_applied(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Target>) -> bool {
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
@@ -709,7 +711,9 @@ pub fn order_applied(
 /// approaching vehicle loses its contact and any queued entry is cleared.
 /// A docked vehicle ignores stop (S-0213 claim 8).
 pub fn stop_order(w: &mut World, id: ObjectId) {
-    if w.obj(id).is_some_and(|o| o.depot.queued.is_some() || o.depot.link.is_some()) {
+    if w.obj(id)
+        .is_some_and(|o| o.depot.queued.is_some() || o.depot.link.is_some())
+    {
         release(w, id);
     }
 }
@@ -721,7 +725,9 @@ pub fn order_entered(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Tar
     if b != Behaviour::Enter {
         return;
     }
-    let Some(Target::Object(k)) = dest else { return };
+    let Some(Target::Object(k)) = dest else {
+        return;
+    };
     if !is_depot(w, k) || w.obj(id).is_none_or(|o| o.kind != Kind::Vehicle) {
         return;
     }

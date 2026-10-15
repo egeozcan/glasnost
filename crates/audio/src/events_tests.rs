@@ -1485,10 +1485,16 @@ fn depot_repair_complete_announcement() {
     a.tick(&w, &[fx(1)], &mut u);
     assert!(!announced(&mut a, 1000), "another house's depot: nothing");
     a.tick(&w, &[fx(0)], &mut u);
-    assert!(announced(&mut a, 2000), "the local player's depot announces");
+    assert!(
+        announced(&mut a, 2000),
+        "the local player's depot announces"
+    );
     a.mixer_mut().clear();
     a.tick(&w, &[fx(0)], &mut u);
-    assert!(!announced(&mut a, 3000), "a nearby unit repaired event suppresses it");
+    assert!(
+        !announced(&mut a, 3000),
+        "a nearby unit repaired event suppresses it"
+    );
 }
 
 // spec: S-0314 claim 6 (the depot's low-funds announcement: the local player's only, no suppression)
@@ -1507,4 +1513,42 @@ fn depot_low_funds_announcement() {
     assert!(!announced(&mut a, 1000));
     a.tick(&w, &[fx(0)], &mut u);
     assert!(announced(&mut a, 2000));
+}
+
+// spec: S-0210 claim 4 (the crushed type's crush sound at the crusher); S-0210 claim 8 (the crushed overlay's crush sound); S-0210 Import mapping (`CrushSound` of a type or an overlay)
+#[test]
+fn crush_sounds() {
+    let w = world();
+    let mut a = audio(&w, &["Squish", "Crunch"]);
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Infantry,
+        index(&w, Kind::Infantry, "WALKER"),
+        TypeSounds {
+            crush: Some("Squish".into()),
+            ..TypeSounds::default()
+        },
+    );
+    n.set_overlay_crush(3, "Crunch");
+    a.set_names(n);
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = [
+        Effect::Sound {
+            sound: Sound::Crush,
+            of: Some(tref(&w, Kind::Infantry, "WALKER")),
+            house: None,
+            pos: Some(at),
+        },
+        Effect::OverlayCrushed {
+            overlay: 3,
+            pos: at,
+        },
+        // An overlay without a crush sound: nothing.
+        Effect::OverlayCrushed {
+            overlay: 4,
+            pos: at,
+        },
+    ];
+    a.tick(&w, &fx, &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Squish", "Crunch"]);
 }

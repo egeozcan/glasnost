@@ -1137,7 +1137,13 @@ fn ship_docked_at_yard() -> (World, ObjectId, ObjectId) {
         Modifiers::default(),
     );
     assert!(
-        r.orders.iter().any(|o| matches!(o, Order::Behaviour { behaviour: Behaviour::Enter, .. })),
+        r.orders.iter().any(|o| matches!(
+            o,
+            Order::Behaviour {
+                behaviour: Behaviour::Enter,
+                ..
+            }
+        )),
         "the click over the yard is enter: {:?}",
         r.orders
     );
