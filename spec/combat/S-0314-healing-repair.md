@@ -2,11 +2,11 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0341]
 supersedes: []
@@ -168,10 +168,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 4. **Step size.** The step size of an infantry unit is the game-wide infantry repair step; for
    every other object it is the game-wide repair step. A step size below 1 counts as 1. In the
    original, building repair takes the game-wide repair step without this minimum; our engine applies
-   the minimum there too (claim 8, Edge cases).
-   - Backing: `measurable` for depot and hospital steps (H3 parts a and d; H6 part b).
-     Aircraft repair steps are `unmeasured`: pad repair timing and a controllable step setup
-     remain open, so no scenario here isolates an aircraft step.
+   the minimum there too (claim 8, Edge cases). Aircraft on reload pads use this same step size.
+   S-0501 claims 26 and 27 own servicing cadence, reload priority and release.
+   - Backing: `measurable` for depot and hospital steps (H3 parts a and d; H6 part b),
+     and for aircraft pad steps (S-0501 AC16).
    - Confidence: high
 
 5. **Step cost.** The step cost of an infantry unit is always 0, whatever the repair percentage.
@@ -185,18 +185,23 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    pad aircraft, and the order in which its floor at 0 applies). That adjusted cost can be negative,
    and the step cost's minimum of 1 credit then still applies.
    - Backing: `measurable` (scenario H3, parts a and c; scenario H5, parts d and e; scenario H6, part a for the
-     infantry cost of 0; H11 for signed inputs and F2's truncations). The same formula for
-     an aircraft repair step is `unmeasured`: no scenario here isolates such a step while
-     landing-pad repair timing remains open.
+     infantry cost of 0; H11 for signed inputs and F2's truncations; S-0501 AC16 for the same
+     cost formula on an aircraft pad step, with servicing governed by S-0501 claims 26 and 27).
    - Confidence: high (the formula, the minimum, 0 for infantry, no house or country factor),
      medium (the free-unit adjustment and the pad-aircraft deduction, S-0408 claim 2)
 
 ### Repair depot, hospital and building repair
 
 6. **Repair depot.** Write *K*<sub>u</sub> for the vehicle repair count and *D* for the depot's
-   processing delay (Formulas F1). A repair depot treats a vehicle docked on it in two phases:
-   - *Settling.* As soon as the vehicle has come to rest on the depot, the depot asks for one repair
-     step on it at once (claim 3). On *not needed* the vehicle is sent away at once, as below, and no repair-complete announcement is
+   processing delay (Formulas F1). A repair depot treats a vehicle docked on it in three phases:
+   - *Waiting.* At each processing, normally *D* ticks apart, the depot checks whether the
+     vehicle stands still within the starting distance of its docking point: strictly less than
+     100 leptons for ordinary locomotors, or 200 leptons for ship and hovering locomotors.
+     Distance is the floating-point spatial distance, including height, truncated toward zero
+     to integer leptons, not distance to the building centre (S-0504 claim 8).
+     A successful check schedules settling 3 ticks later; coming to rest alone takes no step.
+   - *Settling.* At that later processing, provided the vehicle still stands still and its
+     locomotor has finished settling, the depot asks for one repair step (claim 3). On *not needed* the vehicle is sent away at once, as below, and no repair-complete announcement is
      made (unlike *not needed* in the working phase). On
      *cannot pay* nothing happens and the depot asks again at its next processing, *D* ticks later,
      for as long as the vehicle stays. On *more needed* or *done* the depot starts working.
@@ -245,7 +250,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    original's rules for owners that are not human-controlled (glossary, *AI house*, *Player houses
    only*). It holds for no player house: the vehicles of an *AI house*, like a person's, follow the
    destination rule above, and our AI sends them on by ordinary orders.
-   - Backing: `measurable` (scenario H4, parts a to f, for everything above except the next two
+   - Backing: `measurable` (scenario H4, parts a to f, and S-0504 N8 for the waiting gate,
+     spatial distance and 3-tick delay, for everything above except the next two
      statements, the non-local-owner announcement conditions and F7's stated unmeasured
      suppression details). The non-local-owner conditions are `unmeasured`:
      the other-owner attempt in H4 part f needs the original's computer player to dock a vehicle,
@@ -258,7 +264,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      moving (taken on the first tick it stands still, the next step *K*<sub>u</sub> ticks after
      that one): no input of the setup is known that moves a docked vehicle without ending the
      docking. If H4 part g finds one, this statement becomes `measurable`.
-   - Confidence: high (one step per count of *K*<sub>u</sub>, the cost, the end on *done*); medium
+   - Confidence: high (one step per count of *K*<sub>u</sub>, the cost, the end on *done*,
+     the waiting thresholds, spatial distance and 3-tick delay); medium
      (the settling step, the phase *D* + *K*<sub>u</sub> − 1, that repairing stops after *cannot
      pay*, the owner conditions of the two announcements, that the settling *not needed* makes no
      announcement, and that *not needed* is tested before *cannot pay*), and low (the destination without a rally
@@ -326,7 +333,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    it does not promise either a repair or a sale. Claims 12 to 15 give the further conditions.
    AI houses follow human-controlled unit rules, and the neutral and special houses retain the
    original's non-human rules. There is no threshold-specific departure or importer warning.
-   S-0408 claim 13 must replace its gate-only limitation with a pointer to claims 12 to 15.
+   Approved S-0408 claim 13 already states that claims 12 to 15 specify the further conditions and automatic-start outcomes when the skill-level gate passes.
    - Backing: `measurable` for periodic repair (H5) and the exclusion at a positive threshold
      (H9 runs 1 and 3). House levels are `measurable` through S-0412 claim 3's K10 and S-0209 C7.
      Gate passage at 0 and −1 is `measurable` in H13 and H14. The exact absent threshold is
@@ -444,10 +451,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       medium (hostile-hit mark and its persistence)
 
 15. **House-wide pacing and observable order (Q-0341).** The first eligible automatic repair
-    start in a house blocks later buildings of that house in the same tick. Checks and sale
-    draws follow S-0203 claims 3 and 4's object-turn order, within the turn pass, not the later
-    house update. A healing step paid by an earlier building changes the credits available to
-    a later building's credit split in that tick.
+    start in a house blocks later buildings of that house in the same tick. In a tick with multiple eligible buildings, their automatic checks and sale draws have the same observable order as the object-turn order of S-0203 claims 3 and 4: for example, a healing step paid by one building can change the credits available to a later building's credit split in that tick. The credit-order consequence, rather than a particular internal pass or data structure, is the required behavior.
     For a human-controlled house, and for an AI house in our engine, the hold is released by
     that tick's later house update (S-0203 claim 8). No repair-start random choice is made for
     such a house: at most one new automatic start per house per tick, but any number of repairs
@@ -551,6 +555,9 @@ Backing and confidence are claim 15's.
 | Repair percentage, absent-key default | 0.25 | fraction | Claim 5 |
 | Building, vehicle and infantry repair rates, absent-key default | 0.016 | game minutes | F1 |
 | Steps at a depot when a vehicle settles | 1 | steps | Claim 6 |
+| Depot waiting distance, ordinary locomotors | 100 | leptons, strict upper bound | Claim 6 |
+| Depot waiting distance, ship and hovering locomotors | 200 | leptons, strict upper bound | Claim 6 |
+| Waiting-to-settling delay | 3 | ticks | Claim 6 |
 | Infantry and vehicle self-heal intervals, absent-key default | 1000 | ticks | Claim 10 |
 | Infantry and vehicle self-heal amounts, absent-key default | 1 | health points per source | Claim 10 |
 | Infantry and vehicle self-heal counts of a building type, absent-key default | 0 | sources | Claim 10 |
@@ -566,7 +573,9 @@ Backing and confidence are claim 15's.
 
 | State | Event | Result |
 |---|---|---|
-| vehicle comes to rest on a depot | — | settling step at once (claim 3) |
+| waiting for a docked vehicle | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
+| waiting for a docked vehicle | moving or outside its starting distance | waiting, next processing after *D* ticks |
+| settling scheduled | later processing finds the vehicle still and its locomotor settled | settling step (claim 3) |
 | settling | *not needed* | sent away |
 | settling | *cannot pay* | asks again after *D* ticks |
 | settling | *more needed* or *done* | working; the next step falls due *D* + *K*<sub>u</sub> − 1 ticks later |
@@ -754,7 +763,7 @@ same results.
 **H3: step size and cost (claims 3 to 5).** *Part a (steps):* a damaged own vehicle of a test type with cost 900 and
 strength 600, at health 300, docks on a repair depot; repair step 10, repair percentage 25 %, *repair* behaviour
 rate 0.015625 (*D* = 14), the house has 1000 credits. *Observable:* health and credits after each step. *Expected:* +10 health and −3 credits per
-step; the first step comes as soon as the vehicle has come to rest; the last step brings health to
+step; the first step follows claim 6's waiting gate and 3-tick delay; the last step brings health to
 600 exactly.
 *Part b (credits):* a second run with 2 credits: no step happens while the credits stay at 2; when
 the house gets 1 more credit, a step follows within *D* = 14 ticks. *Falsified if:* other amounts,
@@ -770,18 +779,24 @@ adds another amount or costs anything other than 1 credit, including 2 (that wou
 original guards a negative step as our engine does).
 
 **H4: depot timing (claim 6, F1).** *Part a (timing):* as H3 part a with a vehicle repair rate of 0.125 game minutes and a
-*repair* behaviour rate of 0.015625 (*D* = 14). *Observable:* the tick of each step, counted from the
-tick the vehicle comes to rest. *Expected:* a step at once, the second 126 ticks later
+*repair* behaviour rate of 0.015625 (*D* = 14). *Observable:* record the tick the vehicle comes
+to rest, the waiting processing that accepts its distance, and each health-changing step using a
+read-only recorder. *Expected:* no step merely on coming to rest; with the vehicle remaining
+still with its locomotor settled, settling occurs 3 ticks after the accepting processing,
+the second step 126 ticks later
 (14 + 113 − 1), then one every 113 ticks. With the vehicle repair rate absent (0.016): every 15
-ticks after the second. *Falsified if:* no step at rest, a second step other than 126 ticks
-later, or any later interval other than 113 ticks (15 at the absent rate). Intervals of 112 or
+ticks after the second. Repeat S-0504 N8's land, ship and hovering comparisons for the strict
+starting distances and spatial-distance calculation. *Falsified if:* the gate-to-settling interval
+is not 3 ticks in the stable case, a second step comes other than 126 ticks after settling,
+or any later interval differs from 113 ticks (15 at the absent rate). Intervals of 112 or
 14 would mean the depot uses the truncated building period. The
 tick on which the vehicle leaves the depot after the step that brings it to full health is recorded
 too.
 - *Part b (full health):* a vehicle at full health docks. *Expected:* it is sent away on the tick it
-  comes to rest, with no step, no payment and no repair-complete announcement (the local player
-  owns the depot). Repeat with the paying house at 0 credits. *Expected:* the same, sent away on the
-  tick it comes to rest. *Falsified if:* a charge, departure on any later tick, or an
+  takes its settling processing, 3 ticks after the accepting waiting processing, with no healing,
+  no payment and no repair-complete announcement (the local player owns the depot). Repeat with
+  the paying house at 0 credits. *Expected:* the same settling-time departure. *Falsified if:*
+  a charge, departure at another processing in the stable case, or an
   announcement; or, in the repeat, the vehicle stays and the depot asks again *D* ticks later
   (that would mean *cannot pay* takes precedence over *not needed*).
 - *Part c (done, then not needed):* a vehicle one step short of full health docks. *Expected:* the
@@ -1154,6 +1169,9 @@ draws within each turn and the later house update. Any opposite credit split fal
 within-turn consequence. Void a run with another credit-changing event. Nonzero repair-start
 delays of the original computer player remain unmeasured for claim 15's stated control limit.
 
+Aircraft pad repair timing and release are specified by S-0501 claims 26 and 27, with scenario
+AC16 covering step size and cost; they are not open questions here.
+
 ## Open questions
 
 - The exact phase of the second depot step and the first hospital step (±1 tick), and whether a
@@ -1166,8 +1184,6 @@ delays of the original computer player remain unmeasured for claim 15's stated c
 - Whether passengers inside a transport (not a hospital) self-heal: the original is believed not to
   heal them while they are inside. This question covers open-topped transports too, whose
   passengers are in play and take turns (glossary, *in play*); no measurement has settled it for them.
-- How aircraft are repaired on their landing pads (the same repair step is believed to apply, at a
-  timing not measured); a future aircraft spec.
 - The *unit repaired* suppression row and cross-creator suppression retain S-0701 F7's
   unmeasured limitations (claim 6, H4 part f). Zoom progression and cadence are specified by
   S-0410 claims 14–15, with their exact floating-point equality boundaries still unmeasured.
