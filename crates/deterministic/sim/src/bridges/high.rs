@@ -166,10 +166,17 @@ fn section_notice(w: &mut World, s: Section, kind: Notice, side: Side, ctx: &mut
     }
 }
 
-/// Sets a pier's state *k* on every cell of its tile (S-0511 Terms).
-pub(super) fn set_pier(w: &mut World, r: CellXY, family: Family, line: Line, k: i32) {
+/// Sets a pier's state *k* on its affected tile cells (S-0511 Terms),
+/// returning them as found before the change.
+pub(super) fn set_pier(
+    w: &mut World,
+    r: CellXY,
+    family: Family,
+    line: Line,
+    k: i32,
+) -> Vec<CellXY> {
     let Some(b) = w.catalogue.as_ref().map(|c| c.bridge_positions) else {
-        return;
+        return Vec::new();
     };
     let m = match line {
         Line::X => b.middle[0],
@@ -177,29 +184,30 @@ pub(super) fn set_pier(w: &mut World, r: CellXY, family: Family, line: Line, k: 
     };
     // spec: S-0511 Terms (pier state k: tile position m + k)
     let Some(tile) = pieces::tile_of(w, family, m + k) else {
-        return;
+        return Vec::new();
     };
-    let cells = pieces::tile_cells(w, r);
+    // spec: S-0511 Terms (the affected tile cells: the same-tile eight-neighbour component of the reference cell, before the change)
+    let cells = pieces::pier_component(w, r);
     for &c in &cells {
         if let Some(cell) = w.cells.grid.get_mut(c) {
-            // spec: S-0511 Terms (changing the state replaces the tile on every cell of the pier)
+            // spec: S-0511 Terms (a state replacement replaces the tile on every affected cell)
             cell.tile = tile;
         }
     }
     crate::load::recalc_cells(w, &cells);
-    for c in cells {
+    for &c in &cells {
         crate::regions::cell_changed(w, c);
     }
+    cells
 }
 
-/// A collapse lowers every cell of the pier's tile to the reference cell's
-/// pre-collapse level − 4 (claim 6), remembering their levels.
-fn lower_pier(w: &mut World, r: CellXY) {
+/// A collapse lowers the pier's changed tile cells `cells` to the reference
+/// cell's pre-collapse level − 4 (claim 6), remembering their levels.
+fn lower_pier(w: &mut World, r: CellXY, cells: &[CellXY]) {
     let Some(ref_level) = w.cells.cell(r).map(|x| x.level) else {
         return;
     };
-    let cells = pieces::tile_cells(w, r);
-    for &c in &cells {
+    for &c in cells {
         let Some(old) = w.cells.cell(c).map(|x| x.level) else {
             continue;
         };
@@ -209,8 +217,8 @@ fn lower_pier(w: &mut World, r: CellXY) {
             cell.level = ref_level.saturating_sub(4);
         }
     }
-    crate::load::recalc_cells(w, &cells);
-    for c in cells {
+    crate::load::recalc_cells(w, cells);
+    for &c in cells {
         crate::regions::cell_changed(w, c);
     }
 }
@@ -242,7 +250,7 @@ pub fn attempt_pier(
     // spec: S-0511 claim 6 (states 0 to 2 fail; state 3 collapses)
     if k < 3 {
         // spec: S-0511 claim 6 (states 0 to 2: state 3, a damage notice both ways; fails)
-        set_pier(w, r, family, line, 3);
+        let _ = set_pier(w, r, family, line, 3);
         from_pier(w, r, line, at(r, f, 1), Notice::Damage, Side::Start, ctx);
         from_pier(w, r, line, at(r, f, -1), Notice::Damage, Side::Far, ctx);
         return false;
@@ -250,8 +258,8 @@ pub fn attempt_pier(
     // spec: S-0511 claim 6 (state 3: collapse; succeeds)
     let pre = column_levels(w, r, line);
     // spec: S-0511 claim 6 (a collapsed pier is in state 4)
-    set_pier(w, r, family, line, 4);
-    lower_pier(w, r);
+    let cells = set_pier(w, r, family, line, 4);
+    lower_pier(w, r, &cells);
     // spec: S-0511 claim 6 (the column's blow-ups at pre-collapse heights, decreasing cross coordinate, reference, increasing)
     for (c, level) in pre {
         blow::blow_up(w, c, level, ctx);
@@ -315,7 +323,7 @@ fn pier_notice(
     }
     // spec: S-0511 claim 6 (states 1 to 3 are set; state 4 is a collapse)
     if next < 4 {
-        set_pier(w, r, family, line, next);
+        let _ = set_pier(w, r, family, line, next);
         return;
     }
     // spec: S-0511 claim 6 (collapse from a notice: the loss passes onward first, on the side away from the sender)
@@ -330,24 +338,28 @@ fn pier_notice(
         blow::blow_up(w, c, level, ctx);
     }
     // spec: S-0511 claim 6 (its tile and height change as for a direct collapse, with no span check or connectivity of its own)
-    set_pier(w, r, family, line, 4);
-    lower_pier(w, r);
+    let cells = set_pier(w, r, family, line, 4);
+    lower_pier(w, r, &cells);
 }
 
 // ---------------------------------------------------------------------
 // The span check (claim 7) and the band (claim 8).
 
-/// Whether `c` is a start piece of a span along `line` (claim 7): a start
-/// ramp at sub-tile 8 or 12, or a pier at sub-tile 5 or 7.
+/// Whether `c` is a start piece of a span along `line` (claims 7 and 18):
+/// a start ramp at sub-tile 8 or 12, or a pier in any state at sub-tile 5
+/// or 7, read along `line`.
 pub fn is_start_piece(w: &World, c: CellXY, line: Line) -> bool {
     let Some(s) = pieces::sub(w, c) else {
         return false;
     };
-    match pieces::piece_at(w, c) {
-        Some((_, Piece::StartRamp(l))) => l == line && s == pieces::ramp_start_sub(line),
-        Some((_, Piece::Pier(l, _))) => l == line && s == pieces::pier_start_sub(line),
-        _ => false,
+    if let Some((_, Piece::StartRamp(l))) = pieces::piece_at(w, c)
+        && l == line
+        && s == pieces::ramp_start_sub(line)
+    {
+        return true;
     }
+    // spec: S-0511 Terms (repair's start-piece selection requires the axis-specific sub-tile)
+    pieces::pier_along(w, c, line).is_some() && s == pieces::pier_start_sub(line)
 }
 
 /// Whether `c` is a far piece along `line` (claims 7 and 19): a far ramp or
@@ -357,11 +369,11 @@ pub fn is_far_piece(w: &World, c: CellXY, line: Line, ramps_only: bool) -> bool 
         return false;
     };
     let at_ref = s == pieces::reference_sub(line);
-    match pieces::piece_at(w, c) {
-        Some((_, Piece::FarRamp(l))) => l == line && at_ref,
-        Some((_, Piece::Pier(l, _))) => !ramps_only && l == line && at_ref,
-        _ => false,
+    if let Some((_, Piece::FarRamp(l))) = pieces::piece_at(w, c) {
+        return l == line && at_ref;
     }
+    // spec: S-0511 Terms (span repair uses its selected axis)
+    !ramps_only && at_ref && pieces::pier_along(w, c, line).is_some()
 }
 
 /// The nearest cell from `from` toward the start side, `from` included,
@@ -427,10 +439,30 @@ pub fn band(w: &mut World, first: CellXY, last: CellXY, line: Line) {
     }
 }
 
-/// The span check of claim 7 for the span holding `from` along `line`.
-pub fn span_check(w: &mut World, from: CellXY, line: Line, ctx: &mut Ctx) {
-    // spec: S-0511 claim 7 (the span's start piece); Q-0710 (interim: the nearest start piece toward the start side, with no bound)
-    let Some(start) = walk_back(w, from, line, |c| is_start_piece(w, c, line)) else {
+/// The span check of claim 7 for named loss cell `named`. `pier` is the
+/// reference cell of a pier this attempt collapsed directly, given for its
+/// far-side named cell (Q-0678).
+pub fn span_check(w: &mut World, named: CellXY, pier: Option<CellXY>, ctx: &mut Ctx) {
+    // spec: S-0511 claim 7 (the first neighbour of the named loss cell in N, NE, E, SE, S, SW, W, NW order carrying a deck or bridge-body mark supplies the bridge)
+    let Some(b) = crate::regions::STEPS
+        .iter()
+        .map(|&d| at(named, d, 1))
+        .find(|&p| w.cells.is_bridge(p) || w.cells.body(p))
+    else {
+        return;
+    };
+    // spec: S-0511 claim 7 (its responsible section, or its body-mark section by claim 16's body rule; none: no span check)
+    let Some((sc, line, _)) = pieces::section_of(w, b) else {
+        return;
+    };
+    // spec: S-0511 claim 7 (from that section cell toward the start side up to the legal-map boundary, passing over non-bridge cells: the nearest start ramp, or non-collapsed pier, at its start sub-tile; none: no span check)
+    let start = walk_back(w, sc, line, |c| {
+        is_start_piece(w, c, line)
+            && (pieces::pier_along(w, c, line).is_none_or(|(_, k)| k < 4)
+                // Q-0678 (interim: the far-side search of a direct pier collapse also accepts that pier as its span's start)
+                || pier.is_some_and(|r| pieces::pier_reference(w, c, line) == Some(r)))
+    });
+    let Some(start) = start else {
         return;
     };
     span_check_from(w, start, line, ctx);

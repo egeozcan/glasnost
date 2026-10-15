@@ -104,21 +104,10 @@ fn section_cell(
     b: CellXY,
     filter: Option<Family>,
 ) -> Option<(CellXY, Line, Option<Family>)> {
-    if w.cells.is_bridge(b) {
-        // spec: S-0511 claim 16 (a high-bridge cell gives its section cell)
-        let s = pieces::responsible_section(w, b)?;
-        return accepts(filter, s.family).then_some((s.cell, s.line, Some(s.family)));
-    }
-    let line = match w.cells.axis(b) {
-        crate::cells::Axis::X => Line::X,
-        crate::cells::Axis::Y => Line::Y,
-        crate::cells::Axis::None => return None,
-    };
-    let d = line.across();
-    // spec: S-0511 claim 16 and Constants (t: the distance to the nearest cell without the body mark across, toward increasing y on an x bridge, increasing x on a y bridge; 1 ≤ t ≤ 4; the section cell displaced by (t − 2) d)
-    let t = (1..=4).find(|&t| !w.cells.body(at(b, d, t)))?;
-    // spec: S-0511 claim 16 (the section cell displaced by (t − 2) d)
-    Some((at(b, d, t - 2), line, None))
+    let (c, line, fam) = pieces::section_of(w, b)?;
+    // spec: S-0511 claim 16 (the family filter applies to a high-bridge cell's section)
+    fam.is_none_or(|f| accepts(filter, f))
+        .then_some((c, line, fam))
 }
 
 /// The family of a bridge tile in `c` that passes the filter.
@@ -401,12 +390,12 @@ fn repair_from(w: &mut World, c: CellXY, line: Line, filter: Option<Family>) {
 
 /// Restores the pier with reference cell `r` (claim 19).
 fn restore_pier(w: &mut World, r: CellXY, line: Line) {
-    let Some((family, Piece::Pier(_, k))) = pieces::piece_at(w, r) else {
+    // spec: S-0511 Terms (span repair uses its selected axis)
+    let Some((family, k)) = pieces::pier_along(w, r, line) else {
         return;
     };
-    let cells = pieces::tile_cells(w, r);
     // spec: S-0511 claim 19 (the pier's tile goes back to state 0 on all its cells, whatever state it was in)
-    high::set_pier(w, r, family, line, 0);
+    let cells = high::set_pier(w, r, family, line, 0);
     // spec: S-0511 claim 19 (a collapsed pier, state 4, also regains its height)
     if k == 4 {
         if w.rules().quirks.pier_repair_partial_height {
@@ -452,7 +441,7 @@ fn repair_span(w: &mut World, start: CellXY, line: Line, family: Family) {
     for k in 1..reach {
         let x = at(start, f, k);
         // spec: S-0511 claim 19 (every pier before the endpoint, at sub-tile 4 or 2, is restored)
-        if matches!(pieces::piece_at(w, x), Some((_, Piece::Pier(l, _))) if l == line)
+        if pieces::pier_along(w, x, line).is_some()
             && pieces::sub(w, x) == Some(pieces::reference_sub(line))
         {
             restore_pier(w, x, line);

@@ -628,6 +628,78 @@ fn claim_6_direct_pier_attempts() {
     );
 }
 
+// spec: S-0511 Terms (Pier: a state replacement changes the eight-neighbour-connected component of cells with exactly the reference cell's pre-change tile number; a different tile laid over part of the pier, a disconnected copy and a different-state tile stay; a diagonal same-tile copy changes with it) and claim 6 (a collapse sets every changed cell to the reference level − 4)
+#[test]
+fn claim_6_pier_tile_component() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let t = tile(Family::Bridge, M1);
+    put_tile(&mut m, at(4, 1), 0, 0, 4); // laid over part of the pier
+    put_tile(&mut m, at(6, 1), t, 0, 6); // a diagonal-only copy, touching (5, 0)
+    put_tile(&mut m, at(3, -2), t + 1, 0, 4); // a different state, touching (4, -1)
+    put_tile(&mut m, at(4, -4), t, 0, 4); // the same tile, not connected
+    let mut w = game(&ruleset(), &m);
+    let r = at(4, 0);
+    let tile_at = |w: &World, c: CellXY| w.cells.cell(c).unwrap().tile;
+    assert!(!bridges::attempt(&mut w, r));
+    for c in [at(4, -1), r, at(5, 0), at(6, 1)] {
+        assert_eq!(tile_at(&w, c), t + 3, "{c:?} in the component");
+    }
+    assert_eq!(tile_at(&w, at(4, 1)), 0, "the overlaid cell stays");
+    assert_eq!(
+        tile_at(&w, at(3, -2)),
+        t + 1,
+        "a different state does not join"
+    );
+    assert_eq!(tile_at(&w, at(4, -4)), t, "a disconnected copy stays");
+    assert!(bridges::attempt(&mut w, r));
+    for c in [at(4, -1), r, at(5, 0), at(6, 1)] {
+        assert_eq!(tile_at(&w, c), t + 4);
+        assert_eq!(
+            w.cells.cell(c).unwrap().level,
+            0,
+            "{c:?}: the reference level 4 − 4"
+        );
+    }
+    assert_eq!(
+        w.cells.cell(at(4, 1)).unwrap().level,
+        4,
+        "not a changed cell"
+    );
+    assert_eq!(w.cells.cell(at(3, -2)).unwrap().level, 4);
+}
+
+// spec: S-0511 Terms (Pier: a position in both non-collapsed pier ranges is read along x, x states 0 to 3 before y states 0 to 3; an x match only at collapsed state 4 does not override a non-collapsed y match; repair's start-piece selection reads the axis-specific sub-tile)
+#[test]
+fn terms_overlapping_pier_ranges() {
+    let mut m = base();
+    put_tile(&mut m, at(0, 0), tile(Family::Bridge, M1 + 2), 7, 0);
+    let mut w = game(&ruleset(), &m);
+    let mut c = (*catalogue()).clone();
+    // An invented theater whose y pier range starts two positions after the x one.
+    c.bridge_positions.middle = [M1, M1 + 2];
+    w.catalogue = Some(Arc::new(c));
+    use pieces::Piece::Pier;
+    assert_eq!(pieces::piece_of_q(&w, M1 + 2), Some(Pier(Line::X, 2)));
+    assert_eq!(pieces::piece_of_q(&w, M1 + 3), Some(Pier(Line::X, 3)));
+    assert_eq!(
+        pieces::piece_of_q(&w, M1 + 4),
+        Some(Pier(Line::Y, 2)),
+        "x-collapsed, y-live"
+    );
+    assert_eq!(pieces::piece_of_q(&w, M1 + 6), Some(Pier(Line::Y, 4)));
+    // Read along y, the cell at sub-tile 7 is a y pier's start piece.
+    assert_eq!(
+        pieces::pier_along(&w, at(0, 0), Line::Y),
+        Some((Family::Bridge, 0))
+    );
+    assert!(high::is_start_piece(&w, at(0, 0), Line::Y));
+    assert!(
+        !high::is_start_piece(&w, at(0, 0), Line::X),
+        "sub-tile 5 starts along x"
+    );
+}
+
 // spec: S-0511 claim 6 (notice table: loss notice on the start side of a pier in state 0 → 3; a pier chipped on the arriving side ignores it with quirks.pier_loss_notice_skips_chipped, becomes 3 without)
 #[test]
 fn claim_6_pier_notice_table() {
@@ -691,6 +763,52 @@ fn claim_7_span_cap() {
         bridges::attempts(&mut w, at(-6, 0), 2);
         let isolated = data(&w, at(-8, 0)).is_none();
         assert_eq!(isolated, !cap, "cap {cap}");
+    }
+}
+
+// spec: S-0511 claim 7 (finding the span: from the named loss cell, the first marked neighbour's section, then the nearest start piece toward the start side up to the legal-map boundary, passing over non-bridge cells)
+#[test]
+fn claim_7_start_search_passes_over_a_gap() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[]);
+    for x in [1, 2] {
+        m.cells.get_mut(at(x, 0)).unwrap().overlay = NO_OVERLAY;
+    }
+    let mut w = game(&ruleset(), &m);
+    // Neither a deck nor a bridge-body cell: a non-bridge gap.
+    w.cells.clear_body(&[at(1, 0), at(2, 0)]);
+    assert!(!w.cells.is_bridge(at(1, 0)) && !w.cells.body(at(1, 0)));
+    bridges::attempts(&mut w, at(6, 0), 2);
+    for x in [3, 4, 5] {
+        assert_eq!(
+            data(&w, at(x, 0)),
+            None,
+            "x = {x}: isolated from the start ramp"
+        );
+    }
+    for x in [0, 7, 8, 9] {
+        assert!(data(&w, at(x, 0)).is_some(), "x = {x} touches an end");
+    }
+}
+
+// spec: S-0511 claims 6 and 7 (a direct pier collapse checks both adjacent spans, the start-side span first; Q-0678 interim: the far-side search accepts the collapsed pier as its span's start)
+#[test]
+fn claim_7_pier_collapse_checks_both_spans() {
+    for (tag, name) in [(at(2, 0), "start side"), (at(8, 0), "far side")] {
+        let mut m = base();
+        high_x(&mut m, Family::Bridge, 0, 12, &[5]);
+        tagged(&mut m, &[tag]);
+        let mut w = game(&ruleset(), &m);
+        // A missing section in each span.
+        bridges::attempts(&mut w, at(3, 0), 2);
+        bridges::attempts(&mut w, at(9, 0), 2);
+        assert_eq!(data(&w, at(3, 0)), None);
+        assert_eq!(data(&w, at(9, 0)), None);
+        let f0 = fired(&w);
+        assert!(!bridges::attempt(&mut w, at(5, 0)));
+        assert!(bridges::attempt(&mut w, at(5, 0)));
+        assert_eq!(pier_k(&w, at(5, 0)), Some(4));
+        assert_eq!(fired(&w) - f0, 1, "{name}: one band pass");
     }
 }
 
