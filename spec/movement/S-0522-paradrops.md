@@ -2,7 +2,7 @@
 id: S-0522
 title: Parachutes and drops
 topic: movement
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -17,10 +17,11 @@ supersedes: []
 ## Summary
 
 Paradrop delivery in skirmish: plane arrival, passes, passenger release, parachutes, landing and
-losses. Charging, firing and target choice belong to planned S-0513; network games and campaigns
-are out of scope.
+losses. Charging and firing belong to S-0512 claims 5 and 8; target choice and paradrop dispatch
+belong to S-0513 claims 1 and 42. Network games and campaigns are out of scope.
 
 Pointers:
+- S-0513 claim 43 reuses claims 4 and 5 here for the spy plane's arrival edge, cell and draws.
 - S-0107 claims 6, 17 and 21 and its state table give the *parachute* sequence and how deaths of
   falling infantry are shown.
 - S-0214 (Terms and claims 6 to 9) gives what a falling unit cannot do.
@@ -126,7 +127,9 @@ Pointers:
 
    So a plane takes one draw for its arrival cell, or two on the south edge. These draws are ranged draws on the scenario stream (S-0202). No occupant,
    terrain or passability test is made: an aircraft may arrive over any cell.
-   - Backing: `measurable` (scenario P3, with the random-state recorder)
+   - Backing: `measurable` (scenario P3, with the random-state recorder) for edge candidates
+     and draws; `unmeasured` for the no-acceptable-candidate fallback, because no skirmish
+     map fixture exhausting the north candidates has been established
    - Confidence: high
 
 5. **Arrival edge.** A house's arrival edge is decided as follows.
@@ -187,7 +190,7 @@ Pointers:
    leaves the usable area (S-0501 claims 10 and 34). The exit destination uses the house's edge
    when that destination is chosen, not an edge remembered at launch. Paratroopers still on board
    leave play with the plane without a death, loss count, kill credit or experience award.
-   - Backing: `measurable` (scenario P5)
+   - Backing: `measurable` (scenarios P3 and P5)
    - Confidence: high
 
 ### Drops
@@ -238,7 +241,9 @@ Pointers:
     falling ends. There is no fall damage: a paratrooper is not hurt by landing. While it falls it
     shows the *parachute* sequence and, on landing, asks for *stand* (S-0107 claim 21 and its state
     table); what it may not do while falling is S-0214's.
-    - Backing: `measurable` (scenario P8)
+    - Backing: `measurable` (scenario P8) for parachute attachment, expiry and landing,
+      `unmeasured` for a non-parachute animation selecting the slow recurrence, because no
+      fixture retaining such an attachment during descent has been established
     - Confidence: high
 
 13. **The parachute.** At a successful drop, the parachute animation (Import mapping), when
@@ -259,7 +264,8 @@ Pointers:
     its death shows is S-0107 claim 17: a unit not marked "not human" is removed at once with no
     death sequence; the outcome for a "not human" type is S-0107's open question. A paratrooper
     removed this way no longer occupies its cell, so a later drop can use that cell.
-    - Backing: `measurable` (scenario P9)
+    - Backing: `measurable` (scenario P9) for ordinary human-type infantry,
+      `unmeasured` for the not-human-type outcome, which remains unresolved in S-0107 claim 17
     - Confidence: medium
 
 15. **Loss of the plane.** A paradrop plane that is killed and starts to crash loses all its
@@ -279,7 +285,7 @@ Pointers:
 
     The target adjustment (claim 1), the arrival-edge computation (claim 5) and the processing
     delays of claims 6 and 7 take no draw. Draws of the flight itself are S-0501's (its claim 37).
-    - Backing: `measurable` (scenario P3, with the random-state recorder)
+    - Backing: `measurable` (scenarios P1, P2, P3, P4 and P8, with the random-state recorder)
     - Confidence: high
 
 ## Formulas
@@ -391,8 +397,10 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
 ## Edge cases and quirks
 
 - **Arrival fallback coordinate** (`quirks.paradrop_fallback_point`, default on: use the original fallback local point (1, ⌊*L*w* / 2⌋), whose coordinates are reversed from the north midpoint; off: use (⌊*L*w* / 2⌋, 1)). It is rarely used on positive-size local areas.
-- **West edge start row.** The west scan's first candidate can be local row −1 (claim 4); this is the
-  original's distribution of arrival cells and is kept as specified, with no switch.
+- **West edge start row** (`quirks.paradrop_west_edge_start_row`, default on): the west scan's
+  first candidate is local row *r* − 1, so when *r* = 0 it is row −1 (claim 4). With the switch
+  off, the first candidate is row *r* modulo 2*L*h; subsequent candidates continue in cyclic
+  order modulo 2*L*h. The draw range and number of draws are unchanged.
 - **The falling mark of a failed drop.** In the original, a drop attempt that fails after the usable-area
   test leaves the passenger marked as falling while it waits in the plane. This has no observable
   effect; our engine does not mark a passenger that stays aboard.
@@ -416,9 +424,10 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
 | `[CombatDamage]` | `FallingDamageMultiplier` | nothing: read, never applied | — | — |
 | aircraft type | `Ammo` | the plane's starting ammunition, whose parity picks the first drop side (claim 9, F4) | integer | −1 (S-0301 claim 10 and its Import mapping) |
 | map house section | `Edge` | the house's named arrival edge (claim 5) | one of `North`, `East`, `South`, `West`, `Air`, compared case-insensitively; `Air` and any other word leave the edge unnamed | unnamed |
-| superweapon type | `Type` | which launch kind (paradrop or American paradrop) is delivered; planned S-0513 | — | planned S-0513's |
+| superweapon type | `Type` | which launch kind (paradrop or American paradrop) is delivered; dispatch: S-0513 claim 42 | word | no kind |
 
-The superweapon kinds' own keys, charging and targeting belong to planned S-0513. The type ID `PDPLANE` is a
+The superweapon kind mapping is given in S-0512's Import mapping. Charging and firing follow
+S-0512 claims 5 and 8; targeting and dispatch follow S-0513 claims 1 and 42. The type ID `PDPLANE` is a
 name fixed in the original, not a key; the user's rules must define an aircraft type with that ID
 for paradrops to work. Whether a skirmish player's house reads the map's house section for `Edge`
 is an open question; a house without a named edge uses its computed edge (claim 5).
@@ -445,10 +454,16 @@ proposal, not a change to the harness.
   position 0, 1 and 2, and the American paradrop. Record the number of planes and each plane's
   paratrooper count and types (from the units that land) and the draw count around the launch.
   Expected: one plane per payload entry, with the entry's count of the entry's type; draws as in
-  claim 16. Record passenger identity by creation event: releases must be last-created first,
+  claim 16. Record initial plane position, facing, height, target, destination and behaviour
+  before its first flight update: expect the arrival-cell centre, map north, cruise height,
+  the launch target, no destination and *paradrop approach*. Any difference falsifies claim 3.
+  Record passenger identity by creation event: releases must be last-created first,
   including after a refused drop. Any other payload, draw order or release order falsifies the
-  claims. Named test-data variants: mismatched lists for each checked payload give no planes.
-  excess counts in the second side group's list are ignored; count 0 gives an empty plane that
+  claims. Named test-map variants give a country side position other than 0, 1 or 2 and give
+  distinct payload lists: expect the second side group's payload. Also launch the American
+  paradrop from each side: expect the American payload regardless of side. A different list
+  falsifies claim 2. Mismatched lists for each checked payload give no planes.
+  Excess counts in the second side group's list are ignored; count 0 gives an empty plane that
   approaches and then retreats; a missing plane type sends none. A contrary result falsifies
   the corresponding rule. Do not run the original with negative counts or a short second-group
   count list; those safe replacements are design rules, not oracle predictions.
@@ -463,6 +478,16 @@ proposal, not a change to the harness.
   Named map variants give an explicit edge, then change primary yards between launch and retreat:
   arrival stays fixed but a newly chosen retreat destination uses the then-current edge. Whether
   a skirmish player reads the explicit map edge remains an open question.
+  West-edge variant: use an even local top coordinate and record both row −1 and row 0's
+  candidate cells and acceptability. Make up to 200 launches, retaining the draws and candidates,
+  include an *r* = 0 case if one occurs. Expected with the default quirk: candidates begin
+  at −1 and continue through 2*L*h − 2, with claim 4's first acceptable point selected.
+  A different arrival from that prediction falsifies the original rule. If no *r* = 0
+  occurs, report that subcase inconclusive rather than confirmed. On our engine only,
+  replay the same draw with the switch off: expect the cyclic sequence starting at row 0.
+  Repeat the ordinary edge tests with obstacles and occupants beneath the predicted arrival
+  cells: the cell and draw count must remain unchanged; a change falsifies claim 4's
+  absence of occupancy and passability tests. The no-candidate fallback remains unmeasured.
 - **P4 Passes and cadence (claims 6, 7, 9).** Launch at an open land target with one plane of
   several paratroopers. Log per tick the plane's position, behaviour and each paratrooper's
   appearance tick and cell. Expected: approach checks 3 ticks apart, overfly checks and attempts
@@ -471,7 +496,14 @@ proposal, not a change to the harness.
   Successive successful attempts alternate sides. A different cadence, transition distance,
   side or standing position falsifies the corresponding claim. Include a refused attempt:
   the next attempt must retain its passenger and side. Compare its random-state change with
-  whether the standing-position table reached its centre-class row. Observe the initial
+  whether the standing-position table reached its centre-class row. Expect one R(0, 3)
+  exactly when that row is reached, even on refusal; a different draw count falsifies claim 9.
+  Record ammunition and the released unit's initial facing and height: expect one ammunition
+  decrement per success, no net decrement on failure, map south and the plane's world height.
+  Record the parachute sound's playback position: expect the plane's position on success and
+  no such sound on refusal. A difference falsifies claim 9. Compare random state across
+  approach and overfly checks without other draw-producing events: expect no processing-delay
+  draws; a draw attributable to either delay falsifies claims 6, 7 and 16. Observe the initial
   approach without a destination: its first check assigns the target as destination rather
   than immediately entering overfly. A launch near the usable-area boundary tests that an
   in-radius plane outside it makes no attempt. A contrary transition or outside-area attempt
@@ -481,7 +513,7 @@ proposal, not a change to the harness.
   tile, so claim 1 does not move the target) with a unit standing on it, whose surroundings out
   to the radius plus 128 leptons are water. Count the plane's passes over the
   target. Expected: exactly five passes, then *retreat* and removal outside the usable area.
-  no paratrooper appears. More or fewer passes or retained off-map planes falsify the claims.
+  No paratrooper appears. More or fewer passes or retained off-map planes falsify the claims.
   A second case allows one successful drop after several failed passes, then blocks the target:
   expect five further unsuccessful passes, testing reset rather than just initial budget.
   Record passenger loss counts, kill credits and enemy experience across removal: expect no
@@ -489,7 +521,12 @@ proposal, not a change to the harness.
 - **P6 Blocked and bridge cells (claims 9, 10).** Target a strip with a bridge, a row of single
   infantry units on every other cell, and a cliff. Record which cells receive paratroopers and their
   layer. Expected: no drop into a cell already holding any unit, into a cliff cell, or into water,
-  a drop on a free bridge deck lands on the deck. A release on a refused landing layer, a second
+  a drop on a free bridge deck lands on the deck. Named test-map variants place terrain at
+  level −6 and just above it, vary ground occupancy beneath a free bridge deck, and put the
+  desired standing position at the usable-area boundary. Log the drop point, entry outcome,
+  standing position, deck-entry mark and whole-record occupancy. Predict each success or
+  refusal with claim 9 and the cited entry and standing-position rules; any disagreement
+  falsifies claim 9, including a release outside the usable area. A release on a refused landing layer, a second
   release into a layer already occupied by a falling paratrooper, or a ground landing on the
   bridge falsifies the rules. Record horizontal position throughout descent: drift before
   landing falsifies claim 10. Move landed troops away and repeat to distinguish occupancy from
@@ -502,13 +539,17 @@ proposal, not a change to the harness.
 - **P8 Fall (claims 12, 13).** Record a paratrooper's height per tick from its drop to its landing.
   Expected: S-0511 F3's parachute recurrence while an animation is attached, starting at the
   plane's world height; landing below 1 lepton above the landing surface, with no health loss.
-  Record the attached animation's lifetime and passes. Named test-map variants use a finite,
+  Record the infantry sequence while falling and on landing: expect *parachute*, then a request
+  for *stand*. A different sequence request falsifies claim 12. Record the attached animation's
+  lifetime and passes. Named test-map variants use a finite,
   short-lived parachute and an endless one, without follow-up effects, and omit the parachute.
   The finite one can finish before landing, after which the no-parachute recurrence applies.
-  the endless one stops looping on landing. Omission records whether the drop completes, what
+  The endless one stops looping on landing. Omission records whether the drop completes, what
   animation remains attached and which fall rate applies; no outcome is yet asserted for it.
   A rate, landing tick, pass count or health change differing from the defined-animation
-  predictions falsifies claims 12 or 13. Check animation-creation draws against S-0202 claim 10.
+  predictions falsifies claims 12 or 13. Check animation-creation draws against S-0202 claim 10:
+  they must follow any standing-position draw of that attempt. A different count or ordering
+  falsifies claims 13 and 16. The non-parachute-attachment subcase remains unmeasured.
 - **P9 Deaths (claims 14, 15).** Shoot down a loaded paradrop plane with anti-air units; record the
   attacker's kill count and experience. Expected: every passenger dies, credited to the attacker.
   Kill ordinary human-type falling paratroopers: they disappear at once with no death sequence,
