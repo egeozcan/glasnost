@@ -1062,6 +1062,12 @@ fn action(
                 crate::superweapons::nuke::waypoint(w, c);
             }
         }
+        // spec: S-0513 claim 22 and Import mapping (109 invulnerability at a waypoint: the waypoint slot, no house, the imported curtain duration; the number slot is unused)
+        109 => {
+            if let Some(c) = waypoint_cell(w, a.waypoint) {
+                crate::superweapons::protect::curtain(w, None, c, true);
+            }
+        }
         // spec: S-0011 I4 (14 change owner, 32 destroy attached, 42 explosion, 113 cheer, 8 drop-zone animation, 41 play an animation)
         14 | 32 | 42 | 113 | 8 | 41 => {
             w.note("S-0011 claims 24, 27, 28, 29, 36: change owner, destroy attached, explosion, cheer and the waypoint animations are not implemented yet (M6); no effect");

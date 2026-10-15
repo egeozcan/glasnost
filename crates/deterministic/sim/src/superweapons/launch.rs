@@ -163,11 +163,8 @@ fn second_stage(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
         // spec: S-0512 claim 10 (quirks.second_stage_order_unchecked off: refused unless the first stage is granted, not suspended and has an unconsumed source selection)
         return;
     }
-    let Some(source) = frec.source else {
-        // Q-0737: the first stage has never picked a source.
-        w.note("Q-0737: a second-stage order with no source ever picked does nothing (interim)");
-        return;
-    };
+    // spec: S-0512 claim 10 (before any source has been picked the source is cell (0, 0), not an absent selection; the warp uses it and its effect block even outside the playable area; with the unchecked-order quirk off the order was refused above)
+    let source = frec.source.unwrap_or(CellXY::new(0, 0));
     // spec: S-0512 claim 10 (it starts the second effect stage with the first stage's last picked source)
     super::warp::launch(w, h, source, cell);
     let ignores = w.rules().quirks.superweapon_restart_ignores_suspension;
@@ -296,7 +293,12 @@ fn effect(
             // warp from the linked first stage's source, as claim 34 says.
             let ty = w.rules().superweapons.types[i as usize].clone();
             let first = linked_first(w, &ty);
-            let source = first.and_then(|f| record(w, h, f).and_then(|r| r.source));
+            // spec: S-0512 claim 10 (no source picked yet: cell (0, 0))
+            let source = first.map(|f| {
+                record(w, h, f)
+                    .and_then(|r| r.source)
+                    .unwrap_or(CellXY::new(0, 0))
+            });
             if let Some(s) = source {
                 super::warp::launch(w, h, s, cell);
             }

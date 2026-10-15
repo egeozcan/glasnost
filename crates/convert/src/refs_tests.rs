@@ -60,6 +60,28 @@ fn systems(o: &Outcome) -> Vec<String> {
     n
 }
 
+/// spec: S-0522 claim 2 and Import mapping (Q-0736: payload names are creating references of the infantry kind: an unknown name, and a name used only by a vehicle, create infantry types and keep their place in the list; empty items and no-type names are omitted from the reference list)
+#[test]
+fn paradrop_payload_names_create_infantry_types() {
+    let o = base(
+        "[VehicleTypes]\n1=Truck\n[Truck]\nStrength=1\n\
+         [General]\nAllyParaDropInf=Fresh,,Truck,none,<none>,Other\n",
+    );
+    let inf = names(&o, Kind::Infantry);
+    for n in ["Fresh", "Truck", "Other"] {
+        assert!(
+            inf.iter().any(|x| x.eq_ignore_ascii_case(n)),
+            "{n} is created as an infantry type: {inf:?}"
+        );
+    }
+    assert_eq!(inf.len(), 3, "only the retained names: {inf:?}");
+    assert_eq!(
+        names(&o, Kind::Vehicles).len(),
+        1,
+        "the vehicle is a separate type"
+    );
+}
+
 /// spec: S-0004 claim 13 (the kinds each section can create; creating single and list fields), claim 6 (which of them read their section)
 #[test]
 fn each_section_creates_its_kinds() {

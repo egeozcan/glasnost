@@ -474,6 +474,123 @@ pub struct TiberiumType {
     pub image_run: Option<[i32; 3]>,
 }
 
+/// The superweapon kind words in kind-number order 0 to 11 (S-0512 Import
+/// mapping, claim 24): literal lower-case words, matched as a complete word
+/// without regard to case. Hyphens, underscores and internal spaces are not
+/// ignored.
+// spec: S-0512 claim 24 (the twelve kind words of the Import mapping table, in kind-number order)
+pub const SUPERWEAPON_KIND_WORDS: [&str; 12] = [
+    "multimissile",
+    "ironcurtain",
+    "lightningstorm",
+    "chronosphere",
+    "chronowarp",
+    "paradrop",
+    "amerparadrop",
+    "psychicdominator",
+    "spyplane",
+    "geneticconverter",
+    "forceshield",
+    "psychicreveal",
+];
+
+/// The accepted aim-action words (S-0512 Import mapping, claim 23), in the
+/// table's reading order; `none` is no action. Matched as a complete word
+/// without regard to case.
+// spec: S-0512 claim 23 and Import mapping (the complete action-word vocabulary)
+pub const SUPERWEAPON_ACTION_WORDS: &[&str] = &[
+    "none",
+    "move",
+    "nomove",
+    "enter",
+    "self",
+    "attack",
+    "harvest",
+    "select",
+    "toggleselect",
+    "capture",
+    "eaten",
+    "repair",
+    "sell",
+    "sellunit",
+    "nosell",
+    "norepair",
+    "sabotage",
+    "tote",
+    "dontuse2",
+    "dontuse3",
+    "nuke",
+    "dontuse4",
+    "dontuse5",
+    "dontuse6",
+    "dontuse7",
+    "dontuse8",
+    "guardarea",
+    "heal",
+    "damage",
+    "grepair",
+    "nodeploy",
+    "noenter",
+    "nogrepair",
+    "togglepower",
+    "notogglepower",
+    "entertunnel",
+    "noentertunnel",
+    "ironcurtain",
+    "lightningstorm",
+    "chronosphere",
+    "chronowarp",
+    "paradrop",
+    "placewaypoint",
+    "tibsunbug",
+    "enterwaypointmode",
+    "followwaypoint",
+    "selectwaypoint",
+    "loopwaypointpath",
+    "dragwaypoint",
+    "attackwaypoint",
+    "enterwaypoint",
+    "patrolwaypoint",
+    "areaattack",
+    "ivanbomb",
+    "noivanbomb",
+    "detonate",
+    "detonateall",
+    "disarmbomb",
+    "selectnode",
+    "attacksupport",
+    "placebeacon",
+    "selectbeacon",
+    "attackmovenav",
+    "attackmovetar",
+    "demolish",
+    "amerparadrop",
+    "psychicdominator",
+    "spyplane",
+    "geneticconverter",
+    "forceshield",
+    "noforceshield",
+    "airstrike",
+    "psychicreveal",
+];
+
+/// The kind number of a kind word (S-0512 claim 24), or `None` for a word
+/// outside the vocabulary.
+pub fn superweapon_kind_number(word: &str) -> Option<usize> {
+    SUPERWEAPON_KIND_WORDS
+        .iter()
+        .position(|k| k.eq_ignore_ascii_case(word))
+}
+
+/// Whether `word` is in the aim-action vocabulary (S-0512 claim 23); `none`
+/// included.
+pub fn superweapon_action_known(word: &str) -> bool {
+    !word.is_empty()
+        && SUPERWEAPON_ACTION_WORDS
+            .iter()
+            .any(|k| k.eq_ignore_ascii_case(word))
+}
+
 /// A superweapon type (S-0407 and S-0412 Import mapping).
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -481,7 +598,9 @@ pub struct SuperweaponType {
     /// `DisableableFromShell` (S-0412 claim 9 b, S-0407 claim 7); absent: no.
     #[serde(default)]
     pub disableable_from_shell: Option<bool>,
-    /// `Type`, the kind word as written (S-0407 claim 12 j); absent: none.
+    /// `Type`, the kind word, one of the twelve words of S-0512 claim 24
+    /// (S-0407 claim 12 j); absent: none. The importer keeps the previous
+    /// layer's word for an unknown one.
     #[serde(default)]
     pub kind: Option<String>,
     /// `RechargeTime`, the charge time in game minutes, single precision
@@ -505,12 +624,12 @@ pub struct SuperweaponType {
     /// `PostClick`, the second-stage flag (S-0512 Terms); absent: no.
     #[serde(default)]
     pub post_click: Option<bool>,
-    /// `PreDependent`, the second stage's link, a kind word (S-0512 claim
-    /// 11); absent: none.
+    /// `PreDependent`, the second stage's link, a kind word of S-0512 claim
+    /// 24 (claim 11); absent: none.
     #[serde(default)]
     pub pre_dependent: Option<String>,
-    /// `Action`, the aim action word as written (S-0512 claim 23); absent:
-    /// none.
+    /// `Action`, the aim action word as written (S-0512 claim 23); a word
+    /// outside the vocabulary sets no action; absent: none.
     #[serde(default)]
     pub action: Option<String>,
     /// `UseChargeDrain`, the drain-mode flag (S-0512 claim 19); absent: no.

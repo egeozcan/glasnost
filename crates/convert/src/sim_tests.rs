@@ -1083,8 +1083,8 @@ fn starting_unit_gate_and_vein_fields() {
 #[test]
 fn animation_fields() {
     let base = "[Animations]\n0=SPARK\n1=ROCK\n2=DUST\n[Particles]\n0=Puff\n";
-    let art = "[SPARK]\nRandomRate=-1,30\nTiberiumChainReaction=yes\nSpawnsParticle=PUFF\nNumParticles=3\n\
-               [ROCK]\nIsMeteor=yes\nSpawnsParticle=<none>\n[DUST]\nSpawnsParticle=none\n";
+    let art = "[SPARK]\nRandomRate=-1,30\nTiberiumChainReaction=yes\nSpawnsParticle=PUFF\nNumParticles=3\nRate=450\nNormalized=yes\n\
+               [ROCK]\nIsMeteor=yes\nSpawnsParticle=<none>\nRate=-1\n[DUST]\nSpawnsParticle=none\n";
     let (s, _) = sim(base, "", art);
     let spark = &s.animations["SPARK"];
     assert_eq!(spark.random_rate, Some([0, 30]));
@@ -1093,6 +1093,11 @@ fn animation_fields() {
     assert_eq!(spark.num_particles, Some(3));
     // No art lookup ran: μ is unknown.
     assert_eq!(spark.middle_frame, None);
+    assert_eq!((spark.frame_count, spark.canvas_height), (None, None));
+    // spec: S-0109 Import mapping (Rate an integer, -1 not given; Normalized a boolean) for S-0513 claim 46
+    assert_eq!(spark.rate, Some(450));
+    assert_eq!(spark.normalized, Some(true));
+    assert_eq!(s.animations["ROCK"].rate, None);
     let rock = &s.animations["ROCK"];
     assert_eq!(rock.is_meteor, Some(true));
     assert_eq!(rock.spawns_particle, None);

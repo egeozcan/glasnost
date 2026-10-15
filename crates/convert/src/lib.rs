@@ -262,6 +262,18 @@ async fn look_up_art(
             a.middle_sprite_frames = Some(i32::try_from(shp.frames.len()).unwrap_or(i32::MAX));
         }
     }
+    // spec: S-0513 claim 46 and F4 (the animation's current image: its frame count F and its header's canvas height H, not a frame's stored rectangle)
+    for a in arts.values_mut() {
+        let Some(r) = a.sprite.as_ref().and_then(|f| vfs.resolve_bytes(f)) else {
+            continue;
+        };
+        if let Ok(bytes) = vfs.read_resolved(&r).await
+            && let Ok(shp) = glasnost_fmt::shp::Shp::parse(&bytes)
+        {
+            a.sprite_frames = Some(i32::try_from(shp.frames.len()).unwrap_or(i32::MAX));
+            a.sprite_height = Some(i32::from(shp.height));
+        }
+    }
     // spec: S-0005 claim 13 (the loading archives are released before play)
     vfs.finish_loading();
     let in_play = |n: &[u8]| vfs.resolve_bytes(n).is_some();

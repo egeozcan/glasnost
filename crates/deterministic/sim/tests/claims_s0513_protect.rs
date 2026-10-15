@@ -437,6 +437,92 @@ fn claim29_reapplication_restarts_the_envelope() {
 }
 
 #[test]
+fn claim29_buildings_and_both_kinds_draw_in_turn_q_plus_ten() {
+    // spec: S-0513 claim 29 (Q-0733: the draw is identical for the curtain and the force shield and for buildings and mobile objects that take protected turns: turn q + 10)
+    for kind in [ProtectKind::Curtain, ProtectKind::ForceShield] {
+        for name in ["TOWER", "CART"] {
+            let r = ruleset();
+            let mut a = game(&r);
+            let mut b = game(&r);
+            let id = spawn(&mut a, name, BETA, 0, 0);
+            let _ = spawn(&mut b, name, BETA, 0, 0);
+            let q = a.tick;
+            protect::start(&mut a, id, kind, 100);
+            assert_eq!(
+                first_divergence(&mut a, &mut b, 30),
+                Some(q + 10),
+                "{name} {kind:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn claim29_missed_turns_postpone_the_phase_and_schedule_no_draw_of_their_own() {
+    // spec: S-0513 claim 29 (Q-0733: a missed due turn postpones the transition to the next protected turn; after entering Bright hold, an object absent across its expiry draws on its first protected turn back; one absent across the expiry of Initial rise enters Bright hold on its return, starts a fresh 4-tick hold then, and draws only when that hold expires)
+    let r = ruleset();
+    // Absent across the expiry of Bright hold.
+    let mut w = game(&r);
+    let id = spawn(&mut w, "CART", BETA, 0, 0);
+    let q = w.tick;
+    protect::start(&mut w, id, ProtectKind::Curtain, 200);
+    protect::tint_turn(&mut w, id);
+    assert!(matches!(
+        w.obj(id).unwrap().sw.protection.unwrap().tint,
+        superweapons::Tint::Rise(s) if s == q
+    ));
+    w.tick = q + 6;
+    protect::tint_turn(&mut w, id);
+    assert!(matches!(
+        w.obj(id).unwrap().sw.protection.unwrap().tint,
+        superweapons::Tint::BrightHold(s) if s == q + 6
+    ));
+    let taken = w.rng.taken();
+    // Absent for a long while: no draw of its own at q + 10.
+    w.tick = q + 30;
+    assert_eq!(w.rng.taken(), taken);
+    protect::tint_turn(&mut w, id);
+    assert_eq!(
+        w.obj(id).unwrap().sw.protection.unwrap().tint,
+        superweapons::Tint::Dimming
+    );
+    assert_eq!(
+        w.rng.taken(),
+        taken + 1,
+        "drawn on the first protected turn back"
+    );
+
+    // Absent across the expiry of Initial rise.
+    let mut w = game(&r);
+    let id = spawn(&mut w, "CART", BETA, 0, 0);
+    let q = w.tick;
+    protect::start(&mut w, id, ProtectKind::ForceShield, 200);
+    protect::tint_turn(&mut w, id);
+    w.tick = q + 20;
+    let taken = w.rng.taken();
+    protect::tint_turn(&mut w, id);
+    assert!(matches!(
+        w.obj(id).unwrap().sw.protection.unwrap().tint,
+        superweapons::Tint::BrightHold(s) if s == q + 20
+    ));
+    assert_eq!(
+        w.rng.taken(),
+        taken,
+        "no draw on return, a fresh hold starts"
+    );
+    w.tick = q + 20 + 3;
+    protect::tint_turn(&mut w, id);
+    assert_eq!(w.rng.taken(), taken);
+    w.tick = q + 20 + 4;
+    protect::tint_turn(&mut w, id);
+    assert_eq!(
+        w.rng.taken(),
+        taken + 1,
+        "drawn when the fresh hold expires"
+    );
+}
+
+#[test]
 fn claim29_protection_ended_before_the_phase_takes_no_draw() {
     // spec: S-0513 claim 29 (protection that expires before the pulsing phase takes no draw)
     let r = ruleset();

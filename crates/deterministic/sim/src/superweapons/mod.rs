@@ -79,38 +79,32 @@ impl SwKind {
 
     /// The kind of a kind number.
     pub fn from_number(n: u32) -> Option<SwKind> {
-        KINDS.get(n as usize).map(|&(_, k)| k)
+        KINDS.get(n as usize).copied()
     }
 }
 
-/// The kind words (Q-0730 interim): the table words of S-0512 Import
-/// mapping with "kind" dropped and hyphens and spaces stripped, matched
-/// without regard to case. Our engine's provisional spelling, not the
-/// data's: Q-0730 asks for the words the rules files use.
-// spec: S-0512 Import mapping (kind words in kind-number order, 0 to 11; matched without regard to case)
-const KINDS: [(&str, SwKind); 12] = [
-    ("multimissile", SwKind::Missile),
-    ("ironcurtain", SwKind::IronCurtain),
-    ("lightningstorm", SwKind::Storm),
-    ("chronosphere", SwKind::Chrono),
-    ("chronospherewarp", SwKind::ChronoWarp),
-    ("parachutedrop", SwKind::Paradrop),
-    ("americanparachutedrop", SwKind::AmerParadrop),
-    ("psychicdominator", SwKind::Dominator),
-    ("spyaircraft", SwKind::SpyPlane),
-    ("geneticconversion", SwKind::Genetic),
-    ("forceshield", SwKind::ForceShield),
-    ("psychicreveal", SwKind::PsychicReveal),
+/// The kinds in kind-number order, parallel to
+/// [`glasnost_rules::sim_econ::SUPERWEAPON_KIND_WORDS`].
+// spec: S-0512 claim 24 (kind numbers 0 to 11 in the table's order)
+const KINDS: [SwKind; 12] = [
+    SwKind::Missile,
+    SwKind::IronCurtain,
+    SwKind::Storm,
+    SwKind::Chrono,
+    SwKind::ChronoWarp,
+    SwKind::Paradrop,
+    SwKind::AmerParadrop,
+    SwKind::Dominator,
+    SwKind::SpyPlane,
+    SwKind::Genetic,
+    SwKind::ForceShield,
+    SwKind::PsychicReveal,
 ];
 
-/// A kind word's kind (Q-0730 interim normalisation).
+/// A kind word's kind (S-0512 claim 24): one of the twelve literal words,
+/// matched whole and without regard to case; any other spelling gives none.
 pub fn kind_of_word(word: &str) -> Option<SwKind> {
-    let w: String = word
-        .chars()
-        .filter(|c| *c != '-' && *c != ' ' && *c != '_')
-        .flat_map(char::to_lowercase)
-        .collect();
-    KINDS.iter().find(|(k, _)| *k == w).map(|&(_, k)| k)
+    glasnost_rules::sim_econ::superweapon_kind_number(word).map(|n| KINDS[n])
 }
 
 /// One superweapon type, resolved (S-0512 and S-0513 Import mapping).
@@ -136,7 +130,7 @@ pub struct SwType {
     pub post_click: bool,
     /// The second stage's link, a kind number (claim 11).
     pub pre_dependent: Option<u32>,
-    /// The aim action word, lower case (claim 23; Q-0731 interim).
+    /// The aim action word, lower case (claim 23); `None` for no action.
     pub action: Option<String>,
     /// Drain mode (claim 19).
     pub drain: bool,
@@ -259,7 +253,7 @@ pub struct SwRules {
 }
 
 /// The fixed paradrop plane type name (S-0522 Import mapping).
-// spec: S-0522 Import mapping (aircraft type ID `PDPLANE`, a name fixed in the original)
+// spec: S-0513 Import mapping (aircraft type `PDPLANE`, a fixed type name) and S-0522 Import mapping (the original's fixed paradrop-plane type name)
 pub const PARA_PLANE: &str = "PDPLANE";
 
 /// One payload list (S-0522 claims 2 and 3). `partial` is the second side
@@ -292,8 +286,8 @@ fn payload_list(
     // spec: S-0522 claim 2 (a count list longer than the infantry list has its extra counts ignored)
     for (t, &n) in inf.iter().zip(num.iter()) {
         let Some(&ti) = names.get(&(Kind::Infantry, t.clone())) else {
-            // Q-0736 interim: an entry naming no infantry type sends no plane; the importer warns.
-            warnings.push(format!("S-0522 claim 2 (Q-0736): paradrop list {label} names {t}, which is no infantry type; that entry sends no plane"));
+            // spec: S-0522 claim 2 (payload names are creating references of the infantry kind, so the importer registers an unknown name, or one used only by a vehicle, as an infantry type and the entry keeps its place in the pairing; there is no fallback type. A ruleset not made by the importer may lack the type: there is nothing to carry then, so the entry sends no plane, a defensive departure)
+            warnings.push(format!("S-0522 claim 2: paradrop list {label} names {t}, which is no registered infantry type; that entry sends no plane"));
             continue;
         };
         let n = if n < 0 {
@@ -371,14 +365,14 @@ impl SwRules {
                 Some(word) => {
                     let k = kind_of_word(word);
                     if k.is_none() {
-                        // spec: S-0512 Import mapping (an unknown kind word keeps the previous kind; one merged layer: none)
-                        warnings.push(format!("S-0512 Import mapping and Q-0730: superweapon {n} has an unknown kind word {word}; no kind"));
+                        // spec: S-0512 claim 24 (an unknown word keeps the previous layer's kind; the importer already did that, so a word reaching here, from a ruleset it did not make, gives no kind)
+                        warnings.push(format!("S-0512 claim 24: superweapon {n} has an unknown kind word {word}; no kind"));
                     }
                     k
                 }
             };
             let pre_dependent = t.pre_dependent.as_deref().and_then(|word| {
-                // spec: S-0512 Import mapping (the link is a kind word as for `Type`; its kind number)
+                // spec: S-0512 claim 24 (the link is one of the same twelve words as the kind; its kind number)
                 let k = kind_of_word(word).map(SwKind::number);
                 if k.is_none() {
                     warnings.push(format!("S-0512 claim 11: superweapon {n} links to an unknown kind word {word}; no first stage"));
@@ -387,8 +381,8 @@ impl SwRules {
             });
             let action = t.action.as_deref().and_then(|a| {
                 let a = a.to_ascii_lowercase();
-                // spec: S-0512 claim 23 and Import mapping (`None` maps to no action; case-insensitive; Q-0731 interim: an empty word is no action too)
-                (a != "none" && !a.is_empty()).then_some(a)
+                // spec: S-0512 claim 23 and Import mapping (`none` is no action; a word outside the vocabulary sets no action; case-insensitive; an empty value never reaches here, S-0001 claim 11)
+                (a != "none" && glasnost_rules::sim_econ::superweapon_action_known(&a)).then_some(a)
             });
             let aux = t
                 .aux_building
@@ -577,7 +571,7 @@ impl SwRules {
             payloads,
             // spec: S-0522 Import mapping and Constants (ParadropRadius absent: 1024 leptons)
             para_radius: g.paradrop_radius.unwrap_or(1024),
-            // spec: S-0522 Import mapping (Parachute absent: none; Open questions 2, Q-0752)
+            // spec: S-0522 Import mapping (Parachute: initially none; an omitted or empty layered value retains the held type; none and <none> clear it)
             parachute: g.parachute.clone(),
             // spec: S-0522 Import mapping (ChuteSound absent: no sound)
             chute_sound: g.chute_sound.clone(),
@@ -767,7 +761,8 @@ pub struct Cloud {
     pub pos: Pos,
     /// The creation tick.
     pub created: i32,
-    /// The stage delay (Q-0732 interim playback).
+    /// The effective stage delay of its playback (S-0513 claim 46); 0
+    /// freezes the stage.
     pub delay: i32,
     /// Still pending its strike.
     pub pending: bool,
@@ -836,6 +831,10 @@ pub struct ObjSw {
     /// A silo's accepted launch: the target recorded when it accepted
     /// (S-0513 claim 13) and the type list position fired.
     pub silo_launch: Option<(Option<CellXY>, u32)>,
+    /// A silo's busy interval (S-0513 claim 47): it accepts no new launch
+    /// before this tick; 0 when it never accepted one.
+    #[serde(default)]
+    pub silo_busy_until: i32,
 }
 
 // ---------------------------------------------------------------------------

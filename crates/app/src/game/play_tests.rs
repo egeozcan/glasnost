@@ -871,6 +871,34 @@ fn s0512_claim_16_icon_arms_and_a_click_fires() {
     assert_eq!(fired(&p), vec![Order::FireSuperweapon { sw: 0, cell: at }]);
 }
 
+/// spec: S-0512 claim 23 (an otherwise fireable icon with no aim action issues that type's fire order at cell (0, 0), without entering aiming; a recognised nonzero action enters aiming)
+#[test]
+fn a_superweapon_icon_without_an_aim_action_fires_at_cell_zero() {
+    let mut r = fixture::ruleset();
+    r.sim.superweapons.get_mut("NUKE").unwrap().action = None;
+    let mut p = start_with(std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &r,
+        "synthetic-skirmish",
+    )));
+    ready_silo(&mut p);
+    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let n = entries
+        .iter()
+        .position(|e| *e == hud::Entry::Superweapon(0))
+        .expect("the silo's superweapon in the 2nd tab");
+    p.tab = hud::SW_TAB;
+    p.selection.clear();
+    p.cameo_click(n, Button::Left, false);
+    assert_eq!(p.tool, Tool::Select, "no aiming");
+    assert_eq!(
+        fired(&p),
+        vec![Order::FireSuperweapon {
+            sw: 0,
+            cell: CellXY::new(0, 0)
+        }]
+    );
+}
+
 /// spec: S-0214 claim 28 and S-0513 claim 1 (a right click cancels the aim with no order)
 #[test]
 fn s0513_claim_1_right_click_cancels_the_aim() {
@@ -954,7 +982,7 @@ fn source_pick(p: &mut Play, house: HouseId) {
 }
 
 const FOUR_MORE: [(&str, &str); 4] = [
-    ("SWA", "ChronosphereWarp"),
+    ("SWA", "ChronoWarp"),
     ("SWB", "LightningStorm"),
     ("SWC", "IronCurtain"),
     ("SWD", "MultiMissile"),
