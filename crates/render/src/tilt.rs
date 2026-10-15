@@ -3,7 +3,9 @@
 //! tilting locomotor as a pure state machine, and the interpolated tilt
 //! orientation and its matrix for the drawn frames of a transition.
 //!
-//! What is here: the tilt orientations *q_s* (C3), the spherical
+//! What is here: the tilt orientations *q_s* by C3's construction rule with
+//! claim 4's corrected angles (and C3's original rows for oracle
+//! comparisons), the spherical
 //! interpolation of F3 with its table arc cosine, the quaternion's matrix,
 //! and [`TiltState`] with S-0106's continuous restart (claim 6, a
 //! lead-confirmed departure with no switch).
@@ -17,7 +19,7 @@
 use std::f64::consts::FRAC_PI_2;
 
 use crate::rz::{add_rz, div_rz, mul_rz, sub_rz, to_f32_rz};
-use crate::voxel::{Mat34, VoxelQuirks, table_sin_cos};
+use crate::voxel::{Mat34, VoxelQuirks, table_sin_cos, table_sqrt};
 
 /// A tilt orientation quaternion *(x, y, z, w)*, single precision (S-0106
 /// Terms).
@@ -36,10 +38,11 @@ const ACOS_STEPS: f64 = 2048.0; // spec: S-0106 F3 (S(m) for m/2048 − 1)
 /// Last entry of F3's arc-sine table (S-0106 F3: m = 0 … 4096).
 const ACOS_LAST: i64 = 4096; // spec: S-0106 F3 (4097 fixed values)
 
-/// The tilt orientation *q_s* of slope shape `shape` (S-0106 table C3).
-/// Shapes 0 and 17 … 20, and any shape outside 0 … 20, have the identity.
-pub fn tilt_orientation(shape: u8) -> Quat {
-    // spec: S-0106 Constants table C3 (tilt orientations)
+/// The original tilt orientation of slope shape `shape`: table C3's
+/// numeric rows (S-0106), kept as oracle references only. Shapes 0 and
+/// 17 … 20, and any shape outside 0 … 20, have the identity.
+pub fn original_orientation(shape: u8) -> Quat {
+    // spec: S-0106 Constants table C3 (original tilt orientations, oracle references only)
     const E: f32 = 0.253_382; // shapes 1 … 4
     const W1: f32 = 0.967_366_3; // shapes 1 … 4 and 13 … 16
     const C: f32 = 0.131_031_9; // shapes 5 … 12
@@ -60,6 +63,69 @@ pub fn tilt_orientation(shape: u8) -> Quat {
         16 => [S, -S, 0.0, W1],
         _ => [0.0, 0.0, 0.0, 1.0],
     }
+}
+
+/// The tilt angle of the original for shapes 1 … 4 and 13 … 16, *τ_A*
+/// (S-0106 F2), for oracle comparisons.
+pub const TAU_A: f64 = 0.511_634_767_055_511_47; // spec: S-0106 F2 (τ_A = A₂₃)
+
+/// The tilt angle of the original for shapes 5 … 12, *τ_B* (S-0106 F2), for
+/// oracle comparisons.
+pub const TAU_B: f64 = 0.372_388_541_698_455_81; // spec: S-0106 F2 (τ_B = A₁₆)
+
+/// C3's construction rule (S-0106): the rotation about the horizontal axis
+/// (cos *α_s*, sin *α_s*, 0) of F2 by the shape's angle, `edge` for shapes
+/// 1 … 4, `corner` for 5 … 12 and `steep` for 13 … 16. The axis is
+/// normalised with the table square root, the half angle's sine and cosine
+/// are table trigonometry (S-0105 F1), single-precision stores truncated
+/// toward zero (S-0105 F0).
+pub fn construct(shape: u8, (edge, corner, steep): (f64, f64, f64), quirks: &VoxelQuirks) -> Quat {
+    use std::f64::consts::PI;
+    // spec: S-0106 F2 (α_s and τ_s by shape; identity for 0 and 17 … 20)
+    let (alpha, tau) = match shape {
+        1 => (3.0 * PI / 2.0, edge),
+        2 => (PI, edge),
+        3 => (PI / 2.0, edge),
+        4 => (0.0, edge),
+        5 | 9 => (5.0 * PI / 4.0, corner),
+        6 | 10 => (3.0 * PI / 4.0, corner),
+        7 | 11 => (PI / 4.0, corner),
+        8 | 12 => (7.0 * PI / 4.0, corner),
+        13 => (5.0 * PI / 4.0, steep),
+        14 => (3.0 * PI / 4.0, steep),
+        15 => (PI / 4.0, steep),
+        16 => (7.0 * PI / 4.0, steep),
+        _ => return [0.0, 0.0, 0.0, 1.0],
+    };
+    // spec: S-0106 C3 construction rule (axis (cos α, sin α, 0) by table trigonometry, normalised with the table square root)
+    let (sa, ca) = table_sin_cos(alpha, quirks);
+    let (ax, ay) = (f64::from(ca), f64::from(sa));
+    let len = f64::from(table_sqrt(add_rz(mul_rz(ax, ax), mul_rz(ay, ay))));
+    // spec: S-0106 C3 construction rule ((x, y, z) = sin(τ/2) × the normalised axis, w = cos(τ/2), table trigonometry)
+    let (sh, ch) = table_sin_cos(div_rz(tau, 2.0), quirks);
+    let k = f64::from(sh);
+    [
+        to_f32_rz(mul_rz(k, div_rz(ax, len))),
+        to_f32_rz(mul_rz(k, div_rz(ay, len))),
+        0.0,
+        ch,
+    ]
+}
+
+/// The corrected tilt angles of S-0106 claim 4 and F2: arctan(1/√6) for
+/// shapes 1 … 4, π/6 for shapes 5 … 16, in double precision.
+pub fn corrected_angles() -> (f64, f64, f64) {
+    // spec: S-0106 claim 4 and F2 (corrected angles: arctan(1/√6) for edge slopes, π/6 for corner, valley and steep slopes)
+    let edge = (1.0 / 6.0_f64.sqrt()).atan();
+    let other = std::f64::consts::PI / 6.0;
+    (edge, other, other)
+}
+
+/// The tilt orientation *q_s* our engine draws for slope shape `shape`:
+/// C3's construction rule with claim 4's corrected angles (S-0106 F3).
+pub fn tilt_orientation(shape: u8, quirks: &VoxelQuirks) -> Quat {
+    // spec: S-0106 F3 and C3 (corrected orientations: the construction rule with the corrected angles, no switch)
+    construct(shape, corrected_angles(), quirks)
 }
 
 /// F3's table arc cosine: *π/2 − S(⌊2048(x + 1)⌋)*, where *S(m)* is the
@@ -157,13 +223,13 @@ pub struct TiltState {
 impl TiltState {
     /// A unit placed on a cell of shape `shape`: current and previous shape
     /// both that shape, no transition running (S-0106 claim 6).
-    pub fn placed(shape: u8) -> Self {
+    pub fn placed(shape: u8, quirks: &VoxelQuirks) -> Self {
         // spec: S-0106 claim 6, State and ordering (placed: s_c = s_p = σ, settled)
         Self {
             current: shape,
             previous: shape,
             start_tick: None,
-            start: tilt_orientation(shape),
+            start: tilt_orientation(shape, quirks),
         }
     }
 
@@ -203,7 +269,7 @@ impl TiltState {
         // orientation at the tick of the change, evaluated by F3; lead-confirmed departure)
         let start = self
             .orientation(tick, quirks)
-            .unwrap_or_else(|| tilt_orientation(self.current));
+            .unwrap_or_else(|| tilt_orientation(self.current, quirks));
         // spec: S-0106 claim 6 (s_p is the former s_c, s_c the cell's shape, t₀ this tick)
         self.previous = self.current;
         self.current = shape;
@@ -219,7 +285,7 @@ impl TiltState {
         // spec: S-0106 claim 7, F3 (from the start orientation to q_{s_c} at p = j/3)
         Some(interpolate(
             self.start,
-            tilt_orientation(self.current),
+            tilt_orientation(self.current, quirks),
             j,
             quirks,
         ))
@@ -245,10 +311,11 @@ mod tests {
     }
 
     /// spec: S-0106 claims 6, 7, F3, State and ordering (a placed unit is
-    /// settled; flat to shape 1 draws 0°, 9.7559°, 19.5996°, then settles)
+    /// settled; flat to shape 1 draws j = 0, 1, 2 of the way to the
+    /// corrected edge orientation, then settles)
     #[test]
     fn transition_from_flat_to_an_edge_slope() {
-        let mut s = TiltState::placed(0);
+        let mut s = TiltState::placed(0, &q());
         assert_eq!((s.current(), s.previous()), (0, 0));
         assert!(s.orientation(5, &q()).is_none());
         s.observe(10, 0, &q());
@@ -258,48 +325,28 @@ mod tests {
         let tilts: Vec<f64> = (10..13)
             .map(|t| up_tilt(s.orientation(t, &q()).unwrap()))
             .collect();
+        let end = up_tilt(tilt_orientation(1, &q()));
         close(tilts[0], 0.0);
-        close(tilts[1], 9.7559);
-        close(tilts[2], 19.5996);
+        assert!((tilts[1] - end / 3.0).abs() < 0.1, "{tilts:?} {end}");
+        assert!((tilts[2] - 2.0 * end / 3.0).abs() < 0.1, "{tilts:?} {end}");
         // From t₀ + 3 the body is settled.
         assert!(s.orientation(13, &q()).is_none());
     }
 
-    /// spec: S-0106 claim 7, F3 (at j = 0 the start orientation's own
-    /// matrix: an edge slope's q drawn as 29.3555°; F3's sample values)
+    /// spec: S-0106 claim 7, F3 (oracle samples with C3's original rows: an
+    /// edge slope's q drawn as 29.3555°; F3's sample values)
     #[test]
     fn interpolation_samples() {
-        let mut s = TiltState::placed(1);
-        s.observe(0, 0, &q());
-        close(up_tilt(s.orientation(0, &q()).unwrap()), 29.3555);
-        assert_eq!(s.orientation(0, &q()), Some(tilt_orientation(1)));
+        let o = original_orientation;
+        close(up_tilt(o(1)), 29.3555);
         // Shape 1 to shape 4: 22.0749° at both fractions.
         for j in [1, 2] {
-            close(
-                up_tilt(interpolate(
-                    tilt_orientation(1),
-                    tilt_orientation(4),
-                    j,
-                    &q(),
-                )),
-                22.0749,
-            );
+            close(up_tilt(interpolate(o(1), o(4), j, &q())), 22.0749);
             // Shape 5 to shape 7: 7.1054° at both fractions.
-            close(
-                up_tilt(interpolate(
-                    tilt_orientation(5),
-                    tilt_orientation(7),
-                    j,
-                    &q(),
-                )),
-                7.1054,
-            );
+            close(up_tilt(interpolate(o(5), o(7), j, &q())), 7.1054);
         }
         // Equal orientations interpolate linearly to themselves.
-        assert_eq!(
-            interpolate(tilt_orientation(5), tilt_orientation(9), 1, &q()),
-            tilt_orientation(5)
-        );
+        assert_eq!(interpolate(o(5), o(9), 1, &q()), o(5));
     }
 
     /// spec: S-0106 claim 6, claim 7, State and ordering (a shape change
@@ -309,7 +356,7 @@ mod tests {
     /// departure with no switch)
     #[test]
     fn restart_is_continuous() {
-        let mut s = TiltState::placed(0);
+        let mut s = TiltState::placed(0, &q());
         s.observe(10, 1, &q());
         let interrupted = s.orientation(11, &q()).unwrap();
         s.observe(11, 4, &q());
@@ -317,22 +364,57 @@ mod tests {
         // Drawn at the tick of the change: the interrupted orientation, not
         // shape 1's (the original's jump).
         assert_eq!(s.orientation(11, &q()), Some(interrupted));
-        assert_ne!(interrupted, tilt_orientation(1));
-        close(up_tilt(s.orientation(11, &q()).unwrap()), 9.7559);
+        assert_ne!(interrupted, tilt_orientation(1, &q()));
+        assert!(up_tilt(s.orientation(11, &q()).unwrap()) > 1.0);
         // Then on toward shape 4 over three ticks from the change.
         let next = s.orientation(12, &q()).unwrap();
-        assert_eq!(next, interpolate(interrupted, tilt_orientation(4), 1, &q()));
+        assert_eq!(
+            next,
+            interpolate(interrupted, tilt_orientation(4, &q()), 1, &q())
+        );
         assert!(s.in_transition(13));
         assert!(s.orientation(14, &q()).is_none());
         // A change once settled starts from the current shape's orientation.
         s.observe(20, 0, &q());
-        assert_eq!(s.orientation(20, &q()), Some(tilt_orientation(4)));
+        assert_eq!(s.orientation(20, &q()), Some(tilt_orientation(4, &q())));
     }
 
     /// spec: S-0106 F3 (the matrix of the identity orientation is the
     /// identity)
     #[test]
     fn identity_matrix() {
-        assert_eq!(quat_matrix(tilt_orientation(0)), Mat34::IDENTITY);
+        assert_eq!(quat_matrix(tilt_orientation(0, &q())), Mat34::IDENTITY);
+    }
+
+    /// spec: S-0106 C3 (the construction rule with the original angles τ_A
+    /// and τ_B reproduces C3's numeric rows)
+    #[test]
+    fn construction_rule_reproduces_c3() {
+        for shape in 0..=20 {
+            let c = construct(shape, (TAU_A, TAU_B, TAU_A), &q());
+            let o = original_orientation(shape);
+            for i in 0..4 {
+                assert!((c[i] - o[i]).abs() < 2e-6, "shape {shape}: {c:?} vs {o:?}");
+            }
+        }
+    }
+
+    /// spec: S-0106 claim 4, F2 and C3 (corrected orientations: arctan(1/√6)
+    /// ≈ 22.21° for edge slopes, π/6 = 30° for corner, valley and steep
+    /// slopes, to the table trigonometry's resolution; flat and saddle
+    /// shapes the identity)
+    #[test]
+    fn corrected_orientations() {
+        for shape in 1..=4 {
+            let d = up_tilt(tilt_orientation(shape, &q()));
+            assert!((d - 22.2077).abs() < 0.1, "shape {shape}: {d}");
+        }
+        for shape in 5..=16 {
+            let d = up_tilt(tilt_orientation(shape, &q()));
+            assert!((d - 30.0).abs() < 0.1, "shape {shape}: {d}");
+        }
+        for shape in [0, 17, 18, 19, 20] {
+            assert_eq!(tilt_orientation(shape, &q()), [0.0, 0.0, 0.0, 1.0]);
+        }
     }
 }
