@@ -746,6 +746,40 @@ Provisional rules of M6b cloak and stealth, each tied to a request:
 | `cloak::disguise::appears_disguised`, `cloak::view::radar_house`, `econ::minimap::compose`, `occupancy` (row WP25) | claim 35 applies unchanged to buildings and aircraft; a disguise without a house shows its owner's radar colour; row WP25 applies only to a disguise with a house | Q-0728 |
 | `cloak::field::turn`, `set_radius`, `remove` | rings are applied in full, whatever stands on them; the restart distance is the straight line between centre cells; a removed generator restarts its neighbours, a captured one does not | Q-0729 |
 
+## Simulation (M6b: superweapons)
+
+S-0512 (charge and readiness) and the S-0513 effects of the Allied and Soviet kinds are built in `glasnost_sim::superweapons`. The kinds are the nuclear strike, the weather storm, invulnerability (iron curtain), the teleport (chronosphere), the force shield, the paradrop and the spy plane. The ledgers are [docs/m6-claims/S-0512.md](m6-claims/S-0512.md) and [docs/m6-claims/S-0513.md](m6-claims/S-0513.md). The tests are `crates/deterministic/sim/tests/claims_s0512.rs` and `claims_s0513_{nuke,storm,protect,warp,planes}.rs`, on the invented rules of `tests/sw_common/mod.rs`.
+
+- **Records and charge (S-0512).** `superweapons::charge` holds one `Record` per house and type in `World::sw`. Grants, suspension, loss, the one-time and permanent trigger grants, set and reset charge, drain and manual modes, the flash window and the countdown rows all run in the house update (`charge::house_update`, `charge::after_tech`). A fire order (`orders::Order::FireSuperweapon`) is carried out by `launch::fire`, which consumes the charge and dispatches the kind's effect.
+- **Nuclear strike (claims 7 to 13).** `superweapons::nuke`. The silo is the building owned longest. It launches an upward missile on its next update, and the missile-maker burst creates the falling payload (F8). A one-time record drops the payload from 20 000 leptons (F2). The warning marker is an animation. Radiation is the seam `nuke::radiation_seam` (S-0525).
+- **Weather storm (claims 14 to 21).** `superweapons::storm`. The storm states of T1 run in the weather update at row 3 of the tick pipeline, before the turn pass. It covers the countdown and warnings, the radar outage of the other houses, the centre and scatter clouds (F5, F6), strikes with the bolt, area damage and debris, and clearing. Trigger actions 44 and 45 start and stop a storm.
+- **Invulnerability and the force shield (claims 22 to 32).** `superweapons::protect`. The protection timer is `Object::sw.protection` (F7). Its consumers are the hit table, the small-detonation nullification, the firing answers, crushing and the occupancy row. The curtain releases a parasite through `parasite::host_curtain_started`. The force shield blacks out the launching house and shields allied buildings within F3's radius. PLAN.md lists the force shield under M7; it is built here because S-0513 specifies it with the others.
+- **Teleport (claims 33 to 41).** `superweapons::warp`. A source pick emits the player-local marker event. The warp walks the source block (F1, claim 4). For each examined object it first releases a naval parasite with 500 ticks of suppression (`parasite::superweapon_teleport`). It then kills organic objects (claim 35), leaves the excluded ones in place, and makes the rest members (`Object::sw.warp`). Each member's stages (T2) run at the start of its own living turn (`warp::turn`, from `tick::object_turn`): leaving, the 60-tick wait, departure, the landing check and redirect, placement, arrival fate, and the arrival hold. `teleport::phasing_in` and `being_erased` read the member's stage. The departure does not release a drone parasite (S-0614 claim 12, P7), so it does not use `objects::take_inside`. The chrono weapons of S-0514 are the seam `warp::chrono_seam`.
+- **Paradrop and spy plane (claims 42 to 45; S-0522 claims 1 to 3).** `superweapons::planes`. Planes are sent from the house's edge cell. Paratroopers board the plane. The drop itself is the seam `paradrop::drop_passengers` (S-0522), so a plane holds its paratroopers. The spy plane's camera reveals through `econ::shroud::camera` in its approach and overfly.
+- **Quirks.** Every switch of S-0512 and S-0513 is implemented and on by default.
+- **Save format 24.** The records, the storm, the protection timers, the warp members and the held delay are new state, and they are hashed. `warp_state_survives_save_and_load` saves mid-warp and checks the hash.
+- **Not built.**
+  - The Yuri kinds (S-0610, S-0611, S-0612) are `launch::yuri_seam`.
+  - The waypoint curtain trigger action is not dispatched (Q-0734).
+  - Tank bunker links (S-0606) do not exist, so the warp has none to end.
+
+Provisional rules of M6b superweapons, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `superweapons::kind_of_word` | the kind words are the table's descriptions with "kind" dropped and hyphens, spaces and underscores stripped (`ironcurtain`, `americanparachutedrop`), matched without case; an unknown word gives no kind and the importer warns | Q-0730 |
+| `superweapons` import (aim action) | every word other than `None` and the empty word is its own action, lower-cased, so equal words share an action; `None` and an empty value are no action | Q-0731 |
+| `storm::frames`, `storm::frame` | a cloud has F = 2μ frames and strikes when its frame exceeds μ; it advances one frame per drawn stage delay (1 when none is drawn); the frame in tick t is ⌊(t − t₀) / d⌋; μ unknown gives F = 0 (no strike, gone at once) | Q-0732 |
+| `protect::TINT_PHASE`, `protect::tint_turn` | the tint draw is due in tick t₀ + 10 and taken in the object's first turn at or after it while still protected; expired protection takes no draw | Q-0733 |
+| `triggers` | the waypoint curtain action is not dispatched: a trigger using it does nothing; the effect is reachable from code only | Q-0734 |
+| `nuke::accepts`, `nuke::silo_turn` | a silo is busy only from the tick it accepts until its upward missile leaves on its next update; then it accepts again; no launch is queued | Q-0735 |
+| `superweapons::payload_list` | a paradrop entry naming no infantry type sends no plane and the importer warns; the other entries keep their counts; the spy plane count uses the full list length | Q-0736 |
+| `launch::second_stage` | a warp order whose first stage never picked a source does nothing (no warp, no restart) and notes it | Q-0737 |
+| `tick::object_turn`, `warp::turn`, `warp::join` | joining stops the member (destination, path and driving step cleared); until its arrival effects the warp update is its whole turn; in the arrival hold the hold-end test runs first and the ordinary turn follows | Q-0738 |
+| `storm::BOLT_HEIGHT`, `storm::cloud_lift` | the bolt image height H is 0, so every cloud has h_c = −3 leptons; F4 itself is built | Q-0739 |
+| `storm::strike` | the nearest unit is the ground layer's infantry, vehicle or aircraft with the smallest planar squared distance to the centre, ties to the first listed; the building is the first listed; "held nothing" means the ground list is empty; debris appears at the strike point | Q-0740 |
+| `warp::pick_source`, `warp::examine`, `warp::redirect` | the source marker is a player-local event with no draw; an object whose destination cell is off the map is examined and then left in place; a blocked member with no nearby cell keeps its landing point and checks again next update | Q-0741 |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
