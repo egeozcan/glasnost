@@ -84,7 +84,7 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
                     if w.obj(x).is_some_and(|ob| ob.kind == Kind::Vehicle)
                         && crate::combat::damage::strength(w, x) > w.obj(x).map_or(0, |ob| ob.health));
                 if !keep && let Some(ob) = w.obj_mut(id) {
-                    ob.target = None;
+                    crate::spawn::clear_own_target(ob);
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 }
             }
@@ -359,7 +359,7 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
             }
             Answer::Illegal | Answer::Impossible | Answer::OutOfAmmo | Answer::OutOfRange => {
                 if let Some(ob) = w.obj_mut(id) {
-                    ob.target = None;
+                    crate::spawn::clear_own_target(ob);
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                     ob.beh
                         .queue_and_start_at_once(Behaviour::Guard, tick, stale);
@@ -427,7 +427,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
         }
         if !suitable {
             if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.beh
                     .queue_and_start_at_once(Behaviour::Guard, tick, stale);
@@ -450,7 +450,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
     }
     let Some(t) = o.target.filter(|_| suitable) else {
         if let Some(ob) = w.obj_mut(id) {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.beh.progress = 0;
         }
@@ -467,7 +467,7 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
         Answer::NotFacing => 0,
         Answer::Illegal | Answer::Impossible | Answer::OutOfRange => {
             if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             0

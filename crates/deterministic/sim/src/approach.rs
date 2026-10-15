@@ -88,7 +88,7 @@ fn search(w: &mut World, id: ObjectId, r_prime: i32) {
         Approach::TargetItself => ob.dest = t,
         // spec: S-0307 claim 17 (any other actor drops the target; the destination becomes the nearby cell, or none)
         Approach::Drop(n) => {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.dest = n.map(Target::Cell);
         }
@@ -293,7 +293,7 @@ pub fn step(w: &mut World, id: ObjectId) {
         if !keep {
             // spec: S-0215 claim 37 (d) (dropping clears the target and the destination at once; nothing else of the step happens)
             if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
             }
@@ -371,7 +371,7 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
         && !in_range(w, id, t)
         && let Some(ob) = w.obj_mut(id)
     {
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
 }

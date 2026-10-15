@@ -399,7 +399,11 @@ fn claim_8_release_and_rail() {
     for s in &c.slots {
         let x = s.object.unwrap();
         assert!(spawn::kamikaze(&w, x));
-        assert_eq!(w.spawned.kamikaze[&x], w.obj(victim).unwrap().pos.cell());
+        assert!(
+            w.spawned
+                .kamikaze
+                .contains(&(x, w.obj(victim).unwrap().pos.cell()))
+        );
     }
 }
 
@@ -1471,16 +1475,35 @@ fn claim_25_idle_clear() {
         let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
         let a = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
         w.obj_mut(lna).unwrap().target = Some(Target::Object(a));
-        spawn::watch_own_target(&mut w, lna);
         spawn::shot(&mut w, lna, Target::Object(a));
-        w.obj_mut(lna).unwrap().target = None;
-        spawn::watch_own_target(&mut w, lna);
+        spawn::clear_own_target(w.obj_mut(lna).unwrap());
+        spawn::settle_clear(&mut w, lna);
         let expect = on.then_some(Target::Object(a));
         assert_eq!(controller(&w, lna).pending, expect, "quirk {on}");
     }
 }
 
-// spec: S-0506 claim 25 (with a nonempty controller target the clear succeeds; restoring the own target does not restore pending; a held target that stays empty requests nothing more; the pending target's loss clears it at once)
+// spec: S-0506 claim 25 and Edge cases (an explicit clear of an already empty own target leaves pending with the quirk on; off: it empties pending even then)
+#[test]
+fn claim_25_explicit_clear_of_empty_target() {
+    for on in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.spawner_pending_target_survives_idle_clear = on;
+        let mut w = game(&r);
+        let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+        let a = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+        let b = spawn_at(&mut w, "VICTIM", 1, 8, 3, 0);
+        w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = Some(Target::Object(a));
+        spawn::shot(&mut w, lna, Target::Object(b));
+        assert_eq!(w.obj(lna).unwrap().target, None);
+        spawn::explicit_clear_own_target(w.obj_mut(lna).unwrap());
+        spawn::settle_clear(&mut w, lna);
+        let expect = on.then_some(Target::Object(b));
+        assert_eq!(controller(&w, lna).pending, expect, "quirk {on}");
+    }
+}
+
+// spec: S-0506 claim 25 (with a nonempty controller target the clear succeeds; clearing and restoring the own target before a pass does not undo it; direct nonempty replacement does not touch pending; a targetless spawner is not swept at a pass; the pending target's loss clears it at once)
 #[test]
 fn claim_25_clear_and_loss() {
     let r = rules();
@@ -1488,22 +1511,28 @@ fn claim_25_clear_and_loss() {
     let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
     let a = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
     let b = spawn_at(&mut w, "VICTIM", 1, 8, 3, 0);
+    let c = spawn_at(&mut w, "VICTIM", 1, 8, 6, 0);
     w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = Some(Target::Object(a));
     w.obj_mut(lna).unwrap().target = Some(Target::Object(a));
-    spawn::watch_own_target(&mut w, lna);
     spawn::shot(&mut w, lna, Target::Object(b));
-    w.obj_mut(lna).unwrap().target = None;
-    spawn::watch_own_target(&mut w, lna);
-    assert_eq!(controller(&w, lna).pending, None, "an effective clear");
+    // Direct nonempty replacement: pending unchanged.
+    spawn::set_own_target(w.obj_mut(lna).unwrap(), Some(Target::Object(c)));
+    spawn::settle_clear(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
+    // Clear and restore in one go, before any pass: the clear still takes effect.
+    spawn::clear_own_target(w.obj_mut(lna).unwrap());
     w.obj_mut(lna).unwrap().target = Some(Target::Object(a));
-    spawn::watch_own_target(&mut w, lna);
-    assert_eq!(controller(&w, lna).pending, None, "not restored");
+    spawn::pass(&mut w, lna);
+    assert_eq!(
+        controller(&w, lna).pending,
+        None,
+        "an effective clear, not undone by the restore"
+    );
     // A pass with no own target does not drop pending (no per-pass sweep).
     w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = None;
     w.obj_mut(lna).unwrap().target = None;
-    spawn::watch_own_target(&mut w, lna);
     spawn::shot(&mut w, lna, Target::Object(b));
-    spawn::watch_own_target(&mut w, lna);
+    spawn::settle_clear(&mut w, lna);
     assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
     // The pending target's own loss clears it at once.
     glasnost_sim::objects::remove(&mut w, b);
@@ -1670,4 +1699,390 @@ fn s0303_sector_arrival_order() {
         vec![b, a],
         "a new tracking period goes last"
     );
+}
+
+// ---------------------------------------------------------------------
+// Claim 26: the shared kamikaze re-order cycle (Q-0645)
+// ---------------------------------------------------------------------
+
+/// Shoots `spawner` at `victim` and runs tick by tick until its salvo is
+/// released (a kamikaze is enrolled); returns the release tick.
+fn run_to_release(w: &mut World, spawner: ObjectId, victim: ObjectId) -> i32 {
+    let x = controller(w, spawner).slots[0].object.unwrap();
+    spawn::shot(w, spawner, Target::Object(victim));
+    for _ in 0..400 {
+        testkit::run(w, 1);
+        if spawn::kamikaze(w, x) {
+            return w.tick - 1;
+        }
+    }
+    panic!("no release");
+}
+
+fn has_cycle_order(w: &World, x: ObjectId, cell: glasnost_map::CellXY) -> bool {
+    let o = w.obj(x).unwrap();
+    o.target == Some(Target::Cell(cell))
+        && o.combat.ammo == 1
+        && o.beh.queued == Some(glasnost_sim::rules::Behaviour::Attack)
+}
+
+// spec: S-0506 claim 26 (the first cycle is due at tick 1, then every 30 ticks of its own tick even with no kamikaze)
+#[test]
+fn claim_26_empty_cadence() {
+    let r = rules();
+    let mut w = game(&r);
+    assert_eq!(w.spawned.next_reorder, 1);
+    while w.tick <= 1 {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(w.spawned.next_reorder, 31);
+    while w.tick <= 31 {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(w.spawned.next_reorder, 61);
+}
+
+// spec: S-0506 claims 12 and 26 (a release at r replaces the deadline with r + 2: no order in r or r + 1; in r + 2 ammunition 1, the release cell as target and attack queued, then every 30 ticks)
+#[test]
+fn claim_26_release_deadline_and_order() {
+    let r = rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let x = controller(&w, lna).slots[0].object.unwrap();
+    let rt = run_to_release(&mut w, lna, victim);
+    let cell = w.obj(victim).unwrap().pos.cell();
+    assert_eq!(w.spawned.kamikaze, vec![(x, cell)]);
+    assert_eq!(w.spawned.next_reorder, rt + 2);
+    assert!(!has_cycle_order(&w, x, cell), "none in r");
+    testkit::run(&mut w, 1);
+    assert!(!has_cycle_order(&w, x, cell), "none in r + 1");
+    testkit::run(&mut w, 1);
+    assert!(has_cycle_order(&w, x, cell), "the order in r + 2");
+    assert_eq!(w.spawned.next_reorder, rt + 32);
+}
+
+// spec: S-0506 claim 26 (a release on an old due tick: the older group gets that tick's pre-turn order, the newly released object does not; the release then replaces the deadline)
+#[test]
+fn claim_26_release_on_a_due_tick() {
+    let r = rules();
+    let setup = |w: &mut World| {
+        let lna = spawn_at(w, "LNA", 0, 0, 0, 0);
+        let victim = spawn_at(w, "VICTIM", 1, 8, 0, 0);
+        let old = spawn_at(w, "VICTIM", 0, -4, 4, 0);
+        (lna, victim, old)
+    };
+    let mut w = game(&r);
+    let (lna, victim, _) = setup(&mut w);
+    let rt = run_to_release(&mut w, lna, victim);
+    // The same game again, with an older enrolled object and the deadline on tick r.
+    let mut w = game(&r);
+    let (lna, victim, old) = setup(&mut w);
+    let old_cell = glasnost_map::CellXY::new(3, 3);
+    w.spawned.kamikaze.push((old, old_cell));
+    w.spawned.next_reorder = rt;
+    let x = controller(&w, lna).slots[0].object.unwrap();
+    assert_eq!(run_to_release(&mut w, lna, victim), rt);
+    // The old object's own turn may consume the order (claim 26), so only the ammunition is read here.
+    assert_eq!(w.obj(old).unwrap().combat.ammo, 1);
+    assert_ne!(
+        w.obj(x).unwrap().target,
+        Some(Target::Cell(w.obj(victim).unwrap().pos.cell()))
+    );
+    assert_eq!(w.spawned.next_reorder, rt + 2);
+    assert_eq!(w.spawned.kamikaze[0].0, old, "later enrollments follow");
+}
+
+// spec: S-0506 claims 11 and 26 (a reset that releases a preparing flagged object replaces the deadline with its tick + 2; one that releases none changes no deadline)
+#[test]
+fn claim_26_reset_deadline() {
+    let r = rules();
+    let mut w = game(&r);
+    let lnb = spawn_at(&mut w, "LNB", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    // No preparing object: no change.
+    let d0 = w.spawned.next_reorder;
+    spawn::impossible(&mut w, lnb);
+    assert_eq!(w.spawned.next_reorder, d0);
+    spawn::shot(&mut w, lnb, Target::Object(victim));
+    assert!(testkit_run_until(&mut w, 120, |w| controller(w, lnb).slots
+        [0]
+    .state
+        == SlotState::Preparing));
+    spawn::impossible(&mut w, lnb);
+    assert_eq!(w.spawned.next_reorder, w.tick + 2);
+}
+
+// spec: S-0506 claims 13 and 26 (slot clearing enrolls in descending slot index and does not replace the shared deadline)
+#[test]
+fn claim_26_slot_clearing_enrollment() {
+    let mut r = rules();
+    r.globals.quirks.rail_missile_vanishes_with_spawner = true;
+    let mut w = game(&r);
+    let lnb = spawn_at(&mut w, "LNB", 0, 0, 0, 0);
+    let c = controller(&w, lnb);
+    let (x0, x1) = (c.slots[0].object.unwrap(), c.slots[1].object.unwrap());
+    for s in &mut w.obj_mut(lnb).unwrap().spawn.as_mut().unwrap().slots {
+        s.state = SlotState::Preparing;
+    }
+    w.spawned.next_reorder = 77;
+    spawn::clear_slots(&mut w, lnb);
+    let order: Vec<ObjectId> = w.spawned.kamikaze.iter().map(|e| e.0).collect();
+    assert_eq!(order, vec![x1, x0]);
+    assert_eq!(w.spawned.next_reorder, 77);
+}
+
+// spec: S-0506 claim 26 (orders follow enrollment order, not creation order; removing an enrolled object keeps the others' relative order)
+#[test]
+fn claim_26_enrollment_order() {
+    let r = rules();
+    let mut w = game(&r);
+    // Created in the order a, b, c; released in the order c, a, b.
+    let a = spawn_at(&mut w, "LNA", 0, 0, -6, 0);
+    let b = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let c = spawn_at(&mut w, "LNA", 0, 0, 6, 0);
+    // Far targets of their own house (no automatic acquisition), so that every missile is still in flight at the last release.
+    let va = spawn_at(&mut w, "VICTIM", 0, 18, -6, 0);
+    let vb = spawn_at(&mut w, "VICTIM", 0, 18, 0, 0);
+    let vc = spawn_at(&mut w, "VICTIM", 0, 18, 6, 0);
+    let slot = |w: &World, s: ObjectId| controller(w, s).slots[0].object.unwrap();
+    let (xa, xb, xc) = (slot(&w, a), slot(&w, b), slot(&w, c));
+    assert!(xa < xb && xb < xc);
+    run_to_release(&mut w, c, vc);
+    run_to_release(&mut w, a, va);
+    run_to_release(&mut w, b, vb);
+    let order = |w: &World| -> Vec<ObjectId> { w.spawned.kamikaze.iter().map(|e| e.0).collect() };
+    assert_eq!(order(&w), vec![xc, xa, xb]);
+    glasnost_sim::objects::remove(&mut w, xa);
+    assert_eq!(order(&w), vec![xc, xb]);
+}
+
+// spec: S-0506 claim 26 (a pending shared deadline survives a save and load: equal state hashes before and after the cycle)
+#[test]
+fn claim_26_save_load_pending_deadline() {
+    let r = rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let rt = run_to_release(&mut w, lna, victim);
+    assert_eq!(w.spawned.next_reorder, rt + 2);
+    let bytes = glasnost_sim::save::save(&w);
+    let mut w2 =
+        glasnost_sim::save::load(&bytes, w.rules_arc(), testkit::catalogue()).expect("loads");
+    assert_eq!(w2.spawned, w.spawned);
+    assert_eq!(
+        glasnost_sim::save::state_hash(&w),
+        glasnost_sim::save::state_hash(&w2)
+    );
+    for _ in 0..40 {
+        testkit::run(&mut w, 1);
+        testkit::run(&mut w2, 1);
+        assert_eq!(
+            glasnost_sim::save::state_hash(&w),
+            glasnost_sim::save::state_hash(&w2)
+        );
+    }
+    // Cycles in r + 2 and r + 32 have run since.
+    assert_eq!(w2.spawned.next_reorder, rt + 62);
+}
+
+// spec: S-0312 claim 16 and S-0506 claim 20 (interception neither restarts nor suspends the phase timer and adds no crash displacement: a destroyed missile keeps the undamaged twin's phase, timer and position through pause and tilt)
+#[test]
+fn s0312_claim_16_interception_keeps_timer_and_position() {
+    let r = rules();
+    let (mut w, _, _, x) = fly_until(&r, Phase::Pause);
+    let mut twin = w.clone();
+    w.obj_mut(x).unwrap().health = 0;
+    glasnost_sim::combat::death::kill(&mut w, x, &hit(10));
+    let mut compared = 0;
+    for _ in 0..60 {
+        testkit::run(&mut w, 1);
+        testkit::run(&mut twin, 1);
+        let (Some(a), Some(b)) = (w.obj(x), twin.obj(x)) else {
+            break;
+        };
+        let (ra, rb) = (a.rocket.as_ref().unwrap(), b.rocket.as_ref().unwrap());
+        if !matches!(ra.phase, Some(Phase::Pause | Phase::Tilt)) {
+            break;
+        }
+        assert_eq!(ra.phase, rb.phase);
+        assert_eq!(ra.elapsed, rb.elapsed);
+        assert_eq!(a.pos, b.pos);
+        compared += 1;
+    }
+    assert!(compared > 5, "pause and tilt were compared");
+}
+
+// spec: S-0506 claim 24 (a vehicle spawner's ordinary firing step on a tick with a due launch pass cannot supply that pass: the pass comes first in the turn)
+#[test]
+fn claim_24_vehicle_shot_waits_for_next_pass() {
+    let r = rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    click_attack(&mut w, lna, victim);
+    // Run until the firing step makes its first spawner shot (pending set).
+    let mut shot_tick = None;
+    for _ in 0..200 {
+        let t = w.tick;
+        let due = controller(&w, lna).next_pass <= t;
+        testkit::run(&mut w, 1);
+        if controller(&w, lna).pending.is_some() || controller(&w, lna).target.is_some() {
+            shot_tick = Some((t, due));
+            break;
+        }
+    }
+    let (t, _) = shot_tick.expect("a spawner shot");
+    // Force the same situation with a pass due on the shot's tick: replay to t and make the pass due then.
+    let mut w2 = game(&r);
+    let lna2 = spawn_at(&mut w2, "LNA", 0, 0, 0, 0);
+    let victim2 = spawn_at(&mut w2, "VICTIM", 1, 8, 0, 0);
+    click_attack(&mut w2, lna2, victim2);
+    while w2.tick < t {
+        testkit::run(&mut w2, 1);
+    }
+    w2.obj_mut(lna2).unwrap().spawn.as_mut().unwrap().next_pass = t;
+    testkit::run(&mut w2, 1);
+    let c = controller(&w2, lna2);
+    assert_eq!(
+        c.pending,
+        Some(Target::Object(victim2)),
+        "the shot set pending"
+    );
+    assert_eq!(c.target, None, "the pass due on that tick did not adopt it");
+    assert_eq!(c.state, ControllerState::Idle);
+}
+
+// ---------------------------------------------------------------------
+// S-0309 claims 4, 23 and 24: spawner pending-target clears
+// ---------------------------------------------------------------------
+
+/// LNA with a nonempty controller target and a pending target.
+/// The spawner weapon's range is cut to 5 cells, so that the two far
+/// targets are out of range.
+fn pending_setup(r: &Ruleset) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut r = r.clone();
+    r.sim.weapons.get_mut("Launch").unwrap().range = dec("5");
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let a = spawn_at(&mut w, "VICTIM", 1, -19, -19, 0);
+    let b = spawn_at(&mut w, "VICTIM", 1, -19, 19, 0);
+    w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = Some(Target::Object(a));
+    spawn::shot(&mut w, lna, Target::Object(b));
+    assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
+    (w, lna, a, b)
+}
+
+// spec: S-0309 claim 4 and S-0506 claim 25 (dropping an unusable opportunity target requests the conditional pending clear, even when the same search picks a new target)
+#[test]
+fn s0309_claim_4_opportunity_drop_requests_clear() {
+    let r = rules();
+    let (mut w, lna, a, _) = pending_setup(&r);
+    // An opportunity target out of range is unusable; an enemy in range is picked anew.
+    let fresh = spawn_at(&mut w, "VICTIM", 1, 3, 0, 0);
+    {
+        let o = w.obj_mut(lna).unwrap();
+        o.target = Some(Target::Object(a));
+        o.combat.opportunity = true;
+    }
+    glasnost_sim::combat::acquire::search(
+        &mut w,
+        lna,
+        glasnost_sim::combat::acquire::SearchKind::Range,
+        glasnost_sim::combat::acquire::SearchContext::PerTick,
+    );
+    assert_eq!(w.obj(lna).unwrap().target, Some(Target::Object(fresh)));
+    spawn::settle_clear(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, None);
+}
+
+// spec: S-0309 claim 4 and S-0506 claim 25 (a search that finds nothing while already targetless does not cancel pending)
+#[test]
+fn s0309_claim_4_failed_search_keeps_pending() {
+    let r = rules();
+    let (mut w, lna, _, b) = pending_setup(&r);
+    glasnost_sim::combat::acquire::search(
+        &mut w,
+        lna,
+        glasnost_sim::combat::acquire::SearchKind::Range,
+        glasnost_sim::combat::acquire::SearchContext::PerTick,
+    );
+    assert_eq!(w.obj(lna).unwrap().target, None);
+    spawn::settle_clear(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
+}
+
+// spec: S-0309 claim 23 and S-0506 claim 25 (an attack-move search run as for an object with no target requests no pending clear, with either quirk setting: not when it finds nothing, nor when it restores the remembered target)
+#[test]
+fn s0309_claim_23_attack_move_search_keeps_pending() {
+    for on in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.spawner_pending_target_survives_idle_clear = on;
+        // Destination memory, engaged, present target out of range: the search finds nothing.
+        let (mut w, lna, a, b) = pending_setup(&r);
+        {
+            let o = w.obj_mut(lna).unwrap();
+            o.target = Some(Target::Object(a));
+            o.attack_move = Some(glasnost_sim::world::AttackMoveMemory::Dest(Target::Cell(
+                o.pos.cell(),
+            )));
+            o.combat.engaged = true;
+            o.targeting_timer = 0;
+        }
+        glasnost_sim::combat::acquire::per_tick(&mut w, lna);
+        assert_eq!(w.obj(lna).unwrap().target, None, "the search found nothing");
+        spawn::settle_clear(&mut w, lna);
+        assert_eq!(
+            controller(&w, lna).pending,
+            Some(Target::Object(b)),
+            "quirk {on}"
+        );
+        // Target memory out of range: the search finds nothing and restores the remembered target.
+        let (mut w, lna, a, b) = pending_setup(&r);
+        {
+            let o = w.obj_mut(lna).unwrap();
+            o.target = Some(Target::Object(a));
+            o.attack_move = Some(glasnost_sim::world::AttackMoveMemory::Target(
+                Target::Object(a),
+            ));
+            o.targeting_timer = 0;
+        }
+        glasnost_sim::combat::acquire::per_tick(&mut w, lna);
+        assert_eq!(
+            w.obj(lna).unwrap().target,
+            Some(Target::Object(a)),
+            "restored"
+        );
+        spawn::settle_clear(&mut w, lna);
+        assert_eq!(
+            controller(&w, lna).pending,
+            Some(Target::Object(b)),
+            "quirk {on}"
+        );
+    }
+}
+
+// spec: S-0309 claim 24 and S-0506 claim 25 (a nonempty target redirected to none requests the conditional clear even when the old own target was empty; an explicit clear of an empty target does not, quirk on)
+#[test]
+fn s0309_claim_24_redirect_to_none_requests_clear() {
+    let r = rules();
+    let (mut w, lna, _, b) = pending_setup(&r);
+    assert_eq!(w.obj(lna).unwrap().target, None);
+    spawn::clear_own_target(w.obj_mut(lna).unwrap());
+    spawn::settle_clear(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
+    spawn::redirected_to_none(w.obj_mut(lna).unwrap());
+    spawn::settle_clear(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, None);
+    // With an empty controller target the request leaves pending (quirk on); off, it clears pending.
+    for on in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.spawner_pending_target_survives_idle_clear = on;
+        let (mut w, lna, _, b) = pending_setup(&r);
+        w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = None;
+        spawn::redirected_to_none(w.obj_mut(lna).unwrap());
+        spawn::settle_clear(&mut w, lna);
+        let expect = on.then_some(Target::Object(b));
+        assert_eq!(controller(&w, lna).pending, expect, "quirk {on}");
+    }
 }

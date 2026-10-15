@@ -327,7 +327,7 @@ fn civilian_recipient(w: &World) -> Option<HouseId> {
 /// queued (S-0312 claims 30 and 31; S-0408 claim 10a).
 fn free_to_guard(w: &mut World, s: ObjectId) {
     if let Some(ob) = w.obj_mut(s) {
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         ob.queued_dests.clear();
         ob.path.steps.clear();
@@ -480,7 +480,7 @@ pub fn recall(w: &mut World, master: ObjectId) {
             continue;
         }
         if let Some(ob) = w.obj_mut(s) {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.guard_spot = None;
             ob.queued_dests.clear();

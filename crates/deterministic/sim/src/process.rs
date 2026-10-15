@@ -328,7 +328,7 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     };
     let clear = |w: &mut World| {
         if let Some(ob) = w.obj_mut(id) {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.dest = None;
         }
@@ -472,7 +472,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             )
         )
     {
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.opportunity = false;
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
@@ -828,7 +828,7 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             == crate::combat::check::Answer::Illegal
             && let Some(ob) = w.obj_mut(id)
         {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         }
     }
@@ -1049,7 +1049,7 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         if holds {
             // spec: S-0215 claim 26 (drops any target, takes the guard spot as destination)
             if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0;
                 ob.dest = Some(gs);
                 // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up; the leash holds only without one)
