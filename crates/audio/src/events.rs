@@ -603,6 +603,8 @@ impl Audio {
                 pos,
             } => self.sound(w, *sound, *of, *house, *pos),
             // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
+            // The cloak events are presentation-only (selection, S-0516 claim 26).
+            Effect::Cloak { .. } => {}
             Effect::OverlayCrushed { overlay, pos } => {
                 let s = self
                     .names
@@ -693,6 +695,11 @@ impl Audio {
             // spec: S-0207 claim 20 (e) (the arrival sound at L; the type's sound overrides the game-wide one)
             Sound::ChronoIn => {
                 self.play_in(w, ts.chrono_in.as_deref(), at);
+            }
+            // spec: S-0516 claim 15 (the game-wide cloak sound at the object; no type-specific sound)
+            Sound::Cloak => {
+                let s = w.rules().cloak.sound.clone();
+                self.play_in(w, s.as_deref(), at);
             }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
             Sound::LowFunds if house.is_some() && house == self.local => {

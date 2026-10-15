@@ -11,7 +11,8 @@
 //! repaired at its naval yard (S-0314 claims 16 to 24, S-0504 claim 14) and
 //! a vehicle repaired at a repair depot (S-0314), and a bridge demolished
 //! from its hut and repaired by an engineer (S-0511; the map is the first
-//! offered map with a high bridge and its hut). A new scene is one more
+//! offered map with a high bridge and its hut), and a cloaked vehicle seen
+//! by its owner and by an enemy (S-0516 claims 16 and 28). A new scene is one more
 //! function and one more row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
@@ -52,6 +53,8 @@ const SCENES: &[Scene] = &[
     ("depot", vehicle_repaired_at_depot),
     ("bridge-destroyed", bridge_destroyed),
     ("bridge-repaired", bridge_repaired),
+    ("cloaked-as-owner", cloaked_as_owner),
+    ("cloaked-as-enemy", cloaked_as_enemy),
 ];
 
 #[test]
@@ -520,6 +523,111 @@ fn bridge_repaired(lane: &mut Lane) {
     );
     lane.ticks(10);
     lane.save("bridge-repaired");
+}
+
+/// A driving vehicle type with the cloak flag, else (printed) a plain
+/// vehicle that is then given its own cloak flag through the crate seam.
+fn cloak_vehicle(lane: &Lane) -> Option<(String, bool)> {
+    let w = lane.world();
+    let own = find_type(w, Kind::Vehicle, |_, u| {
+        u.locomotor == Locomotor::Drive && u.combat.cloakable && !u.combat.naval && !u.harvester
+    });
+    println!("vehicle type with the cloak flag found: {}", own.is_some());
+    own.map(|n| (n, true))
+        .or_else(|| find_type(w, Kind::Vehicle, |_, u| plain_vehicle(u)).map(|n| (n, false)))
+}
+
+/// Places a cloaking vehicle for `house` and a plain one beside it, near
+/// the local start; returns the cloaking one and its cell.
+fn place_cloaked(lane: &mut Lane, house: HouseId) -> Option<(ObjectId, CellXY)> {
+    let (name, flag) = cloak_vehicle(lane)?;
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 6, home.y + 6));
+    let id = lane.spawn(Kind::Vehicle, &name, house, at);
+    if !flag {
+        glasnost_sim::cloak::machine::grant_own_flag(lane.world_mut(), id);
+    }
+    if let Some(plain) = find_type(lane.world(), Kind::Vehicle, |_, u| plain_vehicle(u)) {
+        let beside = lane.open_land(CellXY::new(at.x + 2, at.y));
+        lane.spawn(Kind::Vehicle, &plain, house, beside);
+    }
+    lane.look_at(at);
+    Some((id, at))
+}
+
+/// Runs until `id` is fully cloaked (at most 600 ticks); prints the ticks.
+fn wait_cloaked(lane: &mut Lane, id: ObjectId) -> bool {
+    for n in 0..600 {
+        if glasnost_sim::cloak::fully_cloaked(lane.world(), id) {
+            println!("fully cloaked after {n} ticks");
+            return true;
+        }
+        lane.ticks(1);
+    }
+    println!("not cloaked after 600 ticks");
+    false
+}
+
+/// S-0516 claims 16, 28 and 29: the local house's own cloaked vehicle, drawn
+/// 50 % translucent for its owner, without its shadow.
+fn cloaked_as_owner(lane: &mut Lane) {
+    let local = lane.local();
+    let Some((id, at)) = place_cloaked(lane, local) else {
+        println!("no vehicle type");
+        return;
+    };
+    if !wait_cloaked(lane, id) {
+        return;
+    }
+    let look = glasnost_sim::cloak::view::look(lane.world(), id, Some(local));
+    println!("at {at:?}: the owner's look {look:?}");
+    lane.ticks(1);
+    lane.save("cloaked-as-owner");
+}
+
+/// S-0516 claim 28: an enemy's cloaking vehicle shot mid-fade (drawn
+/// translucent for every viewer), then fully cloaked (not drawn for a house
+/// that does not sense it).
+fn cloaked_as_enemy(lane: &mut Lane) {
+    let local = lane.local();
+    let w = lane.world();
+    let enemy = (0..w.houses.len()).map(|i| HouseId(i as u8)).find(|&h| {
+        h != local
+            && !w.allied(Some(local), Some(h))
+            && w.houses[usize::from(h.0)].role == glasnost_sim::world::HouseRole::Player
+    });
+    let Some(enemy) = enemy else {
+        println!("no enemy house");
+        return;
+    };
+    let Some((id, at)) = place_cloaked(lane, enemy) else {
+        println!("no vehicle type");
+        return;
+    };
+    // Make it fade in again from the start, then shoot the fade.
+    glasnost_sim::cloak::machine::uncloak(lane.world_mut(), id, false);
+    let mut shot = false;
+    for n in 0..1200 {
+        lane.ticks(1);
+        let w = lane.world();
+        let look = glasnost_sim::cloak::view::look(w, id, Some(local));
+        if glasnost_sim::cloak::state(w, id) == glasnost_sim::cloak::CloakState::Cloaking
+            && look == glasnost_sim::cloak::view::Look::Translucent50
+        {
+            println!("at {at:?}, after {n} ticks: the enemy's fading look {look:?}");
+            lane.save("cloaking-as-enemy");
+            shot = true;
+            break;
+        }
+    }
+    println!("fade shot: {shot}");
+    if !wait_cloaked(lane, id) {
+        return;
+    }
+    let look = glasnost_sim::cloak::view::look(lane.world(), id, Some(local));
+    let hidden = glasnost_sim::cloak::hidden_from(lane.world(), id, Some(local));
+    println!("fully cloaked: the enemy's look {look:?}, hidden from the local house {hidden}");
+    lane.save("cloaked-as-enemy");
 }
 
 // ---------------------------------------------------------------------------

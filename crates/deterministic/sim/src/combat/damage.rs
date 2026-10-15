@@ -406,10 +406,13 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     }
     if stage4 {
         damage_effect_reaction(w, target, HitResult::Unaffected, hit.warhead);
+        // spec: S-0516 claim 12 (a surviving hit that reports unaffected, the final amount 0 or the armour among them, uncloaks)
+        crate::cloak::machine::hit_taken(w, target, HitResult::Unaffected, 0);
         return HitResult::Unaffected;
     }
     let s = strength(w, target);
     let h = o.health;
+    let mut lost = 0;
     let result = if m < 0 {
         // spec: S-0302 F4 (m < 0: H′ = min(H − m, S); the result is unaffected)
         let h2 = (i64::from(h) - i64::from(m)).min(i64::from(s)) as i32;
@@ -418,6 +421,7 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     } else {
         // spec: S-0302 F4 (m′ = min(m, H), H′ = H − m′)
         let mp = m.min(h);
+        lost = mp;
         let h2 = h - mp;
         let res = threshold(w, s, h, m, mp, h2);
         set_health(w, target, h2);
@@ -430,6 +434,10 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     };
     if result != HitResult::NowDead && result != HitResult::PostMortem {
         damage_effect_reaction(w, target, result, hit.warhead);
+        // spec: S-0302 claim 12 and S-0516 claim 34 (a) (the disguise loss and the 2m′ disruption countdown)
+        crate::cloak::disguise::hit_taken(w, target, result, lost);
+        // spec: S-0516 claim 12 (a surviving hit, healing included, uncloaks; quirks.heal_reveals_cloaked)
+        crate::cloak::machine::hit_taken(w, target, result, lost);
         // spec: S-0314 Terms (hostile-hit mark: a surviving hit past claim 8's stopping tests, attacker known, its house not allied from the owner's side)
         let attacker_house = hit
             .attacker

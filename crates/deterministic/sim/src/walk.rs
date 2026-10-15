@@ -495,6 +495,10 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
         | Outcome::FriendlyObstacle
         | Outcome::EnemyObstacle
         | Outcome::Blocked => {
+            if outcome == Outcome::CloakedBlocker {
+                // spec: S-0209 claim 9 and S-0516 claim 11 (e) (every cloaked ground-layer object of the cell starts uncloaking on the asking tick, first or repeated ask)
+                crate::cloak::machine::blocked_reveal(w, next);
+            }
             if first {
                 // spec: S-0209 claim 7 (stop, discard the path, search a new one at once whatever the retry timer)
                 if let Some(ob) = w.obj_mut(id) {

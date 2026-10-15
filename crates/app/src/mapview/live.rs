@@ -298,6 +298,9 @@ pub struct Live {
     debug_markers: bool,
     /// The move-feedback animation's type name (S-0214 claim 30).
     move_flash: Option<Vec<u8>>,
+    /// The house whose eyes the cloak drawing uses (S-0516 claims 28 and
+    /// 29); `None` (the viewer) draws every object as its owner sees it.
+    viewer: Option<HouseId>,
 }
 
 /// An animation type of the import, for playback.
@@ -668,6 +671,7 @@ impl Live {
             cosmetic,
             debug_markers: true,
             move_flash,
+            viewer: None,
         };
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
@@ -782,6 +786,47 @@ impl Live {
     /// viewer's default) or only art (`false`, the game client).
     pub fn set_debug_markers(&mut self, on: bool) {
         self.debug_markers = on;
+    }
+
+    /// Sets the house whose eyes the cloak drawing uses (S-0516 claims 28
+    /// and 29); `None` draws every object as its owner sees it.
+    pub fn set_viewer(&mut self, viewer: Option<HouseId>) {
+        self.viewer = viewer;
+    }
+
+    /// Applies how the viewer sees an object's cloak to its drawn items
+    /// (S-0516 claims 28 and 29): not drawn, or blended 25 % or 50 %, and no
+    /// shadow unless uncloaked. The rippling image has no warp effect here
+    /// yet; it is drawn 50 % translucent (our placeholder, presentation only).
+    /// A disguise is not drawn as its disguise yet (S-0516 claim 37).
+    fn apply_cloak(&self, id: ObjectId, items: &mut Vec<Item>) {
+        use glasnost_render::compose::{Paint, Translucency};
+        use glasnost_sim::cloak::view::{self, Look};
+        let w = &self.world;
+        let v = self.viewer.or_else(|| w.obj(id).and_then(|o| o.owner));
+        let blend = match view::look(w, id, v) {
+            Look::Normal => None,
+            // spec: S-0516 claim 28 (25 % translucent: S-0102 code 1)
+            Look::Translucent25 => Some(Translucency::Quarter),
+            // spec: S-0516 claim 28 (50 % translucent: S-0102 code 2)
+            Look::Translucent50 | Look::Rippling => Some(Translucency::Half),
+            // spec: S-0516 claim 28 (not drawn)
+            Look::Hidden => {
+                items.clear();
+                return;
+            }
+        };
+        // spec: S-0516 claim 29 (no shadow while not uncloaked)
+        if !view::shadow(w, id) {
+            items.retain(|i| i.paint != Paint::Shadow);
+        }
+        if let Some(t) = blend {
+            for i in items.iter_mut() {
+                if let Paint::Lit(s) = i.paint {
+                    i.paint = Paint::Translucent(s, t);
+                }
+            }
+        }
     }
 
     /// Shows a move-target marker (S-0214 claim 30): the imported
@@ -927,7 +972,8 @@ impl Live {
                 Effect::Sound { .. }
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
-                | Effect::OverlayCrushed { .. } => continue,
+                | Effect::OverlayCrushed { .. }
+                | Effect::Cloak { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,
@@ -1100,6 +1146,11 @@ impl Live {
             .zip(entries)
             .map(|(m, e)| (m.object, e))
             .collect();
+        for &id in &ids {
+            if let Some(e) = by_code.get_mut(&sim_code(id)) {
+                self.apply_cloak(id, &mut e.items);
+            }
+        }
         // Buildings the game removed leave the cell pass and the ground
         // layer; so do the map's gates, which are drawn live.
         let mut gone: BTreeSet<u32> = self
@@ -1151,7 +1202,7 @@ impl Live {
         // The game's own buildings (deployed or placed) and the map's gates
         // follow, in object ID order (our placeholder order; the map's
         // other buildings keep their place in the cell pass).
-        let own: Vec<LiveBuilding> = self
+        let own: Vec<(ObjectId, LiveBuilding)> = self
             .world
             .objects
             .values()
@@ -1175,28 +1226,33 @@ impl Live {
                     .buildings
                     .get(o.type_index as usize)
                     .map_or(0, |b| b.strength);
-                Some(LiveBuilding {
-                    idx,
-                    cell: o.pos.cell(),
-                    owner,
-                    health: (o.health, strength),
-                    facing: o.turret.value(self.world.tick),
-                    object: sim_code(o.id),
-                    unloading: self.unloading_of(o),
-                    // spec: S-0108 claim 4 (a gate's door: S-0215 claim 35)
-                    gate_door: self
-                        .rules
-                        .buildings
-                        .get(o.type_index as usize)
-                        .is_some_and(|b| b.gate)
-                        .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
-                })
+                Some((
+                    o.id,
+                    LiveBuilding {
+                        idx,
+                        cell: o.pos.cell(),
+                        owner,
+                        health: (o.health, strength),
+                        facing: o.turret.value(self.world.tick),
+                        object: sim_code(o.id),
+                        unloading: self.unloading_of(o),
+                        // spec: S-0108 claim 4 (a gate's door: S-0215 claim 35)
+                        gate_door: self
+                            .rules
+                            .buildings
+                            .get(o.type_index as usize)
+                            .is_some_and(|b| b.gate)
+                            .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
+                    },
+                ))
             })
             .collect();
         if !own.is_empty() {
+            let (ids, own): (Vec<ObjectId>, Vec<LiveBuilding>) = own.into_iter().unzip();
             let (drawn, notes) = self.painter.buildings(inputs, scene, &own);
             self.notes.extend(notes);
-            for items in drawn {
+            for (id, mut items) in ids.into_iter().zip(drawn) {
+                self.apply_cloak(id, &mut items);
                 scene.items.extend(items);
             }
         }

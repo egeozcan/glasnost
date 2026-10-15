@@ -997,7 +997,8 @@ impl Script {
 
     /// Enemy objects on cells the house has explored, with their cells: fog
     /// of war is off in a skirmish (S-0409 claim 19), so a person in the
-    /// house's seat sees what stands on every explored cell.
+    /// house's seat sees what stands on every explored cell, except a
+    /// cloaked object the house does not sense (S-0516 claim 28).
     pub(crate) fn seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
         let me = &w.houses[usize::from(self.house.0)];
         w.objects
@@ -1010,7 +1011,9 @@ impl Script {
                     && !me.allies.contains(&owner)
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
-                (enemy && shroud::explored(w, self.house, c)).then_some((o.id, c))
+                // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it).
+                let hidden = glasnost_sim::cloak::hidden_from(w, o.id, Some(self.house));
+                (enemy && !hidden && shroud::explored(w, self.house, c)).then_some((o.id, c))
             })
             .collect()
     }

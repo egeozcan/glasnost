@@ -239,9 +239,9 @@ fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
 /// permits it, but not a building whose type is invisible in the game.
 /// Zero health does not exclude a building still in play (awaiting
 /// removal, S-0214 claim 16); being erased does (no erasing weapon yet).
-/// Whether a unit below the surface or a cloaked one can be selected is an
-/// open question of S-0214; neither state exists yet, so such units count
-/// as selectable.
+/// Whether a unit below the surface can be selected is an open question of
+/// S-0214; such units count as selectable. The viewer-dependent cloak and
+/// scenery exclusions are [`selectable_by`].
 pub fn selectable(w: &World, id: ObjectId) -> bool {
     // spec: S-0214 Terms (can be selected: units and buildings; a building whose type is invisible in the game is believed not to be, low)
     // spec: S-0214 Terms and Import mapping (the type's selection flag must permit selection; absent: yes)
@@ -254,6 +254,15 @@ pub fn selectable(w: &World, id: ObjectId) -> bool {
         o.on_map && (o.health > 0 || (o.kind == Kind::Building && o.combat.killed))
     });
     unit_or_building(w, id) && !invisible(w, id) && flag && alive && !being_erased(w, id)
+}
+
+/// Whether house `v` can select the object (S-0214 Terms, *can be
+/// selected*, with S-0516 claims 26 and 36): [`selectable`], and not a
+/// fully cloaked object `v` neither owns nor senses, nor a unit disguised as
+/// scenery that appears disguised to `v`.
+pub fn selectable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
+    // spec: S-0214 Terms and S-0516 claims 26 and 36 (cloak and scenery selection exclusions)
+    selectable(w, id) && crate::cloak::view::pickable(w, id, v)
 }
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
@@ -767,8 +776,15 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
         u.raw.attack_friendlies.unwrap_or(false)
             || u.raw.attack_cursor_on_friendlies.unwrap_or(false)
     }) || sonic_on_parasite_carrier(w, actor, t);
+    // spec: S-0214 claim 6 (disguise rule: a target that does not appear disguised passes; one that does passes with the general attack-cursor-on-disguise rule, a permanently disguised type, a running blink, or friend-attack); S-0516 claim 36
+    // Seam: the scenery-disguise terrain-fire pass of the rule (low, S-0214 Open questions) is not built.
+    let disguise_ok = !crate::cloak::appears_disguised(w, t, Some(house))
+        || w.rules().cloak.attack_cursor_on_disguise
+        || crate::cloak::disguise::perma(w, t)
+        || crate::cloak::disguise::blinking(w, t)
+        || friend_ok;
     // spec: S-0214 claim 6 (a) (force-fire; or enemy or friend-attack, the disguise rule, and a legal target)
-    let a = mods.force_fire || ((enemy || friend_ok) && legal_target(w, t));
+    let a = mods.force_fire || ((enemy || friend_ok) && disguise_ok && legal_target(w, t));
     // spec: S-0214 claim 6 (b) (attackable at all: F3)
     let b = attackable_height(w, t);
     // spec: S-0214 claim 6 (c) (armed, or an infiltrating infantry type)

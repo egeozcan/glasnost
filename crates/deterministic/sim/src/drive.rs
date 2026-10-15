@@ -592,7 +592,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
             return false;
         }
         Outcome::CloakedBlocker => {
-            // spec: S-0207 claim 15 table T4 (cloaked blocker; nothing is cloaked in M3, so there is nothing to reveal)
+            // spec: S-0207 claim 15 table T4 (cloaked blocker); S-0516 claim 11 (e) (the cell's ground-layer cloaked objects start uncloaking)
+            crate::cloak::machine::blocked_reveal(w, first);
             if repeated {
                 give_up(w, id);
                 return false;
@@ -673,7 +674,8 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 return false;
             }
             Outcome::CloakedBlocker => {
-                // spec: S-0207 table T5 (cloaked blocker: as in T4)
+                // spec: S-0207 table T5 (cloaked blocker: as in T4); S-0516 claim 11 (e)
+                crate::cloak::machine::blocked_reveal(w, second);
                 if repeated {
                     give_up(w, id);
                     return false;

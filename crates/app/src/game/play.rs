@@ -339,8 +339,17 @@ impl Play {
         {
             self.tool = Tool::Select;
         }
+        let local = Some(self.local);
+        for e in &self.effects {
+            if let Effect::Cloak { id, event } = *e
+                && glasnost_sim::cloak::view::deselects(&self.game.world, id, event, local)
+            {
+                // spec: S-0516 claim 26 (a cloak start or re-evaluation takes the object out of a non-owner's selection)
+                self.selection.retain(|&x| x != id);
+            }
+        }
         self.selection
-            .retain(|&id| targeting::selectable(&self.game.world, id));
+            .retain(|&id| targeting::selectable_by(&self.game.world, id, local));
         self.outcome = self.game.outcome();
         if let Some(o) = &self.outcome {
             let listed: Vec<HouseId> = o.results.iter().map(|r| r.0).collect();
@@ -362,7 +371,9 @@ impl Play {
     /// What a click targets: the selectable object under the pointer, else
     /// the cell.
     pub fn target(&self, object: Option<ObjectId>, cell: CellXY) -> ClickOn {
-        match object.filter(|&id| targeting::selectable(&self.game.world, id)) {
+        // spec: S-0516 claims 26 and 36 (a cloaked or scenery-disguised object the player cannot pick is not clicked)
+        match object.filter(|&id| targeting::selectable_by(&self.game.world, id, Some(self.local)))
+        {
             Some(id) => ClickOn::Object(id),
             None => ClickOn::Cell(cell),
         }
@@ -419,7 +430,7 @@ impl Play {
 
     fn apply_click(&mut self, mut sel: Vec<ObjectId>, on: ClickOn, mods: Modifiers) {
         let w = &self.game.world;
-        sel.retain(|&id| targeting::selectable(w, id));
+        sel.retain(|&id| targeting::selectable_by(w, id, Some(self.local)));
         let r = targeting::click(w, self.local, &sel, on, mods);
         // spec: S-0701 claim 17 (the first object the input selects speaks; one already in the selection the click acted on does not)
         if let Some(new) = &r.selection
@@ -490,7 +501,9 @@ impl Play {
     /// A key command for the selection (S-0213 table T2).
     pub fn key(&mut self, cmd: KeyCommand) {
         let w = &self.game.world;
-        self.selection.retain(|&id| targeting::selectable(w, id));
+        let local = Some(self.local);
+        self.selection
+            .retain(|&id| targeting::selectable_by(w, id, local));
         let list = targeting::key_command(w, self.local, &self.selection, cmd);
         // spec: S-0701 claim 19 (an empty selection requests no command sound)
         if self.selection.is_empty() {

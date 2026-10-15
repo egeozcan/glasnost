@@ -36,6 +36,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         crate::econ::radar::mark_due(w, h);
     }
     crate::econ::shroud::entered_map(w, id);
+    // spec: S-0516 claims 16, 22, 23 and 40 (entering play: a cloaked vehicle, sensor discs, arrays and detectors)
+    crate::cloak::entered_map(w, id);
     if let Some(h) = owner {
         if kind == Kind::Building {
             // spec: S-0407 claim 12 (a) (a building put on the map)
@@ -64,6 +66,8 @@ pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     crate::econ::victory::leaving_map(w, id);
     crate::econ::power::leaving_map(w, id);
     crate::econ::shroud::leaving_map(w, id, for_good);
+    // spec: S-0516 claims 20, 22, 23 and 40 (leaving play: discs, fields and building coverage)
+    crate::cloak::leaving_map(w, id);
     crate::econ::resource::removed(w, id);
     crate::econ::harvest::leaving_map(w, id);
     if kind == Kind::Building
@@ -112,6 +116,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     // spec: S-0414 claims 21 and 22 (an ownership gain's kill and score)
     crate::econ::stats::owner_changed(w, id, old);
     crate::econ::shroud::owner_changed(w, id);
+    // spec: S-0516 claims 20, 22 and 23 (a change of owner moves discs and fields)
+    crate::cloak::owner_changed(w, id, old);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)
         for h in [old, new].into_iter().flatten() {
@@ -189,4 +195,6 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
         _ => crate::econ::slaves::group_turn(w, id),
     }
     crate::econ::shroud::object_turn(w, id, moved);
+    // spec: S-0516 claims 5 to 9, 13, 18, 20, 22, 25 and 33 (the cloak machine in the object's own turn, S-0203; Q-0720 for its place in the turn)
+    crate::cloak::turn(w, id);
 }

@@ -41,6 +41,8 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     let answer = check(w, id, Some(t), slot, true);
     // spec: S-0506 claim 11 (an impossible answer to an attempt with the spawner weapon resets the controller)
     crate::spawn::firing_answer(w, id, slot, answer);
+    // spec: S-0516 claim 11 (a) (cloaked: a vehicle within range starts uncloaking)
+    crate::cloak::machine::firing_answer(w, id, slot, t, answer);
     match answer {
         Answer::CanFire => {
             if u.vehicle.deploy_to_fire {
@@ -200,7 +202,10 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
     let slot = choose_slot(w, id, Some(t));
     if !attack {
         // spec: S-0107 claim 11 (with a target, not in the attack state and the weapon ready: enter it)
-        if check(w, id, Some(t), slot, true) != Answer::CanFire {
+        let answer = check(w, id, Some(t), slot, true);
+        // spec: S-0516 claim 11 (a) (cloaked: the infantry unit starts uncloaking)
+        crate::cloak::machine::firing_answer(w, id, slot, t, answer);
+        if answer != Answer::CanFire {
             return;
         }
         let d = dir(w, w.reference_point(id), t);
@@ -330,6 +335,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         }
         // spec: S-0506 claim 11 (an impossible answer to an attempt with the spawner weapon resets the controller)
         crate::spawn::firing_answer(w, id, slot, answer);
+        // spec: S-0516 claim 11 (a) (cloaked: the building starts uncloaking)
+        crate::cloak::machine::firing_answer(w, id, slot, t, answer);
         let rotate = |w: &mut World| {
             if b.turret {
                 let d = dir(w, building_aim_point(w, id), t);

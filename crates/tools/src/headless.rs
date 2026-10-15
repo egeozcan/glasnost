@@ -168,7 +168,8 @@ async fn smoke_async(
                         | Effect::Sound { .. }
                         | Effect::Trigger { .. }
                         | Effect::Hit { .. }
-                        | Effect::OverlayCrushed { .. } => {}
+                        | Effect::OverlayCrushed { .. }
+                        | Effect::Cloak { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());

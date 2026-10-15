@@ -1311,3 +1311,56 @@ fn turret_anim_keys_from_rules() {
         "art only equals omitted"
     );
 }
+
+/// spec: S-0516 Import mapping (the cloak, sensor and disguise keys of object, building, weapon and warhead types, and the game-wide values)
+#[test]
+fn cloak_and_disguise_fields() {
+    let base = "[VehicleTypes]\n1=Mirage\n[InfantryTypes]\n1=Spy\n2=Walker\n[BuildingTypes]\n1=Gen\n\
+                [TerrainTypes]\n1=Elm\n2=Oak\n\
+                [Mirage]\nCloakable=yes\nCloakStop=yes\nCloakingSpeed=3\nSensors=yes\nSensorsSight=4\n\
+                CanDisguise=yes\nDisguiseWhenStill=yes\n\
+                [Spy]\nCanDisguise=yes\nPermaDisguise=yes\nDetectDisguise=yes\n\
+                [Gen]\nCloakGenerator=yes\nCloakRadiusInCells=6\nSensorArray=yes\nDetectDisguiseRange=5\n\
+                [General]\nCloakingStages=12\nCloakDelay=0.02\nAlliedDisguise=walker\nSovietDisguise=Spy\n\
+                ThirdDisguise=Nobody\nDefaultMirageDisguises=elm,Oak\nInfantryBlinkDisguiseTime=15\n\
+                AttackCursorOnDisguise=yes\n\
+                [AudioVisual]\nCloakSound=Hum\n";
+    let (s, _) = sim(base, "", "");
+    let m = &s.vehicles["Mirage"].combat;
+    assert_eq!((m.cloakable, m.cloak_stop), (Some(true), Some(true)));
+    assert_eq!(
+        (m.cloaking_speed, m.sensors, m.sensors_sight),
+        (Some(3), Some(true), Some(4))
+    );
+    assert_eq!(
+        (m.can_disguise, m.disguise_when_still),
+        (Some(true), Some(true))
+    );
+    let spy = &s.infantry["Spy"];
+    assert_eq!(spy.perma_disguise, Some(true));
+    assert_eq!(spy.combat.detect_disguise, Some(true));
+    let g = &s.buildings["Gen"];
+    assert_eq!(
+        (g.cloak_generator, g.cloak_radius_in_cells),
+        (Some(true), Some(6))
+    );
+    assert_eq!(
+        (g.sensor_array, g.detect_disguise_range),
+        (Some(true), Some(5))
+    );
+    let gen_ = &s.general;
+    assert_eq!(gen_.cloaking_stages, Some(12));
+    assert_eq!(dec(&gen_.cloak_delay), Some("2e-2"));
+    assert_eq!(gen_.cloak_sound.as_deref(), Some("Hum"));
+    assert_eq!(gen_.allied_disguise.as_deref(), Some("Walker"));
+    assert_eq!(gen_.soviet_disguise.as_deref(), Some("Spy"));
+    assert_eq!(texts(&gen_.default_mirage_disguises), ["Elm", "Oak"]);
+    assert_eq!(gen_.infantry_blink_disguise_time, Some(15));
+    assert_eq!(gen_.attack_cursor_on_disguise, Some(true));
+    let weapons = "[Warheads]\n1=Mimic\n2=Copy\n3=Dart\n\
+                   [Mimic]\nDisguiseFakeBlinkTime=7\nWarhead=Copy\nProjectile=Dart\nDamage=1\n\
+                   [Copy]\nMakesDisguise=yes\n[Dart]\nROT=0\n";
+    let (s, _) = direct(&[weapons], "", &["Mimic"], &["Dart"], IniQuirks::default());
+    assert_eq!(s.weapons["Mimic"].disguise_fake_blink_time, Some(7));
+    assert_eq!(s.warheads["Copy"].makes_disguise, Some(true));
+}
