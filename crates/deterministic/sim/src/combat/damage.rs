@@ -744,7 +744,7 @@ pub fn delay_kill_expiry_turn(w: &mut World, id: ObjectId) {
             .building
             .bridge_repair_hut;
     if hut {
-        // spec: S-0302 claim 16 (a bridge repair hut clears the countdown and the recorded planter, with no expiry hit; its bridge-repair action is the structures specs' seam)
+        // spec: S-0302 claim 16 (a bridge repair hut clears the countdown and the recorded planter, with no expiry hit; its bridge demolition, S-0511 claim 16, is a seam)
         if let Some(ob) = w.obj_mut(id) {
             ob.combat.delay_kill_until = None;
         }

@@ -433,7 +433,7 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         // spec: S-0303 claim 11 (each hit is resolved completely before the next)
         damage::apply(w, cand.id, hit);
     }
-    // Bridges (claim 18) need the map's destroyable-bridges setting and the bridge specs.
+    // Bridges (claim 18) need the setup screen's bridge-destruction option and the bridge spec (S-0511): a seam.
     // spec: S-0303 claim 19 (an exploding overlay in the centre cell)
     exploding_overlay(w, centre, &det);
     // The warhead's particle system and rocking (claim 20) are presentation.
