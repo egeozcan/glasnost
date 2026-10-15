@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -35,8 +35,8 @@ controlled object's owner to the controller's house), *slave master*, *harvestin
 behaviour names (*move*, *attack*, *enter*, *capture*, *eaten*, *harvest*, *return*, *area guard*,
 *guard*, *unload*, *sabotage*, *patrol*, *attack move*) are S-0215's. *Spawned aircraft* and
 *slave unit* (S-0214, Terms, *spawned aircraft type, slave unit*), *garrison* and *mind-controlled*
-are used as S-0214 (Terms) defines them; *garrison occupants* are the infantry inside a garrisoned
-building. Whether a permanent takeover that leaves no controlling object counts as
+are used as S-0214 (Terms) defines them; *garrison occupants* are S-0508's occupants
+(Terms), the infantry inside one garrisonable building. Whether a permanent takeover that leaves no controlling object counts as
 mind-controlled is open in S-0214. Further terms are used as the specs named here define them:
 *queued behaviour* (S-0215, claim 12); *scatter request*, with its *threat point*, *forced*,
 *move-anywhere* and *effectively forced* (S-0208, Terms and claim 11); *reach region* and the
