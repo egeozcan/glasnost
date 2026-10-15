@@ -2,7 +2,7 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -32,7 +32,10 @@ Other specs own the following, and this spec only points to them:
 - the deploy order (S-0213 claim 10) and the input rules for deployed units (S-0214, Terms *deploy
   readiness* and *in-place deployer*),
 - passenger unloading (S-0507),
-- the radiation field that deployed infantry with a radiation weapon keep up (S-0525),
+- radiation creation and top-ups from a deployed infantry unit's own-cell shot (S-0525 claims
+  1 to 4; S-0215 claim 31 owns when it fires),
+- jumpjet hovering before a deploy request, landing and interrupted descent (S-0502 claims 13,
+  15 and 16),
 - whether deployed infantry can be crushed (S-0107).
 
 Skirmish only. Network games and campaigns are out of scope.
@@ -135,10 +138,11 @@ Skirmish only. Network games and campaigns are out of scope.
 5. **Landing first.** A deploy step that finds the vehicle above the ground does one of two things:
    - for a type that is not landing-first, nothing. The processing then returns to *guard* (claim
      3), so the order is dropped,
-   - for a landing-first type, it starts the vehicle landing for deploy. Its locomotor brings it down
-     at its normal descent (S-0502 claims 13 and 15). Each processing in the meantime is another deploy step that
-     finds it still airborne. When it touches down it stops landing for deploy. The next processing
-     then takes the deploy step of claim 4.
+   - for a landing-first type, it requests landing for deploy. Without that request, an idle
+     jumpjet of this type keeps hovering (S-0502 claim 13). Landing checks, descent and touchdown
+     follow S-0502 claim 15. Each processing before touchdown is another deploy step that finds
+     it still airborne. At touchdown the landing request ends. The next processing then takes
+     the deploy step of claim 4.
    - Backing: `measurable` (P1 b and V)
    - Confidence: high (the outcomes); medium (that the descent is the locomotor's ordinary one)
 
@@ -181,8 +185,8 @@ Skirmish only. Network games and campaigns are out of scope.
      The ordinary moving-vehicle readiness condition still applies (S-0215 claim 11). In
      particular, a descending jumpjet in *unload* is moving now (S-0502 claim 20) and normally
      cannot start a queued behaviour just because it is landing rather than deploying.
-   - A destination given during landing can nevertheless cancel the landing independently of
-     starting the queued behaviour (S-0502 claim 16): the vehicle climbs back towards its flying
+   - A destination given during descent, including by a move order, can nevertheless cancel
+     the landing independently of starting the queued behaviour (S-0502 claim 16): the vehicle climbs back towards its flying
      height and the deploy is abandoned. If *unload* is still current, *guard* is queued with
      permission to interrupt movement and starts when the other readiness conditions permit.
    - An order without a destination is not guaranteed to replace *unload* during descent.
@@ -242,13 +246,19 @@ Skirmish only. Network games and campaigns are out of scope.
     - While deployed, the vehicle is drawn with the image of its type's deployed image type, when its
       type names one, and with its own image otherwise. The deployed image type is used only for
       drawing; the vehicle keeps its own type for every rule.
-    - The type's deploy sound plays once per deploy order, at the vehicle's position, at the first
-      deploy step that starts a landing, a transition or an immediate deploy. A landing-first
-      vehicle therefore hears it when its landing starts, not again at touchdown. The type's
-      undeploy sound plays once, when an undeploy step starts. The original replays the relevant
-      sound every processing while landing or in transition, in effect every tick.
-    - Backing: `measurable` (P1 b, c, V and S) for drawing and original sound repetition.
-      Single playback is a presentation-only design correction. Non-drawing type properties
+    - With `quirks.deploy_sound_repeats` on (default original), each deploy step requests the
+      type's deploy sound at the vehicle's position, and each undeploy step requests its
+      undeploy sound there. Landing and transitions therefore repeat the relevant request
+      every processing, normally every tick, including the completion processing. Playback
+      remains subject to S-0701 claims 6, 8 to 10 and 12; not every request must be audible.
+      With the switch off, the deploy sound is requested once, at the first deploy step that
+      starts landing, a transition or an immediate deploy, and the undeploy sound once when
+      an undeploy step starts. Landing-first deployment then makes no second request at touchdown.
+    - Backing: `measurable` (P1 b, c, V and S) for drawing and audible sound repetition.
+      The exact per-processing sound-request cadence is `unmeasured`: P1 S records mixed
+      audio, whose suppression and service timing cannot distinguish every tick's request, and
+      no persistent per-request history is established for the read-only recorder. Single
+      requests with the switch off are a design alternative. Non-drawing type properties
       are `measurable` (P8 c compares selection bounds, occupancy and combat properties).
     - Confidence: high (drawing); medium (when the sound plays)
 
@@ -312,8 +322,13 @@ Skirmish only. Network games and campaigns are out of scope.
 
     The rule never moves the unit: a deployed infantry unit takes no approach step (S-0215 claim 37
     g). The delay after the processing is S-0215's.
+
+    The separate own-cell shot of radiation-immune deployed infantry is governed by S-0215
+    claim 31, not this targeting rule. If its weapon leaves radiation, the detonation creates a
+    field centred on that cell or tops up the field already centred there (S-0525 claims 1 to 4).
     - Backing: `measurable` (P7 a to e for deployed deploy-fire infantry; P7 f for the jumpjet
-      exception and infantry without the deploy-fire flag).
+      exception and infantry without the deploy-fire flag). The separate radiation rule inherits
+      its backing and scenarios from S-0215 claim 31 and S-0525 claims 1 to 4, not P7.
     - Confidence: high (the in-range and search outcomes); medium (that the search ignores the
       targeting timer); low (whether S-0309 claims 2 and 3 limit the search: Open questions)
 
@@ -379,7 +394,7 @@ occurs for a stalled zero-delay transition with its quirk on.
 | deploying | processing before completion | stays deploying, 1 tick |
 | deploying | processing that completes F1 | deployed; *guard* queued and started, 450 ticks |
 | deploying or undeploying | ordinary order queues a behaviour | cannot start during the transition; default: completion replaces it with *guard* (claim 8) |
-| deploying or undeploying | destination given | ignored (claim 9) |
+| deploying or undeploying | destination given | ignored, except for claim 9's carried deployed vehicle |
 | deploying or undeploying | *move* processing | *guard* queued, 1 tick |
 | deployed | deploy order, then processing | no presentation: mobile; with presentation: undeploying, presentation starts in reverse, 1 tick |
 | deployed | move order | no destination; *move* processing queues *guard* (claims 9, 10) |
@@ -427,9 +442,12 @@ occurs for a stalled zero-delay transition with its quirk on.
   obey readiness, and no type-data field forces a current-behaviour replacement through that
   gate. Establishing this hypothetical state directly would require a forbidden state write.
   Confidence: low.
-- **Deploy sound repeats.** The fixed behaviour is claim 12. The original replays the deploy sound
-  every tick while landing or deploying, and the undeploy sound every tick while undeploying. This is
-  a sound glitch, so it gets no switch.
+- **Deploy sound repeats** (`quirks.deploy_sound_repeats`, default on; claim 12). On: each deploy
+  or undeploy processing requests the relevant sound, reproducing the original repetition.
+  Off: request the deploy sound once at the first step that starts landing, a transition or an
+  immediate deploy, and the undeploy sound once when an undeploy step starts. Sound mixing
+  restrictions still apply in either setting. Backing and confidence are those of claim 12.
+  The off setting is a design alternative.
 - **Airborne non-landing-first type.** A deploy order to an airborne in-place deploying type without
   the deploy-to-land flag is silently dropped (claim 5). This is the original's behaviour and is kept.
 - **Deploy-fire vehicle with no slot-0 weapon.** The firing check answers *impossible* (S-0301 claim
@@ -502,7 +520,14 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
     and its targeting timer.
   - (c) At least 500 ticks later, give the deploy order again. Record the same marks for the
     undeploy, its assigned destination, and its cell and height per tick afterwards.
-  - (S) Repeat (b) and (c) with the test sounds.
+  - (S) Repeat (b) and (c) with the test sounds. Keep the vehicle near the view centre on
+    explored ground, mute unrelated sounds through the named test data, and use a short
+    distinguishable non-looping sample without entry-level repeat suppression. Lengthen the presentation
+    and descent so each lasts at least ten sample durations. Record mixed audio with tick
+    timestamps; an isolated sound request is the audibility control. If that control is
+    silent, or channel limits or entry suppression could prevent repetitions throughout the
+    tested phase, the repetition test is inconclusive. Repeat on our engine with the switch off
+    as a design-alternative check, not an oracle measurement.
   - (V) Repeat grounded with no presentation, then airborne with the landing-first flag off.
     Compare a deploy landing with an ordinary landing of the same type from the same height.
     Repeat presentation cases with invented end fields of 1, 2 and 5 stages, different initial
@@ -519,8 +544,10 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
     comes before that, once its targeting timer runs out (claim 3),
   - (c) completion at F2's tick, with a nearby destination assigned and takeoff permitted.
     Remaining over the same cell is not required,
-  - (S) the oracle replays the relevant sound every processing while landing or in transition.
-    Our engine deliberately plays it once at the first step rather than reproducing this glitch,
+  - (S) the oracle and our engine's default switch setting repeat the relevant sound during
+    a sufficiently long landing or transition. With the switch off, our engine requests it
+    once at the first step only, not again at touchdown. Audio capture alone does not establish
+    every processing's request cadence (claim 12),
   - (V) grounded without a presentation: immediate deploy and undeploy at their first processings.
     Airborne without the landing-first flag: no deploy and return to *guard*. Landing descent
     matches ordinary landing. Presentation variants follow F1/F2 regardless of initial frame.
@@ -533,7 +560,8 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
   a timer other than 450 afterwards, absent nearby destination after animated landing-first
   undeploy, a destination assigned by immediate undeploy, no shot before the first *guard* processing despite a legal
   acquired target, a different descent profile, a deploy in (a) or the airborne V variant,
-  zero-delay completion in (Z), cycle survival after destruction, or non-repeating oracle sounds.
+  zero-delay completion in (Z), cycle survival after destruction, or no repeated oracle sound in a valid, audible S run.
+  Audio suppression makes a run inconclusive, not a falsifier of the request cadence.
 
 **P2. Deploy-fire vehicle.**
 - Setup: *deploy-fire-test* gives a vehicle the deploy-fire flag without the in-place flag,
@@ -786,8 +814,8 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   and its subsequent height when there is no presentation and hence no assigned destination.
 - Whether the stage count really advances by one stage per *d* ticks for every deploying type (F1).
   One stage is the vehicle's default step, and nothing known changes it.
-- S-0415 claim 1 says that a deploy-fire vehicle fires its deploy weapon. Claim 2 here says slot 0.
-  Until S-0415 is revised, claim 2 governs that branch. Hand off both corrections together.
+- Approved S-0415 claim 1 calls the deploy-fire weapon the deploy weapon. Its current draft
+  corrects this to slot 0 and the delay of claim 2 here. Confirm that correction at joint hand-off.
 - S-0516 claim 34 describes disguise loss as leaving deployed mode. Claim 6 specifies the first
   undeploy step, before an animated undeploy clears the deployed state. Clarify that timing in
   S-0516 claim 34 when these specs are handed off together.
