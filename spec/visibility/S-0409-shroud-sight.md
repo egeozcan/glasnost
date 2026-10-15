@@ -2,7 +2,7 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -508,7 +508,10 @@ S-0101 claim 3. In addition:
 17. **Area reveals of other specs.** A reveal around a point that another spec orders (the waypoint
     reveal of S-0011, claim 26, the drop-zone reveal of S-0011, claim 36, and superweapon
     reveals) uses claims 5 to 7 with the radius it gives (counted as 10 above 10, nothing at 0) and
-    the observer level of the point. It explores and sees the cells and adds no lasting sight
+    the observer level of the point. The psychic reveal is an exception: it uses claims 5 and 6
+    but skips claim 7's high-ground test, so high ground hides none of its legal shape cells,
+    whatever the reveal-by-height flag says. S-0610 claim 14 gives the houses it is made for.
+    It explores and sees the cells and adds no lasting sight
     (S1 row 6). Outside hostile gap fields the cells stay explored. A cell inside a gap field
     hostile to the house is marked pending and re-covered at the next sweep, unless a sight of
     that house covers it. Which houses it is made for is the ordering spec's. In the original, S-0011 claims
@@ -520,8 +523,9 @@ S-0101 claim 3. In addition:
     The all-player-house scope is a design rule, not an observation of the original.
     - Backing: `measurable` (scenario V14 for the expiry inside a hostile field and the permanence
       outside; the area and the centre are S-0011's scenarios T16 and T21, which observe the disc
-      and its centre but not the expiry)
-    - Confidence: medium
+      and its centre but not the expiry; S-0610 scenario P7 tests the psychic reveal's exemption
+      from height blocking and its recipients)
+    - Confidence: medium; high for the psychic reveal's exemption from height blocking
 
 18. **Optional regrowth.** With the rules' shroud-regrowth flag on (off when absent) and a
     regrowth rate other than 0, a regrowth step runs every trunc(rate × 900) ticks (F5; the first
