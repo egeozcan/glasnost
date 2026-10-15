@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -64,8 +64,8 @@ S-0301's term (Terms and claim 10).
   the land type *water* or *beach* (S-0211).
 - **Kamikaze aircraft.** An aircraft in the dive by which it crashes itself into its target. The
   aircraft specs own when that state begins.
-- **Overpowered building.** A building that charged units are powering beyond its own power (the
-  structures specs own the state). An *overpowerable* building type can be put in that state.
+- **Overpowered building.** A building in the state defined by S-0518 claim 13. An
+  *overpowerable* building type can be put in that state.
 - **Installed upgrade.** A building type that has been installed on a building through one of the
   building's upgrade slots (S-0108 gives the slots). The structures specs own installing an upgrade
   and removing it; this spec only reads the building's list of installed upgrades, in the order they
@@ -259,8 +259,10 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     from its *current occupant*: the occupant at the building's occupant index. The occupant index starts at
     0 and moves to the next occupant, in the order the building holds them, after each successful
     non-disc-laser shot (wrapping to 0 after the last). A disc-laser shot does not advance it,
-    so successive such shots use the same occupant. It returns to 0 whenever occupants leave
-    or are killed. A refused firing attempt or void shot does not advance it (S-0301 claim 15).
+    so successive such shots use the same occupant. It returns to 0 when the building is emptied
+    by occupants leaving or being killed (S-0313 claim 6); this is not a rule for an individual
+    departure or death while other occupants remain. A refused firing attempt or void shot does
+    not advance it (S-0301 claim 15).
     The weapon is:
     - for an elite occupant: its type's elite occupying weapon if the type has one, and otherwise
       the weapon in the occupant's own slot 0 (with claim 2),
@@ -271,9 +273,11 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     fires its own primary, not the occupying weapon (`quirks.elite_occupant_skips_occupy_weapon`).
     S-0313 (claim 6) owns this shared index, called the muzzle index there.
     - Backing: `measurable` for slot 0 (scenario W9, parts a, b and e; S-0313 P5 part b for the disc-laser
-      exception). Reset on an occupant's death and unchanged index on a refused or void attempt
-      are `unmeasured` here: these parts do not isolate a death without emptying the building,
-      or an unsuccessful launch between distinguishable occupants. Occupant substitution in
+      exception; W9 part f for the reset after evacuation). Reset after occupants are killed and
+      unchanged index on a refused or void attempt are `unmeasured` here: these parts do not
+      isolate killing occupants from other building changes, or an unsuccessful launch between
+      distinguishable occupants. Index effects of an individual departure or death while others
+      remain are not established here. Occupant substitution in
       other slots is `unmeasured`: these garrison parts choose only slot 0 for their shots.
     - Confidence: high for the rotation and the weapon rule; medium for the order of occupants
 
@@ -377,7 +381,7 @@ secondary" and "the primary" are the weapons in slots 1 and 0.
 | 7 | the primary's warhead is a locomotor warhead and the target is a building | 1 |
 | 8 | the secondary is a draining weapon, the target's type is drainable, the firer is draining nothing at present, and the target is not allied with the firer | 1 |
 | 9 | the secondary has the area-fire flag and the firer's current behaviour is *unload* | 1 |
-| 10 | the firer is an overpowered building | 1 |
+| 10 | the firer is an overpowered building (S-0518 claim 13) | 1 |
 | 11 | the target is a building allied with the firer, the secondary's warhead is an electric-charge warhead, and the target's type is overpowerable | 1 |
 | 12 | the firer is a kamikaze aircraft | 1 |
 | 13 | the target is a cell, the firer's land-targeting mode is 2, and either the cell's land type is not water and its tile index lies outside the range of the theater's water role (S-0010, table R: 14 tile indices from the role's start), or the cell holds a bridge and the firer's type is naval | 1 |
@@ -456,7 +460,7 @@ number unchanged.
 | a successful shot leaves the building, other than a disc-laser shot | index = (index + 1) mod occupant count |
 | a disc-laser shot leaves the building | index unchanged |
 | a firing attempt is refused or its shot is void | index unchanged |
-| occupants leave or are killed (any) | index = 0 |
+| the building is emptied by occupants leaving or being killed | index = 0 |
 
 Ordering: none of its own. The choice is made each time a rule asks for it, with the state at that
 moment (for example the gattling stage and the deployed state of the same tick).
@@ -732,8 +736,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   occupying weapon, primary damage 11.
 - *Part a:* occupants in this order: *E* (rookie), *G*, *E* (elite). Target a stationary enemy
   vehicle; record the damage of successive shots. *Expected:* 5, 11, 7 (or the elite primary if *E*
-  has one), repeating; after one occupant leaves, the cycle restarts with the first remaining
-  occupant.
+  has one), repeating. This part does not require an individual occupant to leave.
 - *Part b:* the same with *E* given an elite occupying weapon of damage 9. *Expected:* 5, 11, 9.
 - *Part c:* a building with an upgrade slot whose upgrade type holds a weapon in slot 0 (damage 17),
   garrisoned as in part a. *Expected:* every shot 17.
@@ -749,9 +752,17 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   shot uses *E*, damage 5, and the same muzzle point. Control: replace only *E*'s weapon with
   the ordinary occupying weapon of part a; damage then alternates 5, 11. Evacuate and refill:
   the first occupant fires again from index 0.
-- *Falsified if:* any damage in parts a to d differs from their expected sequences, a departure
-  does not restart part a at the first remaining occupant, or part e rotates occupants or muzzles
-  after a disc-laser shot while its ordinary-weapon control alternates.
+- *Part f (reset after emptying):* use part a's ordinary weapons and three occupants. Stop
+  firing after one successful shot, while the index is 1; use a read-only recorder to confirm
+  the index and that no further shot occurs. Evacuate all occupants through the building's
+  deploy order with free exit cells (S-0508 claim 11). *Expected:* the empty building has index
+  0 immediately after evacuation. Refill in the same order and attack again: the first hit is
+  5, from the first occupant. Record the index before refilling so that an entry effect cannot
+  masquerade as an evacuation reset. A nonzero index after evacuation, or a first shot from
+  another occupant after refilling, falsifies this part.
+- *Falsified if:* any damage in parts a to d differs from their expected sequences, part e
+  rotates occupants or muzzles after a disc-laser shot while its ordinary-weapon control
+  alternates, or part f differs from its reset and first-shot predictions.
 
 **W10: mean weapon damage (claim 15).** Through S-0309. A test infantry type with primary damage
 −5 and secondary damage 3 (*M* = trunc(−2 / 2) = −1) is a healer for acquisition: in *guard* next to
@@ -770,6 +781,11 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
   Keep all other acquisition eligibility conditions equal
   to the two-weapon control. Any reversed acquisition outcome falsifies the corresponding
   ambient, single-slot or switching-slot rule.
+- *Negative rounding control:* repeat the two-weapon infantry acquisition setup with primary
+  damage −2 and secondary damage 1, both ambient contributions 0. The sum is −1, so truncation
+  toward zero gives *M* = 0: it must not acquire the damaged ally as a healer. Acquisition in
+  this case, while the *M* = −1 positive control above acquires normally, falsifies the stated
+  rounding (rounding downward instead would give −1).
 
 **W11: registration beyond usable slots (claim 16; S-0004 K6).**
 - *Setup:* named test files: a loose base-rules copy and art copy, tiny skirmish map, one human
@@ -807,10 +823,11 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 
 ## Open questions
 
-- Which states make an aircraft a kamikaze aircraft and a building overpowered (rows 10 and 12):
-  owned by the aircraft and structures specs.
-- The order in which a building holds its occupants (claim 13): assumed to be the order of entry.
-  S-0313 and the structures specs should agree on it.
+- Which states make an aircraft a kamikaze aircraft (row 12): owned by the aircraft specs.
+- S-0508 claim 5 gives entry order for the occupant list; W9 tests the resulting firing order.
+  The index effect of an individual departure or death while other occupants remain is not
+  established here. Claim 13's reset applies when the building is emptied, as S-0313 claim 6
+  states. S-0311's Terms must narrow their reset wording to the same empty-building condition.
 - What a new occupant's entry does to the occupant index of a garrisoned building (claim 13 and its
   state table give only shots and departures): whether the index keeps its value or returns to 0.
 - The rearm-countdown transfer of claim 6, restarted from slot 7, remains low confidence
