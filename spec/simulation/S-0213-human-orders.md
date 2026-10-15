@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -309,11 +309,9 @@ Terms).
    The table defines them so that every order has a result.
    An attack-move order is distinct from the standing behaviour named *attack move*:
    the ordinary eligible target-only and destination-only orders produce *attack* and
-   *move*, respectively, with memory, not that standing behaviour. S-0215 claim 5's
-   statement that player input never creates those orders needs this distinction made
-   explicit; its conclusion that only data puts an actor into *attack move* needs the
-   same ordinary-input scope qualification. This is a required companion change, listed
-   under Questions for the project lead. An attack-move order to a mobile actor whose type is not eligible leaves any attack-move memory it already had unchanged.
+   *move*, respectively, with memory, not that standing behaviour. S-0215 claims 5 and 12
+   already make this distinction and limit the data-only conclusion to the ordinary-input
+   cases studied. An attack-move order to a mobile actor whose type is not eligible leaves any attack-move memory it already had unchanged.
    - Backing: `measurable` (Scenario O3, steps 5a and 5b) for the two eligible rows that input
      creates: the recorded behaviour of an attack-moving unit is *move* with the cell as its
      destination (destination only) and *attack* with the object as its target (target only). What
@@ -504,8 +502,10 @@ Terms).
       backing.
     - Confidence: medium
 
-11. **Detonate order.** If the actor exists and carries a planted bomb, the bomb goes off at once.
-    No other check is made. The order is issued in the name of the planter's house, not the house
+11. **Detonate order.** If the actor exists and carries a planted bomb, the order resolves the
+    bomb at once: it detonates if the carrier is on the map (S-0519 claim 5), but is removed
+    silently, with no detonation, animation or damage, if the carrier is off the map
+    (S-0519 claim 6). No other order-application check is made. The order is issued in the name of the planter's house, not the house
     of the player who gave it. By claim 3 it is therefore applied only when the planter's house is
     human-controlled: a player who sets off a bomb that a computer house planted on one of the
     player's own units gets no effect, and the order is dropped.
@@ -515,14 +515,16 @@ Terms).
       O11 is the original's behaviour against its computer player, which our engine does not
       reproduce under either setting of the switch below. This is a *departure* with no switch,
       decided by the project lead (2026-10-09): AI houses follow the order rules of human houses.
-    - Backing: `measurable` (Scenario O6, step 4, and Scenario O11)
+    - Backing: `measurable` (Scenario O6, step 4, and Scenario O11) for on-map orders.
+      The off-map application is `unmeasured`: no normal-input fixture is established
+      (S-0519 claim 9).
     - Confidence: medium
     - Quirk: `quirks.detonate_in_planter_name` (default: YR behaviour). With the switch off, the
       order is issued and applied in the name of the house of the player who gave it. Input offers
       the detonate action only on the player's own object (S-0214), so that house is always the
       owner of the object that carries the bomb. In our engine the switch decides which house's
       pending list (claim 2) the order fills and in which house's turn of claim 3 it is applied,
-      and the bomb goes off under either setting.
+      and the bomb is resolved as above under either setting.
 
 12. **Sell order.** The actor must be live and owned by the issuing house. A building is sold.
     A vehicle or aircraft is sold only if a building occupies the cell it stands on, which in stock
@@ -2130,13 +2132,10 @@ off together at sign-off:
 - **Q-0286 joint answer already supplied:** confirm S-0214 claims 5 and 23, Scenario T17
   and its Import mapping together with claims 22 and 23 here. The request's current
   answered-by already lists S-0213 and S-0214; preserve both at hand-off.
-- **Required S-0215 claim 5 change:** distinguish attack-move orders, which ordinary
-  eligible input does create, from the standing behaviour *attack move*, which those
-  target-only and destination-only orders do not produce after claim 6's translation.
-  Qualify the current “player input never creates those orders” and “only data” wording
-  to this ordinary-input case, preserving the separately defined unsupported payloads.
-  Check claim 12 and dependent statements for the same distinction. Confirm the corrected
-  companion and this draft together at sign-off.
+- **Attack-move distinction already agrees:** S-0215 claims 5 and 12 distinguish
+  attack-move orders from the standing behaviour *attack move*, preserve claim 6's
+  translation, and qualify the data-only conclusion to the ordinary-input cases studied.
+  No companion edit is required; confirm the matching passages together at sign-off.
 - **Production-start ordering already agrees:** S-0404 claim 11/P11 B/C, S-0411
   claim 13/S9 and S-0202 claim 10 agree with claim 3 here: causing-action draw assignment,
   cancellation-order consequences and turn-pass starts before order-boundary starts.
