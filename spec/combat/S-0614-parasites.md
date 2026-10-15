@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -41,8 +41,7 @@ addition:
 - **Drone parasite, grappling parasite.** A parasite whose type is both naval (S-0315, Terms) and
   organic is a *grappling parasite*; every other parasite is a *drone parasite*. *Organic* is a
   yes/no field of a mobile type (Import mapping). A *naval parasite* (S-0315) is a parasite of a
-  naval type; every grappling parasite is naval, and in stock data every naval parasite is a
-  grappling one.
+  naval type; every grappling parasite is naval.
 - **Hold, held.** Every mobile unit has a *hold timer*, a countdown in ticks. The unit is *held*
   while the timer runs. A parasite starts its host's hold timer (claims 7 and 10), and a parasite
   that comes out of a living host is itself held for some ticks (claim 13). This is not the electromagnetic-pulse
@@ -267,10 +266,11 @@ addition:
     |---|---|---|
     | The host takes a sonic hit (S-0315, claim 7) | exits | exits |
     | The host takes a healing hit whose warhead is not sonic, or a repair step (S-0315, claim 7; S-0314, claim 3) | removed silently | exits |
+    | The host starts curtain protection (S-0513 claim 25) | removed silently: starting protection sets 50 ticks of suppression just before release | exits |
     | The host, a transport, lets a passenger out (unloading) | removed silently: unloading suppresses the parasite for 50 ticks just before it exits | exits |
     | The host reaches a consuming building while being eaten | removed silently: consumption sets 50 ticks of suppression before release | exits before host removal |
-    | The host is caught by a superweapon that teleports it | not at launch; it exits at the teleport jump (next row) | exits at launch, at the host's old position, before the teleport |
-    | The host jumps under the teleporting locomotor, its own move or a superweapon's (S-0207, claim 20e) | exits, before the host leaves its old position | exits, before the host leaves its old position |
+    | The host is caught by a superweapon that teleports it (S-0513 claims 34 and 39) | not released at launch; release at departure remains unresolved | exits at launch, at the host's old position, before the teleport |
+    | The host makes its own jump under the teleporting locomotor (S-0207 claim 20e) | exits, before the host leaves its old position | exits, before the host leaves its old position |
     | An effect replaces the host's locomotor (a weapon that seizes a vehicle) | stays attached | exits |
     | A grappling parasite's host stands on a cell that is not a water tile (claim 10) | not applicable | exits, not held afterwards |
     | A grappling parasite culls its host (claim 11) | not applicable | exits, not held afterwards |
@@ -278,11 +278,12 @@ addition:
     Hit-triggered release excludes S-0315 claim 6's vehicle-factory exception: such a hit does
     not release the parasite. Otherwise, when the parasite leaves through a hit (the first two
     rows), it leaves before that hit changes the host's health (S-0315 claim 7).
-    - Backing: `measurable` (P4 for hit and repair rows, P5 for unloading and consumption, P7 for
-      superweapon, teleport and replacement rows, P6 for cull and off-water rows)
-    - Confidence: high (sonic, healing, repair, unloading, the teleport jump, the locomotor
-      replacement); medium (the consuming-building row); low (that a
-      superweapon's teleport releases a drone parasite through the jump, as the table says)
+    - Backing: `measurable` (P4 for hit, repair and curtain rows, P5 for unloading and consumption,
+      P7 for superweapon launch, ordinary teleport and replacement rows, P6 for cull and off-water
+      rows). No drone release outcome is promised for superweapon departure; P7 records it.
+    - Confidence: high (sonic, healing, repair, curtain protection, unloading, the ordinary
+      teleport jump, the locomotor replacement); medium (the consuming-building row),
+      low (the unresolved drone outcome at superweapon departure)
 
 13. **Where a parasite comes out of a living host.** When a parasite leaves a living host (claim 12)
     and is not removed silently by suppression:
@@ -357,7 +358,9 @@ addition:
       removal for a vehicle.
 
     This answers S-0315's open question on a host destroyed while it carries a parasite.
-    - Backing: `measurable` (P5; P10 for fallback position choice and draws)
+    - Backing: `measurable` (P5; P10 for fallback position choice and draws),
+      `unmeasured` for the object-present refusal: S-0208 claim 3 and S-0209 claim 1
+      establish no practical fixture isolating that flag's effect
     - Confidence: high (release on destruction, suppression, no hold, position choice and draws),
       medium (the in-front cell, forced placement, the invulnerability exception)
 
@@ -402,7 +405,9 @@ addition:
     refuses an organic host's otherwise legal shot. Shots made by behaviour processing instead
     precede it, including aircraft attack-run shots (S-0501 claims 13 and 14); those shots are not undone.
     This claim does not reorder a shot or release caused immediately by another event.
-    - Backing: `measurable` (P12; P6 for movement before the off-water check)
+    - Backing: `measurable` (P12; P6 for movement before the off-water check),
+      `unmeasured` for a hit mark's effect on behaviour: the host cannot retaliate against
+      its own parasite (claim 17), and no other isolating behavioural response is established
     - Confidence: high
 
 19. **Re-selection after release.** A locally owned parasite with the imported re-select flag
@@ -438,7 +443,8 @@ addition:
     position marks rather than its mere presence. Position choice precedes entry acceptance:
     its draw is retained even if entry then refuses. The cited tables already exist; this claim
     supplies their placement use, not new occupant precedence.
-    - Backing: `measurable` (P10)
+    - Backing: `measurable` (P10); `unmeasured` for the object-present refusal:
+      no practical fixture isolating that flag's effect is established (S-0208 claim 3)
     - Confidence: high (single attempt, clear-only acceptance, position choice); medium
       (entry-table application to uncommon building and crushing exceptions)
 
@@ -509,7 +515,8 @@ addition:
     These are placement choices only, not any choices independently caused by the host's death
     or later unit behaviour. S-0209 claims 1, 4 and 5 own occupancy and entry outcomes.
     S-0208 claim 3 owns the shared position-choice refusal and side-preference rules.
-    - Backing: `measurable` (P10)
+    - Backing: `measurable` (P10); `unmeasured` for the object-present refusal:
+      no practical fixture isolating that flag's effect is established (S-0208 claim 3)
     - Confidence: high (failed-choice position, survival versus removal, placement choices),
       medium (accepted-point bridge-height consequences)
 
@@ -575,7 +582,7 @@ Same precision and rounding as S-0311 F3.
 | Latch block length | 20 | ticks | Claims 1 and 5 |
 | Height limit for a latching shot | 2 levels (208) | leptons | Claim 5 |
 | Hold after coming out of a living host | 3 × the weapon's rate of fire | ticks | Claim 13 |
-| Suppression set by unloading or consumption | 50 | ticks | Claim 12 |
+| Suppression set by curtain protection, unloading or consumption | 50 | ticks | Claim 12 |
 | Drone rock displacement | 2 | leptons | Claim 9, presentation |
 | Drone rock strength | 1.5 | (rocking units) | Claim 9, presentation |
 | Grab phase | 10 frames × 3 ticks | ticks | Claim 10 |
@@ -646,7 +653,7 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
   alliance test and no unscored test, and divides by the parasite's cost for its own house, unlike
   every other kill (S-0311). *Fixed:* treat the cull as a destruction credited to the parasite,
   with S-0311's claims 7 to 10.
-- **Unloading and consumption remove a non-naval parasite** (no switch; defined behaviour):
+- **Curtain protection, unloading and consumption remove a non-naval parasite** (no switch; defined behaviour):
   the 50-tick suppression set just before the exit makes the silent removal certain.
 - **`quirks.parasite_host_loss_bridge_test`** (default on): the fallback neighbour's restricted
   land passes when the host's cell has a bridge, even if that neighbour has none. *Fixed:* test
@@ -714,8 +721,8 @@ For every part, a result different from its stated expectation falsifies that pa
   original target even when it has moved away from the detonation, first delivery on the next
   host turn, then F1; no detonation area hit on a nearby bystander. The host can attack the
   second A vehicle but never its own parasite, and the second A vehicle still targets the host.
-  Named map variants: make the host infantry and latchable with a nonzero versus value,
-  or make the host temporarily invulnerable. Expected: the infantry delivery ignores defences
+  Named map variant: make the host infantry and latchable with a nonzero versus value.
+  Expected: the infantry delivery ignores defences
   and kills at first delivery, whereas ordinary non-infantry damage follows S-0302. Give the
   drone's primary weapon distinct rookie and elite damage and cadence; expected the rank's
   primary slot, without a firing-bonus multiplication. Set paralysis length shorter than,
@@ -729,6 +736,9 @@ For every part, a result different from its stated expectation falsifies that pa
   For facing effects, give the delivery animation list eight visually distinct test entries,
   then an empty list. Repeat for all eight host directions: expected the corresponding entry,
   or no delivery animation for the empty list, with the spark effect unchanged.
+  During attachment, deliver a nonlethal area hit that reaches the host and record both units'
+  health: expected no damage to the off-map parasite. Record the parasite's target throughout
+  attachment: expected none, even while other enemies enter range.
 - **P2, legality (claims 2, 5).** Order two A drones at one B tank in one tick. Record every shot.
   Expected: once the first fires, the second check refuses for 20 ticks, and refuses while an
   attachment exists. Named map variant: slow the latching projectile enough that it remains in
@@ -757,6 +767,12 @@ For every part, a result different from its stated expectation falsifies that pa
   only to land type. Compare a host and parasite with different movement zones to discriminate
   host-based search from parasite-based search. Make the sonic hit lethal: expected release
   before the host's health changes, using claim 13 rather than claim 15.
+  In separate stock-data runs, start curtain protection on an infected non-organic vehicle
+  and on a ship carrying a naval parasite, keeping legal exit cells clear. Record suppression,
+  attachment, parasite existence and host hold at activation. Expected: suppression set to
+  50 ticks before release, drone silently removed, naval parasite exiting by claim 13, and
+  host hold ended (S-0513 claim 25). Continued attachment or a surviving released drone
+  falsifies this result; missing naval release with clear placement also falsifies it.
 - **P5, host loss and consumption (claims 12, 15, 16).** Destroy an infected tank by its own
   parasite, recording both destruction and actual map-removal ticks. Expected: ordinary kill
   experience under S-0311, and claim 15 release when the host leaves the map or is removed,
@@ -787,8 +803,10 @@ For every part, a result different from its stated expectation falsifies that pa
   host turn that finds a non-water cell, without a post-exit hold. Named long-lived hosts allow the phase test to finish before culling.
 - **P7, teleport and replacement (claim 12).** Infect a unit using the teleporting locomotor
   with a drone parasite, then order a jump; record the old and new positions and release tick.
-  Expected: exit at the old position before departure. Repeat a teleporting superweapon's
-  relocation of an infected vehicle: hypothesis is release at the warp jump, not launch.
+  Expected: exit at the old position before departure. Separately record a teleporting
+  superweapon's relocation of an infected vehicle, distinguishing attachment, map presence,
+  silent removal and release at launch, departure and arrival. Expected: no drone release at
+  launch; its later fate remains an open question, not an asserted ordinary-jump outcome.
   Repeat with a ship carrying a grappling parasite: expected release
   at launch at its old position. Apply a locomotor-replacing weapon to a latchable host carrying
   a naval parasite and then a non-naval one (named map variants if needed); expected release
@@ -831,11 +849,12 @@ For every part, a result different from its stated expectation falsifies that pa
   blockers separately: expected the ground-record entry test. Repeat sonic release to exercise
   claim 13's final placement separately from its earlier search. For host loss arrange a rejected
   host cell and a valid front neighbour, with zero, one and two occupied side positions, then
-  all three for both kinds. Also repeat with a vehicle-present refusal and an object-present
-  refusal, using a non-traversable object, and with restricted land rejected before choice.
+  all three for both kinds. Also repeat with a vehicle-present refusal and with restricted
+  land rejected before choice. The object-present refusal is unmeasured: a non-traversable
+  object alone does not establish that flag or isolate its effect (S-0208 claim 3).
   Expected: ground-record centre-class choice before forced placement and claim 23's table.
-  All three side positions taken consumes one ranged choice; the two flag refusals consume
-  none. Infantry is removed in all three failed-choice cases, but the vehicle survives at
+  All three side positions taken consumes one ranged choice; the vehicle-present refusal
+  consumes none. Infantry is removed in both tested failed-choice cases, but the vehicle survives at
   world position (128, 128, 0) leptons, unmarked on a bridge, not at the front neighbour or
   another nearby cell. Record the parasite's actual position and existence immediately during
   release, before its next behaviour turn; lack of a visible unit in the local area alone
@@ -870,8 +889,11 @@ For every part, a result different from its stated expectation falsifies that pa
   processing: expected the earlier shot is not cancelled. For behaviour order arrange a due
   processing that chooses a random delay and the drone rocking choice in one turn. Isolated
   controls account for all other effect draws; expected behaviour choice before parasite choice.
-  The recorder logs per-turn health, movement, shots and stream state. Opposite ordering falsifies
-  the corresponding part. P6's zero-hold off-water run expects release on the turn movement first
+  In another part, use two hosts whose update order is opposite to their parasites' original
+  order, with deliveries due in the same tick and other random effects disabled. Record the
+  two rocking choices and health changes: expected assignment in host order, not parasite order.
+  The recorder logs per-turn health, movement, shots, targets and stream state. Opposite ordering
+  falsifies the corresponding part. P6's zero-hold off-water run expects release on the turn movement first
   reaches dry terrain, not one turn later.
 - **P13, air threshold (claims 13, 15 and 22; Q-0623).** Named P4 map variants provide
   latchable jumpjet-infantry, hover-vehicle and ordinary aircraft hosts. Release with nonlethal
@@ -888,6 +910,9 @@ For every part, a result different from its stated expectation falsifies that pa
 
 ## Open questions
 
+- S-0315's Terms and claim 7 still describe a non-naval parasite's superweapon-departure
+  release as expected. They need to follow claim 12's unresolved outcome instead; the ordinary
+  teleport jump must not be assumed for that path.
 - Whether creating the spark effect, the delivery animation, the wakes or the splash animations draws
   from the scenario random stream besides the draws listed in claims 9 and 10.
 - A weapon with the parasite flag on its warhead but without the launch-inside flag.
@@ -895,8 +920,9 @@ For every part, a result different from its stated expectation falsifies that pa
   attachment result is not established.
 - Nonempty delivery-animation lists shorter than eight entries: out-of-list results are not
   established; no wrap or safe fallback is claimed.
-- Whether a superweapon's teleport releases a drone parasite through the teleport jump (claim 12,
-  low): scenario P7.
+- Whether and how a superweapon's teleport releases a drone parasite at departure: the ordinary
+  teleport jump's release is not established for that path (claim 12; S-0513 claim 39). P7
+  records its fate without promising the ordinary-jump outcome.
 - A drone parasite whose ship host is killed and sinks: whether the parasite stays inside during
   the sinking until the host is removed (claim 15 then applies).
 - Whether the host-cell test of claim 13 can fail in skirmish play for reasons other than an
