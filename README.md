@@ -21,8 +21,10 @@ The opponent plays every faction the setup offers. It uses only the orders a per
 
 The simulation is deterministic: integers only and one seeded random stream. Native and WebAssembly builds produce identical state hashes, and saves restore the same hash. Behaviour is implemented only from the specs in `spec/`. Where a spec is missing, a request is filed in `spec/requests/` and the interim rule is listed in `docs/development.md`.
 
-**Not there yet (M6 and later):**
-- aircraft, naval units, garrisons, bridges and superweapons;
+**M6a (first wave of M6) adds** aircraft and air pads, naval units (ships move on water, wake, sink, and are built at naval yards), the V3-style guided missile launcher, and the parasite (a drone that latches inside a vehicle). Carriers and their spawned craft fight. The computer opponent builds aircraft and pads, navies on maps with water, and missile launchers.
+
+**Not there yet (later M6 parts and beyond):**
+- ship repair at yards (the depot cycle), garrisons, bridges, cloaking, paradrops and superweapons;
 - full animation playback;
 - multiplayer over the network.
 
