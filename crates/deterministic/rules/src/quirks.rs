@@ -1437,6 +1437,118 @@ pub struct Quirks {
     // spec: S-0513 claim 40; S-0214 Terms (being erased, phasing in)
     #[serde(default = "on")]
     pub warp_hold_persists: bool,
+    /// A deployed deploy-to-fire vehicle with the in-place deploy flag queues *unload* again instead of firing, so it cycles between deploying and undeploying and never fires; off: a deployed deploy-to-fire vehicle fires normally, and only a mobile one queues *unload*. Not implemented yet (wave 2).
+    // spec: S-0517 claim 13 and Edge cases; S-0310 claim 9 and Edge cases
+    #[serde(default = "on")]
+    pub deploy_to_fire_repacks: bool,
+    /// An assault that clears garrison occupants records the surviving assaulter as destroyed by each removed occupant, which gets the kill credit and experience; off: each removed occupant is the victim, with destruction notifications and loss bookkeeping, and the assaulter gets ordinary kill credit and experience. The assaulter survives in both settings. Not implemented yet (wave 2).
+    // spec: S-0508 claim 14 and Edge cases; S-0311 claim 9
+    #[serde(default = "on")]
+    pub assaulter_reversed_kill_credit: bool,
+    /// A trainable erasing leader gets F5's direct experience gain on top of ordinary kill credit, which may go elsewhere; off: only ordinary S-0311 credit remains. Not implemented yet (wave 2).
+    // spec: S-0514 claim 13 and Edge cases; S-0311 claim 9
+    #[serde(default = "on")]
+    pub erasure_double_experience: bool,
+    /// When the last erasing attacker lets go before completion, the building is switched on regardless of its state before the lock; off: release restores its switch state from before the first lock. Not implemented yet (wave 2).
+    // spec: S-0514 claim 10 and Edge cases; S-0405 claim 8
+    #[serde(default = "on")]
+    pub erasure_release_switches_on: bool,
+    /// Only a leading erasing attacker inside an open-topped transport is checked against the warp distance, not joiners; off: the distance limit applies to every attached open-topped passenger. Not implemented yet (wave 2).
+    // spec: S-0514 claim 11 and Edge cases
+    #[serde(default = "on")]
+    pub erasure_distance_leader_only: bool,
+    /// A delivered erasing hit clears the target's spawner slots and frees the units it mind-controls even when the new lock is refused; off: a refused lock does not clear spawners or free controlled units (the firer's previous beam still lets go). Not implemented yet (wave 2).
+    // spec: S-0514 claim 2 and Edge cases
+    #[serde(default = "on")]
+    pub erasure_refused_hit_side_effects: bool,
+    /// An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition. Not implemented yet (wave 2).
+    // spec: S-0502 claim 7 and Edge cases
+    #[serde(default = "on")]
+    pub jumpjet_bridge_early_cruise_height: bool,
+    /// The look-ahead adds the bridge height of the cell ahead to the jumpjet's own cell's clearance, not to the ahead cell's; off: each cell's bridge height is added to that cell's clearance. Not implemented yet (wave 2).
+    // spec: S-0502 claim 9, F3 and Edge cases
+    #[serde(default = "on")]
+    pub jumpjet_lookahead_bridge: bool,
+    /// A jumpjet that cannot land and finds no cell nearby destroys itself; off: it re-enters *hovering* over its current cell. Not implemented yet (wave 2).
+    // spec: S-0502 claim 17 and Edge cases
+    #[serde(default = "on")]
+    pub jumpjet_no_cell_self_destruct: bool,
+    /// A straight-line step uses F5's shifted angle, table trigonometry and separate coordinate truncation, so southward and westward steps drift one lepton across the line of travel; off: the displacement is the speed times the double-precision sine and cosine of the facing, rounded half away from zero. Not implemented yet (wave 2).
+    // spec: S-0502 claim 10, F5 and Edge cases
+    #[serde(default = "on")]
+    pub jumpjet_step_truncation: bool,
+    /// The cruise bands' remaining-turn test uses the clockwise difference only, so even a small anticlockwise turn takes the band's slower speed; off: it uses the smaller of the clockwise and anticlockwise differences. Not implemented yet (wave 2).
+    // spec: S-0502 claim 11, F6 and Edge cases
+    #[serde(default = "on")]
+    pub jumpjet_turn_slowdown_one_sided: bool,
+    /// Garrison entry is refused only when the occupant count equals the capacity, so a negative capacity admits occupants indefinitely; off: entry requires an occupant count below the capacity, so a non-positive capacity admits none. Not implemented yet (wave 2).
+    // spec: S-0508 claim 1 and Edge cases
+    #[serde(default = "on")]
+    pub garrison_capacity_equality: bool,
+    /// Each deploy or undeploy processing requests the type's deploy or undeploy sound, so landing and transitions repeat the request every processing; off: the deploy sound is requested once, at the first step that starts landing, a transition or an immediate deploy, and the undeploy sound once when an undeploy step starts. Not implemented yet (wave 2).
+    // spec: S-0517 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub deploy_sound_repeats: bool,
+    /// With a presentation stage delay of 0 no stages advance, so a deploy with E > 1 or an undeploy with E > 2 never completes; off: any zero-delay transition completes at the next processing. Not implemented yet (wave 2).
+    // spec: S-0517 claim 7 and Edge cases; S-0109 Edge cases
+    #[serde(default = "on")]
+    pub deploy_stall_zero_delay: bool,
+    /// A behaviour queued during deploying or undeploying is replaced by *guard* at completion; off: completion starts the pending behaviour, or *guard* if none is pending. Not implemented yet (wave 2).
+    // spec: S-0517 claim 8 and Edge cases
+    #[serde(default = "on")]
+    pub deploy_transition_discards_orders: bool,
+    /// A dropped or projectile-less delayed master shot keeps the support count, so the next shot gets the kept bonus on top of new supporters, with no beams for the kept part; off: the count becomes 0 whenever the delayed shot comes, fired or not. Not implemented yet (wave 2).
+    // spec: S-0518 claim 10 and Edge cases
+    #[serde(default = "on")]
+    pub prism_count_survives_dropped_shot: bool,
+    /// Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged. Not implemented yet (wave 2).
+    // spec: S-0518 claim 16, F4 and Edge cases
+    #[serde(default = "on")]
+    pub prism_modifier_reread_scale: bool,
+    /// Supporters need not be in operation, so a switched-off, pulsed, unfinished or selling building still supports a working master; off: a building not in operation (S-0405 claim 8) is not eligible. Not implemented yet (wave 2).
+    // spec: S-0518 claim 2 and Edge cases
+    #[serde(default = "on")]
+    pub prism_support_ignores_operation: bool,
+    /// With a prism delayed-fire field of 0, a recruited supporter stays eligible until its turn, so another master of the same house processed before then also counts it; off: a building with a pending beam is not eligible. Not implemented yet (wave 2).
+    // spec: S-0518 claim 2 and Edge cases
+    #[serde(default = "on")]
+    pub prism_zero_delay_double_count: bool,
+    /// A building of a non-overpowerable type never removes chargers that stopped aiming at it; off: it removes them as an overpowerable type does. Not implemented yet (wave 2).
+    // spec: S-0518 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub stale_chargers_kept: bool,
+    /// A vehicle with an electric-charge secondary has no break-off search and keeps firing charge shots at the building while enemies approach; off: vehicles break off as infantry do. Not implemented yet (wave 2).
+    // spec: S-0518 claim 15 and Edge cases
+    #[serde(default = "on")]
+    pub vehicle_charge_no_break_off: bool,
+    /// Only the type's explosive-charges flag plants a charge on arrival, and the veterancy explosive-charges ability plants nothing; off: the veterancy ability also plants, as the type flag does. Not implemented yet (wave 2).
+    // spec: S-0519 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub charge_needs_type_flag: bool,
+    /// Armour, firepower and speed crates also boost objects off the map whose last recorded position lies inside the crate area; off: only objects on the map are affected, as for cloak and veteran. Not implemented yet (wave 2).
+    // spec: S-0520 claims 19 and 20 and Edge cases
+    #[serde(default = "on")]
+    pub crate_bonus_reaches_limbo: bool,
+    /// The unit crate's harvester rule tests only the first two entries of the refinery list and of the harvester list; off: every entry of both lists is tested. Not implemented yet (wave 2).
+    // spec: S-0520 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub crate_harvester_list_prefix: bool,
+    /// A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Not implemented yet (wave 2).
+    // spec: S-0520 claim 3 and Edge cases
+    #[serde(default = "on")]
+    pub crate_phantom_place: bool,
+    /// A unit crate that cannot place its unit gives money with the unit power-up's argument as the base b; off: with the money power-up's argument, as a money crate would. Not implemented yet (wave 2).
+    // spec: S-0520 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub crate_unit_fallback_unit_argument: bool,
+    /// Adding to a radiation field removes F5's amount r from its cells, which can exceed the field's remaining contribution by one decay step and take radiation other fields gave; off: adding removes exactly the field's own remaining contribution. Not implemented yet (wave 2).
+    // spec: S-0525 claim 4, F5 and Edge cases
+    #[serde(default = "on")]
+    pub radiation_add_overdraw: bool,
+    /// A radiation field's end takes nothing from its cells, so a contribution its decay steps did not take stays and keeps damaging; off: at its end each cell loses what remains of that field's contribution, not below 0. Not implemented yet (wave 2).
+    // spec: S-0525 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub radiation_residue: bool,
 }
 
 impl Default for Quirks {
@@ -1791,6 +1903,34 @@ impl Default for Quirks {
             second_stage_order_unchecked: true,
             superweapon_kind_as_list_position: true,
             warp_hold_persists: true,
+            deploy_to_fire_repacks: true,
+            assaulter_reversed_kill_credit: true,
+            erasure_double_experience: true,
+            erasure_release_switches_on: true,
+            erasure_distance_leader_only: true,
+            erasure_refused_hit_side_effects: true,
+            jumpjet_bridge_early_cruise_height: true,
+            jumpjet_lookahead_bridge: true,
+            jumpjet_no_cell_self_destruct: true,
+            jumpjet_step_truncation: true,
+            jumpjet_turn_slowdown_one_sided: true,
+            garrison_capacity_equality: true,
+            deploy_sound_repeats: true,
+            deploy_stall_zero_delay: true,
+            deploy_transition_discards_orders: true,
+            prism_count_survives_dropped_shot: true,
+            prism_modifier_reread_scale: true,
+            prism_support_ignores_operation: true,
+            prism_zero_delay_double_count: true,
+            stale_chargers_kept: true,
+            vehicle_charge_no_break_off: true,
+            charge_needs_type_flag: true,
+            crate_bonus_reaches_limbo: true,
+            crate_harvester_list_prefix: true,
+            crate_phantom_place: true,
+            crate_unit_fallback_unit_argument: true,
+            radiation_add_overdraw: true,
+            radiation_residue: true,
         }
     }
 }
@@ -2658,6 +2798,82 @@ impl Quirks {
                 self.superweapon_kind_as_list_position,
             ),
             ("warp_hold_persists", self.warp_hold_persists),
+            ("deploy_to_fire_repacks", self.deploy_to_fire_repacks),
+            (
+                "assaulter_reversed_kill_credit",
+                self.assaulter_reversed_kill_credit,
+            ),
+            ("erasure_double_experience", self.erasure_double_experience),
+            (
+                "erasure_release_switches_on",
+                self.erasure_release_switches_on,
+            ),
+            (
+                "erasure_distance_leader_only",
+                self.erasure_distance_leader_only,
+            ),
+            (
+                "erasure_refused_hit_side_effects",
+                self.erasure_refused_hit_side_effects,
+            ),
+            (
+                "jumpjet_bridge_early_cruise_height",
+                self.jumpjet_bridge_early_cruise_height,
+            ),
+            ("jumpjet_lookahead_bridge", self.jumpjet_lookahead_bridge),
+            (
+                "jumpjet_no_cell_self_destruct",
+                self.jumpjet_no_cell_self_destruct,
+            ),
+            ("jumpjet_step_truncation", self.jumpjet_step_truncation),
+            (
+                "jumpjet_turn_slowdown_one_sided",
+                self.jumpjet_turn_slowdown_one_sided,
+            ),
+            (
+                "garrison_capacity_equality",
+                self.garrison_capacity_equality,
+            ),
+            ("deploy_sound_repeats", self.deploy_sound_repeats),
+            ("deploy_stall_zero_delay", self.deploy_stall_zero_delay),
+            (
+                "deploy_transition_discards_orders",
+                self.deploy_transition_discards_orders,
+            ),
+            (
+                "prism_count_survives_dropped_shot",
+                self.prism_count_survives_dropped_shot,
+            ),
+            (
+                "prism_modifier_reread_scale",
+                self.prism_modifier_reread_scale,
+            ),
+            (
+                "prism_support_ignores_operation",
+                self.prism_support_ignores_operation,
+            ),
+            (
+                "prism_zero_delay_double_count",
+                self.prism_zero_delay_double_count,
+            ),
+            ("stale_chargers_kept", self.stale_chargers_kept),
+            (
+                "vehicle_charge_no_break_off",
+                self.vehicle_charge_no_break_off,
+            ),
+            ("charge_needs_type_flag", self.charge_needs_type_flag),
+            ("crate_bonus_reaches_limbo", self.crate_bonus_reaches_limbo),
+            (
+                "crate_harvester_list_prefix",
+                self.crate_harvester_list_prefix,
+            ),
+            ("crate_phantom_place", self.crate_phantom_place),
+            (
+                "crate_unit_fallback_unit_argument",
+                self.crate_unit_fallback_unit_argument,
+            ),
+            ("radiation_add_overdraw", self.radiation_add_overdraw),
+            ("radiation_residue", self.radiation_residue),
         ]
     }
 
