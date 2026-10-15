@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1028,8 +1028,13 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     that teleports an object belongs to the superweapon and combat specs, even when it uses the same
     locomotor.
 
-    - (a) **Taking a destination.** When the object is given a destination (its behaviour or an
-      order sets one, S-0215), the locomotor takes it at once. It drops the destination and does
+    - (a) **Taking a destination.** Vehicle destination assignments, whatever the locomotor,
+      obey S-0517 claim 9: a deployed vehicle or one deploying or undeploying receives no
+      destination, except while still deployed and carried by another object's locomotion.
+      Landing for deploy is not such a transition; destination-driven cancellation of jumpjet
+      landing belongs to S-0502 claim 16 (see also S-0517 claim 8).
+      When the object is given a destination (its behaviour or an order sets one, S-0215),
+      subject to those restrictions, the locomotor takes it at once. It drops the destination and does
       nothing, when the object is disabled by an electromagnetic pulse, is *held*
       (S-0614 Terms), is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
       **landing point** *L* at once (parts b and c). For a vehicle, the vehicle-present
@@ -1103,8 +1108,10 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       erased* because of its own move. When *L* equals its own position, it does not jump, and the
       destination is removed.
     - (e) **What the jump does.** All of this happens in the tick of the jump. Every object that
-      has it as its target drops it, except an attacker whose erasing weapon remains locked onto
-      the living target (S-0215 claim 10). When an override is in effect and that exception does
+      has it as its target drops it, except an attacker whose airstrike is aimed at the living
+      target. This is not an erasing-weapon exception: an object being erased drops destinations
+      under part a and cannot make this jump (S-0514 claim 16).
+      When an override is in effect and that exception does
       not hold, the attacker reverts on the jump tick: it drops the jumping object if that object
       remains its target, but keeps a different target restored by the revert (S-0215 claim 10).
       Every projectile aimed at the jumping object loses its target, so a shot already in flight
@@ -1227,14 +1234,18 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       reservation layers, replacement clearing and post-jump marks; run 14 for Q-0310's
       aircraft two-record landing, next destination and destruction cleanup; run 15
       for part k's actual-cell-only removal and retained pending reservations). `unmeasured`:
-      the live erasing-lock exception, because no stock setup establishes a retained lock at a
-      locomotor jump (S-0215 claim 10). Also `unmeasured` are part a's disabling states other
+      the airstrike target-retention exception, because no stock setup establishes an airstrike
+      aimed at a living object making its own locomotor jump. Part a's vehicle destination
+      restriction uses S-0517 claim 9's backing (P3 a and P4 b); jumpjet landing cancellation
+      uses S-0502 claim 16's backing. Also `unmeasured` are part a's disabling states other
       than phasing in, part b's superweapon hold, part e's parasite expulsion, and part j's
       body-turn and exhaustive unchanged-visibility assertions: D22 isolates none of these,
       and no qualifying setup for their interaction with an own-locomotor jump is specified.
       The animation/sound ordering and type-specific sound overrides of part e are
       `measurable` through D22 run 1's presentation controls
-    - Confidence: high for parts d, e and f and F9 (the whole move was read); medium for part b
+    - Confidence: part a's vehicle destination restriction inherits S-0517 claim 9's
+      confidence (high for refusal, low for the carried exception); jumpjet landing cancellation
+      inherits S-0502 claim 16's confidence. High for parts d, e and f and F9 (the whole move was read); medium for part b
       (including the entry-test level and the search without a reach restriction), for the
       aircraft reservation and landing rules, including Q-0310's clearing and retained
       ground flag after removal, for part k's vehicle and aircraft removal rules,
@@ -1856,7 +1867,7 @@ of the first group.
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
 | teleporting, idle | destination given, not disabled, not being erased, not phasing in | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
-| teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's live-lock and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
+| teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's airstrike and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
 | teleporting, *L* fixed | its next movement update, *L* equals its position or none was fixed | destination removed, no jump (claim 20 b, d) |
 | phasing in | destination given | dropped (claim 20 a) |
 | phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; only with no target, conditional timer shortening then gated teleport search, whose normal timer draw replaces the shortening when both occur; idle fallback when no target is set (claim 20 f) |
@@ -3131,9 +3142,10 @@ are not covered by this scenario.
 - The heading points (Terms) of locomotors other than driving, ship, hovering and teleporting,
   which decide a vehicle scatter centre cell for such vehicles (claim 16), remain for their
   specs. The ship case is settled by S-0504 claim 1 and the hover case by S-0503 claim 5.
-- Whether a live erasing-weapon lock can coexist with a teleporting locomotor jump (claim 20 e)
-  is not established by a stock setup. The conditional exception follows S-0215 claim 10.
-  reachability belongs to the erasing-weapon rules.
+- Whether a stock setup can establish an airstrike aimed at a living object that makes its
+  own teleporting-locomotor jump (claim 20 e). An erasing-weapon lock supplies no such
+  exception: the erased object cannot accept a destination or jump (claim 20 a,
+  S-0514 claim 16).
 - Whether any stock setup gives a vehicle a pending teleport or a phasing-in state before
   temporary driving begins (claim 21). Factory exit establishes the ordinary case, not those
   conditional states.
