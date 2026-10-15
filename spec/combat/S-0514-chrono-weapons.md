@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -78,8 +78,8 @@ before joint hand-off.
      here makes a pending shot arrive from that otherwise inactive firer during this stage.
    - Confidence: high.
 
-4. **A successful lock.** With no existing beam, the firer becomes leader and sets *R* by
-   F1. Otherwise it joins without resetting *R*. The target becomes being erased, is
+4. **A successful lock.** With no beam already attached to the target, the firer becomes
+   leader and sets *R* by F1. Otherwise it joins without resetting *R*. The target becomes being erased, is
    deselected and releases any beam of its own. A building is switched off and its house
    is scheduled to reconsider power and radar; power recalculation follows S-0405 claim 7,
    not an immediate recalculation inside the hit. Slot animations follow S-0109 claim 21.
@@ -143,7 +143,11 @@ before joint hand-off.
     distance. That update makes no reduction, even if another attacker becomes leader.
     Joiners are not checked (`quirks.erasure_distance_leader_only`). Outside an open-topped
     transport, distance alone does not release a beam.
-    - Backing: `measurable` (E8).
+    - Backing: `measurable` (E8) for the range gate, height term and leader-only release.
+      F4's table-root shortfall and rounding-mode dependence are `unmeasured`: E8 has no
+      verified legal placement that distinguishes them from an exact root at the threshold.
+      F4's out-of-domain separations and overflow thresholds are `unmeasured`: no legal
+      setup here reaches those magnitudes.
     - Confidence: high.
 
 ### Completion and release causes
@@ -151,8 +155,9 @@ before joint hand-off.
 12. **Removal.** Completion plays the imported warp-away animation at the target and
     removes the target without death, with claim 13's credit. Building garrison occupants
     are removed as S-0508 claim 15 specifies; absorbed units are deleted without individual
-    destruction credit. A bunker releases its vehicle; removing a bunkered vehicle clears
-    its bunker. A slave master's slaves are freed. Transport passengers are recursively
+    destruction credit. A bunker releases its vehicle as S-0606 claim 13 specifies.
+    Removing a bunkered vehicle clears its bunker as S-0606 claim 14 specifies.
+    A slave master's slaves are freed. Transport passengers are recursively
     removed too, but their destructions have no killer and award the erasing attacker no
     passenger kill credit or experience.
     - Backing: `measurable` (E9). The bunkered-vehicle branch is `unmeasured`: ordinary
@@ -167,8 +172,11 @@ before joint hand-off.
     than its transport or launcher. Thus two gains can go to the same attacker, but ordinary
     credit can instead go elsewhere (`quirks.erasure_double_experience`). Loss announcements
     and destruction-trigger events accompany completion.
-    - Backing: `measurable` (E6, E9 parts f and g). Exhaustive score/counter equivalence is
-      `unmeasured`: these scenarios do not isolate every destruction-bookkeeping consumer.
+    - Backing: `measurable` (E6, E9 parts f and g) for gains, recipients and cost bases.
+      F5's exact rounding, unordered comparison and separately capped gain composition are
+      `unmeasured`: E6's exact binary fractions do not distinguish alternative rounding or
+      cap ordering, and do not produce a not-a-number sum. Exhaustive score/counter
+      equivalence is `unmeasured`: these scenarios do not isolate every destruction-bookkeeping consumer.
     - Confidence: high (gains, cost bases); medium (bookkeeping equivalence).
 
 14. **Release causes.** An attached attacker lets go on arriving in a new cell, entering
@@ -223,7 +231,8 @@ before joint hand-off.
     and tick residue 0. This is presentation only.
     - Backing: `measurable` (E11 part b) for cadence and mobile placement. Exact conversion
       of building drawing positions to world positions is `unmeasured`: no scenario here
-      predicts that transformation independently.
+      predicts that transformation independently. Absence of sparkles on skipped turns is
+      `unmeasured`: E11 does not establish a setup that isolates a skipped turn on a sparkle tick.
     - Confidence: high (cadence, mobile placement); medium (building placement).
 
 19. **Attacker firing.** Holding the same target makes the firing check answer rearming
@@ -250,18 +259,25 @@ Completion is the first resulting signed *R*ⱼ ≤ 0. For positive starting amo
 updates. For example, *S* = 100 and damages 30 and 20 require 20 updates. Zero *D* holds a
 positive amount indefinitely. Negative *D* increases it until wrap or a later change.
 
-**F4, distance:** *Δx*, *Δy*, *Δz* are signed integer coordinate differences in leptons.
+**F4, distance:** *Δx*, *Δy*, *Δz* are signed 32-bit coordinate differences in leptons,
+with subtraction wrapping under S-0205 claim 1. The points are the attacker's own position
+and the target's own position, not a building's foundation-centre reference point.
 
 > *q* = RZ₅₃(RZ₅₃(RZ₅₃(*Δx*²) + RZ₅₃(*Δy*²)) + RZ₅₃(*Δz*²))
 >
-> dist = trunc(RZ₅₃(√*q*))
+> dist = trunc(*r*(*q*))
 >
 > Release when dist > 256 × *W*.
 
-Differences are converted to floating point before squaring. Multiplications, additions and
-the square root use double-significand floating point; RZ₅₃ rounds toward zero as S-0205
-claim 5 specifies. The final conversion truncates toward zero to integer leptons. The warp
-distance *W* is integer cells, and its threshold uses signed 32-bit integer multiplication.
+Differences are converted exactly to floating point before squaring. Multiplications and
+additions use double-significand floating point; RZ₅₃ rounds toward zero as S-0205 claim 5
+specifies. Here *r* is S-0204 claim 5's table square root, not the mathematical square root,
+and the final conversion truncates toward zero to integer leptons. The stated root contract
+covers squared separations below 2⁵³ square leptons, where *q* is an exact integer; larger
+separations remain unresolved, not replaced by exact-integer sums. The warp distance *W*
+is integer cells, and its threshold uses signed 32-bit integer multiplication with wrap.
+There is no building-size distance reduction. `quirks.table_root_distance` off uses the
+exact square root instead, truncated to integer leptons, under S-0204 claim 5's alternative.
 
 **F5, direct gain:** *e* is single-precision experience, *A*ₜ and *A*ₐ are integer actual
 costs in credits as S-0311 F1 defines, for target and attacker houses respectively. Veteran
@@ -272,9 +288,12 @@ ratio ρ and cap *c* are double precision.
 > *e*′ = RZ₂₄(*c*) when *c* ≤ *s* or *s* is not a number, otherwise RZ₂₄(*s*).
 
 RZ₂₄ narrows to single precision toward zero. The cap comparison uses *s* before narrowing.
-This uses S-0311 F3's arithmetic but not its kill value or recipient-cost house. The normal
-credit then uses S-0311 claims 7 to 10 independently. For F4 and F5,
-`quirks.chop_rounding` off selects S-0205 claim 5's round-to-nearest alternative.
+This uses S-0311 claim 10's experience arithmetic but not its kill value or recipient-cost
+house. When the leader also receives ordinary kill experience, its final experience is the
+ordinary S-0311 claims 7 to 10 gain evaluated with *e*′ as its starting experience, including
+that gain's own cap and single-precision narrowing. The two gains are not combined into one
+uncapped increment. For F4 and F5, `quirks.chop_rounding` off selects S-0205 claim 5's
+round-to-nearest alternative; F4's table-root narrowing follows S-0204 claim 5.
 
 ## Constants
 
@@ -302,13 +321,17 @@ credit then uses S-0311 claims 7 to 10 independently. For F4 and F5,
 A refused lock can free controlled units without erasing their controller. Two temporal firers
 whose pending shots reach each other cannot establish reciprocal locks: the first successful
 lock releases its victim's beam and causes that victim's later lock attempt to be refused.
-The direct experience gain can remain on a passenger while ordinary credit goes to its transport, or exist when ordinary allied/unscored credit gives none. The direct gain precedes ordinary kill experience, and each gain is capped separately. Both gains are available by the target's removal.
+The direct experience gain can remain on a passenger while ordinary credit goes to its
+transport, or exist when ordinary allied/unscored credit gives none. At target removal, a
+leader receiving both gains has the final experience defined by F5's composition, including
+the intermediate cap and narrowing rather than a single combined gain. Both recipients'
+gains are present by target removal.
 
 ## Edge cases and quirks
 
 - `quirks.erasure_refused_hit_side_effects`, default original: claim 2's target side effects
   survive refusal. Off: refused locks do not clear spawners or free controlled units.
-  the firer's previous beam still lets go.
+  The firer's previous beam still lets go.
 - `quirks.erasure_release_switches_on`, default original: last release switches the building
   on. Off: restore its switch state from before the first lock.
 - `quirks.erasure_distance_leader_only`, default original: only an open-topped leader is
@@ -351,9 +374,14 @@ is falsified by the opposite result under the same conditions.
   enemy vehicle. Record lock/removal ticks, health and chosen raw damage. With no skipped
   turns or re-entry, expect removal at *n* + ⌈10*S*/*d*⌉, unchanged health beforehand and
   no damage to adjacent bystanders. One tick earlier/later falsifies the calendar prediction.
-  (b) Join two/three attackers, including elite and firepower-bonus variants: expect raw
-  chosen-weapon sums, not multiplied damage. Named zero/negative-damage variants test no
-  reduction/increasing amount; a read-only amount record tests signed wrap separately.
+  (b) Join two/three attackers, including elite and firepower-bonus variants, and compare
+  named victim armour variants with different versus multipliers: expect raw chosen-weapon
+  sums, not multiplied damage. Named zero/negative-damage variants test no
+  reduction/increasing amount.
+  (d) For signed wrap use named target strength 214748365 and raw damage 1: expect initial
+  amount −2147483646 and completion at the first update. In a second variant use strength
+  214748364 and damage −8: expect initial amount 2147483640, then −2147483648 and completion
+  at the first update. A saturated or wider positive amount instead falsifies wrap.
   (c) In separate runs make the local house own the harvester or building target; clear
   announcement cooldowns. Expect ordinary eligible notices on first lock, none on joining.
   Repeat with named 1 × 1 test building art, once with and once without a pack-up vehicle.
@@ -372,9 +400,14 @@ is falsified by the opposite result under the same conditions.
   Expect refusal in the listed protected cases, no effect on targets outside the ground
   render layer, and ground force-fire only releasing the old lock without damage. An
   otherwise eligible ground-layer jumpjet locks regardless of its flight-state label.
-  a lock outside that layer or refusal caused only by flight state falsifies the layer gate.
+  A lock outside that layer or refusal caused only by flight state falsifies the layer gate.
   Use a named slow temporal projectile already in flight when its firer becomes
   locked: expect refusal when it arrives. A lock in a refused case falsifies that gate.
+  In separate runs remove the firer or target before impact: expect no new lock; a new
+  lock falsifies the presence gate. Force-fire at a terrain object while attached elsewhere:
+  expect only the old beam to release, not ordinary temporal damage. Finally attack a
+  bunkered vehicle: expect its bunker, not the vehicle, to become erased. Record the
+  detonation presentation in an eligible delivery: the normal animation remains present.
 - **E5, refused side effects (claim 2).** Hit a protected mind controller holding two units
   and a protected carrier with aircraft out. Expect control freed/spawner slots cleared
   without a lock. Repeat with a firer already erasing another victim: that old beam releases.
@@ -382,20 +415,29 @@ is falsified by the opposite result under the same conditions.
 - **E6, experience (claim 13, F5).** Named test data sets actual attacker/rookie victim costs
   to 1000/500 credits, ratio 4 and cap 2.5. Expect direct 0.125 plus ordinary 0.125 per erasure,
   veteran after four and elite after eight. Repeat with differing house cost factors, allied
-  and unscored victims, and a leader passenger in a trainable open-topped transport.
+  and unscored victims, ranked victims, and a leader passenger in a trainable open-topped transport.
+  A ranked victim still gives direct 0.125 with those cost inputs; only ordinary credit gains
+  the victim-rank multiplier.
   Expect F5 to use the leader's own-house cost, survive allied/unscored exclusions and stay
   on the passenger while ordinary credit goes to the transport. A missing or redirected
-  direct gain, wrong rounding or wrong cost factor falsifies these parts.
+  direct gain or wrong cost factor falsifies these parts. Exact rounding, unordered
+  comparisons and near-cap composition are not isolated by these inputs.
 - **E7, building power state (claims 4, 10).** Lock a locally owned power-draining building
   switched off before the hit. Record switch, house totals and radar through release.
   Expect no output/drain while locked and switch on after last release, with totals updated
   in the next eligible house update. A restored off state falsifies the original quirk.
 - **E8, range (claim 11, F4).** Named warp distance 3 cells. A passenger leads, then its
-  transport drives away: expect release at the first target update beyond 768 truncated
-  3-D leptons and no reduction that update. Repeat with an on-foot leader and passenger
-  joiner: expect no passenger release. Stop the leader so the passenger inherits leadership
+  transport drives away: expect release at the first target update whose F4 table-root
+  distance exceeds 768 leptons, and no reduction that update. Repeat with an on-foot leader
+  and passenger joiner: expect no passenger release. Stop the leader so the passenger inherits leadership
   beyond the limit: its next check releases. Include a height difference and exact-boundary
-  positions. Release at equality or checking the joiner falsifies the corresponding rule.
+  positions. Record both actors' own positions and calculate F4 for each update; use an
+  on-foot leader control to verify that distance alone does not release it. Repeat with a
+  large-foundation building target to distinguish its own position from its foundation
+  centre and verify no building-size reduction. Release at equality, at a distance predicted
+  only by a foundation shift/reduction, or checking the joiner falsifies the corresponding
+  rule. This tests the range gate, not the table-root shortfall: without a verified legal
+  boundary placement that distinguishes the two roots, that distinction stays unmeasured.
 - **E9, completion (claims 12, 13).** Erase separately a garrison, absorbing building,
   occupied bunker, slave master and loaded transport. Record remaining objects, animation,
   announcements, death effects, losses, kills and experience. Expect garrison/absorbed units
@@ -413,14 +455,22 @@ is falsified by the opposite result under the same conditions.
   detachment by that clearing alone in h. Record later behaviour-driven release without a
   predicted deadline; refused takeover is inconclusive. In e, continuation until removal
   is the low-confidence hypothesis; earlier release falsifies it. Also remove a locked
-  target by a trigger and verify all attackers idle. Missing release/idle falsifies that part.
+  target by a trigger and verify all attackers idle. Continue e through attacker removal:
+  expect its beam gone by removal, even if it persisted during the death sequence. In a
+  separate named slow-projectile run with no other attackers, allow two shots from one firer
+  to be in flight before the first lock. On the second impact expect the old attachment released and a fresh F1
+  amount, even at the same victim. Retained progress falsifies that delivery-release rule.
+  Missing release/idle falsifies the corresponding release part.
 - **E11, target and presentation (claims 4, 17, 18).** (a) Lock moving/firing infantry,
   vehicles, landed aircraft and armed buildings: expect ordinary movement/turn/fire to stop.
   (b) Begin long locks at three global tick residues. Expect mobile sparkle creation on
   global multiples of 24, with claim 18's mobile displacement. Named building art with two
   distinct fire positions gives residues 0 and 23; no positions gives residue 0. A different
-  cadence/phase or mobile position falsifies that part. Building coordinate conversion is
-  recorded without a predicted result. (c) Select an own target before lock: expect
+  cadence/phase or mobile position falsifies that part. Also record phasing-in mobile
+  units across three global tick residues: expect the same phase and mobile placement.
+  Phase relative to arrival rather than global tick falsifies that part.
+  Building coordinate conversion is recorded
+  without a predicted result. (c) Select an own target before lock: expect
   deselection, no lock/release-induced flash. (d) Named gattling spin-down tests start well
   above a threshold and just above it. Expect spin reduction in both, a stage reduction only
   across the threshold. A zero decrement resets spin to 0. Record immediately, before
@@ -439,3 +489,10 @@ is falsified by the opposite result under the same conditions.
 - Whether death paths always release before removal, despite no release in beam cleanup itself.
 - Exact world placement of building sparkles from their drawing-coordinate positions.
 - Ordinary beam release's possible firing-side rearm restart; release alone does not establish it.
+- Distance arithmetic for squared separations at or above 2⁵³ square leptons.
+
+## Cross-spec changes required before hand-off
+
+- Glossary, erasure amount: replace the unconditional decrease each tick with a decrease
+  at each eligible target erasure update (claims 7 and 8). Skipped turns and range-release
+  updates give no reduction.
