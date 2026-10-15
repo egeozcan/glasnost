@@ -530,7 +530,7 @@ pub fn display_eligible(w: &World, id: ObjectId) -> bool {
 
 /// Whether an eligible harvesting display is suppressed now (S-0402 claim
 /// 5a, visibility conditions): while the body turns; for a ground driver
-/// while it is on a track with a positive speed fraction (a destination
+/// while it is on a track with a positive integer progress step (a destination
 /// alone does not suppress it); for a teleporting harvester while a
 /// journey is in progress (a landing point fixed and not yet jumped to);
 /// and while phasing in. Being removed by an erasing weapon also
@@ -551,12 +551,14 @@ pub fn display_suppressed(w: &World, id: ObjectId) -> bool {
         // spec: S-0402 claim 5a (a teleporting harvester: a teleport journey still in progress, S-0207 claim 20 a)
         return o.teleport.as_ref().is_some_and(|t| t.landing.is_some());
     }
-    // spec: S-0402 claim 5a (a ground driver: an active track with positive current speed; a destination
-    // alone does not suppress it). Open in Q-0590: "current speed" is read as the speed fraction ρ
-    // of S-0207 Terms above 0, not the truncated step s of S-0207 claim 2. Erasing (also suppressing) is not modelled: no erasing weapon yet.
+    // spec: S-0402 claim 5a (a ground driver: an active track with a positive integer per-tick progress
+    // step s = trunc(s₂ × ρ) of S-0207 claim 2, not merely ρ > 0; a destination alone does not suppress it).
+    // The step is the one the latest drive tick earned (a tick on a track always earns one), not a
+    // re-estimate from ρ, which a second update at a track boundary may change (S-0207 claim 12).
+    // Erasing (also suppressing) is not modelled: no erasing weapon yet.
     o.drive
         .as_ref()
-        .is_some_and(|d| d.track.is_some() && d.rho.gt(F64::ZERO))
+        .is_some_and(|d| d.track.is_some() && d.step > 0)
 }
 
 /// Whether a vehicle harvester shows its harvesting sprite now (S-0402

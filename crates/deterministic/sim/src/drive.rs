@@ -80,6 +80,10 @@ pub struct DriveState {
     /// `quirks.drive_duplicate_scatter_request` off (S-0207 Edge cases).
     #[serde(default)]
     pub requests: Option<(i32, Vec<(CellXY, Layer)>)>,
+    /// The integer progress step s earned in the vehicle's latest drive
+    /// tick (S-0207 claim 2), kept for the movement test of S-0402 claim 5a.
+    #[serde(default)]
+    pub step: i32,
 }
 
 impl DriveState {
@@ -98,6 +102,7 @@ impl DriveState {
             between_steps: true,
             moved_tick: None,
             requests: None,
+            step: 0,
         }
     }
 }
@@ -344,6 +349,13 @@ fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
     F64::from_i64(i64::from(s2), mode)
         .mul(rho, mode)
         .to_i32_common()
+}
+
+/// Keeps the tick's step s (S-0207 claim 2) for S-0402 claim 5a.
+fn record_step(w: &mut World, id: ObjectId, s: i32) {
+    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        d.step = s;
+    }
 }
 
 /// The speed estimate of a vehicle for the lead of S-0306 claim 3 and F6
@@ -1290,6 +1302,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         // spec: S-0207 claim 12 (a tick begun on a track: one update, s earned once)
         update_rho(w, id, &u);
         let s = progress(w, id, &u);
+        record_step(w, id, s);
         add_budget(w, id, s);
         let mut ended = spend_and_stop(w, id);
         let mut finished = usize::from(ended);
@@ -1335,6 +1348,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         // spec: S-0207 claim 12 (a tick begun without a track: one update towards the new track, s once)
         update_rho(w, id, &u);
         let s = progress(w, id, &u);
+        record_step(w, id, s);
         add_budget(w, id, s);
         let ended = spend_and_stop(w, id);
         let mut more = ended && move_goes_on(w, id);

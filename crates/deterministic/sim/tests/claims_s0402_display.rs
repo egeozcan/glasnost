@@ -5,6 +5,8 @@
 mod harvest_common;
 
 use glasnost_map::CellXY;
+use glasnost_num::F64;
+use glasnost_sim::drive::Track;
 use glasnost_sim::econ::harvest::{self, Phase};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::Behaviour;
@@ -225,6 +227,42 @@ fn claim_5a_turning_suppresses_and_a_destination_alone_does_not() {
     // Turning done: shown again.
     w.tick += 200;
     assert!(harvest::display_shown(&w, h));
+}
+
+// spec: S-0402 claim 5a (a ground driver's movement test is an active track with a positive integer
+// step s = trunc(s₂ × ρ) of S-0207 claim 2: ρ > 0 with s = 0 shows the sprite, s > 0 suppresses it)
+#[test]
+fn claim_5a_track_suppresses_only_with_a_positive_integer_step() {
+    let r = ruleset();
+    let mut w = game_with_ore(&r, &field(ORE, 0, 0, 11), 7);
+    place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(1, 1), 0);
+    harvest_now(&mut w, h);
+    until(&mut w, 40, |w| harvest::phase(w, h) == Phase::Loading).expect("loading");
+    assert!(harvest::display_shown(&w, h));
+    let mode = w.rules().mode;
+    let pos = w.obj(h).unwrap().pos;
+    let d = w.obj_mut(h).unwrap().drive.as_mut().expect("a driver");
+    d.track = Some(Track {
+        d: 2,
+        e: None,
+        target: (pos.x, pos.y),
+        target_cell: pos.cell(),
+        next: 0,
+        last: (pos.x, pos.y),
+        cells: vec![pos.cell()],
+        crush: false,
+        exit: false,
+    });
+    // ρ above 0 but the tick's step s = 0 (too small for a whole lepton): shown.
+    d.rho = F64::from_i64(1, mode).div(F64::from_i64(1000, mode), mode);
+    d.step = 0;
+    assert!(!harvest::display_suppressed(&w, h));
+    assert!(harvest::display_shown(&w, h));
+    // The tick earned s > 0: suppressed, whether or not a track point was bought.
+    w.obj_mut(h).unwrap().drive.as_mut().unwrap().step = 1;
+    assert!(harvest::display_suppressed(&w, h));
+    assert!(!harvest::display_shown(&w, h));
 }
 
 // spec: S-0402 claim 5a (the same display for every harvester type and resource kind: a chrono miner and
