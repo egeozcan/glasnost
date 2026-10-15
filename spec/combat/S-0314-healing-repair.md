@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -511,9 +511,12 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     moving, is tethered to the contacted building and still has *enter* as its behaviour, it
     reports arrival. The depot queues *repair* and the vehicle queues *sleep*. Claim 6's waiting
     checks begin when the depot processes that repair behaviour, not on the initial click.
-    There is also an earlier start opportunity in the depot's guard processing: a contacted
+    There is also an earlier start opportunity for an unarmed depot in the waiting stage of
+    its guard processing, after initial idle-body selection (S-0215 claim 29): a contacted
     entering unit, standing still at a spatial distance strictly below 64 leptons from the
     foundation centre, causes the depot to queue repair with a 1-tick processing delay.
+    This opportunity does not apply to an armed depot's guard processing or to the initial
+    idle-body selection itself.
     This guard test uses floating-point Euclidean distance truncated toward zero to integer
     leptons. It is not claim 6's distance to the docking point and never takes a paid step.
     Simultaneous requests are claim 23's; servicing with more than one imported contact place
@@ -1436,7 +1439,12 @@ body facing, contact places, tether, behaviour, building processing and health e
   accessible side. Expected: enter order, contact before arrival, destination directed to the
   depot's supplied point, map-east arrival facing, depot repair and vehicle sleep at completed
   entry, then claim 6's waiting and settling timing. Where the guard-start conditions of claim
-  17 occur first, record that earlier repair scheduling instead. Repair on the initial click,
+  17 occur first, record that earlier repair scheduling instead. Distinguish the unarmed
+  depot's initial idle-body selection from its later guard waiting stage: the early transition
+  is allowed only in the latter. Repeat with an otherwise identical armed depot supplied by
+  named test-map overrides, with no enemy target in range: its guard processing must not take
+  this early transition. Either excluded transition falsifies claim 17's qualification.
+  Repair on the initial click,
   a neighbouring-water or exit-cell destination substituted for the docking point, a point
   changing with approach side, or a different recorded transition falsifies the relevant rule.
 - *b, eligibility:* repeat at full health, then with no credits. Expected: entry is still allowed,
