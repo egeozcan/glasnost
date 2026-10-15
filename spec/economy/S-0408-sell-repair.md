@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -196,7 +196,7 @@ its *master*, and slaves *inside* rather than on the map. In addition:
 
    | Sale state or condition | Observable result |
    |---|---|
-   | First processing | Every docked unit (for example, a harvester unloading at a refinery, a vehicle on a repair depot, or an aircraft on its pad) is told to leave; a vehicle held in the building's bunker is let out; burning-damage animations end. No other release occurs and build-down has not begun. |
+   | First processing | Every docked unit (for example, a harvester unloading at a refinery, a vehicle on a repair depot, or an aircraft on its pad) is told to leave; a vehicle held in the building's bunker is let out by S-0606 claim 13's release track, without walls-down effects or a new behaviour or destination (it keeps *guard*); burning-damage animations end. No other release occurs and build-down has not begun. |
    | A later processing while any unit remains docked | The sale waits. |
    | First processing at which no unit is docked | Absorbed passengers, garrisoned infantry and then sale survivors (claims 7 to 9) are released, in that order. The local player hears the sell sound for an own building, and build-down begins. The order is observable in the positions taken (an earlier unit can occupy a standing position a later unit would otherwise take) and in the order of release draws (claim 9 for the occupants). |
    | Build-down | Its range and stage delay are S-0108's (claim 5); its completion and removal tick are claim 17 below. |
@@ -233,8 +233,8 @@ its *master*, and slaves *inside* rather than on the map. In addition:
    - Backing: `measurable` (scenario S5, parts a to f; S-0312 scenario D14, variant g)
    - Confidence: high (refund at the end, no refund when destroyed, the stopped sale, the next
      eligible own-turn removal and second destruction round, the releases before the
-     build-down, the conditional slave recall), medium (the step timing of the releases), low (which links count as docked and
-     hold the sale; the bunker release, measured by S5 part d; the place of the garrison in the
+     build-down, the conditional slave recall, the bunker release of S-0606 claim 13), medium (the step timing of the releases), low (which links count as docked and
+     hold the sale; the place of the garrison in the
      order, measured by S5 part a)
 
 7. **Sale survivors.** A sold building makes exactly *C* survivor attempts, *C* being the count of
@@ -278,7 +278,9 @@ its *master*, and slaves *inside* rather than on the map. In addition:
 
 8. **Absorbed passengers on a sale.** A sold absorbing building releases its absorbed passengers at
    the step of claim 6, by the placement rule of S-0312 (claim 24): one per foundation cell in the
-   cell order, a vehicle at the cell centre and an infantry unit on a free standing position of its
+   cell order, taking passengers most recently entered first (S-0605 claim 14). The most recently
+   entered passenger takes the first foundation cell, the next most recent the next cell, even if
+   an earlier placement fails. Placement puts a vehicle at the cell centre and an infantry unit on a free standing position of its
    cell (chosen as for a sale survivor, claim 7, with the same desired point and so one R(0, 3)
    draw when the cell is not blocked), each facing the building's facing, with a forced scatter
    request, and on *hunt* when its owner is computer-controlled in the original (our engine: no
@@ -288,7 +290,7 @@ its *master*, and slaves *inside* rather than on the map. In addition:
    *Absorbed passengers beyond the last cell* applies here too. The passengers come out before the
    survivors, so they can take positions the survivors would otherwise get.
    - Backing: `measurable` (scenario S6, part e)
-   - Confidence: medium
+   - Confidence: high (passenger order); medium (placement and other release effects)
 
 9. **Garrison on a sale.** A sold garrisoned building puts out its occupants at the step of claim 6,
    after its absorbed passengers (claim 8) and before its sale survivors (claim 7). Where each
@@ -605,7 +607,7 @@ for such a range: completion is reported on its first wrap (Edge cases).
 |---|---|---|
 | building, any behaviour but *selling* | sell order, type with a build-up sprite | *selling* begins |
 | *selling*, first processing | positive upgrade count | upgrade at that count's position sold; count reduced by 1 or reset to 0 for a turret upgrade; building to *guard* (claim 5); empty position follows the departure |
-| *selling*, first processing | no upgrades | docked units told to leave; bunkered vehicle let out; burning animations end |
+| *selling*, first processing | no upgrades | docked units told to leave; bunkered vehicle takes S-0606 claim 13's release track, without walls-down effects, keeping *guard*; burning animations end |
 | *selling*, a later processing | a unit still docked | waits |
 | *selling*, a later processing | nothing docked | absorbed passengers, garrison, sale survivors released (claims 7 to 9); sell sound; build-down begins |
 | building, any behaviour, type with no build-up sprite | sell order, type with the firestorm-wall flag | removed at once; no refund, no survivors (claim 4) |
@@ -839,7 +841,8 @@ tick number. Any game speed.
 - *Observable:* the tick of the sell order, the ticks at which the occupants and survivors appear,
   the first tick of the build-down, the tick of the credit change and of the building's removal,
   in (c) the tick at which the harvester leaves the dock, in (d) the tick at which the vehicle
-  leaves the bunker, in (a) the draws of the occupants' leaving against the survivors' draws.
+  leaves the bunker, its release path, behaviour and destination, and any walls-down animation
+  or sound, in (a) the draws of the occupants' leaving against the survivors' draws.
   In parts b and e record both destruction rounds' survivor appearances and draws, the killing
   tick, foundation occupancy until removal and the removal turn. In part f record the refund
   and any effects at the former building's position after removal.
@@ -847,7 +850,9 @@ tick number. Any game speed.
   3 ticks of the order), on the tick the build-down starts; the credits rise on the tick the
   building disappears, after the build-down; (b) no credit rise; (c) the harvester is told to leave
   at once, and the releases and the build-down start only once it has left the dock; (d) the
-  vehicle leaves the bunker at the sale's first processing, before any release; (e) no credit rise
+  vehicle starts S-0606 claim 13's release track at the sale's first processing, before the
+  passenger, garrison and survivor releases, without walls-down effects or a new behaviour or
+  destination; it keeps *guard* and stops at that track's end; (e) no credit rise
   and no sale survivors (only the destruction survivors of S-0312, if any). In both b and e the
   sale stops at death, the foundation remains occupied until the next eligible own turn, and
   removal takes a second destruction-survivor and smudge round, with all the applicable draws
@@ -856,7 +861,8 @@ tick number. Any game speed.
   occur at the later expiry.
 - *Falsified if:* the refund comes at the start of the sale, the destroyed building pays (in (b) or
   (e)), the build-down starts before the releases, in (c) the build-down starts while the
-  harvester is still docked, in (d) the vehicle stays until the releases, or in (a) the survivors'
+  harvester is still docked, in (d) the vehicle stays until the releases, follows a different
+  release path, receives a new behaviour or destination, or produces walls-down effects, or in (a) the survivors'
   draws come before the occupants' leaving or a survivor stands on a position an occupant has
   taken (the order of claim 9 is then wrong; it stays low confidence until measured), or in (a) the
   occupants and survivors appear more than 3 ticks after the order. Also falsified if b or e
@@ -867,7 +873,8 @@ tick number. Any game speed.
 - *Setup:* survivor divisor 100 for the owner's side (a named test file); crewed test buildings
   with refunds 500 and 150; a crewed building type that produces buildings, in two variants with
   refunds 100 (*C* = 1) and 500 (*C* = 5), both with foundations of at least 3 × 3; an absorbing crewed
-  test building holding three infantry, and a second test type identical to it except that its
+  test building with at least three foundation cells holding three individually identifiable
+  infantry entered one at a time in a recorded order, and a second test type identical to it except that its
   crewed flag is off; a crewed test building that has a primary weapon and an otherwise identical
   one without a weapon (both of refund 500, neither producing buildings), and a crewed armed
   building that produces buildings, of refund 500.
@@ -877,7 +884,8 @@ tick number. Any game speed.
   record the scenario random stream state before and after selling the armed and unarmed buildings
   of refund 500 and the armed producing building of refund 500, and record the draws. (d) Destroy the
   500 building in 50 runs. (e) Sell the two absorbing test types.
-- *Observable:* the number, types and health of the survivors; the draws; the passengers; in part b
+- *Observable:* the number, types and health of the survivors; the draws; the passengers' entry order,
+  identities and first placement cells before scattering; in part b
   the number of sales in which an engineer survivor appears on the map, and the number of sales in
   which some attempt's first percent draw is below 25 (read from the recorder).
 - *Expected:* (a) 5 and 1 survivors, all at full strength, each standing in one of the building's
@@ -895,14 +903,16 @@ tick number. Any game speed.
   survivor with *p* < 25 is an engineer and takes no crew draw); then the creation draw, a ranged
   draw over 0 to *n* − 1, then a ranged draw over 0 to 3 for the standing position (counting out
   survivors whose cell record blocks every position, which take no last draw); (d) a varying count (S-0312 claim 18) where the sale's count
-  never varies; (e) the passengers come out on the first three foundation cells, and none from the
-  type with the crewed flag off.
+  never varies; (e) the passengers come out on the first three foundation cells in reverse entry
+  order: most recently entered on the first cell, then the next most recent, then the earliest.
+  None come from the type with the crewed flag off.
 - *Falsified if:* fewer survivors than the count above explains, a survivor that first appears
   outside the foundation, two engineers in a sale, a damaged survivor, the draws in another order,
   a missing first percent draw for a building that does not produce buildings (or an extra one),
   or in (b) a count outside the bands above (a count outside them for a producing type of either
   variant rejects the rate 1 − 0.75^*C*, not only the one-engineer rule), or in (e) a passenger
-  that comes out elsewhere than on the first three foundation cells, or any passenger from the type
+  that comes out elsewhere than on the first three foundation cells or takes a cell out of
+  reverse entry order, or any passenger from the type
   with the crewed flag off.
 
 **S7: stored resources (claim 10), only if a setup is found that fills a building's storage.**
