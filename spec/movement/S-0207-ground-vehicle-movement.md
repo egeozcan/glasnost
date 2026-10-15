@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1349,9 +1349,19 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     Cells between departure and landing receive no arrival update. For a teleporting
     vehicle, the tag's actions occur after its arrival reporting and crushing, but
     before jump-time crate collection, destination removal and the landing warp
-    animation. Ordinary infantry walking timing belongs to S-0208, not this claim.
+    animation. A tethered infantry unit using its own teleporting locomotor also
+    gives its factory clear report in this jump-tick arrival update (S-0417 claim 10).
+    Factory contact and tether have therefore ended, and the contacted place is free,
+    when the landing cell's entered-by actions execute. This covers an ordinary
+    factory release to a clear rally cell without an entry interaction removing the
+    unit. Reservation alone, phasing-in completion and falling back to rest do not
+    supply that report. Without a jump, another arrival or an independent contact
+    break, the unit retains contact and tether under S-0417 claim 10.
+    Ordinary infantry walking timing belongs to S-0208, not this claim.
     - Backing: `measurable` (D24 for straight and curved driving, teleport, bridge
-      and passive chain-point cases). Exact ordering against building reports and
+      and passive chain-point cases; S-0417 U10 d/e for teleporting infantry's
+      jump-time clear report, ordering before entered-by actions and no-jump retention).
+      Exact ordering against building reports and
       crushing uses D24 with S-0402 H14 and S-0210's crushing fixtures. Record their
       effects and the tag's variable action in the same arrival tick, using D24's ordering
       controls rather than end-of-tick coincidence alone. Ordering before jump-time crate
@@ -3081,7 +3091,13 @@ cell before *X*.
   tick; end-of-tick coexistence alone establishes no within-tick order. Expect the report
   and crushing effects already completed when the variable changes. A variable change
   before either corresponding effect falsifies claim 22's ordering; a run without that
-  temporal resolution is inconclusive for ordering.
+  temporal resolution is inconclusive for ordering. For tethered teleporting infantry,
+  use S-0417 U10 d/e: record factory contact and tether at the landing tag's variable
+  change, and compare reservation-only and no-jump controls with a later commanded
+  jump. Expect both links ended and the contact place free before that change in the
+  jump tick, not on reservation, phasing-in completion or falling back to rest.
+  A surviving link when the tag action executes, or a release caused solely by one
+  of those non-arrival events, falsifies this rule.
 - *Expected:* a straight target raises on its completion tick despite continued travel,
   not on earlier boundary crossing or reservation. An ordinary two-cell curve raises
   at its final target only, not merely for crossing its first cell. A teleport raises
