@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -134,14 +134,7 @@ a carrier's controller is launching ordinary aircraft.
 4. **Sinking descent and leaving play.** Descent applies only to a sinking vessel retained in
    play after S-0312 claim 15. A crashable surface vessel removed during its first killing hit
    under S-0312 claims 10 and 15 has no subsequent descent, sinking wakes or wake-displacement
-   draws. For a retained vessel, each of its own updates (once per tick, S-0203) first lowers it
-   by 5 leptons. If its height above the terrain is then below
-   −400 leptons (strictly), it leaves play at once (S-0312 claim 15 says what that implies). Its
-   destruction, when sinking followed a killing hit, was already counted at that hit (S-0312
-   claim 10); a cull has no killing hit or ordinary destruction credit (S-0614 claim 11).
-   Otherwise, in a tick whose tick
-   number is divisible by 4, it takes two ranged draws over [−170, 170] from the scenario random
-   stream (S-0202 claim 4) and creates one wake at the displaced point of F2, at the water surface.
+   draws. On each of a retained vessel's own updates (once per tick, S-0203), its height above the terrain is 5 leptons lower than before that update. It leaves play on the first such update whose resulting height is strictly below −400 leptons (S-0312 claim 15 says what that implies). Its destruction, when sinking followed a killing hit, was already counted at that hit (S-0312 claim 10); a cull has no killing hit or ordinary destruction credit (S-0614 claim 11). If it remains in play on an update whose tick number is divisible by 4, it takes two ranged draws over [−170, 170] from the scenario random stream (S-0202 claim 4) and creates one wake at the displaced point of F2, at the water surface.
    A vessel that starts sinking at height 0 therefore leaves play at its 81st descent (F1), 80 ticks
    after its first descent, and creates 20 wakes in all with two draws each, since its 80 descents
    that leave it in play fall on 80 consecutive tick numbers. Its first descent comes in its first
@@ -259,7 +252,7 @@ a carrier's controller is launching ordinary aircraft.
 
 9. **Ship path refresh and retry timing (Q-0644).** The ship locomotor shares S-0212 claim 20's
    last-stored-step refresh with the driving locomotor. As the last stored step begins, a distance
-   strictly greater than 512 leptons to its movement destination triggers a search in mode 0,
+   strictly greater than 512 leptons to its heading point triggers a search in mode 0,
    immediately, without waiting for the path retry timer. Distance is the spatial table-root
    distance of S-0212 claim 20 and S-0204 claim 5, truncated toward zero to integer leptons.
    The squared coordinate differences and their sum are evaluated in double-precision floating
@@ -698,7 +691,7 @@ Use the same stock path-delay field for a driving vehicle on a land control rout
 craft on a water control route. *Procedure:* issue a move, let the blocker cross and then clear
 the route. Record search ticks, stored steps, destination, retry-timer expiry and blockage
 countdown through several searches. *Observable:* delay after a successful ordinary fresh search,
-last-stored-step refresh with destination over 512 leptons away, moving-blocker search mode and
+last-stored-step refresh with heading point over 512 leptons away, moving-blocker search mode and
 timer restart. *Expected:* ship/drive successful ordinary searches clear retry delay, hover fresh
 searches restart it. Ship/drive last-step refresh does not wait for expiry. Moving-blocker re-path
 waits for the retry timer and restarts the same *R*, independent of success; search mode follows

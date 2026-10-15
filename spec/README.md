@@ -109,7 +109,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 23 | approved | — |
 | [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 17 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 28 | approved | — |
-| [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 10 | approved | — |
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 9 | approved | — |
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 13 | approved | — |
 | [S-0106](rendering/S-0106-voxel-tilt-slopes.md) | Slope shapes, terrain surface height and voxel tilt on slopes | rendering | 8 | approved | — |
@@ -126,3 +125,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 14 | approved | — |
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 13 | approved | — |
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 14 | approved | — |
+| [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 11 | approved | — |
