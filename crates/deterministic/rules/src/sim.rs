@@ -1827,10 +1827,12 @@ pub struct BuildingType {
     /// Art `Height` H_b (S-0306 claim 6 c).
     #[serde(default)]
     pub art_height: Option<i32>,
-    /// Art `TurretAnimIsVoxel` (S-0310 claim 4, S-0313 claim 8).
+    /// `TurretAnimIsVoxel` of the building type's rules section (S-0310
+    /// claim 4, S-0313 claims 8 and 10; art has no effect).
     #[serde(default)]
     pub turret_anim_is_voxel: Option<bool>,
-    /// Art `BarrelAnimIsVoxel` (S-0313 claim 8).
+    /// `BarrelAnimIsVoxel` of the building type's rules section (S-0313
+    /// claims 8 and 10).
     #[serde(default)]
     pub barrel_anim_is_voxel: Option<bool>,
     /// Art `PrimaryFirePixelOffset`, pixels (S-0313 claim 7).
@@ -1839,7 +1841,8 @@ pub struct BuildingType {
     /// Art `PrimaryFireDualOffset` (S-0313 claim 7).
     #[serde(default)]
     pub primary_fire_dual_offset: Option<bool>,
-    /// Art `TurretAnimX`, `TurretAnimY`, pixels (S-0313 claim 8).
+    /// `TurretAnimX`, `TurretAnimY` of the building type's rules section,
+    /// pixels (S-0313 claims 8 and 10, S-0310 claim 4).
     #[serde(default)]
     pub turret_anim_xy: Option<[i32; 2]>, // nocite: a pixel pair, our shape
     /// Art `IsAnimDelayedFire` (S-0301 claim 14).

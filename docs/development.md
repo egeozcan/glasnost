@@ -279,7 +279,6 @@ Provisional rules of combat, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
-| `sim_combat::building_combat` (importer) | a building's `TurretAnimX`, `TurretAnimY`, `TurretAnimIsVoxel` and `BarrelAnimIsVoxel` are read from its art image, as S-0310's Import mapping lists; S-0313 revision 2 lists them as rules keys | Q-0601 |
 
 ## Simulation (M5a: economy and base building)
 

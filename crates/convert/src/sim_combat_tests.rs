@@ -753,7 +753,7 @@ fn every_combat_key_resolves() {
     assert!(!warned(&w, "Walker VeteranAbilities"));
 }
 
-/// spec: S-0313 Import mapping (muzzle positions and turret offset from the type's image section), S-0301 Import mapping (firing frames; building delayed fire), S-0306 Import mapping (aim shift, height), S-0310 Import mapping (voxel turret, pixel offsets); S-0003 claim 9 (an unread component keeps the value in force, with a warning)
+/// spec: S-0313 Import mapping (muzzle positions and turret offset from the type's image section; claim 10, the turret-animation keys in art have no effect), S-0301 Import mapping (firing frames; building delayed fire), S-0306 Import mapping (aim shift, height), S-0310 Import mapping (pixel offset); S-0003 claim 9 (an unread component keeps the value in force, with a warning)
 #[test]
 fn art_combat_fields() {
     let base = "[VehicleTypes]\n1=Cart\n2=Solo\n[BuildingTypes]\n1=Hut\n\
@@ -786,15 +786,16 @@ fn art_combat_fields() {
         (h.target_coord_offset, h.art_height),
         (Some([0, 0, 50]), Some(4))
     );
+    // spec: S-0313 claim 10 (turret-animation keys in art have no effect)
     assert_eq!(
         (h.turret_anim_is_voxel, h.barrel_anim_is_voxel),
-        (Some(true), Some(false))
+        (None, None)
     );
     assert_eq!(
         (h.primary_fire_pixel_offset, h.primary_fire_dual_offset),
         (Some([0, -12]), Some(true))
     );
-    assert_eq!(h.turret_anim_xy, Some([0, 7]));
+    assert_eq!(h.turret_anim_xy, None);
     assert_eq!(
         (h.is_anim_delayed_fire, h.delayed_fire_delay),
         (Some(true), Some(6))
@@ -969,7 +970,7 @@ fn combat_coverage() {
             "rules.ini",
             "[VehicleTypes]\n1=Cart\n[Warheads]\n1=Pow\n\
              [Cart]\nArmor=heavy\nWeapon3=Zap\nAmmo=2\nBurstDelay0=3\nWake=x\nPrimary=Gun\n\
-             [Gun]\nROF=5\n[BuildingTypes]\n1=Hut\n[Hut]\nCost=5\n\
+             [Gun]\nROF=5\n[BuildingTypes]\n1=Hut\n[Hut]\nCost=5\nTurretAnimX=2\nTurretAnimIsVoxel=yes\n\
              [Pow]\nVerses=50%\nCellSpread=1\nShakeXlo=2\n\
              [CombatDamage]\nMaxDamage=500\nMinDamage=1\n[General]\nCrewEscape=50%\n\
              DumbMyEffectivenessCoefficient=1\n",
@@ -995,6 +996,15 @@ fn combat_coverage() {
     assert_eq!(row("vehicles", "Ammo"), (Field, "S-0301".into()));
     assert_eq!(row("vehicles", "BurstDelay0"), (Field, "S-0301".into()));
     assert_eq!(row("vehicles", "Wake"), (Unsupported, "S-0312".into()));
+    // spec: S-0313 claim 10 (the turret-animation keys are rules keys of building types)
+    assert_eq!(
+        row("buildings", "TurretAnimX"),
+        (Field, "S-0313, S-0310".into())
+    );
+    assert_eq!(
+        row("buildings", "TurretAnimIsVoxel"),
+        (Field, "S-0313, S-0310".into())
+    );
     assert_eq!(row("warheads", "Verses").0, Field);
     assert_eq!(row("warheads", "CellSpread").0, Field);
     assert_eq!(row("warheads", "ShakeXlo"), (Unsupported, "S-0303".into()));
@@ -1253,4 +1263,27 @@ fn missile_fields() {
     assert_eq!(g.d_misl_warhead.as_deref(), Some("Pow"));
     assert_eq!(g.d_misl_elite_warhead, None);
     assert_eq!(g.c_misl_elite_warhead.as_deref(), Some("Zap"));
+}
+
+/// spec: S-0313 claim 10 and Import mapping, S-0310 Import mapping (the four turret-animation keys come from the building type's rules section through its layers, a later layer's omission keeping the held value; art under the type or image name has no effect)
+#[test]
+fn turret_anim_keys_from_rules() {
+    let base = "[BuildingTypes]\n1=Hut\n2=Shed\n[Hut]\nImage=HUTART\nTurretAnimX=3\nTurretAnimIsVoxel=yes\n\
+                BarrelAnimIsVoxel=yes\n[Shed]\nLeaveRubble=yes\n";
+    let map = "[Hut]\nTurretAnimY=-5\nBarrelAnimIsVoxel=no\n";
+    let art = "[HUTART]\nTurretAnimX=40\nTurretAnimIsVoxel=no\n[Hut]\nTurretAnimY=9\n\
+               [Shed]\nTurretAnimX=8\nTurretAnimIsVoxel=yes\n";
+    let (s, _) = sim(base, map, art);
+    let h = &s.buildings["Hut"];
+    assert_eq!(h.turret_anim_xy, Some([3, -5]));
+    assert_eq!(
+        (h.turret_anim_is_voxel, h.barrel_anim_is_voxel),
+        (Some(true), Some(false))
+    );
+    let shed = &s.buildings["Shed"];
+    assert_eq!(
+        (shed.turret_anim_xy, shed.turret_anim_is_voxel),
+        (None, None),
+        "art only equals omitted"
+    );
 }

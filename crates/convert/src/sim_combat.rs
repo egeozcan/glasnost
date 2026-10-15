@@ -181,6 +181,14 @@ const BUILDING_COMBAT: &[Row] = &[
         "S-0314",
     ),
     ("units_gain_self_heal", "UnitsGainSelfHeal", Int, "S-0314"),
+    // spec: S-0313 claim 10 and Import mapping, S-0310 Import mapping (the voxel-turret and voxel-barrel flags: rules, the section named by the building type; art has no effect)
+    (
+        "turret_anim_is_voxel",
+        "TurretAnimIsVoxel",
+        Bool,
+        "S-0313, S-0310",
+    ),
+    ("barrel_anim_is_voxel", "BarrelAnimIsVoxel", Bool, "S-0313"),
 ];
 
 /// Combat fields of overlay types.
@@ -1341,8 +1349,6 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "TurretOffset",
         "PrimaryFirePixelOffset",
         "PrimaryFireDualOffset",
-        "TurretAnimX",
-        "TurretAnimY",
     ]);
     for n in 1..=SLOTS {
         flh.push(format!("Weapon{n}FLH"));
@@ -1362,10 +1368,11 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     );
     keyed(&["art"], &s(&["TargetCoordOffset", "Height"]), "S-0306");
     keyed(&["art"], &s(&["Trailer", "SpawnDelay"]), "S-0306, S-0007");
+    // spec: S-0313 claim 10 (the turret anchor pair: rules keys of the building type)
     keyed(
-        &["art"],
-        &s(&["TurretAnimIsVoxel", "BarrelAnimIsVoxel"]),
-        "S-0310, S-0313",
+        &["buildings"],
+        &s(&["TurretAnimX", "TurretAnimY"]),
+        "S-0313, S-0310",
     );
     out
 }
@@ -1991,8 +1998,6 @@ impl Builder<'_> {
         }
         // spec: S-0310 Import mapping, S-0313 Import mapping, S-0301 Import mapping (building image flags)
         for (field, k) in [
-            ("turret_anim_is_voxel", "TurretAnimIsVoxel"),
-            ("barrel_anim_is_voxel", "BarrelAnimIsVoxel"),
             ("primary_fire_dual_offset", "PrimaryFireDualOffset"),
             ("is_anim_delayed_fire", "IsAnimDelayedFire"),
         ] {
@@ -2004,8 +2009,9 @@ impl Builder<'_> {
         if let Some(v) = self.art_tuple::<2>(kind, index, t, "PrimaryFirePixelOffset") {
             Self::put_tuple(rec, "primary_fire_pixel_offset", v);
         }
-        // spec: S-0313 Import mapping (TurretAnimX, TurretAnimY: integers, pixels; absent 0)
-        let xy = ["TurretAnimX", "TurretAnimY"].map(|k| self.art_int(kind, index, t, k));
+        // spec: S-0313 claim 10 and Import mapping (TurretAnimX, TurretAnimY: integers, pixels, from the building type's rules section through its layers, a missing key keeping the held value; absent 0; art has no effect)
+        let xy =
+            ["TurretAnimX", "TurretAnimY"].map(|k| fold(key(t, k), None, |v, _| value::integer(v)));
         if xy.iter().any(Option::is_some) {
             Self::put_tuple(rec, "turret_anim_xy", xy.map(|v| v.unwrap_or(0)));
         }
