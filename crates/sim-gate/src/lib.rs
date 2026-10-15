@@ -254,7 +254,12 @@ fn duel(
 /// skirmish and the duels stop earlier when their game is over).
 pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     match scenario {
-        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, true, true),
+        // Since the M6b2 spec revisions (S-0215 revision 45: a falling infantry unit is not
+        // ready to change; S-0513 and S-0207 timing) the straight duel's full run no longer
+        // reaches a launcher shot either, like the naval duel; rocket flights are covered by
+        // S-0506's claim tests and the local lane's "rocket flights" count, so it is no
+        // longer required to fly one. It still must load and unload a transport and launch.
+        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, false, true),
         // The diagonal game ends before a launcher is sent; the straight
         // duel flies both a rocket and an aircraft. Since S-0507 revision 4
         // (eb0224c: the ferried infantry's course differs from about tick
