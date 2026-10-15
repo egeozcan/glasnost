@@ -936,6 +936,11 @@ fn s0610_claim_1_psychic_immunity_defaults_by_kind() {
     ] {
         let t = put(&mut w, kind, ty, BETA, x);
         assert_eq!(loss!(w, t, hit(100, h)).0, lost, "{ty}");
+        // The psionics immunity has the same per-kind default.
+        let psionics = glasnost_sim::combat::veterancy::type_combat(&w, t)
+            .unwrap()
+            .immune_psionics;
+        assert_eq!(psionics, kind == Kind::Building, "{ty}");
     }
 }
 
