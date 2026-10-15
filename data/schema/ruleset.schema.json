@@ -6916,6 +6916,16 @@
           "type": "boolean",
           "default": true
         },
+        "dominator_damage_storm_house": {
+          "description": "A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house. Not implemented yet (M7).",
+          "type": "boolean",
+          "default": true
+        },
+        "dominator_marks_own_objects": {
+          "description": "A dominator strike makes the dominating house's own objects permanently controlled with a ring; off: they are left alone. Not implemented yet (M7).",
+          "type": "boolean",
+          "default": true
+        },
         "done_aircraft_click_cancels": {
           "description": "A left click on a done aircraft with every dock taken cancels it.",
           "type": "boolean",

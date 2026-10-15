@@ -1673,6 +1673,14 @@ pub struct Quirks {
     // spec: S-0615 claim 16 and Edge cases
     #[serde(default = "on")]
     pub disc_laser_no_house: bool,
+    /// A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house. Not implemented yet (M7).
+    // spec: S-0612 claim 9 and Edge cases; S-0302 claim 1
+    #[serde(default = "on")]
+    pub dominator_damage_storm_house: bool,
+    /// A dominator strike makes the dominating house's own objects permanently controlled with a ring; off: they are left alone. Not implemented yet (M7).
+    // spec: S-0612 claim 14 and Edge cases; S-0601 claim 13
+    #[serde(default = "on")]
+    pub dominator_marks_own_objects: bool,
 }
 
 impl Default for Quirks {
@@ -2086,6 +2094,8 @@ impl Default for Quirks {
             refused_mutation_frees_position: true,
             infantry_animation_occupancy: true,
             disc_laser_no_house: true,
+            dominator_damage_storm_house: true,
+            dominator_marks_own_objects: true,
         }
     }
 }
@@ -3129,6 +3139,14 @@ impl Quirks {
                 self.infantry_animation_occupancy,
             ),
             ("disc_laser_no_house", self.disc_laser_no_house),
+            (
+                "dominator_damage_storm_house",
+                self.dominator_damage_storm_house,
+            ),
+            (
+                "dominator_marks_own_objects",
+                self.dominator_marks_own_objects,
+            ),
         ]
     }
 
