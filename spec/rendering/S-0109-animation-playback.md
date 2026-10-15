@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -335,8 +335,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     These rules apply during map loading too. A tile animation (S-0010 claim 19) or an overlay's
     cell animation (S-0009 claim 12) with μ = 0 produces this event at creation, not at its first
     update. The event requests the type's particle count of its named particle type when a particle
-    type is given and the count is positive, otherwise none. Particle creation is not gated by
-    height. The particle requests precede any random choice between a scorch mark and a crater,
+    type is given and the count is positive, otherwise none. These particles are created in the
+    shared gas system of S-0613 claim 1, regardless of their type's behaviour kind, as in
+    S-0613 claim 2. Particle creation is not gated by height. The particle requests precede any random choice between a scorch mark and a crater,
     so their creation draws change the stream state used by that choice. S-0202 claim 15 owns
     the particle creation draw groups during loading and play, including their conditional speed,
     lifetime and colour draws. Its R14 A and D test their composition, including trigger-created
@@ -382,6 +383,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     to every crater request.
     - Backing: `measurable` (AN10, AN19, AN23) for their forward and creation-time
       events, height/flag cases, particle-before-choice order and resource removal.
+      Shared-system membership regardless of particle behaviour kind is `measurable`
+      through AN10's particle variant.
       Downstream creation and selection draws during loading and play have S-0202 claim 15's
       backing (R14 A to E) and confidence, including its medium-confidence placement and
       resource-removal recalculation composition.
@@ -1165,6 +1168,13 @@ building that can cloak), it sets them in the test map's override section, which
   - Expected: for M1 a scorch mark appears on the tick image frame ⌊*N*/2⌋ is first shown; M2 never
     makes one. This also shows that trigger-played animations keep their middle events.
   - Falsified if: M1 makes no scorch mark or makes it on another tick, or M2 makes one.
+  - Particle variant: on the same map at game speed 2, use named test art to give M1 a
+    positive particle count and a named particle type. Run once with a gas-behaviour type
+    and once with a smoke-behaviour type. Record each requested particle's system membership
+    at creation, before subsequent particle updates, and the number of particle systems.
+    Expected: in both runs the requested particles belong to the existing, ownerless shared
+    gas system of S-0613 claim 1; the event creates no new particle system. Falsified by
+    either type using a different system, or by the event creating a system.
 - **AN11 (claim 15).** Test types F (rate 300, end 4, follow-up G) and G (start 2, loop count 0, rate
   150, no end field, sprite with *N*<sub>G</sub> image frames); a second pair F2 (reverse flag, end
   4, loop end 4, rate 300, follow-up G2) and G2 (start 2, end 6, rate 300, no reverse flag). F and F2
