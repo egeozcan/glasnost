@@ -2,13 +2,13 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0600]
 supersedes: []
 ---
 
@@ -92,9 +92,23 @@ a carrier's controller is launching ordinary aircraft.
    (glossary) is divisible by 8, the ship creates one wake at its own position, provided all of these
    hold: its type is not an underwater type, it is not on a bridge deck, the land type of its cell is
    *water* (S-0211), and the game-wide wake animation is defined. A ship is *moving now* when its
-   body is turning, or when it has a heading point and its current speed is above 0. A wake takes no
+   body is turning, or when it has a heading point and its current integer progress rate *s* is
+   above 0. Here *s* is the rate of S-0207 claim 2, evaluated with the ship's current speed fraction
+   and factors at the wake check: *s* = trunc(*s*₂ × *ρ*), in progress units per tick, with the
+   floating-point arithmetic and intermediate truncations of that claim. It is not the fraction
+   *ρ* itself, accumulated progress, distance actually travelled, or a remembered rate from the
+   last moving tick. With no body turn, a positive *ρ* that still gives *s* = 0 produces no wake.
+   Positive *s* can produce a wake without a position change when the progress budget has not yet
+   reached the next track point. The heading point is the active track's target (claim 1), not a
+   path destination retained between tracks.
+   The wake check uses the position, heading point, turning state and speed fraction after that
+   tick's locomotor movement and track transitions. Thus the wake is at the post-movement
+   position; completing a track can remove its heading-point eligibility even if it travelled
+   earlier in that tick. Creation occurs during the ship's own turn (S-0203 claim 4), after the
+   draws of that locomotor movement, not in a separate end-of-tick wake pass. A wake takes no
    draw of its own beyond those its animation type takes when it is created (S-0109 claim 3).
-   - Backing: `measurable` (N3, including its named no-animation variant)
+   - Backing: `measurable` (N3, including its named no-animation variant; N3a for the rate,
+     track-boundary eligibility, position and draw ordering)
    - Confidence: high
 
 3. **Launching hold.** A ship whose launching count is positive (S-0506 claim 10) does not
@@ -259,7 +273,7 @@ docking points for different dock places or approach sides; complete point selec
 
 | State | Event | Result |
 |---|---|---|
-| ship, moving now | tick number divisible by 8, conditions of claim 2 hold | one wake at its position |
+| ship, moving now after locomotor movement | tick number divisible by 8, conditions of claim 2 hold | one wake at its post-movement position |
 | ship, between tracks | launching count is positive | keeps waiting with destination kept (claim 3) |
 | alive vessel | killing hit, S-0312 claim 10 holds | sinking at 1 health point, in play |
 | sinking | own update | descends 5 leptons; then leaves play if below −400 leptons, else on a tick number divisible by 4 two draws and one wake |
@@ -296,7 +310,7 @@ original-versus-fixed behaviours:
 | Rules, type section, `Underwater` | underwater type (claims 2, 6) | boolean | no |
 | Rules, type section, `Cloakable` | whether an underwater type can be submerged (Terms; planned S-0516 owns it) | boolean | no |
 | Rules, type section, `MovementZone` | the *amphibious* exception of the naval match (claim 7; S-0211 owns the field) | movement zone name | S-0211 |
-| Rules, `[General]`, `Wake` | the game-wide wake animation (claims 2, 4) | animation type name | none (engine default): a ship makes no wakes (claim 2); a sinking vessel takes its draws and makes no wake, with an importer warning (claim 4) |
+| Rules, `[General]`, `Wake` | the game-wide wake animation (claims 2, 4); claim 2's speed test and within-turn timing are engine rules, not additional imported settings | animation type name | none (engine default): a ship makes no wakes (claim 2); a sinking vessel takes its draws and makes no wake, with an importer warning (claim 4) |
 | Rules, building section, `UnitRepair` | repair flag of a depot or yard (claim 8; S-0314 owns it) | boolean | no |
 | Rules, building section, `Naval` | a naval building, for the naval match (claim 7) | boolean | no |
 | Rules, type section, `Spawns` | spawned type in the shared controller (S-0506 claim 1); claim 3 uses its launching count, not ordinary aircraft preparation | type name | none |
@@ -348,6 +362,29 @@ surface ship stationary and not turning: any wake from it falsifies the moving-n
 For the water-land gate, use a named map override permitting the same ship-locomotor type to
 travel across a non-water strip. Record 32 moving ticks on that strip: no wake is expected,
 and any moving wake there falsifies claim 2. An impassable strip makes that variant inconclusive.
+
+**N3a. Wake speed and within-turn timing (claim 2; Q-0600).** *Setup:* the N3 water
+map, a surface ship initially at rest, already facing its straight travel direction. Use named
+map test data, "naval-wake-speed", with acceleration enabled, a low acceleration factor and a positive type speed so
+that *ρ* > 0 while *s* = 0 lasts at least 8 ticks; keep the ship locomotor and define a wake
+animation. Remove the override after the run. *Procedure:* order a long straight move, then
+repeat with an unmodified stock ship; record through acceleration and final arrival, repeating
+from each of the eight start-tick residues modulo 8. *Observable:* per-tick speed fraction,
+computed *s*, progress budget, track target, turning state, pre/post-movement position and wake
+creation position, using the read-only recorder. *Expected:* no wake with no body turn and
+*s* = 0, including positive-fraction ticks; eligible positive-rate ticks can create a wake even
+when the budget buys no track point. Each created wake uses the post-movement position and
+eligibility. An arrival with no remaining heading point and no body turn creates none.
+*Falsified if:* a wake appears solely because the fraction is positive, is missing solely because
+position did not change despite positive rate and the other gates holding, uses the pre-movement
+position, or uses a track target already cleared by arrival. A run without the intended zero-rate
+interval or boundary tick is inconclusive for that sub-test.
+For draw ordering, additionally record a turn or track transition that takes identified movement
+draws under S-0207, on an eligible wake tick, and use a named test animation with distinguishable
+creation draws under S-0109 claim 3. Compare the movement outcome and animation choices with the
+raw stream values. Movement receives the earlier values and wake creation the later ones.
+Reversed assignments falsify the claimed order. A tick with no movement draws does not test
+that part. This is a recorder proposal, not a measurement already made.
 
 **N4. Launching hold (claim 3).** *Setup:* a stock missile-launching ship with its slots docked
 and an enemy target in range. *Procedure:* order an attack, then issue move input during
