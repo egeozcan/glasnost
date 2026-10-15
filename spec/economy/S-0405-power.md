@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -61,9 +61,11 @@ house's own update in a tick, which comes after the turn pass and before orders 
   counted buildings that has output is being drained.
 - **Being drained.** The state of a building to which an enemy unit with a draining weapon is
   attached (special-abilities specs own the attaching and which building types can be drained).
-- **Charger.** An infantry unit that is charging a building with its weapon (the special-abilities
-  specs own which units can charge which buildings). *n*<sub>c</sub> is the number of chargers a
-  building has at the moment.
+- **Charger.** An infantry unit registered as a building's charger by a charge shot.
+  S-0518 claims 11–12 own registration and removal, including registrations retained by
+  non-overpowerable buildings under `quirks.stale_chargers_kept` (default original).
+  *n*<sub>c</sub> is the building's current registered-charger count, the same count as
+  S-0518 claims 11–12 use, not a fresh count of units currently aiming at it.
 - **Absorbing building.** A building whose type takes in infantry, vehicles or both as passengers
   that do not come out on their own (S-0312, Terms, *absorbed passengers*). *n*<sub>a</sub> is the
   number of passengers it holds.
@@ -229,8 +231,11 @@ house's own update in a tick, which comes after the turn pass and before orders 
    - the health of one of the house's buildings changes: the building notices the change in its own
      turn, and the house works out its power in its update of the same tick,
    - a passenger enters or leaves an absorbing building of the house,
-   - a draining unit attaches to or lets go of one of its buildings, and an erasing weapon locks on
-     or lets go,
+   - a draining unit attaches to or lets go of one of its buildings,
+   - an erasing weapon successfully locks on to one of its buildings, or the last erasing
+     attacker releases it before completion (S-0514 claims 4 and 10). Release restores the
+     building's contributions according to its resulting switch state (claims 1, 2 and 8).
+     The house totals wait for the house update, rather than changing inside the hit or release,
    - a timed blackout starts or ends (claim 6),
    - a super-gap is switched on or off (claim 16).
 
@@ -588,7 +593,7 @@ is implementer design, not a further game-state rule. No formula here prescribes
 
 | State | Event | Result |
 |---|---|---|
-| house power not due | building placed, created on the map, removed, destroyed or changes owner; a building's health changes (damage or repair, noticed in its own turn); building switched on or off; upgrade gained or lost; passenger enters or leaves an absorbing building; draining unit or erasing weapon attaches or lets go; timed blackout starts or ends; super-gap switched on or off (claim 7) | power due |
+| house power not due | building placed, created on the map, removed, destroyed or changes owner; a building's health changes (damage or repair, noticed in its own turn); building switched on or off; upgrade gained or lost; passenger enters or leaves an absorbing building; draining unit attaches or lets go; erasing weapon successfully locks on or its last attacker releases before completion; timed blackout starts or ends; super-gap switched on or off (claim 7) | power due |
 | power due | the house's update | *O*, *D* worked out (claims 4, 5); production periods worked out again (claim 11); a change of low-power state checks superweapon suspension and resumption under S-0512 claim 6, with claim 15's exceptions |
 | full power | worked out with *D* > 0 and *O* < *D* | low power: needs-power buildings with a base drain above 0 and fewer than 2 chargers stop being in operation (claim 8) |
 | low power | worked out with *O* ≥ *D* or *D* = 0 | full power: the power condition no longer prevents operation; claim 8's other conditions still apply |
