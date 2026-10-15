@@ -2,11 +2,11 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707]
 supersedes: []
@@ -781,7 +781,11 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     group occurs for every vehicle. S-0011 claim 19 and T7 agree with these groups:
     with the original's persistent latch, a fresh repeating destroyed-by-anything trigger
     fires seven times for a normal vehicle with an attacker, four without, and twice for
-    a common-group-only death. Hand these passages off together with D20.
+    a common-group-only death. With `quirks.persistent_event_latch` off and the extra
+    vehicle group on, the normal vehicle instead fires twice, once per destroyed-by-anything
+    raise; a common-group-only death fires once. These latch-off alternatives are rules of
+    our engine under S-0011 claim 9, not additional original behaviour.
+    Hand these passages off together with D20.
 
     **Deferred deaths.** A cyborg's crippling hit does not reach health 0 after its reprieve
     and makes no destruction raise. A delayed-kill building does reach 0 before the reprieve:
@@ -1811,7 +1815,11 @@ within the killing hit, compared with two for infantry, aircraft and buildings; 
 attacker the vehicle gives four and the other kinds two. Use the separate polled tag's
 lethal waypoint explosion above for every no-attacker count, not destroy-attached-objects.
 Each action's effects and draws precede death debris. A different count or position in the replay falsifies the groups.
-On our engine with the new extra-raise quirk off, the vehicle gives two. Repeat the original's
+On our engine with the extra-raise quirk off and persistent latching on, the vehicle gives
+two. With `quirks.persistent_event_latch` off and the extra vehicle group on, it gives two
+firings, one per destroyed-by-anything raise, with or without an attacker. With both switches
+off it gives one. A different count falsifies the corresponding alternative; these switch-off
+runs test our engine, not the original. Repeat the original's
 vehicle case after takeover by a vehicle thief, first with the tag-carries-over flag clear and
 then set on one definition in its chain: the flag-clear case retains the extra group, the
 flag-set case gives only the common group's two firings. Record the remembered hijacker type
