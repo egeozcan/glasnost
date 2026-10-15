@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -377,11 +377,13 @@ its *master*, and slaves *inside* rather than on the map. In addition:
 11. **A sell order on a vehicle or aircraft.** A vehicle or aircraft that a sell order reaches
     while a building occupies its cell (S-0213, claim 12; otherwise the order does nothing) is
     removed at once, with no animation and no survivors; its house receives its refund (claim 1) and
-    its passengers are dealt with (open question). The local player hears the unit-sold announcement
-    for an own unit. No input creates such an order (S-0213, claim 12; S-0214, claim 13), so in a skirmish no unit is ever sold. The removal, refund and announcement are specified here; how the unit's passengers are handled remains an open question and is not specified by this claim.
+    any passengers still aboard are killed without attacker credit or independent death effects,
+    including nested passengers, by S-0507 claim 16's removal cleanup. They are not released.
+    The local player hears the unit-sold announcement for an own unit. No input creates such an
+    order (S-0213, claim 12; S-0214, claim 13), so in a skirmish no unit is ever sold.
     - Backing: `unmeasured` (no input creates a sell order for a vehicle or aircraft, so neither
       scripted input nor an AI house under the same input rules can reach the rule; no scenario)
-    - Confidence: medium (the refund, the immediate removal), low (the passengers)
+    - Confidence: medium (the refund, the immediate removal), high (passenger removal cleanup)
 
 12. **Selling a wall.** A sell-wall order (S-0213, table T1) for a cell removes the wall in it when
     all of these hold: the cell holds a wall overlay, the wall has an owner, the owner is
@@ -616,7 +618,7 @@ for such a range: completion is reported on its first wrap (Edge cases).
 | build-down, positive-delay range of 1 stage or fewer | stage wraps, original quirk on | No completion report, removal or payment; sale remains in build-down (claim 17) |
 | *selling*, any stage (the build-down included) | building destroyed | sale stops; no refund or further sale survivors; awaits its own next eligible turn, with a second destruction-survivor and smudge round on removal (claim 6; S-0312 claim 21) |
 | *selling* | sell order | nothing changes, except that the local player hears the order sound again for an own building (claim 4) |
-| vehicle or aircraft on a building | sell order (no input creates one) | refund; removed at once (claim 11) |
+| vehicle or aircraft on a building | sell order (no input creates one) | refund; removed at once; remaining passengers, including nested passengers, killed without attacker credit or independent death effects (claim 11; S-0507 claim 16) |
 | wall cell | sell-wall order, conditions of claim 12 | wall removed; no credits |
 | slave group | master removed by true sale | hidden slaves removed; on-map slaves freed to civilian-side recipient, or hit if none exists (claim 10a) |
 
@@ -1134,5 +1136,4 @@ tick number. Any game speed.
 - Whether any skirmish path fills a building's own storage, so that claim 10 can occur.
 - In which order a building's storage lists its resource types, the order in which claim 10 pays
   them (F3).
-- Whether the passengers of a unit that a sell order sells are killed or released (claim 11; only reachable if some input is found that creates such an order).
 - How a docked unit relates to the glossary's contact and tether link (Terms, claim 6).
