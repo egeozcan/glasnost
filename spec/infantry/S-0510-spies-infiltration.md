@@ -2,8 +2,8 @@
 id: S-0510
 title: Spies and infiltration
 topic: infantry
-revision: 2
-sources-class: [decomp]
+revision: 3
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
@@ -25,11 +25,20 @@ the money theft and the infiltrated-factory flags. Disguise (taking, showing, de
 it) is S-0516's. Who may be ordered to infiltrate what is S-0214 (table I, row I24); the approach
 to the building is S-0215 claim 28. Skirmish only; network games and campaigns are out of scope.
 
-Coordinated corrections required at hand-off: S-0311 claim 11 and Terms must identify the flags
-as the infiltrating house's, not the victim's (claim 5 here); S-0111 claim 9 and scenario OV6
-must not expect infiltration to reveal pips (claim 8 here). S-0405 claim 6 and S-0409 claim 15
-must describe spies of another house, including conditional allied entries, with the single-effect
-precedence of claim 3 here. S-0407 claim 6 already agrees with E3's default conditions.
+### Cross-spec changes to confirm
+
+The coordinated corrections requested by the preceding approved text are already present in
+both the current approved companion specs and their working drafts. At hand-off, preserve and
+confirm these agreements:
+
+- S-0311 claim 11 and Terms assign the factory flags to the infiltrating house, not the victim,
+  and read them from the newly created object's own house (claim 5 here).
+- S-0111 claim 9 and scenario OV6 expect no pip-scale reveal from infiltration (claim 8 here).
+- S-0405 claim 6 and S-0409 claim 15 include spies of another house, including allied spies
+  conditional on reaching entry, and defer to claim 3 here for single-effect precedence.
+- S-0407 claim 6 agrees with row E3's default radar and power exclusions.
+
+No further companion-spec edit is required for these corrections.
 
 ## Terms
 
@@ -42,8 +51,8 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
 - **Spy.** An infantry unit whose type has the spy flag (Import mapping). S-0214 uses the same
   flag for its order rules.
 - **Infiltration.** A spy's entry into a building by claim 1, including the no-effect own-house case. The *infiltrating
-  house* is the spy's owner at the moment of entry; the *victim house* is the building's owner at
-  that moment.
+  house* is the spy's owner when the effect is selected, after the building's entry raise; the
+  *victim house* is the building's owner at that same point (claim 9).
 - **Steal fraction *f*.** A game-wide decimal: the share of the victim's available credits that a
   theft takes (claim 6, Import mapping).
 - **Infiltrated-vehicle-factory flag, infiltrated-infantry-factory flag.** Two yes/no states of a
@@ -51,6 +60,7 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
   another house's factory building of that kind (claim 5). S-0311 claim 11 and S-0007 read them
   from the house that owns the object being created or shown.
 - **Vehicle-like building.** As S-0214 (Terms).
+- **Occupier type, assaulter type.** As S-0508 (Terms).
 
 ## Behaviour
 
@@ -62,17 +72,22 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
    - the cell of that standing position holds a building (any cell of the building's foundation),
    - that building is the spy's destination or its target.
 
-   Nothing else is tested at entry: not the building type's spyable flag, not alliance, not the
-   building's health, construction or sale. Those gates belong to giving the order (S-0214 row
+   An occupier or assaulter type in *capture* whose destination is this building instead makes
+   the garrison entry attempt of S-0508 claim 2, even when it also has the spy flag. Whether
+   that attempt succeeds or is refused, it does not infiltrate at that arrival. This exclusion
+   also applies to claim 10's non-spy entrants.
+
+   Apart from these entry-path exclusions, nothing else is tested at entry: not the building
+   type's spyable flag, not alliance, not the building's health, construction or sale. Those gates belong to giving the order (S-0214 row
    I24) and to the approach (S-0215 claim 28). How a walker comes to stand in a cell of its
    destination building is S-0209 (claim 4, mission-target override). A spy whose type also has
    the engineer flag is handled as an engineer and never infiltrates (S-0509). A destination that
    is a vehicle-like building, reached at the building's own cell, is handled by a different entry
    rule that does not look at the spy flag (S-0509 claim 17); no infiltration happens then.
    The building's entry raise is the shared raise of S-0509 claim 2, described in claim 9 here.
-   - Backing: `measurable` (scenarios I1 and I6) for ordinary *capture* arrival and engineer
-     precedence; `unmeasured` for *area guard*, *patrol*, target-only arrival, the absence of
-     extra entry gates and the vehicle-like exception: no scenario here establishes those
+   - Backing: `measurable` (scenarios I1 and I6) for ordinary *capture* arrival, garrison
+     exclusion and engineer precedence; `unmeasured` for *area guard*, *patrol*, target-only
+     arrival, the absence of extra entry gates and the vehicle-like exception: no scenario here establishes those
      arrival states independently of the order and approach gates
    - Confidence: high (*capture*, the destination-or-target test, the engineer precedence),
      medium (*area guard* and *patrol*, that nothing else is tested, the vehicle-like case)
@@ -141,14 +156,18 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
    - Confidence: high
 
 6. **Money theft.** Row E5 moves money from the victim to the infiltrating house. With *B* the
-   victim's available credits at the moment of entry and *f* the steal fraction, the infiltrating
+   victim's available credits when the effect is selected and *f* the steal fraction, the infiltrating
    house's credit balance rises by *s* (Formulas F1) and the victim pays *s* from its credit balance; a payment above the balance empties it, as
-   S-0404 claim 4 describes for spending, and never makes it negative.
-   Normally 0 ≤ *f* ≤ 1, so the victim loses exactly *s*. With *f* above 1 the victim loses its
-   whole balance while the thief still gains the full *s*; with *f* below 0 the money flows the
-   other way and the infiltrating house's balance can go below 0
+   S-0404 claim 4 describes for spending. A non-negative payment cannot make a non-negative
+   victim balance negative.
+   For non-negative starting balances, without integer overflow or an out-of-range conversion,
+   0 ≤ *f* ≤ 1 makes the victim lose exactly *s*. Under those same qualifications, *f* above 1
+   empties the victim's balance while the thief still gains the full *s*; with *f* below 0 the money
+   flows the other way and the infiltrating house's balance can go below 0
    (`quirks.spy_theft_unbacked_gain`).
-   - Backing: `measurable` (scenario I3)
+   - Backing: `measurable` (scenario I3) for in-range conversion and non-overflowing transfers.
+     `unmeasured` for out-of-range conversion and balance overflow: no validated data-only
+     fixture here establishes the required extreme starting balances or fractions
    - Confidence: high (the formula and the truncation); medium (the out-of-range fractions)
 
 7. **Repeat entries.** An infiltration leaves no mark on the building. Each later entry, by the
@@ -156,8 +175,10 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
    that replaces the running one (S-0405 claim 6), another reset, another re-cover. For two spies entering in the same tick, the final balances are those produced by applying the
    thefts serially in S-0203's object-update order: each theft uses the victim balance left by the
    preceding theft.
-   - Backing: `measurable` (scenario I3, parts c and f) for repeated and same-tick theft.
-     `unmeasured` for repeat blackout, reset and re-cover: no repeat scenario for those
+   - Backing: `measurable` (scenario I3, parts c and f) for repeated theft and same-tick
+     balance reuse. `unmeasured` for the particular object-update order among simultaneous
+     thieves: I3 uses spies of one house, so reversing them gives the same balances.
+     Also `unmeasured` for repeat blackout, reset and re-cover: no repeat scenario for those
      effects is supplied here
    - Confidence: high
 
@@ -176,12 +197,14 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
    the spy as causing object (an entry raise, S-0011 claim 18). This is the same raise as
    S-0509 claim 2, not an additional raise. It happens before the effect, so the actions of
    that raise see the state before the effect: for example the victim's balance before a theft and
-   the building's owner at the time. After the effect and before its removal, the spy's own tag
-   is raised with the destroyed-by-anything code, with the spy as causing object (S-0011 claim 19).
+   the building's owner at the time. If those actions change ownership, effect selection uses
+   the owners after the raise, including the own-house no-effect test. After the effect and
+   before its removal, the spy's own tag is raised with the destroyed-by-anything code, with the spy as causing object (S-0011 claim 19).
    The entry raise also happens for an entry that has no effect (own house, or no matching row)
    and for the other entrants of claim 10.
    - Backing: `measurable` (scenario I8) for both raises and their order; `unmeasured` for what the
-     either raise's actions see relative to the effect, the spy's continued presence during
+     actions of either raise see relative to the effect, ownership changed by those actions,
+     the spy's continued presence during
      its own raise, and the conditional own-house raise: I8's visible actions distinguish
      raise order, not balance changes, presence or own-house reachability
    - Confidence: high
@@ -223,16 +246,27 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
 
 ## Formulas
 
-**F1. Theft amount.**
+**F1. Theft amount.** Let *B* be the victim's available credits in integer credits, and let
+*f* be the steal fraction held as a single-precision value (Import mapping). The product *Bf*
+is formed in floating point in the original; our engine reproduces it as a double-precision
+arithmetic result under S-0205 claim 5: with `quirks.chop_rounding` on, round toward zero to
+53 significant bits; with it off, round to nearest, ties to even. The single-precision *f*
+widens exactly. Let *s*, in credits, be the result of converting that product to a signed
+32-bit integer by S-0205 claim 7's common conversion: truncate toward zero, reduce the integer
+modulo 2³² into the signed 32-bit range when the product's magnitude is below 2⁶³, and use zero
+otherwise (including infinity and not-a-number). All credit amounts and balances are signed
+32-bit integers (S-0205 claim 1).
 
-> *s* = trunc(RZ₅₃(*B* × *f*)) credits
+With *T* and *V* the thief's and victim's balances before this effect, in credits, the resulting
+balances in skirmish, where resource storage holds no separate credit value, are:
 
-*B* is an integer (the victim's available credits, credits). *f* is held in single precision
-(Import mapping). The product is formed in floating point, which our engine reproduces as a double
-under S-0205 claim 5 (rounded toward zero with `quirks.chop_rounding` on, to nearest with it off),
-and the single-precision *f* widens exactly. trunc is the conversion of S-0205 claim 7, toward zero.
-The infiltrating house's balance rises by *s*; the victim's balance falls by min(*s*, its balance)
-for *s* ≥ 0, and rises by −*s* for *s* < 0.
+> *T*′ is the signed 32-bit result congruent to *T* + *s* modulo 2³².
+>
+> *V*′ is the signed 32-bit result congruent to *V* − min(*s*, *V*) modulo 2³².
+
+The balance results wrap rather than saturate. For non-negative *V* and no overflow these give
+the ordinary transfer of claim 6. The conversion and balance-overflow extreme cases retain
+claim 6's unmeasured qualification.
 
 Examples, with the original rounding: *B* = 10 001 and *f* = 0.5 give 5000. A named test file
 giving `57%` stores *f* as the single just below 0.57, so *B* = 100 gives 56, not 57; `33%` with
@@ -269,9 +303,11 @@ observe the infiltration's result (S-0203 claim 8).
   Both switch-off alternatives here, and the importer warning below, are design rules,
   `unmeasured` because they are not behaviours of the original.
 - `quirks.spy_theft_unbacked_gain` (YR default: on). The thief gains the computed *s* even when the
-  victim pays less (*f* above 1 with *B* above 0) and even when *s* is negative. Off: the amount is
-  clamped to 0 ≤ *s* ≤ the victim's credit balance before either balance changes, so money is
-  neither created nor taken from the thief. Our importer warns when *f* is outside 0 … 1 (S-0003
+  victim pays less (*f* above 1 with *B* above 0, within the non-overflowing domain of claim 6)
+  and even when *s* is negative. Off: the amount is
+  clamped to 0 ≤ *s* ≤ max(0, the victim's credit balance) before either balance changes, so
+  no negative theft is made and the nominal transfer never exceeds the victim's non-negative
+  balance. Integer overflow still follows S-0205 claim 1. Our importer warns when *f* is outside 0 … 1 (S-0003
   claim 18 already warns for a likely forgotten percent sign).
 - **Own building.** A spy that reaches a building of its own house is used up for nothing (claims 2
   and 3). Whether a building's change of owner while a spy walks towards it clears the spy's
@@ -375,8 +411,9 @@ proposals, not assertions that an existing harness already exposes them.
   enemy's units rather than ours are promoted, or if a flag clears. Also record our sidebar
   icons before and after each entry: eligible types change to their alternate icons, not the
   enemy's. Repeat an entry before destruction: ranks and icons stay unchanged. In separate
-  runs replace destruction with sale, capture by a third house, and victim defeat; retain an
-  additional enemy contender so defeat does not end the game. Train again after each event:
+  runs replace destruction with sale, capture by a third house, and victim defeat. For the
+  defeat run only, the named victim's defeat is exempt from the common bystander exclusion.
+  Retain an additional enemy contender so defeat does not end the game. Train again after each event:
   still veterans with alternate icons. Any reversion or additional promotion falsifies claim 5.
 - **I5 (claim 3, own and allied; Open questions).** A second computer house is allied with us.
   A spy of ours is ordered into an enemy power plant; while it walks, a map trigger changes the
@@ -391,7 +428,16 @@ proposals, not assertions that an existing harness already exposes them.
   no engineer flag), and another type both the spy and the engineer flags. Order each into an enemy
   capturable building with no garrison. Expected: the first stands in the building's cell, then
   walks off it, the building unchanged; the second behaves as an engineer (S-0509). Falsified if
-  either infiltrates.
+  either infiltrates. Additional garrison-precedence runs use named test-map overrides to give
+  a spy the occupier flag (S-0508 Import mapping), then the assaulter flag instead. In *capture*,
+  send each to a spyable building where S-0508's occupation test refuses entry. Give that
+  building I8's entered-by tag and visible action to detect any general entry raise. Confirm the
+  behaviour and destination with the recorder; void a run that never reaches the building.
+  Expected: the spy remains on the map and scatters, without an infiltration effect or a general
+  entry raise. For the occupier variant, also use a building where occupation is allowed:
+  expected occupation with one garrison entry raise, and later eviction of the same spy,
+  not consumption. Any infiltration, consumption on refusal, or entry raise on refusal
+  falsifies claim 1's exclusion.
 - **I7 (claim 8).** The enemy owns a transport-like building (a named test file gives a stock
   spyable building type a passenger capacity and the passengers pip-scale kind, S-0111 OV6) and a
   barracks that is training. For this run only give the enemy enough credits to train,
