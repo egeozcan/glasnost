@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -350,7 +350,7 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    - Backing for this local ordering: `measurable` (S-0511 scenario B3, turn-order variant)
    - Confidence for this local ordering: high, as in S-0511 claim 10
 
-   **Within-turn superweapon warp.** S-0513 claim 48 owns the confirmed boundary
+   **Within-turn superweapon warp: original evidence.** S-0513 claim 48 owns the confirmed boundary
    separately for vehicles, infantry and landed aircraft: a member still in its leaving
    stage after its warp update drops target and destination and skips ordinary healing,
    behaviour processing, movement, firing and turret turning for that turn. Its former
@@ -372,6 +372,28 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    - Confidence for these boundaries: high for the leaving-stage exclusion and hold-test
      ordering; low for unresolved eligibility, continuation and update counts, as in
      S-0513 claim 48
+
+   **Within-turn superweapon warp: engine contract.** S-0513 claim 51 separately
+   supplies our deterministic rule for vehicles, teleporter infantry and landed aircraft.
+   A living member receives one warp update per tick throughout pending, leaving,
+   landing retries, placement awaiting effects and arrival hold, including while off-map.
+   From the first pending update through arrival effects, ordinary self-healing,
+   behaviour processing, movement, firing and turret turning are suppressed both before
+   and after warp work. In arrival hold, including its expiry turn, the hold-end test
+   precedes those ordinary opportunities, each still subject to its own eligibility.
+   Launch immediately clears the old path, queued destinations and driving step; none
+   resumes after the warp. Target and current destination retain claim 48's leaving-stage
+   clearing rather than an added launch-time clearing. Intrinsic warp target searches,
+   sensor updates, elapsed protection duration, placement and arrival-fate tests are not
+   suppressed ordinary work. These restrictions are not missed turns under claim 10
+   and create no separate global tick part. The update count makes S-0513 claim 39's
+   timeline applicable in our engine for uninterrupted successful landing and placement.
+   It does not settle the original's per-kind update count or continuation gaps above.
+   This is an engine design rule, not a reproduction claim, and has no quirk switch.
+   - Backing for this contract: `measurable` in our engine (S-0513 scenario SW23 part f).
+     The original-side gaps retain claim 48's `unmeasured` backing
+   - Confidence for this contract: high as design; low for matching the original's
+     unresolved rows, as in S-0513 claim 51
 
    - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
      after its own turn: claim 11's backing (`unmeasured`).
@@ -837,7 +859,11 @@ turn, not a shared falling phase.
 procedure, observables and falsifier for the leaving-stage exclusion and stopped driving,
 with vehicles, infantry and landed aircraft recorded separately. Departure, placement,
 arrival, hold-expiry continuation and the number of warp updates within a turn are
-exploratory observations there, not promised outcomes or confirmed absolute timelines.
+exploratory original-side observations in parts a to e, not promised oracle outcomes.
+Part f separately tests S-0513 claim 51's engine contract: one warp update per tick,
+immediate route clearing, suppressed ordinary work through arrival effects, and ordinary
+eligibility after the hold-end test. A contrary event falsifies the engine contract,
+not claim 48's explicitly unresolved original-side continuation.
 
 **Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
 procedure, sub-tick observables and falsifiers for same-tick aircraft access to the assigned
