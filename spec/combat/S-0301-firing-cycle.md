@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -31,9 +31,7 @@ switch*, *departure*, *AI house*, *speed-normalised delay*). From S-0202: R(*a*,
 draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*. In addition:
 
 - **Firer.** An object that fires a weapon: a vehicle, infantry, aircraft or building.
-- **Shot.** One firing of one weapon by a firer: one projectile, beam or effect launched. A shot is
-  *made* when the firer's weapon is launched; an attempt that the firing check refuses, or whose
-  launch fails (claim 15), makes no shot.
+- **Shot.** One firing of one weapon by a firer: one projectile, beam or effect launched, or, for a spawner weapon, one target handed to the spawn controller as a pending target. A shot is *made* when the weapon's firing action succeeds; an attempt that the firing check refuses, or whose projectile launch fails (claim 15), makes no shot.
 - **Void shot.** An attempt that passed the firing check but whose projectile could not be put on
   the map (claim 15). It makes no shot.
 - **Rearm countdown.** A per-firer countdown in ticks. It is set by every shot the firer makes, to
@@ -296,7 +294,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing and capture tests (their feature specs), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), or a sinking firer or target (S-0504 claim 5). S-0214, claim 6(e), defers to these for what the check refuses |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing and capture tests (their feature specs), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), or a sinking firer or target (S-0504 claim 5). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
@@ -324,7 +322,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | |
    | 8 | cloaked | |
-   | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, the capture tests, the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8; a spawner weapon is already refused at rank 4), give *illegal* |
+   | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, the capture tests, a bomb-planting warhead against a target that already carries a planted bomb or a disarm warhead against one that carries none (S-0519 claim 3), the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8; a spawner weapon is already refused at rank 4), give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
    | 11 | must deploy | a vehicle only (S-0310 claim 9), whose own cell fails S-0517 claim 14's deploy-to-fire cell test |
    | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
@@ -357,7 +355,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      handoff and lockouts; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
      N6 for sinking restrictions; S-0517 scenario P4 for transition and magnetic-beam refusals
      and P5 for the deploy-to-fire cell test; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
-     scenario F15 part f and S-0516 scenario CS9 part c for hidden targets).
+     scenario F15 part f and S-0516 scenario CS9 part c for hidden targets; S-0519 scenario T3 for bomb-planting and disarm legality).
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
      S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once (only
      contrived data gives such a firer, for instance a spawner vehicle that is also playing death
@@ -459,14 +457,15 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     starts its firing animation and its delayed-fire countdown, set by the type's delayed-fire field
     *d* (ticks). The delayed shot is pending until the building's turn max(*d* − 1, 0) ticks after
     the turn that started it. (A building takes a turn in every tick. The countdown does not depend on how often its attack behaviour is processed,
-    which is every other tick while it turns towards its target or rearms, S-0215 claim 32.) In that turn the building asks the
-    firing check again, with range. On *can fire* it fires its weapon at its current target; on any
-    other answer the shot is dropped. Either way the shot is no longer pending. While the shot is
-    pending, the firing check answers *rearming*. The rearm countdown starts only with the shot
-    itself.
-    - Backing: `measurable` (scenario F12)
-    - Confidence: medium (the countdown arithmetic); low (the support charging of a prism-type building,
-      which uses the same countdown and is left to a future structures spec)
+    which is every other tick while it turns towards its target or rearms, S-0215 claim 32.) In that turn the building makes its scheduled firing check again, with range; that check is not refused merely because this same delayed shot is pending. On *can fire* it fires its weapon at its current target; on any other answer the shot is dropped. Either way the shot is no longer pending. Other firing checks made while the shot is pending answer *rearming*. The rearm countdown starts only with the shot itself.
+
+    **Prism-type buildings.** S-0518 claims 1–10 own their support recruitment and supported
+    shots. In the ordinary attack path covered there (no SAM flag or installed upgrades), a
+    prism-type building recruits supporters before starting its own delayed shot. That shot
+    always uses this countdown, regardless of the animation-delayed-fire flag, and both its
+    final firing check and its shot use weapon slot 0 (S-0518 claims 4 and 7).
+    - Backing: `measurable` (scenario F12; S-0518 scenarios PS1 and PS5 for prism shots)
+    - Confidence: medium (the countdown arithmetic); high (the prism exceptions)
 
 15. **Failed launches.** If the projectile of a shot cannot be put on the map, the shot is void:
     the rearm countdown, the burst counter, the ammunition and the garrison muzzle position (S-0313)
@@ -1037,7 +1036,6 @@ is absent (the control).
 - The amount of ammunition lost to damage (claim 17) is S-0302's.
 - Aircraft ammunition spending and servicing at landing pads are specified by S-0501 claims
   15 and 26 to 28; starting ammunition is answered by claim 10 (Q-0060 question 1).
-- The support charging of a prism-type building (claim 14) needs a structures spec.
 - Whether a temporal weapon's firing side restarts the rearm countdown when its beam lets go
   remains open. Beam release itself does not establish such a restart, and
   no release-time rearm rule is claimed here.
