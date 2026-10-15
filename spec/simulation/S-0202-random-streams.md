@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -690,9 +690,10 @@ original's recording modes are retained as deferred context, not implementation 
     Our engine runs this stream from the game's seed (claim 8) with the same algorithm and lets
     none of its draws reach game state. Game-side sound choices and per-instance playback
     choices share this one unsynchronised stream, not separate generators (S-0701 claim 30).
-    Playback service times can change presentation choices without changing scenario-stream
-    state or game rules. How it runs on the machines of a network game is for the
-    future multiplayer spec (network games are out of scope for now).
+    In the original, playback service times can change presentation choices without changing
+    scenario-stream state or game rules. Our engine must schedule those choices deterministically.
+    S-0701 claim 30 defers the exact replacement schedule. How this stream runs on the machines
+    of a network game is for the future multiplayer spec (network games are out of scope for now).
     - Backing: `measurable` (scenario R6 a) that no draw of this stream reaches the scenario random
       stream; `measurable` (R6 b) for voice responses and the choice of music track.
       Sound-instance pitch, volume shift, pre-delay, sample and play-order draws inherit
