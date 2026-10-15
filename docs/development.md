@@ -299,6 +299,42 @@ Provisional rules of M5a, each tied to a request:
 | `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
 
+## Simulation (M6a: parasites)
+
+- **Parasites (S-0614).** `glasnost_sim::parasite` holds a unit's parasite record (`ParasiteState` in `Object::parasite`). Only a latching weapon creates one, so saves without parasites are unchanged. `combat::fire::shot` calls `parasite::fired`: the firer leaves the map inside the projectile and the latch block is set. `combat::projectile` calls `parasite::carrier_ended` when the projectile ends, which either latches or fails to latch (claims 3 and 4). A parasite-flag detonation makes no area hit but keeps its animation and debris (S-0303 claim 2, S-0306 claim 21). An attached parasite acts in its host's turn (`parasite::host_turn`, called from `tick::object_turn`):
+  - drone deliveries and the hold (claims 6 to 9, F1);
+  - the grappling cycle of table G, with strikes, splashes, wakes and the cull (claims 10 and 11, F3, F5, F6). A culled host starts sinking through `naval::start_sinking`.
+- **Leaving.** A parasite leaves its host through these hooks:
+  - `parasite::host_hit`, from `combat::damage::apply` (sonic hits, healing and suppression, S-0315 claims 6 and 7);
+  - `parasite::repair_step`, from `combat::heal::repair_step`;
+  - `parasite::host_jumps`, from `teleport`;
+  - `parasite::leaving`, from `objects::take_inside` and `objects::remove` (host loss, claim 15).
+- **Held units.** A held unit:
+  - does not drive or fly (`tick::object_turn`);
+  - is not movable (`targeting`);
+  - gets rank 4 *impossible* when it is a mobile spawner, and rank 9 *illegal* when it is an organic firer (`combat::check`);
+  - cannot deploy (`econ::deploy::deploy_ready`);
+  - drops its destination when it is a teleporter.
+
+  A host never retaliates against its own parasite (`combat::acquire`). The five quirk switches from the spec's Edge cases are in `quirks`.
+- **Orders a human gives.** Select a drone and click an enemy vehicle. The attack order fires the latching weapon (`targeting::click`, then `orders::issue`).
+- **Claim ledger.** `docs/m6-claims/S-0614.md`.
+
+Provisional rules of M6a, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `parasite::place_ordinary`, `parasite::host_lost` | Ordinary placement. The parasite's own locomotion class and movement zone must be able to enter the cell (judged on the bridge deck when the parasite came from it), and the cell must hold no building. A vehicle parasite also needs a cell with no infantry or vehicles. An infantry parasite takes the first free standing position, 0 to 4. The claim 15 fallback places either kind at the cell centre. | Q-0620 |
+| `parasite::carrier_ended` | A latching projectile removed without a detonation counts as a failed latch (claim 4). | Q-0621 |
+| `tick::object_turn` | The parasite acts after the host's self-healing and before its behaviour processing and movement. A host killed by a delivery does nothing more in that turn. | Q-0622 |
+| `parasite::host_cell_ok` | A host is in the air when S-0307's airborne rule holds (at least 208 leptons above its surface) or when it is an aircraft in flight. | Q-0623 |
+
+Known limits of M6a:
+
+- A culled host only gets the sinking mark (`naval::NavalState::sinking`). S-0504's sinking descent is not built, so the host stays in play.
+- Some hooks have no callers yet because their topics are not built: `parasite::host_unloading`, `parasite::host_consumed`, `parasite::superweapon_teleport` and `parasite::locomotor_replaced`.
+- Not modelled: spark particles, the tank bunker, uncloaking, F2 rocking (presentation) and claim 19's re-selection (presentation).
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
@@ -455,7 +491,6 @@ Known limits:
 - Icons are drawn through the icon palette of S-0103 claim 13 (`palette::icon_palette_565`: `CAMEO.PAL` through claim 1's conversion, the middle shade row, the 16-bit step; black with an importer warning when the file is missing, our engine's departure). The file is read with each game's files, not once at program start, so a side's archives that hold a different copy would change it between games (claim 13's session lifetime is not modelled).
 - With no radar building, the radar box says "No radar" (S-0410).
 - A vehicle whose weapon is a spawner (the V3 launcher's rocket is a spawned object) takes an attack order but never fires: its firing check answers *rearming* (S-0301 claim 9 rank 4: no spawned object of its own is alive, and our engine spawns none). Spawned aircraft and the rocket locomotor are M6 scope (PLAN §5, M6: air and Rocket), so this is expected until M6. The fix lane's `spawner_weapon_attack` logs the answer.
-- A terror drone fires its weapon at a vehicle instead of latching on as a parasite: parasites belong to the special-abilities specs (S-0214 Terms), not written yet (spec batch 5). Until then the drone uses its weapon like any other unit.
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
 
