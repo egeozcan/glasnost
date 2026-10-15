@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -62,8 +62,8 @@ not rules for implementing them.
   in this batch are plain spec pointers, not planned specs. S-0417 is also approved; its revised
   draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
   S-0507, S-0511, S-0512, S-0513, S-0516, S-0522 and S-0524 are approved.
-  S-0508, S-0509, S-0510 and S-0515 are drafts in this batch and own the terms attributed
-  to them below. Sign-off checks every cross-spec
+  S-0508, S-0509, S-0510 and S-0515 are approved. S-0502, S-0514, S-0517 and S-0525
+  are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -1048,6 +1048,9 @@ level when the type's field is absent. S-0501 claim 2 owns climbing toward it; i
 distinguish cruise height from the height held during landing or destination guidance.
 Not the *jumpjet cruise height*.
 
+**deploy-to-land vehicle.** A vehicle whose type has both the simple-deployer and deploy-to-land
+flags. It hovers when idle and lands to deploy (S-0502 claim 13); S-0517 owns its deploy cycle.
+
 **drop attempt.** One attempt to release a carrying aircraft's first passenger beside it.
 S-0522 claims 9 and 11 own the attempt and its use by aircraft shots.
 
@@ -1070,6 +1073,9 @@ the linked group (see *train*).
 **hover height.** A hovering vehicle's world height above the terrain surface at its position,
 less 416 leptons when it stands on a deck (S-0503 claim 8).
 
+**hover slot.** A per-cell mark held by at most one hovering jumpjet. S-0502 claims 7 and 13
+own claiming and releasing the slot.
+
 **hover speed.** A hovering vehicle's double-precision fraction from 0 to 1 of its per-tick
 speed that it travels, changed by acceleration and braking. It is distinct from the speed
 fraction already included in that per-tick speed (S-0503 claims 3 and 4).
@@ -1087,6 +1093,9 @@ at which its jumpjets fly, in leptons. It is also the hover height that S-0101 u
 absent-key default and its role as the boundary between the air and top render layers. Specs write
 "jumpjet cruise height", not "hover-height field". See S-0102.
 
+**jumpjet state.** One of seven flight states: *grounded*, *ascending*, *hovering*, *cruising*,
+*descending*, *crashing* or *crashed* (S-0502 Terms and claim 3).
+
 **jumpjet type, jumpjet.** A jumpjet type is an infantry or vehicle type with the imported jumpjet
 flag, which flies with a jump-pack style locomotor. A *jumpjet* is a unit of a jumpjet type that is
 currently moving with that jumpjet locomotor. Specs say which of the two a rule needs. See S-0107.
@@ -1098,6 +1107,9 @@ cannot enter that land. See S-0211 (Terms, claims 2 and 10).
 **land type.** One of twelve categories of ground that each cell has at any time: *clear*, *road*,
 *water*, *rock*, *wall*, *tiberium* (resource ground), *beach*, *rough*, *ice*, *railroad*, *tunnel*
 and *weeds*. See S-0211 (Terms, claims 5 to 8).
+
+**landing reservation.** A descending jumpjet's occupancy mark in its landing cell, made before
+touchdown (S-0502 claim 15).
 
 **local point.** An integer point (*a*, *b*) in the local area's own frame: *a* counts cells
 across the screen from its left side, *b* half-rows down from its top. S-0522 claim 4 owns
@@ -1133,6 +1145,14 @@ lower-case names of S-0211 (claim 12), for example *normal*, *crusher*, *amphibi
 gives how each is written in the data. S-0211 (claims 10 and 12) gives which cells each zone may cross, S-0212 builds
 its connectivity from them, and S-0107 (claim 7) lets infantry of the zone *amphibious-destroyer*
 use their water sequences. It is not the *locomotion class* or the *locomotor*.
+
+**moving now.** Movement-specific, not interchangeable between locomotors. A jumpjet is moving
+now in every jumpjet state except *grounded* and *hovering* (S-0502 claim 20). A hovering
+vehicle is moving now when it has a destination or heading point and its throttle is not 0
+(S-0503 Terms).
+
+**neighbour step.** A jumpjet's move to a neighbouring cell chosen by one ranged draw over
+0 to 7 from the scenario random stream when its desired hover slot is taken (S-0502 claim 21).
 
 **occupancy record.** The record that each cell layer keeps of which standing positions are taken,
 whether a vehicle, a building or another object is present, and the house of the last infantry unit
@@ -1233,6 +1253,10 @@ hovering-vehicle wakes.
 
 ### infantry
 
+**deployed-firing rule.** A deployed infantry unit keeps an in-range target; otherwise it runs
+a range search centred on its own position. If it then has no target it falls back to rest,
+unless its current behaviour is *guard* or its type is a jumpjet type (S-0517 claim 16).
+
 **infantry.** A type kind and its objects: soldiers and other units drawn as sprites and moving on
 foot. See S-0107.
 
@@ -1330,10 +1354,10 @@ Terms).
 **awaiting removal.** The state of a destroyed building kept in play after its death effects,
 until its removal turn. S-0312 owns the term and the removal conditions (Terms, claim 21).
 
-**being erased.** The state of an object that an erasing weapon (a temporal weapon) has locked
-onto, from the moment the first such weapon locks on until the last one lets go or the object is
-removed. S-0215's *warped out* means the same state. Erasing weapons are left to a later combat
-spec. See
+**being erased.** The state of an object with at least one temporal beam attached, from the
+first lock until the last beam lets go or the object is removed (S-0514 claims 4 and 10).
+An object in the leaving stage of a chrono move also counts as being erased, without a beam
+(S-0513 claim 39; S-0514 Terms). S-0215's *warped out* means the same state. See also
 S-0109 (Terms) and S-0214 (Terms).
 
 **berserk.** The state of a unit that a berserk-causing warhead has put out of its owner's
@@ -1342,6 +1366,10 @@ S-0309 uses it. How it starts and ends is left to a later warhead spec.
 
 **burst counter.** A per-firer count of the shots made in the current burst, shared by all weapons
 of the firer. S-0301 owns it (Terms, claim 4); S-0313 (claim 2) uses it.
+
+**cell radiation.** The radiation held by a cell: a double-precision floating-point running sum
+of field contributions, less the amounts taken away by decay and topping up, never below 0.
+It can include contributions from fields that have ended (S-0525 claims 3 and 6).
 
 **close-range property.** An imported boolean type flag, not a description of a weapon's range.
 S-0307 owns the term and its effects on approach-position searches (Terms, claim 22).
@@ -1368,6 +1396,13 @@ claim 6); S-0303 gives the detonation.
 **debris.** Animations thrown by a death or a detonation. S-0312 owns them (Terms, claim 4,
 Formulas F1); S-0303 (claim 22) throws them from a warhead.
 
+**deploy-fire vehicle.** A vehicle whose type has the deploy-fire flag but not the in-place
+deploy flag. While *unload* is current it attempts to fire its slot-0 weapon at its own cell,
+subject to the firing check (S-0517 claim 2).
+
+**deploy-to-fire cell test.** A cell passes when its slope shape is flat, it holds no building
+and its land type has the buildable flag (S-0517 claim 14).
+
 **detonation, detonation point.** One application of area damage at a point, the *detonation
 point*, with a damage amount, a warhead, and optionally the object and the house that caused it.
 S-0303 owns what a detonation does (Terms, claims 1 to 23). Projectiles (S-0306), damaging
@@ -1391,6 +1426,11 @@ S-0211's high-bridge-cell test (claim 15). S-0307 owns its verified marking scop
 of elite rank uses instead; the slot that holds it is that slot's *elite slot*. S-0311 (claim 6)
 owns when it is used and S-0308 (Terms, claims 1 and 2) the slots; S-0313 gives its firing positions.
 
+**erasure amount.** The integer remaining amount for a target with temporal beams attached.
+It starts at 10 times the target type's strength and falls each tick by the sum of the attackers'
+raw weapon damage, counting at most the leading attacker and the 51 most recent joiners.
+Erasure completes at 0 or less (S-0514 claims 6 and 7).
+
 **expected damage.** The damage that the original estimates, when an object fires at another, for
 target choice. S-0302 owns how it is computed (claim 18); S-0309 uses it for its *expected
 remaining health*.
@@ -1398,6 +1438,12 @@ remaining health*.
 **experience.** A number per object, held in single precision, from which its *veterancy rank*
 follows. S-0311 owns how it is gained, kept and lost (Terms, claims 1, 2 and 7 to 13); S-0302 and
 S-0312 use it.
+
+**field level.** A radiation field's integer current level, ⌊*L*·*T*/*N*⌋, where *L* is its
+level set at creation or topping up, *T* its time left and *N* its duration in ticks. The current
+level is 0 when *T* < 1. S-0525 claims 4 and 7 own the scaling and rounding: integer evaluation
+for the deployed-infantry test, floating-point evaluation truncated toward zero for topping up.
+Not the cell radiation.
 
 **fire point.** The world position from which a shot is fired, where its projectile normally
 starts. S-0313 owns it and the muzzle positions it is built from (Terms, claim 1). S-0306 places
@@ -1448,10 +1494,17 @@ S-0614 claims 7, 8 and 13 own renewal, effects and post-exit hold, including exc
 Being held stops most locomotors and makes the unit not movable for orders; it is distinct
 from the electromagnetic-pulse disable called *paralysed* by S-0214.
 
+**in-place deploying vehicle.** A vehicle whose type deploys in place, changing between mobile
+and deployed without becoming another object (S-0517 Terms and claim 3). Not a vehicle that
+deploys into a building under S-0415.
+
 **known attacker.** Damage has a known attacker when it comes with the object that caused it.
 See S-0107 (Terms); S-0208 (claim 15) uses it for the scatter requests that damage sends. S-0302
 (Terms, claim 1) calls that object the *attacker*, adds the *attacking house* that a hit credits,
 and says which sources give which.
+
+**landing-first type.** An in-place deploying vehicle type that must touch down before it can
+deploy (S-0517 claim 5).
 
 **latching weapon.** A weapon whose warhead has the parasite flag and whose launch puts
 the firer inside its own projectile. S-0614 claim 1 owns this launch and the attempt to
@@ -1465,6 +1518,10 @@ whose object is of a missile type (with the missile-spawn flag) and on the map.
 The spawner is *launching* while this
 count is above 0. S-0506 claim 10 owns the resulting lockouts; its Terms define the count.
 
+**leading attacker.** Of the attackers whose temporal beams are attached to one target, the one
+that carries the erasure amount. When it lets go, the most recent remaining joiner takes over
+without losing progress (S-0514 claim 9).
+
 **parasite, victim, host.** A *parasite* is a unit that attaches itself to another unit,
 its *victim*, and damages it while attached. The victim is its *host* while it is attached.
 S-0614 claims 1 to 5 own latching, claims 6 to 11 deliveries and hold, claims 12 to 14
@@ -1474,6 +1531,11 @@ by damage and healing. S-0209 and S-0214 use these terms for entry and order tar
 **projectile.** The object that carries a shot from where it is launched (normally its fire point,
 S-0306 claim 5) to where it detonates. S-0203
 (Terms) names it, S-0306 owns its launch, flight and detonation, and most combat specs use it.
+
+**radiation field.** A patch of irradiated ground with a centre cell, a spread in whole cells,
+an integer level, a duration and time left in ticks, and a light source. At most one field has
+a given centre cell; fields with different centres can overlap (S-0525 Terms and claim 2).
+See *field level* and *cell radiation* for the distinct level concepts.
 
 **range test, weapon range.** The *range test* is the yes/no question whether a target is within
 reach of a weapon of a firer; the firing check's *out of range* is its "no". A weapon's *weapon
