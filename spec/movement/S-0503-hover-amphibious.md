@@ -2,13 +2,13 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
+requests: [Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
 supersedes: []
 ---
 
@@ -53,7 +53,11 @@ source of the bomb mark must be removed: claim 11 below supplies one. These corr
 checked together at sign-off. Further coordinated additions: S-0209 claim 1 and its
 between-steps definition must use claim 13 below for hovering; S-0212 claims 8, 21 and 23
 must distinguish claim 14's ρ test, claim 12's immediate-search timer restart and claim 7's
-cached final step. S-0417 claims 5 and 7 must cite claims 5 and 15 for immediate first-point
+cached final step. For Q-0675, S-0209 claim 1 and S-0417 claim 7 must use claim 15's
+arrival outcome table, not equate failed searches with refused choices. S-0212 claims 20–23
+and S-0213 claim 8 must distinguish claim 16's retained movement destination from the
+cleared order-level destination. S-0209 claim 1 must also preserve claim 13's distinct
+flag-setting and flag-clearing layer tests and the no-choice reservation exception. S-0417 claims 5 and 7 must cite claims 5 and 15 for immediate first-point
 choice and hover cell-arrival updates. S-0206 claim 13 must cite claim 15 for initial north
 and retained placement heading. S-0213 claim 8 must cite claim 16 for the hover stop outcome.
 
@@ -67,8 +71,13 @@ From the glossary and other specs: *locomotor*, *locomotion class*, *land type*,
 
 New terms:
 - **Hovering vehicle.** A vehicle whose locomotor (S-0207 claim 14) is the hovering locomotor.
-- **Destination** *D*. The point a hovering vehicle was last ordered to move to, kept until the
-  move ends. Its height is the surface height of its cell, plus 416 leptons on a high-bridge cell.
+- **Destination** *D*. The locomotor's movement point, distinct from the order-level destination
+  read by behaviours and factory reporting. The two can disagree after a stop order (claim 16).
+  Unless held, assignment sets its height to the surface height of its cell, plus 416 leptons on
+  a high-bridge cell. Held assignment retains the supplied point without this height adjustment.
+- **Held.** The parasite hold timer of S-0614 claims 7–8 is running. This is the meaning of
+  *paralysed* for this spec's hover assignment and choice rules, not electromagnetic-pulse disable.
+  Claim 17 gives its consequences.
 - **Heading point** *P*. For a hovering vehicle, the centre of the next cell of its stored path,
   at the surface height of that cell, plus 416 leptons when the
   vehicle's world height is at least 312 leptons above that surface, even without a high bridge
@@ -172,13 +181,15 @@ New terms:
    destination, not on its next movement tick. This includes a resting factory-produced hover:
    on a successful clear choice it already has its heading point before the factory sets
    ρ = ½ (S-0417 claim 5). A refused choice or unsuccessful search need not supply a point.
-   A paralysed vehicle merely remembers the destination without this immediate choice.
+   A held vehicle merely remembers the supplied destination without this immediate choice or
+   height adjustment (claim 17).
    A powered vehicle already moving now keeps an existing heading point when given a new
-   destination. If moving now but without a heading point, it sets throttle and ρ to 1 and
-   attempts the path update immediately, but chooses a heading point there only if its
-   destination has disappeared or is in its present cell. Otherwise the no-heading-point
-   tick rule supplies the later choice. Giving a destination while unpowered does not itself
-   start the choice.
+   destination. If powered and moving now but without a heading point, it sets throttle and
+   ρ to 1, applies the path-update rules immediately, and attempts heading-point choice there
+   too. This path update is not an unconditional fresh search: it includes destination-cell
+   completion and the ordinary retry-delay gate of S-0212 claims 20–23. An actual fresh search
+   starts the retry delay by claim 12; a timer-deferred update does not restart it.
+   Giving a destination while unpowered does not itself start the choice.
 
    A vehicle also attempts a new heading-point choice on moving ticks without a heading
    point and on arrivals at its heading point (claim 7):
@@ -194,8 +205,8 @@ New terms:
    next stored step, or towards the heading point when there is no further step. So the body looks
    one cell ahead along the path; the body facing does not steer the vehicle.
    - Backing: `measurable` (H2 for body aim, H3 for heading-point selection, H10 for crates,
-     H8 for the immediate move-start choice). The paralysed, unpowered and already-moving-now
-     exceptional assignments are `unmeasured`: H8 does not isolate those states.
+     H8 for the immediate move-start choice; H14 for held assignment and the already-moving-now
+     no-point path update). Assignment while not powered is `measurable` in H14.
      The elevated heading point on a non-bridge cell is `unmeasured`: no stock route isolating
      that height condition is established
    - Confidence: medium
@@ -215,7 +226,8 @@ New terms:
    has arrived there. It is not placed on the point: it initially keeps its position, up to *d*
    leptons from the point. The test alone neither snaps it to the point nor cancels the travel
    distance already computed for this tick. Then:
-   - it chooses its next heading point (claim 5). When one is chosen, it travels *d* on the same
+   - it attempts the next heading-point choice when claim 15's destination/contact condition
+     permits it (claim 5). When one is chosen, it travels *d* on the same
      tick along its current movement heading (claim 6), still aimed towards the old heading point,
      so at a turn it can swing wide of the cell centres.
    - when no new heading point is chosen, any positive *d* already computed can still produce a
@@ -233,7 +245,9 @@ New terms:
    A failed fresh search on an arrival tick, including either failed-search distance case of
    S-0212 claim 23, does not cancel the already computed positive *d*: the surviving on-map
    vehicle can take that final step along its old movement heading even though the search
-   cleared its destination and heading point. This also applies when the first refusal caused
+   cleared its destination and heading point. The flag and cell-arrival update are not implied
+   by this final travel: claim 15 distinguishes failure before choice from failure during choice.
+   This also applies when the first refusal caused
    an immediate search and that search failed: zeroing φ and ρ during the refusal does not
    change the already computed *d*. It is the resulting nonzero entry outcome that can
    suppress travel, not search failure alone.
@@ -375,16 +389,22 @@ tick while switched off has no further spin rotation on that tick. The spin ends
 
     A clear heading-point choice reserves that point's cell at once by setting its
     vehicle-present flag, before physical entry. Replacing or abandoning a heading point
-    clears its old reservation. On the positive advance that ends the between-steps state,
+    clears its old reservation, except for claim 15's no-choice idle-arrival case.
+    On the positive advance that ends the between-steps state,
     the flag at the vehicle's actual position is cleared before its position moves, even if
     it remains in that cell. While not between steps, cell-edge crossings move the listing
     but neither set nor clear these flags: cells merely swung through at a turn are not
     reserved. If a crossing occurs while still between steps, removal clears the flag at
-    the old actual position and insertion sets it at the new one. A successful arrival-time
-    choice that leaves no heading point restores a mark at the actual position.
-    A marked point uses deck occupancy only when its cell has a high bridge and that point
-    is at least 416 leptons above terrain surface there, otherwise ground occupancy.
-    This is not automatically the vehicle's present listing layer. These are flags, not counts
+    the old actual position and insertion sets it at the new one. Claim 15 gives the exact
+    arrival cases that restore a flag at the actual position, including a deferred search.
+    Setting a flag, at either a chosen point or the actual position, uses deck occupancy only
+    when that cell has a high bridge and that point is at least 416 leptons above terrain
+    surface there, otherwise ground occupancy. Clearing a flag uses the point's height alone:
+    at least 416 leptons above terrain clears deck occupancy even without a high bridge,
+    below that clears ground occupancy. This asymmetry is controlled by
+    `quirks.hover_flag_clear_height_only` (default original); with it off, clearing requires
+    the same high-bridge condition as setting. Neither operation uses the vehicle's listing layer.
+    These are flags, not counts
     attributed to individual vehicles (S-0209 claim 1).
     - Backing: `measurable` (H11)
     - Confidence: high for reservation and first-advance release; medium for exceptional
@@ -404,15 +424,26 @@ tick while switched off has no further spin rotation on that tick. The spin ends
     actual position, not the chosen point. This includes the first choice when a move is
     given and a further clear choice on an F5 arrival tick. The point is chosen but its
     reservation and consumption of the stored step have not yet taken effect at that update.
-    Consequently factory reporting observes the pre-travel position. At an F5 arrival where
-    a choice is attempted and succeeds without supplying a heading point, there is also a
-    cell-arrival update at the actual position, after its flag is restored there. This includes
-    normal completion while still in the contacted factory's cell. Arrival alone does not
-    promise an update if no choice is attempted or its entry check refuses. A cleared
-    destination does not independently generate an update. In particular, when completion
-    clears the destination, no path remains and the contacted object is not in the present
-    cell, that completion alone gives no update. Cell-edge crossing between heading points
-    is not a cell-arrival update.
+    Consequently factory reporting observes the pre-travel position. For an F5 arrival,
+    the initial path update of claim 7 can already finish or fail a move before heading-point
+    choice. Choice is attempted when *D* still exists after that update, or when the contacted
+    object is in the vehicle's present cell. An absent order-level destination does not forbid it.
+    The following table concerns a surviving on-map vehicle, before any cached final travel.
+
+    | Arrival situation | Flag and cell-arrival update |
+    |---|---|
+    | No *D* after the initial update, no contacted object in the present cell | No choice, no actual-position flag restoration and no cell-arrival update. With no stored step, *P* is cleared. This includes an ordinary stop with unequal points and no contact. Merely clearing *P* here does not clear its old reservation: absent another clearing event, that flag remains at the former heading cell (`quirks.hover_idle_arrival_reservation`). |
+    | No *D*, but contacted object in the present cell, and vehicle not held | Choice is attempted and ends without a point. The old heading reservation is cleared if still present, the actual-position flag is set, and a cell-arrival update follows. No fresh search is made without *D*. |
+    | *D* remains, no stored step, retry delay still running, vehicle not held | Choice clears the old heading reservation and leaves no point. The actual-position flag is set and a cell-arrival update follows. The vehicle waits marked at its actual cell, not the old heading cell. |
+    | A search fails during choice, vehicle not held | No point results, but this is still a non-refusing choice: the actual-position flag is set and a cell-arrival update follows, even if that search clears *D*. |
+    | A search fails in the initial arrival path update and clears *D* and *P* | The no-*D* rows above decide whether a choice and restoration follow. Without same-cell contact there is no restoration or update, and the failed search has cleared the old heading reservation: no replacement flag is supplied. |
+    | Choice refuses entry, including a held vehicle | No actual-position restoration or cell-arrival update from that choice. Claim 12 governs refusal. |
+
+    Search success is not required for restoration and an update, but reaching the
+    non-refusing choice outcome is.
+    In each restoration row the cached final step may still cross a cell boundary, transferring
+    the actual-position flag by claim 13. Thus its eventual waiting cell is the post-travel cell.
+    Cell-edge crossing is not itself a cell-arrival update.
 
     A newly attached hovering locomotor starts with movement heading north, 0 facing units,
     independently of the body facing used to place the vehicle. Ordinary placement on the
@@ -421,7 +452,8 @@ tick while switched off has no further spin rotation on that tick. The spin ends
     a teleported hover retaining its locomotor retains its previous heading and any turn
     already in progress. A replacement with a newly attached hovering locomotor starts north
     again. Body-facing placement does not copy into this heading.
-    - Backing: `measurable` (H8 for factory updates; H13 for initial and retained headings)
+    - Backing: `measurable` (H8 for factory updates, H13 for initial and retained headings,
+      H15 for absent destinations and failed or deferred arrival searches)
     - Confidence: high for clear-choice updates and initial north; medium for exceptional
       completion and retained-heading placement cases
 
@@ -440,8 +472,37 @@ tick while switched off has no further spin rotation on that tick. The spin ends
     or passive speed ramp occurs. A hover already without a heading point ceases moving
     when the destination is removed. Target, order queues, behaviour and stop-order
     refusal conditions remain S-0213 claim 8's, not new locomotor exceptions.
-    - Backing: `measurable` (H12)
+
+    Behaviours and S-0417 claim 7's report tests see the cleared order-level destination,
+    not a retained *D*. Hover throttle, moving-state tests and the completion/search rules of
+    S-0212 as applied here use *D*. A search targets *D*'s cell even with no order-level
+    destination. Clearing the order-level destination also makes the ordinary retry timer
+    immediately eligible; the next actual search starts its full delay as usual.
+    When *D* equals *P* and the ordinary destination-cell/height completion condition holds,
+    arrival still completes: the retained *D* makes choice possible, choice removes *P*,
+    and completion then removes *D*. Its non-refusing no-point outcome restores the
+    actual-position flag and gives a cell-arrival update even without same-cell contact.
+    With unequal points and *D* removed by stop, claim 15's no-*D* rows apply instead.
+    An accepted person's stop also breaks contact (S-0213 claim 8), so an unchanged
+    factory contact must not be assumed for a later report; a new contact, if any, uses
+    the order-level destination tests above.
+    - Backing: `measurable` (H12 and H15)
     - Confidence: high for the retained movement quantities; medium for the final position
+
+17. **Held versus switched off (Q-0675).** The hold test used by hover destination assignment
+    and heading-point choice is precisely whether the parasite hold timer has ticks left
+    (S-0614 claims 7–8 and 13). A held vehicle can still be powered: being held does not
+    itself switch off lift. A held destination assignment remembers the supplied point only,
+    a held heading-point choice clears its old reservation and point but refuses as *blocked*.
+    EMP disable, control-centre switch-off and magnetic lifting do not themselves satisfy
+    this timer test. Switch-off separately affects the powered test (Terms and claim 10),
+    including its positive-height exception. Magnetic lift uses the replacement movement
+    model of S-0607 claims 1–3, not a new hover hold condition. A parasite's presence alone
+    is insufficient once its hold timer has expired.
+    - Backing: `measurable` (H14); the timer's identity inherits S-0614 claims 7–8.
+      The EMP-only negative case is `unmeasured`: no stock skirmish activation is established
+      for H14, although the hold test itself is settled
+    - Confidence: high
 
 ## Formulas
 
@@ -588,6 +649,14 @@ These consequences inherit the backing and confidence of claims 8–10 (H6 and H
   so ordinary disabling cannot test this absence.
 - **Pushing.** The original's hovering locomotor can be pushed one cell aside, with or without a
   spin. No stock caller of that was found (Open questions), so it is not specified.
+- **`quirks.hover_idle_arrival_reservation`.** Default original: clearing the last heading
+  point at a no-choice/no-destination arrival does not release its old reservation (claim 15).
+  Off: release that reservation and mark the actual position instead. This changes flags only,
+  not the absence of a cell-arrival update. Backing: `measurable` (H15), confidence high.
+- **`quirks.hover_flag_clear_height_only`.** Default original: flag clearing chooses deck by
+  height alone, while setting also requires a high bridge (claim 13). Off: both require the
+  high bridge, avoiding a mismatched ground mark and deck clear at elevated non-bridge points.
+  Backing: `measurable` (H15's named elevated-point test), confidence high.
 - **Tunnels.** A stored step into a tunnel entrance is handled by the tunnel rules (S-0212 claim 9), not
   by this spec.
 
@@ -610,8 +679,13 @@ The floating absent-key defaults above are chosen by round-to-nearest, ties-to-e
 binary64, independently of the program's arithmetic rounding mode. They do not pass through
 the single-precision text conversion. Giving a key the displayed default decimal text can
 therefore differ from omitting it. This precision is specific to these defaults, not a new
-parsing rule for S-0003 claim 6. The path-retry field used by claim 12 is imported by
+parsing rule for S-0003 claim 6. The path-retry field used by claims 5, 12 and 15 is imported by
 S-0212 claim 21 and its Import mapping; it introduces no additional hover key.
+
+| Input owned elsewhere | Feeds here | Parse form and absent-key default |
+|---|---|---|
+| warhead `Paralyzes` | held timer tested in claims 5 and 17 | integer ticks, default 0; S-0614 claims 7–8 and Import mapping own its renewal |
+| runtime stop order, destination and contact | claims 15–16 | runtime state, not an INI setting; no imported default |
 
 Each key keeps its value when a later layer omits it (S-0006). The engine defaults are those of the
 program when no layer gives the key. The absent-key defaults and numeric import precision are
@@ -759,6 +833,47 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   η and turn state across replacement with the same locomotor. A reset to body facing
   or north in this last case falsifies claim 15's retention. Record placement and motion
   separately so movement on the placement tick is not mistaken for an initial setting.
+
+- **H14 Hold and assignment-time path update (Q-0675).** Use H1's map/settings and a named
+  test-map variant with a hovering host that stock parasite attacks can hold; change only the
+  host's locomotor, keeping the attack and its hold field unchanged. Compare held and expired-hold
+  assignment with control-centre switch-off, and magnetic lift in separate runs. Record the
+  hold countdown, powered state, both destinations, heading point, supplied height, path searches
+  and retry timer at assignment. Expected: claim 17's timer predicate, including powered-but-held
+  states; only held assignment omits immediate choice and destination-height adjustment.
+  Switch-off alone does not set that timer; positive height can still make the hover powered.
+  Magnetic lift has its replacement locomotor, not a held hover. EMP has no established stock
+  skirmish activation here: if an ordinary stock input is identified, record it as an additional
+  subcase, otherwise it is not an observed confirmation of the negative predicate claim.
+  To isolate claim 5's moving-now/no-point branch, retain a trace where both *D* and throttle
+  are nonzero but no point exists, then retarget while a positive retry delay runs, and again
+  after it expires. Expected: immediate choice attempt in both cases, no search while gated,
+  and a search with full delay restart only when eligible. A delayed choice, unconditional
+  search through the running timer, or missing restart falsifies the corresponding rule.
+  If this state is never reached, that subtest is inconclusive, not evidence of a mandatory
+  tick delay. One qualifying run per subcase; propose any missing read-only recorder support.
+- **H15 Arrival outcome matrix (Q-0675).** Extend H3/H9/H12 with recording of both destination
+  kinds, contact cell, hold timer, retry timer, ground/deck flags, between-steps state, searches
+  and cell-arrival events. In separate runs retain: no-*D* arrival without contact; no-*D*
+  arrival with same-cell contact; deferred search with *D* retained; failure in the initial
+  arrival path update; failure during heading choice; and refused choice. Use a corridor
+  whose only route can be blocked after a point is reserved. Distinguish event order in the
+  read-only trace, not merely the final absence of a point. Expected: exactly claim 15's rows,
+  including no replacement flag after early failure without same-cell contact, and actual-cell
+  marking after deferred search or failure during choice. Account for a cached step transferring
+  that actual mark at a boundary. A contrary restoration, old-cell flag, update or search timing
+  falsifies the row. For no-*D*/no-contact stop, expect the former heading reservation to remain
+  unless another event clears it. Stop also ends contact, so use a separate newly established
+  contact trace rather than assuming a factory remains contacted after accepting stop.
+  Repeat stop with full three-dimensional *D* = *P*: expected both local points finish and an
+  update occurs despite the absent order-level destination; unequal points take the no-*D*
+  case. A retained *D* must not suppress a report as a different order-level destination.
+  On a high bridge and beneath it, compare marking and release layers with claim 13's height
+  rule rather than listing layer. Add a named test-map variant giving sufficient hover height
+  to isolate an elevated non-bridge point: setting marks ground, clearing at that height clears
+  deck with the default quirk, ground with it off. A common listing-based rule or symmetric
+  original clearing rule falsifies claim 13. Record one qualifying run per matrix row and layer
+  case; no qualifying trace leaves the subcase unmeasured rather than confirming it.
 
 ## Open questions
 

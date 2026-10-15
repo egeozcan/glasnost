@@ -1,9 +1,9 @@
 ---
 id: Q-0675
 title: Hover actual-position flag layer, arrival with no destination, failed arrival search, paralysed state and the stop order's two destinations
-status: open
+status: answered
 related: [S-0503, S-0209, S-0212, S-0213, S-0417]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need
