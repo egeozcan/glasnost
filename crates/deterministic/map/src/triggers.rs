@@ -54,6 +54,7 @@ pub struct Action {
     pub number2: i32,
     /// The fourth to seventh items, read as integers (S-0011 I2; the
     /// local-area rectangle of code 40, S-0524 I1).
+    // spec: S-0011 I2 (the fourth to seventh items)
     pub items: [i32; 4],
     /// The waypoint slot (F5 of the eighth item), −1 when it decodes to no
     /// letter; 0 (waypoint A) when the eighth item is missing.

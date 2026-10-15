@@ -177,6 +177,7 @@ impl CellGrid {
     /// Replaces the local area (Lx, Ly, Lw, Lh), as the resize action of
     /// S-0524 claim 8 does in play. The legal cells and the dense indices
     /// depend only on W and H, so they stay.
+    // spec: S-0524 claim 8 (four items: left, top, width, height)
     pub fn set_local(&mut self, local: [i32; 4]) {
         self.footprint.local = local;
     }

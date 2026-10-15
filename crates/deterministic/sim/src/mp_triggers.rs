@@ -111,10 +111,10 @@ pub enum Coverage {
 /// 12 to 15; S-0513 claims 20 and 22).
 pub fn action_coverage(code: i32) -> Coverage {
     match code {
-        // S-0011's subset, S-0512's superweapon actions, S-0513's storm actions and S-0524's
+        // spec: S-0011 I4 (the subset), S-0512 claims 12 to 15, S-0513 claims 20 and 22, S-0524 I1
         11 | 17 | 19 | 21 | 23..=27 | 33 | 34 | 40 | 44 | 45 | 53..=57 | 63 | 66 | 73 | 90
         | 95 | 99 | 102 | 103 | 129 | 130 | 133 => Coverage::Implemented,
-        // teams, crates (S-0520), computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations
+        // spec: S-0011 claim 30 (teams, computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
         4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 113 | 135 => Coverage::Seam,
         _ => Coverage::Unknown,
     }
@@ -291,6 +291,7 @@ pub fn set_ambient(w: &mut World, value: i32) {
 /// recalculated in the visiting order, and the passability categories and
 /// the reach regions are rebuilt. The radar (`econ::minimap`) and the view
 /// read the local area from the cells, so they follow at once.
+// spec: S-0524 claim 8 (four items: left, top, width, height)
 pub fn resize_local_area(w: &mut World, items: [i32; 4]) {
     // spec: S-0524 claim 8 (left, top, width and height, as signed integers in S-0009 claim 4's units)
     w.cells.grid.set_local(items);
