@@ -364,8 +364,12 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     }
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
-        Some(Kind::Infantry | Kind::Vehicle) => true,
-        Some(Kind::Aircraft) => !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false)),
+        // spec: S-0214 Terms and S-0614 claim 8 (not held)
+        Some(Kind::Infantry | Kind::Vehicle) => !crate::parasite::held(w, id),
+        Some(Kind::Aircraft) => {
+            !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
+                && !crate::parasite::held(w, id)
+        }
         // spec: S-0214 Terms (a building: rally-capable or undeploys into a vehicle; a construction yard also needs the lobby option, which our setup lacks)
         Some(Kind::Building) => {
             let b = building(w, id);
@@ -696,7 +700,7 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
     let friend_ok = u.is_some_and(|u| {
         u.raw.attack_friendlies.unwrap_or(false)
             || u.raw.attack_cursor_on_friendlies.unwrap_or(false)
-    });
+    }) || sonic_on_parasite_carrier(w, actor, t);
     // spec: S-0214 claim 6 (a) (force-fire; or enemy or friend-attack, the disguise rule, and a legal target)
     let a = mods.force_fire || ((enemy || friend_ok) && legal_target(w, t));
     // spec: S-0214 claim 6 (b) (attackable at all: F3)
@@ -715,6 +719,17 @@ fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Mo
             || check::check(w, actor, Some(Target::Object(t)), slot, false) != Answer::Illegal
     };
     a && b && c && d && e
+}
+
+/// Whether the weapon `actor` would use has a sonic warhead and `t` is a
+/// mobile unit with a parasite on it (S-0214 claim 6, *may attack as a friend*).
+fn sonic_on_parasite_carrier(w: &World, actor: ObjectId, t: ObjectId) -> bool {
+    // spec: S-0214 claim 6 (that warhead is sonic and the target is a mobile unit with a parasite on it)
+    crate::parasite::carries_parasite(w, t) && {
+        let (_, x) = weapon::would_use(w, actor, Some(Target::Object(t)));
+        x.and_then(|wp| w.rules().combat.warhead_of(wp))
+            .is_some_and(|h| h.sonic)
+    }
 }
 
 /// The generic result g on an object (S-0214 table G).

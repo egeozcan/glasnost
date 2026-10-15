@@ -106,10 +106,11 @@ pub fn packs_up(w: &World, id: ObjectId) -> bool {
 }
 
 /// Deploy readiness of a vehicle that deploys into a building (S-0214
-/// Terms). Being disabled, inside a tunnel, carrying a parasite and mind
-/// control are other topics' states and never hold yet.
+/// Terms). Being disabled, inside a tunnel and mind control are other
+/// topics' states and never hold yet.
 fn deploy_ready(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.health > 0)
+    // spec: S-0214 Terms and S-0415 claim 2 (not when it deploys into a building while a parasite is on it, S-0614)
+    w.obj(id).is_some_and(|o| o.health > 0) && !crate::parasite::carries_parasite(w, id)
 }
 
 /// Rounded body facing (S-0415 F1).

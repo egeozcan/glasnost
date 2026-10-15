@@ -931,6 +931,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         let pos = pr.pos;
         explode(w, &mut pr, &p, pos, true);
         remove(w, id);
+        crate::parasite::carrier_ended(w, id, pr.weapon, true);
         return;
     }
     // spec: S-0306 claim 17 (a lost target object: its cell if it was not airborne, else nothing)
@@ -1225,7 +1226,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
             }
             w.projectiles.insert(id, pr);
         }
-        Some(None) => remove(w, id),
+        Some(None) => {
+            remove(w, id);
+            crate::parasite::carrier_ended(w, id, pr.weapon, false);
+        }
         Some(Some(point)) => {
             pr.pos = point;
             // spec: S-0306 T1 and claim 20 b (the passed-by row is not a reached row; it counts as arrival when the firer's type is a jumpjet type)
@@ -1247,6 +1251,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
             pr.pos = pt;
             explode(w, &mut pr, &p, pt, false);
             remove(w, id);
+            // spec: S-0614 claim 1 (when the projectile detonates, the parasite tries to latch on)
+            crate::parasite::carrier_ended(w, id, pr.weapon, true);
         }
     }
 }
@@ -1371,8 +1377,13 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let wr = rules.combat.weapon(pr.weapon).clone();
+    // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
+    let area = !rules
+        .combat
+        .warhead_of(pr.weapon)
+        .is_some_and(|h| h.parasite);
     if p.airburst {
-        let res = projectile_detonation(
+        let res = detonation_inner(
             w,
             pr.weapon,
             pr.damage,
@@ -1381,6 +1392,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
             pr.house,
             pr.pos,
             p.inviso,
+            area,
         );
         let _ = res;
         if let Some(aw) = p.airburst_weapon {
@@ -1391,7 +1403,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     // spec: S-0306 Edge cases (a cluster count of 0 or less: no detonation, no draw)
     let mut q = point;
     for _ in 0..p.cluster.max(0) {
-        projectile_detonation(
+        detonation_inner(
             w,
             pr.weapon,
             pr.damage,
@@ -1400,6 +1412,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
             pr.house,
             pr.pos,
             p.inviso,
+            area,
         );
         // spec: S-0306 claim 21 (after every detonation: R(256, 512), then one raw value for the nearby point)
         let lambda = w.rng.ranged(256, 512, half);
@@ -1479,6 +1492,26 @@ pub fn projectile_detonation(
     q: Pos,
     invisible: bool,
 ) -> DetonationResult {
+    detonation_inner(
+        w, weapon, damage, point, attacker, house, q, invisible, true,
+    )
+}
+
+/// [`projectile_detonation`], without the area damage when `area` is false
+/// (S-0303 claim 2: a parasite-flag warhead's projectile).
+#[allow(clippy::too_many_arguments)]
+// spec: S-0303 claim 21 (N(P, 32, u mod 256), the invisible-projectile animation scatter)
+fn detonation_inner(
+    w: &mut World,
+    weapon: WeaponId,
+    damage: i32,
+    point: Pos,
+    attacker: Option<ObjectId>,
+    house: Option<HouseId>,
+    q: Pos,
+    invisible: bool,
+    area: bool,
+) -> DetonationResult {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     // spec: S-0303 claim 14 and S-0302 claim 1 (a firer removed from the game by any means since the shot: neither attacker nor attacking house is carried; a loaded firer, which stays carried, is a seam: transports)
@@ -1492,17 +1525,22 @@ pub fn projectile_detonation(
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
         return DetonationResult::Missed;
     };
-    let res = area::detonate(
-        w,
-        Detonation {
-            point,
-            damage,
-            warhead: Some(h),
-            source: attacker,
-            house,
-            resources: true,
-        },
-    );
+    let res = if area {
+        area::detonate(
+            w,
+            Detonation {
+                point,
+                damage,
+                warhead: Some(h),
+                source: attacker,
+                house,
+                resources: true,
+            },
+        )
+    } else {
+        // spec: S-0303 claim 2 (no area hits for a parasite-flag warhead's projectile)
+        DetonationResult::Missed
+    };
     let wh = rules.combat.warhead(h).clone();
     let mut anim_at = point;
     if invisible {

@@ -292,6 +292,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     if !o.on_map {
         return;
     }
+    // spec: S-0614 claim 15 (a host taken off the map releases its parasite at once)
+    crate::parasite::leaving(w, id);
     crate::econ::events::leaving_map(w, id, false);
     let skip = w.rules().quirks.update_order_removal_skip;
     // spec: S-0203 claim 10 (going inside: a removal from the update order, counting during the turn pass)
@@ -299,6 +301,15 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     let q = occ_quirks(w);
     let cell = o.pos.cell();
     w.cells.leave(cell, o.layer, id);
+    if o.kind == Kind::Vehicle {
+        // A vehicle going inside (a latching parasite, S-0614 claim 1) releases its claims and its step.
+        crate::drive::release_claims(w, id);
+        if let Some(ob) = w.obj_mut(id)
+            && ob.drive.is_some()
+        {
+            ob.drive = Some(crate::drive::DriveState::new());
+        }
+    }
     if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
         w.cells.clear_infantry(wt.cell(), o.layer, id, q);
     }
@@ -328,6 +339,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
+    crate::parasite::leaving(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)

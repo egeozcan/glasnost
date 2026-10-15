@@ -292,6 +292,10 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     if o.kind == Kind::Terrain {
         return terrain_hit(w, target, hit);
     }
+    // spec: S-0315 claims 6 and 7 and S-0614 claim 12 (a hit on a host counts before it changes the host's health, stopped hits included; not inside the vehicle factory)
+    if !inside_factory(w, target) {
+        crate::parasite::host_hit(w, target, &hit);
+    }
     let rules = w.rules_arc();
     let mode = rules.mode;
     let q = rules.quirks;

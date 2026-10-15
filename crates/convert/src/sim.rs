@@ -644,8 +644,7 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         Int,
     ),
     ("warp_out", b"General", "WarpOut", Ref(Kind::Animations)),
-    // spec: S-0207 Import mapping ([General] Wake, the game-wide wake animation of claim 23)
-    ("wake", b"General", "Wake", Ref(Kind::Animations)),
+    // [General] Wake (S-0207 Import mapping, claim 23) is imported with the combat table (S-0614).
     ("chrono_out_sound", b"AudioVisual", "ChronoOutSound", Text),
     ("chrono_in_sound", b"AudioVisual", "ChronoInSound", Text),
     // spec: S-0213 Import mapping
@@ -2162,3 +2161,7 @@ mod combat_tests;
 #[cfg(test)]
 #[path = "sim_econ_tests.rs"]
 mod econ_tests;
+
+#[cfg(test)]
+#[path = "sim_parasite_tests.rs"]
+mod parasite_tests;

@@ -168,6 +168,10 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
     if w.allied(o.owner, a.owner) {
         return;
     }
+    // spec: S-0309 claim 18 and S-0614 claim 17 (X is not the parasite attached to it)
+    if crate::parasite::parasite_of(w, actor) == Some(attacker) {
+        return;
+    }
     // spec: S-0309 claim 18 (mean weapon damage above 0, and armed)
     if mean_damage(w, actor) <= 0 || !armed(w, actor) {
         return;

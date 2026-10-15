@@ -102,6 +102,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn)
     crate::combat::heal::turn(w, id);
+    // spec: S-0614 claim 18 (an attached parasite acts in its host's turn; its place within the turn is an interim rule, Q-0622)
+    crate::parasite::host_turn(w, id);
+    if w.obj(id).is_none_or(crate::combat::damage::dead) {
+        return;
+    }
     process::turn(w, id);
     if w.obj(id).is_none() {
         return;
@@ -131,9 +136,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
         .map(|u| u.locomotor);
     let rocket = w.obj(id).is_some_and(|o| o.rocket.is_some());
+    // spec: S-0614 claim 8 (a held unit does not move under the driving, ship, flying, teleporting and tunnelling locomotors; walking and rocket ignore the hold)
+    let held = crate::parasite::held(w, id);
     let moved = match loco {
         // spec: S-0506 Terms (a rocket missile moves in the rocket-flight movement mode, claims 14 to 19)
         _ if rocket => crate::rocket::tick(w, id),
+        Some(Locomotor::Drive) if held => false,
         Some(Locomotor::Drive) => {
             let moved = drive::tick(w, id);
             // spec: S-0207 claim 23 (a drive vehicle's wake; open in Q-0600: created right after its drive update)
@@ -142,14 +150,14 @@ fn object_turn(w: &mut World, id: ObjectId) {
         }
         Some(Locomotor::Walk) => walk::tick(w, id),
         // spec: S-0417 claim 5 (a tunnelling or teleporting vehicle drives temporarily for its factory exit)
-        _ if crate::econ::release::temporary_drive(w, id) => drive::tick(w, id),
+        _ if crate::econ::release::temporary_drive(w, id) => !held && drive::tick(w, id),
         // spec: S-0207 claim 20 (d) (the jump on the first movement update after L is fixed; the behaviour is processed before it)
         Some(Locomotor::Teleport) => crate::teleport::tick(w, id),
         // spec: S-0501 claims 1 to 10 (aircraft flight)
-        Some(Locomotor::Fly) => crate::air::tick(w, id),
+        Some(Locomotor::Fly) => !held && crate::air::tick(w, id),
         // A rocket-locomotor type outside the rocket-flight mode has no movement of its own (S-0506 Terms).
         // spec: S-0504 claim 1 (the ship locomotor)
-        Some(Locomotor::Ship) => crate::naval::tick(w, id),
+        Some(Locomotor::Ship) => !held && crate::naval::tick(w, id),
         _ => false,
     };
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)

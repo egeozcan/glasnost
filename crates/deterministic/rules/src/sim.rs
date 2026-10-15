@@ -483,8 +483,9 @@ pub struct General {
     /// e).
     #[serde(default)]
     pub warp_out: Option<String>,
-    /// `Wake`, the game-wide wake animation of driving wakes (S-0207 claim
-    /// 23; engine default none).
+    /// `[General] Wake`, the game-wide wake animation: driving wakes (S-0207
+    /// claim 23; engine default none) and the grappling wakes (S-0614 claim
+    /// 10; S-0312).
     #[serde(default)]
     pub wake: Option<String>,
     /// `[AudioVisual] ChronoOutSound`, the game-wide departure sound of a
@@ -652,6 +653,11 @@ pub struct General {
     /// `[General] MetallicDebris`, animation names (S-0303 F6, S-0312 F1).
     #[serde(default)]
     pub metallic_debris: Option<Vec<String>>,
+    /// `[CombatDamage] DefaultSparkSystem`, a particle-system name: the drone
+    /// delivery's spark effect (S-0614 claim 9); absent-key default not
+    /// established.
+    #[serde(default)]
+    pub default_spark_system: Option<String>,
     /// `[General] WeaponNullifyAnim` (S-0303 claim 15).
     #[serde(default)]
     pub weapon_nullify_anim: Option<String>,
@@ -1399,6 +1405,12 @@ pub struct UnitType {
     /// animation of a rocket missile (S-0506 claim 21, S-0004 claim 14).
     #[serde(default)]
     pub trailer: Option<String>,
+    /// `Parasiteable`, the can-carry-a-parasite flag (S-0614 claim 2); absent: yes.
+    #[serde(default)]
+    pub parasiteable: Option<bool>,
+    /// `ReselectIfLimboed`, the re-select flag (S-0614 claim 19); absent: no.
+    #[serde(default)]
+    pub reselect_if_limboed: Option<bool>,
 }
 
 /// Combat fields that infantry, vehicle, aircraft and building types share
@@ -2031,6 +2043,13 @@ pub struct WeaponType {
     /// `RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: no.
     #[serde(default)]
     pub reveal_on_fire: Option<bool>,
+    /// `LimboLaunch`, the launch-inside flag (S-0614 Terms); absent: no.
+    #[serde(default)]
+    pub limbo_launch: Option<bool>,
+    /// `Anim`, animation names: the per-direction delivery animation
+    /// (S-0614 claim 9); absent: empty.
+    #[serde(default)]
+    pub anim: Option<Vec<String>>,
 }
 
 /// A projectile's simulation fields.
@@ -2139,6 +2158,15 @@ pub struct WarheadType {
     /// `Sonic`.
     #[serde(default)]
     pub sonic: Option<bool>,
+    /// `Parasite`, the parasite flag (S-0614 Terms); absent: no.
+    #[serde(default)]
+    pub parasite: Option<bool>,
+    /// `Paralyzes`, the paralysis length P in ticks (S-0614 claims 6, 7); absent: 0.
+    #[serde(default)]
+    pub paralyzes: Option<i32>,
+    /// `Culling`, the cull flag (S-0614 claim 11); absent: no.
+    #[serde(default)]
+    pub culling: Option<bool>,
     /// `Fire`.
     #[serde(default)]
     pub fire: Option<bool>,
