@@ -1218,6 +1218,8 @@ fn stationary_friendly_destination_is_replaced() {
     );
     let o = w.obj(id).unwrap();
     assert_eq!(o.path.for_goal, Some(cell(5, 0)));
+    // The adopted cell becomes the unit's destination (departure D3's "replaces").
+    assert_eq!(o.dest, Some(Target::Cell(cell(5, 0))));
     assert_eq!(
         *visits(cell(0, 0), &o.path.steps).last().unwrap(),
         cell(5, 0)
@@ -1229,6 +1231,7 @@ fn stationary_friendly_destination_is_replaced() {
         Search::Found
     );
     assert_eq!(w.obj(id).unwrap().path.for_goal, Some(cell(6, 0)));
+    assert_eq!(w.obj(id).unwrap().dest, Some(Target::Cell(cell(6, 0))));
 }
 
 // spec: S-0212 claim 24 (a blocked building cell is always replaced, with no distance test; trains are never substituted)
@@ -1245,10 +1248,16 @@ fn building_destination_is_always_replaced() {
             Some(cell(5, 0)),
             "{start:?}"
         );
+        assert_eq!(
+            w.obj(id).unwrap().dest,
+            Some(Target::Cell(cell(5, 0))),
+            "{start:?}"
+        );
     }
     let (mut w, id) = substitution_scene(cell(0, 0), false, "TESTTRAIN");
     let _ = compute_to(&mut w, id, cell(6, 0), Mode::Fresh);
     assert_ne!(w.obj(id).unwrap().path.for_goal, Some(cell(5, 0)));
+    assert_eq!(w.obj(id).unwrap().dest, Some(Target::Cell(cell(6, 0))));
 }
 
 // --------------------------------------------------------- entry outcomes

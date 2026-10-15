@@ -539,7 +539,10 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             v = Some(Outcome::Clear);
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
-            if b.gate && crate::process::gate_open(w, oid) {
+            if m.contact == Some(oid) && !blocking_cell(w, oid, c) {
+                // spec: S-0209 claim 5 (row VP3: a building the vehicle is in contact with, on a cell that is not one of its blocking cells: none)
+                v = None;
+            } else if b.gate && crate::process::gate_open(w, oid) {
                 // spec: S-0209 claim 5 (row VP8: an open gate gives none; open or closed by S-0215 claim 35)
                 v = None;
             } else if b.gate && w.allied(o.owner, m.owner) {

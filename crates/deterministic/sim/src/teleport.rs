@@ -688,7 +688,12 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         crate::crush::entered_cell(w, id, new);
         // spec: S-0207 claim 22 (for a vehicle, arrival reporting to a contacted building, S-0402 claim 10, then cell-centre crushing, S-0210 claims 3 and 8, precede the entered-by raise)
         crate::econ::harvest::track_arrival(w, id);
+        // spec: S-0207 claims 20 (e) and 22 (reaching a track target in a new cell is a cell-arrival update: a tethered vehicle's clear report to its factory, S-0417 claims 7 and 8, before crushing)
+        crate::econ::release::arrival(w, id);
         crate::crush::at_cell_centre(w, id);
+    } else if o.kind == Kind::Infantry {
+        // spec: S-0207 claim 22 (the jump tick's arrival update, any object kind) and S-0417 claim 10; Q-0697 (interim: a tethered teleporting infantry unit gives its clear report on it, as S-0208 claim 23's walker does on its arrival)
+        crate::econ::release::arrival(w, id);
     }
     // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
     crate::objects::arrival_raise(w, id);

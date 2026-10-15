@@ -1930,6 +1930,13 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
                 goal = c;
             }
         }
+        // spec: S-0212 claim 24 and departure D3 (the adopted cell replaces the unit's destination cell, so arrival is judged against it)
+        if let Some(Target::Cell(d)) = o.dest
+            && d != goal
+            && let Some(ob) = w.obj_mut(id)
+        {
+            ob.dest = Some(Target::Cell(goal));
+        }
     }
     let congested = match mode {
         Mode::Fresh => BTreeSet::new(),
