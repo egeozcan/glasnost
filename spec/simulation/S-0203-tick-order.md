@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -349,6 +349,24 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    turn. Falling is not a missed turn under claim 10 here, nor a separate tick part.
    - Backing for this local ordering: `measurable` (S-0511 scenario B3, turn-order variant)
    - Confidence for this local ordering: high, as in S-0511 claim 10
+
+   **Within-turn superweapon warp.** S-0513 claim 48 owns the confirmed boundary
+   separately for vehicles, infantry and landed aircraft: a member still in its leaving
+   stage after its warp update drops target and destination and skips ordinary healing,
+   behaviour processing, movement, firing and turret turning for that turn. Its former
+   driving does not continue during the warp. The first pending turn is not automatically
+   excluded from ordinary work before entering the leaving stage. These are restrictions
+   within a turn, not a missed turn under claim 10 or a separate tick part. In particular,
+   no universal ordering of warp work after protection brightness processing is implied.
+   Exact continuation at departure, off-map retries, placement, arrival and hold expiry
+   remains unresolved for each kind under S-0513 claim 48. S-0513 claim 39's timeline
+   assumes one warp update per tick; neither it nor the one-turn constant here establishes
+   that update count or makes the warp update the whole turn through arrival.
+   - Backing for this boundary: `measurable` (S-0513 scenario SW23); exact continuation
+     and per-kind update counts remain `unmeasured` for the reasons in S-0513 claim 48
+   - Confidence for this boundary: high for the leaving-stage exclusion; low for the
+     unresolved continuation, as in S-0513 claim 48
+
    - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
      after its own turn: claim 11's backing (`unmeasured`).
    - Confidence: high
@@ -808,6 +826,12 @@ supplies the setup, procedure, observables and falsifiers: due behaviour remains
 during descent, ordinary movement and firing do not, and a protected survivor's landing
 is visible to those later checks in the same turn. This tests local ordering within a
 turn, not a shared falling phase.
+
+**Within-turn superweapon warp (claim 4).** S-0513 scenario SW23 supplies the setup,
+procedure, observables and falsifier for the leaving-stage exclusion and stopped driving,
+with vehicles, infantry and landed aircraft recorded separately. Departure, placement,
+arrival, hold-expiry continuation and the number of warp updates within a turn are
+exploratory observations there, not promised outcomes or confirmed absolute timelines.
 
 **Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
 procedure, sub-tick observables and falsifiers for same-tick aircraft access to the assigned
