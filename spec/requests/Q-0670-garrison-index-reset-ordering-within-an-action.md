@@ -1,9 +1,9 @@
 ---
 id: Q-0670
 title: Whether the garrison index reset must precede releases within an eviction or clearing action (S-0313 revision 5 against S-0308, S-0311 and S-0508)
-status: open
+status: answered
 related: [S-0313, S-0308, S-0311, S-0508]
-answered-by: []
+answered-by: [S-0313]
 ---
 
 ## Need

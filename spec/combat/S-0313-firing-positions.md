@@ -2,13 +2,13 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0601]
+requests: [Q-0601, Q-0670]
 supersedes: []
 ---
 
@@ -163,8 +163,14 @@ S-0202: R(*a*, *b*). In addition:
    laser keeps the same muzzle point and the same occupant from shot to shot. After a completed
    whole-building eviction or clearing action, the index is 0. Reoccupation therefore starts at 0.
    An additional entry does not change the index (S-0508 claim 18).
-   No ordering of the reset relative to individual releases or removals within the action is
-   required here: no observable consequence distinguishes those intermediate states.
+   Only this completed-action result is required, not a reset before the first individual
+   release or removal (Q-0670). S-0308 claim 13, S-0311 claim 15 and S-0508 claim 18 agree.
+   No reachable shot or kill credited to the building during the action is established that
+   distinguishes intermediate index values; no such intermediate reading has a specified
+   result. Evacuation's release choices and assault's occupant-animation positions do not
+   use this firing index. Assault's reversed kill credit names the individual occupant,
+   not a firing occupant selected through the building (S-0508 claims 10, 11 and 14,
+   and S-0311 claim 9). These effects therefore impose no reset-before-release requirement.
    S-0311 claim 15 describes the limited individual set-up removal case that retains the
    numeric index without reducing it modulo the remaining count. Separately, defeat or
    surrender of an occupant's own house can kill it inside a building belonging to a surviving
@@ -173,12 +179,17 @@ S-0202: R(*a*, *b*). In addition:
    without resetting it or reducing it modulo a new count; they do not imply compaction or
    renumbering of surviving occupants. The original can retain a dead occupant among its
    firing choices. Safe subsequent firing, muzzle selection and experience selection through
-   that dead choice remain unspecified pending a project-lead decision. The related drafts
-   must be aligned as listed in Cross-spec changes required below before joint sign-off.
+   that dead choice, or an out-of-range choice after individual removal, remain unspecified
+   pending a coordinated project-lead decision. Numeric-index retention alone does not
+   establish a safe continuation.
    The same index picks which occupant's weapon fires (S-0308 claim 13). A muzzle point that
    the art data does not give, or gives as (65535, 65535), is (0, 0).
    - Backing: `measurable` (scenario P5) for the cycle, completed-action reset, reoccupation,
-     additional entry and muzzle shifts. The limited set-up removal remains `unmeasured`
+     additional entry and muzzle shifts. Intermediate reset timing is `unmeasured`: no
+     validated fixture interleaves a shot or building-credited destruction within the action.
+     It is not an implementation constraint. The index-independent release and assault
+     effects inherit their cited claims' backing; P5's clearing variant checks the assault
+     distinction without inventing an interleaved shot. The limited set-up removal remains `unmeasured`
      for the fixture limitation in S-0311 claim 15: no validated data-only selective-removal
      scenario is supplied. Defeat hits and numeric-index retention are `measurable` (P5's
      defeat variant). Mixed-house selective survival is `unmeasured`: no validated fixture
@@ -348,6 +359,7 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 | `AlternateFLH` followed by 0 to 4 (art, type image) | alternate muzzle positions, also used as mind-control link anchors (S-0601 claim 17) | three integers, leptons | 0, 0, 0 |
 | `MuzzleFlash` followed by 0, 1, … (art, building image) | garrison muzzle points | two integers, pixels | (0, 0) |
 | `MaxNumberOccupants` (rules, building type) | how many garrison muzzle points are read | integer | 0 |
+| No user-data field | shared occupant/muzzle index and completed-action reset (claim 6; Q-0670) | runtime integer, not imported | initially 0; no imported intermediate-reset setting |
 | `PrimaryFirePixelOffset` (art, building image) | primary fire pixel shift | two integers, pixels | not given |
 | `PrimaryFireDualOffset` (art, building image) | dual-shift flag (claim 7) | boolean | no |
 | `TurretAnimX` (rules, section named by building type) | horizontal component of turret anchor's pixel shift (claims 8 and 10; also S-0310 claim 4) | integer, pixels | 0 |
@@ -498,6 +510,13 @@ the user, not a request to alter the game.
   inconclusive for reset; no weapon that kills occupants through the building is assumed.
 - Repeat evacuation, additional entry and clearing in three fresh games each. These observations
   test completed actions, not the index between individual releases or removals within an action.
+  In the clearing variant also record assault credit and occupant-animation positions.
+  Expected: credit names the occupants under S-0508 claim 14, not an occupant selected by
+  the building's pre-action firing index. Their animation positions are not selected by that
+  index; exact occupant-to-position correspondence is not predicted here. Credit selected
+  through the building's firing index would falsify this distinction. No shot or credited
+  destruction is artificially inserted between removals: no validated ordinary-input fixture
+  reaches such an intermediate reading (Q-0670).
 - Defeat variant: in a named `firing-index-defeat.map`, add a third isolated living contender.
   The human house enters three identifiable occupants, fires exactly once and stops at index 1.
   A timed building-only ownership trigger transfers the building to a surviving hostile house,
@@ -599,18 +618,6 @@ the user, not a request to alter the game.
   starts even though the primary weapon muzzle is unchanged.
 - Falsified if: link starts ignore the alternate triples or instead follow the primary muzzle.
 - Runs: one six-victim acquisition per art variant, at unchanged settled facings.
-
-## Cross-spec changes required
-
-These changes are required in the same hand-off with S-0508 claims 18 and 19.
-
-- S-0308 claim 13 and its occupant-index table must state the completed-action reset without
-  requiring intermediate release/removal ordering. Include S-0508 claim 19's own-house defeat
-  exception and retained numeric index, without inferred compaction or modulo repair.
-- S-0311 claim 15 and its firing-occupant term must likewise use the completed-action reset
-  without an intermediate ordering requirement. Distinguish the limited set-up removal from
-  S-0508 claim 19's defeat deaths and retained numeric index. Safe experience selection through
-  a dead firing choice needs the same project-lead decision as safe firing and muzzle selection.
 
 ## Open questions
 
