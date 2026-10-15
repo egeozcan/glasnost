@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1221,7 +1221,7 @@ undefined.
 | I15 | Vehicle thief; the target counts as a vehicle and belongs to another house (allied ones included) | capture (hijack); see the harvester-truce quirk |
 | I16 | Charge planter (the type flag, or the actor has the explosive-charges veterancy ability at its current rank); *g*₁ is attack; the target a building, not vehicle-like | sabotage if the building's type accepts charges and is not invisible in the game, else attack |
 | I17 | *g*₁ is attack, and the weapon the actor would use against the target has the demolition-cursor flag | select if the target is a vehicle held inside a tank bunker, else demolish |
-| I18 | *g*₁ is attack, and that weapon has the air-strike-cursor flag | airstrike if the target is a building that accepts charges and is not invisible in the game, else attack |
+| I18 | *g*₁ is attack, and that weapon has the air-strike-cursor flag | airstrike if the target is a building that accepts charges and is not invisible in the game, else attack; the flag affects only the cursor, not the designation effect (S-0519 claim 16) |
 | I19 | Bomb planter; *g*₁ is attack | bomb if the target's type accepts bombs and it carries none, else no-bomb |
 | I20 | An in-place deployer in its deployed state; *g*₁ is move | no-move |
 | I21 | An in-place deployer in its deployed state; *g*₁ is attack; its type does not fire while deployed, or the target is out of range of its first weapon | no-move |
@@ -1500,7 +1500,7 @@ Part 2, infantry, vehicles and aircraft:
 | area guard (cell) | area guard | cell | nothing | movable, and armed or of an engineer type |
 | patrol | patrol | nothing | a nearby cell found by the search of claim 11 | — |
 | deploy, area attack | unload | nothing | nothing | — |
-| bomb, demolish, airstrike | attack | object | nothing | able to fire |
+| bomb, demolish, airstrike | attack (airstrike designation effects: S-0519 claims 16 to 21) | object | nothing | able to fire |
 | harvest | harvest | nothing | cell | — |
 | enter tunnel | move | nothing | the cell next to the tunnel entrance on its open side (low) | — |
 | idle | guard, or area guard if the actor's first weapon heals | the actor itself | nothing | — |
@@ -2668,11 +2668,6 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   not evidence that all object clicks create markers.
 
 ## Open questions
-
-- Row I18 and table M own only the airstrike cursor and its attack order, not the
-  subsequent designation effect or aircraft call-in. No current spec owns those effects.
-  Lead assignment is needed before a claim-level effects pointer can be supplied.
-  S-0519 is the proposed owner for the designation effect.
 
 - Q-0278 is answered by claims 18–20, with the remaining explicitly unmeasured qualification
   of state-specific transient box points (claim 19, T14 part B). Claims 24 and 25 answer
