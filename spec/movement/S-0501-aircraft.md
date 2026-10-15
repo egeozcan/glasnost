@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653]
 supersedes: []
 ---
 
@@ -31,6 +31,9 @@ Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rul
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
 and preparing non-missile aircraft alone do not impose it (claim 35 here).
+
+Unless an alternative is explicitly stated, the behaviour and oracle scenarios below use every
+quirk switch in its default, original-behaviour state.
 
 This spec covers skirmish; network games and campaigns are out of scope. Player houses controlled
 by our AI use the human-controlled rules below. Computer-only behaviour described here records
@@ -80,6 +83,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   invisible.
 - **speed fraction**: a floating-point value from 0 to 1 that multiplies the aircraft's speed.
   The locomotor holds a current and a target value.
+- **halving zone**: for an aircraft with positive slowdown distance *S*, the post-step
+  distances *d* to its destination point with *d* < 86 leptons and *d* < *S* / 10, where
+  ordinary slowing halves its fraction (claim 5, F4).
 - **unfinished flight**: movement accepted but not yet completed by settling at a landing
   destination (claim 40); this is distinct from a nonzero speed fraction.
 - **attack run**: one approach to a target ending in one or more firing passes and one round of
@@ -137,6 +143,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    and *f* its current speed fraction. The displacement is split into x and y with the table trigonometry of S-0105 (F1),
    and each new coordinate is truncated toward zero (Formula F3). Ordinary forward motion
    follows its body facing; the table and coordinate truncations determine the exact step.
+   No fraction of a lepton is kept from one step to the next. Because map positions are
+   positive, each coordinate moves by its component rounded down, so a one-lepton step whose
+   body facing lies between east and south (both components positive and below one; F3's
+   table gives the exact facings, 16391 to 32766) leaves the aircraft where it is (`quirks.aircraft_unit_step_stall`). A step of two or more
+   leptons always changes at least one coordinate.
    A living descending aircraft with a destination additionally moves 5 leptons toward the
    centre of its destination cell in the same tick, except during *enter* toward a helipad
    building. This extra displacement follows the forward step and ordinary height reduction.
@@ -174,24 +185,47 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    cruise height. At the end of every living movement tick the current fraction moves toward
    *τ* by at most 0.1.
 
-   **Order within one movement tick (Q-0651).** The forward step of claim 4 comes first and
-   uses the current fraction left by the previous movement tick. The distance *d* is then
-   measured from the position after that step. The fraction calculation and the 0.1 adjustment
-   follow, and their result moves the aircraft only in the next movement tick. Because *τ* = 0
-   whenever the creep restart applies, the 0.1 adjustment in the same tick always brings the
-   restarted fraction back to 0: the creep restart never moves an aircraft, and an
-   implementation that omits it behaves identically.
+   **Observable consequences within one movement tick (Q-0651).** The position change in a tick
+   is determined by the current fraction retained from the preceding movement tick. The distance
+   *d* used for the fraction calculation is the distance from the position resulting from that
+   change. The fraction retained at the end of the tick affects movement only in the following
+   tick. When the creep-restart conditions hold, the end-of-tick fraction is 0; accordingly, the
+   restart does not change any position, and omitting it produces the same observable behaviour.
 
-   **Consequence: ordinary slowing ends at fraction 0 short of the point.** Without the
-   fixed-full-speed case below, and with *S* > 0, an aircraft whose converted speed *V* is at least 10 slows
-   until, after some step, *d* < 86 and *d* < *S* / 10. From then on each tick halves its
-   fraction and lowers it by 0.1, so it reaches exactly 0 within a few ticks, normally in one,
-   and stays there while the destination point is unchanged: it hovers that far short of the
-   point and makes no further forward progress. The stopping distance is therefore normally
-   below min(86, *S* / 10) leptons and not necessarily below 16. With a small *S* the aircraft
-   can instead come within 16 leptons while its fraction is still positive. With *V* < 10 the
-   step ⌊*V* × *f*⌋ can become 0 while *f* is still at least 0.1, before that zone is reached; the
-   aircraft then hovers with a positive fraction indefinitely (Edge cases).
+   **Consequence: where ordinary slowing ends.** Without the fixed-full-speed case below, and
+   with *S* > 0, the halving zone (Terms) is where *d* < 86 and *d* < *S* / 10. A fraction calculated outside that zone is never below 0.1, so the next
+   forward step is at least ⌊*V* / 10⌋ leptons, *V* the converted speed.
+   - With *V* ≥ 20 every step taken outside the zone is at least 2 leptons and the aircraft
+     advances at every heading until, after some step, it is in the zone. From then on each
+     tick halves its fraction and lowers it by 0.1, so it reaches exactly 0 within a few ticks,
+     normally in one, and stays there while the destination point is unchanged: it hovers that
+     far short of the point and makes no further forward progress. The stopping distance is
+     therefore normally below min(86, *S* / 10) leptons and not necessarily below 16.
+   - With 10 ≤ *V* < 20 the step is exactly 1 lepton at every post-step distance outside
+     the zone with *d* < 2*S* / *V*, once the fraction has settled on its target
+     max(0.1, *d* / *S*). Such distances not below 16 leptons exist when
+     2*S* / *V* > max(16, min(86, *S* / 10)). If, in any tick with such a 1-lepton step, the
+     body facing is one of F3's facings 16391 to 32766 (between east and south), that step
+     changes neither coordinate (claim 4, F3). Then *d*, *f* and the facing stay as they are
+     and the aircraft hovers there with a positive fraction indefinitely while the
+     destination point is unchanged (`quirks.aircraft_unit_step_stall`). At other facings the
+     1-lepton steps move it on, and it stops at fraction 0 in the zone as for *V* ≥ 20.
+     Inside the zone a motionless step changes nothing, because halving and the zero target
+     do not depend on progress. The facing is the quantised direction to the point (S-0204
+     claim 8), so the outcome follows from the exact positions. For example, with *V* = 12 and
+     *S* = 1000, an approach from the west 11 leptons north of the point's row hovers at
+     *d* = 166 with fraction 0.166. Starting 11 leptons south of that row, the aircraft drifts
+     north while its steps are longer, until the direction becomes exactly east; its 1-lepton
+     steps then go east and the fraction reaches 0 at about 85 leptons. From the north, 11 leptons
+     to either side of the point's column, it hovers as well: from the east side the drift ends
+     1 lepton east of the column, where the quantised direction lies just east of south.
+     The landing triggers of claim 6 need a zero target fraction or a current fraction below
+     0.05, so the same hover also stops a *move* or a return to a pad short of landing.
+   - With *V* < 10 the step ⌊*V* × *f*⌋ can become 0 while *f* is still at least 0.1, before
+     the zone is reached; the aircraft then hovers with a positive fraction indefinitely at
+     every heading (Edge cases).
+   - With a small *S* the aircraft can instead come within 16 leptons while its fraction is
+     still positive, before either kind of hover.
 
    **Approach target replacement.** After the adjustment, a living aircraft flying toward a
    destination, neither landing nor taking off, can get a replacement target fraction. With
@@ -204,8 +238,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    adjustment only in a later tick in which the ordinary calculation is skipped and nothing
    else has set the target, such as a take-off restarted below half its cruise height by a
    refused touchdown (claim 7). Landing and take-off set their own targets (claims 7 and 8).
-   - Backing: `measurable` for resulting fractions, the stopping distance and the ineffective
-     replacement (AC3 and AC24). The clamp's exact placement among the ordinary halving,
+   - Backing: `measurable` for resulting fractions, the stopping distance, the 1-lepton
+     hover and the ineffective replacement (AC3 and AC24). The clamp's exact placement among the ordinary halving,
      creep and adjustment is `unmeasured`: with integer distance and fractions in 0 … 1, it
      changes only the zero-distance case, where several alternative intermediate orders give
      the same final zero fraction.
@@ -213,8 +247,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    and while it holds its height (claim 6) and either its type has the fly-by flag or it is a
    strafer or fighter (claim 11) with ammunition left. This fixed-full-speed case does not apply
    the halving, distance clamp or creep restart; while it applies the fraction does not fall to 0.
-   - Confidence: high (formula, constants, order within the tick and the stopping
-     consequence); medium (the full-speed conditions and the skipped-calculation cases of the
+   - Confidence: high (formula, constants, order within the tick, the stopping consequence
+     and the 1-lepton hover); medium (the full-speed conditions and the skipped-calculation cases of the
      replacement)
 
 6. **Holding height and the landing trigger.** An aircraft is marked as holding height while
@@ -803,7 +837,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     nevertheless report stopped above terrain. T1's ordinary-attacker approach uses the other
     test: it moves to *firing* when the current speed fraction is exactly 0, whether or not the
     flight is unfinished (claim 42). A positive fraction whose forward step truncates to 0 does
-    not count as stopped there.
+    not count as stopped there under the default of `quirks.aircraft_zero_step_attack_stall`.
+    Claim 42 gives its attack-only alternative.
     - Backing: `measurable` (scenarios AC23 and AC24)
     - Confidence: high for destination selection, draws and the stopped test; medium for
       unusual object heading-point cases inherited from S-0506 claim 14
@@ -865,13 +900,12 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       own-cell no-result destination and its discard. Candidate choice inherits S-0212 claim
       25a's confidence. Medium for the resulting flight path while the placeholder repeats
 
-42. **Close approach and guidance facings (Q-0651).** In each update of an aircraft, the
-    processing of its behaviour (when due) comes before its movement tick, and the movement
-    tick (claims 4 and 5) comes before the guidance described here. So T1's test of the
-    current speed fraction reads the value left by the previous movement tick, and the
-    guidance requests are the last facing requests made in the update. A facing turns toward
-    the last direction requested in a tick (S-0206 claim 1); an earlier request in the same
-    tick that is replaced has no lasting effect.
+42. **Close approach and guidance facings (Q-0651).**
+
+    **Observable update consequences.** T1's test of the current speed fraction uses the value
+    retained from the preceding movement tick. The facing after an update reflects the last
+    direction requested during that update (S-0206 claim 1); an earlier request replaced during the
+    same update has no lasting effect. The guidance rules below determine that final request.
 
     **Guidance.** After each movement tick of a living aircraft that has a flight point, is
     neither landing nor taking off, and is above the terrain:
@@ -897,10 +931,12 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       its aiming facing; between 512 and 256 leptons guidance turns that facing back toward the
       spot in the same update, and below 256 leptons guidance also aims it at the target. Its
       direction of travel never turns toward the target.
-    - With positive slowdown distance it slows to a fraction of exactly 0 short of the spot
-      (claim 5) and keeps no minimum
-      speed. At the next processing of *approaching* it moves to *firing* where it hovers,
-      keeping its destination. If it first comes within 16 leptons with a positive fraction,
+    - With positive slowdown distance and converted speed at least 20 it slows to a fraction
+      of exactly 0 short of the spot (claim 5) and keeps no minimum speed. With converted
+      speed from 10 to 19 it does the same, except that it hovers with a positive fraction
+      when its 1-lepton step arrives while its body facing is between east and south
+      (claim 5, F3's facings 16391 to 32766). Only the zero-fraction hover moves to *firing*
+      at the next processing of *approaching*, keeping its destination. If it first comes within 16 leptons with a positive fraction,
       the distance row applies instead and it then stops the same way.
     - In *firing*, its request to turn the body toward the target is replaced in the same
       update by guidance's request toward the spot point, so the body stays pointed at the
@@ -908,14 +944,24 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       facing test (claim 19) uses the aiming facing, so it fires from where it hovers once
       that facing is within 2048 facing units of the target and the other firing conditions
       hold. A refusal is handled by T1 as usual.
-    - With converted speed below 10 it can hover with a positive fraction and never reach
-      *firing* (Edge cases).
-    These ordinary slowing consequences assume *S* > 0, as in AC24.
+    - In either positive-fraction hover (converted speed below 10 at any heading, or from 10
+      to 19 between east and south) it never reaches *firing* and fires no shot, unless it
+      first came within 16 leptons. The zero-lepton-step case is controlled by
+      `quirks.aircraft_zero_step_attack_stall`; the one-lepton-step case by
+      `quirks.aircraft_unit_step_stall` (Edge cases).
+    These ordinary slowing consequences assume *S* > 0 and both switches on, as in AC24.
+    With `quirks.aircraft_zero_step_attack_stall` off, an ordinary attacker also moves from
+    *approaching* to *firing* when its positive current fraction gives F3 step length 0
+    leptons. This does not change its fractions, position, guidance or *move* completion.
+    A step length of 1 lepton that changes neither coordinate does not meet this additional
+    test and remains governed by the other switch.
     - Backing: `measurable` (scenario AC24), except the strafer's 8192-unit exception:
       `unmeasured`, because AC24's ordinary aircraft cannot exercise it and no isolated
       strafer setup is supplied here
+      The zero-step switch-off rule is `unmeasured`: it is a proposed design alternative for
+      our engine, not an observable outcome of the original.
     - Confidence: high for the order within an update, the zero-fraction test, the facings
-      requested and the retained flight point; medium for the strafer's 8192-unit exception
+      requested, the retained flight point and the stated design alternative; medium for the strafer's 8192-unit exception
 
 ## Formulas
 
@@ -937,7 +983,28 @@ division truncated toward zero.
 > point and truncated toward zero once. Facing 16384 moves along +x, facing 0 along −y, both by
 > exactly *s*. Because map positions are positive, the truncation of the sum acts as rounding the
 > step down, so a step with a negative component can be one lepton longer in that axis than a
-> step with the same positive component.
+> step with the same positive component. The new coordinates are integers and no fractional
+> remainder is carried into the next step. With *s* = 1 this gives, by body facing *F* (with
+> S-0105's table values):
+>
+> | *F* | Change (x, y) |
+> |---|---|
+> | 0 to 16379 | (0, −1) |
+> | 16380 to 16386 | (+1, 0) |
+> | 16387 to 16390 | (0, −1), the table's negative-angle bias giving a positive sine |
+> | 16391 to 32766, between east and south | (0, 0): no motion (`quirks.aircraft_unit_step_stall`) |
+> | 32767 to 32772 | (0, +1) |
+> | 32773 to 49155 | (−1, 0) |
+> | 49156 to 65531 | (−1, −1) |
+> | 65532 to 65535 | (0, −1) |
+>
+> So between north and east a 1-lepton step moves one lepton north, between south and west
+> one lepton west, and between west and north one lepton on each axis. For *s* ≥ 2 at least
+> one coordinate always changes. With `quirks.aircraft_unit_step_stall` off, a forward step
+> with *s* ≥ 1 that would change neither coordinate instead moves 1 lepton along the axis
+> whose component has the larger magnitude, in that component's direction, taking x on equal
+> magnitudes. The descent nudge and the off-map fallback (claim 4) use F3's trigonometry with
+> lengths 5 and 64 and are not affected by the switch.
 
 > **F4 Speed fraction.** This formula gives ordinary destination-dependent slowing under
 > claim 5, not its fixed-full-speed exception. Let *f*₀ be the current fraction before slowing,
@@ -961,7 +1028,10 @@ division truncated toward zero.
 > the outcome. Claim 5's subsequent approach replacement does not recalculate this adjusted
 > fraction, and the next tick's calculation of *τ* replaces it before that tick's adjustment.
 > All fractions and their arithmetic use double precision with S-0205 claim 5's rounding
-> mode; there is no integer conversion of a fraction.
+> mode; there is no integer conversion of a fraction. An adjusted fraction calculated with
+> *τ* ≥ 0.1 is itself at least 0.1, so a step taken after it is at least ⌊*V* / 10⌋ leptons.
+> F4 itself never refers to the heading, and the heading-dependent hover of claim 5 comes
+> only from F3's truncation of each coordinate.
 
 > **F5 Crash contribution.** The fall counter starts at zero. On each crashing tick, increase it by 1 for a dead aircraft or by 3 for a living aircraft. The downward height contribution on that tick equals the updated counter: *h*₁ = *h* − *k*. Integer, leptons. Impact is tested against *h*₁ before any ordinary altitude adjustment. Without impact and with ordinary movement active, claims 2 and 3 give the remaining altitude change, using *h*₁ as their input height.
 
@@ -1080,7 +1150,7 @@ which decide the direction of travel.
 | *choosing* | no target or no ammunition | *done*; standard delay |
 | *approaching* | pending round spent, run lock off; no target or no ammunition | *done*; standard delay |
 | *approaching* | strafer, target at or beyond weapon range | keep flying at the destination (row "steer") |
-| *approaching* | strafer, target within range; or fighter; or other aircraft whose current speed fraction is exactly 0 (claim 42) | *firing*, the destination kept; 1 tick |
+| *approaching* | strafer, target within range; or fighter; or other aircraft whose current speed fraction is exactly 0 (claim 42; its zero-step switch-off alternative also applies here) | *firing*, the destination kept; 1 tick |
 | *approaching* (steer) | no destination | *choosing* |
 | *approaching* (steer) | distance to destination ≥ 512 | request the aiming facing toward the destination; 1 tick |
 | *approaching* (steer) | distance < 512 | request the aiming facing toward the target (the body is not turned); if distance ≥ 16, 1 tick; else the destination is cleared, the flight point kept, and *firing*; 1 tick |
@@ -1192,10 +1262,29 @@ attacking in that same pass; it does not require either neighbour to have been r
   Off: treat the failed own-cell search as no successful building choice and continue with the
   other-object fallback, in which the chosen building counts like any other own-house object,
   and finally the aircraft's own cell.
-- **Slow ordinary attacker never fires.** With converted speed below 10, an ordinary attacker
-  (claim 42) can come to rest with a positive speed fraction whose forward step truncates to 0,
-  more than 16 leptons from its firing spot; it then never reaches *firing*. This follows from
-  claims 4, 5 and T1 without a separate rule, so it has no switch.
+- **Slow ordinary attacker never fires** (`quirks.aircraft_zero_step_attack_stall`, default
+  on = original). With converted speed below 10, an ordinary attacker (claim 42) can hover
+  with a positive speed fraction whose forward step truncates to 0 leptons, at least 16
+  leptons from its firing spot; it then never reaches *firing*. Off: in *approaching*, a
+  positive current fraction with F3 step length 0 leptons also permits transition to
+  *firing*, retaining the destination and using the same 1-tick delay as the zero-fraction
+  transition. The firing checks still apply. No movement or slowing formula changes, and
+  *move* and pad landing keep their existing completion rules. This is independent of the
+  one-lepton coordinate-stall switch below: a length-1 step is not a length-0 step, even
+  when both coordinates stay unchanged. The off alternative is a proposed design rule,
+  not an oracle measurement.
+- **One-lepton step between east and south** (`quirks.aircraft_unit_step_stall`, default on =
+  original). A forward step of exactly 1 lepton at a body facing between east and south (F3's
+  facings 16391 to 32766) changes neither coordinate, because each coordinate is truncated and
+  no remainder is kept. An ordinary attacker with converted speed from 10 to 19 whose step
+  falls to 1 lepton outside claim 5's halving zone at such a facing hovers there with a
+  positive fraction and never fires (claims 5 and 42); the same approach from another
+  direction stops at fraction 0 and fires. Any aircraft approaching a destination under
+  ordinary slowing hovers the same way, so a *move* or a return to a pad can stop short of
+  landing (claim 6). Off: a forward step of at least 1 lepton that would
+  change neither coordinate moves 1 lepton along the axis of its larger component, in that
+  component's direction, x on equal magnitudes (F3); every other step is unchanged. This
+  alternative is a design rule, not an oracle measurement.
 - **Damage smoke consumes game-state randomness** (`quirks.aircraft_smoke_scenario_draw`,
   default on = original). Claim 37's damage-smoke chance uses the scenario stream, including
   updates that show no smoke. This can change later game-state random outcomes, so it is not
@@ -1652,7 +1741,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
     that part. Own-cell 1 × 1 replacement instead uses reference-distance choice; compare
     equal-distance candidates at different search ticks to distinguish its stable collection
     tie from the no-reference searches' tick-modulo choice. No search takes a random draw.
-- **AC24 Ordinary attacker close approach (claims 5, 40 and 42; Q-0651).** Named test map
+- **AC24 Ordinary attacker close approach (claims 4, 5, 40 and 42; Q-0651, Q-0653).** Named test map
   `aircraft-close-approach`: a test-map override gives a landable, non-pad-bound aircraft type an
   ordinary attack: a primary weapon whose projectile has a turn rate above 1 and is visible,
   no fighter or fly-by flag, several rounds. One durable stationary enemy vehicle stands in open
@@ -1661,16 +1750,39 @@ listed in Open questions are not claimed confirmed by these scenarios.
   current and target fractions, distance to the destination point, behaviour stage, destination
   and flight point, and shot events. Run three type variants: (a) speed field and slowdown
   distance chosen so the converted speed is about 35 and *S* = 500; (b) converted speed about
-  12 with *S* = 1000; (c) converted speed about 35 with *S* = 100. Expected:
+  12 with *S* = 1000; (c) converted speed about 35 with *S* = 100. Variant (b) is flown from
+  several starts about 20 cells from the flight point along one axis and 11 leptons off its
+  row or column, measured from the logged flight point (Q-0653): (b1) from the west, north of
+  the point's row; (b2) from the west, south of the row; (b3) from the north, west of the
+  point's column; (b4) from the north, east of the column; (b5) from the east and (b6) from
+  the south, on either side. If the firing spot does not let these starts be set exactly,
+  record the actual side distances and compare with claim 5 and F3 computed from the logged
+  positions and facings. Expected:
   - in each tick the forward step equals ⌊*V* × *f*⌋ for the fraction logged at the end of the
     previous tick, and the distance used for slowing is the post-step distance.
   - a logged target replacement (0, 0.5 or 0.75) never survives into the next tick's
     adjustment: the next adjusted fraction follows F4 from min(1, *d* / *S*).
   - no tick shows fraction 0.05 at its end, and once the fraction is 0 the position stops changing.
-  - (a) and (b): the fraction reaches 0 at a post-step distance below min(86, *S* / 10) and
-    above 16 leptons (about 48 leptons in variant a and about 80 to 85 in variant b), the run moves to *firing*
-    at the next processing with the destination still set, and the first shot leaves from that
-    hovering position.
+  - (a), (b2), (b5) and (b6): the fraction reaches 0 at a post-step distance below
+    min(86, *S* / 10) and above 16 leptons (about 48 leptons in variant a and about 80 to 85
+    in the (b) runs), the run moves to *firing* at the next processing with the destination
+    still set, and the first shot leaves from that hovering position. In (b2) the aircraft
+    drifts north while its steps are several leptons long, stops drifting about 2 leptons south
+    of the row when its body facing becomes exactly east (16383), and its 1-lepton steps then
+    go east.
+  - (b1), (b3) and (b4): once the forward step falls to 1 lepton (post-step distance about
+    166, the first *d* with ⌊*V* × *d* / *S*⌋ = 1), the position stops changing with the
+    fraction positive (about 0.166) and steady and the distance and body facing constant, the
+    facing lying in 16391 to 32766 (about 16892 in b1, about 32076 in b3 and 32766 in b4,
+    where the westward drift has ended 1 lepton east of the column). The run never reaches
+    *firing* and fires no shot within 2000 ticks. A run that keeps advancing one lepton per
+    tick and fires falsifies the truncation of each coordinate without remainder (claim 4,
+    F3); a hover in (b2), (b5) or (b6) falsifies F3's per-facing table or the direction
+    quantisation of S-0204 claim 8. In (b1) the side distance stays 11 leptons, because the
+    southward component of each step truncates away. A (b1) run at most 2 leptons off the row
+    flies exactly east through the 1-lepton distances and does not stall; at 3 or 4 leptons it
+    hovers nearer, at about 122 or 163 leptons. Check the logged side distance before reading
+    an advancing run as a falsification.
   - (c): the aircraft comes within 16 leptons with a positive fraction, the destination is
     cleared, the flight point remains and the fraction then falls to 0.
   - in every variant the body facing keeps pointing at the firing spot point and never turns to
@@ -1679,11 +1791,21 @@ listed in Open questions are not claimed confirmed by these scenarios.
 
   An implementation that turns the direction of travel toward the target at 512 leptons and
   reaches *firing* only below 16 leptons or with no unfinished flight fails this scenario:
-  variants (a) and (b) then never fire. A hover with fraction 0 that is not
+  the zero-fraction-hover variants (a), (b2), (b5) and (b6) then never fire. A hover with fraction 0 that is not
   followed by *firing* at the next processing falsifies the zero-fraction test, and a body
   turning to the target before the first shot falsifies the guidance rule. A fourth variant
   (d) with converted speed 7 (raw speed field 3) and *S* = 500 should hover with a positive
-  fraction and fire no shot within 2000 ticks (Edge cases).
+  fraction and F3 step length 0 leptons at a distance of at least 16 leptons, and fire no shot
+  within 2000 ticks. Fly (d) from each map-axis direction and record its first zero-step
+  approach processing. A transition to *firing* or a shot while the fraction remains positive,
+  the step length is 0 and the distance is at least 16 falsifies the default zero-step stall
+  rule. Failure to reach those conditions is a coverage gap.
+  Separately replay (d) on our engine with `quirks.aircraft_zero_step_attack_stall` off:
+  expect *firing* at the first approach processing with step length 0, followed by its
+  ordinary 1-tick delay and firing checks, with no change to F3 or F4. A retained
+  *approaching* state under those conditions fails the design rule. Repeat a length-1
+  coordinate-stall variant with only this switch off: it must remain *approaching*.
+  These switch-off checks test our engine only, not the original.
 - **AC25 Own-cell landing search with no result (claim 41, F8; Q-0650).** Named test map
   `aircraft-no-own-cell`: a house owns one building of the aircraft type's first dock type and
   no free pad. 1 to 3 cells from that building (weighted distance below 256 leptons) lies a
@@ -1730,3 +1852,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
 13. Q-0650 is answered by claim 41 and F8: the placeholder destination at map cell (0, 0) and its
     discard. The net flight path while the placeholder repeats has medium confidence; AC25
     measures it.
+14. Q-0653 is answered by claims 4, 5 and 42, F3 and Edge cases. (1) The original hovers: it
+    truncates each new coordinate and keeps no remainder, so a 1-lepton step between east and
+    south does not move the aircraft (`quirks.aircraft_unit_step_stall`). (2) Nothing in the
+    step or the slowing differs from F3 and F4; F3 now gives the per-facing result of a
+    1-lepton step. (3) Claim 5 now states the condition: converted speed from 10 to 19,
+    2*S* / *V* > max(16, min(86, *S* / 10)), and a body facing in 16391 to 32766 during a
+    1-lepton step outside the halving zone; converted speed of at least 20 never takes such a
+    step. AC24's (b1) to (b6) measure it.

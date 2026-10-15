@@ -1,9 +1,9 @@
 ---
 id: Q-0653
 title: Whether an aircraft's one-lepton forward step moves it when its heading is just off an axis
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
