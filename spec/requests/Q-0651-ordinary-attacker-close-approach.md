@@ -29,10 +29,10 @@ for it either. Also, once it turns toward the target below 512 leptons, its head
 points at the spot, so motion at that heading misses it. In a sweep over speed and turn rate,
 only a few combinations reached 16 leptons, and inconsistently.
 
-The stall also shows in our AI skirmish tests, which use a synthetic plane type: no
-plane ever fires (`flies_aircraft_from_pads`), and AI-against-AI games no longer end within the
-test limit (`plays_to_the_last_side`, `plays_to_a_winner`). All three passed before revision 7
-was built.
+Built literally, the stall also shows in our AI skirmish tests, which use a synthetic plane
+type: no plane ever fires (`flies_aircraft_from_pads`), and AI-against-AI games no longer end
+within the test limit (`plays_to_the_last_side`, `plays_to_a_winner`). All three passed
+before revision 7 was built, and pass again with the interim rule below.
 
 `air::behaviour_turn` (attack) and `air::tick` (F4) must decide this.
 
@@ -59,9 +59,17 @@ of travel in that time. Repeat with two or three different speeds and turn rates
 
 ## Current workaround
 
-`glasnost_sim::air` follows revision 7 literally, so an ordinary attacker stalls (checked by
-`claim_40_attacker_hovers_short_of_its_spot` in `crates/deterministic/sim/tests/claims_s0501.rs`).
-The end-to-end attack tests use a test-only harness, `carry`, which moves an approaching
-attacker that is between 16 and 512 leptons from its spot onto the spot, hovering and facing the
-target, so that the later stages (firing, ammunition, return, landing, rearming) can be tested.
-Nothing in the simulation itself carries the aircraft. Recorded in docs/development.md.
+An interim rule in `glasnost_sim::air`, marked `interim: Q-0651`, keeps the close approach an
+ordinary attacker had before revision 7 (when its firing spot was the target itself), and
+everything else follows revision 7:
+
+- For T1's row "another aircraft whose locomotor has stopped: firing", it also counts as
+  stopped when it hovers at current fraction 0 at its held height, or stands on the ground, and
+  is not taking off.
+- Below 512 leptons it keeps flying toward its firing spot, and turns toward the target only
+  once hovering.
+- While it hovers and the firing check answers *not facing*, it stays approaching and turns in
+  place toward the target.
+
+`q0651_ordinary_attacker_reaches_its_spot_and_fires` in
+`crates/deterministic/sim/tests/claims_s0501.rs` checks this. Recorded in docs/development.md.

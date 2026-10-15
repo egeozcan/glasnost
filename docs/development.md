@@ -391,7 +391,7 @@ Provisional rules of M6a (aircraft), each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `air::landing_spot` | below 256 leptons, when the 1 × 1 search near the aircraft's own cell finds nothing, the spot near the chosen building | Q-0650 |
-| `air` (attack, approaching) | built literally, an ordinary attacker slows to fraction 0 short of T1's 16 leptons and never fires; the end-to-end tests use the test-only `carry` harness in `claims_s0501.rs`, which puts an approaching attacker on its spot, hovering and facing the target. Because of the stall the AI release tests `flies_aircraft_from_pads`, `plays_to_the_last_side` and `plays_to_a_winner` fail | Q-0651 |
+| `air` (attack, approaching; `air::hovering_still`, the heading in `air::tick`) | built literally, an ordinary attacker (neither strafer nor fighter) slows to fraction 0 short of T1's 16 leptons and never fires. Meanwhile, as before revision 7: for T1's "locomotor has stopped" row it also counts as stopped when hovering at fraction 0 at its held height (or on the ground); below 512 leptons it keeps flying toward its firing spot and turns toward the target only once hovering; while hovering and the firing check answers not facing it stays approaching and turns in place. Everything else follows revision 7 | Q-0651 |
 
 ## Own AI (M5b)
 
