@@ -1,9 +1,9 @@
 ---
 id: Q-0763
 title: Order of starting-building restoration and which cell must hold the building
-status: open
+status: answered
 related: [S-0524]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need

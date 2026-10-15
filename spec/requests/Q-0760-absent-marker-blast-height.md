@@ -1,9 +1,9 @@
 ---
 id: Q-0760
 title: Height of a demolition blast or light flash at an absent waypoint marker
-status: open
+status: answered
 related: [S-0524, S-0011]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need

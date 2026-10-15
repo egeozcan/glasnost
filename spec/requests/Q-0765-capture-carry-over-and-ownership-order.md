@@ -1,9 +1,9 @@
 ---
 id: Q-0765
 title: Order of tag carry-over and ownership change in an engineer capture
-status: open
+status: answered
 related: [S-0524, S-0509, S-0011]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need

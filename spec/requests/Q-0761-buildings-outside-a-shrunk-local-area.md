@@ -1,9 +1,9 @@
 ---
 id: Q-0761
 title: Buildings left outside the local area after a code-40 shrink
-status: open
+status: answered
 related: [S-0524, S-0009]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need

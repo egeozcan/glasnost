@@ -1,9 +1,9 @@
 ---
 id: Q-0764
 title: State of a restored starting building, and where displaced units go
-status: open
+status: answered
 related: [S-0524, S-0212, S-0406]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0762
 title: Entered-by raises for transports, repair pads and other building entries
-status: open
+status: answered
 related: [S-0524, S-0011, S-0509, S-0510]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need
