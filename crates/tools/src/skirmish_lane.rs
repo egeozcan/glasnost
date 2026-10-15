@@ -26,7 +26,7 @@ use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::econ::tech;
 use glasnost_sim::load::new_game;
-use glasnost_sim::rules::SimRules;
+use glasnost_sim::rules::{Kind, SimRules};
 use glasnost_sim::save;
 use glasnost_sim::world::{HouseId, World};
 
@@ -98,6 +98,8 @@ struct Game {
     /// Shots and kills of the game (S-0301, S-0312).
     shots: usize,
     killed: usize,
+    /// The distinct objects that showed each M6 feature (see [`features`]).
+    features: BTreeMap<&'static str, BTreeSet<u32>>,
     replay_ms: u128,
     replay_matches: bool,
     save_matches: bool,
@@ -341,6 +343,7 @@ fn play(
     let paid = &mut g.paid;
     let income = &mut g.income;
     let harvest_ticks = &mut g.harvest_ticks;
+    let feats = &mut g.features;
     let (mut shots, mut killed, mut drained) = (0usize, 0usize, 0usize);
     let first = &mut g.first;
     let t = Instant::now();
@@ -356,6 +359,7 @@ fn play(
                 }
             }
             drained = w.effects.len();
+            features(w, feats);
             for h in 0..PLAYERS {
                 watch(w, h, &mut seen[h], &mut first[h]);
                 let c = w.houses[h].credits;
@@ -440,6 +444,7 @@ fn play_ai(
             }
         }
         drained = w.effects.len();
+        features(w, &mut g.features);
         if w.tick == EARLY {
             for h in 0..PLAYERS {
                 g.early[h] = offer(w, h);
@@ -541,6 +546,54 @@ fn play_ai(
     }
     g.save_matches = same_at_save && loaded.state_hash() == end;
     Ok(())
+}
+
+/// Notes the objects that show an M6 feature now: a spawner, a rocket in
+/// flight (S-0506), a parasite inside its host (S-0614), an aircraft on the
+/// map that is not a rocket (S-0501), a naval yard, a ship, a sinking ship
+/// (S-0504), and a building the script builds for no role (the tech climb).
+fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
+    let r = w.rules();
+    for (id, o) in &w.objects {
+        let mut note = |k: &'static str| {
+            out.entry(k).or_default().insert(id.0);
+        };
+        if o.spawn.is_some() {
+            note("spawners");
+        }
+        if o.rocket.as_ref().is_some_and(|x| x.phase.is_some()) {
+            note("rocket flights");
+        }
+        if glasnost_sim::parasite::host_of(w, *id).is_some() {
+            note("parasites latched");
+        }
+        if !o.on_map || o.owner.is_none() {
+            continue;
+        }
+        match o.kind {
+            Kind::Aircraft if o.rocket.is_none() => note("aircraft"),
+            Kind::Building => {
+                let b = r.buildings.get(o.type_index as usize);
+                if b.is_some_and(|b| b.naval && b.factory.is_some()) {
+                    note("naval yards");
+                }
+                if role_of(w, tech::type_of(o)).is_none() {
+                    note("climb buildings");
+                }
+            }
+            Kind::Vehicle => {
+                if r.unit(o.kind, o.type_index)
+                    .is_some_and(|u| u.locomotor == glasnost_sim::rules::Locomotor::Ship)
+                {
+                    note("ships");
+                }
+                if glasnost_sim::naval::sinking(w, *id) {
+                    note("ships sinking");
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// The types house `h` can build now, by role.
@@ -694,6 +747,12 @@ fn report(
             );
         }
         let _ = writeln!(s, "  combat: {} shots, {} killed", g.shots, g.killed);
+        let f: Vec<String> = g
+            .features
+            .iter()
+            .map(|(k, v)| format!("{k} {}", v.len()))
+            .collect();
+        let _ = writeln!(s, "  M6 features (distinct objects): {}", f.join(", "));
         for h in 0..PLAYERS {
             if !g.army_end[h].is_empty() {
                 let v: Vec<String> = g.army_end[h]
