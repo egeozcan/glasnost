@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -141,11 +141,16 @@ a carrier's controller is launching ordinary aircraft.
    own update after sinking starts. For a killing hit, that is in the tick of the hit when the
    vessel's turn (S-0203) comes after the hit, otherwise in the next tick. S-0614 claim 11 owns
    the cull trigger; its timing within the host's turn remains unestablished here.
+   Any passengers still aboard at final sinking removal are killed without attacker credit
+   under S-0507 claim 16. They are not released or preserved,
+   and have no independent death effects. This does not change earlier passenger escapes or
+   attacker-credited deaths under S-0312 claims 5, 12 and 16.
    When no wake animation is defined, our engine still takes the two draws on such a tick and
    creates no wake, and the importer warns (a design choice: the original's behaviour without a
    wake animation was not established, and stock data always defines one).
    - Backing: `measurable` (scenario N5; the draws with the random-state recorder) for
-     ordinary sinking from height 0 with a wake animation. F1 at other initial heights is
+     ordinary sinking from height 0 with a wake animation; N5's loaded-vessel variant and
+     S-0507 scenario T14 for remaining-passenger cleanup. F1 at other initial heights is
      `unmeasured` here: N5 does not establish a sinking start at another height. The no-animation outcome is a design rule,
      `unmeasured` against the original because its outcome for this input is not established.
    - Confidence: high for the descent, the threshold, the draws and their order; medium for the tick
@@ -625,6 +630,17 @@ For the first-hit crashable comparison, use S-0312 scenario D8's first-hit crash
 removal during that hit, with no subsequent descent or sinking-wake draws, is expected rather
 than 81 descents. Retention for descent or later sinking wakes falsifies that removal rule.
 The no-animation rule is a design choice, not a stock measurement.
+For passenger cleanup, repeat with a loaded non-crashable vessel, using named test-map data
+"naval-sinking-passengers" to supply transport capacity if stock types
+cannot reach that setup. Use a killing hit or squid cull that leaves passengers aboard during
+descent. Record passenger identities, in-play status, kill/loss counts and independent death
+effects through final removal, distinguishing any earlier passenger deaths or escapes.
+Expected: every passenger still aboard at final removal dies
+without attacker credit or independent death effects; earlier credited deaths stay credited.
+A surviving carried unit, release, extra attacker kill or independent passenger death effect
+at final removal falsifies that outcome. A run with no passengers left before final removal
+is inconclusive for cleanup. S-0507 scenario T14 supplies the shared transport comparison.
+Remove the named test data after the run.
 
 **N6. A sinking vessel cannot fire or be fired on (claim 5).** *Setup:* a sinking vessel with an
 enemy in range and a second enemy already targeting it before the killing hit. *Procedure:*
