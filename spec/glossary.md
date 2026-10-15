@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1827,7 +1827,8 @@ attached. S-0405 owns the term (Terms) and what it changes in power (claim 5); S
 uses it. How the attaching starts and ends belongs to the special-abilities specs.
 
 **collector.** The object that picks up a crate by committing to a ground step into its cell,
-or by landing in it as a jumpjet (S-0520 claim 6).
+by landing in it as a jumpjet, or after landing in it through its own teleporting locomotor
+(S-0520 claim 6). Superweapon chronoshift arrival is not a pickup.
 
 **counted building.** Ambiguous on its own. S-0405 (Terms, claim 3) counts the buildings whose power
 a house sums, and S-0414 (Terms, claim 4) the buildings that keep a house alive in its defeat
