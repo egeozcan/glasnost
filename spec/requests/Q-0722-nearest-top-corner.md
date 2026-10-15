@@ -1,9 +1,9 @@
 ---
 id: Q-0722
 title: Which occupant is nearest the top corner of a cell
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

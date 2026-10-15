@@ -1,9 +1,9 @@
 ---
 id: Q-0728
 title: Disguise tests for buildings, aircraft and a disguise without a house
-status: open
+status: answered
 related: [S-0516, S-0410, S-0209]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

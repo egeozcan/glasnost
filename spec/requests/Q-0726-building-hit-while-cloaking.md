@@ -1,9 +1,9 @@
 ---
 id: Q-0726
 title: What a cloaking building does when an uncloak cause reaches it
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need
