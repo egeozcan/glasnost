@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -312,11 +312,13 @@ are out of scope.
     - Backing: `measurable` (scenario B14)
     - Confidence: medium
 
-11. **Grand opening.** When a building first completes, these slots start:
+11. **Grand opening.** A building's grand opening brings it into service once: on construction
+    completion in play, or during placement at game set-up. These slots start:
     - For a building that is not a refinery: *idle* (occupied variants allowed), *active-1*
       (occupied variants allowed), and *active-2*, *active-3* and *active-4* (no occupied variant).
     - For a refinery: only the *active* slot of its fill level (claim 15), with no occupied
-      variant. A refinery does not start *idle*.
+      variant. Grand opening does not itself start *idle* for a refinery, nor stop slots
+      already running.
     - For a building with a superweapon: *super-3* when the weapon's remaining charge time is
       below 15 ticks, otherwise *super-1*. Both allow occupied variants.
     - For a building with a turret whose turret art is not voxel art: the *turret* slot. This start
@@ -331,12 +333,21 @@ are out of scope.
 
     A building placed during the game's set-up at game start starts the *idle* and *active-1* …
     *active-4* slots each time its body state is set during the set-up, all with occupied variants
-    allowed.
-    - Backing: `measurable` (B6 for unoccupied completion starts and the turret case,
+    allowed. Its placement gives it the *idle* body and queues *guard*, then runs the grand
+    opening described above. The opening sets readiness, but *guard* becomes current only at the
+    first per-tick start (S-0215 claim 1). Thus a set-up refinery can retain *idle* and the other
+    *active* slots started with its body state, alongside the slot selected by its fill level.
+    A set-up superweapon building or sprite-turret building also receives its corresponding
+    grand-opening slot starts. The normal-name turret start can swap the variants of the slots
+    already running, just as at construction completion. Set-up grants no free unit
+    (S-0402 claim 18).
+    - Backing: `measurable` (B6 for unoccupied completion starts, set-up slot presence and the
+      turret case, S-0215 claim 1 for queued *guard* and readiness,
       S-0402 scenario H13 for the free unit).
       `unmeasured` for occupied grand-opening variants (normally no occupants at completion),
-      below-15-tick charge at completion (B6 establishes no such setup), and repeated setup starts
-      (no input path selecting each setup state is established). Unknown-name starts and empty
+      below-15-tick charge at completion (B6 establishes no such setup), and repeated set-up
+      body-state changes beyond the placement's idle entry (no input path selecting each
+      additional set-up state is established). Unknown-name starts and empty
       upgrade names are also `unmeasured`: no start path for those slots is established here.
     - Confidence: high
 
@@ -981,6 +992,18 @@ expected numbers are computed from the type's own fields at measurement time.
   - Falsified if: the refinery shows *idle*, the superweapon starts in the wrong slot, the turret
     building shows damaged art right after completion, or the test type shows no *active-1* slot
     animation.
+  - Set-up comparison: place stock instances of the refinery, superweapon building and
+    sprite-turret building on a tiny skirmish map, owned by a non-player house. Include full-health
+    and below-yellow-health instances. Record their slot animation types and variants at the end
+    of set-up, before any building turn, with the read-only recorder, then through their first
+    turn; compare with the construction-completion runs. Use the common game speed and settings,
+    one run per case. Only slots with a valid selected animation name are expected to appear.
+    Expect the set-up refinery to retain the idle and active slots supplied by its idle body
+    entry, with its fill-level slot also started by grand opening; expect the superweapon and
+    turret starts of claim 11 already present before the first turn. A damaged sprite-turret
+    building shows normal variants after its turret start. Absence of an expected defined slot,
+    or postponement of its start until a turn, falsifies this claim. Later periodic slot changes
+    follow their own claims, not a second grand opening.
 - **B7 (claims 13, 18).**
   - Setup: a building that needs and draws power, with *freeze-unpowered* and *light-unpowered*
     slot animations, and a superweapon building with an *effect-unpowered* *super-3* slot and a
