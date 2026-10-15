@@ -2,11 +2,11 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413]
 supersedes: []
@@ -68,8 +68,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
   such an object without any stock scenario to show it.
 - **Absorbed passengers.** Units held inside a building whose type absorbs units or infantry (for
   example a building that converts infantry into power). The structures specs own how they get in.
-- **Sinking, crashing.** Two states in which a killed vehicle or aircraft stays in play after its
-  death until the naval or the locomotor specs end the state.
+- **Sinking, crashing.** States that can keep a vehicle or aircraft in play after a killing hit,
+  or start without one. S-0504 claims 4 and 5 own vehicle sinking after it starts.
+  S-0501 claim 9 owns flying-aircraft crash motion and sinking. S-0614 claim 11 owns
+  culling-induced sinking without a killing hit. Rocket-missile interception is S-0506 claim 20.
 - **Nearby point** N(*Q*, *r*, *b*). A point displaced from *Q* by a nominal distance of *r*
   leptons in one of 256 directions, chosen by the remainder *b* (0 to 255) of one raw value of
   the scenario random stream modulo 256, with the coordinate rounding and fallback of F2.
@@ -184,7 +186,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    for the game-wide weapon. The detonation uses that weapon's warhead and brightness, has the dying
    object as its source object and the object's house as its source house, so the dying object
    itself is not hit (it is also dead, S-0303 claim 9). An object that is not exploding fires no death
-   weapon at death; a crashing aircraft fires one when it hits the ground (claim 16). The type's
+   weapon at death; a non-rocket crashing aircraft fires one when it hits the ground (claim 16).
+   Rocket interception follows S-0506 claim 20 instead. The type's
    death-weapon damage factor *φ* (F3) applies to the primary weapon too, not only to a death
    weapon of the type's own.
    - Backing: `measurable` (scenario D6; variant d for the debris position)
@@ -223,10 +226,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 10. **Sinking.** A killed vehicle of a naval type that is not an underwater type and not organic,
     whose type's weight is at least the game-wide sinking weight, and that is on a water cell, sinks
     instead of exploding: it keeps 1 health point, stays in play and shows no explosion or
-    destruction animation (claim 9). Its passengers are handled as in claim 12. How it sinks and
-    when it leaves play belong to the naval specs.
-    - Backing: `measurable` (scenario D8)
-    - Confidence: high for the condition; low for anything after it
+    destruction animation (claim 9). Its passengers are handled as in claim 12. S-0504 claims 4
+    and 5 own its descent, duration, removal and behaviour while sinking.
+    Separately, a grappling parasite's cull starts its host sinking without a killing hit,
+    regardless of the host type's weight: health is unchanged and no damage is delivered
+    (S-0614 claim 11). This is not a killing hit that takes this spec's death effects.
+    - Backing: `measurable` (scenario D8, S-0504 scenarios N5 and N6 for sinking after it starts,
+      S-0614 scenario P6 for culling)
+    - Confidence: high for the killing-hit condition and the cull distinction; sinking after
+      it starts inherits S-0504 claims 4 and 5's confidence
 
 11. **Vehicles with the bomb mark that die low over water.** A vehicle that carries the bomb mark
     (Terms) and dies within 10 leptons above a water cell skips claims 4 to 6 and 9 (its attached
@@ -322,7 +330,17 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     terrain; otherwise it leaves play at once. An object that starts to crash loses all
     its passengers (credited to the attacker) and, unless it is infantry, takes three draws for its
     tumbling (one unit-interval value, one ranged draw over 0 to 1 that chooses the sense, one more
-    unit-interval value). It then falls (locomotor specs). When it reaches the ground:
+    unit-interval value). For an aircraft using ordinary flying movement, S-0501 claim 9 owns
+    crash motion: its growing fall counter supplies a downward contribution, not necessarily
+    the net descent, because ordinary altitude adjustment can still apply. That claim also owns
+    its sinking branch. For other crashable movement modes, the owning movement spec supplies
+    the motion. The following impact rules exclude rocket missiles: S-0506 claim 20 owns their
+    interception outcomes, with detonation governed by S-0506 claim 19. An intercepted rocket
+    above the terrain starts to crash but keeps rocket-flight movement and its full detonation
+    damage on the next positive-speed movement attempt, including a rejected map-edge attempt.
+    At zero speed the health-triggered detonation waits for such an attempt. On the ground it
+    is removed without a rocket detonation. This does not establish that any additional crash
+    displacement is absent. For the non-rocket crash, when it reaches the ground:
     - if it was shot down, its death weapon goes off at the impact point (claim 6, even if it already
       went off at the moment of death because the aircraft was exploding), and it leaves play,
     - if it was still alive (a crash started without a kill), it is destroyed by damage equal to its
@@ -330,9 +348,14 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` (scenario D11; variant f for an empty explosion list)
+    - Backing: `measurable` (scenario D11, variant f for an empty explosion list,
+      S-0501 scenario AC5 for dead flying-aircraft crash motion; S-0506 scenario R13 for
+      rocket interception). Living flying-aircraft crashes, aircraft sinking and additional
+      rocket crash displacement retain the backing limitations of S-0501 claim 9 and
+      S-0506 claim 20.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
-      empty list, and their independence from height; medium for the impact rules; low for the double death weapon and for which objects
+      empty list, and their independence from height; rocket interception inherits S-0506
+      claim 20's confidence; medium for the non-rocket impact rules; low for the double death weapon and for which objects
       use this crash (aircraft and crashable jumpjet types are believed to)
 
 ### Buildings
@@ -966,9 +989,10 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | State | Event | Result |
 |---|---|---|
 | alive vehicle | killing hit, sinking conditions hold | sinking, 1 health point, in play |
-| alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play |
-| crashing | reaches the ground, was shot down | death weapon, leaves play |
-| crashing | reaches the ground, was alive | destroyed by its remaining health, detonation |
+| living grappling host | cull under S-0614 claim 11 | sinking without a hit or health change, regardless of weight |
+| alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
+| non-rocket crashing object | reaches the ground, was shot down | death weapon, leaves play |
+| non-rocket crashing object | reaches the ground, was alive | destroyed by its remaining health, detonation |
 | alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled; health becomes the greater of 1 health point and one quarter of its type's strength, truncated toward zero |
 | prone cyborg | lethal hit | dies (S-0107 claim 17) |
 | alive eligible building | lethal hit of a delay-kill warhead | 1 health point, countdown of *T* ticks (claim 3) |
@@ -983,9 +1007,9 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   fire more times at a vehicle death. Off: omit that extra group, leaving only the common
   group; this changes any draws taken by the omitted firings' actions.
 
-- **`quirks.crash_death_weapon_twice`** (default: on, the original). An exploding aircraft fires its
+- **`quirks.crash_death_weapon_twice`** (default: on, the original). An exploding non-rocket aircraft fires its
   death weapon at death and again at the impact of its crash (claim 16). Off: it fires only at the
-  impact.
+  impact. Rocket interception and its quirk are owned by S-0506 claim 20.
 - **`quirks.building_smudge_discarded_draws`** (default: on). Claim 19 (a) takes up to two ranged
   draws whose results are not used (none for a 2 × 2 foundation). Off: those draws are not taken. Turning it off changes every
   later draw, so it is a switch only for mods that do not need the original's random sequence.
@@ -1255,6 +1279,9 @@ with its underwater flag set, its organic flag set, and as an amphibious non-nav
 Each fails the sinking condition; sinking falsifies that part. Repeat the ordinary vessel at
 exactly the imported sinking weight: it must sink. Record both explosion and destruction
 animations; either on a sinking instance falsifies their omission.
+S-0504 scenarios N5 and N6 test the subsequent duration, removal and sinking behaviour.
+S-0614 scenario P6 separately tests culling-induced sinking without a killing hit, including
+unchanged health; the killing-hit expectations above do not apply to that cull.
 
 **D9. Passengers of destroyed vehicles (claim 12).** *Setup:* a stock transport with five infantry,
 killed (a) on open ground by normal damage, (b) by a train driving into its cell (damage that
@@ -1338,7 +1365,9 @@ A fallback animation, an extra list-choice draw with the empty list, a missing p
 one entry, or a height-dependent list-choice rule falsifies f. A trace that cannot separate
 weapon impact, death effects and later crash impact is inconclusive. Variant b cannot run until
 a normal input or named-data setup that starts a living crash is established; it provides no
-measurable backing in this revision.
+measurable backing in this revision. S-0501 scenario AC5 tests dead flying-aircraft crash
+motion, distinguishing the counter contribution from net descent. Rocket interception is
+instead tested by S-0506 scenario R13, not by D11's ordinary impact expectations.
 
 **D12. Contacts of a destroyed building (claim 17).** *Setup:* a stock building type that produces
 vehicles, destroyed while a vehicle is leaving it; a stock building type that harvesters dock at,
@@ -1690,7 +1719,6 @@ from successful transfers. No release draw-count prediction is asserted.
   corner's cell. Scenario D6, variant d, would show it.
 - Vehicles whose type has death image frames (a sprite death animation) take another path at death that is
   not known (claim 9).
-- What a sinking vehicle does until it leaves play, and how long it takes (claim 10).
 - Whether anything in the original sets the bomb mark (claim 11). None was found, and if something
   does, claim 11 becomes measurable.
 - How many absorbed passengers a stock building can hold compared with its foundation cells, which
