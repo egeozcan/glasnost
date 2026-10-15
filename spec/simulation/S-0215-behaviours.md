@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -368,9 +368,9 @@ Terms used by this spec:
   captured actor a guard reset (claim 9).
 - **Being erased:** as the glossary defines it. The combat topic owns erasing weapons.
 - **Cloak, sensor:** an object that *starts to cloak* begins to turn invisible to other houses,
-  and a *sensor* of a house detects cloaked objects in the cells it covers, as in S-0209 ("a sensor
-  of that house covers its cell"). The visibility topic owns both, including when an object
-  starts to cloak and which cells a sensor covers; this spec uses them only as a revert cause
+  and a *sensor* of a house detects cloaked objects in the cells it covers. S-0516 claims 1–9
+  own the cloak states and when an object starts to cloak; S-0516 claims 21–23 own sensor
+  coverage. This spec uses them only as a revert cause
   and its exception (claim 10).
 - **Chrono move, leaving stage, phase-in:** a chrono move teleports an actor to another place, by a
   superweapon or by its own teleporting locomotor. A superweapon move's **leaving stage** runs
@@ -769,8 +769,8 @@ Terms used by this spec:
         condition), except in three cases: the queued behaviour is *enter*; the current behaviour
         is *guard*, or *attack* without a target; or the queued behaviour is a *guard* that one of
         two *unload* rules queued with an allowance to interrupt movement. Those two rules belong to other specs: a transport
-        vehicle that reaches the last stage of unloading its passengers queues *guard* (transport
-        specs), and a jumpjet vehicle in *unload* that is sent off again while it descends to land
+        vehicle that reaches the last stage of unloading its passengers queues *guard* (S-0507
+        claim 11), and a jumpjet vehicle in *unload* that is sent off again while it descends to land
         queues *guard* (movement specs). The allowance lasts until the slots next change (any
         queue that takes effect, start, force, override or revert ends it),
       - its unload or deploy cycle has not finished,
@@ -1719,10 +1719,15 @@ apply in our engine to the actors of every player house.
     - Confidence: medium (the table); high (the options of the scatter request)
 
 29. **Enter.** An actor in *enter* keeps asking the object it is meant to enter (a transport, a
-    building) for permission; if that object refuses, the actor breaks off its contact and falls
-    back to rest. The entry protocol and its timing belong to the transport and structures specs.
-    - Backing: `measurable` (scenario B12)
-    - Confidence: low (summary only)
+    building) for permission. In the transport loading exchange, only acceptance or an existing
+    tether keeps the passenger in *enter*: without a tether, any non-accepting reply ends contact
+    and makes it fall back to rest, including a reply that makes the transport approach the
+    requester. The transport entry protocol and its timing are S-0507 claims 4–6; building
+    entry belongs to the structures specs.
+    - Backing: `measurable` (scenario B12; S-0507 T5 and T6 for loading replies).
+      The existing-tether exception inherits S-0507 claim 5's `unmeasured` backing: no
+      isolating ordinary-input scenario is established.
+    - Confidence: high (loading replies); low (building-entry summary only)
 
 30. **Unload (infantry).** For an infantry type that deploys, *unload* switches between deployed and
     undeployed, and in every case forces *guard* and clears the unit's destination:
@@ -1984,7 +1989,8 @@ apply in our engine to the actors of every player house.
     - *harvest*: economy, the harvest cycle,
     - *construction*, *selling*, *repair*: structures (build-up, selling, repair bays and service
       depots); *open* for buildings is claim 35,
-    - *unload* for vehicles: transports and vehicle deploying; for factory buildings:
+    - *unload* for vehicles: S-0507 claims 7–12 for transports, and the vehicle deploying
+      specs for deploying; aircraft passenger unloading: S-0507 claim 13; for factory buildings:
       S-0417 (structures, factory unloading); other building unloading: structures,
     - *missile*: buildings only (superweapons and structures); infantry, vehicles and aircraft
       process it by the default rule of claim 4 (table T1),
@@ -2001,7 +2007,7 @@ apply in our engine to the actors of every player house.
       S-0501 claims 29–34. In particular, aircraft *hunt*'s choice queues *attack* without an
       immediate start; it becomes current at a permitted opportunity of S-0501 claim 31,
       not by bypassing readiness. Aircraft fall-back and queued starts are S-0501 claims 18
-      and 31 (claims 11 and 13 here); aircraft *unload* remains with transports.
+      and 31 (claims 11 and 13 here); aircraft passenger *unload*: S-0507 claim 13.
     - Backing: pointers inherit the cited claims' backing; the aircraft *hunt* queue/start
       distinction is `measurable` (S-0501 AC10, recording queued and current behaviours against
       the readiness and start opportunities of S-0501 claim 31).
