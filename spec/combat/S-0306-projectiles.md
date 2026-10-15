@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -578,8 +578,14 @@ S-0501 claim 20.
     projectile of a kind other than steering whose new position is outside the legal map (Terms) is removed
     without detonating, unless a "reached" row or the proximity row of T1 applies in the same turn
     (T2). Detonation and removal happen in that same turn (S-0203 claim 5).
+    When a latching weapon's carrying projectile is removed without detonation, S-0614 claim 21
+    owns the consequence: its parasite remains stranded off the map, unattached and unable to
+    act, rather than attempting a failed-latch return. That claim also owns
+    `quirks.parasite_carrier_loss_strands_unit` and its alternative.
     - Backing: `measurable` (scenarios P6, P7, P9, P11, P13, P18; P22 to P25 and P29 to P34 for
-      single rows, P36 for the speed row; P26 for removal and T2; P32 runs f and g for the open-gate
+      single rows, P36 for the speed row; P26 for removal and T2; S-0614 scenario P11 for
+      carrier loss, with that spec's unmeasured qualification for other removal causes, and
+      P32 runs f and g for the open-gate
       and firer exceptions of the first row). The rule that the rows of this spec never remove a
       steering projectile for leaving the map is `unmeasured`: what then happens to such a
       projectile is not established (Open questions), so no scenario could predict an outcome
@@ -735,6 +741,39 @@ S-0501 claim 20.
       and run e for the absent fireball-animation type)
     - Confidence: medium (the selection by name and the wait: high; the radar event and the
       creation of the animation at the snapped position: medium)
+
+26. **Trigger-created nuclear payload flight.** S-0524 claim 3 owns the launch inputs of
+    trigger action 95, not the ordinary shot launch of claims 1 to 7: there is no firer or
+    attacking house, the stored projectile speed is 50 leptons per tick, and its initial velocity
+    is S-0524's nuclear velocity formula. With the original table trigonometry, that formula
+    gives a vertical component of exactly −100 leptons per tick and two tiny negative horizontal
+    components, not a downward velocity of 50. Placement still applies claim 9, including its
+    steering rescaling when the projectile type has a positive turn rate. Subsequent flight is
+    determined by the imported projectile properties, not by the nuclear warhead name.
+
+    For a vertical payload with turn rate 0, not invisible, ranged, dropping, level or
+    flak-scattering, its unchanged initial speed already exceeds the stored speed of 50.
+    Claim 11 therefore makes no acceleration change. The integer displacement in every turn is
+    exactly (0, 0, −100) leptons before detonation-point adjustments: the tiny horizontal
+    components truncate to 0. Provided its
+    detonation altitude is above its start, no other T1 row intervenes and the target is a flat
+    empty cell without a bridge, it reaches surface height 0 in turn 200, ends turn 201 at
+    height −100, and requests detonation in turn 202. The negative-height test uses the
+    start-of-turn height and is strict; height 0 in turn 201 does not suffice. Claim 20 raises
+    the detonation point to the surface. These heights are relative to the target surface, not
+    absolute world heights.
+
+    On the same flat setup with a stationary ground vehicle centred on the target cell,
+    proximity instead requests detonation in turn 199, at height 100 before the proximity
+    snap, and moves the point onto the vehicle. On an empty high-bridge cell, the downward
+    deck crossing requests detonation in turn 201, at 100 leptons below the deck, without
+    moving the vertical projectile to the deck height (claim 11). The terrain is still 316
+    leptons below that point. Claim 25 starts its nuclear wait on the predicted turn, not
+    after a constant-speed 400-turn fall; damage waits for the animation as usual.
+    - Backing: `measurable` (P40; S-0524 scenario C3 for attribution and action inputs)
+    - Confidence: high for the launch-speed distinction and the vertical predictions under
+      the stated conditions; other projectile-property combinations retain claims 10 to 15's
+      confidence
 
 ## Formulas
 
@@ -2317,6 +2356,40 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Falsified if: in the 200-cell run the length differs by more than one lepton from *L* of F1 for
   *s*₁ = *v*(*d*, 10) of the wrapped *d* (the unwrapped alternative is about 783), or in the control
   run it differs by more than one lepton from *L* for *v* of the planar distance.
+
+**P40. Trigger nuclear descent (claim 26).**
+- Setup: a tiny flat purpose-made skirmish map, one human player and one bystander computer
+  player kept away from the test area, standard mode, game-speed index 2, 800 × 600, director
+  and mods off except the named test data. Fire one trigger action 95 at an empty waypoint
+  cell. A named test-map override selects a vertical payload projectile with turn rate 0,
+  detonation altitude 40000 leptons, and the flags excluded by claim 26 off; it has no trailer,
+  is not airburst, inaccurate or subject to cliffs or walls, and does not degenerate. Keep the
+  payload weapon's warhead nuclear so that the start of the wait is visible. Do not change
+  its velocity through any game-state writer. Use a read-only recorder of position, velocity,
+  projectile turns, animation existence and ticks. Exclude all other units, overlays and
+  effects from the test cell and its neighbours. Void a run if the bystander interferes.
+- Procedure: record one launch through the nuclear wait and damage. Repeat with a stationary
+  ground vehicle of the human house centred exactly on the waypoint on level-0 terrain, then
+  with an empty intact high-bridge cell whose terrain and deck heights are recorded. Repeat
+  each fixture twice. A stock-payload control is evaluated by these same predictions only
+  when its recorded properties meet claim 26's conditions; otherwise predict its flight from
+  the applicable flight claim, not from the stored speed alone.
+- Observable: initial velocity, successive integer position differences, turn of flash and
+  fireball creation, their position, later damage tick, and any kill credit. A turn is counted
+  from 1 at the projectile's first turn, not from the action tick.
+- Expected: the initial vertical velocity is exactly −100, and every non-detonating turn's
+  displacement is (0, 0, −100). The empty flat fixture starts its flash and fireball in turn 202 at the
+  surface; the centred-vehicle fixture does so in turn 199 at the vehicle's position; the empty
+  bridge fixture does so in turn 201 at deck height minus 100. If the first turn occurs in the
+  action tick, these correspond to tick differences 201, 198 and 200 respectively; otherwise
+  add the recorded first-turn delay. No movement occurs during the wait. Damage follows
+  claim 25's animation-end rule and has no attacker or attacking house. The vehicle case
+  must not attribute a kill to the human house merely because it owns the victim.
+- Falsified if: a qualifying fixture falls at 50 leptons per tick, accelerates despite its
+  initial speed exceeding 50, drifts horizontally, starts the wait in another turn or at
+  another point, or deals damage before the animation ends. A kill credited to a house
+  falsifies the attribution rule. An early unrelated T1 condition voids the timing fixture,
+  rather than falsifying its explicitly conditional prediction.
 
 ## Open questions
 
