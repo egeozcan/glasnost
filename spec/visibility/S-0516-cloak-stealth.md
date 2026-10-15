@@ -2,13 +2,13 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729]
+requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792]
 supersedes: []
 ---
 
@@ -71,6 +71,11 @@ Two kinds of rule are kept apart throughout.
   - An object is *sensed by H* when the cell under its centre is sensed by *H*.
   - The coverage belongs to the owner only. Allies do not share it.
   - This is the *sensed cell* of S-0309 (Terms).
+- **Cell-arrival update.** The movement event that relocates mobile sensor coverage and
+  tests adjacency reveal. Its timing depends on the locomotor (claim 22). The earlier name
+  *completed-cell movement event* means this event, not every cell-boundary crossing.
+- **Idle generator.** A cloak generator with neither growth nor shrinking pending. This is
+  independent of its radius and of being in operation (claim 20).
 - **Sensor disc of radius R.** The cells (*X* + *dx*, *Y* + *dy*) around a centre cell (*X*, *Y*)
   whose integer displacements satisfy all of:
   - −*R* ≤ *dx* ≤ *R* − 1
@@ -284,13 +289,18 @@ Two kinds of rule are kept apart throughout.
     - Confidence: medium (the exact list of hits that do not uncloak)
 
 13. **Adjacent sensor reveal.** When a fully cloaked vehicle, infantry unit or aircraft
-    completes a cell-movement event (claim 22), the game checks each of the 8 neighbouring
-    cells that pass the usable-area test.
+    has a cell-arrival update (claim 22), the game checks each of the 8 neighbouring
+    cells that pass the usable-area test. This is the same event that relocates its sensor
+    disc, if any; an object need not itself be a sensor to receive this reveal test.
+    Walking and hovering use the events in claim 22's table, including same-cell updates.
+    Ordinary aircraft flight supplies no such event, so flying past a sensor does not
+    cause this adjacency uncloak.
     - For each such cell it takes a single candidate from infantry, vehicles, aircraft and
       buildings in the ground layer. For position (*x*, *y*, *z*) in leptons, let *u* = *x* mod 256
       and *w* = *y* mod 256, residues from 0 to 255. Its distance is the integer
       ⌊*r*(*u*² + *w*²)⌋, where *r* is S-0204 claim 5's table square root, subject to
-      `quirks.table_root_distance`. The squares and sum are formed in double precision, exactly
+      `quirks.table_root_distance` (default on: the table root; off: the exact integer square
+      root, as defined under Edge cases and quirks). The squares and sum are formed in double precision, exactly
       in this range, and the root is truncated toward zero. Height is ignored. The least
       integer distance wins, with ties going to the first object in the cell-layer order
       (S-0209 claim 13). This is the same distance as S-0207 claim 15, but its optional
@@ -307,8 +317,13 @@ Two kinds of rule are kept apart throughout.
     - Only a cloaked object that moves is revealed this way. A sensor that walks up to a stationary
       cloaked object reveals nothing by adjacency; its coverage (claim 22) only lets its house see
       and attack the object.
-    - Backing: `measurable` (CS8)
-    - Confidence: medium
+    - Backing: `measurable` (CS8, CS17 candidate checks, CS18 parts C and J) for event timing,
+      standing-position preference and first-listed integer-distance ties. The distinction
+      between table-root and exact-root candidate distances is `unmeasured`: no legal
+      sub-cell placement pair distinguishing the winning candidate has been established.
+      CS18 part C's non-standing-position extension is conditional on finding such placements,
+      not established coverage of that distinction.
+    - Confidence: high for event timing; medium for the candidate test
 
 14. **Targets when an object cloaks.** Two moments affect attackers of vehicles, infantry and
     aircraft:
@@ -381,7 +396,9 @@ Two kinds of rule are kept apart throughout.
       (`quirks.building_sensor_ring_owner_only`). Each cell uses the nearest candidate of claim 13,
       except that when the candidate is the building itself, the first infantry occupant is
       tested instead.
-    - Backing: `measurable` (CS10, CS18 part F)
+    - Backing: `measurable` (CS10, CS17 building checks, CS18 part F), except the
+      table-root versus exact-root candidate distinction is `unmeasured` for the same
+      placement limitation as claim 13.
     - Confidence: high (fade timing and explicit uncloak); medium (the sensor ring)
 
 ### Cloak fields
@@ -402,7 +419,9 @@ Two kinds of rule are kept apart throughout.
     - **Growth.** For positive type radius *r*, a generator starts with no covered cells and
       adds radius 1 on its first growth update, then radius 2, and so on through *r*, one per
       tick. Radius 0 is an empty field, not the radius-zero circle of F5. A zero or negative
-      type radius gives no field and no growth or restart effects. Negative radii are rejected
+      type radius gives no field and cannot initiate a neighbour restart by shrinking.
+      A zero-radius generator can still receive a restart when idle, as specified below.
+      Negative radii are rejected
       as invalid with an importer warning and treated as zero: the original instead lets its
       growth radius wrap through invalid sizes. This invalid-data failure is not reproduced.
       Every object on a newly covered cell is re-evaluated (claim 6).
@@ -416,17 +435,34 @@ Two kinds of rule are kept apart throughout.
     - **Overlaps.** Coverage is a yes-or-no flag per house and cell, not a count. When one of two
       overlapping generators of the same house shrinks, the shared cells leave the field even
       though the other generator still covers them. When an uninterrupted collapse reaches
-      radius 0, every other in-play, powered, idle generator within the strict integer squared-distance
-      test Δ*X*² + Δ*Y*² < 4(*r* + 2)² is restarted. *X*, *Y* are the cell coordinates obtained
+      radius 0, every other in-play generator that is in operation and idle within the strict
+      integer squared-distance test Δ*X*² + Δ*Y*² < 4(*r* + 2)² is restarted. *X*, *Y* are the cell coordinates obtained
       from each building's centre, and *r* is the shrinking generator's type radius. No lepton
       distance, height, foundation-edge distance or square-root approximation is used. At its
       full radius, the neighbour restarts from 0. Otherwise its current radius decreases by
       one, floored at 0, and growth resumes. This restart is not restricted to the same owner.
-      Until then, objects in the gap may uncloak (`quirks.cloak_field_overlap_loss`).
+      Idle means no growth or shrinking is pending, not merely powered or stationary:
+
+      | Neighbour's field state at the collapse | Restart eligibility, assuming the other tests pass |
+      |---|---|
+      | Idle at full radius | Yes; radius becomes 0 and growth becomes pending |
+      | Idle below full radius, including radius 0 | Yes; radius decreases by one with floor 0 and growth becomes pending |
+      | Growing, including a newly restarted radius-0 field | No |
+      | Growing at full radius, before its next update ends growth | No; reaching the radius alone has not made it idle |
+      | Shrinking, even if the building is in operation again | No |
+      | Not in operation | No, whatever the radius or field state |
+
+      Thus an ordinary growing neighbour does not take the below-full-radius restart branch.
+      A second collapse cannot restart a neighbour already made growing by the first.
+      Until recovery, objects in the gap may uncloak (`quirks.cloak_field_overlap_loss`).
     - **Buildings within a ring.** With `quirks.cloak_field_building_interrupt` on, a growing
       field's newly covered cells take effect in increasing *Y*, then increasing *X*. The
       first newly covered centre cell of an own building is covered, then the rest of that
-      update's circle is omitted. Its radius has already increased. The next growth update
+      update's circle is omitted. The generator's own centre is not exempt, including on
+      the first radius-1 update. Alone on previously uncovered open ground, that first
+      update covers only the relative cells (0, −1), (−1, 0) and (0, 0), where coordinates
+      are integer cells relative to its centre. The other two radius-1 cells remain
+      uncovered. Its radius has already increased. The next growth update
       examines the whole next larger circle, so omitted cells can be covered then. Already
       covered building centres do not interrupt again. If this was the final radius, there
       is no next larger circle: omitted cells stay uncovered until another growth cycle or
@@ -438,7 +474,10 @@ Two kinds of rule are kept apart throughout.
     - **Immediate collapse.** Sale, destruction, removal and capture clear the field without
       building-centre interruptions and perform the same neighbour-restart test. On capture,
       this happens for the old field before any new-owner growth.
-    - Backing: `measurable` (CS11, CS17, CS18 parts D and I)
+    - Backing: `measurable` (CS11, CS17, CS18 parts D and I, CS19), except the restart of
+      an idle below-full positive-radius neighbour is `unmeasured`: no ordinary setup for
+      that idle state is established. CS19 gives the conditional test. Its eligibility
+      rule is settled; only construction of that state remains unavailable.
     - Confidence: high
 
 ### Sensors
@@ -458,15 +497,25 @@ Two kinds of rule are kept apart throughout.
     - Confidence: high
 
 22. **Mobile sensors.** A vehicle, infantry unit or aircraft whose type has a non-zero sensors-sight
-    *R* covers the sensor disc of radius *R* around its cell for its owner. The sensors flag alone
-    gives no coverage; it serves claims 13 and 18.
+    *R* supplies its owner's sensor disc of radius *R*. Entering play centres it on the object's
+    cell; subsequent relocation follows the events below, not continuous position. The sensors
+    flag alone gives no coverage; it serves claims 13 and 18.
     - **Entering play.** The disc is added when the object enters play.
-    - **Movement.** The disc moves at the completed-cell movement event, not merely when the
-      object's centre crosses a cell boundary: remove around the last recorded coverage cell,
-      then add around the object's current cell and record it. For ordinary ground and ship
-      tracks this event is arrival at the cell centre (S-0207 claim 7, S-0504 claim 1).
-      Crossing a boundary earlier in the track leaves the disc at its old centre. The same
-      event supplies the adjacency check of claim 13.
+    - **Movement.** At a cell-arrival update, the old disc is removed around the last recorded
+      coverage cell and a disc is added around the object's cell at that update. That cell
+      becomes the recorded coverage cell. This happens even if it equals the old cell.
+      Boundary crossing alone is not the event, nor is a later cloak update a substitute.
+
+      | Locomotor | Cell-arrival update for sensor coverage and claim 13 |
+      |---|---|
+      | Driving or ship tracks | Track arrival at the cell centre (S-0207 claim 7, S-0504 claim 1), not the earlier boundary crossing |
+      | Walking infantry | Arrival and snap to the chosen standing position (S-0208 claims 6 and 23), including intermediate walking targets and same-cell arrivals; not reservation, boundary crossing or a physical step alone |
+      | Hovering, including amphibious hovering | The non-refusing heading-point choices and no-point restoration cases of S-0503 claim 15. Coverage uses the actual position at that event, before any cached final travel, not the newly chosen heading cell. A clear choice can produce it when movement starts. Arrival need not snap to a cell centre; crossing a boundary during later travel does not produce it |
+      | Ordinary flying aircraft | None from taking off, flight across cells, destination arrival or landing. Coverage remains where entering play or another independent coverage-changing event left it (`quirks.flying_sensor_disc_stationary`) |
+
+      S-0501 claims 1–8 own ordinary flying movement; S-0502 claim 3 describes the distinct
+      jumpjet locomotor, not ordinary aircraft flight. The table does not add a jumpjet timing rule.
+      The sensors flag without a nonzero sensors-sight gives no disc in flight either.
     - **Owner change.** The disc moves from the old owner to the new one.
     - **Leaving play.** The disc is removed around the object's current cell, not necessarily
       the last recorded coverage cell (`quirks.mobile_sensor_removal_centre`). If it crossed a
@@ -476,7 +525,7 @@ Two kinds of rule are kept apart throughout.
     - **Floor.** Removal never takes a mobile sensor's count below 0.
 
     A mobile type's disguise-detection range has no effect (claim 40).
-    - Backing: `measurable` (CS12 parts a and b, CS18 part B)
+    - Backing: `measurable` (CS12 parts a and b, CS18 parts B and J)
     - Confidence: high
 
 23. **Sensor-array buildings.** A building whose type is a sensor array adds the sensor disc of
@@ -711,7 +760,7 @@ Two kinds of rule are kept apart throughout.
 38. **Radar colour.** For viewing house *V*, a disguised unit appears on the radar in its owner's
     colour when its owner allies *V*, including when *V* is the owner. Otherwise it appears in the
     disguise house's colour. This is the one-way owner → viewer relation, not viewer → owner.
-    Mutual alliance is not required. When the disguise-house branch gives none, the radar object is still drawn, using the fixed neutral radar fallback colour of S-0410 claim 8, not the owner's colour. This is the fallback scheme identified in Import mapping and also used for an ownerless radar object. This resolves the open question recorded in S-0410 claim 8; revise that claim in the same handoff to state that a disguise with no disguise house uses the neutral fallback colour.
+    Mutual alliance is not required. When the disguise-house branch gives none, the radar object is still drawn, using the fixed neutral radar fallback colour of S-0410 claim 8, not the owner's colour. This is the fallback scheme identified in Import mapping and also used for an ownerless radar object. This agrees with S-0410 claim 8's no-disguise-house fallback; no change to that claim is needed.
     - Backing: `measurable` (CS16 part c, CS18 part H)
     - Confidence: high
 
@@ -808,12 +857,12 @@ F2, uncloaking time (integers):
 
 > *T*_uncloak = (*N* − 1) × *S*. Units: ticks.
 
-F3, cloak delay. *d* is the game-wide cloak delay in minutes. It is read as a decimal per S-0003
+F3, cloak delay. *d* is the game-wide cloak delay in game minutes. It is read as a decimal per S-0003
 claims 6 and 7: single precision, widened, and scaled when written with a percent sign.
 
 > *D* = trunc(*d* × 900.0). The multiplication rounds toward zero to a 53-bit significand,
 > then the result is truncated toward zero to integer ticks (S-0205 claim 5).
-> Units: ticks.
+> Units: ticks; 900 ticks per game minute.
 
 F4, health test (double precision, 53-bit significand). Let *h* be the integer health,
 *h*ₘₐₓ the positive integer strength and ρ the red ratio, imported as S-0302 claim 12 says.
@@ -856,7 +905,7 @@ F6, owner's disguise cycle (integers):
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
-| Ticks per minute (cloak delay) | 900 | ticks | F3 |
+| Cloak-delay conversion | 900 | ticks per game minute | F3 |
 | Self-cloak chance below red | 4 | per hundred | Claim 5, draw R(0, 99) < 4 |
 | Low-health abort chance | 10 | per hundred | Claim 8, draw R(0, 99) < 10 |
 | Fade-fraction scale | 256 | fraction units | Bands at 64, 128, 192 |
@@ -905,6 +954,13 @@ F6, owner's disguise cycle (integers):
 
 ## Edge cases and quirks
 
+- **`quirks.table_root_distance`** (default on, original behaviour; owned by S-0204 claim 5).
+  Claim 13 uses ⌊*r*(*n*)⌋, with *n* = *u*² + *w*² in square leptons and the table root
+  defined by S-0204 claim 5. Off: use ⌊√*n*⌋, the exact integer square root, in leptons.
+  Both results are non-negative integers, rounded down. This changes only the candidate's
+  distance measure, not the top-corner reference, height exclusion or first-listed tie rule.
+  The same choice applies to claim 18's candidate test. It is the shared distance switch,
+  not a separate sensor switch.
 - **`quirks.cloak_flag_ground_mobile_only`** (default on). The type's cloak flag is ignored for
   aircraft and buildings. Fixed behaviour: aircraft and buildings with the flag can cloak by
   themselves.
@@ -913,10 +969,12 @@ F6, owner's disguise cycle (integers):
   current stage.
 - **`quirks.cloak_zero_speed_stall`** (default on). With a cloaking speed of 0:
   - cloaking advances one stage per tick
-  - uncloaking never advances, so the object stays at the first uncloaking stage forever, drawn as
-    warped, and a weapon that needs it visible never fires.
+  - for *N* ≥ 2, uncloaking never advances, so the object stays at stage *N* − 1 forever,
+    drawn according to claim 28, and a weapon that needs it visible never fires.
+  - for *N* = 1, uncloaking starts at stage 0 and completes at its next ordinary update
+    as in claim 43, despite the zero speed.
 
-  Fixed behaviour: uncloaking also advances one stage per tick.
+  Fixed behaviour: uncloaking also advances one stage per tick when its stage is positive.
 - **`quirks.sensor_building_activation_once`** (default on). Sensor arrays and disguise detectors:
   - their coverage is set at first placement only, if powered
   - power changes do nothing afterwards
@@ -951,6 +1009,10 @@ F6, owner's disguise cycle (integers):
   sensor's disc around its current position cell, producing the coverage drift of claim 22
   when it has not yet completed movement into that cell. Off: remove the disc actually last
   added by that sensor, retaining the floor at zero.
+- **`quirks.flying_sensor_disc_stationary`** (default on). Ordinary flying movement never
+  relocates a sensor disc, even on landing. Off: horizontal cell-boundary crossings during
+  that movement relocate the disc to the new current cell. This alternative changes coverage
+  only; it does not add claim 13 adjacency uncloak events to ordinary flight.
 - **`quirks.cloak_field_building_interrupt`** (default on). Claim 20's partial coverage and
   interrupted shrinking/restart are retained. Off: apply each circle in full, without an
   early stop at an own building's centre.
@@ -966,12 +1028,14 @@ F6, owner's disguise cycle (integers):
 | `CloakStop` (object type) | Cloak-stop, claim 3 | boolean | no |
 | `CloakingSpeed` (object type) | *S*, claims 7 and 43 | signed integer, ticks per stage; negative means one step per update in both directions; zero retains its quirk | 7 |
 | `CloakingStages` (General) | *N*, claim 43 | signed integer; warn and substitute 1 for values ≤ 0 | 9 |
-| `CloakDelay` (General) | *d*, F3 | decimal, minutes | 0.0 |
+| `CloakDelay` (General) | *d*, F3 | decimal, game minutes | 0.0 |
 | `CloakSound` (AudioVisual) | Claim 15 sound | sound name | none |
 | `CloakGenerator` (building type) | Cloak generator, claims 19–20 | boolean | no |
 | `CloakRadiusInCells` (building type) | *r*, also claim 23 removal | integer, kept as signed 8-bit; zero gives empty field; negative effective value warns and uses zero for generator growth | 20 |
 | `Sensors` (object type) | Sensors flag, claims 13 and 18 | boolean | no |
-| `SensorsSight` (object type) | *R*, claims 22–23, completed-cell movement disc and removal drift | integer, cells | 0 |
+| `SensorsSight` (object type) | *R*, claims 22–23, cell-arrival disc and removal drift; a nonzero range, not the sensors flag, supplies coverage for aircraft too | integer, cells | 0 |
+| No data key | Claims 13 and 22: walking, hovering and ordinary flying cell-arrival timing | engine behaviour; locomotor choice belongs to S-0208, S-0503 and S-0501 | claim 22 table |
+| No data key | Claim 20: own-centre interruption, including radius 1, and idle-neighbour eligibility | engine behaviour, not a separate radius or power setting | idle excludes both growing and shrinking |
 | No data key | Claims 11, 13, 18 and 42: object-crush uncloak (not overlay-only), candidate distance, ties, explicit building uncloak and within-turn timing | engine behaviour | fixed |
 | No data key | Claim 16: passenger cloak state, stage and elapsed delay | engine behaviour, independent of transport capacity imports in S-0507 | preserved on ordinary boarding and exit |
 | `LightGrey` (Colors) | Claim 38 fallback radar colour | named colour definition, S-0103 claims 6–10; use its one-shade scheme's radar colour as for an ownerless radar object in S-0410 claim 8 | fixed lookup name; colour values come from user data |
@@ -1082,7 +1146,7 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
   - Place an allied sensor unit next to the building. Expected: the building uncloaks.
 - **CS11, field shape and rate.**
   - Record which cells' units cloak for a test file radius of 4, and for the stock radius.
-    Expected: F5.
+    Expected: F5's candidate circle, with claim 20's own-centre interruptions and omissions.
   - Cut power. Expected: rings leave one per tick.
   - Overlap two generators and sell one. Expected: units in the overlap uncloak briefly.
 - **CS12, sensors.**
@@ -1151,7 +1215,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 13 | Share a neighbouring cell between sensor and non-sensor infantry. Swap which is nearest the top corner. Repeat with an ability sensor and on a bridge. | Only the nearest ground-layer candidate counts. A sensor approaching a stationary target gives coverage, not adjacency uncloaking. |
 | 14, 24–26 | Retain own-house, sensed-enemy and unsensed-enemy targeters at the mobile start/completion. Repeat on a building. Select a sensed non-owned object before it cloaks. Try positive-damage force fire on a hidden own target and healing on a hidden ally. | Unsensed enemies drop at both mobile moments, buildings only at the start. Non-owner selection is lost at cloak start even with sensors. Positive mean weapon damage is refused; nonpositive mean passes the cloak test for an own or allied target, independently of the selected weapon's sign. |
 | 18 | Put sensor infantry in the foundation/border, with candidate-control occupants. Compare own/allied/enemy and veterancy-only sensors. Lose the field during cloaking, then restore it during uncloaking and change sensor coverage. Watch levels and particles. | Foreign type-flag sensors, allies included, block. Interrupted cloaking completes before uncloaking. Field re-evaluation can reverse uncloaking at its current level. Particles stop at 15 and restart at 0. |
-| 19, 20 | Witness the circle boundary. Power, disable, sell, destroy and capture a generator separately. Test allied witnesses. With two generators cut one's power, then separately sell it. Repeat with a nearby other-owner generator. | F5, open-ground ring rates and immediate removal hold. Allies are not covered. Overlaps can lose coverage; a full idle neighbouring generator restarts irrespective of owner. |
+| 19, 20 | Witness the circle boundary. Power, disable, sell, destroy and capture a generator separately. Test allied witnesses. With two generators cut one's power, then separately sell it. Repeat with a nearby other-owner generator. | F5's candidate circles, interrupted growth/shrinking and immediate removal hold. Allies are not covered. Overlaps can lose coverage; a full idle neighbouring generator restarts irrespective of owner. |
 | 21–23, 40 | Observe detection across a mobile sensor's movement, capture and removal. Compare a type flag alone with a range alone. Toggle array/detector power after placement, and remove an initially unpowered building. Compare mobile and building disguise detectors. | Coverage is owner-only and does not lift shroud. Mobile range supplies coverage. Building power changes do not toggle coverage, and capture leaves it with the old owner. Mobile disguise detectors supply no shared coverage. |
 | 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. For detectors test the detection-radius disc after an initially unpowered building is removed. | A formerly −1 cell needs two additions. Array removal uses cloak radius; detector removal uses detection radius. |
 | 27–29 | Compare owner, mutual-ally and enemy views on explored ground with/without own sensors. Record clicks, shadow, radar and images every tick. Include a stage count reaching fraction 255. | Claim 28 bands hold. Unsensed allies see the cloak image but cannot click or list it on radar. Fading vehicles have no shadow. Fraction 255 is not drawn for non-owners. |
@@ -1162,7 +1226,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 41 | Compare stock submarines with an underwater fixture vehicle stripped of all cloak sources. Fire after surfacing; add sensors and then cause adjacency reveal. | The control stays surfaced. Ordinary transitions give submerged states and F2 surfacing delay. Sensing alone does not surface it; adjacency can. |
 
 Zero-speed check (claim 7's quirk): record cloaking and subsequent firing over 256 ticks with
-speed 0 in CS-fixture. Expected: cloaking advances one stage per tick but uncloaking does not
+speed 0 and *N* ≥ 2 in CS-fixture. Expected: cloaking advances one stage per tick but uncloaking does not
 advance. A later shot from a weapon requiring visibility falsifies the stall.
 
 ### CS18: request-resolution checks
@@ -1197,16 +1261,22 @@ unavailable state construction are identified below rather than counted as measu
   between sensor and non-sensor infantry. Exchange top, centre, left, right and bottom
   standing positions. Record cell-layer listing order and the moving enemy's uncloak.
   Expected: top wins over centre, centre over left/right, left/right tie by first listing,
-  bottom last. Include non-standing positions with unequal squared distances that truncate
-  to the same root distance: listing order still breaks that tie. A different candidate
+  bottom last. If legal non-standing placements with unequal squared distances but equal
+  truncated root distances can be found, record those placements and repeat: listing order
+  must still break that tie. This extension remains conditional until such placements are
+  established; the standing-position runs alone do not distinguish table and exact roots.
+  A different candidate
   falsifies claim 13. Separately cloak a crusher and drive it through infantry, a crushable
   vehicle, only a crushable overlay/wall, and an empty cell. Remove other uncloak causes.
   Expected: only actual object crushing uncloaks with sound. A takeover-only run also
   produces no crushing uncloak. Record actual removals to exclude missed crushes.
 - **D — Radius and interrupted circles (claim 20; Q-0724, Q-0729).** On an open-ground map,
   record the first covered cells with radius zero and positive radii, including 1. Expected:
-  zero covers nothing; positive growth begins with the full radius-1 circle, then successive
-  radii. Place own buildings with centre cells in several successive circles. Record covered
+  zero covers nothing; positive growth begins at radius 1, but the generator's own centre
+  interrupts that update. Alone with initially clear coverage it covers exactly (0, −1),
+  (−1, 0), (0, 0), not the full radius-1 circle. For a type radius of 1 the other two cells
+  remain uncovered after growth becomes idle. On our engine with the interruption quirk
+  off, the full circle is the control. Place own buildings with centre cells in several successive circles. Record covered
   cells immediately before and after each growth update. Expected: the first newly covered
   own centre in increasing row/column order ends that update, later cells wait for a larger
   circle, and omissions at the final radius remain. Repeat cutting power, including the
@@ -1265,6 +1335,52 @@ unavailable state construction are identified below rather than counted as measu
   shrink interrupted at zero is the no-restart control from part D. A boundary restart,
   a foundation-lepton-distance decision or no restart after an uninterrupted immediate
   collapse falsifies the corresponding rule.
+- **J — Other sensor locomotors (claims 13 and 22; Q-0791).** Give CS-fixture walking
+  infantry, a hovering vehicle and an ordinary flying aircraft the same positive sensor
+  range, then repeat with only the sensors flag and zero range. Keep stationary cloaked
+  witnesses at the old-only and new-only disc edges, outside adjacency distance. Record
+  position, standing-position arrivals, heading-point choices, boundary crossings and
+  sensed counts each tick. Expected: walking transfers coverage only at standing-position
+  arrival. Hover transfers it at S-0503 claim 15's updates at its pre-travel position,
+  including the initial clear choice and the listed non-refusing no-point cases, not at
+  boundary crossing or necessarily exact-centre arrival. The aircraft leaves coverage at
+  its placement cell through take-off, flight and landing. Range alone supplies the disc,
+  whereas the flag alone never does. A differing relocation tick or moving aircraft disc falsifies
+  the corresponding rule. Repeat with fully cloaked movers and stationary hostile sensor
+  candidates, no weapons or other reveal causes. Give the aircraft a cloaking veterancy
+  ability and cloak it while grounded before take-off. For the hover, cloak it while
+  switched off and grounded, with that ability, then restore lift. Record uncloak state
+  and sound: walking
+  and hovering test adjacency on their listed updates, even in the same cell; ordinary
+  flying movement produces no adjacency uncloak. A sensor approaching a stationary
+  cloaked witness remains the coverage-only control. Compare both senses of approach so
+  sensed visibility is not mistaken for a global uncloak.
+
+### CS19: Generator eligibility and own-centre interruption (claim 20; Q-0792)
+
+Use CS-fixture and the common three-run skirmish recording setup. Place a single powered
+positive-radius generator on previously uncovered open ground, with no other buildings in
+its first circle. Record every covered cell after the first growth update. Expect exactly
+(0, −1), (−1, 0), (0, 0), including its own centre, with relative coordinates in cells.
+A full circle with the interruption quirk on falsifies own-centre interruption. Repeat
+with type radius 1 and wait until idle: the two omitted cells still lack coverage. With
+larger radius, later circles may fill the omissions. Repeat on our engine with the quirk off:
+the first circle is full.
+
+For restart tests use immediate sale of a nearby source generator, avoiding an interrupted
+ordinary shrink. Keep three neighbours in range: one idle at full radius, one growing below
+full radius, and one just restarted at radius 0 by an earlier source collapse. Record their
+field states and radii immediately before and after sale, distinguishing their own growth
+turns from the restart effect. Expect only the idle neighbour to restart. A growing neighbour,
+including one at its target radius whose next update has not yet made it idle, must not
+restart. Repeat with a shrinking neighbour and with a neighbour not in operation: neither
+qualifies. Any contrary immediate radius/state change falsifies the corresponding row.
+For an in-operation idle radius-0 neighbour, use a zero-radius generator as a reachable
+control: it can become growing after restart but produces no field, and its next growth
+update becomes idle again. If an in-operation idle below-full positive-radius state becomes
+available, repeat with it and expect a decrement floored at 0 followed by growth, not
+exclusion by radius alone. This last state-construction test is conditional, not a completed
+measurement. The eligibility test is field state plus operation, not radius.
 
 ## Open questions
 

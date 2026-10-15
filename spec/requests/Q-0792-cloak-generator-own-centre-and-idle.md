@@ -1,9 +1,9 @@
 ---
 id: Q-0792
 title: A cloak generator's own centre during growth, and which neighbours count as idle
-status: open
+status: answered
 related: [S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

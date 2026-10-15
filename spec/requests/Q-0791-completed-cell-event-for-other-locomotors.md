@@ -1,9 +1,9 @@
 ---
 id: Q-0791
 title: When a walking, hovering or flying sensor completes a cell movement
-status: open
+status: answered
 related: [S-0516, S-0208, S-0503, S-0502, S-0207]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need
