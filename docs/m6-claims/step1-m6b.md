@@ -244,3 +244,5 @@ Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q
   aim cursors wait for Q-0731's action words. S-0102 claim 34's protection masks and S-0104's
   protection brightness are not built. S-0104's building-animation brightness, now refreshed on
   building turns, is not modelled (slot animations do not play).
+- **S-0207 (rev 28), S-0301 (rev 16), S-0215 (rev 44), S-0406 (rev 9), S-0516 (rev 8).** Q-0795 to
+  Q-0798 answered; the gaps named above are closed. See `step2-core.md`.

@@ -129,11 +129,15 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
             // spec: S-0511 claim 10 (height above the terrain 0 or less after the move: height 0, the fall ends)
             ob.pos.z = ground;
             ob.fall.falling = false;
-            // spec: S-0522 claim 13 and State and ordering (a parachute still present on landing makes its current pass the last; the simulation keeps no playback clock, S-0109 claim 28, so it is detached here)
-            ob.fall.chute = false;
         }
     }
     if landed {
+        // spec: S-0516 claim 22 (a completed fall landing is a cell-arrival update, also within the same cell, after the height becomes 0 and falling ends and before the parachute is told to end: the sensor disc moves and the adjacent sensor test applies; the descent itself moved nothing)
+        crate::cloak::machine::cell_movement_completed(w, id);
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0522 claim 13 and State and ordering (a parachute still present on landing makes its current pass the last; the simulation keeps no playback clock, S-0109 claim 28, so it is detached here)
+            ob.fall.chute = false;
+        }
         land(w, id);
     }
     v != 0

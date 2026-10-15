@@ -1399,6 +1399,10 @@ pub struct Quirks {
     // spec: S-0516 claim 20, Edge cases
     #[serde(default = "on")]
     pub cloak_field_building_interrupt: bool,
+    /// An accepted manual power-off of a cloak generator makes shrinking pending even at radius 0, a current radius of 0 becoming the type radius first (no coverage is added); off: shrinking is requested only at a positive current radius, as for an ordinary loss of operation.
+    // spec: S-0516 claim 20, Edge cases
+    #[serde(default = "on")]
+    pub cloak_generator_zero_radius_shutdown: bool,
     /// A mobile sensor leaving play removes its disc around its current cell; off: around the cell where it was last added.
     // spec: S-0516 claim 22, Edge cases
     #[serde(default = "on")]
@@ -2159,6 +2163,7 @@ impl Default for Quirks {
             building_sensor_ring_owner_only: true,
             cloak_field_overlap_loss: true,
             cloak_field_building_interrupt: true,
+            cloak_generator_zero_radius_shutdown: true,
             mobile_sensor_removal_centre: true,
             flying_sensor_disc_stationary: true,
             mirage_adjacent_check_cadence: true,
@@ -3119,6 +3124,10 @@ impl Quirks {
             (
                 "cloak_field_building_interrupt",
                 self.cloak_field_building_interrupt,
+            ),
+            (
+                "cloak_generator_zero_radius_shutdown",
+                self.cloak_generator_zero_radius_shutdown,
             ),
             (
                 "mobile_sensor_removal_centre",

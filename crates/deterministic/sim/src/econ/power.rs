@@ -660,6 +660,8 @@ pub fn switch(w: &mut World, actor: ObjectId, on: bool) {
     // The lights and working animations of claim 10 are presentation, derived from `switched_off` and the in-operation result; no simulation state.
     if !on {
         crate::econ::shroud::gap_switched_off(w, actor);
+        // spec: S-0516 claim 20 (an accepted manual power-off makes a cloak generator's shrinking pending at once, also at radius 0)
+        crate::cloak::field::switched_off(w, actor);
     }
     crate::econ::events::switched(w, actor);
 }

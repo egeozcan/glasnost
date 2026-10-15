@@ -69,7 +69,10 @@ fn start(s: &Scene, steps: &[u8]) -> (World, ObjectId) {
     let mut w = s.build();
     let id = objects_of(&w, Kind::Vehicle)[0];
     open_orders(&mut w);
-    order_move(&mut w, id, end_cell(steps));
+    // spec: S-0207 claim 26 (a move into the vehicle's own cell is cleaned up by the first update without a track, so a path that returns to the start orders a far cell and has its steps replaced)
+    let end = end_cell(steps);
+    let dest = if end == cell(0, 0) { cell(0, -12) } else { end };
+    order_move(&mut w, id, dest);
     tick::step(&mut w);
     w.obj_mut(id).expect("vehicle").path.steps = steps.to_vec();
     (w, id)

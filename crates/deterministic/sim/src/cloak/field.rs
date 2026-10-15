@@ -66,8 +66,9 @@ pub fn placed(w: &mut World, id: ObjectId) {
             house: h,
             centre: c,
             radius: 0,
-            // spec: S-0516 claim 20 (a generator starts with no covered cells and adds radius 1 on its first growth update)
-            phase: FieldPhase::Growing,
+            // spec: S-0516 claim 20 (a newly created generator is idle at radius 0 with no covered cells; becoming in operation makes growth pending, so radius 1 comes on the first growth update, in the turn that detects the change)
+            phase: FieldPhase::Idle,
+            was_on: false,
         });
     }
 }
@@ -102,11 +103,12 @@ fn clear(w: &mut World, id: ObjectId, h: HouseId, c: CellXY) -> bool {
     w.cloak.fields.remove(&(h.0, c))
 }
 
-/// A generator's turn (claim 20): a growth update while growth is pending,
-/// a shrink update while shrinking is pending. Going out of operation makes
-/// shrinking pending; a shrink runs on to its stop at radius 0 even when
-/// the generator is back in operation, and an idle generator in operation
-/// below its full radius has growth pending.
+/// A generator's turn (claim 20): the ordinary building turn first detects a
+/// change in operation, which can make growth or shrinking pending (the
+/// table of claim 20's pending changes), then a growth update runs while
+/// growth is pending and a shrink update while shrinking is. Staying in
+/// operation (or out of it) requests nothing, and pending growth has no
+/// power gate.
 pub fn turn(w: &mut World, id: ObjectId) {
     let Some(g) = w.obj(id).and_then(|o| o.cloak.field) else {
         return;
@@ -114,16 +116,28 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let full = full_radius(w, id);
     let on = crate::econ::power::in_operation(w, id);
     let interrupt = w.rules().quirks.cloak_field_building_interrupt;
-    let phase = match (on, g.phase) {
-        // spec: S-0516 claim 20 (when the generator goes out of operation the field shrinks by one ring per tick to 0)
-        (false, FieldPhase::Growing | FieldPhase::Idle) if g.radius > 0 => FieldPhase::Shrinking,
-        // Q-0796 (interim: a generator out of operation with no field has nothing pending)
-        (false, FieldPhase::Growing) => FieldPhase::Idle,
-        // spec: S-0516 claim 20 (a shrinking generator stays shrinking even if the building is in operation again); Q-0796 (interim: it shrinks on to radius 0 and the stop update, then grows)
-        // Q-0796 (interim: an idle generator in operation below its full radius has growth pending from this update)
-        (true, FieldPhase::Idle) if g.radius < full => FieldPhase::Growing,
-        (_, p) => p,
+    let phase = if on == g.was_on {
+        // spec: S-0516 claim 20 (merely remaining in operation, or out of it, requests no growth or shrinking; an idle field below its full radius stays idle)
+        g.phase
+    } else {
+        match (on, g.phase) {
+            // spec: S-0516 claim 20 (idle or shrinking, radius unequal to the type radius, a change to being in operation: growing from the current radius, no wait for the shrink to reach 0)
+            (true, FieldPhase::Idle | FieldPhase::Shrinking) if g.radius != full => {
+                FieldPhase::Growing
+            }
+            // spec: S-0516 claim 20 (idle or growing at a positive radius, a change to being out of operation: shrinking from the current radius; at radius 0 every phase is unchanged)
+            (false, FieldPhase::Idle | FieldPhase::Growing) if g.radius > 0 => {
+                FieldPhase::Shrinking
+            }
+            // spec: S-0516 claim 20 (shrinking at the full radius stays shrinking on a change to being in operation; growing stays growing; a pending phase survives its own kind of change)
+            (_, p) => p,
+        }
     };
+    if let Some(ob) = w.obj_mut(id)
+        && let Some(f) = ob.cloak.field.as_mut()
+    {
+        f.was_on = on;
+    }
     set_phase(w, id, phase);
     match phase {
         FieldPhase::Growing if g.radius >= full => {
@@ -220,11 +234,8 @@ fn restart_neighbours(w: &mut World, id: ObjectId) {
     let Some(g) = w.obj(id).and_then(|o| o.cloak.field) else {
         return;
     };
+    // spec: S-0516 claim 20 (a zero or negative type radius is treated as 0: ordinary shrinking never reaches this test from radius 0, but an immediate collapse performs it, with strict reach ΔX² + ΔY² < 16)
     let r = full_radius(w, id);
-    if r <= 0 {
-        // spec: S-0516 claim 20 (a zero or negative type radius cannot initiate a neighbour restart by shrinking); Q-0796 (interim: nor by an immediate collapse)
-        return;
-    }
     // spec: S-0516 claim 20 and Constants (the strict integer squared-distance test ΔX² + ΔY² < 4(r + 2)²)
     let reach2 = 4 * i64::from(r + 2) * i64::from(r + 2);
     let others: Vec<ObjectId> = w
@@ -277,8 +288,32 @@ pub fn vanish(w: &mut World, id: ObjectId) {
         reevaluate(w, &gone);
     }
     set_phase(w, id, FieldPhase::Idle);
-    // spec: S-0516 claim 20 (an immediate collapse performs the same neighbour-restart test)
+    // spec: S-0516 claim 20 (an immediate collapse performs the same neighbour-restart test, also when both the current and the type radius are 0 and nothing was covered)
     restart_neighbours(w, id);
+}
+
+/// An accepted manual power-off order (S-0516 claim 20, Manual power-off;
+/// S-0405 claim 10 owns which orders are accepted): shrinking becomes
+/// pending at once, and with `quirks.cloak_generator_zero_radius_shutdown`
+/// a current radius of 0 becomes the type radius first, without adding
+/// coverage. The recorded operation state is left alone, so the next turn's
+/// change detection finds nothing new if the building is switched on again
+/// before it.
+pub fn switched_off(w: &mut World, id: ObjectId) {
+    let Some(g) = w.obj(id).and_then(|o| o.cloak.field) else {
+        return;
+    };
+    let zero_shutdown = w.rules().quirks.cloak_generator_zero_radius_shutdown;
+    // spec: S-0516 claim 20 and quirks.cloak_generator_zero_radius_shutdown (on: shrinking pending even at radius 0; off: only at a positive current radius, as for an ordinary loss of operation)
+    if g.radius <= 0 && !zero_shutdown {
+        return;
+    }
+    if g.radius <= 0 {
+        // spec: S-0516 claim 20 (a current radius of 0 becomes the type radius before the shrink; it never invents a positive radius for a zero-radius type, and adds no coverage)
+        let full = full_radius(w, id);
+        set_radius(w, id, full);
+    }
+    set_phase(w, id, FieldPhase::Shrinking);
 }
 
 /// A captured generator (claim 20): the old field collapses at once, with
@@ -290,13 +325,19 @@ pub fn captured(w: &mut World, id: ObjectId) {
     }
     // spec: S-0516 claim 20 (on capture the old field's collapse and restart test come before any new-owner growth)
     vanish(w, id);
+    let on = crate::econ::power::in_operation(w, id);
     if let Some(ob) = w.obj_mut(id) {
         match ob.owner {
             Some(h) => {
                 if let Some(g) = ob.cloak.field.as_mut() {
                     g.house = h;
-                    // spec: S-0516 claim 20 (on capture the field grows again for the new owner if the building is in operation)
-                    g.phase = FieldPhase::Growing;
+                    // spec: S-0516 claim 20 (on capture the field grows again for the new owner if the building is in operation; otherwise it stays idle until a change in operation)
+                    g.phase = if on {
+                        FieldPhase::Growing
+                    } else {
+                        FieldPhase::Idle
+                    };
+                    g.was_on = on;
                 }
             }
             None => ob.cloak.field = None,
