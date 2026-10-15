@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2302,10 +2302,10 @@ Announcements play one at a time separately from sound channels. See S-0701 (Ter
 to 28).
 
 **audio clock.** The original's real time in milliseconds, distinct from ticks. S-0701 claims
-9 to 14 and 27 describe which original sound timings use it rather than game time. It is not an
-engine scheduling contract: S-0701 claim 30 requires deterministic presentation scheduling in
-our engine and defers the exact replacement schedule. The glossary's *departure* rule remains
-in force.
+9 to 14 and 27 describe which original sound timings use it rather than game time. This term
+defines only the original's clock. S-0701 claim 30 supplies our engine's deterministic logical
+cycle-end clock, sample-completion deadlines and waits instead. The glossary's *departure*
+rule remains in force.
 
 **build icon, cameo.** One entry of a *sidebar tab* (S-0004, Terms): a type *offered* to the local
 player, shown by its picture. S-0004 (claim 11) owns the tab and position of each icon, and
@@ -2404,11 +2404,15 @@ G2. **Game-speed direction (skirmish).** In a skirmish game, with a game-speed i
     and says where the control's starting position comes from. S-0201 (claims 4 and 5) also gives
     our engine fixed paced periods, 8 ms at index 0, as a departure; that is a rule of our engine
     and leaves this claim about the original unchanged.
-    - Backing: `measurable` (Scenario G2) for parts (a), (b) and (c). Part (b′) is `unmeasured`:
-      whether index 0 adds a wait is internal to the original, and its one observable consequence,
-      *N*₀ > *N*₁ in Scenario G2, depends on how much faster than index 1 the machine and display
-      path could run, which no observable of the scenario establishes independently. A run set
-      with *N*₀ > *N*₁ is consistent with (b′), but one without it cannot falsify (b′).
+    - Backing: `measurable` (Scenario G2) for parts (a) and (c). Part (b) is `unmeasured`:
+      the separate real-time runs have timing noise and uncontrolled host variation, so Scenario
+      G2's 1 % resolution cannot distinguish exact equality from a small decrease. No practical
+      measurement proposed here resolves that boundary. The exact relation is retained, not
+      replaced by a rule permitting a 1 % decrease. Part (b′) is `unmeasured`: whether index 0
+      adds a wait is internal to the original, and its observable consequence, *N*₀ > *N*₁ in
+      Scenario G2, depends on how much faster than index 1 the machine and display path could
+      run, which no observable of the scenario establishes independently. A run set with
+      *N*₀ > *N*₁ is consistent with (b′), but one without it cannot falsify (b′).
     - Confidence: high for parts (a), (b) and (b′), as for S-0201 claims 2 and 5; medium for part
       (c), as for S-0201 claim 7
 
@@ -2634,15 +2638,14 @@ generically (see *measurement setup*).
   display path waits for it, a display compatibility layer that does not wait is used, and the
   record names it generically.
 - *Procedure:* start the game and let it run with no orders for 300 seconds of real time after
-  the map is visible.
+  the map is visible. A run is void if the game ends before the 300 seconds have elapsed.
 - *Observable:* *N*ₛ, the number of ticks run in those 300 seconds at index *s*, the mean of the
   runs at that index; the lobby control's starting position in each run.
 - *Runs:* 2 per index. A second set of runs, 2 per position, sets the speed by moving the skirmish
   lobby's speed control to each of its seven positions instead, and records the counts the same
   way. The second run set has the setup of S-0201 scenario T1, part B, which also sets the speed
   with the lobby's control, and may serve both.
-- *Expected:* *N*₀ ≥ 0.99 × *N*₁ (part b; 1 % allows for timing noise, as in S-0201 scenario T1).
-  In a run set with *N*₀ > 1.01 × *N*₁, which shows that the machine can compute and show ticks
+- *Expected:* in a run set with *N*₀ > 1.01 × *N*₁, which shows that the machine can compute and show ticks
   faster than index 1 allows and so establishes the condition of part (a), *N*ₛ < 0.99 × *N*ₛ₋₁ for
   every *s* from 2 to 6. The lobby positions, from the slowest to the fastest, give counts within
   1 % of *N*₆, *N*₅, …, *N*₀ in that order. Where two neighbouring indices have counts within
@@ -2652,13 +2655,17 @@ generically (see *measurement setup*).
   If the indices' counts are again within 2 % of each other, which of the two positions sets which
   index is recorded as inconclusive at this resolution, and part (c) is judged on the other
   positions.
-- *Falsified if:* *N*₀ < 0.99 × *N*₁ (part b); in a run set with *N*₀ > 1.01 × *N*₁,
+- *Falsified if:* in a run set with *N*₀ > 1.01 × *N*₁,
   *N*ₛ > 1.01 × *N*ₛ₋₁ for some *s* from 2 to 6 (part a); or a lobby position's
   count is not within 1 % of the index it is expected to match (part c). A run of the first set
   whose control did not start at the position of its index tests S-0201 claim 7, not this claim,
-  and is void here. No result falsifies part (b′), which is `unmeasured` (claim G2).
-- *Resolution:* the scenario resolves differences of 1 % or more. A run set with
-  *N*₀ ≥ 0.99 × *N*₁ supports part (b) within this tolerance; it cannot establish exact equality.
+  and is void here. Parts (b) and (b′) are not judged by this scenario; both are `unmeasured`
+  for the reasons in claim G2.
+- *Consistency observation, not a test of part (b):* record whether
+  *N*₀ ≥ 0.99 × *N*₁, as in S-0201 scenario T1. Meeting that threshold does not confirm the
+  exact relation in (b); falling below it prompts investigation of the host, the display path
+  and the rule, not a resolved verdict on that exact relation from these separate noisy runs.
+- *Resolution:* the scenario resolves differences beyond its 1 % noise band.
   A run set in which *N*₀ is not above 1.01 × *N*₁ cannot
   test part (a), because the machine may have limited the rate; part (a) is judged only on a run
   set, on this or a faster machine or display path, in which it is. For part (a), each pair of
