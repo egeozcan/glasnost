@@ -2,7 +2,7 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -33,7 +33,14 @@ Pointers, not repeated here:
   arrival-time stop): S-0207 claim 19 c and d.
 - the hover's exit from a factory: S-0417 claim 5.
 - water cells, ships and wakes of ships: S-0504.
-- unloading at a shoreline: S-0507.
+- shoreline unloading: S-0507 claim 7 for refusal of unload orders on water (for every player
+  house in our engine), and claim 8 for an already-active unload's approach to a nearby location
+  where a wheeled unit can stand before releasing passengers. That search does not promise the
+  geometrically nearest location.
+- approaching a would-be passenger from water or a different reach region for the passenger's
+  movement zone: S-0507 claim 5. Taking the passenger as a destination is not acceptance of
+  boarding; an untethered passenger breaks contact and falls back to rest, rather than waiting
+  indefinitely for the transport. These transport rules do not change the locomotor at the shore.
 - bridge decks as surfaces: S-0511.
 - disabling by loss of a control centre: S-0405 claim 13.
 - death over water with the bomb mark: S-0312 claim 11.
@@ -110,8 +117,8 @@ New terms:
    - Backing: `measurable` (scenarios H2 and H3)
    - Confidence: high
 
-3. **Acceleration, braking and boost.** In the same tick, after the throttle, the vehicle sets its
-   boost and then its hover speed φ (F2):
+3. **Acceleration, braking and boost.** In the same tick, the resulting boost and hover speed are
+   determined from the throttle according to F2:
    - while *T* > 0, *B* = the hover boost factor when its stored path has at least two steps and the
      first two are equal (a straight run), and *B* = 1 otherwise. While *T* = 0, *B* keeps its value.
    - the goal is *G* = min(1, *B* × *T*).
@@ -448,10 +455,12 @@ These consequences inherit the backing and confidence of claims 8–10 (H6 and H
   416 leptons whenever the vehicle is at least 312 leptons above that heading point's terrain surface, whether
   or not that cell has a high bridge. Off: require a high-bridge cell too. This changes the
   three-dimensional throttle-distance test, not the cell's actual terrain height.
-- **A stalled start.** When the step length is 0 while the movement heading points exactly at the
-  heading point, the vehicle sets *T* = 1 and ρ = 1 at once and recomputes *d* on that tick, so a
-  fraction left at 0 by another rule does not hold it still. This changes throttle and fraction,
-  not hover speed directly; a positive step still requires positive hover speed.
+- **`quirks.hover_stalled_start_reset` (default: on, the original).** When the step length is 0
+  while the movement heading points exactly at the heading point, the vehicle sets *T* = 1 and
+  ρ = 1 at once and recomputes *d* on that tick, so a fraction left at 0 by another rule does
+  not hold it still. This changes throttle and fraction, not hover speed directly; a positive
+  step still requires positive hover speed. Off: the vehicle does not apply this stalled-start
+  reset or recompute the step length on that tick.
 - **Weather switch-off.** The original also contains a switch-off of hovering vehicles that follows
   a house-wide weather condition. It never triggers with the stock program, so our engine has none.
   Backing: `unmeasured`, confidence medium: no established stock input activates that condition,
