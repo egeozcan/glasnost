@@ -2,7 +2,7 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,7 +22,9 @@ special fire points of garrisoned buildings, buildings with pixel muzzle shifts 
 open-topped transports; and the redirected targets of spray-attack firers. The fire point is game
 state: projectiles normally start there (S-0306 claim 8), so it changes flight times and what a projectile passes.
 The placement exceptions are owned by S-0306 claim 5, including dropping projectiles, which
-start at the firer's own position rather than its fire point. This spec covers skirmish; network
+start at the firer's own position rather than its fire point. Disc lasers create no projectile
+(S-0615 claim 12); their rings follow the current slot-0 fire point as S-0615 claim 15 specifies.
+This spec covers skirmish; network
 games and campaigns are out of scope.
 
 ## Terms
@@ -157,26 +159,33 @@ S-0202: R(*a*, *b*). In addition:
    building's *muzzle index*. This claim owns that index; S-0308 (claim 13) cites it. The index
    starts at 0, and after every shot it makes (a launch that succeeds, S-0301 claim 15) it becomes
    (*k* + 1) mod *n*, *n* being the occupant count then. Exception: a shot of a disc laser weapon
-   (S-0301 claim 10) does not advance the index, so a garrison whose occupant weapon is a disc
+   (S-0615 claim 12) does not advance the index, so a garrison whose occupant weapon is a disc
    laser keeps the same muzzle point and the same occupant from shot to shot. After a completed
    whole-building eviction or clearing action, the index is 0. Reoccupation therefore starts at 0.
-   An additional entry does not change the index (S-0508 claim 18, in the same-round draft).
+   An additional entry does not change the index (S-0508 claim 18).
    No ordering of the reset relative to individual releases or removals within the action is
    required here: no observable consequence distinguishes those intermediate states.
    S-0311 claim 15 describes the limited individual set-up removal case that retains the
-   numeric index without reducing it modulo the remaining count. Neither that case nor
-   releases within a whole-building action establish an independent selective skirmish departure
-   or death, whose index effect remains unresolved (S-0508 claim 18). The related drafts must
-   be aligned as listed in Cross-spec changes required below before joint sign-off.
+   numeric index without reducing it modulo the remaining count. Separately, defeat or
+   surrender of an occupant's own house can kill it inside a building belonging to a surviving
+   house (S-0508 claim 19). Only the defeated house's occupants are hit, so differently owned
+   occupants can survive in a mixed-house garrison. These deaths retain the numeric index,
+   without resetting it or reducing it modulo a new count; they do not imply compaction or
+   renumbering of surviving occupants. The original can retain a dead occupant among its
+   firing choices. Safe subsequent firing, muzzle selection and experience selection through
+   that dead choice remain unspecified pending a project-lead decision. The related drafts
+   must be aligned as listed in Cross-spec changes required below before joint sign-off.
    The same index picks which occupant's weapon fires (S-0308 claim 13). A muzzle point that
    the art data does not give, or gives as (65535, 65535), is (0, 0).
    - Backing: `measurable` (scenario P5) for the cycle, completed-action reset, reoccupation,
      additional entry and muzzle shifts. The limited set-up removal remains `unmeasured`
      for the fixture limitation in S-0311 claim 15: no validated data-only selective-removal
-     scenario is supplied. No index rule is predicted for an unestablished independent
-     selective gameplay loss.
-   - Confidence: high (the cycle, action reset and additional entry); medium (the shift
-     arithmetic, F3, and the limited set-up removal)
+     scenario is supplied. Defeat hits and numeric-index retention are `measurable` (P5's
+     defeat variant). Mixed-house selective survival is `unmeasured`: no validated fixture
+     supplies differently owned entrants. Safe continuation through a dead firing choice is
+     `unmeasured`: no safe result is established or unsafe confirming attack proposed.
+   - Confidence: high (the cycle, action reset, additional entry and defeat's off-map hits),
+     medium (the shift arithmetic, F3, limited set-up removal and defeat index retention)
 
 7. **Buildings with a primary fire pixel shift.** A building that is not garrisoned and whose type
    gives a primary fire pixel shift fires, with any weapon, from its base point shifted by that
@@ -306,6 +315,7 @@ by *B* with truncation toward zero; the direction sum wraps modulo 8 with no fur
 | garrisoned building, muzzle index *k* | a disc laser shot is launched | *k* unchanged |
 | garrisoned building | a whole-building eviction or clearing action completes | *k* = 0; reoccupation starts at muzzle 0 |
 | garrisoned building | an additional occupant enters (S-0508 claim 18) | *k* unchanged |
+| garrisoned building belonging to a surviving house | an occupant's own house is defeated or surrenders (S-0508 claim 19) | that house's occupants receive killing hits; numeric *k* unchanged, without modulo repair or inferred compaction; safe later firing remains open |
 | spray-attack firer, burst counter 0 | a shot | *s* ← R(0, 7), one draw before the projectile's draws (S-0301 claim 18) |
 | spray-attack firer, burst counter above 0 | a shot | *s* ← (*s* + trunc(8 / *B*)) mod 8, no draw |
 
@@ -488,6 +498,19 @@ the user, not a request to alter the game.
   inconclusive for reset; no weapon that kills occupants through the building is assumed.
 - Repeat evacuation, additional entry and clearing in three fresh games each. These observations
   test completed actions, not the index between individual releases or removals within an action.
+- Defeat variant: in a named `firing-index-defeat.map`, add a third isolated living contender.
+  The human house enters three identifiable occupants, fires exactly once and stops at index 1.
+  A timed building-only ownership trigger transfers the building to a surviving hostile house,
+  leaving the occupants under their original owner. Verify those owners and index 1, keep the
+  building from firing again, and surrender the human house through ordinary input. Record
+  the surrender-processing tick, building health/owner, occupant health and numeric index
+  read-only, before any later firing uses a dead choice. Expected: the occupants receive killing
+  hits despite being off-map, the foreign-owned building survives without eviction, and the
+  index remains 1. Exclusion of the hits, eviction solely from the occupants' defeat, or an
+  index reset falsifies that part. Repeat three fresh games; void a run with an intervening
+  shot or whole-building action. This tests S-0508 claim 19's numeric retention, not a safe
+  later muzzle or a validated mixed-house selective-survival fixture. Do not resume attacks
+  through the dead choices as a confirming test.
 - Data variant: named test art supplies distinct muzzle pixel pairs, including a missing entry,
   the not-given pair from Constants, and positive and negative unequal components. Expected:
   missing and not-given entries use (0, 0); others give exactly F3 at unchanged world height.
@@ -579,21 +602,21 @@ the user, not a request to alter the game.
 
 ## Cross-spec changes required
 
-These changes are required in the same hand-off; references to S-0508 claim 18 identify its
-same-round draft, not a claim present in the currently approved copy.
+These changes are required in the same hand-off with S-0508 claims 18 and 19.
 
-- S-0508 claim 18 must state the observable completed-action reset and additional-entry
-  retention, without requiring reset before individual releases or removals. Its claim 11's
-  completed evacuation result already agrees with claim 6 here.
 - S-0308 claim 13 and its occupant-index table must state the completed-action reset without
-  requiring intermediate release/removal ordering. The approved claim's empty-building result
-  already agrees; the current draft's stronger ordering must be removed.
+  requiring intermediate release/removal ordering. Include S-0508 claim 19's own-house defeat
+  exception and retained numeric index, without inferred compaction or modulo repair.
 - S-0311 claim 15 and its firing-occupant term must likewise use the completed-action reset
-  without an intermediate ordering requirement. Retain the limited set-up removal and the
-  unresolved independent selective-loss and out-of-range experience cases.
+  without an intermediate ordering requirement. Distinguish the limited set-up removal from
+  S-0508 claim 19's defeat deaths and retained numeric index. Safe experience selection through
+  a dead firing choice needs the same project-lead decision as safe firing and muzzle selection.
 
 ## Open questions
 
+- Safe firing, muzzle selection and experience selection after an occupant's own-house defeat
+  leaves a dead firing choice need a coordinated project-lead decision (claim 6). Numeric-index
+  retention is established; it does not specify a safe continuation.
 - The fire point of a building whose barrel is a voxel model follows the barrel's elevation
   (claim 8); its rule is not yet worked out.
 - For infantry and aircraft, *D* is the locomotor's body transform; whether any of their
