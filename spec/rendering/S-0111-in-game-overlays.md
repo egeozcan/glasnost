@@ -2,7 +2,7 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,7 +21,8 @@ the five render layers: where they are anchored, when the health bar shows, how 
 are filled and in which colour, the selection marks, the pip scale (passengers, spawned aircraft,
 occupants, mind control, resource load, ammunition), the self-heal marker, the control-group number,
 the veterancy insignia and the repair wrench. Which objects have status extras and the painting order
-belong to S-0102.
+belong to S-0102. Skirmish only; campaigns and network games are out of scope. Conditional fog
+behaviour is deferred context only, since S-0409 claim 19 forces fog off in skirmish.
 
 ## Terms
 
@@ -38,7 +39,7 @@ S-0108 (Formulas F3).
 | status anchor | The screen pixel of an object's centre at its world height: its world pixel by the projection of S-0101 including the height lift, minus the view origin. Every displacement below is in screen pixels from it, *x* to the right and *y* downwards. |
 | projected displacement P(ξ, η, ζ) | The screen displacement that S-0101 F1 and F2 give when applied to the world displacement (ξ, η, ζ) in leptons (not to an absolute position): P = (trunc((30ξ − 30η) / 256), trunc((15ξ + 15η) / 256) − *L*(ζ)), integers, truncated toward zero. A building overlay is placed at the anchor plus a projected displacement. This is not the same as projecting the absolute corner and subtracting the anchor's world pixel, which can differ by a pixel through the truncations. |
 | building box | For a building of foundation W × D cells (W along the map *x* axis, D along *y*): the box whose footprint is 256·W by 256·D leptons centred on the building's centre point, and which rises from the centre's height to *V* leptons above it. *V* is the building's art height field (Import mapping) times the height of one level, 104 leptons. With α = 128·W and β = 128·D (half the footprint, in leptons), its left corner lies (−α, β) leptons from the centre point and its top corner (−α, −β). |
-| health ratio *h* | Current health *H* divided by the type's full strength *S*, the quotient rounded toward zero to binary64, as in S-0108 F3 (the round-toward-zero mode, planned S-0205). |
+| health ratio *h* | Current health *H* divided by the type's full strength *S*, the quotient rounded toward zero to binary64, as in S-0108 F3 (the round-toward-zero mode, S-0205). |
 | yellow ratio, red ratio | The two game-wide condition ratios that S-0108 imports (Import mapping), binary64 values. |
 | health colour | green, yellow or red (claim 5). |
 | selected | Chosen by the local player as part of the current selection. |
@@ -57,14 +58,18 @@ S-0108 (Formulas F3).
 1. **Anchor and culling.** All status extras of an object are placed from its status anchor. They
    are drawn only when the anchor lies within the battlefield view widened by 360 pixels on the left
    and the right and by 180 pixels at the top and the bottom. Fog of war does not hide them.
-   - Backing: `measurable` (scenario OV1)
+   - Backing: `measurable` (scenario OV1) for anchoring and culling; `unmeasured` for fog
+     independence, since fog is always off in skirmish (S-0409 claim 19)
    - Confidence: high
 
 2. **Shading of overlay images.** Selection brackets, the veterancy insignia, the repair wrench and
    the attached-bomb sprite are shaded by the light-alpha values of S-0104 claim 15 at neutral
    brightness, so the shroud and fog of S-0110 (shroud rendering) darken them. Health segments and
    pips are not shaded: they keep their palette colours under shroud and at night.
-   - Backing: `measurable` (scenario OV2)
+   - Backing: `measurable` (scenario OV2) for shroud and lighting; `unmeasured` for fog
+     shading, since fog is always off in skirmish (S-0409 claim 19). The fog rule is deferred
+     context for later modes, not a reachable skirmish test. A sprite's shroud shading remains
+     `unmeasured` if OV2 cannot expose an eligible nontransparent pixel beneath a shroud piece
    - Confidence: medium
 
 3. **When the health bar shows.** The health bar of an object, of any owner, is drawn while it is
@@ -161,11 +166,14 @@ S-0108 (Formulas F3).
 
 9. **Who sees the pip scale.** The pip scale is drawn together with the health bar (claim 3) when:
    - the owner is the local player's house or allied with it, or
-   - the local player's house has spied on the object (the special-abilities specs own spying), or
    - for a building only, the type is marked to draw its pips for all, or can be occupied by
      infantry. The draw-for-all mark has no effect on vehicles, aircraft and infantry.
 
-   Otherwise only the health bar is drawn.
+   Otherwise only the health bar is drawn. Infiltration does not reveal an enemy object's pip
+   scale (S-0510 claim 8). These rules cover skirmish only. This corrects this spec's previously
+   approved claim 9, which offered spying as a pip-visibility condition; that condition is not
+   reachable in stock skirmish. It is a correction of the described original behaviour, not a
+   departure or a new quirk switch.
    - Backing: `measurable` (scenario OV6)
    - Confidence: high
 
@@ -208,8 +216,10 @@ S-0108 (Formulas F3).
     Filling or exceeding the passenger row length does not hide the passenger row, the self-heal
     marker or the group number: claim 12 clips the passenger pips to the row, and claims 9, 16 and
     17 still decide their ordinary visibility.
-    - Backing: `measurable` (scenarios OV6, OV7); overflow visibility is a departure tested against
-      this spec, not the original (scenario OV7-D)
+    - Backing: `measurable` (scenarios OV6, OV7) for the tested rows and spawn/ammunition overlap.
+      `unmeasured` for other multi-row overlaps and resource-building suppression of the group
+      number: these scenarios do not establish those combinations. Overflow visibility is a
+      departure tested against this spec, not the original (scenario OV7-D)
     - Confidence: high for the rows, the covering, the passenger rule and the resource cut-off,
       high for the lead-decided overflow visibility
 
@@ -227,7 +237,7 @@ S-0108 (Formulas F3).
       the sum of the sizes each truncated toward zero, whatever the order of entry. A negative size
       can make *Z* depend on that order: in general *Z* = *Z*<sub>1</sub>, where *Z*<sub>m+1</sub> = 0
       and *Z*<sub>k</sub> = trunc(*Z*<sub>k+1</sub> + *z*<sub>k</sub>) for *k* = *m* … 1, each sum in
-      binary64 under the round-toward-zero mode (planned S-0205). For sizes of 0
+      binary64 under the round-toward-zero mode (S-0205). For sizes of 0
       or more this equals Σ trunc(*z*<sub>k</sub>), because that mode never rounds a sum up. For
       example, a first passenger of size −0.5 followed by one of size 2.5 gives *Z* = 1, not 2.
     - **Row bounds.** Only pips with integer indices 0 ≤ *j* < *R* are drawn, whether *Z* is below,
@@ -267,7 +277,14 @@ S-0108 (Formulas F3).
       holds more passengers than *R*, the original's result is *unspecified*; our engine shows only
       the *R* most recent passengers.
     - Backing: `measurable` (scenario OV7); fixed pip retention is a display-only departure tested
-      against this spec in OV7-R, not an original-game expectation
+      against this spec in OV7-R, not an original-game expectation. `unmeasured` for fractional
+      and negative passenger sizes, passengers other than infantry or vehicles, a zero-length
+      gunner row and absorbing-building overflow: OV7 supplies no reachable controlled fixture
+      for those cases, so their safe results and warnings are not oracle measurements.
+      Passenger rows whose kind is power, resource or mind control are also `unmeasured`: OV7
+      does not supply those mixed-capability hosts. Vehicle passenger blocks remain `unmeasured`
+      if OV7's conditional vehicle fixture cannot be loaded; absorbing-building vehicle pips are
+      `unmeasured`, because OV7 tests only infantry absorption
     - Confidence: high for fixed pip retention, the row length, total size, blocks, image frames and order.
       Medium for the gunner gap and the absorbing buildings
     - Overflow clipping backing: departure, tested against this spec in OV7-D, not the original,
@@ -299,7 +316,7 @@ S-0108 (Formulas F3).
     amount a single-precision number. The load is split in two:
     - *g* is the amount at registration index 1, widened exactly to binary64, and
     - *q* is the sum of the amounts at indices 0, 2 and 3, formed in binary64 under the
-      round-toward-zero mode (planned S-0205) as (*a*<sub>3</sub> +
+      round-toward-zero mode (S-0205) as (*a*<sub>3</sub> +
       *a*<sub>2</sub>) + *a*<sub>0</sub>, where *a*<sub>i</sub> is the amount at index *i*. This sum
       is exact, so its order and its rounding cannot matter, whenever the largest non-zero amount
       is less than 2<sup>27</sup> times the smallest non-zero amount: the binary exponents of the amounts then
@@ -317,9 +334,12 @@ S-0108 (Formulas F3).
 
     So each part rounds half up separately, and the row can show one pip more or one pip fewer than
     the whole load would round to.
-    - Backing: `measurable` (scenario OV9) for the row, the split and the rounding; `unmeasured` for
-      the order of the sum *q*: another order or rounding changes *q* by at most one unit in its last
-      binary64 place, which moves *n*<sub>q</sub> only when *q* / *C* × *R* + 0.5 lies within that
+    - Backing: `measurable` (scenario OV9) for the vehicle row, the split and the rounding.
+      `unmeasured` for the infantry row and zero-storage safe result: OV9 provides neither a
+      collecting infantry fixture nor a zero-storage load. `unmeasured` for
+      resource indices 2 and 3 if OV9 cannot collect them: a skipped resource fixture is not
+      confirmation. `unmeasured` for the order of the sum *q*: another order or rounding changes
+      *q* by at most one unit in its last binary64 place, which moves *n*<sub>q</sub> only when *q* / *C* × *R* + 0.5 lies within that
       margin of a whole number, and no scenario can arrange that reliably
     - Confidence: high
 
@@ -350,7 +370,9 @@ S-0108 (Formulas F3).
       drawn as a shadow while *t* mod |*T*| ≤ 5. Our engine does the same and the importer warns. With *T* =
       0 the original fails; our engine then never blinks the marker and the importer warns
       (departure).
-    - Backing: `measurable` (scenario OV11)
+    - Backing: `measurable` (scenario OV11) for the positive and negative periods and marker
+      presentation; `unmeasured` for a zero period and its safe replacement, since OV11 avoids
+      the failing original case and supplies no departure-conformance run
     - Confidence: high for the conditions, image frames, places and the blink period; medium for the
       darkened drawing during the blink
 
@@ -415,12 +437,17 @@ S-0108 (Formulas F3).
     - Backing: `measurable` (scenario OV14)
     - Confidence: high for the period, the image frames, the cell tested and its centre height,
       medium for the shroud condition as seen on screen and for the case below level 0
+    - Coverage limit: the slope-height and below-zero cases are `unmeasured` until OV14's
+      conditional placements are demonstrated reachable. Attached-bomb shroud visibility is
+      `unmeasured` if OV14 cannot expose a visible bomb sprite and its tested cell's shroud states.
+      A skipped placement is not confirmation. The non-default wrench period is an engine
+      alternative tested against this spec in OV14-D, not an original-game measurement
 
 ## Formulas
 
 **F1. Filled health segments.** *H* and *S* are the integer health and full strength, *S* > 0 (claim
 5 gives *f* for *S* ≤ 0). Write ⟨*e*⟩ for the binary64 result of the single operation *e*, rounded
-toward zero (the round-toward-zero mode, planned S-0205):
+toward zero (the round-toward-zero mode, S-0205):
 
 > *f* = min(*n*, max(1, trunc(⟨⟨*H* / *S*⟩ × *n*⟩))),  where ⟨*H* / *S*⟩ is the health ratio *h*
 
@@ -536,6 +563,11 @@ and the pip scale covers the health bar.
 The overload pip (claim 13) and the self-heal blink (claim 16) change with ticks: every drawn frame
 between two ticks shows the same state.
 
+The overlap order between insignia, health bar and pip scale is `unmeasured`, confidence medium:
+no scenario below isolates their overlapping nontransparent pixels. The visibility table restates
+claims 3, 9 and 18. OV8 and OV11 test tick transitions; invariance over multiple drawn frames
+within one tick is `unmeasured`, confidence high, since they supply no frozen-cycle comparison.
+
 ## Edge cases and quirks
 
 - **`quirks.building_resource_pips_hidden`** (default: on). A building with the resource pip-scale
@@ -548,7 +580,8 @@ between two ticks shows the same state.
   S-0003 claim 16 and S-0006 claim 5; omission alone produces no importer warning.
 - **The game-wide enemy-health flag does nothing.** The original reads it, but no overlay changes
   with its value. Our engine imports it and ignores it, with no switch, since there is no behaviour
-  to reproduce.
+  to reproduce. Backing: `unmeasured`, confidence high: no scenario here varies the flag while
+  holding the scene constant.
 - **Passenger row overflow** (departure, no switch). The original hides the passenger row,
   self-heal marker and group number when the passengers' total size exceeds the row length, a
   display-only bug whose departure is confirmed by the project lead. Claims 11 and 12 require
@@ -569,10 +602,10 @@ between two ticks shows the same state.
 - **Self-heal interval of 0 or below** (claim 16): reproduced for negative values, safe result for
   0 (departure, no switch), importer warning for both.
 - **Round-toward-zero mode** (no switch here). F1 and F2 depend on it; the switch
-  `quirks.chop_rounding` belongs to S-0205 (number domains, planned), and F1 and F2 are among the
+  `quirks.chop_rounding` belongs to S-0205 (number domains), and F1 and F2 are among the
   results it covers.
 - **`quirks.speed_normalised_delays`** (default: on, shared with S-0107, S-0108
-  and S-0109 (animation playback, planned)). Claim 19.
+  and S-0109 (animation playback)). Claim 19.
 
 ## Import mapping
 
@@ -613,42 +646,58 @@ retains the held value, initially 1 (`Pip`) and 7 (`OccupyPip`), as claim 12 req
 Overlay sprites, resolved by S-0005: `PIPS.SHP` (pip sprite), `PIPS2.SHP` (second pip sprite),
 `PIPBRD.SHP` (bracket sprite), `WRENCH.SHP` (wrench sprite). Pips and brackets use the overlay palette
 `PALETTE.PAL`; the wrench and the bomb sprite use `MOUSE.PAL`. A missing sprite draws nothing; the
-importer warns.
+importer warns. This missing-asset rule is `unmeasured`, confidence medium: no scenario here
+removes the overlay assets and checks both the absent drawing and the warning. Other importer
+warnings in this spec are likewise `unmeasured`, confidence medium, unless explicitly checked by
+a departure-conformance scenario: the original cannot confirm our importer's diagnostics.
 
 ## Measurement scenarios
 
 **Common setup.** The glossary's *measurement setup*, a tiny flat purpose-made map, one human player and
-one computer player, neutral lighting, a fixed screen resolution, screenshots compared pixel by pixel
-with the overlay sprites and palettes from the stock archives. Health is set by attacking with a stock
+one bystander computer player (the glossary's void rule applies in the observed area around the
+test objects), neutral lighting, game-speed index 2 and 800 × 600 pixels unless stated otherwise,
+no mods except the named test data, screenshots compared pixel by pixel
+with the overlay sprites and palettes from the stock archives. No external program may alter game
+state or generate orders beyond the scenario's prescribed mouse and keyboard input. Read-only
+recorders and the glossary's scripted-input allowance remain permitted; the original's computer
+player remains active and subject to the bystander void rule. Health is set by attacking with a stock
 weapon and read with a recorder that reads the running game's state; the recorder also gives each
 object's centre, from which the status anchor follows by S-0101. Where a scenario needs data that
 stock types do not have, it uses a test map whose override sections change only the named fields,
 documented with the scenario. Unless a scenario says otherwise, one run is enough: no random draw is
 involved.
 
-- **OV1 (claim 1).** Scroll so that a selected vehicle's anchor moves out of the view in steps of 10
-  pixels. Expected: its bracket and bar stay drawn while the anchor is within 360 pixels left or
-  right (180 above or below) of the view, and vanish beyond. Falsified if they vanish earlier or stay
-  later.
+- **OV1 (claim 1).** Use a named test bracket sprite with a centred canvas extending at least
+  400 pixels horizontally and 220 pixels vertically from its centre, with visible test marks
+  throughout. This makes the bracket still intersect the view when its anchor crosses the culling
+  margin. Scroll a selected vehicle out of the view, first in steps of 10 pixels and then in
+  single-pixel steps at each boundary; read its anchor and view origin with the recorder.
+  Expected: the intersecting test marks remain drawn while the anchor is within 360 pixels left or
+  right (180 above or below) of the view, including equality, and vanish beyond. Falsified if
+  disappearance occurs at another anchor position. Repeat at each of the four view edges. Ordinary
+  stock brackets alone cannot expose this offscreen culling margin.
 - **OV2 (claim 2).** A selected veteran transport of the player, with one passenger, at the edge of
-  the shroud and in fog; a damaged building of the player being repaired, partly in fog; a unit of
-  the player carrying an attached bomb (if a stock weapon attaches one), in fog. Then the same
-  scene in a test map with night lighting. Expected: the bracket, the insignia, the wrench and the
-  bomb sprite are darkened in fog and under shroud as S-0110 (shroud rendering) F1 gives, and drawn at
-  neutral brightness whatever the map lighting; the health segments and the passenger pips keep their
-  palette colours in fog, under shroud and at night. Falsified if the segments or pips darken, or the
-  bracket, insignia, wrench or bomb sprite does not darken in fog, or any of them follows the night
-  lighting.
+  the shroud; a damaged building of the player being repaired at that edge; a unit of the player
+  carrying an attached bomb, attached by a stock bomb-planting weapon, at that edge. Position the
+  objects so visible overlay pixels cross the shroud rim while the wrench and bomb pass claim 19's
+  point test; log that test's explored cells. Compare the same scene in named test maps with neutral
+  and night lighting. Expected: the bracket, insignia, wrench and bomb pixels darken under shroud
+  as S-0110 F1 gives and otherwise use neutral brightness regardless of map lighting; health
+  segments and passenger pips keep their palette colours. Falsified if the segments or pips darken,
+  the other sprites ignore shroud at sampled covered pixels, or any overlay follows night lighting.
+  If no covered, nontransparent pixel of an eligible sprite can be exposed, that sprite's shroud
+  result remains unmeasured, not passed. No fog-on run is proposed: S-0409 claim 19 forces fog off.
 - **OV3 (claims 3, 6).** A stock vehicle, infantry unit and aircraft of the player and of the computer
-  player, each at several healths. Select and hover each. Expected: the segment rows of claim 6 at the
+  player, each at several healths. Select each owned object, then deselect it and hover it.
+  Hover each enemy object. Expected: the segment rows of claim 6 at the
   displacements given (δ read from the type's field), the bracket only when selected, enemy bars on
   hover. Falsified if any displacement or image frame differs. Also hover an enemy spy disguised
   as infantry of the player's house and an enemy disguise-when-still vehicle disguised as terrain,
   with neither inside the player's disguise-detector coverage. Expected: a bar on the spy, whose
   disguise has a house, and none on the vehicle, whose disguise has none. Repeat after detector
   coverage reaches the vehicle: expected its hover bar. Falsified by the opposite visibility.
-  Use game-speed index 2, director and mods off, screen capture and a read-only recorder of disguise
-  state and house; repeat each case three times.
+  Use game-speed index 2 and the common setup's restrictions on mods and external orders, screen
+  capture and a read-only recorder of disguise state and house; repeat each case three times.
 - **OV4 (claims 4, 5).** A test map gives one stock vehicle type a strength of 160 and sets the
   yellow and red ratios to 0.5 and 0.25 (exact in binary64), and gives a second stock vehicle type a
   strength of 170. The first vehicle is taken through healths 81, 80, 41 and 40. Expected: green,
@@ -657,7 +706,11 @@ involved.
   taken through healths 170 down to 1. Expected: *f* as F1 gives at every health, in particular 2
   filled segments at health 30 (*h* = 3/17), not 3, and 1 segment at health 1. Falsified if a colour
   changes one point late or early, or *f* differs (3 segments at health 30 would mean
-  round-to-nearest).
+  round-to-nearest). Repeat the sweep with a test infantry type of strength 160: expected the
+  eight-segment F1 result. Repeat the colour checks with both condition ratios omitted from a
+  named loose test base-rules copy, ensuring no later layer supplies them: expected no yellow.
+  Then set the red ratio to 0.75 and yellow to 0.25: expected red through equality at 0.75 and
+  green above it, never yellow. Any yellow in these last two runs falsifies claim 5.
 - **OV5 (claims 7, 8).** Buildings of the player with foundations 1 × 1, 1 × 2, 1 × 4, 2 × 2, 3 × 4
   and 4 × 4 (stock buildings where these exist, otherwise test-map foundations), each selected.
   Expected: 7, 14, 29, 15, 29 and 30 health pips, stepping (−4, +2), filled first in the health
@@ -674,20 +727,23 @@ involved.
   (−10, +10). For a 2 × 2 occupiable building, *o* = (−60, 0) from the anchor and occupant pip *j*
   at (−54 + 4*j*, −1 + 2*j*); for a 3 × 2 one, *o* = (−75, −7). The refinery shows none. The test
   spawner shows the spawn row with the ammunition row covering it. Falsified if an enemy transport
-  shows pips without being spied on, the refinery shows pips, a building row is placed elsewhere, or
+  shows pips, the refinery shows pips, a building row is placed elsewhere, or
   the test spawner lacks either row. Then a test map whose override sections give one stock enemy
   building type that a spy can infiltrate a passenger capacity of 3 and the passengers pip-scale kind
   (so that its pip scale is a row of three empty pips, image frame 0); a spy of the player infiltrates
-  one such building and a second one is left alone. Expected: the empty row on the infiltrated
-  building after the spy enters and not before, and none on the other. The same test map also gives
+  one such building and a second one is left alone. Neither type is occupiable or marked to draw
+  its pips for all. Hover both before and after entry. Expected: neither building shows a pip scale
+  before or after infiltration (S-0510 claim 8). The same test map also gives
   a second enemy building type the same capacity and kind and marks it, and one stock enemy
   transport type, to draw their pips
   for all. Expected: the three empty pips on that building without any spy, and no pips on the empty
   enemy transport (its row of empty pips stays hidden). Last, an own unit of a stock type with the
   ammunition pip-scale kind and no passenger capacity, fully loaded. Expected: its ammunition pips 3
-  pixels above the row places of claim 10, from the second pip sprite. Falsified if the infiltrated
-  building shows no pip scale or the untouched one shows it, the draw-for-all mark shows pips on the
-  transport or not on the building, or the ammunition pips sit at another height.
+  pixels above the row places of claim 10, from the second pip sprite. Falsified if either the infiltrated
+  building or the untouched one shows a pip scale, the draw-for-all mark shows pips on the
+  transport or not on the building, or the ammunition pips sit at another height. Repeat the
+  ordinary passenger and ammunition checks with a mutually allied bystander house: expected its
+  hovered transport's pips as for an owned transport. Hidden allied pips falsify claim 9.
 - **OV7 (claims 11, 12).** A stock transport of the player, of a type without the gunner flag, in control group 1, loaded in a known
   order with infantry of different pip colours and, if one exists, a vehicle passenger of size 2.
   Expected: read from pip 0, the passengers in loading order, each one's colour pip (image frame 5
@@ -731,7 +787,7 @@ involved.
   The self-heal marker and group digit remain visible in all four states. Repeat with the pip-scale
   kind none (*R* = 0): no passenger pips at any load, but the marker and digit remain visible.
   Deselect and move the pointer away: all pip-scale elements disappear. Repeat the hovered loaded
-  case with an unspied enemy transport: its passenger pips remain hidden under claim 9, regardless
+  case with an enemy transport: its passenger pips remain hidden under claim 9, regardless
   of fullness. Record one screenshot per state; falsified by a missing in-row pip, any pip outside
   the row, suppressed eligible markers, or pip-scale elements visible against claims 3 or 9.
 - **OV8 (claim 13).** A stock mind-controlling unit controlling 0, 1 and its maximum of units; then a
@@ -759,17 +815,22 @@ involved.
 - **OV11 (claim 16).** An own damaged infantry unit while the player owns an infantry-healing building,
   recorded every drawn frame for 3 periods; then a damaged own non-organic vehicle while the player
   owns a unit-repair building; then a test vehicle type marked organic, damaged, while the player owns
-  only an infantry-healing building; then, with a test rules file that sets the infantry self-heal
+  only an infantry-healing building. Also select a damaged aircraft and a damaged building while
+  the player owns both healing buildings: expected no self-heal marker on either. Then, with a
+  test rules file that sets the infantry self-heal
   interval to a negative value −*T*₀, the infantry unit again. Expected: image frame 13 at (25, −35)
   from *o* for the infantry unit, image frame 20 at (33, −32) for the vehicle, image frame 13 at
   (33, −32) for the organic vehicle; the marker drawn as a shadow during ticks with *t* mod *T* ≤ 5 and as an image
-  otherwise, with period *T*₀ under the negative interval; undamaged, always as an image; no marker
-  on aircraft. Falsified if an image frame, place or the blink timing differs.
+  otherwise, with period *T*₀ under the negative interval. Repeat each unit case at full health:
+  expected always an image, never a shadow. Falsified if an image frame, place or the blink timing
+  differs, a full-health marker blinks, or an aircraft or building shows the marker.
 - **OV12 (claim 17).** A vehicle and an infantry unit put in groups 1, 5 and 10 of the keyboard.
   Expected: digits 1, 5 and 0 in the owner's house colour, placed from the point (−14, −26) from the
   vehicle's anchor and (−14, −29) from the infantry unit's; the screenshots also show how the text
   aligns to that point (Open questions). Falsified if the digit differs, or the text moves with
-  anything other than that point.
+  anything other than that point, or if the digit or its border is not in the owner's house
+  colour. Repeat with a selected building assigned to a control group: expected the same digit
+  rule at (−4, −36) from its building pip-scale origin; a different digit or placement falsifies it.
 - **OV13 (claim 18).** A small map with water. A test map whose unit entries give veterancy values of
   −0.5, 0.5, 1.5 and 2.5 levels (through the veterancy field of the map's unit entries, in hundredths:
   −50, 50, 150, 250) to units of both players; a disguised enemy unit; a cloaked own naval unit, a
@@ -789,8 +850,9 @@ involved.
   Also record a veteran disguised enemy vehicle during a fake blink that shows its real image
   (S-0516 claim 39): while it still appears disguised, its insignia remains hidden. Once detector
   coverage prevents it appearing disguised, the insignia shows. Use game-speed index 2, 800 × 600
-  pixels, director and mods off apart from the named test-map cloak-field and veterancy fixture,
-  tick-stamped screen capture and a read-only recorder; repeat these added sub-tests three times.
+  pixels, the common setup's restrictions on external orders, and no mods apart from the named
+  test-map cloak-field and veterancy fixture. Use tick-stamped screen capture and a read-only
+  recorder; repeat these added sub-tests three times.
   Falsified if any image frame or band differs, the own cloaked unit hides its insignia,
   the cloaked enemy away from sensors shows it, the allied cloaked unit hides it in skirmish,
   a building's threshold differs, or the insignia follows the disguise image rather than the
@@ -818,10 +880,17 @@ involved.
     *c*<sub>y</sub> + 1) of the three explored and the area under the wrench uncovered, expected no
     wrench (the level height would test that cell).
 
-  Then a unit carrying an attached bomb (if a stock weapon attaches one), in view and with its cell
-  under shroud: expected the bomb sprite in view and none under shroud. Falsified if the period does
+  Then use a unit carrying an attached bomb (if a stock weapon attaches one), with the sprite's
+  location in view and free of shroud shading. Compare its tested cell unexplored and explored:
+  expected no bomb sprite in the former state and the bomb sprite in the latter. Falsified if the period does
   not follow F4, a state (a) shows the wrench, a state (b) does not, or the bomb sprite ignores the
-  shroud.
+  shroud. An attached-bomb sub-test that cannot reach both explored and unexplored tested-cell
+  states while keeping eligible bomb pixels in view is unmeasured, not passed.
+- **OV14-D (claim 19; engine-alternative conformance, not an original-game measurement).** Replay the
+  repaired-building timing test in our engine with `quirks.speed_normalised_delays` off, at game
+  speeds 0, 3 and 6. Record the tick and wrench image frame for 30 ticks per speed. Expected:
+  period 3 ticks and image frames 0, 3, 6 at tick residues 0, 1, 2, respectively, at every speed.
+  Falsified by any different image frame or period.
 
 ## Open questions
 
@@ -838,6 +907,11 @@ involved.
 
 ## Cross-spec consistency
 
+- This draft replaces this spec's previously approved claim 9 and OV6 infiltration expectation:
+  spying is not a reachable pip-reveal condition in stock skirmish. The corrected claim 9 agrees
+  with approved S-0510 claim 8 and its scenario I7. Hand-off replaces the old S-0111 text; no
+  companion correction to S-0510 is required. OV6 explicitly discriminates the old expectation
+  (pips appear after infiltration) from the corrected one (they remain hidden).
 - Q-0471 is fully answered by claim 12 and Import mapping: the former
   `quirks.pip_colour_default_shift` is withdrawn. Pip-value retention is mandatory, not a
   rendering option; OV7-R checks the corrected result. S-0003 claim 16 and S-0006 claim 5 agree.
