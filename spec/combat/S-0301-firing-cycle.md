@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0060, Q-0798]
 supersedes: []
@@ -22,7 +22,8 @@ delayed and animation-synchronised shots, and the firing check, the per-attempt 
 says whether a shot can be fired now and, if not, why. Aiming tolerances and turret behaviour are
 S-0310; where a shot starts is S-0313; which weapon is used is S-0308; range is S-0307.
 Drain attempts replace ordinary shots (S-0608 claim 1; claim 9 here). Disc-laser firing and its
-lasting effect are S-0615 claims 12 to 17.
+lasting effect are S-0615 claims 12 to 17. Aircraft carrying a first passenger replace ordinary
+shots with drop attempts (S-0522 claim 11), outside the ordinary-shot rules below.
 
 ## Terms
 
@@ -37,6 +38,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Draining weapon, drain attempt, drainable type, draining, being drained.** As S-0608
   claims 1 to 3 and Terms. A drain attempt replaces an ordinary shot and does not count as a
   shot for this spec's countdown, burst, ammunition or ordinary-shot draw rules (claim 9).
+- **Drop attempt.** A carrying aircraft's attempt to release its first passenger instead of an
+  ordinary shot (S-0522 claim 11). Neither success nor refusal counts as an ordinary shot here.
 - **Void shot.** An attempt that passed the firing check but whose projectile could not be put on
   the map (claim 15). It makes no shot.
 - **Rearm countdown.** A per-firer countdown in ticks. It is set by every shot the firer makes, to
@@ -132,7 +135,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    one created during play, has no running countdown: it can fire as soon as it has a target. The
    countdown is not changed by switching weapons or targets. Counting is in ticks: game speed does
    not change *D*, and `quirks.speed_normalised_delays` does not apply to any delay of this spec.
-   - Backing: `measurable` (scenario F1)
+   A carrying aircraft's drop attempt instead leaves the countdown unchanged on refusal and
+   expires it immediately on success; it sets no ordinary shot delay (S-0522 claim 11).
+   - Backing: `measurable` (scenario F1; S-0522 scenario P7 for drop attempts)
    - Confidence: high
 
 2. **Which delay a shot gets.** Four kinds of delay exist: the 1-tick delay of a building with
@@ -223,8 +228,12 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    has none), its burst counter is set to 0; a change from one target to another keeps it.
    An aircraft's full burst makes all *B* shots in one tick without a firing check between shots
    (S-0501 claim 12). Each shot still advances the burst counter and sets the countdown.
-   The in-burst delays do not separate those shots.
-   - Backing: `measurable` (scenario F3; S-0501 scenarios AC7 to AC9 for aircraft)
+   The in-burst delays do not separate those shots. Each attempt made while a first passenger
+   exists is instead a drop attempt: it never advances the burst counter or chooses an ordinary
+   full or in-burst delay, including their draws (S-0522 claim 11). The exception ends when no
+   first passenger remains; any further attempts in that same burst are not cargo drops.
+   - Backing: `measurable` (scenario F3; S-0501 scenarios AC7 to AC9 for aircraft,
+     S-0522 scenario P7 for drop attempts)
    - Confidence: high (the counter and both in-burst delays); medium (the reset when the target is
      cleared, and the carry-over between weapons)
 
@@ -457,7 +466,11 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     round (S-0615 claim 12; and it neither advances a garrison's muzzle index, S-0313,
     nor restarts a vehicle's reload, claim 11). A drain attempt likewise uses no round
     (claim 9; S-0608 claim 1). Aircraft spend one round per attack run in which they fired, not per shot
-    (S-0501 claim 15). Servicing on pads belongs to S-0501 claims 26 to 28. Only their starting count is owned here. The 1-tick rule depends on
+    (S-0501 claim 15). A successful drop attempt additionally spends one round immediately,
+    whereas a refused drop has no net immediate ammunition change (S-0522 claims 9 and 11).
+    Run-level pending spending still applies even when every drop attempt in the firing pass
+    is refused; it is additional to successful drops' immediate spending.
+    Servicing on pads belongs to S-0501 claims 26 to 28. Only their starting count is owned here. The 1-tick rule depends on
     a building's ammunition before the shot: a building that holds more than 1 round before a shot
     has a delay of exactly 1 tick after that shot, with no draw, whatever its weapon's burst count
     or kind (claim 2's order; `quirks.building_ammo_fast_rearm`). The shot made with its last round gets the normal delay of
@@ -465,7 +478,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     building with 3 rounds and no other firing gate therefore fires in ticks *t*, *t* + 1
     and *t* + 2, then answers
     *rearming* until its countdown ends, and only then *out of ammunition*.
-    - Backing: `measurable` (scenario F9; the building part of scenario F3 for a burst weapon; the building part of scenario F4)
+    - Backing: `measurable` (scenario F9; the building part of scenario F3 for a burst weapon,
+      the building part of scenario F4; S-0522 scenario P7 for drop ammunition)
     - Confidence: high (starting count, no clamp, the same rule for map and production,
       rounds used, out of ammunition); medium (the building rule: it needs a building with
       ammunition above 1, so test data must supply it)
@@ -557,11 +571,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 15. **Failed launches.** If the projectile of a shot cannot be put on the map, the shot is void:
     the rearm countdown, the burst counter, the ammunition and the garrison muzzle position (S-0313)
-    stay as they were.
+    stay as they were. A carrying aircraft's drop attempt is not a void shot merely because
+    it launches no projectile: successful release and its ammunition spending remain, and its
+    rearm countdown expires; refusal retains the countdown (S-0522 claim 11). Neither outcome
+    produces ordinary-shot effects: no spray draw, weapon report or muzzle animation.
     - Backing: `measurable` (S-0306, scenario P5 run d: an arcing shot for which the launch pitch has
       no solution is removed before it enters play, S-0306 claim 6 a; observed here by scenario F14,
-      void-shot part)
-    - Confidence: medium
+      void-shot part; S-0522 scenario P7 for the drop exception)
+    - Confidence: medium (failed projectile launches); high (the drop exception)
 
 ### Related state
 
@@ -584,7 +601,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     - Confidence: low
 
 18. **Draws taken by one shot.** These are ordinary-shot draws, not the possible
-    link-effect draws of a drain attempt (claim 9; S-0608 claims 1 and 5). A shot takes, from the scenario random stream and in this order:
+    link-effect draws of a drain attempt (claim 9; S-0608 claims 1 and 5), nor the
+    standing-position and parachute draws of a drop attempt (S-0522 claims 9, 11 and 13).
+    A drop attempt takes no ordinary-shot draws, whether successful or refused. A shot takes, from the scenario random stream and in this order:
     the spray pick of S-0313 (only for the first shot of a burst of a spray-attack type), the
     projectile's own draws (S-0306), the draws of creating an effect weapon's particle system
     (S-0202, claim 10, when this shot starts the effect), then the one delay draw (R(0, 2) of claim 2 or R(3, 5) of claim 4) if
@@ -593,7 +612,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     effects). A refused attempt takes no draw at all. A delay without a draw (a burst-delay field of claim 4, the bare
     rate of claim 5, the 1-tick delay of claim 10) takes no delay draw. A void shot as in claim 15 takes the projectile's draws but no delay draw.
     - Backing: `measurable` (scenario F14, with the random-state recorder; the void-shot rule through
-      S-0306 scenario P5 run d; S-0608 scenario D1 part a for drain attempts and link effects)
+      S-0306 scenario P5 run d; S-0608 scenario D1 part a for drain attempts and link effects,
+      S-0522 scenario P7 for drop attempts)
     - Confidence: high (one delay draw per shot, or none); medium (its place between the projectile's and the animation's
       draws)
 
@@ -668,6 +688,7 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 |---|---|---|
 | ready (no countdown running), or countdown running in claim 13's sync tick | an attempt passes the firing check and makes a shot | the shot is the *j*-th of its burst, *j* = *k* + 1; the countdown runs for the shot's delay *D*, of the kind that claim 2's order gives for *j*, with the factors of claims 3, 6 and 7 where that kind takes them and the halving of claim 8 where it applies; the burst counter is *j* mod *B* |
 | ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ammunition use or ordinary-shot draws; target clearing still resets the burst counter |
+| carrying aircraft with a first passenger | firing reaches a drop attempt | no ordinary shot, burst advance, delay draw, spray draw, report or muzzle animation; refusal retains countdown and ammunition, success expires countdown and spends one round immediately; run spending remains separate (S-0522 claim 11) |
 | ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
 | ready, animation-delayed non-SAM building on the ordinary path | its attack behaviour gets *can fire*, outside an active upgrade gate | the delayed shot becomes pending (claim 14); no shot is made yet |
 | ready, animation-delayed non-SAM building with active upgrade gate | *can fire*, gate passes | immediate primary and secondary attempts, no delayed shot started; an empty secondary does nothing (claims 9 and 14) |
@@ -951,8 +972,9 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   Test the emptied marked carrier with: (i) countdown running and aim wrong, (ii) countdown
   over, target out of range and the attempt asking for range, (iii) countdown over and
   target in range but aim wrong, and (iv) countdown over, in range and correctly aimed.
-  Obtain (i) immediately after its last passenger shot, with a long test rearm delay.
-  Keep all other refusal causes absent. Expected answers are respectively *rearming*,
+  Its last successful passenger drop expires its countdown (S-0522 claim 11), so does not
+  supply case (i). Test that case only if normal inputs establish an emptied marked carrier
+  with a running countdown; otherwise report it inconclusive. Keep all other refusal causes absent. Expected answers are respectively *rearming*,
   *out of range*, *out of ammunition* and *out of ammunition*, with no ordinary projectile
   shot in any case. The fresh empty control answers *not facing* in case iii and may fire
   in case iv. A different recorded answer, or ordinary projectile fire from the emptied
