@@ -5834,6 +5834,21 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_endless_refire": {
+          "description": "With the re-approach flag off, an ordinary non-fighter, non-strafer repeats burst-plus-single-shot cycles without spending its pending round; off: each such cycle ends as one run.",
+          "type": "boolean",
+          "default": true
+        },
+        "aircraft_half_reload_with_target": {
+          "description": "An aircraft on a pad with a target is never reloaded past half its ammunition while it keeps the target; off: reload to full regardless of target.",
+          "type": "boolean",
+          "default": true
+        },
+        "aircraft_smoke_scenario_draw": {
+          "description": "An aircraft's damage-smoke chance draws from the scenario stream, including updates that show no smoke; off: no damage-smoke draw and no smoke animation.",
+          "type": "boolean",
+          "default": true
+        },
         "all_carriers_without_carrier": {
           "description": "An all-carriers tag with no carrier never fires; off: a carrier count of 0 counts like 1, so the tag fires once and is deleted.",
           "type": "boolean",
@@ -6039,6 +6054,11 @@
           "type": "boolean",
           "default": true
         },
+        "cull_experience_path": {
+          "description": "A cull's experience has no rank multiplier, no alliance test and no unscored test, and divides by the parasite's cost for its own house; off: the cull is a destruction credited to the parasite under S-0311 claims 7 to 10.",
+          "type": "boolean",
+          "default": true
+        },
         "curtain_nullifies_small_detonation": {
           "description": "A small detonation that finds a curtain-protected object hits only protected objects.",
           "type": "boolean",
@@ -6106,6 +6126,11 @@
         },
         "deploy_refuses_own_walls": {
           "description": "A deploying vehicle cannot deploy onto its own house's wall.",
+          "type": "boolean",
+          "default": true
+        },
+        "destroyed_rocket_still_detonates": {
+          "description": "A rocket missile destroyed in flight still detonates (claim 20).",
           "type": "boolean",
           "default": true
         },
@@ -6414,6 +6439,11 @@
           "type": "boolean",
           "default": true
         },
+        "launch_spacing_from_spawner_type": {
+          "description": "The 9-tick launch spacing is chosen by the missile-spawn flag of the spawner's own type, not of the spawned type; off: the spawned type's flag decides.",
+          "type": "boolean",
+          "default": true
+        },
         "mind_controlled_passengers_cell_choice": {
           "description": "Passengers of a mind-controlled open-topped transport take the cell's last object only.",
           "type": "boolean",
@@ -6476,6 +6506,11 @@
         },
         "nominal_survivor_count": {
           "description": "A nominal survivor is not added to the infantry count but is taken off when it leaves.",
+          "type": "boolean",
+          "default": true
+        },
+        "non_unloading_refinery_accepts": {
+          "description": "A dock-type building without the dock-unload flag still accepts refinery contact, leaving the harvester in enter without unloading; off: such buildings are excluded from both refinery choices and refuse refinery contact.",
           "type": "boolean",
           "default": true
         },
@@ -6561,6 +6596,36 @@
         },
         "packup_sound_on_sale": {
           "description": "A sold building with a pack-up sound also plays it.",
+          "type": "boolean",
+          "default": true
+        },
+        "pad_distance_overflow": {
+          "description": "The squared pad distance of F9 wraps in 32 bits, so a very distant pad can look nearer; off: exact squared distances.",
+          "type": "boolean",
+          "default": true
+        },
+        "pad_limit_counts_list_only": {
+          "description": "The pad limit's count includes only types in the pad-aircraft list; off: the asked-for type is counted too.",
+          "type": "boolean",
+          "default": true
+        },
+        "parasite_exit_search_host_mobility": {
+          "description": "A parasite's exit-cell search uses the host's locomotion class and movement zone; off: the parasite's own.",
+          "type": "boolean",
+          "default": true
+        },
+        "parasite_exit_tests_host_cell": {
+          "description": "Whether a parasite may come out at all is judged on the host's cell, not on the chosen cell; off: the chosen cell is tested.",
+          "type": "boolean",
+          "default": true
+        },
+        "parasite_host_loss_bridge_test": {
+          "description": "On host loss, the fallback neighbour's restricted land passes when the host's cell has a bridge; off: the neighbour's own bridge is tested.",
+          "type": "boolean",
+          "default": true
+        },
+        "parasite_host_loss_suppresses_naval": {
+          "description": "On host loss, a suppressed naval parasite is removed silently; off: a naval parasite ignores suppression here too.",
           "type": "boolean",
           "default": true
         },
@@ -6669,6 +6734,16 @@
           "type": "boolean",
           "default": true
         },
+        "rail_missile_vanishes_with_spawner": {
+          "description": "Missiles on the rail vanish with no detonation when the spawner dies or changes hands; off: they are released like preparing missiles.",
+          "type": "boolean",
+          "default": true
+        },
+        "raised_missile_rail_time_from_set_b": {
+          "description": "A set-C missile's rail time uses set B's pause and tilt times; off: set C's own times.",
+          "type": "boolean",
+          "default": true
+        },
         "ramp_shape_zero": {
           "description": "A tile of the ramp range or of the smooth-ramp range whose slope shape is 0 becomes the tile just before the ramp range.",
           "type": "boolean",
@@ -6771,6 +6846,16 @@
         },
         "resume_restarts_step": {
           "description": "A resumed line waits a full step period before its next step.",
+          "type": "boolean",
+          "default": true
+        },
+        "rocket_aim_at_heading_point": {
+          "description": "A rocket missile's aim point is fixed at the heading point of claim 14.",
+          "type": "boolean",
+          "default": true
+        },
+        "rocket_stalls_at_map_edge": {
+          "description": "A rocket missile whose path leaves the legal cells keeps the last legal position and continues its phase, speed and pitch updates; off: it detonates at the last legal position.",
           "type": "boolean",
           "default": true
         },
@@ -7216,6 +7301,11 @@
         },
         "yellow_state_at_half": {
           "description": "The yellow damage state is reported at half the strength, whatever the yellow ratio.",
+          "type": "boolean",
+          "default": true
+        },
+        "zero_capacity_harvester_cycles": {
+          "description": "A vehicle harvester type with capacity 0 runs its cycle without ever carrying a bale (fill ratio 0/0); off: imported capacity 0 counts as 1 bale.",
           "type": "boolean",
           "default": true
         },

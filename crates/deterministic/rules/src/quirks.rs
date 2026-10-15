@@ -1181,6 +1181,78 @@ pub struct Quirks {
     // spec: S-0701 claim 26, Edge cases
     #[serde(default = "on")]
     pub announcement_volume_ignored: bool,
+    /// A vehicle harvester type with capacity 0 runs its cycle without ever carrying a bale (fill ratio 0/0); off: imported capacity 0 counts as 1 bale.
+    // spec: S-0402 claim 1, Edge cases
+    #[serde(default = "on")]
+    pub zero_capacity_harvester_cycles: bool,
+    /// A dock-type building without the dock-unload flag still accepts refinery contact, leaving the harvester in enter without unloading; off: such buildings are excluded from both refinery choices and refuse refinery contact.
+    // spec: S-0402 claims 8 and 10, Edge cases
+    #[serde(default = "on")]
+    pub non_unloading_refinery_accepts: bool,
+    /// The 9-tick launch spacing is chosen by the missile-spawn flag of the spawner's own type, not of the spawned type; off: the spawned type's flag decides.
+    // spec: S-0506 claim 6, Edge cases
+    #[serde(default = "on")]
+    pub launch_spacing_from_spawner_type: bool,
+    /// A set-C missile's rail time uses set B's pause and tilt times; off: set C's own times.
+    // spec: S-0506 claim 9, Edge cases
+    #[serde(default = "on")]
+    pub raised_missile_rail_time_from_set_b: bool,
+    /// Missiles on the rail vanish with no detonation when the spawner dies or changes hands; off: they are released like preparing missiles.
+    // spec: S-0506 claim 13, Edge cases
+    #[serde(default = "on")]
+    pub rail_missile_vanishes_with_spawner: bool,
+    /// A rocket missile's aim point is fixed at the heading point of claim 14.
+    // spec: S-0506 claim 14, Edge cases
+    #[serde(default = "on")]
+    pub rocket_aim_at_heading_point: bool,
+    /// A rocket missile destroyed in flight still detonates (claim 20).
+    // spec: S-0506 claim 20, Edge cases
+    #[serde(default = "on")]
+    pub destroyed_rocket_still_detonates: bool,
+    /// A rocket missile whose path leaves the legal cells keeps the last legal position and continues its phase, speed and pitch updates; off: it detonates at the last legal position.
+    // spec: S-0506 claim 18, Edge cases
+    #[serde(default = "on")]
+    pub rocket_stalls_at_map_edge: bool,
+    /// A parasite's exit-cell search uses the host's locomotion class and movement zone; off: the parasite's own.
+    // spec: S-0614 claim 13, Edge cases
+    #[serde(default = "on")]
+    pub parasite_exit_search_host_mobility: bool,
+    /// Whether a parasite may come out at all is judged on the host's cell, not on the chosen cell; off: the chosen cell is tested.
+    // spec: S-0614 claim 13, Edge cases
+    #[serde(default = "on")]
+    pub parasite_exit_tests_host_cell: bool,
+    /// On host loss, the fallback neighbour's restricted land passes when the host's cell has a bridge; off: the neighbour's own bridge is tested.
+    // spec: S-0614 claim 15, Edge cases
+    #[serde(default = "on")]
+    pub parasite_host_loss_bridge_test: bool,
+    /// On host loss, a suppressed naval parasite is removed silently; off: a naval parasite ignores suppression here too.
+    // spec: S-0614 claim 15, Edge cases; S-0315 claim 7
+    #[serde(default = "on")]
+    pub parasite_host_loss_suppresses_naval: bool,
+    /// A cull's experience has no rank multiplier, no alliance test and no unscored test, and divides by the parasite's cost for its own house; off: the cull is a destruction credited to the parasite under S-0311 claims 7 to 10.
+    // spec: S-0614 claim 11, Edge cases
+    #[serde(default = "on")]
+    pub cull_experience_path: bool,
+    /// With the re-approach flag off, an ordinary non-fighter, non-strafer repeats burst-plus-single-shot cycles without spending its pending round; off: each such cycle ends as one run.
+    // spec: S-0501 claims 14 and 15, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_endless_refire: bool,
+    /// An aircraft on a pad with a target is never reloaded past half its ammunition while it keeps the target; off: reload to full regardless of target.
+    // spec: S-0501 claim 28, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_half_reload_with_target: bool,
+    /// An aircraft's damage-smoke chance draws from the scenario stream, including updates that show no smoke; off: no damage-smoke draw and no smoke animation.
+    // spec: S-0501 claim 37, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_smoke_scenario_draw: bool,
+    /// The pad limit's count includes only types in the pad-aircraft list; off: the asked-for type is counted too.
+    // spec: S-0501 claim 30, S-0407 Edge cases
+    #[serde(default = "on")]
+    pub pad_limit_counts_list_only: bool,
+    /// The squared pad distance of F9 wraps in 32 bits, so a very distant pad can look nearer; off: exact squared distances.
+    // spec: S-0501 claim 21 and F9, Edge cases
+    #[serde(default = "on")]
+    pub pad_distance_overflow: bool,
 }
 
 impl Default for Quirks {
@@ -1471,6 +1543,24 @@ impl Default for Quirks {
             shroud_sound_corner_cell: true,
             deploy_command_silent: true,
             announcement_volume_ignored: true,
+            zero_capacity_harvester_cycles: true,
+            non_unloading_refinery_accepts: true,
+            launch_spacing_from_spawner_type: true,
+            raised_missile_rail_time_from_set_b: true,
+            rail_missile_vanishes_with_spawner: true,
+            rocket_aim_at_heading_point: true,
+            destroyed_rocket_still_detonates: true,
+            rocket_stalls_at_map_edge: true,
+            parasite_exit_search_host_mobility: true,
+            parasite_exit_tests_host_cell: true,
+            parasite_host_loss_bridge_test: true,
+            parasite_host_loss_suppresses_naval: true,
+            cull_experience_path: true,
+            aircraft_endless_refire: true,
+            aircraft_half_reload_with_target: true,
+            aircraft_smoke_scenario_draw: true,
+            pad_limit_counts_list_only: true,
+            pad_distance_overflow: true,
         }
     }
 }
@@ -2160,6 +2250,66 @@ impl Quirks {
                 "announcement_volume_ignored",
                 self.announcement_volume_ignored,
             ),
+            (
+                "zero_capacity_harvester_cycles",
+                self.zero_capacity_harvester_cycles,
+            ),
+            (
+                "non_unloading_refinery_accepts",
+                self.non_unloading_refinery_accepts,
+            ),
+            (
+                "launch_spacing_from_spawner_type",
+                self.launch_spacing_from_spawner_type,
+            ),
+            (
+                "raised_missile_rail_time_from_set_b",
+                self.raised_missile_rail_time_from_set_b,
+            ),
+            (
+                "rail_missile_vanishes_with_spawner",
+                self.rail_missile_vanishes_with_spawner,
+            ),
+            (
+                "rocket_aim_at_heading_point",
+                self.rocket_aim_at_heading_point,
+            ),
+            (
+                "destroyed_rocket_still_detonates",
+                self.destroyed_rocket_still_detonates,
+            ),
+            ("rocket_stalls_at_map_edge", self.rocket_stalls_at_map_edge),
+            (
+                "parasite_exit_search_host_mobility",
+                self.parasite_exit_search_host_mobility,
+            ),
+            (
+                "parasite_exit_tests_host_cell",
+                self.parasite_exit_tests_host_cell,
+            ),
+            (
+                "parasite_host_loss_bridge_test",
+                self.parasite_host_loss_bridge_test,
+            ),
+            (
+                "parasite_host_loss_suppresses_naval",
+                self.parasite_host_loss_suppresses_naval,
+            ),
+            ("cull_experience_path", self.cull_experience_path),
+            ("aircraft_endless_refire", self.aircraft_endless_refire),
+            (
+                "aircraft_half_reload_with_target",
+                self.aircraft_half_reload_with_target,
+            ),
+            (
+                "aircraft_smoke_scenario_draw",
+                self.aircraft_smoke_scenario_draw,
+            ),
+            (
+                "pad_limit_counts_list_only",
+                self.pad_limit_counts_list_only,
+            ),
+            ("pad_distance_overflow", self.pad_distance_overflow),
         ]
     }
 
@@ -2331,7 +2481,11 @@ mod tests {
                     .and_then(|n| n.to_str())
                     .unwrap_or("")
                     .to_owned();
-                if name.starts_with("S-02") || name.starts_with("S-03") || name.starts_with("S-04")
+                if name.starts_with("S-02")
+                    || name.starts_with("S-03")
+                    || name.starts_with("S-04")
+                    || name.starts_with("S-05")
+                    || name.starts_with("S-06")
                 {
                     files.push(p);
                 }
