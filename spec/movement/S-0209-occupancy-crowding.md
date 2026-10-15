@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 28
+revision: 29
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -335,13 +335,17 @@ rank* and *elite weapon*), *n*
 - **Between steps.** A vehicle is *between steps* from the moment it completes a movement step (it
   reaches the target of its track, S-0207) until it next advances along a track. A vehicle that has
   not advanced along a track since it was created, or since it was put down somewhere else (for
-  example by a teleport), is between steps too. This holds for vehicles that drive on tracks; that
-  hovering vehicles and walking vehicles are between steps at the end of each step, and otherwise
-  not, is medium confidence. Vehicles that move in other ways (for example by jumping or flying)
-  are not known ever to leave the state (low). Otherwise this definition has the confidence and
-  backing of the rows that use it: rows WP17 and WP18 of claim 4 and rows VP22 and VP23 of claim 5.
-  For vehicles that do not drive on tracks, that backing is U6 (claim 4's list): claim 1 uses the state
-  only for vehicles that drive on tracks, so for the others it shows only in the split of those rows.
+  example by a teleport), is between steps too. This definition applies to vehicles that drive on
+  tracks. For a hovering vehicle, S-0503 claim 13 owns the state: it starts between steps, each
+  arrival at its heading point puts it between steps again, and the next positive-distance travel
+  with a heading point ends that state, including travel on the same arrival tick. Choosing a
+  heading point does not itself end the state; losing one after refusal does not itself set it.
+  This pointer inherits that claim's confidence and `measurable` backing (S-0503 scenario H11).
+  That walking vehicles are between steps at the end of each step, and otherwise not, is medium
+  confidence. Vehicles that move in other ways (for example by jumping or flying) are not known
+  ever to leave the state (low). Otherwise this definition has the confidence and backing of the
+  rows that use it: rows WP17 and WP18 of claim 4 and rows VP22 and VP23 of claim 5. U6 (claim 4's
+  list) still applies to isolating the split of those rows, not to the hover state itself.
 - **At a chain point.** A vehicle that drives on tracks is *at a chain point* while its position is
   the chain point of its current two-cell curve, the step after that curve turns again, and the next
   pair of steps has a curve with an entry point (S-0207 claim 8). Whether the vehicle's type has the
@@ -423,9 +427,9 @@ rank* and *elite weapon*), *n*
      afterwards, by an infantry unit or by a terrain object's mark. Otherwise it stays as it was.
      This house-clearing rule applies only to clearing an infantry mark; clearing a terrain
      object's marks leaves the house unchanged, even when it frees the last side position.
-   - *Vehicles.* A vehicle sets the vehicle-present flag of the cell layer its position is in.
-     Ordinary ground movement has the reservations below; teleporting movement has the separate
-     lifecycle described next. When it starts a movement step into a neighbouring cell, it also sets that cell's flag at once, before
+   - *Driving vehicles.* A driving vehicle sets the vehicle-present flag of the cell layer its
+     position is in. Driving movement has the reservations below; hovering and teleporting
+     movement have their separate lifecycles described next. When it starts a movement step into a neighbouring cell, it also sets that cell's flag at once, before
      its position is in it. When the step is a two-cell curve (S-0207 claim 7), it sets the flag of
      both cells of the curve at once. A vehicle that drives on tracks clears a flag at three
      moments, each time in the cell layer of its position at that moment:
@@ -441,8 +445,21 @@ rank* and *elite weapon*), *n*
      flag until the vehicle makes progress on its next track, and a cell it is leaving loses the
      flag before the vehicle's position leaves it. While the vehicle is still listed there, the
      occupant rows of claims 4 and 5 (row VP1 for the vehicle itself) still see it. Moving into a
-     new cell during a track clears nothing. When hovering vehicles, ships and walking vehicles
-     clear their flags is not established (Open questions).
+     new cell during a track clears nothing. When ships and walking vehicles clear their flags
+     is not established (Open questions).
+   - *Hovering vehicles.* S-0503 claim 13 owns their reservations and between-steps state.
+     A clear heading-point choice reserves that point's cell before physical entry. Replacing or
+     abandoning the point clears its old reservation. The positive advance with a heading point
+     that ends the between-steps state clears the flag at the actual position before movement,
+     even when the vehicle remains in that cell. While not between steps, cell-edge crossings
+     move the listing without setting or clearing flags, so cells merely swung through at a turn
+     are not reserved. A crossing while still between steps clears the old actual-position flag
+     and marks the new actual position. A successful arrival-time choice that leaves no heading
+     point restores a mark at the actual position. Reservation surface follows the marked point
+     under S-0503 claim 13, not automatically the current listing layer. These are flags, not
+     per-vehicle counts. This pointer inherits that claim's high confidence for reservation and
+     first-advance release, medium confidence for exceptional crossings and no-point restoration,
+     and `measurable` backing (S-0503 scenario H11).
    - *Teleporting vehicles.* S-0207 claim 20 a, e and k owns their reservation lifecycle.
      Fixing a landing point reserves its ground record, even for a high-bridge cell and even
      when the nearby search uses deck mode. Replacing a remembered landing point clears that
@@ -3055,8 +3072,8 @@ That moment is called the *window*. Common setup:
   checks ordinary straight and two-cell-curve cases; it does not settle every track or chained
   curve. This is a shared clarification for S-0207 and S-0209: any resolution must reconcile the
   position rule with the reservation and release rules and be handed off in both specs together.
-- When hovering vehicles, ships and walking vehicles clear their vehicle-present flags (claim 1) is
-  not established. The driving vehicle's moments are claim 1's. Whether a vehicle that is removed from
+- When ships and walking vehicles clear their vehicle-present flags (claim 1) is
+  not established. Hovering vehicles use S-0503 claim 13's reservation and between-steps rules. The driving vehicle's moments are claim 1's. Whether a vehicle that is removed from
   the map in the middle of a track clears the flags it set ahead of itself is not established either.
 - The underground locomotor's rule (claim 5, part 5b): which cells it makes *blocked*, the
   game-wide setting that turns it off, and the situations in which it applies belong to the specs
