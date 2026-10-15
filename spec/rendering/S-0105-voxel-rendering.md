@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 15
+revision: 16
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0216, Q-0470]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470]
 supersedes: []
 ---
 
@@ -23,7 +23,10 @@ this spec rather than the original. Fifteen lead-classified presentation glitche
 fixed outright, with no switches. Q-0215 questions 1–6 are already answered by F8.
 Question 7's arbitrary-section characterization is explicitly `unmeasured`, not an
 implied extrapolation from that table. MS-28 proposes larger mixed-tie discriminators
-and states what is still required to close that question.
+and states what is still required to close that question. Q-0215 is listed for these
+answers and this explicit unmeasured disposition, not as a claim that a general rule
+has been established. What our engine draws in the meantime outside the covered
+configurations is not a stable rule to infer or a reference result.
 
 How a voxel model (a VXL model with its HVA animation) becomes pixels: the fixed viewing
 transform, how many facings each model part can show, how the body, turret and barrel are
@@ -466,7 +469,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       the listed examples do not distinguish all possible full-sequence relations, and
       no arbitrary-section coverage characterization is established here. MS-28 is the
       proposed discriminating investigation; this is a specification gap, not an
-      assertion that those pixels cannot be observed.
+      assertion that those pixels cannot be observed. What our engine draws in the
+      meantime outside F8's covered configurations is not a stable rule to infer,
+      nor evidence of the original's general priority.
     - Confidence: high for the stated priorities and input sufficiency; low for any
       extrapolation beyond the covered configurations
 
@@ -1125,7 +1130,8 @@ not a complete characterization for arbitrary section counts (Q-0215 question 7)
 Backing: `measurable` (MS-25, MS-5b) for the table, all-equal case and input sufficiency.
 Backing: `unmeasured` for an arbitrary-count mixed-tie relation, for the reason in claim 23.
 Confidence: high for the stated results, low for extrapolation. MS-28 supplies proposed
-outside-table observations, not a general default priority.
+outside-table observations, not a general default priority. Interim engine pixels outside
+these covered configurations do not establish a stable tie rule.
 
 **F9. Turning at a turn rate (claim 6, Terms).** This is S-0206's turning rule (its claim 1 and F1), stated here for the barrel elevation. All quantities are integers. A facing turns from
 a start facing *ψ₀* toward a target facing *ψ₁* at turn rate *ω* (1 … 127). Let *Δ* be *ψ₁ − ψ₀* taken as the signed
@@ -3019,8 +3025,10 @@ conformance for lead-confirmed departures, not an oracle experiment.
   behavioural characterization for arbitrary mixed-depth ties remains open and is
   explicitly `unmeasured` (claim 23): finite examples cannot identify a unique general
   relation. MS-28 gives outside-table pairwise discriminators and the settlement criterion.
-  The current table does not license extrapolation or a stable tie rule. Q-0215 is not
-  listed as fully answered in the front matter because this part remains open.
+  The current table does not license extrapolation or a stable tie rule. What our engine
+  draws in the meantime outside the covered configurations is not a reference result.
+  Q-0215's front-matter entry records questions 1–6 and question 7's explicit unmeasured
+  disposition; the general arbitrary-count rule itself remains open.
 
 ## Questions for the project lead
 

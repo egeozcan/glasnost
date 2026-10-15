@@ -1,9 +1,9 @@
 ---
 id: Q-0260
 title: How does a sound name from the rules data become the samples that play, and what do the sound database's entries control?
-status: open
+status: answered
 related: [S-0005, S-0001, S-0107, S-0214, S-0408, S-0415, S-0416, S-0410, S-0210, S-0109, S-0207]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

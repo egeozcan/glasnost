@@ -1,9 +1,9 @@
 ---
 id: Q-0264
 title: Which sound plays when a weapon fires, when an object dies and when a building is damaged?
-status: open
+status: answered
 related: [S-0301, S-0312, S-0302, S-0202]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need

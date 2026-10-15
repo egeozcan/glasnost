@@ -2,7 +2,7 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -617,6 +617,14 @@ S-0101 claim 3. In addition:
     marking an enemy object discovered does not reveal its cell or bypass S-0410's enemy-object
     shroud tests.
 
+    In the original, a building whose owner is not human-controlled is also revealed to
+    that owner near the end of its placement. This sets a separate discovery mark shared
+    by all houses other than the local player's house, not one mark per computer house.
+    It does not explore cells or replace the local player's discovery mark. For a set-up
+    building, this owner reveal permits the ready-mark effect described in S-0215 claim 1.
+    This is original-only bookkeeping: our engine's player-house discovery remains the
+    per-house rule above, and AI houses follow human-controlled unit rules (glossary).
+
     A reveal whose cover piece changes also marks one object per eligible cell discovered.
     For a height-0 reveal cell, the eligible cells are that cell plus (*n*, *n*) for integer
     *n* from 0 to 6, when the candidate cell's height level *h* satisfies
@@ -632,13 +640,17 @@ S-0101 claim 3. In addition:
       corrected S-0410 R9 part A). Placement discovery for infantry, aircraft, buildings,
       bridge-deck placements and outside-area clearing is `unmeasured` here: V17 tests only
       vehicles on usable ground, and no listed part isolates those other kinds or locations.
+      The original's separate shared discovery mark and its owner-reveal assignment are
+      `unmeasured` independently: neither is drawn, and the placement already sets the local
+      player's mark. The set-up readiness consequence is measurable by S-0215 scenario B36.
       The unset mark before map placement is `unmeasured` independently: an off-map newly
       created object is not listed on radar, so its mark cannot be distinguished there.
       The reveal-selection geometry, eligible kinds and tie priority are `unmeasured`: ordinary
       skirmish cell placement already marks the competing objects discovered, so selecting one
       again has no separately observable effect. A tree cannot hide a vehicle's radar mark.
-    - Confidence: high for discovery on cell placement and the distinction from ownership,
-      medium for outside-area clearing and the reveal-selection rules
+    - Confidence: high for discovery on cell placement, the distinction from ownership and
+      the original's owner reveal and shared mark; medium for outside-area clearing and
+      the reveal-selection rules
 
 21. **Shared off-map state in whole-map operations (Q-0111).** With
     `quirks.offmap_cells_shared` on, non-legal cells covered by gap fields affect one shared

@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -74,7 +74,7 @@ a carrier's controller is launching ordinary aircraft.
    the ship crush handling of S-0210 claim 9. This does not assert equivalence for special exit
    tracks. These rules cover skirmish; network games and campaigns are out of scope. In particular these S-0207 rules
    hold for it unchanged: the speed and progress per tick (claims 1 to 4), height and facing on a
-   track (claim 4), turning in place before a step (claim 6, with S-0206 claim 12), the choice of
+   track (claim 5), turning in place before a step (claim 6, with S-0206 claim 12), the choice of
    track from tables T1 and T2 (claim 7), no chaining of curves for ordinary vehicles (claim 8),
    the target fraction and the speed-fraction update with the same cases and constants (claims 9
    and 10), stopping (claim 11), ticks and track boundaries (claim 12), the speed power-up (claim 13),
@@ -83,11 +83,20 @@ a carrier's controller is launching ordinary aircraft.
    (claim 19) and cell-tag arrival timing (claim 22). A ship's *heading point* (S-0207 Terms) is the
    driving one: the track target of the track it is on, from the tick the track begins until the
    tick it ends, and none while it stands still, turns in place, waits or is between tracks.
+   Its stored world height follows S-0207 claim 24: it copies the ship's current integer
+   world height in leptons when the track begins, before progress, with no rounding,
+   target-surface sampling or extra deck lift. This holds for one-cell tracks and two-cell
+   curves. The height stays unchanged during the track and through curve chaining, even
+   when the ship's own height changes; chaining advances only the horizontal target.
+   A new track after completion copies the ship's height anew. A high-bridge target alone
+   therefore does not assign deck height. S-0511 claims 9 and 11 own the bridge-loss uses
+   of this stored height and the separate current-height track test.
    A ship stays in the ground layer, or the bridge-deck layer on a deck, by S-0207's rules; an
    underwater type is in the same layer as a surface ship (claim 6). Its body tilts on slopes as
    S-0106 claim 5 says for naval locomotion.
    - Backing: `measurable` (N1 and N2) for ordinary progress, turning, stopping, heading-point
-     scatter and approach. The remaining shared-rule assertions are `unmeasured` here: those
+     scatter and approach; S-0207 D27 for heading-height assignment and retention through
+     chaining. The remaining shared-rule assertions are `unmeasured` here: those
      scenarios do not isolate power-ups, lead speed, cell-tag timing, slope tilt or every entry
      outcome; the cited specs' scenarios need ship-specific counterparts.
    - Confidence: high for shared ordinary rules and tables; medium for lead speed, approach
@@ -551,6 +560,14 @@ with the random-state recorder's draws to compare against S-0207 claim 16's pred
 and the tick the ship stops at range. *Expected:* (a) the cell of the track target; (b) S-0207 claim 19's stop rule. *Falsified
 if:* the heading point differs from the track target, the chosen scatter destination differs
 from the prediction using that target and the recorded draws, or the stop tick differs.
+
+**Heading-height comparison (claim 1).** Use S-0207 D27's ship cases, including its
+legal-water control and qualified chaining control. Record the ship's world height immediately
+before track start and its stored heading height throughout the track and each chain.
+Expected: exact copying at track start and retention until completion, not target terrain or
+deck height; a new track copies height anew. A different initial value, mid-track height
+change or height refresh at a qualified chain falsifies the rule. N1 and N2 alone do not
+isolate these alternatives. S-0511 B6 separately tests the bridge-loss consequences.
 
 **N3. Wake cadence (claims 2, 6).** *Setup:* one surface ship and one underwater ship moving on
 open water; a bridge over part of the path. *Procedure:* run 200 ticks of straight movement and a

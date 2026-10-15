@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -64,7 +64,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 - **Hijacker type.** The infantry type remembered by a vehicle that a vehicle thief has taken over
   (S-0524 claim 11).
 - **Bomb mark.** A mark that an object can carry which causes landing damage when it finishes
-  falling (S-0511 claim 10). Stock sources include a hovering vehicle's switch-off fall over water
+  falling. Landing does not clear it: a survivor retains it for later landing hits and for claim
+  11's low-water death effects even when no longer falling (S-0511 claim 10). Stock sources include a hovering vehicle's switch-off fall over water
   (S-0503 claim 11) and a bridge collapse dropping objects from its deck (S-0511 claim 9).
 - **Absorbed passengers.** Units held inside a building whose type absorbs units or infantry (for
   example a building that converts infantry into power). The structures specs own how they get in.
@@ -271,12 +272,18 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     the surface (S-0503 claim 11), and a vehicle dropped from a collapsing bridge deck (S-0511
     claims 9 and 10). The hover's strict 104-lepton fall-start threshold is separate from this
     claim's inclusive 10-lepton death-effects threshold; receiving the mark alone does not
-    suppress the ordinary death effects at greater heights.
+    suppress the ordinary death effects at greater heights. Landing does not clear the mark
+    (S-0511 claim 10), so a survivor's later death still takes this claim's effects when its
+    water and height conditions hold, even when it is no longer falling.
     - Backing: `measurable` (scenario D8's marked-water variant; S-0503 scenario H7 and S-0511
       scenario B3 for stock falls and water-death animations). H7 does not establish passenger
       loss or the exact fall-start boundary; D8's variant supplies the passenger test.
-      The exact 10-lepton death threshold remains `unmeasured`: these falls end at the surface
-    - Confidence: medium for the stock sources; low for the low-water death-effects rule
+      The exact 10-lepton death threshold remains `unmeasured`: these falls end at the surface.
+      A later low-water death after surviving landing is also `unmeasured`: S-0511 claim 10
+      and scenario B3 establish no stock-play fixture guaranteeing that later death without
+      another mark writer.
+    - Confidence: high for retention after landing and the absence of an active-falling
+      requirement; medium for the stock sources; low for the low-water death-effects rule
 
 12. **Passengers of a destroyed vehicle.** Passengers that claim 5 has not killed are handled after
     the vehicle's animations. What happens to them depends on the vehicle as follows (the rows

@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 41
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371, Q-0663, Q-0685]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685]
 supersedes: []
 ---
 
@@ -72,15 +72,20 @@ refresh before the rest tables, but neither settled these collisions. Q-0231 is 
 by claim 26: the newly taken own-cell guard spot qualifies in that same processing, including
 its search, targeting-timer restart and idle-action outcomes. The earlier version left that
 qualification open; S-0309's area-search rule already supplies candidate eligibility, not a
-one-processing deferral. Q-0241 question 3 is clarified by claim 1: set-up supplies queued
-*guard*, not a guaranteed current *guard* on tick 0. The automatic start of a set-up turreted
-building and the upgrade comparison remain open and `unmeasured` (claim 1, B36); this
-revision does not endorse a set-up ready mark as a replacement rule. Q-0312 is answered
+one-processing deferral. Q-0241 is answered in full by claim 1: set-up placement runs the
+building's grand opening after *guard* is queued, and the grand opening sets the ready mark.
+The *guard* queued at set-up therefore becomes current at the building's first per-tick start
+and is processed in that same turn. This holds alike for armed, unarmed, turreted,
+non-turreted and set-up-upgraded buildings (question 2). S-0009 claim 40's "starts in the
+*guard* behaviour" means *guard* queued at the end of set-up and current from the first
+per-tick start, so every processing, the first included, is of *guard* (question 3).
+Earlier revisions left the start open because they traced only the readiness rules after
+placement. Q-0312 is answered
 by claim 38 and F11–F12: the selected centre, no-base fallback, house records and exact
 ranged/raw draw assignments. Q-0238 is answered jointly: S-0212 claim 23a already
 supplies same-tick destination assignment, queue-only *area guard* and the final nearby
 search; claim 38 supplies its centre. Keep Q-0238 open until the complementary revisions
-are approved together. Q-0241 remains open for its bootstrap and upgrade comparison.
+are approved together.
 Q-0371 question 3's behaviour consequence and subsequent processing are clarified by
 claim 11a; S-0212 claim 23 owns the failure categories and route retry delay, and
 S-0402 claims 3 and 13 own seeking and resumption. Q-0663 is answered by
@@ -190,11 +195,15 @@ Terms used by this spec:
   passage state and close countdown are defined in claim 35, which owns when a gate is open or
   closed.
 - **Ready mark:** a per-building yes/no state that makes a building ready to change (claim 11).
-  Some building processings set it (claim 32), as does the construction state (S-0406 claim 17).
-  A building without a turret also sets it when its body range advances onto its last stage, or
+  Some building processings set it (claim 32), as do the construction state (S-0406 claim 17)
+  and a building's grand opening (claim 1). A building without a turret also sets it when its body range advances onto its last stage, or
   on every non-advancing turn of a zero-delay range; a turreted building does so only while its
   behaviour is *construction* or *selling* (claim 11). A successful per-tick start clears it.
   Only its effect on when queued behaviours start is observable.
+- **Grand opening:** S-0108's term (claim 11): the one-time step that brings a building into
+  service. A building has at most one. This spec uses only one of its effects: it sets the
+  ready mark. Claim 1 says when a building placed at set-up has it. S-0108, S-0402 and S-0009
+  own its other effects.
 - **Attack-move order, attack-move memory, eligible for attack-move:** S-0213 (human orders)
   owns the order and its initial memory; S-0214 (order targeting rules) owns eligibility.
   S-0309 claim 23 owns the memory's searches, refresh, removal and resumption. An attack-move order is the order that the
@@ -434,26 +443,43 @@ Terms used by this spec:
 
    A building's placement fall-back queues *construction*, rather than choosing a resting
    behaviour, and requests the construction body (S-0406 claim 17). At game set-up it instead
-   receives the idle body and *guard* queued. This is the meaning of S-0009 claim 40's
-   “starts in the *guard* behaviour”: a query can see queued *guard* under this claim,
-   but that wording does not promise that *guard* is already current. Creation starts with
-   the ready mark clear; the set-up placement's choice of idle body and queued *guard*
-   does not itself set that mark. In particular, merely having a weapon is not a set-up
-   ready-mark setter. When placement does not find the actor ready, its queue remains
-   pending under claim 11. The first automatic start for a set-up turreted building is
-   not established here (Q-0241, Open questions). The armed, unarmed and map-installed
-   upgrade cases share the established placement rule, but that alone does not establish
-   whether their first automatic starts coincide or happen at all. No bootstrap tick is
-   specified for any of those three cases.
+   receives the idle body and *guard* queued. Creation starts with the ready mark clear.
+   The set-up choice of idle body and queued *guard* does not set the mark, and placement's
+   readiness test, which comes right after that choice, finds the building not ready, so
+   *guard* stays queued for now. Later in the same placement, the building's grand opening
+   (Terms) runs, and it sets the ready mark. This is a fixed rule of set-up placement for
+   a building whose owner is not human-controlled, which in a skirmish is every building
+   the map places (S-0009 claim 27).
+
+   So when set-up ends, the building has the idle body, current *none*, *guard* queued and
+   the ready mark set. At the building's first per-tick start (claim 11; its first turn, the
+   tick of which S-0203 gives) *guard* becomes current and the mark is cleared, and *guard*
+   is processed in that same turn (claim 3 a). From there an armed building's search and
+   first shot follow claims 32 and 33, and its *guard* processing sets the mark again
+   (claim 32).
+
+   None of this depends on the building's weapon or turret. Armed or unarmed, turreted or
+   not, the building starts *guard* at the same per-tick start. An upgrade that the map
+   installs on the building (S-0009 claim 40) changes neither the host's slots nor its
+   ready mark. The upgrade object is never placed as a building of its own and has no grand
+   opening. A host whose turret comes from such an upgrade therefore starts like any other.
+   This is the meaning of S-0009 claim 40's “starts in the *guard* behaviour”: *guard* is
+   queued at the end of set-up and current from the building's first per-tick start, so
+   every processing of the building, its first included, is a processing of *guard*.
+
+   Only the ready-mark effect of the grand opening belongs to this spec. Which of its other
+   effects a set-up building shows is for S-0009 claim 40, S-0108 claim 11 and S-0402
+   claim 18 to say. For a set-up building whose owner is human-controlled, which a skirmish
+   never places, the original would run the grand opening before *guard* is queued, so
+   placement's readiness test would already make *guard* current.
    - Backing: `measurable` (scenario B1, reading the slots with the recorder; S-0406 PL11 for
-     construction entry and the queued-behaviour query; scenario B35 for game-set-up buildings; B36 for the initial mark and queued/current distinction).
-     The bootstrap and comparison of its tick across armed, unarmed and upgraded cases
-     are `unmeasured`: no verified later rule supplies the missing start, and no oracle
-     recording has yet identified one. B36 is the settling investigation, not backing for
-     a conjectured first-tick start or a claim that the queue remains pending forever.
-     The human-owner set-up comparison is also `unmeasured`: skirmish drops that owner's
-     map building entries, and construction or capture cannot isolate set-up placement.
-   - Confidence: high for placement; low for the unresolved bootstrap
+     construction entry and the queued-behaviour query; scenario B35 for game-set-up
+     buildings; scenario B36 for the slots and ready mark at the end of set-up, the first
+     per-tick start, the first processing of *guard*, and the armed, unarmed, non-turreted
+     and upgrade comparison). The human-owner set-up case is `unmeasured`: skirmish drops
+     that owner's map building entries, and construction or capture cannot isolate set-up
+     placement.
+   - Confidence: high
 
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
    turn in the turn pass of S-0203, tick order, which says which objects
@@ -843,7 +869,9 @@ Terms used by this spec:
       *unload* and the *guard* queued at its end therefore wait for the same ready-mark rule
       (S-0417 claim 2, `quirks.factory_unload_waits_ready_mark`, default original; that spec
       owns the alternative). For an unarmed factory without a turret, its body range supplies
-      the mark. Other structures rules (repair, selling and others) also set or clear it.
+      the mark. A building's grand opening (Terms) also sets it; at game set-up this is what
+      makes the queued *guard* current at the building's first per-tick start (claim 1). Other structures rules
+      (repair, selling and others) also set or clear it.
       Each of the building's two
       per-tick starts clears the mark when it succeeds; nothing else of this spec clears it. So a
       behaviour queued for a building becomes current at the first of its per-tick starts at which
@@ -3179,7 +3207,7 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 | none | route ownership and alliance perspective (claim 13, Q-0663) | fixed owner-routes departure, including both service alliance guards and non-allied fallback; no imported local-house setting or absent-key choice |
 | none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 | none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
-| none | initial ready mark and queued/current distinction for set-up buildings (claim 1, Q-0241) | fixed behaviour, not a new data flag; building map entry, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
+| none | ready mark from the grand opening at set-up placement and *guard* current from the first per-tick start (claim 1, Q-0241) | fixed behaviour, not a new data flag; it does not depend on any weapon, turret or upgrade field. Building map entry, upgrade, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
 | none | house-centre selection after path give-up (claim 38, Q-0238, Q-0312) | fixed behaviour and constants, F11–F12; no per-behaviour rate or new setting |
 | building type `Cost` and its price factors | price weight of base-record refresh (claim 38, F12) | integer cost and price-factor parsing/defaults stay with S-0403, S-0404 and S-0413; use the current purchase price, not a copied stock cost |
 | map geometry and start assignment | usable-area correction and recorded base-start cell (claim 38) | parse forms and absent-key rules stay with S-0009; no implicit unit-relative centre |
@@ -4588,27 +4616,32 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed index 2, 800 × 600, no external
   controller playing either house or altering game state, and no mods or engine add-ons
-  except the named test data below. Place a stock turreted defence for a non-player owner and a named enemy
-  unit in its range; keep the bystander away. Record current, queued and suspended
-  behaviours, ready mark, body state, target, processing timer and first shot from
-  placement through tick 1000. Before any turn, expect idle body, *guard* queued,
-  current *none* and ready mark clear. A mark already set by ordinary placement or
-  current *guard* already assigned there falsifies claim 1's new qualification.
-  Repeat with a named test type identical except unarmed, and a non-turreted base
-  with a turret-bearing upgrade installed by the map. Three runs per case; remove
-  named data afterwards. Record the first mark setter and first start if either occurs:
-  their ticks are investigation results, not predicted by this revision. Capture each
-  pre-turn and both per-tick-start boundaries, including the host before and after each
-  upgrade installation, rather than only end-of-tick snapshots. Keep the named enemy
-  unable to damage the buildings. A human-owner set-up comparison remains unmeasured:
-  skirmish drops map building entries for the human-controlled owner (S-0009 claim 27),
-  and constructing or capturing a building is not set-up placement. Do not substitute
-  either for that comparison. A first-start recording must identify the event that supplies readiness or bypasses
-  it, then repeat without that event as a control. If no start occurs by tick 1000,
-  report a bounded pending queue, not proof of perpetual inactivity. This settles the
-  bootstrap tick and armed/unarmed/upgrade comparison when a repeatable first event is
-  found; otherwise Q-0241 remains open. Do not inject a ready mark or force a start.
-  Enemy action before the first recorded turn invalidates the placement observation.
+  except the named test data below. The map places a stock turreted defence with a weapon for
+  a non-player owner, and a named enemy unit in its range; keep the bystander away. Use the
+  read-only recorder to record current, queued and suspended behaviours, ready mark, body
+  state, target, processing timer and first shot. Capture them at the end of set-up, before
+  the first turn, then at both per-tick-start boundaries and at the end of each tick through
+  tick 1000. Repeat with a named test type identical except unarmed, with a non-turreted
+  armed type, and with a non-turreted base that gets a turret-bearing upgrade installed by
+  the map. For the upgrade case, also capture the host just before and just after the
+  upgrade is installed. Three runs per case; remove named data afterwards. Keep the named
+  enemy unable to damage the buildings.
+
+  Expected, in every case: at the end of set-up the building has the idle body, current
+  *none*, *guard* queued and the ready mark set. Installing the upgrade changes neither the
+  host's slots nor its mark. At the building's first per-tick start *guard* becomes current
+  and the mark is cleared, and *guard* is processed in that same turn. The armed defence
+  then searches and fires under claims 32 and 33; the unarmed one does not fire.
+  Falsifiers: a clear ready mark at the end of set-up; *guard* still queued after the
+  building's first per-tick start; a first processing of *guard* later than the first
+  turn; or any of these differing between the armed, unarmed, non-turreted and upgrade
+  cases. *Guard* already current at the end of set-up falsifies only the order within
+  placement (the grand opening after the queue), not the first-turn result.
+  A human-owner set-up comparison remains unmeasured: skirmish drops map building entries
+  for the human-controlled owner (S-0009 claim 27), and constructing or capturing a
+  building is not set-up placement. Do not substitute either for that comparison. Do not
+  inject a ready mark or force a start. Enemy action before the first recorded turn
+  invalidates the placement observation.
 
 - **B37 (claim 38, Q-0238 and Q-0312).** Reuse S-0212 P26's unreachable-destination
   skirmish setup for the neutral and special houses, speed index 2, 800 × 600, with no
@@ -4710,7 +4743,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   and controlled-transport comparisons remain unmeasured until fixtures isolate their
   targets at the same maintenance point; no state injection is proposed.
 
-- **B40 (claims 5 and 10: bridge fall processing and centre-cell revert).** Reuse
+- **B42 (claims 5 and 10: bridge fall processing and centre-cell revert).** Reuse
   S-0511 scenario B3's turn-order variant and B10's target-loss variant, including their
   setup, recorder and run counts. Record due processing and order changes during a deck
   drop, with a protected landing survivor as the same-turn control. Expected: due
@@ -4726,14 +4759,6 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ## Open questions
 
-- **Q-0241 questions 1 and 2:** the first automatic start of a turreted building placed
-  at set-up is not established. Placement queues *guard* but does not itself set the
-  ready mark, and neither the ordinary idle body-range gate nor the unprocessed armed
-  *guard* rule supplies a bootstrap. Determine whether a later set-up or first-turn
-  rule starts it, or whether the queue genuinely remains pending without an outside
-  event. The armed/unarmed and set-up-upgrade comparisons are B36. No first-tick ready
-  mark is adopted as a workaround here. Question 3's queued/current ambiguity is resolved
-  by claim 1; retain S-0009 claim 40's matching queued-*guard* wording.
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
   geometric answer, also answering Q-0312. S-0212 claim 23a supplies the same-tick queue
   and destination rules and final nearby search. Keep Q-0238 open until the
@@ -4755,7 +4780,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   them; scenario B16 (m) reaches the rule only with a test gate type, and only if the retaliation
   rules allow the override while the gate is in *open*.
 - Which additional structures rules set or clear a building's ready mark (claim 11), beyond
-  the established processings and body-range rule. An unarmed building's own *guard*
+  the established processings, the body-range rule and the grand opening (claim 1). An unarmed building's own *guard*
   processing never sets it, but its non-turreted body range can. Factory release and unloading
   neither set nor clear it: the queued *unload* and the *guard* queued at its end wait for
   claim 11's ready-mark rule, with the body-range consequences of S-0417 claim 2 and
@@ -4814,8 +4839,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ### Cross-spec changes to confirm
 
-- S-0009 claim 40 already says set-up queues *guard* without promising it current.
-  Retain that correction at hand-off. Q-0241's bootstrap remains open.
+- S-0009 claim 40 should say that set-up queues *guard* and that it becomes current at the
+  building's first per-tick start (claim 1 here), and drop its sentence that leaves the turreted start open in this spec. Its statement
+  that a set-up building has no grand opening disagrees with claim 1: the grand opening
+  runs during set-up placement. S-0009, S-0108 claim 11 and S-0402 claim 18 should decide
+  which of its effects other than the ready mark a set-up building shows. Q-0241 is
+  answered here.
 - S-0212 claim 23a's backing should inherit claim 38's unmeasured qualifications for
   separately set centre precedence and start-assigned records: B37 does not supply their
   legal setup. Its covered geometry, draw and failure-timing backing is unchanged.
