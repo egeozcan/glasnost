@@ -2,7 +2,7 @@
 id: S-0509
 title: Engineers and capture
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -70,10 +70,10 @@ Neighbouring specs own the rest:
    is *capture*, *area guard* or *patrol* and the building is its destination or its target.
    Standing in the building's foundation for any other reason, or in any other behaviour, is not a
    building entry. Two cases are excluded and handled elsewhere:
-   - a destination building that is vehicle-like follows claim 17 instead,
    - an occupier or assaulter type in *capture* whose destination is a building makes S-0508's
-     entry attempt (S-0508 claim 2) instead, whether or not it can occupy that building, and has
-     no general entry raise.
+     entry attempt (S-0508 claim 2) instead, whether or not it can occupy that building. This takes
+     precedence even for a vehicle-like building: refusal there does not become a takeover,
+   - otherwise a destination building that is vehicle-like follows claim 17 instead.
    - Backing: `measurable` (scenario E1) for *capture* with a building destination. `unmeasured`
      for the target-only case and *area guard*/*patrol*: no proposed order fixture establishes
      those arrival states independently. The garrison exclusion is tested by S-0508 claim 2.
@@ -84,7 +84,8 @@ Neighbouring specs own the rest:
    for every unit that makes a building entry (claim 1), whatever the outcome: capture, repair,
    refusal, damage, nothing, a bridge repair hut and infiltration. A raise has no per-tick de-duplication: a repeating trigger fires
    once per raise. The entered-by raise listed in S-0511 claim 17 for a hut is this raise; a hut
-   gets no second one. After this raise:
+   gets no second one. Claim 1's garrison-route exception never receives this general raise:
+   S-0508 claim 3 gives one garrison entry raise on success and none on refusal. After the general raise:
    - an engineer follows claims 3 to 11,
    - a spy or other infiltrator follows S-0510 (claims 1 to 9),
    - any other unit is refused and scattered as S-0510 claim 10 gives.
@@ -96,7 +97,7 @@ Neighbouring specs own the rest:
 ### Engineer outcomes
 
 3. **Outcome of an engineer's building entry.** *H* is the building's health and *S* its strength
-   (both integers). When several rows' conditions hold, the first such row decides. Row order states
+   (both integers). Where row conditions overlap, the outcome in the higher row takes precedence. Row order states
    precedence between outcomes, not the order or method of testing.
 
    | Row | Building | Outcome | Engineer |
@@ -220,7 +221,7 @@ Neighbouring specs own the rest:
 
     | Effect | Owner |
     |---|---|
-    | Announcements of capture or loss when requested; trigger transfers request none | S-0701 claim 39, S-0011 claim 24 |
+    | Capture/loss announcement selection and playback, subject to eligibility below | S-0701 claim 39 |
     | Old owner's counts drop, new owner's grow; a gain counted as a kill | S-0414 claims 4, 20 and 21 |
     | Power totals worked out again | S-0405 claim 7 |
     | Sight and the shroud for both houses | S-0409 claim 8 |
@@ -236,13 +237,23 @@ Neighbouring specs own the rest:
     | Cloak field, sensor array, gap generator | S-0516 claims 20 and 23 |
     | A missile silo's spawner | S-0506 claim 13, S-0513 claim 13 |
     | Persistence of infiltration effects, not a building spy mark | S-0510 claims 5, 7 and 8 |
-    | Occupants keep their own house | S-0508 claim 17 |
-    | Manned state, cash and secret-lab effects | S-0515 claims 2 to 4, 7 and 8 |
+    | Occupants and their houses are unchanged | S-0508 claim 17 |
+    | An empty civilian garrison building returns to the civilian house at its next turn | S-0508 claim 8 |
+    | Manned state, cash and secret-lab effects | S-0515 claims 2 to 8 |
 
-    - Backing: `unmeasured` here: this is an index of dependencies, not an additional claim of
-      independent confirmation; no scenario here isolates every listed effect. The owning claims
-      specify the actual rules and their tests.
-    - Confidence: medium (completeness of this index)
+    Capture/loss announcements are eligible only when the local player is the old or new owner,
+    the new owner's country is not passive, and the cause of the transfer requests an announcement.
+    Engineer capture (claim 8) and vehicle-like takeover (claim 17) request one. Trigger owner
+    changes (S-0011 claim 24) and occupation ownership changes (S-0508 claims 7 and 8) do not.
+    Occupation's own garrison/abandonment feedback is separate (S-0508 claims 6 and 8).
+    Eligibility is not a promise of audible playback: S-0701 claim 39 owns the further selection
+    and playback conditions.
+
+    - Backing: `measurable` (E14) for announcement eligibility in its tested transfers.
+      `unmeasured` for passive new owners and transfers between two non-local houses, which E14
+      does not independently arrange. The dependency index is `unmeasured` here, not an additional
+      claim of independent confirmation; the owning claims specify their actual rules and tests.
+    - Confidence: high (announcement eligibility); medium (completeness of this index)
 
 13. **A planted bomb is disarmed.** If a timed bomb planted by an infantry unit is on the building
     (S-0312 claim 7), the ownership change removes it without a detonation. It never goes off later.
@@ -290,9 +301,11 @@ Neighbouring specs own the rest:
 ### Vehicle-like buildings
 
 17. **Takeover of a vehicle-like building.** A vehicle-like building (S-0214 Terms) is taken over by
-    any infantry unit, whatever its type, whose behaviour is *capture*, *area guard* or *patrol* and
-    whose destination is that building, when the unit arrives at the end of a walking step in the
-    building's own cell. Neither alliance nor ownership is tested. The building's tag receives one
+    any infantry unit whose behaviour is *capture*, *area guard* or *patrol* and whose destination
+    is that building, when the unit arrives at the end of a walking step in the building's own cell,
+    except for claim 1's prior garrison route. An occupier or assaulter type in *capture* is refused
+    there under S-0508 claim 2, not consumed by takeover. Otherwise the unit's type, including its
+    spy flag, plays no part. Neither alliance nor ownership is tested. The building's tag receives one
     entry raise with the unit as causing object, which sees the old owner. Then:
     - a building ownership change to the unit's house follows, with announcements,
     - claim 9's scatter follows,
@@ -363,7 +376,7 @@ length rounded down.
 | same | building entry, capturable building that is not arrival-friendly, not sold and not erased | two entry raises; capture and tag carry-over under claim 8's partial ordering; infantry scatter (claim 9); engineer's destroyed raise and removal |
 | same | building entry, capturable building being sold or erased, not arrival-friendly | one entry raise; refused |
 | same | building entry, building of a type that is not capturable, not arrival-friendly | one entry raise; engineer's destroyed raise; engineer removed |
-| any infantry in those behaviours | arrival in a vehicle-like destination building's own cell | entry raise, ownership change, infantry scatter, tag carry-over, unit's destroyed raise, unit removed |
+| any infantry in those behaviours, except claim 1's garrison route | arrival in a vehicle-like destination building's own cell | entry raise, ownership change, infantry scatter, tag carry-over, unit's destroyed raise, unit removed |
 
 The tables summarise the default outcomes, not a total order of effects. In particular, they
 establish no order between capture's tag carry-over and ownership change. Backing and confidence
@@ -416,7 +429,7 @@ Ordering consequences:
 | `MultiEngineer` | `[MultiplayerDialogSettings]` | multi-engineer rule; forced off in a skirmish (S-0412 claim 1) | boolean | off |
 | `EngineerCaptureLevel` | `[General]` | cursor threshold only (S-0214 table I row I7); never read at a building entry | fraction, single precision | S-0214 |
 
-Initial absent-key defaults have high confidence and `unmeasured` backing here: none of E1–E13
+Initial absent-key defaults have high confidence and `unmeasured` backing here: none of E1–E14
 removes the supplied lower rules layers to expose initial defaults. Later-layer omission normally
 retains the value already in force (S-0006 claim 1).
 
@@ -551,6 +564,18 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
   destroyed firing and immediate removal. Falsified by repair, capture, refusal or survival.
   This tests the default of `quirks.engineer_lost_on_uncapturable`; the off-state is a design
   alternative tested in our engine, not a different oracle setting.
+
+- **E14. Announcement eligibility (claim 12).** In fresh games with the announcement queue idle,
+  have the local player's engineer capture an enemy ordinary building and a passive-house tech
+  building. Record the capture tick, ownership, announcement requests read-only, and sound.
+  Expected: eligible capture feedback, subject to S-0701 claim 39. Transfer the same kinds of
+  building to the local player by a map trigger instead: expected no capture/loss announcement
+  request. In a further run, occupy a civilian building and then evacuate it; record ownership
+  turns and distinguish garrison/abandonment feedback from capture/loss feedback. Expected:
+  no capture/loss request from either occupation transfer. Falsified by a capture/loss request
+  from either silent transfer cause, or missing eligible capture feedback with all S-0701 gates
+  satisfied. If requests cannot be distinguished from queue suppression, that variant is
+  inconclusive. Passive-new-owner and two-non-local-owner transfers remain unmeasured.
 
 ## Changes for other specs
 
