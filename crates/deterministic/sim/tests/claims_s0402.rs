@@ -91,6 +91,23 @@ fn claim_1_16_capacity_zero() {
     assert_eq!(stage(&w, at(1, 1)), Some(5));
 }
 
+// spec: S-0402 Terms and claim 1 (quirks.zero_capacity_harvester_cycles off: imported capacity 0 is effective
+// C = 1 bale and the ordinary positive-capacity cycle: one bale loaded, then full and returning)
+#[test]
+fn claim_1_quirk_zero_capacity_off_counts_one_bale() {
+    let mut r = ruleset();
+    r.globals.quirks.zero_capacity_harvester_cycles = false;
+    let mut w = game_with_ore(&r, &field(0, 0, 5), 7);
+    place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "EMPTYH", 0, at(1, 1), 0);
+    assert_eq!(harvest::capacity(&w, h), 1);
+    assert!(!harvest::full(&w, h));
+    harvest_now(&mut w, h);
+    until(&mut w, 400, |w| harvest::phase(w, h) == Phase::Returning).expect("returning");
+    assert_eq!(harvest::state_of(&w, h).total(), 1);
+    assert!(harvest::full(&w, h));
+}
+
 // spec: S-0402 claim 2 (a harvest order on a cell gives harvest with the cell as destination)
 #[test]
 fn claim_2_harvest_order() {
@@ -798,6 +815,37 @@ fn claim_10_not_a_dock_unload_refinery() {
     assert_eq!(current(&w, h), Some(Behaviour::Enter));
     assert_eq!(w.obj(h).unwrap().contact, Some(refn));
     assert_eq!(w.houses[0].credits, c0);
+    assert_eq!(harvest::load(&w, h), vec![5, 0]);
+}
+
+// spec: S-0402 claims 8 and 10 and Edge cases (quirks.non_unloading_refinery_accepts off: a building without the
+// dock-unload flag is excluded from the choice and refuses contact, an enter order included)
+#[test]
+fn claims_8_10_quirk_non_unloading_refinery_off() {
+    let mut r = ruleset();
+    r.globals.quirks.non_unloading_refinery_accepts = false;
+    let mut plain = r.sim.buildings.get("REFN").unwrap().clone();
+    plain.econ.dock_unload = None;
+    r.sim.buildings.insert("REFN".into(), plain);
+    // Without any dock-unload refinery: no contact through the choice.
+    let mut w = game(&r);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(-2, 2), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        phase: Phase::Returning,
+        ..Default::default()
+    });
+    harvest_now(&mut w, h);
+    testkit::run(&mut w, 400);
+    assert_ne!(w.obj(h).unwrap().contact, Some(refn));
+    assert_ne!(current(&w, h), Some(Behaviour::Enter));
+    // An explicit enter order is refused too: contact is never taken.
+    let t = w.tick;
+    w.obj_mut(h).unwrap().dest = Some(Target::Object(refn));
+    w.obj_mut(h).unwrap().beh.force(Behaviour::Enter, t, true);
+    testkit::run(&mut w, 60);
+    assert_ne!(w.obj(h).unwrap().contact, Some(refn));
     assert_eq!(harvest::load(&w, h), vec![5, 0]);
 }
 

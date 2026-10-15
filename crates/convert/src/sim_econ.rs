@@ -733,6 +733,7 @@ impl Builder<'_> {
                 self.efields(&mut econ, t, kind, UNIT_ECON);
                 self.efields(&mut econ, t, kind, VEHICLE_ECON);
                 self.dock_unload_warning(t);
+                self.zero_capacity_warning(t);
             }
             Kind::Aircraft => {
                 self.efields(&mut econ, t, kind, UNIT_ECON);
@@ -868,6 +869,28 @@ impl Builder<'_> {
                     show(&n)
                 ));
             }
+        }
+    }
+
+    /// The importer warning of S-0402 claim 1: a vehicle harvester whose
+    /// capacity (`Storage`, absent 0) is 0 is bad data, in either setting of
+    /// `quirks.zero_capacity_harvester_cycles`.
+    fn zero_capacity_warning(&mut self, t: &TypeRec) {
+        let flag = |state: Option<&KeyState>| fold(state, None, |v, _| value::boolean(v));
+        if flag(t.keys.get(&b"Harvester"[..])) != Some(true) {
+            return;
+        }
+        let storage = fold(t.keys.get(&b"Storage"[..]), None, |v, e| {
+            Some((value::integer(v), e.layer, e.line))
+        });
+        // spec: S-0402 Import mapping (Storage absent: 0)
+        let (c, layer, line) = storage.map_or((Some(0), 0, 0), |(c, l, n)| (c, l, n));
+        if c == Some(0) {
+            // spec: S-0402 claim 1 and Import mapping (zero vehicle capacity warns in either setting)
+            self.warn(layer, line, format!(
+                "vehicles {} Storage 0: a harvester that never carries a bale, or 1 bale with quirks.zero_capacity_harvester_cycles off (S-0402 claim 1)",
+                show(&t.name)
+            ));
         }
     }
 

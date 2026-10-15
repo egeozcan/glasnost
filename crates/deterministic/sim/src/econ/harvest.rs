@@ -469,6 +469,18 @@ fn st(w: &World, id: ObjectId) -> HarvestState {
         .unwrap_or_default()
 }
 
+/// The effective capacity *C* of a vehicle harvester (S-0402 Terms): the
+/// imported capacity, except that with
+/// `quirks.zero_capacity_harvester_cycles` off an imported 0 counts as 1.
+pub fn capacity(w: &World, id: ObjectId) -> i32 {
+    let c = unit(w, id).map_or(0, |u| u.capacity);
+    // spec: S-0402 Terms and claim 1 (quirks.zero_capacity_harvester_cycles off: imported capacity 0 is effective C = 1 bale)
+    if c == 0 && !w.rules().quirks.zero_capacity_harvester_cycles {
+        return 1;
+    }
+    c
+}
+
 fn zero_stalls(w: &World) -> bool {
     w.rules().quirks.zero_load_period_stalls
 }
@@ -477,7 +489,7 @@ fn zero_stalls(w: &World) -> bool {
 /// (claim 16, F4). For *C* = 0 the ratio is not a number and never equals
 /// 1.0.
 pub fn full(w: &World, id: ObjectId) -> bool {
-    let c = unit(w, id).map_or(0, |u| u.capacity);
+    let c = capacity(w, id);
     let total = st(w, id).total();
     let m = w.rules().mode;
     // spec: S-0402 F4 (ratio = total / C, a double quotient; full when it equals 1.0)
@@ -771,6 +783,13 @@ fn accepts(w: &World, refinery: ObjectId, harvester: ObjectId, waiting: bool) ->
         Some(Behaviour::Construction | Behaviour::Selling)
     ) || b.econ.sale.is_some()
         || b.econ.building.switched_off
+    {
+        return false;
+    }
+    // spec: S-0402 claims 8 and 10 (quirks.non_unloading_refinery_accepts off: a building without the
+    // dock-unload flag is excluded from both choices and refuses refinery contact, an enter order included)
+    if !w.rules().quirks.non_unloading_refinery_accepts
+        && !building(w, refinery).is_some_and(|x| x.dock_unload)
     {
         return false;
     }
@@ -1118,8 +1137,7 @@ fn loading(w: &mut World, id: ObjectId) -> i32 {
         return 1;
     }
     let cell = o.pos.cell();
-    let capacity = unit(w, id).map_or(0, |u| u.capacity);
-    if capacity == 0 {
+    if capacity(w, id) == 0 {
         // spec: S-0402 claim 5 table and Edge cases (capacity 0: no bale, counter unchanged; then counted as full)
         return now_full(w, id, cell);
     }

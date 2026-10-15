@@ -360,6 +360,20 @@ fn weeder_and_the_dock_unload_warning() {
     );
 }
 
+// spec: S-0402 claim 1 and Import mapping (a vehicle harvester of Storage 0, given or absent, warns; a positive one does not)
+#[test]
+fn zero_capacity_harvester_warning() {
+    let base = "[VehicleTypes]\n0=CART\n1=WAGON\n2=BUGGY\n3=TRUCK\n[CART]\nHarvester=yes\nStorage=0\n\
+[WAGON]\nHarvester=yes\n[BUGGY]\nHarvester=yes\nStorage=4\n[TRUCK]\nStorage=0\n";
+    let (_, w) = import(base, "");
+    let z: Vec<&String> = w.iter().filter(|m| m.contains("Storage 0")).collect();
+    assert_eq!(z.len(), 2, "{w:?}");
+    assert!(
+        z.iter().any(|m| m.contains("CART")) && z.iter().any(|m| m.contains("WAGON")),
+        "{z:?}"
+    );
+}
+
 // spec: S-0415 Edge cases and S-0406 Import mapping (a DeployFacing outside 0 … 255 gets an importer warning)
 #[test]
 fn deploy_facing_out_of_range_warning() {
