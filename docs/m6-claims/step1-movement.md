@@ -7,6 +7,9 @@ Buckets: **(a)** changes or clarifies behaviour the engine already implements;
 controller) or S-0614 (parasites), effective only once that feature exists;
 **(c)** editorial, no behavioural change.
 
+M6a: the (b) pointers into S-0501 are now implemented in `glasnost_sim::air` (lane A2); see
+[S-0501.md](S-0501.md) for their status. The evidence column below is unchanged.
+
 Evidence is taken from committed code at HEAD (d158117). The working tree also holds
 uncommitted work from another session (`sim/src/air.rs`, `naval.rs`, `parasite.rs`,
 `rocket.rs`, `spawn.rs`, plus new quirk fields in `rules/src/quirks.rs`). Those files

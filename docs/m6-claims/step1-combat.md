@@ -9,6 +9,9 @@ Buckets:
   target code does not exist yet, so there is no M6 work.
 - **(b)** pointer into S-0501 (aircraft), S-0504 (naval), S-0506 (missiles/spawn controller) or
   S-0614 (parasites); it takes effect only when that feature exists.
+
+M6a: the (b) pointers into S-0501 are now implemented in `glasnost_sim::air` (lane A2); see
+[S-0501.md](S-0501.md) for their status. The evidence column below is unchanged.
 - **(c)** editorial: revision/date, backing, confidence, scenario text, rewording.
 
 Requests: no front-matter `requests:` line changed in any of the 13 specs, so these revisions
