@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -249,6 +249,11 @@ this spec:
    before its behaviour processing, an aircraft clears even a living target whose in-the-air
    answer is yes (S-0501 claim 32, using the test defined in its Terms). The table *Search
    outcome and target state* (State and ordering) gives every search case.
+   For a spawner, dropping an unusable opportunity target requests the conditional pending-target
+   clear of S-0506 claim 25. A direct replacement by a nonempty target does not itself change
+   pending, and a search that finds nothing while already targetless does not cancel pending.
+   The *impossible* reset above remains a separate event that clears both controller records
+   (S-0506 claim 11). Claim 23 gives the attack-move exception to requesting a clear.
    When the search picks a target object, that object's expected remaining health is reduced at
    once by the expected damage of the weapon the searcher would use against it (S-0302, claim 18),
    unless that weapon's projectile has the inaccurate flag (Import mapping). So a searcher that
@@ -744,7 +749,10 @@ this spec:
     | only a target | any other | a range search runs as for an object with no target, so its present target is not kept; if the search finds a target, it queues *attack* with an immediate start and counts as engaged; if not, its target becomes the memory's target again |
 
     These searches are not limited by claims 2 and 3, and the targets they find are not
-    opportunity targets.
+    opportunity targets. For a spawner, running as for an object with no target does not itself
+    request a pending-target clear: pending is unchanged whether this search finds a replacement,
+    leaves the object targetless or restores the memory's target. Subsequent shots, target-loss
+    notifications and controller resets remain governed by S-0506 claims 3, 11 and 25.
 
     *(b) On a fall-back to rest*, among the common effects of S-0215 claim 13, the memory is
     refreshed at most once per actor per tick. If the object is engaged, or its current behaviour
@@ -794,7 +802,8 @@ this spec:
       part k for F1's engineer exception, part l for targets not being opportunity targets,
       part n for arrival, memory removal and the 1-tick delay, and part o for conversion of a
       removed target to its last cell and the subsequent fall-back and arrival). The once-per-tick
-      limit inherits S-0215 claim 13's backing.
+      limit inherits S-0215 claim 13's backing. The spawner pending-target consequences are
+      `measurable` by scenario A6 part i and S-0506 scenario R19.
     - Confidence: high for the refresh context and removal when neither engaged nor in *guard*,
       medium for the searches, resumption, arrival consequences and removed-target conversion
 
@@ -809,8 +818,14 @@ this spec:
     Any other target is held as set. The second and third rows judge the target as the first row
     leaves it. So a dead or sinking unit sitting in a tank bunker, set as the target of an object
     that the first row covers, gives the bunker building, and the third row then judges the
-    building: the object is left with no target only if the building itself is dead. An object left
-    with no target also clears the target of its spawned aircraft.
+    building: the object is left with no target only if the building itself is dead. For a spawner,
+    setting a target that leaves it with none requests the conditional pending-target clear of
+    S-0506 claim 25, not an immediate clearing of its spawned aircraft's targets. With the original
+    quirk setting, pending is cleared only if the controller target is nonempty. Explicitly
+    clearing an already-empty own target is a no-op, but assigning a nonempty target that is
+    redirected to no target still requests the conditional clear, even if the old own target
+    was empty. A replacement that remains nonempty does not itself update pending.
+    Controller adoption, reset and loss notifications remain S-0506 claims 3, 11 and 25.
 
     Every setting of a target, even to the same one, leaves a target that is not an opportunity
     target, with one exception: a target that the per-tick range search of claim 1's first row
@@ -1701,12 +1716,22 @@ set in the test map's override sections.
   *guard* run decides it only if no other row of table C rejects a sinking vehicle. *Falsified
   if:* the self-attack gives the unit itself or no target, or the recorder shows a dead, dying or
   sinking object as a target in any run.
-- *Part i (spawned aircraft, claim 24):* a spawner-type firer (S-0301) whose spawned aircraft are
-  attacking target *X*₁ (a vehicle of the enemy). The firer is then ordered to attack a second
-  enemy vehicle in the very tick in which that vehicle is destroyed, so the order leaves it with no
-  target. *Expected:* the firer has no target afterwards, and its spawned aircraft stop attacking
-  *X*₁ (recorded by the target recorder; what they do instead is the aircraft specs'). *Falsified
-  if:* the spawned aircraft keep attacking *X*₁ while the firer has no target.
+- *Part i (spawner pending targets, claims 4, 23 and 24):* use the ordinary carrier setup,
+  timed shot-to-pass input and recorder of S-0506 scenario R19, under this scenario's common
+  settings. Record own, controller and pending targets and the next adoption. Between a shot
+  and the next pass, arrange separately: a nonempty replacement with no further shot, an
+  unusable opportunity-target drop, a failed search while already targetless, and an
+  attack-move search that does not retain its present target. Repeat with empty and nonempty
+  controller targets. A redirected dead-target assignment is tested only if normal input can
+  supply it as in part h; otherwise that run is void. Expected: direct nonempty replacement
+  and an already-targetless failed search leave pending unchanged. An opportunity-target drop
+  or a redirected assignment leaving no target clears pending only with a nonempty controller
+  target; it does not immediately clear the attacking aircraft's targets. An attack-move
+  search that ignores the present target leaves pending unchanged, including when it finds
+  nothing or restores the remembered target. Keep all referenced targets alive through the
+  observation except the explicitly tested dead target, to separate loss notifications.
+  Run each reachable case three times. Falsified by different pending changes or adoption,
+  after excluding another shot, a target-loss notification or a controller reset.
 - *Part j (airstrike redirect, claim 24):* a unit of a type that can call airstrikes (it has an
   airstrike team) is ordered to attack an enemy vehicle that sits in a tank bunker, with no
   airstrike in progress. *Expected:* the target recorder shows the bunker building, not the vehicle,
