@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -63,9 +63,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
   (claim 9).
 - **Hijacker type.** The infantry type remembered by a vehicle that a vehicle thief has taken over
   (special-abilities specs).
-- **Bomb mark.** A mark that an object can carry which destroys it when it finishes falling to the
-  ground. No situation of stock play is believed to set it, so claim 11 records what the original does for
-  such an object without any stock scenario to show it.
+- **Bomb mark.** A mark that an object can carry which causes landing damage when it finishes
+  falling (S-0511 claim 10). Stock sources include a hovering vehicle's switch-off fall over water
+  (S-0503 claim 11) and a bridge collapse dropping objects from its deck (S-0511 claim 9).
 - **Absorbed passengers.** Units held inside a building whose type absorbs units or infantry (for
   example a building that converts infantry into power). The structures specs own how they get in.
 - **Sinking, crashing.** States that can keep a vehicle or aircraft in play after a killing hit,
@@ -242,14 +242,17 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     of the game-wide splash list (S-0303, F5) at its position. Claims 12 to 15 then apply as for any
     other destroyed vehicle, except that its passengers do not get out: claim 12 kills them, or
     keeps them inside until the crash when the vehicle's type can crash. The wake and splash animations take the place of claim 9's
-    animations in the order of death effects (State and ordering). No situation of stock play is
-    believed to give a vehicle the bomb mark, so there is no stock scenario for this claim; it is
-    recorded so that an engine that gives some object the mark (a mod's dropped units, say) can
-    reproduce the original.
-    - Backing: `unmeasured` (nothing in stock play sets the condition, so it cannot be observed
-      without a modified game; if a scenario that sets the mark is ever found, it becomes
-      `measurable` with a variant of D8)
-    - Confidence: low
+    animations in the order of death effects (State and ordering). Stock sources of the mark
+    include a hovering vehicle whose switch-off spin ends over water less than 104 leptons above
+    the surface (S-0503 claim 11), and a vehicle dropped from a collapsing bridge deck (S-0511
+    claims 9 and 10). The hover's strict 104-lepton fall-start threshold is separate from this
+    claim's inclusive 10-lepton death-effects threshold; receiving the mark alone does not
+    suppress the ordinary death effects at greater heights.
+    - Backing: `measurable` (scenario D8's marked-water variant; S-0503 scenario H7 and S-0511
+      scenario B3 for stock falls and water-death animations). H7 does not establish passenger
+      loss or the exact fall-start boundary; D8's variant supplies the passenger test.
+      The exact 10-lepton death threshold remains `unmeasured`: these falls end at the surface
+    - Confidence: medium for the stock sources; low for the low-water death-effects rule
 
 12. **Passengers of a destroyed vehicle.** Passengers that claim 5 has not killed are handled after
     the vehicle's animations. What happens to them depends on the vehicle as follows (the rows
@@ -1273,8 +1276,7 @@ these parts.
 killed on water; variant b a test naval type with weight below it. *Observable:* whether the vessel
 sinks (stays in play at 1 health) or shows an explosion. *Expected:* the first sinks with no
 explosion animation; the second explodes. *Falsified if:* the first explodes, or the below-threshold
-vessel sinks instead of showing an explosion. Claim 11 has no
-scenario (it is `unmeasured`). Use named map overrides to repeat the above-threshold vessel
+vessel sinks instead of showing an explosion. Use named map overrides to repeat the above-threshold vessel
 with its underwater flag set, its organic flag set, and as an amphibious non-naval type on water.
 Each fails the sinking condition; sinking falsifies that part. Repeat the ordinary vessel at
 exactly the imported sinking weight: it must sink. Record both explosion and destruction
@@ -1282,6 +1284,18 @@ animations; either on a sinking instance falsifies their omission.
 S-0504 scenarios N5 and N6 test the subsequent duration, removal and sinking behaviour.
 S-0614 scenario P6 separately tests culling-induced sinking without a killing hit, including
 unchanged health; the killing-hit expectations above do not apply to that cull.
+
+*Marked-water variant (claim 11).* Use S-0503 claim 11's scenario H7 for a stock hover switched
+off over flat water, and S-0511 claims 9 and 10's scenario B3 for a stock vehicle dropped from
+a bridge deck over water. Use stock data, director and mods off, at a fixed game speed. Record
+heights, death ticks and animations with tick-aligned capture and a read-only recorder. Expect
+a fall followed by wake and the last splash animation at low-water death, without the ordinary
+debris, death weapon or vehicle explosion/destruction animations. Ordinary death effects in
+place of wake and splash falsify this rule. Repeat the bridge test with a loaded, non-crashable
+stock amphibious transport: record passenger deaths and any escape. Expect no passenger to get
+out; a surviving escaped passenger falsifies the passenger rule. This is not a test of where
+passengers leave a vehicle destroyed on an intact deck (claim 12); that placement remains open
+in S-0511. These ordinary falls do not discriminate the exact 10-lepton death threshold.
 
 **D9. Passengers of destroyed vehicles (claim 12).** *Setup:* a stock transport with five infantry,
 killed (a) on open ground by normal damage, (b) by a train driving into its cell (damage that
@@ -1719,8 +1733,6 @@ from successful transfers. No release draw-count prediction is asserted.
   corner's cell. Scenario D6, variant d, would show it.
 - Vehicles whose type has death image frames (a sprite death animation) take another path at death that is
   not known (claim 9).
-- Whether anything in the original sets the bomb mark (claim 11). None was found, and if something
-  does, claim 11 becomes measurable.
 - How many absorbed passengers a stock building can hold compared with its foundation cells, which
   decides whether the departure for passengers beyond the last cell is ever reached (claim 24).
 - Which events set and clear a building's charge planter (claims 18 and 24).
